@@ -1604,6 +1604,47 @@ TEST_CASE("Process Terminal waits on readiness and wakes promptly for stop", "[t
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
 }
 
+TEST_CASE("Process Terminal resolves a lone escape within pi's escape fragment window",
+        "[tui][terminal][issue722][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    std::mutex input_mutex;
+    std::string delivered;
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    REQUIRE(terminal.start(
+            [&](std::string input) -> cch::support::ExpectedVoid {
+                std::lock_guard lock(input_mutex);
+                delivered += input;
+                return {};
+            },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // A lone ESC resolves at the fragment deadline. pi selects that window from
+    // what the buffer holds (`buffer === ESC ? escapeTimeout : timeout`,
+    // stdin-buffer.ts), which is 10 ms for this case; the polling-era 150 ms
+    // window cannot meet this bound (#722).
+    const auto started = std::chrono::steady_clock::now();
+    REQUIRE(::write(pty->master.get(), "\x1b", 1) == 1);
+    REQUIRE(cch::tests::wait_until([&] {
+        std::lock_guard lock(input_mutex);
+        return !delivered.empty();
+    }));
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+
+    CHECK(delivered == "\x1b");
+    CAPTURE(elapsed_ms);
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+    // Sanitizer overhead invalidates this performance bound; the functional
+    // assertions above still run (CODING_STANDARDS.md §11.9).
+    (void)elapsed_ms;
+#else
+    CHECK(elapsed_ms < 100);
+#endif
+}
+
 TEST_CASE("Process Terminal stops promptly while input is streaming", "[tui][terminal][issue462][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);

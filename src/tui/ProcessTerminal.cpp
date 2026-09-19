@@ -74,11 +74,6 @@ constexpr auto kProgressKeepalive = std::chrono::milliseconds(1000);
 /// queries run before asynchronous I/O starts; pi probes synchronously at
 /// startup).
 constexpr auto kAppearanceProbeTimeout = std::chrono::milliseconds(100);
-/// Escape-sequence and negotiation idle flush window: after input leaves a
-/// partial protocol/appearance response (or a decoder flush) pending, the
-/// event-loop readiness path flushes it once this window passes (was 15 polls
-/// at 10 ms in the periodic-polling design; issue #462).
-constexpr auto kNegotiationTimeout = std::chrono::milliseconds(150);
 /// Startup cursor-position poll bound (ADR 0041): a terminal that does not
 /// answer the DSR query within this window falls back to clear-screen + home +
 /// scrollback with the origin at row 0.
@@ -317,6 +312,10 @@ struct InputState {
     detail::TerminalStreamDecoder decoder;
     bool color_scheme_reported{false};
     bool needs_input_flush{false};
+    /// Escape window, resolved once per session from pi's `resolveEscapeTimeoutMs`.
+    std::chrono::milliseconds escape_fragment_timeout{detail::kEscapeFragmentTimeout};
+    /// Deadline for the fragment currently held by the decoder (and for the
+    /// empty-value flush that follows forwarded input); `max` arms nothing.
     std::chrono::steady_clock::time_point negotiation_deadline{std::chrono::steady_clock::time_point::max()};
 };
 
@@ -821,6 +820,27 @@ void apply_terminal_responses(
         }
     }
 }
+/// pi picks the fragment window from what the decoder still holds
+/// (`this.buffer === ESC ? this.escapeTimeoutMs : this.timeoutMs`,
+/// stdin-buffer.ts), so a chunk that leaves nothing held resolves immediately
+/// and arms no deadline.
+template <typename T> void arm_fragment_deadline(T& impl) {
+    const auto& decoder = impl.input_state.decoder;
+    if (decoder.holds_lone_escape()) {
+        impl.input_state.negotiation_deadline =
+                std::chrono::steady_clock::now() + impl.input_state.escape_fragment_timeout;
+        return;
+    }
+    // Forwarded input is followed by an empty-value flush for the Tui decoder,
+    // which can hold a fragment of its own, so that case keeps the sequence
+    // window alongside a genuinely incomplete fragment.
+    if (decoder.holds_fragment() || impl.input_state.needs_input_flush) {
+        impl.input_state.negotiation_deadline = std::chrono::steady_clock::now() + detail::kSequenceFragmentTimeout;
+        return;
+    }
+    impl.input_state.negotiation_deadline = std::chrono::steady_clock::time_point::max();
+}
+
 template <typename T> void process_input_chunk(T& impl, std::string_view chunk) {
     if (chunk.empty()) return;
     {
@@ -830,13 +850,13 @@ template <typename T> void process_input_chunk(T& impl, std::string_view chunk) 
             return;
         }
     }
-    impl.input_state.negotiation_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
     auto decoded = impl.input_state.decoder.feed(chunk);
     apply_terminal_responses(impl, impl.input_state, decoded.responses);
     if (!decoded.forwarded_input.empty()) {
         invoke_input(impl, std::move(decoded.forwarded_input));
         impl.input_state.needs_input_flush = true;
     }
+    arm_fragment_deadline(impl);
 }
 
 template <typename T> void poll_nonblocking(T& impl) {
@@ -1344,14 +1364,17 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
 #endif
         impl_->input_state = InputState{};
         impl_->input_state.color_scheme_reported = impl_->startup_color_scheme_reported;
+        impl_->input_state.escape_fragment_timeout =
+                detail::resolve_escape_fragment_timeout(environment("PI_TUI_ESC_TIMEOUT"),
+                        !environment("SSH_CONNECTION").empty() || !environment("SSH_TTY").empty());
         if (!startup_input.empty()) {
-            impl_->input_state.negotiation_deadline = std::chrono::steady_clock::now() + kNegotiationTimeout;
             auto decoded = impl_->input_state.decoder.feed(startup_input);
             apply_terminal_responses(*impl_, impl_->input_state, decoded.responses);
             if (!decoded.forwarded_input.empty()) {
                 invoke_input(*impl_, std::move(decoded.forwarded_input));
                 impl_->input_state.needs_input_flush = true;
             }
+            arm_fragment_deadline(*impl_);
         }
         lock.lock();
         prepare_async_io(*impl_);

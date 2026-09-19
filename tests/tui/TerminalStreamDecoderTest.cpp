@@ -1,6 +1,6 @@
 // Unit tests for the unified terminal stream decoder: response demux
 // (CPR, cell size, keyboard protocol, color scheme), single-buffer fragment
-// reassembly across chunk boundaries, 150 ms timeout flush semantics, and
+// reassembly across chunk boundaries, fragment-window flush semantics, and
 // key/paste pass-through. Behavioral baseline: pi 83114817
 // packages/tui/src (terminal.ts negotiation, terminal-image.ts cell size,
 // terminal-colors.ts appearance, keys.ts parseKey).
@@ -9,6 +9,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -179,6 +180,48 @@ TEST_CASE("stream decoder flush resolves a lone escape as the escape key", "[tui
     const auto* key = std::get_if<tui::KeyEvent>(&flushed.events.front());
     REQUIRE(key != nullptr);
     CHECK(key->key == "escape");
+}
+
+TEST_CASE(
+        "stream decoder fragment window follows pi's escape and sequence timeouts", "[tui][decoder][issue722][spec]") {
+    // pi stdin-buffer.ts baseline values.
+    CHECK(tui::detail::kEscapeFragmentTimeout.count() == 10);
+    CHECK(tui::detail::kSshEscapeFragmentTimeout.count() == 100);
+    CHECK(tui::detail::kSequenceFragmentTimeout.count() == 50);
+
+    CHECK(tui::detail::resolve_escape_fragment_timeout("", false).count() == 10);
+    CHECK(tui::detail::resolve_escape_fragment_timeout("", true).count() == 100);
+    CHECK(tui::detail::resolve_escape_fragment_timeout("25", false).count() == 25);
+    CHECK(tui::detail::resolve_escape_fragment_timeout("25", true).count() == 25);
+
+    // pi requires a finite positive Number; anything else keeps the SSH/default window.
+    CHECK(tui::detail::resolve_escape_fragment_timeout("0", false).count() == 10);
+    CHECK(tui::detail::resolve_escape_fragment_timeout("-5", true).count() == 100);
+    CHECK(tui::detail::resolve_escape_fragment_timeout("abc", true).count() == 100);
+}
+
+TEST_CASE("stream decoder reports the held fragment that selects the window", "[tui][decoder][issue722][spec]") {
+    tui::detail::TerminalStreamDecoder decoder;
+
+    CHECK_FALSE(decoder.holds_fragment());
+    CHECK_FALSE(decoder.holds_lone_escape());
+
+    const auto escape = decoder.feed("\x1b");
+    CHECK(escape.events.empty());
+    CHECK(escape.forwarded_input.empty());
+    CHECK(decoder.holds_fragment());
+    CHECK(decoder.holds_lone_escape());
+
+    decoder.reset();
+    CHECK_FALSE(decoder.holds_fragment());
+
+    (void)decoder.feed("\x1b[");
+    CHECK(decoder.holds_fragment());
+    CHECK_FALSE(decoder.holds_lone_escape());
+
+    (void)decoder.feed("1;5");
+    CHECK(decoder.holds_fragment());
+    CHECK_FALSE(decoder.holds_lone_escape());
 }
 
 TEST_CASE("stream decoder flush drops appearance response fragments", "[tui][decoder][spec]") {

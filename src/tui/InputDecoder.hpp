@@ -4,12 +4,27 @@
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/TerminalImage.hpp>
 
+#include <chrono>
 #include <string>
 #include <string_view>
 #include <variant>
 #include <vector>
 
 namespace cch::tui::detail {
+
+/// Fragment-window policy for the input edge (behavioural baseline: pi 83114817
+/// packages/tui/src/stdin-buffer.ts): pi picks the window from what its buffer
+/// still holds (`this.buffer === ESC ? this.escapeTimeoutMs : this.timeoutMs`),
+/// so a lone ESC resolves quickly while any other held fragment waits longer.
+inline constexpr std::chrono::milliseconds kEscapeFragmentTimeout{10};
+inline constexpr std::chrono::milliseconds kSshEscapeFragmentTimeout{100};
+inline constexpr std::chrono::milliseconds kSequenceFragmentTimeout{50};
+
+/// Resolve the escape window from pi's `resolveEscapeTimeoutMs`: a positive
+/// `PI_TUI_ESC_TIMEOUT` wins, then the SSH window, then the local default. The
+/// configured value is a positive millisecond count; pi accepts any finite
+/// positive `Number`, so a fractional count truncates to whole milliseconds.
+[[nodiscard]] std::chrono::milliseconds resolve_escape_fragment_timeout(std::string_view configured, bool over_ssh);
 
 /// Kitty keyboard-protocol negotiation answers (behavioral baseline: pi
 /// 83114817 packages/tui/src/terminal.ts
@@ -68,9 +83,9 @@ struct StreamDecodeResult {
 /// reassembles escape sequences split across reads, one pass demuxes raw
 /// byte chunks into out-of-band `TerminalResponseVariant` values and in-band
 /// `InputEventVariant` values, and one escape-discard machine bounds
-/// malformed input. `feed` consumes a raw chunk; `flush` ends the 150 ms
-/// fragment window (the caller's deadline), resolving or dropping whatever
-/// the buffer holds. Behavioral baseline: pi 83114817 packages/tui/src
+/// malformed input. `feed` consumes a raw chunk; `flush` ends the fragment
+/// window (the caller's deadline), resolving or dropping whatever the buffer
+/// holds. Behavioral baseline: pi 83114817 packages/tui/src
 /// (keys.ts parseKey sequences, stdin-buffer.ts framing, terminal.ts
 /// negotiation buffering, terminal-image.ts consumeCellSizeResponse, and
 /// terminal-colors.ts appearance reports).
@@ -79,6 +94,12 @@ public:
     [[nodiscard]] StreamDecodeResult feed(std::string_view input);
     [[nodiscard]] StreamDecodeResult flush();
     void reset();
+
+    /// True while an incomplete fragment is held for the fragment window.
+    [[nodiscard]] bool holds_fragment() const noexcept { return !pending_.empty(); }
+    /// True when the held fragment is exactly a lone ESC (pi `buffer === ESC`):
+    /// the case that resolves at the escape window, not the sequence window.
+    [[nodiscard]] bool holds_lone_escape() const noexcept { return pending_.size() == 1 && pending_.front() == '\x1b'; }
 
 private:
     enum class EscapeDiscardMode {
