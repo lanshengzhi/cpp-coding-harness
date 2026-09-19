@@ -98,6 +98,10 @@ private:
     void fallback_focus();
     [[nodiscard]] Focusable* find_focusable_target();
     [[nodiscard]] std::optional<CursorPosition> resolve_cursor_location() const;
+    /// Rows of `previous_lines_` admitted to the terminal under the given
+    /// partition, or 0 when the partition changed and every row must be
+    /// rewritten.
+    [[nodiscard]] std::size_t admitted_prefix(TerminalDimensions dimensions, std::size_t viewport_height) const;
 
     Terminal& terminal_; // must outlive this Tui.
     std::unique_ptr<detail::TerminalStreamDecoder> stream_decoder_;
@@ -126,6 +130,27 @@ private:
     /// scrollback flow (pi `TuiMainScreen` `previousViewportTop`): the
     /// composed buffer's lines below it are the terminal's native scrollback.
     std::size_t viewport_top_{0};
+    /// Physical write progress of the committed composed buffer: rows
+    /// [0, `rows`) of `previous_lines_` are on the terminal, written under
+    /// `dimensions` and `viewport_height`. `cleared` records that the committed
+    /// screen state rests on an unfinished clear frame (the clear is admitted
+    /// and the buffer was painted from the screen top), so a retry of that
+    /// frame resumes rather than clearing again. A shrunken buffer owes a clear
+    /// of the stale rows below it, down to `stale_below` (the pre-shrink
+    /// height); `stale_cleared` is the first stale row not yet cleared, so the
+    /// retry resumes that tail too. A frame ended by terminal backpressure
+    /// keeps this watermark so the retry resumes after the admitted rows
+    /// instead of re-emitting the buffer from its first changed row (#732); a
+    /// completed frame replaces it.
+    struct AdmittedFrame {
+        std::size_t rows{0};
+        TerminalDimensions dimensions{};
+        std::size_t viewport_height{0};
+        bool cleared{false};
+        std::size_t stale_below{0};
+        std::size_t stale_cleared{0};
+    };
+    AdmittedFrame admitted_;
     std::vector<ActiveImage> active_images_;
     TerminalDimensions previous_dimensions_{};
 };

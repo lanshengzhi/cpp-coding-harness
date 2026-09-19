@@ -1721,6 +1721,75 @@ TEST_CASE("Process Terminal backpressures bounded output in write order", "[tui]
     REQUIRE(terminal.stop());
 }
 
+TEST_CASE("Process Terminal keeps scroll accounting when output is refused", "[tui][terminal][issue732][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    const auto dimensions = terminal.dimensions();
+    REQUIRE(dimensions.rows >= 2);
+    REQUIRE(terminal.set_scroll_margins(0, dimensions.rows - 1));
+
+    // Stall the terminal with the master never read until the bounded queue
+    // refuses: the queue is full and no further escape sequence is admitted.
+    std::size_t admitted = 0;
+    bool saw_busy = false;
+    const std::string filler(4000, 'f');
+    for (std::size_t index = 0; index < 2000; ++index) {
+        if (auto written = terminal.write(filler); !written) {
+            CHECK(written.error().code == cch::support::ErrorCode::Busy);
+            saw_busy = true;
+            break;
+        }
+        admitted += filler.size();
+    }
+    REQUIRE(saw_busy);
+    // Close the queue's remaining slack: the refusal above was for a 4 KB
+    // chunk, so a small escape sequence could still fit. Any refused write
+    // leaves the queue exactly at its bound.
+    const std::string slack(16, 's');
+    for (;;) {
+        auto written = terminal.write(slack);
+        if (!written) break;
+        admitted += slack.size();
+    }
+    for (;;) {
+        auto written = terminal.write("x");
+        if (!written) break;
+        admitted += 1;
+    }
+
+    // A refused cursor move below the viewport bottom must not advance the
+    // terminal's scroll accounting: its scroll line flow was never admitted, so
+    // the move has to emit that flow again once the terminal drains.
+    constexpr std::size_t kTargetRow = 100;
+    auto refused = terminal.set_cursor({.column = 0, .row = kTargetRow});
+    REQUIRE_FALSE(refused);
+    CHECK(refused.error().code == cch::support::ErrorCode::Busy);
+
+    std::string drained;
+    const auto drain_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (drained.size() < admitted && std::chrono::steady_clock::now() < drain_deadline) {
+        drained += cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50));
+    }
+    REQUIRE(drained.size() >= admitted);
+
+    REQUIRE(terminal.set_cursor({.column = 0, .row = kTargetRow}));
+    const auto scroll = kTargetRow - (dimensions.rows - 1);
+    std::string cursor_output;
+    const auto cursor_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (std::count(cursor_output.begin(), cursor_output.end(), '\n') < static_cast<std::ptrdiff_t>(scroll) &&
+            std::chrono::steady_clock::now() < cursor_deadline) {
+        cursor_output += cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50));
+    }
+    CHECK(std::count(cursor_output.begin(), cursor_output.end(), '\n') == static_cast<std::ptrdiff_t>(scroll));
+    REQUIRE(terminal.stop());
+}
+
 TEST_CASE("Process Terminal admits a startup-sized paint while the output is not draining",
         "[tui][terminal][issue727][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
