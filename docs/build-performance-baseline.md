@@ -104,6 +104,29 @@ Slow translation units include:
 
 A standalone Debug compile of the leading hotspot took 32.7 seconds with GCC and 22.1 seconds with Clang. This supports a full Clang experiment, but not an immediate compiler-default change.
 
+## CI build-time evidence
+
+The supported-Linux CI lanes run on GitHub-hosted `ubuntu-24.04` runners (4 vCPU). The vcpkg dependency cache (#521) restores in about two seconds, so lane wall time is dominated by project compilation and the test run.
+
+### Before the compiler cache (#744)
+
+Measured on run [35440499959](https://github.com/lanshengzhi/cpp-coding-harness/actions/runs/35440499959) (PR #741), with no compiler cache configured:
+
+| Step | GCC 16 Debug (lane 21 min) | Arch pinned (lane 20 min) |
+| --- | ---: | ---: |
+| Build | 606 s | 528 s |
+| Run offline tests | 355 s | 308 s |
+| Configure | 107 s | 200 s |
+| Toolchain, container, checkout | ~40 s | ~25 s |
+
+The run's wall clock was set by the slowest lanes (GCC 16 ASan+UBSan 36 min, Clang 22 conformance 33 min).
+
+### With the compiler cache (#744)
+
+Every compiling lane of the toolchain workflow injects ccache as a workflow-level compiler launcher (the `CMAKE_<LANG>_COMPILER_LAUNCHER` environment variables; the pinned presets are untouched) with rolling per-lane GitHub Actions cache entries (each run saves a fresh snapshot keyed on lane and commit, and restores the most recent one through the lane's key prefix), and a `concurrency` block cancels superseded pull-request runs.
+
+Warm-cache Build-step measurements from this change's CI runs are recorded here once the first warm run completes; the acceptance target is a Build step under three minutes per lane with cache-hit statistics in the job log.
+
 ## Diagnosed causes
 
 ### 1. The test build is monolithic

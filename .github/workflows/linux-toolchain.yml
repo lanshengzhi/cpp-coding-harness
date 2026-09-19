@@ -9,6 +9,15 @@ on:
 permissions:
   contents: read
 
+# Concurrency (issue #744): superseded pull-request runs cancel instead of
+# burning every lane to completion. The group is per workflow + ref, so each
+# PR serializes on its own merge ref, while push runs on main keep
+# cancel-in-progress disabled: they are release-qualification evidence and
+# the shared compiler-cache writers, so they always run to completion.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-and-test:
     name: ${{ matrix.name }}
@@ -91,6 +100,21 @@ jobs:
       # VCPKG_BINARY_SOURCES because that is the variable this pinned vcpkg
       # tool revision reads.
       VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.cache/vcpkg-archives,readwrite"
+      # Compiler cache (issue #744): the launcher is injected purely at the
+      # workflow layer. CMake initializes CMAKE_<LANG>_COMPILER_LAUNCHER from
+      # these environment variables, so the pinned CI presets stay untouched
+      # and ADR 0039's supported-build boundary is unaffected. CMake records
+      # the bare compiler in compile_commands.json (the launcher lives only
+      # in the generator rules), so Gate and warning-gate evidence is
+      # unchanged.
+      CMAKE_C_COMPILER_LAUNCHER: "ccache"
+      CMAKE_CXX_COMPILER_LAUNCHER: "ccache"
+      CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+      CCACHE_COMPRESS: "1"
+      # Bounded per lane so the lane entries share the repository cache quota
+      # with the vcpkg archives; ccache evicts least-recently-used entries
+      # beyond the cap.
+      CCACHE_MAXSIZE: "512M"
 
     steps:
       - name: Check out harness
@@ -164,6 +188,16 @@ jobs:
           test -n "$symbolizer" && test -x "$symbolizer"
           echo "CCH_SYMBOLIZER=$symbolizer" >> "$GITHUB_ENV"
 
+      - name: Install ccache
+        # Wraps the pinned compiler as the launcher injected above (issue
+        # #744). Deliberately unpinned: compilation semantics come from the
+        # pinned toolchain and ccache only caches its outputs; the version is
+        # printed for the record.
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ccache
+          ccache --version
+
       - name: Restore the shared vcpkg binary cache
         # Per-lane primary key so every concurrently running job can persist
         # its own save (one immutable key shared by parallel jobs lets only
@@ -178,6 +212,27 @@ jobs:
           key: vcpkg-${{ hashFiles('vcpkg.json') }}-${{ matrix.preset }}
           restore-keys: vcpkg-${{ hashFiles('vcpkg.json') }}-
 
+      - name: Restore the compiler cache
+        # Rolling per-lane keys (issue #744): the primary key names the lane
+        # (preset determines the lane's flags, matrix.cc the pinned compiler)
+        # plus the commit, so every run saves an updated snapshot under a
+        # fresh key and restores the most recent one via the lane prefix.
+        # Cache entries are immutable — a static key would freeze the lane at
+        # its first run and the hit rate would decay as sources churn. ccache
+        # itself hashes the compiler binary and the full command line into
+        # every entry, so stale or cross-lane entries cannot false-hit; old
+        # snapshots are LRU-evicted against the repository cache quota.
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .cache/ccache
+          key: ccache-${{ matrix.preset }}-${{ matrix.cc }}-${{ github.sha }}
+          restore-keys: ccache-${{ matrix.preset }}-${{ matrix.cc }}-
+
+      - name: Zero compiler cache statistics
+        # Zeroed after the restore so the post-build statistics describe this
+        # run alone (acceptance evidence for issue #744).
+        run: ccache --zero-stats
+
       - name: Bootstrap pinned vcpkg
         run: |
           test "$(git -C "$VCPKG_ROOT" rev-parse HEAD)" = "2f1d605400c8727cc00c15797aba796c88ccd523"
@@ -191,6 +246,11 @@ jobs:
 
       - name: Build
         run: cmake --build --preset "${{ matrix.preset }}"
+
+      - name: Show compiler cache statistics
+        # Acceptance evidence (issue #744): a warm run reports a high hit
+        # rate here and a materially shorter Build step above.
+        run: ccache --show-stats
 
       # Quarantined tests (issue #634) are excluded per lane through the
       # matrix `ctest_label_exclude` field above; adding a lane exclusion
@@ -283,6 +343,16 @@ jobs:
       VCPKG_ROOT: ${{ github.workspace }}/.deps/vcpkg
       # Shared binary cache (issue #521); see the build-and-test job.
       VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.cache/vcpkg-archives,readwrite"
+      # Compiler cache (issue #744): workflow-level launcher injection, same
+      # mechanism and boundary as the build-and-test job. The qualification
+      # build keeps exercising the real pinned toolchain — a cache hit is a
+      # bit-identical replay of a previous compile, never a skipped compile —
+      # and the post-build statistics make cache behavior visible in the log.
+      CMAKE_C_COMPILER_LAUNCHER: "ccache"
+      CMAKE_CXX_COMPILER_LAUNCHER: "ccache"
+      CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+      CCACHE_COMPRESS: "1"
+      CCACHE_MAXSIZE: "512M"
     steps:
       - name: Record the qualification run start
         run: echo "RUN_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
@@ -323,6 +393,14 @@ jobs:
           test "$(gcc -dumpfullversion)" = "16.0.1"
           test "$(g++ -dumpfullversion)" = "16.0.1"
 
+      - name: Install ccache
+        # Same compiler-cache wrapping as the build-and-test job (issue
+        # #744); see that job's step for the pinning rationale.
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ccache
+          ccache --version
+
       - name: Restore the shared vcpkg binary cache
         # Per-lane primary key + shared-prefix fallback (see build-and-test);
         # this lane's dependencies are ABI-identical to the other GCC lanes.
@@ -331,6 +409,20 @@ jobs:
           path: .cache/vcpkg-archives
           key: vcpkg-${{ hashFiles('vcpkg.json') }}-release-artifact
           restore-keys: vcpkg-${{ hashFiles('vcpkg.json') }}-
+
+      - name: Restore the compiler cache
+        # Lane-keyed rolling compiler cache (issue #744); see the
+        # build-and-test job for the rolling-key design.
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .cache/ccache
+          key: ccache-release-artifact-gcc-16-${{ github.sha }}
+          restore-keys: ccache-release-artifact-gcc-16-
+
+      - name: Zero compiler cache statistics
+        # Zeroed after the restore so the post-build statistics describe this
+        # run alone (acceptance evidence for issue #744).
+        run: ccache --zero-stats
 
       - name: Bootstrap pinned vcpkg
         run: |
@@ -345,6 +437,11 @@ jobs:
 
       - name: Build
         run: cmake --build --preset vcpkg-release-artifact
+
+      - name: Show compiler cache statistics
+        # Acceptance evidence (issue #744): a warm run reports a high hit
+        # rate here and a materially shorter Build step above.
+        run: ccache --show-stats
 
       - name: Collect toolchain and Gate evidence
         run: |
@@ -436,9 +533,10 @@ jobs:
   # dependency contract (pinned vcpkg manifest) and the same Parity
   # Architecture Gate contracts as the Ubuntu lanes. The image digest freezes
   # the environment; the pacman mirror is pinned to the matching Arch Linux
-  # Archive snapshot so the installed tool gaps (git, zip, unzip) come from
-  # the same frozen package set. A toolchain drift (e.g. GCC leaving 16.x)
-  # fails this lane closed and forces a deliberate re-pin.
+  # Archive snapshot so the installed tool gaps (git, zip, unzip, python,
+  # ccache) come from the same frozen package set. A toolchain
+  # drift (e.g. GCC leaving 16.x) fails this lane closed and forces a
+  # deliberate re-pin.
   arch-pinned:
     name: Arch pinned base-devel-20260809 (blocking)
     runs-on: ubuntu-24.04
@@ -454,12 +552,21 @@ jobs:
       # the arch-prefixed fallback keeps Arch lanes from downloading Ubuntu
       # archives they can never hit.
       VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.cache/vcpkg-archives,readwrite"
+      # Compiler cache (issue #744): workflow-level launcher injection, same
+      # mechanism and boundary as the Ubuntu lanes. The compiler identity is
+      # frozen by the digest-pinned base image and asserted in the toolchain
+      # contract step.
+      CMAKE_C_COMPILER_LAUNCHER: "ccache"
+      CMAKE_CXX_COMPILER_LAUNCHER: "ccache"
+      CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+      CCACHE_COMPRESS: "1"
+      CCACHE_MAXSIZE: "512M"
     steps:
       - name: Pin pacman to the image snapshot and install tool gaps
         run: |
           printf 'Server = https://archive.archlinux.org/repos/2026/08/09/$repo/os/$arch\n' \
             > /etc/pacman.d/mirrorlist
-          pacman -Sy --noconfirm --needed git zip unzip python
+          pacman -Sy --noconfirm --needed git zip unzip python ccache
 
       - name: Assert the declared toolchain contract
         run: |
@@ -488,6 +595,20 @@ jobs:
           key: vcpkg-${{ hashFiles('vcpkg.json') }}-arch-pinned
           restore-keys: vcpkg-${{ hashFiles('vcpkg.json') }}-arch-
 
+      - name: Restore the compiler cache
+        # Lane-keyed rolling compiler cache (issue #744); see the
+        # build-and-test job for the rolling-key design.
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .cache/ccache
+          key: ccache-arch-pinned-gcc-${{ github.sha }}
+          restore-keys: ccache-arch-pinned-gcc-
+
+      - name: Zero compiler cache statistics
+        # Zeroed after the restore so the post-build statistics describe this
+        # run alone (acceptance evidence for issue #744).
+        run: ccache --zero-stats
+
       - name: Bootstrap pinned vcpkg
         run: |
           test "$(git -C "$VCPKG_ROOT" rev-parse HEAD)" = "2f1d605400c8727cc00c15797aba796c88ccd523"
@@ -498,6 +619,11 @@ jobs:
 
       - name: Build
         run: cmake --build --preset vcpkg
+
+      - name: Show compiler cache statistics
+        # Acceptance evidence (issue #744): a warm run reports a high hit
+        # rate here and a materially shorter Build step above.
+        run: ccache --show-stats
 
       # Quarantined tests (issue #634): excluded on this unoptimized lane
       # where runner resourcing exceeds the 2ms flat-time bound.
