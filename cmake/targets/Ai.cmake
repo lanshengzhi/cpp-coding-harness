@@ -35,6 +35,7 @@ cch_parity_declare_target(
         src/ai/auth/OAuthCallbackServer.cpp
         src/ai/auth/OAuthHttpClient.cpp
         src/ai/auth/OpenAICodexOAuth.cpp
+        src/ai/auth/OpenAICodexOAuthWire.cpp
         src/ai/auth/KimiCodingOAuth.cpp
         src/ai/auth/KimiOAuthWire.cpp
         src/ai/auth/OauthPage.cpp
