@@ -204,7 +204,13 @@ TEST_CASE("Native TUI footer renders usage totals, cache hit rate, context, and 
     CHECK(screen.find(fixture.workspace.path().string()) != std::string::npos);
 
     REQUIRE(terminal.inject_input("usage turn\r"));
-    drain_ready(io);
+    // Turn completion and the footer stats update cross Runtime worker hops,
+    // so wait on the observable outcome instead of asserting after one drain
+    // (#739).
+    REQUIRE(tests::pump_until(io, [&] {
+        const auto text = visible_screen(terminal);
+        return text.find("usage turn answer") != std::string::npos && text.find("$0.002") != std::string::npos;
+    }));
     screen = visible_screen(terminal);
     // Usage totals: ↑input ↓output RcacheRead WcacheWrite, the cache hit
     // rate (8000/(1000+8000+1000) = 80%), the cost, and the right-aligned
@@ -222,8 +228,9 @@ TEST_CASE("Native TUI footer renders usage totals, cache hit rate, context, and 
     CHECK(screen.find("fake-model") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    // Session close crosses persistence and Runtime hops; wait for the run
+    // to finish instead of asserting after one drain (#739).
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 
@@ -264,21 +271,32 @@ TEST_CASE("Native TUI shows the Working indicator while a prompt streams and cle
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("stream\r"));
-    drain_ready(io);
-    auto screen = visible_screen(terminal);
+    // The agent_start → status-show → repaint chain crosses Runtime worker
+    // hops, so wait on the observable indicator instead of asserting after
+    // one drain (#739). The gated response holds the turn open: once the
+    // indicator shows, it stays until the release below.
+    REQUIRE(tests::pump_until(io, [&] { return visible_screen(terminal).find("Working...") != std::string::npos; }));
     // pi WorkingStatusIndicator: "Working..." with the accent spinner.
+    auto screen = visible_screen(terminal);
     CHECK(screen.find("Working...") != std::string::npos);
 
     gated.control->release();
-    drain_ready(io);
+    // agent_end's indicator clear crosses the same worker hops: a drain can
+    // return on the intermediate frame where the answer is already painted
+    // but the indicator is still up (the Clang-lane flake, #739).
+    REQUIRE(tests::pump_until(io, [&] {
+        const auto text = visible_screen(terminal);
+        return text.find("gated answer") != std::string::npos && text.find("Working...") == std::string::npos;
+    }));
     screen = visible_screen(terminal);
     // agent_end clears the indicator back to the two-row idle status.
     CHECK(screen.find("Working...") == std::string::npos);
     CHECK(screen.find("gated answer") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    // Session close crosses persistence and Runtime hops; wait for the run
+    // to finish instead of asserting after one drain (#739).
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 
@@ -311,6 +329,13 @@ TEST_CASE("Native TUI retry indicator counts down pi's backoff and clears on suc
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("retry me\r"));
+    // The retry policy starts after the error terminal crosses Runtime
+    // worker hops; wait on the observable indicator instead of asserting
+    // after one drain (#739). The drain then services the countdown's posted
+    // arm handler, so the wall-clock sleep below measures against the armed
+    // one-second tick.
+    REQUIRE(tests::pump_until(
+            io, [&] { return visible_screen(terminal).find("Retrying (1/3)") != std::string::npos; }));
     drain_ready(io);
     auto screen = visible_screen(terminal);
     // The RetryStatusIndicator with the initial countdown (ceil(2s)).
@@ -332,8 +357,9 @@ TEST_CASE("Native TUI retry indicator counts down pi's backoff and clears on suc
     CHECK(screen.find("Recovered after retry") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    // Session close crosses persistence and Runtime hops; wait for the run
+    // to finish instead of asserting after one drain (#739).
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 
@@ -389,17 +415,31 @@ TEST_CASE("Native TUI shows the overflow Compaction indicator and rebuilds the c
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("overflow me\r"));
-    drain_ready(io);
-    auto screen = visible_screen(terminal);
+    // The overflow terminal and the Compaction indicator cross Runtime
+    // worker hops; wait on the observable indicator instead of asserting
+    // after one drain (#739). The gated summarization holds the compaction
+    // open, so once the indicator shows it stays until the release below.
+    REQUIRE(tests::pump_until(io, [&] {
+        return visible_screen(terminal).find("Context overflow detected, Auto-compacting... (escape to cancel)") !=
+               std::string::npos;
+    }));
     // The overflow terminal triggers the auto-compaction policy; while the
     // summarization is gated, the overflow Compaction indicator shows.
+    auto screen = visible_screen(terminal);
     CHECK(
         screen.find(
             "Context overflow detected, Auto-compacting... (escape to cancel)") !=
         std::string::npos);
 
     gated.control->release();
-    drain_ready(io);
+    // Compaction end, the chat rebuild, and the retried turn's answer cross
+    // the same worker hops: a drain can return on an intermediate frame
+    // (the Clang-lane flake class, #739).
+    REQUIRE(tests::pump_until(io, [&] {
+        const auto text = visible_screen(terminal);
+        return text.find("Recovered after compaction") != std::string::npos &&
+               text.find("Auto-compacting") == std::string::npos;
+    }));
     screen = visible_screen(terminal);
     CHECK(screen.find("Auto-compacting") == std::string::npos);
     // The chat rebuilt from the fresh snapshot shows the collapsed compaction
@@ -418,8 +458,9 @@ TEST_CASE("Native TUI shows the overflow Compaction indicator and rebuilds the c
     CHECK(screen.find("Compacted history summary") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    // Session close crosses persistence and Runtime hops; wait for the run
+    // to finish instead of asserting after one drain (#739).
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 
@@ -471,7 +512,12 @@ TEST_CASE("Native TUI /reload refuses during auto-compaction with pi's streaming
     // The overflow terminal triggers the auto-compaction policy; while the
     // summarization is gated the compaction is in flight.
     REQUIRE(terminal.inject_input("overflow me\r"));
-    drain_ready(io);
+    // The indicator crosses Runtime worker hops; wait on the observable
+    // state instead of asserting after one drain (#739).
+    REQUIRE(tests::pump_until(io, [&] {
+        return visible_screen(terminal).find("Context overflow detected, Auto-compacting... (escape to cancel)") !=
+               std::string::npos;
+    }));
     auto screen = visible_screen(terminal);
     CHECK(
         screen.find(
@@ -494,10 +540,10 @@ TEST_CASE("Native TUI /reload refuses during auto-compaction with pi's streaming
         std::string::npos);
 
     gated.control->release();
-    drain_ready(io);
+    // The exit is deferred until the admitted compaction settles (ADR 0040);
+    // wait for the run to finish instead of asserting after one drain (#739).
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 
@@ -648,8 +694,9 @@ TEST_CASE("Native TUI app.suspend stops the TUI, keeps the run alive, and resume
         std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    // Session close crosses persistence and Runtime hops; wait for the run
+    // to finish instead of asserting after one drain (#739).
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 
@@ -704,8 +751,9 @@ TEST_CASE("Native TUI app.editor.external edits prompt.md through VISUAL and res
     REQUIRE(terminal.inject_input("\x03"));
     drain_ready(io);
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    // Session close crosses persistence and Runtime hops; wait for the run
+    // to finish instead of asserting after one drain (#739).
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
 
@@ -779,7 +827,8 @@ TEST_CASE("Native TUI editor border color transitions for bash mode and thinking
     CHECK(terminal.cells()[*restored_border][0].style.fg_color == idle_color);
 
     REQUIRE(terminal.inject_input("\x04"));
-    drain_ready(io);
-    REQUIRE(run_result);
+    // Session close crosses persistence and Runtime hops; wait for the run
+    // to finish instead of asserting after one drain (#739).
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
     CHECK(*run_result);
 }
