@@ -59,6 +59,14 @@ private:
 
 /// Sleeps on the current executor, waking early with a Cancelled error
 /// carrying `cancel_message` when the stop token fires.
+///
+/// `steady_timer::async_wait` completes only with success or
+/// `operation_aborted`, and the only cancellation source here is the
+/// stop-token bridge — so an aborted wait always coincides with
+/// `stop_requested()`, and no non-abort error state exists. The pre-unified
+/// retry wait additionally mapped that unreachable non-abort state to a
+/// "Retry wait failed" stream error; dropping it is an intentional,
+/// semantics-preserving narrowing (adversarial-review finding, #714).
 [[nodiscard]] inline boost::asio::awaitable<support::ExpectedVoid> interruptible_sleep(
         std::chrono::milliseconds duration, std::stop_token stop_token, std::string cancel_message) {
     if (stop_token.stop_requested()) {

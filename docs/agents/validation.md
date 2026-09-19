@@ -86,12 +86,14 @@ ctest --preset vcpkg -L architecture
 
 ## Strict no-exception validation
 
-The strict no-exception core is the default build (ADR 0042; issue #487):
-`CCH_STRICT_NO_EXCEPTIONS=ON` is the default, adding `-fno-exceptions` to
-every project-owned production and test target and passing strict mode to the
-Parity Architecture Gate. Turning the option off is a deliberate deviation
-from the supported policy, intended only for local debugging, and emits a
-configure-time warning.
+The strict no-exception core is the only supported configuration (ADR 0042;
+issues #487, #720): `CCH_STRICT_NO_EXCEPTIONS=ON` is the default and sole
+supported mode, adding `-fno-exceptions` to every project-owned production and
+test target and passing strict mode to the Parity Architecture Gate. The
+exception-enabled fallback was retired in #720 — no
+`#if !defined(BOOST_ASIO_NO_EXCEPTIONS)` guards remain in project sources.
+Turning the option off is a deliberate deviation from the supported policy,
+intended only for local debugging, and emits a configure-time warning.
 
 Strict-mode evidence must include:
 
