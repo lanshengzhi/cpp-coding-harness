@@ -17,9 +17,6 @@
 namespace cch::ai::auth {
 namespace {
 
-constexpr std::string_view kBase64Alphabet =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
 [[nodiscard]] support::Expected<std::string> random_bytes(std::size_t count) {
     std::string bytes(count, '\0');
     if (RAND_bytes(reinterpret_cast<unsigned char*>(bytes.data()),
@@ -50,40 +47,15 @@ constexpr std::string_view kBase64Alphabet =
         digest_length);
 }
 
-[[nodiscard]] int base64_value(char character) {
-    const auto index = kBase64Alphabet.find(character);
-    return index == std::string_view::npos ? -1 : static_cast<int>(index);
-}
-
 [[nodiscard]] std::string base64_encode(std::string_view bytes) {
-    std::string result;
-    result.reserve((bytes.size() + 2) / 3 * 4);
-    std::size_t index = 0;
-    while (index + 3 <= bytes.size()) {
-        const auto first = static_cast<unsigned char>(bytes[index]);
-        const auto second = static_cast<unsigned char>(bytes[index + 1]);
-        const auto third = static_cast<unsigned char>(bytes[index + 2]);
-        result.push_back(kBase64Alphabet[(first >> 2) & 0x3F]);
-        result.push_back(kBase64Alphabet[((first << 4) | (second >> 4)) & 0x3F]);
-        result.push_back(kBase64Alphabet[((second << 2) | (third >> 6)) & 0x3F]);
-        result.push_back(kBase64Alphabet[third & 0x3F]);
-        index += 3;
-    }
-    const auto remaining = bytes.size() - index;
-    if (remaining == 1) {
-        const auto first = static_cast<unsigned char>(bytes[index]);
-        result.push_back(kBase64Alphabet[(first >> 2) & 0x3F]);
-        result.push_back(kBase64Alphabet[(first << 4) & 0x3F]);
-        result.push_back('=');
-        result.push_back('=');
-    } else if (remaining == 2) {
-        const auto first = static_cast<unsigned char>(bytes[index]);
-        const auto second = static_cast<unsigned char>(bytes[index + 1]);
-        result.push_back(kBase64Alphabet[(first >> 2) & 0x3F]);
-        result.push_back(kBase64Alphabet[((first << 4) | (second >> 4)) & 0x3F]);
-        result.push_back(kBase64Alphabet[(second << 2) & 0x3F]);
-        result.push_back('=');
-    }
+    // EVP_EncodeBlock writes one trailing NUL past the payload; size for it
+    // and trim back to the exact encoded length.
+    const std::size_t encoded_size = 4 * ((bytes.size() + 2) / 3);
+    std::string result(encoded_size + 1, '\0');
+    EVP_EncodeBlock(reinterpret_cast<unsigned char*>(result.data()),
+            reinterpret_cast<const unsigned char*>(bytes.data()),
+            static_cast<int>(bytes.size()));
+    result.resize(encoded_size);
     return result;
 }
 
@@ -110,30 +82,16 @@ constexpr std::string_view kBase64Alphabet =
         normalized.append(4 - remainder, '=');
     }
 
-    std::string result;
-    result.reserve(normalized.size() / 4 * 3);
-    for (std::size_t index = 0; index < normalized.size(); index += 4) {
-        const int first = base64_value(normalized[index]);
-        const int second = base64_value(normalized[index + 1]);
-        const int third = base64_value(normalized[index + 2]);
-        const int fourth = base64_value(normalized[index + 3]);
-        if (first < 0 || second < 0 ||
-            (normalized[index + 2] != '=' && third < 0) ||
-            (normalized[index + 3] != '=' && fourth < 0)) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::JsonParse,
-                "invalid base64 character"));
-        }
-        result.push_back(static_cast<char>((first << 2) | (second >> 4)));
-        if (normalized[index + 2] != '=') {
-            result.push_back(static_cast<char>(
-                ((second << 4) & 0xF0) | (third >> 2)));
-        }
-        if (normalized[index + 3] != '=') {
-            result.push_back(static_cast<char>(
-                ((third << 6) & 0xC0) | fourth));
-        }
+    std::string result(normalized.size() / 4 * 3 + 1, '\0');
+    const int decoded = EVP_DecodeBlock(reinterpret_cast<unsigned char*>(result.data()),
+            reinterpret_cast<const unsigned char*>(normalized.data()),
+            static_cast<int>(normalized.size()));
+    if (decoded < 0) {
+        return std::unexpected(support::make_error(support::ErrorCode::JsonParse, "invalid base64 character"));
     }
+    // EVP_DecodeBlock counts padding toward its length; strip it back off.
+    const std::size_t padding = normalized.ends_with("==") ? 2 : normalized.ends_with('=') ? 1 : 0;
+    result.resize(static_cast<std::size_t>(decoded) - padding);
     return result;
 }
 
