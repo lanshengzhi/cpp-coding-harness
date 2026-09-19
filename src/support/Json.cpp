@@ -360,9 +360,11 @@ struct Parser {
 /// rules: shortest round-trip digits; fixed notation while the first digit's
 /// decimal exponent is in [-4, 15] and scientific (uppercase `E`, no `+`,
 /// no leading zero) outside that range; `-0` for negative zero; `null` for
-/// non-finite. Strings escape only `"`, `\\`, `\b`, `\f`, `\n`, `\r`, `\t`;
-/// every other byte (including control characters and UTF-8) is emitted raw,
-/// matching Glaze's writer.
+/// non-finite. Strings escape `"`, `\\`, `\b`, `\f`, `\n`, `\r`, `\t` and, like
+/// Glaze's writer with `escape_control_characters`, every other byte below
+/// 0x20 as `\u00XX`; all remaining bytes (including UTF-8 and 0x7f) are
+/// emitted raw. RFC 8259 forbids a raw control character inside a string, so
+/// emitting one produced invalid JSON for any content carrying one (#724).
 [[nodiscard]] std::string format_number(double value) {
     if (std::isnan(value) || std::isinf(value)) {
         return "null";
@@ -514,6 +516,17 @@ struct Parser {
                 out += "\\t";
                 break;
             default:
+                if (c < 0x20) {
+                    // Raw control characters are invalid inside a JSON string;
+                    // escape them exactly as Glaze's writer does when
+                    // `escape_control_characters` is enabled, so both writers
+                    // agree on the wire (#724).
+                    constexpr std::string_view kHexDigits = "0123456789ABCDEF";
+                    out += "\\u00";
+                    out.push_back(kHexDigits[(c >> 4) & 0xF]);
+                    out.push_back(kHexDigits[c & 0xF]);
+                    break;
+                }
                 out.push_back(static_cast<char>(c));
                 break;
             }

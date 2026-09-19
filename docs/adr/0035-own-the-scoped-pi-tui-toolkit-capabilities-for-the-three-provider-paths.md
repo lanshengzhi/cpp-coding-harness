@@ -8,6 +8,8 @@ The pi-tui toolkit surface is exactly the reusable terminal/input/editor/compone
 
 > Terminology refined by [ADR 0039](0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md): every “public” toolkit, module, header, utility, or surface reference in this ADR means the repository-internal `cch_tui` Owner Interface. It does not mean an installed consumer surface, SDK, ABI, CMake package, or exported target. The Supported/Deferred capability classifications and observable TUI semantics remain authoritative.
 
+> Fragment-window correction ([#722](https://github.com/lanshengzhi/cpp-coding-harness/issues/722)): the "pi's 150 ms fragment timeout" recorded below was never pi's value. pi's `StdinBuffer` resolves a lone ESC after 10 ms, any other held fragment after 50 ms, and raises the escape window to 100 ms over SSH (`PI_TUI_ESC_TIMEOUT` overrides all three); 150 ms was this repository's polling-era default. The split-response buffering contract is unchanged and now aligned at pi's values.
+
 ## Considered options
 
 - Adopt pi's raw-string key matching end to end (`matchesKey(data, keyId)` on raw escape sequences, process-global Kitty flag): rejected — decoding once at the terminal edge into typed `KeyEvent`/`PasteEvent` values is the repository's passive-value idiom, gives a single coverage/audit point for pi's sequence tables, and carries the bounded-paste hardening; the observable contract (which sequences produce which actions, the `modifier+key` identifier grammar, Kitty press/repeat/release semantics) is fully preserved and is what the gate must prove. Adopting string matching across consumers would be mechanical TypeScript translation, which the map excludes.

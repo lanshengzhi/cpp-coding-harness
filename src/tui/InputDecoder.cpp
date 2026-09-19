@@ -677,6 +677,19 @@ struct ResponseScan {
 
 } // namespace
 
+std::chrono::milliseconds resolve_escape_fragment_timeout(std::string_view configured, bool over_ssh) {
+    if (!configured.empty()) {
+        double parsed = 0.0;
+        const auto* first = configured.data();
+        const auto* last = first + configured.size();
+        const auto [end, error] = std::from_chars(first, last, parsed);
+        if (error == std::errc{} && end == last && std::isfinite(parsed) && parsed > 0.0) {
+            return std::chrono::milliseconds{static_cast<std::chrono::milliseconds::rep>(parsed)};
+        }
+    }
+    return over_ssh ? kSshEscapeFragmentTimeout : kEscapeFragmentTimeout;
+}
+
 StreamDecodeResult TerminalStreamDecoder::feed(std::string_view input) {
     StreamDecodeResult result;
     for (const auto byte : input) {

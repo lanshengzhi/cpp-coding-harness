@@ -1370,6 +1370,47 @@ TEST_CASE("Process Terminal waits on readiness and wakes promptly for stop", "[t
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
 }
 
+TEST_CASE("Process Terminal resolves a lone escape within pi's escape fragment window",
+        "[tui][terminal][issue722][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    std::mutex input_mutex;
+    std::string delivered;
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    REQUIRE(terminal.start(
+            [&](std::string input) -> cch::support::ExpectedVoid {
+                std::lock_guard lock(input_mutex);
+                delivered += input;
+                return {};
+            },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // A lone ESC resolves at the fragment deadline. pi selects that window from
+    // what the buffer holds (`buffer === ESC ? escapeTimeout : timeout`,
+    // stdin-buffer.ts), which is 10 ms for this case; the polling-era 150 ms
+    // window cannot meet this bound (#722).
+    const auto started = std::chrono::steady_clock::now();
+    REQUIRE(::write(pty->master.get(), "\x1b", 1) == 1);
+    REQUIRE(cch::tests::wait_until([&] {
+        std::lock_guard lock(input_mutex);
+        return !delivered.empty();
+    }));
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+
+    CHECK(delivered == "\x1b");
+    CAPTURE(elapsed_ms);
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+    // Sanitizer overhead invalidates this performance bound; the functional
+    // assertions above still run (CODING_STANDARDS.md §11.9).
+    (void)elapsed_ms;
+#else
+    CHECK(elapsed_ms < 100);
+#endif
+}
+
 TEST_CASE("Process Terminal stops promptly while input is streaming", "[tui][terminal][issue462][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
@@ -1443,6 +1484,59 @@ TEST_CASE("Process Terminal backpressures bounded output in write order", "[tui]
     }
     REQUIRE(received.size() == expected.size());
     CHECK(received == expected);
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE("Process Terminal admits a startup-sized paint while the output is not draining",
+        "[tui][terminal][issue727][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // A full-frame repaint is delivered as thousands of small writes, and the
+    // measured startup paint queues 252-279 KB at 120x40 (#727). The bound must
+    // therefore exceed one paint: with the former 256 KiB bound the PTY buffer
+    // plus the queue admitted ~320 KB, so a startup paint was refused with Busy
+    // while the terminal was stalled -- and the startup render path turned that
+    // backpressure into a fatal "Native TUI failed" instead of waiting.
+    constexpr std::size_t kChunkCount = 1000;
+    const std::string payload(512, 'p');
+    std::size_t refused_at = kChunkCount;
+    std::string refused_detail;
+    for (std::size_t index = 0; index < kChunkCount; ++index) {
+        if (auto written = terminal.write(std::format("paint-{:05d}-{}", index, payload)); !written) {
+            refused_at = index;
+            refused_detail = written.error().message;
+            break;
+        }
+    }
+    INFO("refused at chunk " << refused_at << ": " << refused_detail);
+    CHECK(refused_at == kChunkCount);
+
+    // Accepting the paint is not enough: every admitted byte still has to reach
+    // the terminal, in write order, once the master drains.
+    const auto last_marker = std::format("paint-{:05d}-", kChunkCount - 1);
+    std::string received;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (received.find(last_marker) == std::string::npos && std::chrono::steady_clock::now() < deadline) {
+        received += cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50));
+    }
+    std::size_t cursor = 0;
+    std::size_t missing = kChunkCount;
+    for (std::size_t index = 0; index < kChunkCount; ++index) {
+        const auto marker = std::format("paint-{:05d}-", index);
+        const auto position = received.find(marker, cursor);
+        if (position == std::string::npos) {
+            missing = index;
+            break;
+        }
+        cursor = position + marker.size();
+    }
+    CHECK(missing == kChunkCount);
     REQUIRE(terminal.stop());
 }
 
@@ -1521,7 +1615,7 @@ TEST_CASE("Process Terminal admits a large single write on a draining terminal",
     // is admitted when nothing is queued: the fast path writes the writable
     // prefix and the delivery worker drains the remainder in order on the
     // healthy, draining terminal. The bound only caps accumulated backlog.
-    const std::string large(1024 * 1024, 'L'); // 1 MiB > the 256 KiB bound
+    const std::string large(2 * 1024 * 1024, 'L'); // 2 MiB > the 1 MiB bound
     REQUIRE(terminal.write(large));
     std::string received;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);

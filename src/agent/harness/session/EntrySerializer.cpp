@@ -176,7 +176,7 @@ namespace {
 
 template <typename Dto>
 [[nodiscard]] support::Expected<std::string> serialize_tree_entry(const Dto& dto) {
-    auto json = glz::write_json(dto);
+    auto json = support::write_json(dto);
     if (!json) {
         return std::unexpected(session_error("failed to serialize tree entry"));
     }
@@ -207,19 +207,18 @@ template <typename Dto>
     return *type;
 }
 
+/// Parse one entry DTO from the raw line rather than from the `glz::generic`
+/// already built for it. Glaze's generic -> DTO conversion re-serializes the
+/// generic through its own default (unescaped) writer and reads that text back,
+/// so a pi-captured `\uXXXX` control character failed with a `syntax_error`
+/// reported against the intermediate text and not the line (#724).
 template <typename T>
-[[nodiscard]] support::Expected<T> entry_from_generic(
-    const glz::generic& value,
-    std::string_view line,
-    std::size_t line_number) {
-    auto parsed = glz::read_json<T>(value);
+[[nodiscard]] support::Expected<T> entry_from_line(std::string_view line, std::size_t line_number) {
+    auto parsed = support::read_json<T>(line);
     if (!parsed) {
-        return std::unexpected(session_error(
-            "failed to parse session entry",
-            "failed to parse session entry at line " + std::to_string(line_number) + ": " +
-                glz::format_error(parsed.error(), line)));
+        return std::unexpected(session_error("failed to parse session entry",
+                "failed to parse session entry at line " + std::to_string(line_number) + ": " + parsed.error().detail));
     }
-    // The engaged check above makes this a non-throwing move.
     return std::move(*parsed);
 }
 
@@ -815,7 +814,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
             }
 
             if (*type == "header" || *type == "session") {
-                auto header = entry_from_generic<detail::ReadHeaderDto>(*generic, stored_line, line_number);
+                auto header = entry_from_line<detail::ReadHeaderDto>(stored_line, line_number);
                 if (!header) {
                     return std::unexpected(header.error());
                 }
@@ -871,7 +870,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
     auto payload = support::json_from_glaze(*generic);
     auto kind = kind_from_type(*type);
     if (kind == SessionEntryKind::Message) {
-        auto dto = entry_from_generic<detail::MessageEntryDto>(*generic, line, line_number);
+        auto dto = entry_from_line<detail::MessageEntryDto>(line, line_number);
         if (!dto) {
             return std::unexpected(dto.error());
         }
@@ -900,7 +899,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
     entry.payload = std::move(payload);
     switch (kind) {
     case SessionEntryKind::ModelChange: {
-        auto dto = entry_from_generic<detail::ModelChangeDto>(*generic, line, line_number);
+        auto dto = entry_from_line<detail::ModelChangeDto>(line, line_number);
         if (!dto) {
             return std::unexpected(dto.error());
         }
@@ -912,7 +911,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
         break;
     }
     case SessionEntryKind::ThinkingLevelChange: {
-        auto dto = entry_from_generic<detail::ThinkingLevelChangeDto>(*generic, line, line_number);
+        auto dto = entry_from_line<detail::ThinkingLevelChangeDto>(line, line_number);
         if (!dto) {
             return std::unexpected(dto.error());
         }
@@ -921,7 +920,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
         break;
     }
     case SessionEntryKind::ActiveToolsChange: {
-        auto dto = entry_from_generic<detail::ActiveToolsChangeDto>(*generic, line, line_number);
+        auto dto = entry_from_line<detail::ActiveToolsChangeDto>(line, line_number);
         if (!dto) {
             return std::unexpected(dto.error());
         }
@@ -930,7 +929,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
         break;
     }
     case SessionEntryKind::Custom: {
-        auto dto = entry_from_generic<detail::CustomDto>(*generic, line, line_number);
+        auto dto = entry_from_line<detail::CustomDto>(line, line_number);
         if (!dto) {
             return std::unexpected(dto.error());
         }
@@ -942,7 +941,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
         break;
     }
     case SessionEntryKind::CustomMessage: {
-        auto dto = entry_from_generic<detail::CustomMessageDto>(*generic, line, line_number);
+        auto dto = entry_from_line<detail::CustomMessageDto>(line, line_number);
         if (!dto) {
             return std::unexpected(dto.error());
         }
@@ -960,7 +959,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
         break;
     }
     case SessionEntryKind::Label: {
-        auto dto = entry_from_generic<detail::LabelDto>(*generic, line, line_number);
+        auto dto = entry_from_line<detail::LabelDto>(line, line_number);
         if (!dto) {
             return std::unexpected(dto.error());
         }
@@ -972,7 +971,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
         break;
     }
     case SessionEntryKind::Compaction: {
-        auto dto = entry_from_generic<detail::CompactionDto>(*generic, line, line_number);
+        auto dto = entry_from_line<detail::CompactionDto>(line, line_number);
         if (!dto) {
             return std::unexpected(dto.error());
         }
@@ -1010,7 +1009,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
         break;
     }
     case SessionEntryKind::BranchSummary: {
-        auto dto = entry_from_generic<detail::BranchSummaryDto>(*generic, line, line_number);
+        auto dto = entry_from_line<detail::BranchSummaryDto>(line, line_number);
         if (!dto) {
             return std::unexpected(dto.error());
         }
@@ -1033,7 +1032,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
         break;
     }
     case SessionEntryKind::SessionInfo: {
-        auto dto = entry_from_generic<detail::SessionInfoDto>(*generic, line, line_number);
+        auto dto = entry_from_line<detail::SessionInfoDto>(line, line_number);
         if (!dto) {
             return std::unexpected(dto.error());
         }
@@ -1042,7 +1041,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
         break;
     }
     case SessionEntryKind::Leaf: {
-        auto dto = entry_from_generic<detail::LeafDto>(*generic, line, line_number);
+        auto dto = entry_from_line<detail::LeafDto>(line, line_number);
         if (!dto) {
             return std::unexpected(dto.error());
         }
