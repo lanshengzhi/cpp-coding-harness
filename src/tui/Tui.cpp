@@ -477,6 +477,32 @@ support::ExpectedVoid Tui::render() {
         return {};
     };
 
+    // Clear rows [from, to) in place: drop each row's overlapping image
+    // placements, then blank the row. A refused row is reported through
+    // `on_refusal` before the backpressure note so a resumable clear records
+    // the first row it has not cleared (#597, #732).
+    const auto clear_rows_in_place = [&](std::size_t from, std::size_t to, auto&& on_refusal) -> support::ExpectedVoid {
+        for (std::size_t row = from; row < to; ++row) {
+            const CellRegion region{
+                    .column = 0,
+                    .row = row,
+                    .columns = dimensions.columns,
+                    .rows = 1,
+            };
+            if (auto result = remove_images_intersecting(region); !result) {
+                on_refusal(row);
+                note_backpressure(result.error());
+                return std::unexpected(result.error());
+            }
+            if (auto result = clear_row(terminal_, row, dimensions.columns); !result) {
+                on_refusal(row);
+                note_backpressure(result.error());
+                return std::unexpected(result.error());
+            }
+        }
+        return {};
+    };
+
     const auto supports_sync = capabilities.synchronized_output;
     const auto initial_viewport_top = viewport_top_;
     const auto initial_active_images = active_images_;
@@ -627,21 +653,10 @@ support::ExpectedVoid Tui::render() {
             if (auto result = write_full_buffer(frame_write_start); !result) {
                 return std::unexpected(result.error());
             }
-            for (std::size_t row = new_lines.size(); row < viewport_height; ++row) {
-                const CellRegion region{
-                        .column = 0,
-                        .row = row,
-                        .columns = dimensions.columns,
-                        .rows = 1,
-                };
-                if (auto result = remove_images_intersecting(region); !result) {
-                    note_backpressure(result.error());
-                    return std::unexpected(result.error());
-                }
-                if (auto result = clear_row(terminal_, row, dimensions.columns); !result) {
-                    note_backpressure(result.error());
-                    return std::unexpected(result.error());
-                }
+            // The full buffer above is already admitted, so a refusal here
+            // resumes at the repaint rather than at a tracked stale row.
+            if (auto result = clear_rows_in_place(new_lines.size(), viewport_height, [](std::size_t) {}); !result) {
+                return std::unexpected(result.error());
             }
             return {};
         }
@@ -688,23 +703,10 @@ support::ExpectedVoid Tui::render() {
             // inside the visible viewport are cleared in place (rows that already
             // scrolled into the terminal's scrollback keep their history). A
             // retry resumes the tail at the first row it has not cleared.
-            for (std::size_t row = stale_start; row < stale_end; ++row) {
-                const CellRegion region{
-                        .column = 0,
-                        .row = row,
-                        .columns = dimensions.columns,
-                        .rows = 1,
-                };
-                if (auto result = remove_images_intersecting(region); !result) {
-                    stale_cleared_row = row;
-                    note_backpressure(result.error());
-                    return std::unexpected(result.error());
-                }
-                if (auto result = clear_row(terminal_, row, dimensions.columns); !result) {
-                    stale_cleared_row = row;
-                    note_backpressure(result.error());
-                    return std::unexpected(result.error());
-                }
+            if (auto result = clear_rows_in_place(
+                        stale_start, stale_end, [&](std::size_t row) { stale_cleared_row = row; });
+                    !result) {
+                return std::unexpected(result.error());
             }
             stale_cleared_row = stale_end;
         }
@@ -841,9 +843,6 @@ support::ExpectedVoid Tui::render() {
             .rows = previous_lines_.size(),
             .dimensions = dimensions,
             .viewport_height = viewport_height,
-            .cleared = false,
-            .stale_below = 0,
-            .stale_cleared = 0,
     };
     previous_viewport_height_ = viewport_height;
     previous_dimensions_ = dimensions;

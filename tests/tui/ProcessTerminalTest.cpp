@@ -145,6 +145,27 @@ IoContextRunner& test_io() {
     return runner;
 }
 
+// Fill the terminal's bounded output queue with uniquely labelled 4 KB chunks
+// (the master is never read) until a write is refused with Busy. Returns the
+// concatenation of the admitted chunks so the drained bytes prove write order.
+[[nodiscard]] std::string fill_output_queue_until_busy(cch::tui::Terminal& terminal) {
+    std::string admitted;
+    bool saw_busy = false;
+    for (std::size_t i = 0; i < 2000; ++i) {
+        const auto chunk = std::format("chunk-{:06d}-{};", i, std::string(4000, 'x'));
+        const auto result = terminal.write(chunk);
+        if (!result) {
+            REQUIRE(result.error().code == cch::support::ErrorCode::Busy);
+            saw_busy = true;
+            break;
+        }
+        admitted += chunk;
+    }
+    REQUIRE(saw_busy);
+    REQUIRE_FALSE(admitted.empty());
+    return admitted;
+}
+
 [[nodiscard]] bool answer_appearance_query(int descriptor, std::string_view response) {
     constexpr std::string_view kColorSchemeQuery = "\x1b[?996n";
     constexpr std::string_view kBackgroundQuery = "\x1b]11;?\x07";
@@ -1461,20 +1482,7 @@ TEST_CASE("Process Terminal backpressures bounded output in write order", "[tui]
     // up: the terminal falls back to its bounded ordered queue and reports
     // explicit backpressure (`Busy`) instead of blocking the caller. Each
     // chunk is unique so the final concatenation proves write order.
-    std::string expected;
-    bool saw_busy = false;
-    for (std::size_t i = 0; i < 2000; ++i) {
-        const auto chunk = std::format("chunk-{:06d}-{};", i, std::string(4000, 'x'));
-        auto result = terminal.write(chunk);
-        if (!result) {
-            CHECK(result.error().code == cch::support::ErrorCode::Busy);
-            saw_busy = true;
-            break;
-        }
-        expected += chunk;
-    }
-    REQUIRE(saw_busy);
-    REQUIRE_FALSE(expected.empty());
+    const std::string expected = fill_output_queue_until_busy(terminal);
 
     // Once the master drains, every admitted byte arrives in write order.
     std::string received;
@@ -1626,19 +1634,7 @@ TEST_CASE(
     // Fill the ordered queue without consuming the PTY. A render frame must
     // be staged behind the synchronized-update seam rather than rejected a
     // chunk at a time or leaving the terminal inside an open update.
-    std::string expected;
-    bool saw_busy = false;
-    for (std::size_t i = 0; i < 2000; ++i) {
-        const auto chunk = std::format("queued-{:06d}-{};", i, std::string(4000, 'q'));
-        auto result = terminal.write(chunk);
-        if (!result) {
-            CHECK(result.error().code == cch::support::ErrorCode::Busy);
-            saw_busy = true;
-            break;
-        }
-        expected += chunk;
-    }
-    REQUIRE(saw_busy);
+    const std::string expected = fill_output_queue_until_busy(terminal);
 
     const auto frame_payload = std::string("frame-payload-") + std::string(8000, 'f');
     REQUIRE(terminal.begin_synchronized_update());
