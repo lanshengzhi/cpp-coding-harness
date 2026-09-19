@@ -2445,6 +2445,42 @@ TEST_CASE("Native TUI retries a transient render backpressure failure", "[coding
     CHECK(run_result->error().message == "Native TUI render failed");
 }
 
+TEST_CASE(
+        "Native TUI defers a startup frame rejected by terminal backpressure", "[coding_agent][tui][issue727][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    TransientRenderBackpressureTerminal terminal;
+    // Reject the second (last) startup frame, which is a startup render rather
+    // than a ticker frame. Startup used to call `Tui::render` directly and map
+    // this typed Busy onto `fail_start`, killing the run before the first
+    // prompt. Rejecting the last one matters: no later startup paint supersedes
+    // it, so the owed frame can only be repainted by the retry timer.
+    terminal.fail_on_render_end = 2;
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    // Backpressure on a startup frame is a deferral, not a startup failure: the
+    // run survives the rejected frame...
+    CHECK_FALSE(run_result.has_value());
+    // ...and the frame it still owes is repainted by the retry timer instead of
+    // being forgotten (the two startup paints plus the deferred frame's retry).
+    CHECK(pump_until(io, [&] { return terminal.render_end_calls >= 3; }, std::chrono::milliseconds{1000}));
+    CHECK_FALSE(run_result.has_value());
+}
+
 TEST_CASE("Native TUI redacts startup failures and leaves the Session closed",
         "[coding_agent][tui][failure][issue58][spec]") {
     tests::RuntimeFixture runtime;

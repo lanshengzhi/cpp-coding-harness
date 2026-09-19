@@ -487,6 +487,18 @@ private:
         return started_generation != action_generation_;
     }
 
+    // ── Frame painting ───────────────────────────────────────────────────
+
+    /// One frame attempt: painted, or owed and deferred to the retry timer.
+    enum class PaintOutcome { Painted, Deferred };
+    /// Attempt one frame through `Tui::render`. A typed `Busy` is terminal
+    /// output backpressure rather than a failure: the Tui has rolled its
+    /// differential state back, so the frame stays owed and is repainted by the
+    /// render-retry timer once the queue drains. Every other error is returned
+    /// to the caller. Deferral is the one policy, so a startup frame and a
+    /// ticker frame cannot disagree about it.
+    [[nodiscard]] support::Expected<PaintOutcome> paint_frame();
+
     // ── Exit gating ──────────────────────────────────────────────────────
 
     [[nodiscard]] bool render();
