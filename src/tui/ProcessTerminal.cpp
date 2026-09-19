@@ -1389,9 +1389,13 @@ support::ExpectedVoid ProcessTerminal::clear_screen() {
     // pi's resize full-redraw clears scrollback too (`\x1b[3J`): the native
     // scroll history, the mirrored scroll count, and the anchor all reset
     // (the screen is cleared and homed, so buffer row 0 lands on screen row 0).
-    impl_->viewport_top = 0;
-    impl_->scroll_origin = 0;
-    return enqueue_output(*impl_, kClearScreen);
+    // A refused clear leaves all of that alone; the caller retries the frame.
+    auto result = enqueue_output(*impl_, kClearScreen);
+    if (result) {
+        impl_->viewport_top = 0;
+        impl_->scroll_origin = 0;
+    }
+    return result;
 }
 
 support::ExpectedVoid ProcessTerminal::write(std::string_view output) {
@@ -1407,6 +1411,16 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
         return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "Process Terminal cursor position is outside its dimensions"));
     }
+    // Cursor and scroll accounting describe admitted output only: a bounded
+    // queue refusal (Busy) leaves no bytes on the terminal, so the state moves
+    // exactly when its escape sequence is admitted. Otherwise a refused write
+    // would leave the terminal's scroll anchor ahead of its physical content
+    // and every later row would land one line off (#732).
+    const auto commit_cursor = [&](std::size_t row, std::size_t column, std::size_t scroll) {
+        impl_->viewport_top += scroll;
+        impl_->cursor.row = row;
+        impl_->cursor.column = column;
+    };
     // `row` is a buffer row under the main-screen scrollback flow: the
     // renderer writes the full composed buffer in increasing row order, and
     // rows at or past the visible viewport bottom must advance the terminal's
@@ -1423,9 +1437,10 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
     if (position.row < first_visible_row) {
         // Rows above the first visible buffer row are in the terminal's
         // scrollback; as before the anchor, they clamp to screen row 0 (or margin_top).
-        impl_->cursor.row = impl_->margins_active ? impl_->margin_top : 0;
-        impl_->cursor.column = position.column;
-        return enqueue_output(*impl_, std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
+        const auto row = impl_->margins_active ? impl_->margin_top : 0;
+        auto result = enqueue_output(*impl_, std::format("\x1b[{};{}H", row + 1, position.column + 1));
+        if (result) commit_cursor(row, position.column, 0);
+        return result;
     }
     const auto screen_row = impl_->scroll_origin + position.row - impl_->viewport_top;
     if (impl_->margins_active) {
@@ -1435,15 +1450,15 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
             std::string sequence;
             sequence += std::format("\x1b[{};1H", impl_->margin_bottom + 1);
             sequence.append(scroll, '\n');
-            impl_->viewport_top += scroll;
-            impl_->cursor.row = impl_->margin_bottom;
-            impl_->cursor.column = position.column;
-            sequence += std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1);
-            return enqueue_output(*impl_, sequence);
+            sequence += std::format("\x1b[{};{}H", impl_->margin_bottom + 1, position.column + 1);
+            auto result = enqueue_output(*impl_, sequence);
+            if (result) commit_cursor(impl_->margin_bottom, position.column, scroll);
+            return result;
         }
-        impl_->cursor.row = impl_->margin_top + screen_row;
-        impl_->cursor.column = position.column;
-        return enqueue_output(*impl_, std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
+        const auto row = impl_->margin_top + screen_row;
+        auto result = enqueue_output(*impl_, std::format("\x1b[{};{}H", row + 1, position.column + 1));
+        if (result) commit_cursor(row, position.column, 0);
+        return result;
     }
     if (screen_row >= impl_->dimensions.rows) {
         const auto scroll = screen_row - (impl_->dimensions.rows - 1);
@@ -1454,14 +1469,13 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
         }
         sequence.append(scroll, '\r');
         sequence.append(scroll, '\n');
-        impl_->viewport_top += scroll;
-        impl_->cursor.row = bottom;
-        impl_->cursor.column = position.column;
-        return enqueue_output(*impl_, sequence);
+        auto result = enqueue_output(*impl_, sequence);
+        if (result) commit_cursor(bottom, position.column, scroll);
+        return result;
     }
-    impl_->cursor.row = screen_row;
-    impl_->cursor.column = position.column;
-    return enqueue_output(*impl_, std::format("\x1b[{};{}H", impl_->cursor.row + 1, position.column + 1));
+    auto result = enqueue_output(*impl_, std::format("\x1b[{};{}H", screen_row + 1, position.column + 1));
+    if (result) commit_cursor(screen_row, position.column, 0);
+    return result;
 }
 
 support::ExpectedVoid ProcessTerminal::set_scroll_margins(std::size_t top_row, std::size_t bottom_row) {
@@ -1473,24 +1487,33 @@ support::ExpectedVoid ProcessTerminal::set_scroll_margins(std::size_t top_row, s
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "Process Terminal scroll margins are invalid"));
     }
-    impl_->margin_top = top_row;
-    impl_->margin_bottom = bottom_row;
-    impl_->margins_active = true;
+    // The active region follows its admitted escape sequence, like the cursor
+    // state in `set_cursor`: a refused margin change must not leave the
+    // renderer addressing rows in a region the terminal does not have (#732).
     auto sequence = std::format("\x1b[{};{}r", top_row + 1, bottom_row + 1);
     sequence += std::format("\x1b[{};{}H", impl_->cursor.row + 1, impl_->cursor.column + 1);
-    return enqueue_output(*impl_, sequence);
+    auto result = enqueue_output(*impl_, sequence);
+    if (result) {
+        impl_->margin_top = top_row;
+        impl_->margin_bottom = bottom_row;
+        impl_->margins_active = true;
+    }
+    return result;
 }
 
 support::ExpectedVoid ProcessTerminal::reset_scroll_margins() {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
     if (!impl_->margins_active) return {};
-    impl_->margins_active = false;
-    impl_->margin_top = 0;
-    impl_->margin_bottom = 0;
     auto sequence = std::format("\x1b[1;{}r", impl_->dimensions.rows);
     sequence += std::format("\x1b[{};{}H", impl_->cursor.row + 1, impl_->cursor.column + 1);
-    return enqueue_output(*impl_, sequence);
+    auto result = enqueue_output(*impl_, sequence);
+    if (result) {
+        impl_->margins_active = false;
+        impl_->margin_top = 0;
+        impl_->margin_bottom = 0;
+    }
+    return result;
 }
 
 support::ExpectedVoid ProcessTerminal::set_dock_cursor(std::size_t dock_row, std::size_t column) {
@@ -1511,9 +1534,12 @@ support::ExpectedVoid ProcessTerminal::set_dock_cursor(std::size_t dock_row, std
                         impl_->margins_active,
                         impl_->margin_bottom)));
     }
-    impl_->cursor.row = screen_row;
-    impl_->cursor.column = column;
-    return enqueue_output(*impl_, std::format("\x1b[{};{}H", screen_row + 1, column + 1));
+    auto result = enqueue_output(*impl_, std::format("\x1b[{};{}H", screen_row + 1, column + 1));
+    if (result) {
+        impl_->cursor.row = screen_row;
+        impl_->cursor.column = column;
+    }
+    return result;
 }
 support::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
     std::lock_guard lock(impl_->mutex);

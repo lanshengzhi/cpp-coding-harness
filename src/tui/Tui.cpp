@@ -194,6 +194,7 @@ support::ExpectedVoid Tui::start() {
     previous_lines_.clear();
     previous_viewport_height_ = 0;
     previous_dimensions_ = terminal_.dimensions();
+    admitted_ = {};
     return {};
 }
 
@@ -290,6 +291,7 @@ support::ExpectedVoid Tui::clear_screen() {
     previous_dimensions_ = {};
     previous_viewport_height_ = 0;
     viewport_top_ = 0;
+    admitted_ = {};
     first_render_ = true;
     return {};
 }
@@ -419,16 +421,78 @@ support::ExpectedVoid Tui::render() {
         }
     }
 
+    // pi differential: first-changed-line tracking over the full buffer. The
+    // frame's write start is the first changed row or the committed buffer's
+    // admitted prefix, whichever is earlier: a partial flush leaves committed
+    // rows the terminal has not received yet (#732).
+    const auto min_previous = std::min(previous_lines_.size(), new_lines.size());
+    std::size_t first_diff = 0;
+    while (first_diff < min_previous && previous_lines_[first_diff] == new_lines[first_diff]) {
+        ++first_diff;
+    }
+    std::size_t frame_write_start = std::min(first_diff, admitted_prefix(dimensions, viewport_height));
+    // Physical progress of this frame: `admitted_rows` is the first composed
+    // row the terminal has not received. A typed Busy refusal records it and
+    // marks the frame a resumable partial flush: the rows behind the refusal
+    // are already on the terminal, so the retry resumes after them (#732).
+    // Every other failure endpoint keeps the all-or-nothing rollback.
+    // `stale_previous_rows` keeps the pre-shrink buffer height whose rows below
+    // the committed buffer are still owed a clear; `cleared_frame` records that
+    // this frame's composition assumes a cleared screen.
+    std::size_t admitted_rows = frame_write_start;
+    bool partial_flush = false;
+    bool cleared_frame = false;
+    const auto stale_previous_rows = std::max(previous_lines_.size(), admitted_.stale_below);
+    std::size_t stale_cleared_row = admitted_.stale_cleared;
+
+    const auto note_backpressure = [&](const support::Error& error,
+                                           std::optional<std::size_t> admitted = std::nullopt) {
+        if (error.code != support::ErrorCode::Busy) return;
+        admitted_rows = admitted.value_or(new_lines.size());
+        partial_flush = true;
+    };
+
+    // Write one composed buffer row and record the frame's admitted prefix.
+    // The differential drops the row's overlapping image placements first
+    // (fork-B image-follows-content); a full-buffer pass leaves placements to
+    // the image reconciliation that follows a completed frame, as before.
+    const auto write_row_at = [&](std::size_t row, bool remove_images) -> support::ExpectedVoid {
+        if (remove_images) {
+            const CellRegion region{
+                    .column = 0,
+                    .row = row,
+                    .columns = dimensions.columns,
+                    .rows = 1,
+            };
+            if (auto result = remove_images_intersecting(region); !result) {
+                note_backpressure(result.error(), row);
+                return std::unexpected(result.error());
+            }
+        }
+        if (auto result = write_line(terminal_, row, new_lines[row]); !result) {
+            note_backpressure(result.error(), row);
+            return std::unexpected(result.error());
+        }
+        admitted_rows = row + 1;
+        return {};
+    };
+
     const auto supports_sync = capabilities.synchronized_output;
     const auto initial_viewport_top = viewport_top_;
     const auto initial_active_images = active_images_;
     const auto initial_previous_dock_lines = previous_dock_lines_;
     const auto initial_previous_viewport_height = previous_viewport_height_;
-    const auto rollback_render_state = [&] {
+    // Viewport bookkeeping rolls back on any failed frame. A partial flush
+    // keeps its already-admitted rows and image removals physical (see the
+    // failure handling below), so the rollback is split.
+    const auto rollback_viewport_state = [&] {
         viewport_top_ = initial_viewport_top;
-        active_images_ = initial_active_images;
         previous_dock_lines_ = initial_previous_dock_lines;
         previous_viewport_height_ = initial_previous_viewport_height;
+    };
+    const auto rollback_render_state = [&] {
+        rollback_viewport_state();
+        active_images_ = initial_active_images;
     };
 
     // Begin synchronized update if supported
@@ -450,6 +514,8 @@ support::ExpectedVoid Tui::render() {
     auto write_dock_lines = [&]() -> support::ExpectedVoid {
         for (std::size_t i = dock_skip; i < new_dock_lines.size(); ++i) {
             if (auto result = write_dock_line(terminal_, i - dock_skip, new_dock_lines[i]); !result) {
+                // Reaching the dock means the viewport prefix is complete.
+                note_backpressure(result.error());
                 return std::unexpected(result.error());
             }
         }
@@ -461,6 +527,7 @@ support::ExpectedVoid Tui::render() {
             const std::string empty_line(dimensions.columns, ' ');
             for (std::size_t row = visible_rows; row < previous_visible; ++row) {
                 if (auto result = write_dock_line(terminal_, row, empty_line); !result) {
+                    note_backpressure(result.error());
                     return std::unexpected(result.error());
                 }
             }
@@ -468,12 +535,12 @@ support::ExpectedVoid Tui::render() {
         return {};
     };
 
-    auto write_full_buffer = [&]() -> support::ExpectedVoid {
+    auto write_full_buffer = [&](std::size_t start_row) -> support::ExpectedVoid {
         if (auto margins = apply_scroll_margins(); !margins) {
             return std::unexpected(margins.error());
         }
-        for (std::size_t row = 0; row < new_lines.size(); ++row) {
-            if (auto result = write_line(terminal_, row, new_lines[row]); !result) {
+        for (std::size_t row = start_row; row < new_lines.size(); ++row) {
+            if (auto result = write_row_at(row, /*remove_images=*/false); !result) {
                 return std::unexpected(result.error());
             }
         }
@@ -487,16 +554,39 @@ support::ExpectedVoid Tui::render() {
 
     // pi fullRender(true): drop all image placements, clear screen, home, and
     // clear scrollback (`\x1b[2J\x1b[H\x1b[3J`), then reflow the full buffer so
-    // the terminal's scroll history starts clean.
-    auto clear_and_rewrite = [&]() -> support::ExpectedVoid {
-        if (auto result = remove_active_images(); !result) {
-            return std::unexpected(result.error());
-        }
-        if (auto result = terminal_.clear_screen(); !result) {
-            return std::unexpected(result.error());
-        }
+    // the terminal's scroll history starts clean. The clear is owed once per
+    // composition: a retry after backpressure already cleared and painted its
+    // prefix, so it resumes there instead of clearing and re-emitting the
+    // buffer from row zero (#732). `force_clear` is the reflow case where rows
+    // above the tracked viewport cannot be reached in place (a shrunken buffer
+    // or a change above the visible top): the pending prefix does not make that
+    // repaint safe, so the screen clears again and the retry resumes from the
+    // new attempt's prefix.
+    auto clear_and_rewrite = [&](bool force_clear) -> support::ExpectedVoid {
+        // The clear homes the buffer at the screen top, physically in this
+        // frame or in the attempt that admitted the current prefix. Only a
+        // prefix whose remaining rows are all at or below the visible top can
+        // resume: rows above it have scrolled into the terminal's scrollback
+        // and addressing them in place would clamp them onto the visible top.
+        cleared_frame = true;
+        const auto previous_visible_top = viewport_top_;
         viewport_top_ = 0;
-        return write_full_buffer();
+        const auto resumable = !force_clear && admitted_prefix(dimensions, viewport_height) != 0 && admitted_.cleared &&
+                               frame_write_start >= previous_visible_top;
+        if (!resumable) {
+            if (auto result = remove_active_images(); !result) {
+                return std::unexpected(result.error());
+            }
+            if (auto result = terminal_.clear_screen(); !result) {
+                return std::unexpected(result.error());
+            }
+            // The clear erased every physical row, so the watermark resets
+            // only once the clear itself is admitted.
+            admitted_ = {};
+            frame_write_start = 0;
+            admitted_rows = 0;
+        }
+        return write_full_buffer(frame_write_start);
     };
 
     auto render_result = [&]() -> support::ExpectedVoid {
@@ -504,7 +594,7 @@ support::ExpectedVoid Tui::render() {
             // pi fullRender(false): write the full buffer without clearing
             // ("assumes clean screen"), so startup content stays visible until
             // the buffer grows past one screen and scrolls away.
-            if (auto result = write_full_buffer(); !result) {
+            if (auto result = write_full_buffer(frame_write_start); !result) {
                 return std::unexpected(result.error());
             }
             if (!has_dock) {
@@ -513,6 +603,7 @@ support::ExpectedVoid Tui::render() {
                 if (auto result = terminal_.set_cursor(
                             CursorPosition{.column = 0, .row = new_lines.empty() ? 0U : new_lines.size() - 1});
                         !result) {
+                    note_backpressure(result.error());
                     return std::unexpected(result.error());
                 }
             }
@@ -524,16 +615,16 @@ support::ExpectedVoid Tui::render() {
         // scroll history is cleared, matching pi (the Termux height-change
         // special-case is not applicable and is not ported).
         if (width_changed || height_changed) {
-            return clear_and_rewrite();
+            return clear_and_rewrite(/*force_clear=*/false);
         }
-        // A viewport/dock re-partition repaints the full buffer at the new
+        // A viewport/dock re-partition repaints the buffer at the new
         // partition without clearing scrollback: every dock row is rewritten
         // at its new address. Rows the shrunken dock vacated inside the
         // grown viewport still show stale dock pixels (they are past the new
         // transcript end, so no buffer line repaints them): clear that gap
         // in place like the differential clear-on-shrink below (#597).
         if (viewport_height_changed) {
-            if (auto result = write_full_buffer(); !result) {
+            if (auto result = write_full_buffer(frame_write_start); !result) {
                 return std::unexpected(result.error());
             }
             for (std::size_t row = new_lines.size(); row < viewport_height; ++row) {
@@ -544,9 +635,11 @@ support::ExpectedVoid Tui::render() {
                         .rows = 1,
                 };
                 if (auto result = remove_images_intersecting(region); !result) {
+                    note_backpressure(result.error());
                     return std::unexpected(result.error());
                 }
                 if (auto result = clear_row(terminal_, row, dimensions.columns); !result) {
+                    note_backpressure(result.error());
                     return std::unexpected(result.error());
                 }
             }
@@ -557,12 +650,15 @@ support::ExpectedVoid Tui::render() {
         }
 
         // pi differential: first-changed-line tracking over the full buffer.
-        const auto min_previous = std::min(previous_lines_.size(), new_lines.size());
-        std::size_t first_diff = 0;
-        while (first_diff < min_previous && previous_lines_[first_diff] == new_lines[first_diff]) {
-            ++first_diff;
-        }
-        const auto viewport_unchanged = first_diff == min_previous && previous_lines_.size() == new_lines.size();
+        // A row the terminal has not received yet counts as changed: the frame
+        // must finish the admitted prefix's tail before it can be skipped. A
+        // shrink's stale tail rows count as changed until their clear runs.
+        const auto stale_start = std::max(new_lines.size(), stale_cleared_row);
+        const auto stale_end =
+                std::min(stale_previous_rows, viewport_top_ + (has_dock ? viewport_height : dimensions.rows));
+        const auto stale_clear_owed = stale_start < stale_end;
+        const auto viewport_unchanged = first_diff == min_previous && previous_lines_.size() == new_lines.size() &&
+                                        frame_write_start == new_lines.size() && !stale_clear_owed;
         const auto dock_unchanged = !has_dock || (previous_dock_lines_ == new_dock_lines);
         if (viewport_unchanged && dock_unchanged) return {};
 
@@ -574,14 +670,25 @@ support::ExpectedVoid Tui::render() {
             // redraw).
             const auto target_row = new_lines.empty() ? 0U : new_lines.size() - 1;
             if (first_diff < viewport_top_ || target_row < viewport_top_) {
-                return clear_and_rewrite();
+                return clear_and_rewrite(/*force_clear=*/true);
             }
 
             // Line-flow differential: write changed and appended lines from
-            // first_diff through the end of the buffer. Rows at or past the
-            // visible bottom advance the terminal's scrollback (the absolute-
-            // cursor seam scrolls on addressing a row below the viewport).
-            for (std::size_t row = first_diff; row < new_lines.size(); ++row) {
+            // the frame's write start through the end of the buffer. Rows at or
+            // past the visible bottom advance the terminal's scrollback (the
+            // absolute-cursor seam scrolls on addressing a row below the
+            // viewport).
+            for (std::size_t row = frame_write_start; row < new_lines.size(); ++row) {
+                if (auto result = write_row_at(row, /*remove_images=*/true); !result) {
+                    return std::unexpected(result.error());
+                }
+            }
+
+            // Clear-on-shrink: stale rows below the new content that are still
+            // inside the visible viewport are cleared in place (rows that already
+            // scrolled into the terminal's scrollback keep their history). A
+            // retry resumes the tail at the first row it has not cleared.
+            for (std::size_t row = stale_start; row < stale_end; ++row) {
                 const CellRegion region{
                         .column = 0,
                         .row = row,
@@ -589,34 +696,17 @@ support::ExpectedVoid Tui::render() {
                         .rows = 1,
                 };
                 if (auto result = remove_images_intersecting(region); !result) {
+                    stale_cleared_row = row;
+                    note_backpressure(result.error());
                     return std::unexpected(result.error());
                 }
-                if (auto result = write_line(terminal_, row, new_lines[row]); !result) {
+                if (auto result = clear_row(terminal_, row, dimensions.columns); !result) {
+                    stale_cleared_row = row;
+                    note_backpressure(result.error());
                     return std::unexpected(result.error());
                 }
             }
-
-            // Clear-on-shrink: stale rows below the new content that are still
-            // inside the visible viewport are cleared in place (rows that already
-            // scrolled into the terminal's scrollback keep their history).
-            if (new_lines.size() < previous_lines_.size()) {
-                const auto visible_rows = has_dock ? viewport_height : dimensions.rows;
-                const auto stale_end = std::min(previous_lines_.size(), viewport_top_ + visible_rows);
-                for (std::size_t row = new_lines.size(); row < stale_end; ++row) {
-                    const CellRegion region{
-                            .column = 0,
-                            .row = row,
-                            .columns = dimensions.columns,
-                            .rows = 1,
-                    };
-                    if (auto result = remove_images_intersecting(region); !result) {
-                        return std::unexpected(result.error());
-                    }
-                    if (auto result = clear_row(terminal_, row, dimensions.columns); !result) {
-                        return std::unexpected(result.error());
-                    }
-                }
-            }
+            stale_cleared_row = stale_end;
         }
 
         if (has_dock) {
@@ -663,6 +753,7 @@ support::ExpectedVoid Tui::render() {
                     const std::size_t visible_row = dock_row > dock_skip ? dock_row - dock_skip : 0;
                     if (auto cursor_result = terminal_.set_dock_cursor(visible_row, cursor_loc->column);
                             !cursor_result) {
+                        note_backpressure(cursor_result.error());
                         render_result = std::unexpected(cursor_result.error());
                     }
                 } else {
@@ -672,6 +763,7 @@ support::ExpectedVoid Tui::render() {
                     else if (cursor_loc->row > viewport_bottom)
                         cursor_loc->row = viewport_bottom;
                     if (auto cursor_result = terminal_.set_cursor(*cursor_loc); !cursor_result) {
+                        note_backpressure(cursor_result.error());
                         render_result = std::unexpected(cursor_result.error());
                     }
                 }
@@ -682,6 +774,7 @@ support::ExpectedVoid Tui::render() {
                 else if (cursor_loc->row > viewport_bottom)
                     cursor_loc->row = viewport_bottom;
                 if (auto cursor_result = terminal_.set_cursor(*cursor_loc); !cursor_result) {
+                    note_backpressure(cursor_result.error());
                     render_result = std::unexpected(cursor_result.error());
                 }
             }
@@ -697,7 +790,42 @@ support::ExpectedVoid Tui::render() {
     }
 
     if (!render_result) {
-        rollback_render_state();
+        if (partial_flush) {
+            // The terminal admitted the frame's prefix before refusing the next
+            // write, so the composed buffer becomes the committed baseline with
+            // that prefix marked: the retry resumes after the admitted rows
+            // instead of re-emitting the buffer from its first changed row
+            // (#732). The rows are physically there and the frame's image
+            // removals already happened, so both stay committed. A cleared
+            // frame leaves the buffer homed at the screen top, and a shrink
+            // leaves its stale rows owed a clear.
+            previous_lines_ = std::move(new_lines);
+            previous_raw_lines_ = std::move(next_raw_lines);
+            rollback_viewport_state();
+            if (cleared_frame) {
+                // The clear homed the buffer at the screen top; the admitted
+                // rows advanced the terminal's scrollback past the visible top.
+                const auto visible_rows = has_dock ? viewport_height : dimensions.rows;
+                viewport_top_ = admitted_rows > visible_rows ? admitted_rows - visible_rows : 0;
+                // The clear also erased the previously drawn dock rows, so the
+                // retry must repaint them even when the dock content is
+                // unchanged.
+                previous_dock_lines_.clear();
+            }
+            const auto committed_rows = previous_lines_.size();
+            admitted_ = {
+                    .rows = admitted_rows,
+                    .dimensions = dimensions,
+                    .viewport_height = viewport_height,
+                    .cleared = cleared_frame,
+                    .stale_below = !cleared_frame && stale_previous_rows > committed_rows ? stale_previous_rows
+                                                                                          : std::size_t{0},
+                    .stale_cleared =
+                            !cleared_frame && stale_cleared_row > committed_rows ? stale_cleared_row : std::size_t{0},
+            };
+        } else {
+            rollback_render_state();
+        }
         return std::unexpected(render_result.error());
     }
 
@@ -709,6 +837,14 @@ support::ExpectedVoid Tui::render() {
     // prepared row the terminal never received.
     previous_raw_lines_ = std::move(next_raw_lines);
     previous_raw_dock_lines_ = std::move(next_raw_dock_lines);
+    admitted_ = {
+            .rows = previous_lines_.size(),
+            .dimensions = dimensions,
+            .viewport_height = viewport_height,
+            .cleared = false,
+            .stale_below = 0,
+            .stale_cleared = 0,
+    };
     previous_viewport_height_ = viewport_height;
     previous_dimensions_ = dimensions;
     first_render_ = false;
@@ -896,6 +1032,14 @@ void Tui::invalidate() {
     if (request_render && render_request_sink_) {
         (void)render_request_sink_();
     }
+}
+
+std::size_t Tui::admitted_prefix(TerminalDimensions dimensions, std::size_t viewport_height) const {
+    if (dimensions.columns != admitted_.dimensions.columns || dimensions.rows != admitted_.dimensions.rows ||
+            viewport_height != admitted_.viewport_height) {
+        return 0;
+    }
+    return admitted_.rows;
 }
 
 bool Tui::owns(const Component* component) const {

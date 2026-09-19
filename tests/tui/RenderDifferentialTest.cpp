@@ -7,6 +7,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
+#include <charconv>
+#include <format>
 #include <memory>
 #include <string>
 #include <vector>
@@ -75,6 +78,173 @@ public:
 private:
     std::size_t cursor_row_;
     bool focused_{false};
+};
+
+/// A Component whose transcript and dock can change between frames: the shape
+/// of a long session whose editor line changes on a keystroke.
+class TranscriptDockComponent final : public cch::tui::Component {
+public:
+    void set_lines(std::vector<std::string> lines) { lines_ = std::move(lines); }
+    void set_dock_lines(std::vector<std::string> dock_lines) { dock_lines_ = std::move(dock_lines); }
+    void set_viewport_height(std::size_t height) {
+        viewport_height_ = height;
+        has_viewport_height_ = true;
+    }
+
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        cch::tui::RenderResult result;
+        result.lines = lines_;
+        result.dock_lines = dock_lines_;
+        if (has_viewport_height_) result.viewport_height = viewport_height_;
+        return result;
+    }
+
+    void invalidate() override {}
+
+private:
+    std::vector<std::string> lines_;
+    std::vector<std::string> dock_lines_;
+    std::size_t viewport_height_{0};
+    bool has_viewport_height_{false};
+};
+
+/// Distinct single-byte-width rows, so a frame's addressed rows are visible in
+/// the terminal's recorded cursor moves.
+[[nodiscard]] std::vector<std::string> session_rows(std::size_t count) {
+    std::vector<std::string> lines;
+    lines.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+        lines.push_back(std::format("row-{:04d}", index));
+    }
+    return lines;
+}
+
+/// A Terminal with a bounded undrained output queue: an escape sequence is
+/// admitted while the queue has room and refused with a typed Busy afterwards,
+/// the way ProcessTerminal refuses a backed-up queue. `drain()` models the
+/// terminal consuming what it holds, so a resumed frame can make progress
+/// across refusals. Admitted buffer rows and emitted bytes are recorded per
+/// frame.
+class BoundedQueueTerminal final : public cch::tui::Terminal {
+public:
+    BoundedQueueTerminal(cch::tui::TerminalDimensions dimensions, std::size_t capacity)
+        : dimensions_(dimensions), capacity_(capacity) {}
+
+    void drain() { queued_ = 0; }
+    [[nodiscard]] std::size_t emitted_bytes() const { return emitted_bytes_; }
+    [[nodiscard]] const std::vector<std::size_t>& cursor_rows() const { return cursor_rows_; }
+    [[nodiscard]] std::size_t dock_cursor_calls() const { return dock_cursor_calls_; }
+    [[nodiscard]] std::size_t blank_row_writes() const { return blank_row_writes_; }
+    [[nodiscard]] std::size_t clear_screen_calls() const { return clear_screen_calls_; }
+    [[nodiscard]] std::size_t last_written_row() const { return last_written_row_; }
+    void reset_frame_counters() {
+        emitted_bytes_ = 0;
+        cursor_rows_.clear();
+        dock_cursor_calls_ = 0;
+        blank_row_writes_ = 0;
+        last_written_row_ = 0;
+    }
+
+    [[nodiscard]] cch::support::ExpectedVoid start(
+            cch::tui::TerminalInputSink, cch::tui::TerminalResizeSink resize_sink) override {
+        resize_sink_ = std::move(resize_sink);
+        modes_.started = true;
+        return {};
+    }
+    [[nodiscard]] cch::support::ExpectedVoid stop() override {
+        modes_.started = false;
+        return {};
+    }
+    [[nodiscard]] cch::support::ExpectedVoid inject_resize(cch::tui::TerminalDimensions dimensions) {
+        dimensions_ = dimensions;
+        if (!resize_sink_) return {};
+        return resize_sink_(dimensions);
+    }
+    [[nodiscard]] cch::tui::TerminalDimensions dimensions() const override { return dimensions_; }
+    // No synchronized output: each escape sequence is delivered on its own, so
+    // a refused write leaves the frame partially admitted, as under tmux.
+    [[nodiscard]] cch::tui::TerminalCapabilities capabilities() const override { return {}; }
+    [[nodiscard]] cch::tui::TerminalModeState modes() const override { return modes_; }
+    [[nodiscard]] cch::support::ExpectedVoid clear_screen() override {
+        if (!admit(kEscapeCost)) return busy();
+        ++clear_screen_calls_;
+        return {};
+    }
+    [[nodiscard]] cch::support::ExpectedVoid write(std::string_view output) override {
+        if (!admit(output.size())) return busy();
+        if (!output.empty() && output.find_first_not_of(' ') == std::string_view::npos) {
+            ++blank_row_writes_;
+        } else if (output.starts_with("row-")) {
+            // Composed transcript rows carry their index, so a test can tell
+            // which rows the terminal has actually received.
+            std::size_t row = 0;
+            const auto digits = output.substr(4, 4);
+            const auto [_, parse_error] = std::from_chars(digits.data(), digits.data() + digits.size(), row);
+            if (parse_error == std::errc{}) last_written_row_ = row;
+        }
+        return {};
+    }
+    [[nodiscard]] cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition position) override {
+        if (!admit(kEscapeCost)) return busy();
+        cursor_rows_.push_back(position.row);
+        return {};
+    }
+    [[nodiscard]] cch::support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override {
+        if (!admit(kEscapeCost)) return busy();
+        return {};
+    }
+    [[nodiscard]] cch::support::ExpectedVoid reset_scroll_margins() override {
+        if (!admit(kEscapeCost)) return busy();
+        return {};
+    }
+    [[nodiscard]] cch::support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override {
+        if (!admit(kEscapeCost)) return busy();
+        ++dock_cursor_calls_;
+        return {};
+    }
+    [[nodiscard]] cch::support::Expected<cch::tui::TerminalImageHandle> place_image(
+            const cch::tui::TerminalImage&) override {
+        return cch::tui::TerminalImageHandle{};
+    }
+    [[nodiscard]] cch::support::ExpectedVoid remove_image(
+            cch::tui::TerminalImageHandle, const cch::tui::CellRegion&) override {
+        return {};
+    }
+    [[nodiscard]] cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid end_synchronized_update() override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid set_progress(bool) override { return {}; }
+    [[nodiscard]] cch::support::ExpectedVoid drain_input(
+            std::chrono::milliseconds, std::chrono::milliseconds) override {
+        return {};
+    }
+
+private:
+    static constexpr std::size_t kEscapeCost = 8;
+
+    [[nodiscard]] static cch::support::ExpectedVoid busy() {
+        return std::unexpected(
+                cch::support::make_error(cch::support::ErrorCode::Busy, "bounded queue cannot admit more output"));
+    }
+    [[nodiscard]] bool admit(std::size_t bytes) {
+        if (queued_ + bytes > capacity_) return false;
+        queued_ += bytes;
+        emitted_bytes_ += bytes;
+        return true;
+    }
+
+    cch::tui::TerminalDimensions dimensions_;
+    std::size_t capacity_{0};
+    std::size_t queued_{0};
+    std::size_t emitted_bytes_{0};
+    std::vector<std::size_t> cursor_rows_;
+    std::size_t dock_cursor_calls_{0};
+    std::size_t blank_row_writes_{0};
+    std::size_t clear_screen_calls_{0};
+    std::size_t last_written_row_{0};
+    cch::tui::TerminalResizeSink resize_sink_;
+    cch::tui::TerminalModeState modes_;
 };
 
 } // namespace
@@ -454,4 +624,302 @@ TEST_CASE("A one-row view change prepares only the changed composed row", "[tui]
     REQUIRE(tui.render());
     CHECK(cch::tui::detail::testing::frame_prepare_call_count(tui) == 1);
     CHECK(terminal.screen().front() == "one       ");
+}
+
+TEST_CASE("Tui resumes a backpressured frame after its admitted rows", "[tui][render][issue732][spec]") {
+    constexpr std::size_t kRows = 60;
+    constexpr std::size_t kCapacity = 400;
+    BoundedQueueTerminal terminal({.columns = 12, .rows = 4}, kCapacity);
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<TranscriptDockComponent>();
+    auto* view = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+
+    // A committed one-row frame, then a much larger one. The large frame is
+    // refused mid-buffer, so the terminal holds rows [0, admitted) and the
+    // committed buffer holds all kRows.
+    view->set_lines(session_rows(1));
+    REQUIRE(tui.render());
+    terminal.drain();
+    terminal.reset_frame_counters();
+
+    view->set_lines(session_rows(kRows));
+    // Every refusal leaves the rows the terminal admitted behind it, and every
+    // retry continues at the next row instead of re-emitting the buffer from
+    // its first changed row (row 1, after the committed one-row frame).
+    std::size_t expected_next = 1;
+    for (std::size_t attempt = 0; attempt < 50; ++attempt) {
+        const auto rendered = tui.render();
+        REQUIRE_FALSE(terminal.cursor_rows().empty());
+        CHECK(terminal.cursor_rows().front() == expected_next);
+        expected_next = terminal.last_written_row() + 1;
+        if (rendered) break;
+        CHECK(rendered.error().code == cch::support::ErrorCode::Busy);
+        terminal.drain();
+        terminal.reset_frame_counters();
+    }
+    CHECK(expected_next == kRows);
+}
+
+TEST_CASE("A dock-only frame after a backpressured paint emits only the dock", "[tui][render][issue732][spec]") {
+    constexpr std::size_t kRows = 2000;
+    constexpr std::size_t kWidth = 80;
+    constexpr std::size_t kCapacity = 16 * 1024;
+    BoundedQueueTerminal terminal({.columns = kWidth, .rows = 4}, kCapacity);
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<TranscriptDockComponent>();
+    auto* view = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+
+    view->set_lines(session_rows(kRows));
+    view->set_dock_lines({"editor"});
+    view->set_viewport_height(2);
+
+    // The composed buffer is far larger than one admission, so the paint is
+    // refused repeatedly and completes only by resuming after each refusal.
+    // Repeatedly re-emitting rows [0, admitted) instead consumes every drain
+    // and never reaches the dock.
+    bool painted = false;
+    for (std::size_t attempt = 0; attempt < 100 && !painted; ++attempt) {
+        painted = static_cast<bool>(tui.render());
+        terminal.drain();
+    }
+    REQUIRE(painted);
+
+    // A keystroke changes only the editor line. The frame must emit the dock
+    // row, never the transcript (`kRows * kWidth` composed bytes).
+    terminal.drain();
+    terminal.reset_frame_counters();
+    view->set_dock_lines({"editor!"});
+    REQUIRE(tui.render());
+    CHECK(terminal.cursor_rows().empty());
+    CHECK(terminal.dock_cursor_calls() >= 1);
+    CHECK(terminal.emitted_bytes() >= kWidth);
+    CHECK(terminal.emitted_bytes() <= 2 * kWidth);
+}
+
+TEST_CASE("Tui resumes a backpressured clear repaint after its admitted rows", "[tui][render][issue732][spec]") {
+    constexpr std::size_t kRows = 40;
+    // Admits the margins, the clear, and a few rows before refusing the rest.
+    BoundedQueueTerminal terminal({.columns = 12, .rows = 4}, 100);
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<TranscriptDockComponent>();
+    auto* view = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+
+    // Paint 40 rows on a 4-row screen, leaving the viewport scrolled to row 36.
+    view->set_lines(session_rows(kRows));
+    bool painted = false;
+    for (std::size_t attempt = 0; attempt < 50 && !painted; ++attempt) {
+        painted = static_cast<bool>(tui.render());
+        terminal.drain();
+    }
+    REQUIRE(painted);
+
+    // Shrinking to 5 rows ends above the scrolled viewport, so the frame must
+    // clear and reflow. The refusal must resume at the admitted row instead of
+    // clearing and re-emitting from row zero on every retry.
+    terminal.drain();
+    terminal.reset_frame_counters();
+    view->set_lines(session_rows(5));
+    std::size_t expected_next = 0;
+    bool finished = false;
+    for (std::size_t attempt = 0; attempt < 50 && !finished; ++attempt) {
+        const auto rendered = tui.render();
+        REQUIRE_FALSE(terminal.cursor_rows().empty());
+        CHECK(terminal.cursor_rows().front() == expected_next);
+        expected_next = terminal.last_written_row() + 1;
+        finished = static_cast<bool>(rendered);
+        if (!rendered) {
+            CHECK(rendered.error().code == cch::support::ErrorCode::Busy);
+            terminal.drain();
+            terminal.reset_frame_counters();
+        }
+    }
+    REQUIRE(finished);
+    CHECK(expected_next == 5);
+}
+
+TEST_CASE("Tui repaints a cleared dock when the dock write is refused", "[tui][render][issue732][spec]") {
+    constexpr std::size_t kRows = 40;
+    // Admits the margins, the clear, both viewport rows, and the dock cursor,
+    // but not the dock row itself.
+    BoundedQueueTerminal terminal({.columns = 12, .rows = 4}, 100);
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<TranscriptDockComponent>();
+    auto* view = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+
+    view->set_lines(session_rows(kRows));
+    view->set_dock_lines({"editor"});
+    view->set_viewport_height(3);
+    bool painted = false;
+    for (std::size_t attempt = 0; attempt < 50 && !painted; ++attempt) {
+        painted = static_cast<bool>(tui.render());
+        terminal.drain();
+    }
+    REQUIRE(painted);
+
+    // Shrinking above the viewport clears the screen, so the previously drawn
+    // dock is erased. The viewport rows fit and the dock write is refused.
+    terminal.drain();
+    terminal.reset_frame_counters();
+    view->set_lines(session_rows(2));
+    const auto shrunk = tui.render();
+    REQUIRE_FALSE(shrunk);
+    CHECK(shrunk.error().code == cch::support::ErrorCode::Busy);
+    CHECK(terminal.dock_cursor_calls() >= 1);
+
+    // The dock content did not change, but the retry still owes the repaint the
+    // clear erased: skipping it would leave the dock blank.
+    terminal.drain();
+    terminal.reset_frame_counters();
+    REQUIRE(tui.render());
+    CHECK(terminal.dock_cursor_calls() >= 1);
+    CHECK(terminal.emitted_bytes() >= 6);
+}
+
+TEST_CASE("Tui clears again when a pending clear repaint changes above the visible top",
+        "[tui][render][issue732][spec]") {
+    constexpr std::size_t kRows = 60;
+    // Admits the margins, the clear, and five 10-column rows, but not the sixth.
+    BoundedQueueTerminal terminal({.columns = 12, .rows = 4}, 170);
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<TranscriptDockComponent>();
+    auto* view = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+
+    view->set_lines(session_rows(kRows));
+    bool painted = false;
+    for (std::size_t attempt = 0; attempt < 50 && !painted; ++attempt) {
+        painted = static_cast<bool>(tui.render());
+        terminal.drain();
+    }
+    REQUIRE(painted);
+
+    // A width change reflows from a clean screen; the repaint is refused with
+    // its visible top above row zero.
+    terminal.drain();
+    REQUIRE(terminal.inject_resize({.columns = 10, .rows = 4}));
+    const auto resized = tui.render();
+    REQUIRE_FALSE(resized);
+    CHECK(resized.error().code == cch::support::ErrorCode::Busy);
+    const auto clears_after_resize = terminal.clear_screen_calls();
+    REQUIRE(clears_after_resize >= 1);
+
+    // A change above the pending repaint's visible top has scrolled away and
+    // cannot be reached in place: the retry must clear again.
+    auto changed = session_rows(kRows);
+    changed.front() = "changed!";
+    view->set_lines(std::move(changed));
+    terminal.drain();
+    const auto changed_frame = tui.render();
+    REQUIRE_FALSE(changed_frame);
+    CHECK(changed_frame.error().code == cch::support::ErrorCode::Busy);
+    CHECK(terminal.clear_screen_calls() == clears_after_resize + 1);
+
+    // The new repaint then converges by resuming its own admitted prefix.
+    bool finished = false;
+    for (std::size_t attempt = 0; attempt < 50 && !finished; ++attempt) {
+        terminal.drain();
+        finished = static_cast<bool>(tui.render());
+    }
+    REQUIRE(finished);
+}
+
+TEST_CASE("Tui finishes a backpressured clear-on-shrink tail clear", "[tui][render][issue732][spec]") {
+    constexpr std::size_t kRows = 30;
+    constexpr std::size_t kShrunkRows = 10;
+    // Small enough that the tail clear is refused partway, large enough to
+    // admit the frame's margins and a couple of cleared rows per attempt.
+    BoundedQueueTerminal terminal({.columns = 12, .rows = 40}, 48);
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<TranscriptDockComponent>();
+    auto* view = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+
+    view->set_lines(session_rows(kRows));
+    bool painted = false;
+    for (std::size_t attempt = 0; attempt < 50 && !painted; ++attempt) {
+        painted = static_cast<bool>(tui.render());
+        terminal.drain();
+    }
+    REQUIRE(painted);
+
+    // The shrink stays inside the unscrolled viewport, so the frame takes the
+    // differential route and owes a clear of rows [10, 30). A refusal in the
+    // middle of that clear must not let the retry skip the rest of the tail.
+    terminal.drain();
+    terminal.reset_frame_counters();
+    view->set_lines(session_rows(kShrunkRows));
+    std::size_t cleared_rows = 0;
+    bool finished = false;
+    for (std::size_t attempt = 0; attempt < 50 && !finished; ++attempt) {
+        terminal.drain();
+        terminal.reset_frame_counters();
+        const auto rendered = tui.render();
+        cleared_rows += terminal.blank_row_writes();
+        finished = static_cast<bool>(rendered);
+        if (!rendered) CHECK(rendered.error().code == cch::support::ErrorCode::Busy);
+    }
+    REQUIRE(finished);
+    CHECK(cleared_rows >= kRows - kShrunkRows);
+}
+
+TEST_CASE("Tui forces a clean repaint when content above a pending clear changes", "[tui][render][issue732][spec]") {
+    constexpr std::size_t kRows = 40;
+    constexpr std::size_t kShrunkRows = 20;
+    // Small enough to interrupt the clear repaint after a few rows, large
+    // enough to admit the frame's margins and keep the visible top above row 0.
+    BoundedQueueTerminal terminal({.columns = 12, .rows = 4}, 200);
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<TranscriptDockComponent>();
+    auto* view = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+
+    // Scrolled buffer: 40 rows on a 4-row screen leaves the viewport top at 36.
+    view->set_lines(session_rows(kRows));
+    bool painted = false;
+    for (std::size_t attempt = 0; attempt < 50 && !painted; ++attempt) {
+        painted = static_cast<bool>(tui.render());
+        terminal.drain();
+    }
+    REQUIRE(painted);
+
+    // The shrink ends above the viewport, so the frame clears and reflows from
+    // the screen top. It is refused partway, leaving a pending clear whose
+    // admitted prefix still scrolls the visible top past row 0.
+    terminal.drain();
+    view->set_lines(session_rows(kShrunkRows));
+    const auto shrunk = tui.render();
+    REQUIRE_FALSE(shrunk);
+    CHECK(shrunk.error().code == cch::support::ErrorCode::Busy);
+    const auto clears_after_shrink = terminal.clear_screen_calls();
+    REQUIRE(clears_after_shrink >= 1);
+
+    // A change above the pending clear's visible top cannot be reached in
+    // place: the retry must clear again rather than resume over scrolled rows.
+    auto changed = session_rows(kShrunkRows);
+    changed.front() = "changed-row";
+    view->set_lines(std::move(changed));
+    const auto changed_frame = tui.render();
+    REQUIRE_FALSE(changed_frame);
+    CHECK(changed_frame.error().code == cch::support::ErrorCode::Busy);
+    CHECK(terminal.clear_screen_calls() == clears_after_shrink + 1);
+
+    // The repaint then converges by resuming its own admitted prefix.
+    bool finished = false;
+    for (std::size_t attempt = 0; attempt < 50 && !finished; ++attempt) {
+        terminal.drain();
+        const auto rendered = tui.render();
+        finished = static_cast<bool>(rendered);
+    }
+    REQUIRE(finished);
 }
