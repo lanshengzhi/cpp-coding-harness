@@ -152,9 +152,9 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
 
     if (!booting) {
         initialize_view(diagnostics);
-        if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
+        if (auto painted = paint_frame(); !painted) return fail_start(painted.error());
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
-        if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
+        if (auto painted = paint_frame(); !painted) return fail_start(painted.error());
         local_dock_dirty_.store(false, std::memory_order_release);
         start_frame_ticker();
         if (run.initial_prompt()) {
@@ -171,9 +171,9 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         // diagnostics render after bind, alongside the created session's
         // snapshot.
         startup_diagnostics_ = std::move(diagnostics);
-        if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
+        if (auto painted = paint_frame(); !painted) return fail_start(painted.error());
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
-        if (auto rendered = tui_.render(); !rendered) return fail_start(rendered.error());
+        if (auto painted = paint_frame(); !painted) return fail_start(painted.error());
         local_dock_dirty_.store(false, std::memory_order_release);
         start_frame_ticker();
         initial_prompt_ = run.initial_prompt();
@@ -267,14 +267,14 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         auto failed = fail_start(warning.error());
         co_return std::unexpected(failed.error());
     }
-    if (auto rendered = tui_.render(); !rendered) {
-        co_return std::unexpected(rendered.error());
+    if (auto painted = paint_frame(); !painted) {
+        co_return std::unexpected(painted.error());
     }
     if (auto focused = tui_.set_focus(view_); !focused) {
         co_return std::unexpected(focused.error());
     }
-    if (auto rendered = tui_.render(); !rendered) {
-        co_return std::unexpected(rendered.error());
+    if (auto painted = paint_frame(); !painted) {
+        co_return std::unexpected(painted.error());
     }
     local_dock_dirty_.store(false, std::memory_order_release);
     if (initial_prompt_) {
@@ -734,26 +734,37 @@ void InteractiveEngine::invalidate() {
     tui_.invalidate();
 }
 
+support::Expected<InteractiveEngine::PaintOutcome> InteractiveEngine::paint_frame() {
+    if (auto rendered = tui_.render(); !rendered) {
+        if (rendered.error().code != support::ErrorCode::Busy) {
+            return std::unexpected(rendered.error());
+        }
+        // Terminal output backpressure (#727): the terminal refused the frame
+        // because its bounded output queue is still draining. Keep the frame
+        // owed and repaint it on the retry timer. The retry re-marks the frame
+        // when it fires, so a caller that clears its own render bookkeeping in
+        // the meantime still repaints.
+        local_dock_dirty_.store(true, std::memory_order_release);
+        schedule_render_retry();
+        return PaintOutcome::Deferred;
+    }
+    if (render_retry_pending_) {
+        render_retry_pending_ = false;
+        ++render_retry_generation_;
+        (void)render_retry_timer_.cancel();
+    }
+    return PaintOutcome::Painted;
+}
+
 [[nodiscard]] bool InteractiveEngine::render() {
     if (!running_) return false;
     if (!immediate_frame_render_) ++render_count_;
-    if (auto rendered = tui_.render(); rendered) {
-        if (render_retry_pending_) {
-            render_retry_pending_ = false;
-            ++render_retry_generation_;
-            (void)render_retry_timer_.cancel();
-        }
-        return true;
-    } else if (rendered.error().code == support::ErrorCode::Busy) {
-        local_dock_dirty_.store(true, std::memory_order_release);
-        schedule_render_retry();
-        return false;
-    } else {
-        completion_result_ = std::unexpected(presentation_error(
-            rendered.error(),
-            "Native TUI render failed"));
+    if (auto painted = paint_frame(); !painted) {
+        completion_result_ = std::unexpected(presentation_error(painted.error(), "Native TUI render failed"));
         request_exit();
         return false;
+    } else {
+        return *painted == PaintOutcome::Painted;
     }
 }
 

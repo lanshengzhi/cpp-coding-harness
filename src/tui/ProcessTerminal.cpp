@@ -84,7 +84,14 @@ constexpr auto kCursorPositionTimeout = std::chrono::milliseconds(250);
 constexpr auto kResizeWatchdogInterval = std::chrono::milliseconds(500);
 /// Ordered output queue bound: beyond this many queued bytes the terminal
 /// reports explicit backpressure (`Busy`) instead of buffering without limit.
-constexpr std::size_t kOutputQueueMaxBytes = 256 * 1024;
+/// The bound must exceed one full-frame repaint, or a frame cannot be admitted
+/// while the terminal is not draining: the deferred retry re-emits the same
+/// frame from its start, so it would stall at the same byte and never converge.
+/// Measured startup paint (#727, session-independent): 252-279 KB at 120x40 and
+/// 410 KB at 240x60, so 1 MB keeps roughly 2.5x headroom over the largest.
+/// debt: a repaint larger than this bound cannot converge through the deferred
+/// retry; raise the bound or paint in slices when a measured paint exceeds it.
+constexpr std::size_t kOutputQueueMaxBytes = 1024 * 1024;
 
 [[nodiscard]] support::Error process_error(std::string message, std::string_view operation, int error_number) {
     return support::make_error(support::ErrorCode::Process,
