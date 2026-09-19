@@ -17,8 +17,10 @@ cch_parity_declare_target(
         src/ai/ModelStream.cpp
         src/ai/SimpleOptions.cpp
         src/ai/Usage.cpp
+        src/ai/api/AnthropicEvents.cpp
         src/ai/api/AnthropicMessagesAdapter.cpp
         src/ai/api/AnthropicPayload.cpp
+        src/ai/api/AnthropicShared.cpp
         src/ai/api/CodexEvents.cpp
         src/ai/api/CodexShared.cpp
         src/ai/api/CodexWebSocketCache.cpp
