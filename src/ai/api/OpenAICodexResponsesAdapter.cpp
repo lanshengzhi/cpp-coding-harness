@@ -35,20 +35,6 @@
 namespace cch::ai::api {
 namespace {
 
-[[nodiscard]] support::Expected<std::string> ws_frame_json(
-    const support::JsonValue& body) {
-    const auto* body_object = body.get_if<JsonObject>();
-    if (!body_object) {
-        return std::unexpected(providers::make_stream_error("Codex request body is not an object"));
-    }
-    JsonObject frame;
-    frame.emplace("type", "response.create");
-    for (const auto& [key, value] : *body_object) {
-        frame.emplace(key, value);
-    }
-    return support::write_json(support::JsonValue{std::move(frame)});
-}
-
 struct WsAttemptOutcome {
     bool completed{false};
     bool output_started{false};
@@ -254,32 +240,6 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
 
 /// The completed-WS-attempt terminal: cancelled, assistant-level error, or
 /// the success Done event.
-[[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> finish_ws_completed(
-        AssistantMessage assistant, bool started, const std::stop_token& stop_token, AssistantEventSink& sink) {
-    if (stop_token.stop_requested()) {
-        co_return complete_failure(assistant,
-                support::make_error(support::ErrorCode::Cancelled, "Request was aborted"),
-                sink,
-                InferenceFailure{
-                        .kind = InferenceFailureKind::Cancelled,
-                        .output_started = started,
-                },
-                started);
-    }
-    if (assistant.stop_reason == AssistantStopReason::Error) {
-        co_return complete_failure(assistant,
-                providers::make_stream_error(assistant.error_message.value_or("Codex request failed")),
-                sink,
-                std::nullopt,
-                started);
-    }
-    CCH_TRY_VOID(providers::emit(sink,
-            AssistantDoneEvent{
-                    .reason = assistant.stop_reason,
-                    .message = assistant,
-            }));
-    co_return assistant;
-}
 
 /// pi codex websocket retry policy: a previous_response_not_found miss and a
 /// pre-start connection-limit rejection each retry exactly once.

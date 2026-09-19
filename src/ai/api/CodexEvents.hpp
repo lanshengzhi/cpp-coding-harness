@@ -42,4 +42,9 @@ void append_transport_diagnostic(AssistantMessage& assistant,
         bool websocket_started,
         std::size_t request_bytes);
 
+/// Terminal path for a completed WebSocket attempt: cancellation, provider
+/// failure, or the finished assistant message.
+[[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> finish_ws_completed(
+        AssistantMessage assistant, bool started, const std::stop_token& stop_token, AssistantEventSink& sink);
+
 } // namespace cch::ai::api

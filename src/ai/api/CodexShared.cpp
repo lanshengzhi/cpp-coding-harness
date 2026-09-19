@@ -103,4 +103,17 @@ namespace cch::ai::api {
 
 enum class WsFrameAction { Continue, Terminal };
 
+[[nodiscard]] support::Expected<std::string> ws_frame_json(const support::JsonValue& body) {
+    const auto* body_object = body.get_if<JsonObject>();
+    if (!body_object) {
+        return std::unexpected(providers::make_stream_error("Codex request body is not an object"));
+    }
+    JsonObject frame;
+    frame.emplace("type", "response.create");
+    for (const auto& [key, value] : *body_object) {
+        frame.emplace(key, value);
+    }
+    return support::write_json(support::JsonValue{std::move(frame)});
+}
+
 } // namespace cch::ai::api

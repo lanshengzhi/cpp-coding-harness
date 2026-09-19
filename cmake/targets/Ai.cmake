@@ -30,15 +30,16 @@ cch_parity_declare_target(
         src/ai/api/OpenAIResponsesAdapter.cpp
         src/ai/api/ResponsesEventProcessor.cpp
         src/ai/api/ResponsesPayload.cpp
+        src/ai/api/ResponsesSlots.cpp
         src/ai/api/Termination.cpp
         src/ai/api/UsageNormalization.cpp
         src/ai/auth/OAuthCallbackServer.cpp
         src/ai/auth/OAuthHttpClient.cpp
-        src/ai/auth/OpenAICodexOAuth.cpp
-        src/ai/auth/OpenAICodexOAuthWire.cpp
         src/ai/auth/KimiCodingOAuth.cpp
         src/ai/auth/KimiOAuthWire.cpp
         src/ai/auth/OauthPage.cpp
+        src/ai/auth/OpenAICodexOAuth.cpp
+        src/ai/auth/OpenAICodexOAuthWire.cpp
         src/ai/auth/Pkce.cpp
         src/ai/providers/BoostBeastStreamTransport.cpp
         src/ai/providers/BoostBeastWebSocketTransport.cpp

@@ -205,4 +205,31 @@ void append_transport_diagnostic(AssistantMessage& assistant,
     });
 }
 
+[[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> finish_ws_completed(
+        AssistantMessage assistant, bool started, const std::stop_token& stop_token, AssistantEventSink& sink) {
+    if (stop_token.stop_requested()) {
+        co_return complete_failure(assistant,
+                support::make_error(support::ErrorCode::Cancelled, "Request was aborted"),
+                sink,
+                InferenceFailure{
+                        .kind = InferenceFailureKind::Cancelled,
+                        .output_started = started,
+                },
+                started);
+    }
+    if (assistant.stop_reason == AssistantStopReason::Error) {
+        co_return complete_failure(assistant,
+                providers::make_stream_error(assistant.error_message.value_or("Codex request failed")),
+                sink,
+                std::nullopt,
+                started);
+    }
+    CCH_TRY_VOID(providers::emit(sink,
+            AssistantDoneEvent{
+                    .reason = assistant.stop_reason,
+                    .message = assistant,
+            }));
+    co_return assistant;
+}
+
 } // namespace cch::ai::api
