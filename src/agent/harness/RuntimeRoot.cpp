@@ -77,36 +77,20 @@ struct RuntimeRoot::State final {
     }
 
     [[nodiscard]] bool post_worker(RuntimeRoot::Task task) noexcept {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            {
-                std::lock_guard lock(worker_mutex);
-                if (stopping.load(std::memory_order_acquire)) {
-                    return false;
-                }
-                worker_tasks.push_back(std::move(task));
+        {
+            std::lock_guard lock(worker_mutex);
+            if (stopping.load(std::memory_order_acquire)) {
+                return false;
             }
-            worker_ready.notify_one();
-            return true;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            return false;
+            worker_tasks.push_back(std::move(task));
         }
-#endif
+        worker_ready.notify_one();
+        return true;
     }
 
     [[nodiscard]] bool post_loop(RuntimeRoot::Task task) noexcept {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            boost::asio::post(*loop, std::move(task));
-            return true;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            return false;
-        }
-#endif
+        boost::asio::post(*loop, std::move(task));
+        return true;
     }
 
     [[nodiscard]] boost::asio::any_io_executor executor() const noexcept {
@@ -225,33 +209,21 @@ struct RuntimeTarget::State final : std::enable_shared_from_this<RuntimeTarget::
     }
 
     void post_result(std::size_t sequence, RuntimeRoot::Task task) noexcept {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            bool schedule_drain = false;
-            {
-                std::lock_guard lock(mailbox_mutex);
-                const auto [_, inserted] = completed_results.emplace(sequence, std::move(task));
-                if (!inserted) {
-                    std::terminate();
-                }
-                if (!mailbox_drain_scheduled) {
-                    mailbox_drain_scheduled = true;
-                    schedule_drain = true;
-                }
-            }
-            if (schedule_drain && !root->post_loop([self = shared_from_this()]() noexcept {
-                    self->drain_mailbox();
-                })) {
+        bool schedule_drain = false;
+        {
+            std::lock_guard lock(mailbox_mutex);
+            const auto [_, inserted] = completed_results.emplace(sequence, std::move(task));
+            if (!inserted) {
                 std::terminate();
             }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            // An admitted operation needs a terminal mailbox slot. Capacity
-            // failure cannot be repaired by executing work inline.
+            if (!mailbox_drain_scheduled) {
+                mailbox_drain_scheduled = true;
+                schedule_drain = true;
+            }
+        }
+        if (schedule_drain && !root->post_loop([self = shared_from_this()]() noexcept { self->drain_mailbox(); })) {
             std::terminate();
         }
-#endif
     }
 
 private:

@@ -196,22 +196,11 @@ struct Editor::Impl {
 
     void notify_change() {
         if (!on_change) return;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            if (auto result = on_change(buffer.text()); !result) {
-                // An explicit change-sink failure is a bounded callback
-                // diagnostic (ADR 0017); it never vetoes editing.
-                callback_error = std::move(result.error());
-            }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            callback_error = support::make_error(
-                support::ErrorCode::Unknown,
-                "Editor change sink failed",
-                "the change callback threw an exception");
+        if (auto result = on_change(buffer.text()); !result) {
+            // An explicit change-sink failure is a bounded callback
+            // diagnostic (ADR 0017); it never vetoes editing.
+            callback_error = std::move(result.error());
         }
-#endif
     }
 
     [[nodiscard]] std::string text() const {
@@ -276,19 +265,11 @@ struct Editor::Impl {
         if (!render_request_sink || !*render_request_sink) return;
         bool sink_threw = false;
         std::optional<support::Error> sink_error;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            if (*render_request_sink) {
-                if (auto result = (*render_request_sink)(); !result) {
-                    sink_error = std::move(result.error());
-                }
+        if (*render_request_sink) {
+            if (auto result = (*render_request_sink)(); !result) {
+                sink_error = std::move(result.error());
             }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            sink_threw = true;
         }
-#endif
         if (sink_threw) {
             // A throwing render-request sink is a bounded callback diagnostic
             // (ADR 0017); the observer is deactivated after failure.
@@ -783,22 +764,11 @@ struct Editor::Impl {
         notify_change();
         echo_local();
         if (!on_submit) return;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            if (auto submitted = on_submit(result); !submitted) {
-                // An explicit submit-sink failure is a bounded callback
-                // diagnostic (ADR 0017); it never vetoes editing state.
-                callback_error = std::move(submitted.error());
-            }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            callback_error = support::make_error(
-                support::ErrorCode::Unknown,
-                "Editor submit sink failed",
-                "the submit callback threw an exception");
+        if (auto submitted = on_submit(result); !submitted) {
+            // An explicit submit-sink failure is a bounded callback
+            // diagnostic (ADR 0017); it never vetoes editing state.
+            callback_error = std::move(submitted.error());
         }
-#endif
     }
 
     void paste(std::string text) {

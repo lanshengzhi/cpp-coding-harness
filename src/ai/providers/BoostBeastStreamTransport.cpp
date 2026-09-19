@@ -1,6 +1,8 @@
 #include "BoostBeastStreamTransport.hpp"
 
+#include "ai/CancellationBridge.hpp"
 #include "ai/TransportExecutor.hpp"
+#include "ai/providers/TransportShared.hpp"
 
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_signal.hpp>
@@ -31,52 +33,6 @@
 
 namespace cch::ai::providers {
 namespace {
-
-struct ParsedUrl {
-    std::string host;
-    std::string port{"443"};
-    std::string target{"/"};
-};
-
-[[nodiscard]] support::Expected<ParsedUrl> parse_https_url(const std::string& url) {
-    constexpr std::string_view scheme = "https://";
-    if (!url.starts_with(scheme)) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "unsupported URL scheme",
-            "BoostBeastStreamTransport only supports https URLs"));
-    }
-
-    auto rest = url.substr(scheme.size());
-    auto slash = rest.find('/');
-    auto authority = slash == std::string::npos ? rest : rest.substr(0, slash);
-
-    ParsedUrl parsed;
-    parsed.target = slash == std::string::npos ? "/" : rest.substr(slash);
-    if (authority.empty()) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "missing HTTPS host",
-            "https URL is missing host"));
-    }
-
-    auto colon = authority.rfind(':');
-    if (colon != std::string::npos) {
-        parsed.host = authority.substr(0, colon);
-        parsed.port = authority.substr(colon + 1);
-    } else {
-        parsed.host = authority;
-    }
-
-    if (parsed.host.empty() || parsed.port.empty()) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "invalid HTTPS authority",
-            "https URL has invalid host or port"));
-    }
-
-    return parsed;
-}
 
 [[nodiscard]] std::string_view request_method(const StreamRequest& request) {
     return request.method.empty() ? std::string_view{"POST"} : std::string_view{request.method};
@@ -110,16 +66,6 @@ struct ParsedUrl {
         "transport operation was cancelled");
 }
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-[[nodiscard]] support::Error exception_error(const std::exception& error) {
-    std::string detail = error.what();
-    auto code = detail.find("timeout") != std::string::npos || detail.find("timed out") != std::string::npos
-        ? support::ErrorCode::Timeout
-        : support::ErrorCode::Network;
-    return support::make_error(code, "stream transport failure", std::move(detail));
-}
-#endif
-
 } // namespace
 
 boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransport::async_stream(
@@ -130,68 +76,49 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
     namespace http = boost::beast::http;
     namespace ssl = boost::asio::ssl;
 
-    auto parsed = parse_https_url(request.url);
+    auto parsed = parse_transport_url(
+            request.url, "https://", "HTTPS", "https", "BoostBeastStreamTransport only supports https URLs");
     if (!parsed) {
         co_return std::unexpected(parsed.error());
     }
 
     auto response_header_timed_out = std::make_shared<bool>(false);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        http::verb verb = http::string_to_verb(request_method(request));
-        if (verb == http::verb::unknown) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Validation,
-                "unsupported HTTP method",
-                std::string(request_method(request))));
-        }
+    http::verb verb = http::string_to_verb(request_method(request));
+    if (verb == http::verb::unknown) {
+        co_return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "unsupported HTTP method", std::string(request_method(request))));
+    }
 
         const auto executor = transport_executor(co_await asio::this_coro::executor);
         if (request.stop_token.stop_requested()) {
             co_return std::unexpected(cancelled_error());
         }
 
-        auto cancellation_signal = std::make_shared<asio::cancellation_signal>();
-        std::stop_callback cancellation{request.stop_token, [executor, cancellation_signal] {
-            asio::post(executor, [cancellation_signal] {
-                cancellation_signal->emit(asio::cancellation_type::all);
-            });
-        }};
-        const auto cancellable = [&cancellation_signal](auto completion_token) {
-            return asio::bind_cancellation_slot(
-                cancellation_signal->slot(),
-                std::move(completion_token));
+        CancellationSignalBridge cancellation(request.stop_token, executor);
+        const auto cancellable = [&cancellation](auto completion_token) {
+            return cancellation.bind(std::move(completion_token));
         };
         TransportTimer response_header_timer(executor, request.timeout);
-        response_header_timer.async_wait(
-            [response_header_timed_out, cancellation_signal](
-                boost::system::error_code error) {
-                if (!error) {
-                    *response_header_timed_out = true;
-                    cancellation_signal->emit(asio::cancellation_type::all);
-                }
-            });
+        response_header_timer.async_wait([response_header_timed_out, cancellation_signal = cancellation.signal_ptr()](
+                                                 boost::system::error_code error) {
+            if (!error) {
+                *response_header_timed_out = true;
+                cancellation_signal->emit(asio::cancellation_type::all);
+            }
+        });
 
         ssl::context ctx(ssl::context::tls_client);
-        boost::system::error_code ec;
-        ctx.set_default_verify_paths(ec);
-        if (ec) {
-            co_return std::unexpected(network_error("CA loading failure", ec));
+        if (auto ca = load_tls_client_ca(ctx); !ca) {
+            co_return std::unexpected(ca.error());
         }
 
         TransportResolver resolver(executor);
         TransportTlsStream stream(executor, ctx);
         beast::get_lowest_layer(stream).expires_after(request.timeout);
 
-        if (!SSL_set_tlsext_host_name(stream.native_handle(), parsed->host.c_str())) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Network,
-                "TLS SNI setup failed",
-                "OpenSSL rejected the host name"));
+        if (auto tls = configure_tls_client_stream(stream, parsed->host); !tls) {
+            co_return std::unexpected(tls.error());
         }
-        stream.set_verify_mode(ssl::verify_peer);
-        stream.set_verify_callback(ssl::host_name_verification(parsed->host));
 
         // Setup awaits report failures through an explicit error code so the
         // strict no-exception build returns Expected instead of reaching the
@@ -342,21 +269,6 @@ boost::asio::awaitable<support::Expected<StreamResponse>> BoostBeastStreamTransp
         }
 
         co_return response;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const boost::system::system_error& error) {
-        if (*response_header_timed_out) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Timeout,
-                "response header timeout",
-                error.code().message()));
-        }
-        co_return std::unexpected(network_error(
-            "stream transport failure",
-            error.code()));
-    } catch (const std::exception& error) {
-        co_return std::unexpected(exception_error(error));
-    }
-#endif
 }
 
 } // namespace cch::ai::providers

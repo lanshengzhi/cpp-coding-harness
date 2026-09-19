@@ -162,19 +162,7 @@ int run_print_mode(
     while (future.wait_for(std::chrono::milliseconds{0}) != std::future_status::ready) {
         (void)io.run_one();
     }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        return future.get();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        config.error << "print mode failed: " << error.what() << '\n';
-        return 1;
-    } catch (...) {
-        config.error << "print mode failed: unknown error\n";
-        return 1;
-    }
-#endif
+    return future.get();
 }
 
 } // namespace cch::cli

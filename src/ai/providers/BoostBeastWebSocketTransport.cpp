@@ -1,6 +1,8 @@
 #include "BoostBeastWebSocketTransport.hpp"
 
+#include "ai/CancellationBridge.hpp"
 #include "ai/TransportExecutor.hpp"
+#include "ai/providers/TransportShared.hpp"
 
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_signal.hpp>
@@ -31,53 +33,6 @@
 namespace cch::ai::providers {
 namespace {
 
-struct ParsedWebSocketUrl {
-    std::string host;
-    std::string port{"443"};
-    std::string target{"/"};
-};
-
-[[nodiscard]] support::Expected<ParsedWebSocketUrl> parse_websocket_url(
-    const std::string& url) {
-    std::string_view rest = url;
-    if (url.starts_with("wss://")) {
-        rest.remove_prefix(6);
-    } else {
-        // Client transports are TLS-only (ADR 0054).
-        return std::unexpected(support::make_error(support::ErrorCode::Validation,
-                "unsupported URL scheme",
-                "BoostBeastWebSocketTransport only supports wss URLs"));
-    }
-
-    auto slash = rest.find('/');
-    auto authority = slash == std::string_view::npos ? rest : rest.substr(0, slash);
-
-    ParsedWebSocketUrl parsed;
-    parsed.target = slash == std::string_view::npos ? "/" : std::string{rest.substr(slash)};
-    if (authority.empty()) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "missing WebSocket host",
-            "WebSocket URL is missing host"));
-    }
-
-    auto colon = authority.rfind(':');
-    if (colon != std::string_view::npos) {
-        parsed.host = std::string{authority.substr(0, colon)};
-        parsed.port = std::string{authority.substr(colon + 1)};
-    } else {
-        parsed.host = std::string{authority};
-    }
-
-    if (parsed.host.empty() || parsed.port.empty()) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "invalid WebSocket authority",
-            "WebSocket URL has invalid host or port"));
-    }
-    return parsed;
-}
-
 [[nodiscard]] support::Error cancelled_error() {
     return support::make_error(
         support::ErrorCode::Cancelled,
@@ -99,13 +54,8 @@ template <typename Socket>
 class BeastWebSocketConnection final : public WebSocket {
 public:
     BeastWebSocketConnection(
-        Socket socket,
-        std::stop_token stop_token,
-        std::optional<std::chrono::milliseconds> idle_timeout)
-        : socket_(std::move(socket)),
-          stop_token_(std::move(stop_token)),
-          idle_timeout_(idle_timeout),
-          signal_(std::make_shared<boost::asio::cancellation_signal>()) {}
+            Socket socket, std::stop_token stop_token, std::optional<std::chrono::milliseconds> idle_timeout)
+        : socket_(std::move(socket)), stop_token_(std::move(stop_token)), idle_timeout_(idle_timeout) {}
 
     ~BeastWebSocketConnection() override {
         close();
@@ -128,15 +78,10 @@ public:
                 "WebSocket is closed"));
         }
         auto executor = co_await asio::this_coro::executor;
-        std::stop_callback cancellation{stop_token_, [executor, signal = signal_] {
-            asio::post(executor, [signal] {
-                signal->emit(asio::cancellation_type::all);
-            });
-        }};
+        CancellationSignalBridge cancellation(stop_token_, executor);
         boost::system::error_code write_ec;
         co_await socket_.async_write(
-            asio::buffer(text),
-            asio::redirect_error(cancellable(asio::use_awaitable), write_ec));
+                asio::buffer(text), asio::redirect_error(cancellation.bind(asio::use_awaitable), write_ec));
         if (write_ec) {
             co_return std::unexpected(transport_error(
                 "WebSocket send failure", write_ec));
@@ -154,11 +99,7 @@ public:
             co_return std::optional<std::string>{};
         }
         auto executor = co_await asio::this_coro::executor;
-        std::stop_callback cancellation{stop_token_, [executor, signal = signal_] {
-            asio::post(executor, [signal] {
-                signal->emit(asio::cancellation_type::all);
-            });
-        }};
+        CancellationSignalBridge cancellation(stop_token_, executor);
         bool idle_timed_out = false;
         std::optional<TransportTimer> idle_timer;
         if (idle_timeout_ && *idle_timeout_ > std::chrono::milliseconds{0}) {
@@ -179,10 +120,7 @@ public:
         }
 
         boost::system::error_code read_ec;
-        co_await socket_.async_read(
-            buffer_,
-            asio::redirect_error(
-                cancellable(asio::use_awaitable), read_ec));
+        co_await socket_.async_read(buffer_, asio::redirect_error(cancellation.bind(asio::use_awaitable), read_ec));
         if (idle_timer) {
             idle_timer->cancel();
         }
@@ -217,15 +155,9 @@ public:
     }
 
 private:
-    [[nodiscard]] auto cancellable(auto completion_token) {
-        return boost::asio::bind_cancellation_slot(
-            signal_->slot(), std::move(completion_token));
-    }
-
     Socket socket_;
     std::stop_token stop_token_;
     std::optional<std::chrono::milliseconds> idle_timeout_;
-    std::shared_ptr<boost::asio::cancellation_signal> signal_;
     boost::beast::flat_buffer buffer_;
     bool closed_{false};
     bool closing_{false};
@@ -241,11 +173,10 @@ template <typename Socket>
 }
 
 template <typename Socket>
-[[nodiscard]] boost::asio::awaitable<boost::system::error_code> perform_websocket_handshake(
-    Socket& socket,
-    const ParsedWebSocketUrl& parsed,
-    const std::map<std::string, std::string, std::less<>>& headers,
-    std::shared_ptr<boost::asio::cancellation_signal> signal) {
+[[nodiscard]] boost::asio::awaitable<boost::system::error_code> perform_websocket_handshake(Socket& socket,
+        const ParsedUrl& parsed,
+        const std::map<std::string, std::string, std::less<>>& headers,
+        std::shared_ptr<boost::asio::cancellation_signal> signal) {
     namespace asio = boost::asio;
     namespace beast = boost::beast;
     const auto cancellable = [&signal](auto completion_token) {
@@ -278,7 +209,9 @@ BoostBeastWebSocketTransport::async_connect(
     namespace beast = boost::beast;
     namespace ssl = boost::asio::ssl;
 
-    auto parsed = parse_websocket_url(request.url);
+    // Client transports are TLS-only (ADR 0054).
+    auto parsed = parse_transport_url(
+            request.url, "wss://", "WebSocket", "WebSocket", "BoostBeastWebSocketTransport only supports wss URLs");
     if (!parsed) {
         co_return std::unexpected(parsed.error());
     }
@@ -287,21 +220,13 @@ BoostBeastWebSocketTransport::async_connect(
     }
 
     const auto executor = transport_executor(co_await asio::this_coro::executor);
-    auto signal = std::make_shared<asio::cancellation_signal>();
-    std::stop_callback cancellation{request.stop_token, [executor, signal] {
-        asio::post(executor, [signal] {
-            signal->emit(asio::cancellation_type::all);
-        });
-    }};
-    const auto cancellable = [&signal](auto completion_token) {
-        return asio::bind_cancellation_slot(
-            signal->slot(), std::move(completion_token));
-    };
+    CancellationSignalBridge cancellation(request.stop_token, executor);
+    const auto cancellable = [&cancellation](
+                                     auto completion_token) { return cancellation.bind(std::move(completion_token)); };
 
     TransportTimer connect_timer(executor, request.connect_timeout);
     bool connect_timed_out = false;
-    connect_timer.async_wait([&connect_timed_out, &signal](
-                                 boost::system::error_code error) {
+    connect_timer.async_wait([&connect_timed_out, signal = cancellation.signal_ptr()](boost::system::error_code error) {
         if (!error) {
             connect_timed_out = true;
             signal->emit(asio::cancellation_type::all);
@@ -325,36 +250,18 @@ BoostBeastWebSocketTransport::async_connect(
             ec.message());
     };
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    // The staged build still permits setup exceptions (e.g. the throwing
-    // `set_verify_mode` / `set_option` surface); convert them before the
-    // no-exception completion contract takes over.
-    try {
-#endif
         TransportResolver resolver(executor);
         {
             ssl::context ctx(ssl::context::tls_client);
-            boost::system::error_code ec;
-            ctx.set_default_verify_paths(ec);
-            if (ec) {
-                co_return std::unexpected(
-                        support::make_error(support::ErrorCode::Network, "CA loading failure", ec.message()));
-            }
-            if (request.trusted_ca_certificate_pem) {
-                // Test-only trust injection (WebSocketConnectRequest contract);
-                // production never sets it.
-                if (ctx.add_certificate_authority(asio::buffer(*request.trusted_ca_certificate_pem), ec); ec) {
-                    co_return std::unexpected(
-                            support::make_error(support::ErrorCode::Network, "test CA loading failure", ec.message()));
-                }
+            // The optional extra CA is the test-only trust injection
+            // (WebSocketConnectRequest contract); production never sets it.
+            if (auto ca = load_tls_client_ca(ctx, request.trusted_ca_certificate_pem); !ca) {
+                co_return std::unexpected(ca.error());
             }
             TransportTlsStream stream(executor, ctx);
-            if (!SSL_set_tlsext_host_name(stream.native_handle(), parsed->host.c_str())) {
-                co_return std::unexpected(support::make_error(
-                        support::ErrorCode::Network, "TLS SNI setup failed", "OpenSSL rejected the host name"));
+            if (auto tls = configure_tls_client_stream(stream, parsed->host); !tls) {
+                co_return std::unexpected(tls.error());
             }
-            stream.set_verify_mode(ssl::verify_peer);
-            stream.set_verify_callback(ssl::host_name_verification(parsed->host));
 
             boost::system::error_code setup_ec;
             auto results = co_await resolver.async_resolve(
@@ -380,29 +287,14 @@ BoostBeastWebSocketTransport::async_connect(
             }
 
             beast::websocket::stream<TransportTlsStream> socket(std::move(stream));
-            setup_ec = co_await perform_websocket_handshake(socket, *parsed, request.headers, signal);
+            setup_ec =
+                    co_await perform_websocket_handshake(socket, *parsed, request.headers, cancellation.signal_ptr());
             if (setup_ec) {
                 co_return std::unexpected(setup_failure(setup_ec));
             }
             connect_timer.cancel();
             co_return make_connection(std::move(socket), request.stop_token, request.idle_timeout);
         }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const boost::system::system_error& error) {
-        co_return std::unexpected(setup_failure(error.code()));
-    } catch (const std::exception& error) {
-        if (connect_timed_out) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Timeout,
-                "WebSocket connect timeout after " +
-                    std::to_string(request.connect_timeout.count()) + "ms"));
-        }
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Network,
-            "WebSocket connect failure",
-            error.what()));
-    }
-#endif
 }
 
 } // namespace cch::ai::providers

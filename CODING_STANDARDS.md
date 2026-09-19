@@ -74,15 +74,15 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 5.3. Error-propagation macros are support implementation machinery and never appear in Owner Interfaces. Use the owning operation's return form (`return`, `co_return`, or callback completion) consistently; do not add a second error channel.
 
-5.4. Before asynchronous initiation, report ordinary setup failures through the operation's expected error channel. Producer initiation and terminal completion are `noexcept` contracts (ADR 0040). Exception-enabled fallback handling is scoped by §5.7.
+5.4. Before asynchronous initiation, report ordinary setup failures through the operation's expected error channel. Producer initiation and terminal completion are `noexcept` contracts (ADR 0040).
 
 5.5. Filesystem calls use the `std::error_code` overloads, not the throwing overloads.
 
 5.6. The standard error check is if-init: `if (auto result = f(...); !result) { ... }`.
 
-5.7. Project-owned production and test targets use the strict no-exception configuration by default (`CCH_STRICT_NO_EXCEPTIONS=ON`): ordinary failures use `Expected`/`std::error_code`, and invariant violations terminate. `CCH_STRICT_NO_EXCEPTIONS=OFF` is a warned local debugging deviation, not a supported failure channel. In the guarded fallback paths, catch ordinary setup and weak-observer exceptions and translate them into the declared error or observer-failure path (§5.4, §6.3); `#if !defined(BOOST_ASIO_NO_EXCEPTIONS)` excludes those handlers from strict compilation. Neither mode uses throws for control flow (ADR 0042; `docs/agents/validation.md` §Strict no-exception validation).
+5.7. Project-owned production and test targets use the strict no-exception configuration (`CCH_STRICT_NO_EXCEPTIONS=ON`): ordinary failures use `Expected`/`std::error_code`, and invariant violations terminate. The exception-enabled fallback was retired in #720: no `#if !defined(BOOST_ASIO_NO_EXCEPTIONS)` guards remain, and `CCH_STRICT_NO_EXCEPTIONS=OFF` is a warned local debugging deviation, not a supported failure channel. Throws are never used for control flow (ADR 0042; `docs/agents/validation.md` §Strict no-exception validation).
 
-5.8. Owner Interfaces never expose `std::exception_ptr`, Boost.Asio completion types, or exception-based completion. Exception pointers are confined to the private completion bridges named by `cmake/parity/manifest.json`'s `exception_policy.allowed_exception_ptr_sources` (ADR 0042, ADR 0046). In the exception-enabled fallback a non-null pointer maps once to an `Expected` error; under `BOOST_ASIO_NO_EXCEPTIONS` it terminates as a Runtime invariant. It is never rethrown or forwarded across an Owner boundary.
+5.8. Owner Interfaces never expose `std::exception_ptr`, Boost.Asio completion types, or exception-based completion. Exception pointers are confined to the private completion bridges named by `cmake/parity/manifest.json`'s `exception_policy.allowed_exception_ptr_sources` (ADR 0042, ADR 0046). A non-null pointer terminates as a Runtime invariant. It is never rethrown or forwarded across an Owner boundary.
 
 ## 6. Async and connections
 
@@ -90,7 +90,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 6.2. Stored single operations, sinks, committers, and policy operations use `std::move_only_function` — never `std::function` unless independent copying is a documented contract (`docs/agents/architecture.md` §Connection strength; ADR 0040). A stored callback's copyability says nothing about referent lifetime. Asynchronous callbacks, stored operations, and coroutine lambdas MUST use explicit value capture or init-capture (`[x = std::move(x)]`); never implicit capture (`[&]`, `[=]`), and never capture `this` or local references across asynchronous boundaries without a documented lifetime guarantee per §7.5.
 
-6.3. Connection strength is explicit. Model-stream delivery and Agent-to-Session commitment are named strong, awaited, backpressured connections. Session-to-TUI, status, diagnostic, and ordinary Agent Session subscribers are weak observers that perform only bounded value work or mailbox sends. Reported observer failures receive bounded diagnostics and deactivate the faulty observer without vetoing progress or persistence; exception-enabled fallback handling follows §5.7 (ADR 0017; ADR 0040; ADR 0042).
+6.3. Connection strength is explicit. Model-stream delivery and Agent-to-Session commitment are named strong, awaited, backpressured connections. Session-to-TUI, status, diagnostic, and ordinary Agent Session subscribers are weak observers that perform only bounded value work or mailbox sends. Reported observer failures receive bounded diagnostics and deactivate the faulty observer without vetoing progress or persistence (ADR 0017; ADR 0040; ADR 0042).
 
 6.4. Cancellation is supplied explicitly as `std::stop_token`; each Capability Owner resolves cancellation/completion races into its honest domain outcome. Session Abort and Session Close are idempotent; Close never cancels an admitted Session Event Commitment or required persistence work (ADR 0020; ADR 0040).
 

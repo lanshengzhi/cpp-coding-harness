@@ -2,7 +2,10 @@
 
 #include "DevicePoll.hpp"
 #include "OAuthCallbackServer.hpp"
+#include "OAuthShared.hpp"
 #include "Pkce.hpp"
+#include "ai/JsonAccess.hpp"
+#include "ai/Timestamps.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -54,12 +57,6 @@ const std::map<std::string, std::string, std::less<>> kJsonHeaders{
     {"Content-Type", "application/json"},
 };
 
-struct OAuthToken {
-    std::string access{};
-    std::string refresh{};
-    std::int64_t expires{0};
-};
-
 struct DeviceAuthInfo {
     std::string device_auth_id{};
     std::string user_code{};
@@ -70,25 +67,6 @@ struct DeviceTokenSuccess {
     std::string authorization_code{};
     std::string code_verifier{};
 };
-
-[[nodiscard]] std::int64_t current_timestamp_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-}
-
-[[nodiscard]] const std::string* json_object_string_field(
-    const support::JsonValue::object_t& object,
-    std::string_view name) {
-    const auto found = object.find(std::string{name});
-    return found == object.end() ? nullptr : found->second.get_if<std::string>();
-}
-
-[[nodiscard]] const double* json_object_number_field(
-    const support::JsonValue::object_t& object,
-    std::string_view name) {
-    const auto found = object.find(std::string{name});
-    return found == object.end() ? nullptr : found->second.get_if<double>();
-}
 
 [[nodiscard]] std::string resolve_callback_host(
     const OpenAICodexOAuthOptions& options) {
@@ -184,26 +162,20 @@ post_with_login_cancellation(
     }
     if (auto json = support::read_json(response.body); !json) {
         return std::unexpected(missing_fields());
-    } else {
-        const auto* object = json->get_if<support::JsonValue::object_t>();
-        const auto* access = object == nullptr
-            ? nullptr
-            : json_object_string_field(*object, "access_token");
-        const auto* refresh = object == nullptr
-            ? nullptr
-            : json_object_string_field(*object, "refresh_token");
-        const auto* expires = object == nullptr
-            ? nullptr
-            : json_object_number_field(*object, "expires_in");
-        if (access == nullptr || refresh == nullptr || expires == nullptr) {
+    } else if (const auto* object = json_object(*json)) {
+        const auto access = json_string_member(*object, "access_token");
+        const auto refresh = json_string_member(*object, "refresh_token");
+        const auto expires = json_number_member(*object, "expires_in");
+        if (!access || !refresh || !expires) {
             return std::unexpected(missing_fields());
         }
         return OAuthToken{
-            .access = *access,
-            .refresh = *refresh,
-            .expires = current_timestamp_ms() +
-                static_cast<std::int64_t>(*expires * 1000.0),
+                .access = std::string{*access},
+                .refresh = std::string{*refresh},
+                .expires = oauth_token_expiry_ms(*expires, current_timestamp_ms()),
         };
+    } else {
+        return std::unexpected(missing_fields());
     }
 }
 
@@ -245,19 +217,14 @@ post_with_login_cancellation(
             support::ErrorCode::OAuth,
             "Invalid OpenAI Codex device code response: " + response.body));
     } else {
-        const auto* object = json->get_if<support::JsonValue::object_t>();
-        const auto* device_auth_id = object == nullptr
-            ? nullptr
-            : json_object_string_field(*object, "device_auth_id");
-        const auto* user_code = object == nullptr
-            ? nullptr
-            : json_object_string_field(*object, "user_code");
+        const auto* object = json_object(*json);
+        const auto device_auth_id = object ? json_string_member(*object, "device_auth_id") : std::nullopt;
+        const auto user_code = object ? json_string_member(*object, "user_code") : std::nullopt;
         int interval_seconds = -1;
         if (object != nullptr) {
-            if (const auto* interval = json_object_number_field(*object, "interval")) {
+            if (const auto interval = json_number_member(*object, "interval")) {
                 interval_seconds = static_cast<int>(*interval);
-            } else if (const auto* interval_text =
-                           json_object_string_field(*object, "interval")) {
+            } else if (const auto interval_text = json_string_member(*object, "interval")) {
                 // Numeric interval may arrive as a string; validated below.
                 int parsed = -1;
                 const auto [position, error] =
@@ -271,16 +238,15 @@ post_with_login_cancellation(
                 }
             }
         }
-        if (device_auth_id == nullptr || user_code == nullptr ||
-            interval_seconds < 0) {
+        if (!device_auth_id || !user_code || interval_seconds < 0) {
             return std::unexpected(support::make_error(
                 support::ErrorCode::OAuth,
                 "Invalid OpenAI Codex device code response: " + response.body));
         }
         return DeviceAuthInfo{
-            .device_auth_id = *device_auth_id,
-            .user_code = *user_code,
-            .interval_seconds = interval_seconds,
+                .device_auth_id = std::string{*device_auth_id},
+                .user_code = std::string{*user_code},
+                .interval_seconds = interval_seconds,
         };
     }
 }
@@ -295,15 +261,10 @@ poll_device_token(const OAuthHttpResponse& response) {
                                "response: " + response.body,
                 },
             };
-        } else {
-            const auto* object = json->get_if<support::JsonValue::object_t>();
-            const auto* authorization_code = object == nullptr
-                ? nullptr
-                : json_object_string_field(*object, "authorization_code");
-            const auto* code_verifier = object == nullptr
-                ? nullptr
-                : json_object_string_field(*object, "code_verifier");
-            if (authorization_code == nullptr || code_verifier == nullptr) {
+        } else if (const auto* object = json_object(*json)) {
+            const auto authorization_code = json_string_member(*object, "authorization_code");
+            const auto code_verifier = json_string_member(*object, "code_verifier");
+            if (!authorization_code || !code_verifier) {
                 return DevicePollResult<DeviceTokenSuccess>{
                     .kind = DevicePollResult<DeviceTokenSuccess>::Failed{
                         .message = "Invalid OpenAI Codex device auth token "
@@ -312,12 +273,23 @@ poll_device_token(const OAuthHttpResponse& response) {
                 };
             }
             return DevicePollResult<DeviceTokenSuccess>{
-                .kind = DevicePollResult<DeviceTokenSuccess>::Complete{
-                    .value = DeviceTokenSuccess{
-                        .authorization_code = *authorization_code,
-                        .code_verifier = *code_verifier,
-                    },
-                },
+                    .kind =
+                            DevicePollResult<DeviceTokenSuccess>::Complete{
+                                    .value =
+                                            DeviceTokenSuccess{
+                                                    .authorization_code = std::string{*authorization_code},
+                                                    .code_verifier = std::string{*code_verifier},
+                                            },
+                            },
+            };
+        } else {
+            return DevicePollResult<DeviceTokenSuccess>{
+                    .kind =
+                            DevicePollResult<DeviceTokenSuccess>::Failed{
+                                    .message = "Invalid OpenAI Codex device auth token "
+                                               "response: " +
+                                               response.body,
+                            },
             };
         }
     }
@@ -328,16 +300,15 @@ poll_device_token(const OAuthHttpResponse& response) {
     }
     std::optional<std::string> error_code;
     if (auto json = support::read_json(response.body); json) {
-        if (const auto* object = json->get_if<support::JsonValue::object_t>()) {
+        if (const auto* object = json_object(*json)) {
             const auto error_found = object->find("error");
             if (error_found != object->end()) {
                 if (const auto* code = error_found->second.get_if<std::string>()) {
                     error_code = *code;
                 } else if (const auto* error_object =
                                error_found->second.get_if<support::JsonValue::object_t>()) {
-                    if (const auto* code =
-                            json_object_string_field(*error_object, "code")) {
-                        error_code = *code;
+                    if (const auto code = json_string_member(*error_object, "code")) {
+                        error_code = std::string{*code};
                     }
                 }
             }
@@ -426,22 +397,12 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
         .state = state,
     }));
 
-    // Best-effort display: notify never vetoes login. The hook is
-    // contractually non-throwing (AuthNotifyHook); the guarded conversion
-    // only preserves the staged exception-enabled build.
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        interaction.notify(ai::AuthEvent{ai::AuthUrl{
-            .url = authorize_url,
-            .instructions =
-                "A browser window should open. Complete login to finish.",
-        }});
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        // Best-effort display: notify never vetoes login.
-    }
-#endif
+    // Best-effort display: notify never vetoes login.
+    notify_best_effort(interaction.notify,
+            ai::AuthUrl{
+                    .url = authorize_url,
+                    .instructions = "A browser window should open. Complete login to finish.",
+            });
 
     struct ManualState {
         std::mutex mutex;
@@ -471,23 +432,8 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
             };
             manual_prompt.stop_token = manual_state->manual_stop.get_token();
             support::Expected<std::string> result;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            try {
-#endif
-                result = co_await cch::support::detail::await_async_result(
-                        interaction_shared->prompt(std::move(manual_prompt)));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            } catch (const std::exception& error) {
-                result = std::unexpected(support::make_error(
-                    support::ErrorCode::OAuth,
-                    "login prompt failed",
-                    error.what()));
-            } catch (...) {
-                result = std::unexpected(support::make_error(
-                    support::ErrorCode::OAuth,
-                    "login prompt failed"));
-            }
-#endif
+            result = co_await cch::support::detail::await_async_result(
+                    interaction_shared->prompt(std::move(manual_prompt)));
             {
                 std::scoped_lock lock(manual_state->mutex);
                 if (result) {
@@ -589,20 +535,13 @@ OpenAICodexOAuth::login_device_code(ai::AuthInteraction interaction) {
         interaction.stop_token));
     CCH_TRY(device, parse_device_auth_response(response));
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        interaction.notify(ai::AuthEvent{ai::AuthDeviceCode{
-            .user_code = device.user_code,
-            .verification_uri = std::string{kDeviceVerificationUri},
-            .interval_seconds = device.interval_seconds,
-            .expires_in_seconds = kDeviceCodeTimeoutSeconds,
-        }});
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        // Best-effort display.
-    }
-#endif
+    notify_best_effort(interaction.notify,
+            ai::AuthDeviceCode{
+                    .user_code = device.user_code,
+                    .verification_uri = std::string{kDeviceVerificationUri},
+                    .interval_seconds = device.interval_seconds,
+                    .expires_in_seconds = kDeviceCodeTimeoutSeconds,
+            });
 
     CCH_TRY(success, co_await poll_device_flow<DeviceTokenSuccess>(
         DevicePollOptions<DeviceTokenSuccess>{
@@ -696,31 +635,7 @@ ai::OAuthAuth make_openai_codex_oauth_auth(
     auto impl = std::make_shared<OpenAICodexOAuth>(
         std::move(http_client),
         std::move(options));
-    ai::OAuthAuth auth;
-    auth.name = "OpenAI (ChatGPT Plus/Pro)";
-    auth.login = [impl](ai::AuthInteraction interaction) -> cch::support::AsyncResult<ai::OAuthCredential> {
-        return cch::support::detail::make_async_result(
-                [impl, interaction = std::move(interaction)]() mutable
-                        -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-                    co_return co_await impl->login(std::move(interaction));
-                });
-    };
-    auth.refresh = [impl](ai::OAuthCredential credential) -> cch::support::AsyncResult<ai::OAuthCredential> {
-        return cch::support::detail::make_async_result(
-                [impl, credential = std::move(credential)]()
-                        -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-                    co_return co_await impl->refresh(std::move(credential));
-                });
-    };
-    auth.to_auth = [impl](const ai::OAuthCredential& credential) -> cch::support::AsyncResult<ai::ModelAuth> {
-        return cch::support::detail::make_async_result(
-                [impl,
-                        credential =
-                                std::move(credential)]() -> boost::asio::awaitable<support::Expected<ai::ModelAuth>> {
-                    co_return co_await impl->to_auth(credential);
-                });
-    };
-    return auth;
+    return bind_oauth_auth("OpenAI (ChatGPT Plus/Pro)", std::move(impl));
 }
 
 } // namespace cch::ai::auth

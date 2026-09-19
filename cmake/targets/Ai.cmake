@@ -12,14 +12,22 @@ cch_parity_declare_target(
         src/ai/InferenceFailure.cpp
         src/ai/Model.cpp
         src/ai/Models.cpp
+        src/ai/ModelsAuth.cpp
+        src/ai/ModelsStream.cpp
         src/ai/ModelStream.cpp
         src/ai/SimpleOptions.cpp
         src/ai/Usage.cpp
         src/ai/api/AnthropicMessagesAdapter.cpp
+        src/ai/api/AnthropicPayload.cpp
+        src/ai/api/CodexEvents.cpp
+        src/ai/api/CodexShared.cpp
+        src/ai/api/CodexWebSocketCache.cpp
         src/ai/api/MessageConversion.cpp
+        src/ai/api/MessageNormalization.cpp
         src/ai/api/OpenAICodexResponsesAdapter.cpp
         src/ai/api/OpenAIResponsesAdapter.cpp
         src/ai/api/ResponsesEventProcessor.cpp
+        src/ai/api/ResponsesPayload.cpp
         src/ai/api/Termination.cpp
         src/ai/api/UsageNormalization.cpp
         src/ai/auth/OAuthCallbackServer.cpp

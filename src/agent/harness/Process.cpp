@@ -83,19 +83,8 @@ void cancel_output_pipe(boost::asio::posix::stream_descriptor& pipe) noexcept {
 }
 
 [[nodiscard]] support::ExpectedVoid invoke_output_callback(
-    std::move_only_function<support::ExpectedVoid(std::string_view)>& callback,
-    std::string_view chunk) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        return callback(chunk);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Process,
-            "process output callback threw"));
-    }
-#endif
+        std::move_only_function<support::ExpectedVoid(std::string_view)>& callback, std::string_view chunk) {
+    return callback(chunk);
 }
 
 void append_limited(
@@ -179,22 +168,12 @@ void append_limited(
         ~CompletionGuard() noexcept { *done = true; }
     } completion_guard{done};
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
         auto outcome = co_await drain_pipe(*pipe, limit, std::move(callback));
         if (outcome) {
             *capture = std::move(*outcome);
         } else {
             *drain_error = std::move(outcome.error());
         }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        *drain_error = support::make_error(
-            support::ErrorCode::Process,
-            "process output drain failed");
-    }
-#endif
     co_return;
 }
 
@@ -491,21 +470,7 @@ public:
         // if the child has not exited yet, hand the reap to a non-blocking
         // poll that the loop drives to completion.
         if (poll_child(child_, status, reaped, ignored) && !reaped) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            try {
-#endif
-                boost::asio::co_spawn(
-                    executor_,
-                    reap_child_polled(child_),
-                    boost::asio::detached);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            } catch (...) {
-                // A deferred reap could not be scheduled while unwinding; the
-                // child is terminated but may remain a zombie until the
-                // harness exits. Blocking the runtime loop is never
-                // acceptable, so no fallback is attempted here.
-            }
-#endif
+            boost::asio::co_spawn(executor_, reap_child_polled(child_), boost::asio::detached);
         }
     }
 
@@ -538,9 +503,6 @@ private:
 } // namespace
 
 boost::asio::awaitable<support::Expected<ProcessResult>> DefaultAsyncProcessRunner::run(ProcessRequest request) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
     if (request.stop_token.stop_requested()) {
         co_return std::unexpected(support::make_error(
             support::ErrorCode::Cancelled,
@@ -698,34 +660,15 @@ boost::asio::awaitable<support::Expected<ProcessResult>> DefaultAsyncProcessRunn
     std::optional<support::Error> terminal_error;
 
     auto start_drain = [&](boost::asio::posix::stream_descriptor& pipe,
-                           OutputLimit limit,
-                           std::optional<std::move_only_function<support::ExpectedVoid(std::string_view)>> callback,
-                           OutputCapture& capture,
-                           std::optional<support::Error>& drain_error,
-                           bool& done) -> bool {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            boost::asio::co_spawn(
-                executor,
-                drain_pipe_into(
-                    &pipe,
-                    limit,
-                    std::move(callback),
-                    &capture,
-                    &drain_error,
-                    &done),
+                               OutputLimit limit,
+                               std::optional<std::move_only_function<support::ExpectedVoid(std::string_view)>> callback,
+                               OutputCapture& capture,
+                               std::optional<support::Error>& drain_error,
+                               bool& done) -> bool {
+        boost::asio::co_spawn(executor,
+                drain_pipe_into(&pipe, limit, std::move(callback), &capture, &drain_error, &done),
                 boost::asio::detached);
-            return true;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (...) {
-            done = true;
-            drain_error = support::make_error(
-                support::ErrorCode::Process,
-                "process output drain setup failed");
-            return false;
-        }
-#endif
+        return true;
     };
 
     const bool stdout_started = start_drain(
@@ -1046,18 +989,6 @@ boost::asio::awaitable<support::Expected<ProcessResult>> DefaultAsyncProcessRunn
         result.output += "\n[output truncated]";
     }
     co_return result;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Process,
-            "process execution failed",
-            error.what()));
-    } catch (...) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Process,
-            "process execution failed"));
-    }
-#endif
 }
 
 } // namespace cch::harness

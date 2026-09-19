@@ -1,15 +1,12 @@
 #include "StreamExecutionEngine.hpp"
 
+#include "ai/CancellationBridge.hpp"
+#include "ai/Timestamps.hpp"
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/StreamEmit.hpp"
 #include <cch/ai/InferenceFailure.hpp>
 #include "support/ExpectedMacros.hpp"
-
-#include <boost/asio/redirect_error.hpp>
-#include <boost/asio/steady_timer.hpp>
-#include <boost/asio/this_coro.hpp>
-#include <boost/asio/use_awaitable.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -24,18 +21,6 @@
 namespace cch::ai::providers {
 namespace {
 
-[[nodiscard]] TimestampMs current_timestamp_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-}
-
-[[nodiscard]] support::Error stream_error(std::string message, std::string detail = {}) {
-    return support::make_error(
-        support::ErrorCode::Stream,
-        bounded_provider_error_detail(std::move(message)),
-        bounded_provider_error_detail(std::move(detail)));
-}
-
 [[nodiscard]] support::Error normalize_transport_error(
     std::string_view protocol_name,
     const support::Error& error) {
@@ -45,13 +30,9 @@ namespace {
     if (error.code == support::ErrorCode::Unknown) {
         return error;
     }
-    return stream_error(
-        error.message.empty()
-            ? std::format("{} request failed", protocol_name)
-            : error.message,
-        error.detail);
+    return make_stream_error(
+            error.message.empty() ? std::format("{} request failed", protocol_name) : error.message, error.detail);
 }
-
 void ensure_tool_arguments_allocated(AssistantMessage& assistant) {
     for (auto& content : assistant.content) {
         auto* tool = std::get_if<ToolCallContent>(&content);
@@ -149,36 +130,6 @@ void ensure_tool_arguments_allocated(AssistantMessage& assistant) {
     };
 }
 
-[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> wait_before_retry(
-    std::uint64_t delay_ms,
-    std::stop_token stop_token) {
-    if (stop_token.stop_requested()) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Cancelled,
-            "Request was aborted"));
-    }
-    if (delay_ms == 0) {
-        co_return support::ExpectedVoid{};
-    }
-    auto executor = co_await boost::asio::this_coro::executor;
-    boost::asio::steady_timer timer(executor, std::chrono::milliseconds{delay_ms});
-    std::stop_callback cancellation{stop_token, [&timer] { timer.cancel(); }};
-    boost::system::error_code error;
-    co_await timer.async_wait(boost::asio::redirect_error(
-        boost::asio::use_awaitable, error));
-    if (stop_token.stop_requested()) {
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Cancelled,
-            "Request was aborted"));
-    }
-    if (error) {
-        co_return std::unexpected(stream_error(
-            "Retry wait failed",
-            error.message()));
-    }
-    co_return support::ExpectedVoid{};
-}
-
 [[nodiscard]] boost::asio::awaitable<support::Expected<bool>> retry_provider_failure(
     ProviderFailure failure,
     std::uint32_t attempt,
@@ -192,19 +143,11 @@ void ensure_tool_arguments_allocated(AssistantMessage& assistant) {
         attempt,
         options.max_retry_delay_ms,
         current_timestamp_ms()));
-    CCH_TRY_VOID(co_await wait_before_retry(delay, options.stop_token));
-    co_return true;
-}
-
-[[nodiscard]] support::ExpectedVoid emit_start(
-    AssistantEventSink& sink,
-    AssistantMessage& assistant,
-    bool& started) {
-    if (started) {
-        return {};
+    if (delay > 0) {
+        CCH_TRY_VOID(co_await interruptible_sleep(
+                std::chrono::milliseconds{delay}, options.stop_token, "Request was aborted"));
     }
-    started = true;
-    return emit(sink, AssistantStartEvent{.partial = assistant});
+    co_return true;
 }
 
 } // namespace
@@ -313,17 +256,13 @@ execute_sse_stream(SseStreamExecutionOptions execution_options) {
             if (retry) {
                 continue;
             }
-            co_return complete_failure(
-                assistant,
-                stream_error(
-                    std::format(
-                        "{} request failed with HTTP {}",
-                        protocol_name,
-                        response->head.status_code),
-                    response->body),
-                guarded_sink,
-                failure.inference_failure,
-                false);
+            co_return complete_failure(assistant,
+                    make_stream_error(
+                            std::format("{} request failed with HTTP {}", protocol_name, response->head.status_code),
+                            response->body),
+                    guarded_sink,
+                    failure.inference_failure,
+                    false);
         }
 
         if (!started) {
@@ -380,13 +319,12 @@ execute_sse_stream(SseStreamExecutionOptions execution_options) {
             }
         }
         if (assistant.stop_reason == AssistantStopReason::Error) {
-            co_return complete_failure(
-                assistant,
-                stream_error(assistant.error_message.value_or(
-                    std::format("{} request failed", protocol_name))),
-                guarded_sink,
-                std::move(inference_failure),
-                started);
+            co_return complete_failure(assistant,
+                    make_stream_error(
+                            assistant.error_message.value_or(std::format("{} request failed", protocol_name))),
+                    guarded_sink,
+                    std::move(inference_failure),
+                    started);
         }
         CCH_TRY_VOID(emit(guarded_sink, AssistantDoneEvent{
             .reason = assistant.stop_reason,

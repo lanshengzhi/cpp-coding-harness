@@ -230,29 +230,16 @@ void print_session_diagnostics(
     // terminals — including retired Sessions' late completions — reach their
     // mailboxes before the root, the Models runtime, and the loop destruct.
     int exit_code = 0;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        if (auto result = future.get(); !result) {
-            if (!run.creation_failure_reported()) {
-                std::cerr << "Native TUI failed: " << result.error().message;
-                if (!result.error().detail.empty() &&
-                    result.error().detail != result.error().message) {
-                    std::cerr << ": " << result.error().detail;
-                }
-                std::cerr << '\n';
+    if (auto result = future.get(); !result) {
+        if (!run.creation_failure_reported()) {
+            std::cerr << "Native TUI failed: " << result.error().message;
+            if (!result.error().detail.empty() && result.error().detail != result.error().message) {
+                std::cerr << ": " << result.error().detail;
             }
-            exit_code = 1;
+            std::cerr << '\n';
         }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        std::cerr << "Native TUI failed: " << error.what() << '\n';
-        exit_code = 1;
-    } catch (...) {
-        std::cerr << "Native TUI failed: unknown exception\n";
         exit_code = 1;
     }
-#endif
     close_runtime(runtime_root, *io);
     return exit_code;
 }

@@ -170,14 +170,7 @@ void ModelSelectorComponent::start_refresh() {
                         self->load_models_from_snapshot();
                     }
                     if (on_invalidate) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                        try {
-#endif
-                            on_invalidate();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                        } catch (...) {
-                        }
-#endif
+                        on_invalidate();
                     }
                 },
                 boost::asio::detached);

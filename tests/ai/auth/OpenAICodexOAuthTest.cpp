@@ -2,12 +2,14 @@
 #include "support/AsyncResultBridge.hpp"
 #include "ai/auth/OAuthCallbackServer.hpp"
 #include "ai/auth/OAuthHttpClient.hpp"
+#include "support/FakeOAuthHttpClient.hpp"
 #include "ai/auth/OpenAICodexOAuth.hpp"
 #include "ai/auth/OauthPage.hpp"
 #include "ai/auth/Pkce.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/PiFixture.hpp"
 #include "support/ExpectedMacros.hpp"
+#include "support/StreamAdapterFixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -40,29 +42,11 @@
 #include <variant>
 
 using namespace cch;
+using tests::FakeOAuthHttpClient;
+using tests::run_async_result;
+using tests::run_awaitable;
 
 namespace {
-
-template <typename T>
-T run_awaitable(boost::asio::awaitable<T> operation) {
-    boost::asio::io_context io;
-    auto result = boost::asio::co_spawn(io, std::move(operation), boost::asio::use_future);
-    io.run();
-    return result.get();
-}
-
-template <typename T, typename E>
-std::expected<T, E> run_async_result(cch::support::AsyncResult<T, E> result) {
-    boost::asio::io_context io;
-    auto future = boost::asio::co_spawn(
-            io,
-            [](cch::support::AsyncResult<T, E> op) -> boost::asio::awaitable<std::expected<T, E>> {
-                co_return co_await cch::support::detail::await_async_result(std::move(op));
-            }(std::move(result)),
-            boost::asio::use_future);
-    io.run();
-    return future.get();
-}
 
 std::string access_token_for(const std::string& account_id) {
     const auto header = ai::auth::base64url_encode(R"({"alg":"none"})");
@@ -122,62 +106,6 @@ std::string query_param(const std::string& text, const std::string& key) {
     const auto found = pairs.find(key);
     return found == pairs.end() ? std::string{} : found->second;
 }
-
-class FakeOAuthHttpClient final : public ai::auth::OAuthHttpClient {
-public:
-    struct Request {
-        std::string url;
-        std::map<std::string, std::string, std::less<>> headers;
-        std::string body;
-        std::stop_token stop_token;
-    };
-    struct ScriptedResponse {
-        int status{200};
-        std::string body;
-    };
-
-    boost::asio::awaitable<support::Expected<ai::auth::OAuthHttpResponse>> post(
-        std::string url,
-        std::map<std::string, std::string, std::less<>> headers,
-        std::string body,
-        std::stop_token stop_token) override {
-        requests.push_back(Request{
-            std::move(url),
-            std::move(headers),
-            std::move(body),
-            stop_token,
-        });
-        if (failure) {
-            if (stop_token.stop_requested()) {
-                co_return std::unexpected(support::make_error(
-                    support::ErrorCode::Cancelled,
-                    "fake client cancelled"));
-            }
-            co_return std::unexpected(*failure);
-        }
-        auto& queue = responses[requests.back().url];
-        if (queue.empty()) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Network,
-                "no scripted response for " + requests.back().url));
-        }
-        auto scripted = std::move(queue.front());
-        queue.pop_front();
-        if (stop_token.stop_requested()) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Cancelled,
-                "fake client cancelled"));
-        }
-        co_return ai::auth::OAuthHttpResponse{
-            .status_code = scripted.status,
-            .body = std::move(scripted.body),
-        };
-    }
-
-    std::map<std::string, std::deque<ScriptedResponse>, std::less<>> responses;
-    std::vector<Request> requests;
-    std::optional<support::Error> failure;
-};
 
 using UrlSeenChannel = boost::asio::experimental::channel<
     void(boost::system::error_code, std::string)>;

@@ -542,17 +542,6 @@ TEST_CASE("Editor rejects failing or width-changing generic styling", "[tui][edi
     REQUIRE_FALSE(width_failure);
     CHECK(width_failure.error().code == cch::support::ErrorCode::Validation);
     CHECK(width_failure.error().message.find("changed visible width") != std::string::npos);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    // The staged build still defends against a throwing style hook; the
-    // no-exception build enforces non-throwing hooks by construction.
-    cch::tui::EditorTheme throwing;
-    throwing.text = [](std::string) -> std::string { throw std::runtime_error("style failed"); };
-    editor.set_theme(std::move(throwing));
-    const auto callback_failure = editor.render(8);
-
-    REQUIRE_FALSE(callback_failure);
-    CHECK(callback_failure.error().message.find("style hook failed") != std::string::npos);
-#endif
 }
 
 TEST_CASE("Editor does nothing on Up when history is empty", "[tui][editor][history][issue379][spec]") {
@@ -1155,26 +1144,6 @@ TEST_CASE(
     CHECK(render_requests == 1);
 }
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-TEST_CASE("Editor deactivates a throwing autocomplete render notification",
-        "[tui][editor][autocomplete][issue538][spec]") {
-    std::size_t render_requests = 0;
-    auto provider = std::make_unique<HeldAutocompleteProvider>();
-    cch::tui::Editor editor(cch::tui::EditorOptions{
-            .render_request = [&render_requests]() -> cch::support::ExpectedVoid {
-                ++render_requests;
-                throw std::runtime_error("render request failed");
-            },
-    });
-    editor.set_autocomplete_provider(std::move(provider));
-
-    type(editor, "/");
-    CHECK(render_requests == 1);
-    type(editor, "h");
-    CHECK(render_requests == 1);
-}
-#endif
-
 TEST_CASE("Editor debounces unclosed quoted attachment paths like pi", "[tui][editor][autocomplete][issue383][spec]") {
     auto timer = std::make_unique<ManualDebounceTimer>();
     auto* timer_ptr = timer.get();
@@ -1642,40 +1611,6 @@ TEST_CASE("Editor does not request a duplicate repaint when a mutation closes th
     CHECK(repaint_requests == repaint_after_open);
     CHECK_FALSE(menu_rendered(editor));
 }
-
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-TEST_CASE("Editor deactivates a throwing presentation render request", "[tui][editor][autocomplete][issue538][spec]") {
-    std::size_t render_requests = 0;
-    auto provider = std::make_unique<HeldAutocompleteProvider>();
-    auto* provider_ptr = provider.get();
-    provider_ptr->response = cch::tui::AutocompleteSuggestions{
-            .items =
-                    {
-                            {.value = "help", .label = "help", .description = {}},
-                            {.value = "history", .label = "history", .description = {}},
-                    },
-            .prefix = "/",
-    };
-    cch::tui::Editor editor(cch::tui::EditorOptions{
-            .render_request = [&render_requests]() -> cch::support::ExpectedVoid {
-                ++render_requests;
-                throw std::runtime_error("render request failed");
-            },
-    });
-    editor.set_autocomplete_provider(std::move(provider));
-
-    type(editor, "/");
-    CHECK(render_requests == 1);
-
-    // Presentation-only navigation: the throw is caught, diagnosed as a
-    // bounded callback error, and the sink is deactivated.
-    key(editor, "down");
-    CHECK(render_requests == 2);
-    CHECK_FALSE(editor.render(80).has_value());
-    key(editor, "up");
-    CHECK(render_requests == 2);
-}
-#endif
 
 TEST_CASE("Editor client-side prediction emits in-place local echo to pinned dock",
         "[tui][editor][dock][issue605][spec]") {

@@ -154,16 +154,7 @@ void InteractiveView::replace_status_indicator(StatusIndicator::Kind kind, std::
             // view's separate coalescible invalidate sink (not the action
             // seam); a failing render request is a callback diagnostic.
             if (!on_invalidate_) return {};
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            try {
-#endif
-                on_invalidate_();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            } catch (...) {
-                record_callback_error(
-                    "Native TUI status indicator render request failed");
-            }
-#endif
+            on_invalidate_();
             return {};
         },
         std::move(message));
@@ -228,14 +219,7 @@ void InteractiveView::set_user_bash_progress(runtime::UserBashProgress progress)
             progress.exclude_from_context);
         pending_bash_->start_loader([this]() -> support::ExpectedVoid {
             if (!on_invalidate_) return {};
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            try {
-#endif
-                on_invalidate_();
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-            } catch (...) {
-            }
-#endif
+            on_invalidate_();
             return {};
         });
         last_bash_output_size_ = 0;

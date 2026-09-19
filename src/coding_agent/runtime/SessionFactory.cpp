@@ -128,14 +128,10 @@ template <typename T, typename Operation>
                     support::AsyncCompletion<T, support::Error> completion) mutable noexcept {
                 std::shared_ptr<RuntimeWorkState<T>> state;
                 std::optional<harness::RuntimeTarget::Admission> admission;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                bool terminal_posted = false;
-                try {
-#endif
-                    if (stop_token.stop_requested()) {
-                        completion(std::unexpected(runtime_work_cancelled_error()));
-                        return;
-                    }
+                if (stop_token.stop_requested()) {
+                    completion(std::unexpected(runtime_work_cancelled_error()));
+                    return;
+                }
                     admission = runtime_target->try_admit_reserved(byte_charge);
                     if (!admission) {
                         completion(std::unexpected(runtime_work_busy_error()));
@@ -146,23 +142,11 @@ template <typename T, typename Operation>
                     state->completion = std::move(completion);
                     const bool queued = state->admission->post_worker(
                             [state, stop_token, operation = std::move(operation)]() mutable noexcept {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                                try {
-#endif
-                                    if (stop_token.stop_requested()) {
-                                        state->outcome = std::unexpected(runtime_work_cancelled_error());
-                                    } else {
-                                        state->outcome = operation();
-                                    }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                                } catch (const std::exception& error) {
-                                    state->outcome = std::unexpected(support::make_error(
-                                            support::ErrorCode::Unknown, "Session assembly work failed", error.what()));
-                                } catch (...) {
-                                    state->outcome = std::unexpected(support::make_error(
-                                            support::ErrorCode::Unknown, "Session assembly work failed"));
+                                if (stop_token.stop_requested()) {
+                                    state->outcome = std::unexpected(runtime_work_cancelled_error());
+                                } else {
+                                    state->outcome = operation();
                                 }
-#endif
                                 std::move(*state->admission).complete([state]() mutable noexcept {
                                     state->completion(std::move(*state->outcome));
                                 });
@@ -171,43 +155,7 @@ template <typename T, typename Operation>
                         std::move(*state->admission).complete([state]() mutable noexcept {
                             state->completion(std::unexpected(runtime_work_busy_error()));
                         });
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                        terminal_posted = true;
-#endif
                     }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                } catch (const std::exception& error) {
-                    const auto failure = support::make_error(
-                            support::ErrorCode::Unknown, "Session assembly work could not be scheduled", error.what());
-                    if (state && !terminal_posted) {
-                        std::move(*state->admission).complete([state, failure = failure]() mutable noexcept {
-                            state->completion(std::unexpected(std::move(failure)));
-                        });
-                    } else if (admission) {
-                        std::move(*admission)
-                                .complete([completion = std::move(completion), failure = failure]() mutable noexcept {
-                                    completion(std::unexpected(std::move(failure)));
-                                });
-                    } else {
-                        completion(std::unexpected(failure));
-                    }
-                } catch (...) {
-                    const auto failure = support::make_error(
-                            support::ErrorCode::Unknown, "Session assembly work could not be scheduled");
-                    if (state && !terminal_posted) {
-                        std::move(*state->admission).complete([state, failure = failure]() mutable noexcept {
-                            state->completion(std::unexpected(std::move(failure)));
-                        });
-                    } else if (admission) {
-                        std::move(*admission)
-                                .complete([completion = std::move(completion), failure = failure]() mutable noexcept {
-                                    completion(std::unexpected(failure));
-                                });
-                    } else {
-                        completion(std::unexpected(failure));
-                    }
-                }
-#endif
             }}};
 }
 

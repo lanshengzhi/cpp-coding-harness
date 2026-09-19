@@ -1,7 +1,10 @@
 #include "KimiCodingOAuth.hpp"
 
 #include "DevicePoll.hpp"
+#include "OAuthShared.hpp"
 #include "Pkce.hpp"
+#include "ai/JsonAccess.hpp"
+#include "ai/Timestamps.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -43,12 +46,6 @@ const std::map<std::string, std::string, std::less<>> kFormHeaders{
     {"Accept", "application/json"},
 };
 
-struct OAuthToken {
-    std::string access{};
-    std::string refresh{};
-    std::int64_t expires{0};
-};
-
 struct DeviceAuthorization {
     std::string device_code{};
     std::string user_code{};
@@ -57,25 +54,6 @@ struct DeviceAuthorization {
     int interval_seconds{kDefaultPollIntervalSeconds};
     int expires_in_seconds{kDeviceCodeTimeoutSeconds};
 };
-
-[[nodiscard]] std::int64_t current_timestamp_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-}
-
-[[nodiscard]] const std::string* json_object_string_field(
-    const support::JsonValue::object_t& object,
-    std::string_view name) {
-    const auto found = object.find(std::string{name});
-    return found == object.end() ? nullptr : found->second.get_if<std::string>();
-}
-
-[[nodiscard]] const double* json_object_number_field(
-    const support::JsonValue::object_t& object,
-    std::string_view name) {
-    const auto found = object.find(std::string{name});
-    return found == object.end() ? nullptr : found->second.get_if<double>();
-}
 
 /// pi `getOauthHost`: KIMI_CODE_OAUTH_HOST then KIMI_OAUTH_HOST, else the
 /// default; trailing slashes stripped from the resolved host.
@@ -199,26 +177,18 @@ post_kimi_request(
                 " response missing fields: " + response.body);
     };
     auto json = support::read_json(response.body);
-    const auto* object = json ? json->get_if<support::JsonValue::object_t>() : nullptr;
-    const auto* access = object == nullptr
-        ? nullptr
-        : json_object_string_field(*object, "access_token");
-    const auto* refresh = object == nullptr
-        ? nullptr
-        : json_object_string_field(*object, "refresh_token");
-    const auto* expires = object == nullptr
-        ? nullptr
-        : json_object_number_field(*object, "expires_in");
-    if (access == nullptr || access->empty() ||
-        refresh == nullptr || refresh->empty() ||
-        expires == nullptr || !std::isfinite(*expires) || *expires <= 0) {
+    const auto* object = json ? json_object(*json) : nullptr;
+    const auto access = object ? json_string_member(*object, "access_token") : std::nullopt;
+    const auto refresh = object ? json_string_member(*object, "refresh_token") : std::nullopt;
+    const auto expires = object ? json_number_member(*object, "expires_in") : std::nullopt;
+    if (!access || access->empty() || !refresh || refresh->empty() || !expires || !std::isfinite(*expires) ||
+            *expires <= 0) {
         return std::unexpected(missing_fields());
     }
     return OAuthToken{
-        .access = *access,
-        .refresh = *refresh,
-        .expires = current_timestamp_ms() +
-            static_cast<std::int64_t>(*expires * 1000.0),
+            .access = std::string{*access},
+            .refresh = std::string{*refresh},
+            .expires = oauth_token_expiry_ms(*expires, current_timestamp_ms()),
     };
 }
 
@@ -236,12 +206,9 @@ post_kimi_request(
     }
 
     auto json = support::read_json(response.body);
-    const auto* object = json ? json->get_if<support::JsonValue::object_t>() : nullptr;
-    const auto* access = object == nullptr
-        ? nullptr
-        : json_object_string_field(*object, "access_token");
-    if (response.status_code >= 200 && response.status_code < 300 &&
-        access != nullptr) {
+    const auto* object = json ? json_object(*json) : nullptr;
+    const auto access = object ? json_string_member(*object, "access_token") : std::nullopt;
+    if (response.status_code >= 200 && response.status_code < 300 && access) {
         if (auto parsed = parse_token_response(response, "poll"); parsed) {
             return DevicePollResult<OAuthToken>{
                 .kind = DevicePollResult<OAuthToken>::Complete{
@@ -257,16 +224,10 @@ post_kimi_request(
         }
     }
 
-    const auto* error = object == nullptr
-        ? nullptr
-        : json_object_string_field(*object, "error");
-    const auto* description = object == nullptr
-        ? nullptr
-        : json_object_string_field(*object, "error_description");
-    const auto description_suffix = description == nullptr
-        ? std::string{}
-        : ": " + *description;
-    if (error == nullptr) {
+    const auto error = object ? json_string_member(*object, "error") : std::nullopt;
+    const auto description = object ? json_string_member(*object, "error_description") : std::nullopt;
+    const auto description_suffix = !description ? std::string{} : ": " + std::string{*description};
+    if (!error) {
         return DevicePollResult<OAuthToken>{
             .kind = DevicePollResult<OAuthToken>::Failed{
                 .message = "Kimi Code device token request failed (status " +
@@ -281,10 +242,8 @@ post_kimi_request(
     }
     if (*error == "slow_down") {
         std::optional<int> interval;
-        if (const auto* value = object == nullptr
-                ? nullptr
-                : json_object_number_field(*object, "interval");
-            value != nullptr && std::isfinite(*value) && *value > 0) {
+        if (const auto value = object ? json_number_member(*object, "interval") : std::nullopt;
+                value && std::isfinite(*value) && *value > 0) {
             interval = static_cast<int>(*value);
         }
         return DevicePollResult<OAuthToken>{
@@ -309,11 +268,12 @@ post_kimi_request(
         };
     }
     return DevicePollResult<OAuthToken>{
-        .kind = DevicePollResult<OAuthToken>::Failed{
-            .message = "Kimi Code device token request failed (status " +
-                std::to_string(response.status_code) + ": " + *error +
-                description_suffix + ")",
-        },
+            .kind =
+                    DevicePollResult<OAuthToken>::Failed{
+                            .message = "Kimi Code device token request failed (status " +
+                                       std::to_string(response.status_code) + ": " + std::string{*error} +
+                                       description_suffix + ")",
+                    },
     };
 }
 
@@ -346,43 +306,30 @@ start_device_authorization(
     }
 
     auto json = support::read_json(response.body);
-    const auto* object = json ? json->get_if<support::JsonValue::object_t>() : nullptr;
-    const auto* device_code = object == nullptr
-        ? nullptr
-        : json_object_string_field(*object, "device_code");
-    const auto* user_code = object == nullptr
-        ? nullptr
-        : json_object_string_field(*object, "user_code");
-    const auto* verification_uri = object == nullptr
-        ? nullptr
-        : json_object_string_field(*object, "verification_uri");
-    const auto* verification_uri_complete = object == nullptr
-        ? nullptr
-        : json_object_string_field(*object, "verification_uri_complete");
-    if (device_code == nullptr || user_code == nullptr ||
-        verification_uri == nullptr || verification_uri_complete == nullptr ||
-        !trusted_http_url(*verification_uri_complete) ||
-        !trusted_http_url(*verification_uri)) {
+    const auto* object = json ? json_object(*json) : nullptr;
+    const auto device_code = object ? json_string_member(*object, "device_code") : std::nullopt;
+    const auto user_code = object ? json_string_member(*object, "user_code") : std::nullopt;
+    const auto verification_uri = object ? json_string_member(*object, "verification_uri") : std::nullopt;
+    const auto verification_uri_complete =
+            object ? json_string_member(*object, "verification_uri_complete") : std::nullopt;
+    if (!device_code || !user_code || !verification_uri || !verification_uri_complete ||
+            !trusted_http_url(*verification_uri_complete) || !trusted_http_url(*verification_uri)) {
         co_return std::unexpected(support::make_error(
             support::ErrorCode::OAuth,
             "Invalid Kimi Code device authorization response: " + response.body));
     }
 
     DeviceAuthorization device;
-    device.device_code = *device_code;
-    device.user_code = *user_code;
-    device.verification_uri = *verification_uri;
-    device.verification_uri_complete = *verification_uri_complete;
-    if (const auto* interval = object == nullptr
-            ? nullptr
-            : json_object_number_field(*object, "interval");
-        interval != nullptr && std::isfinite(*interval) && *interval > 0) {
+    device.device_code = std::string{*device_code};
+    device.user_code = std::string{*user_code};
+    device.verification_uri = std::string{*verification_uri};
+    device.verification_uri_complete = std::string{*verification_uri_complete};
+    if (const auto interval = object ? json_number_member(*object, "interval") : std::nullopt;
+            interval && std::isfinite(*interval) && *interval > 0) {
         device.interval_seconds = static_cast<int>(*interval);
     }
-    if (const auto* expires_in = object == nullptr
-            ? nullptr
-            : json_object_number_field(*object, "expires_in");
-        expires_in != nullptr && std::isfinite(*expires_in) && *expires_in > 0) {
+    if (const auto expires_in = object ? json_number_member(*object, "expires_in") : std::nullopt;
+            expires_in && std::isfinite(*expires_in) && *expires_in > 0) {
         device.expires_in_seconds = static_cast<int>(*expires_in);
     }
     co_return device;
@@ -458,20 +405,13 @@ KimiCodingOAuth::login(ai::AuthInteraction interaction) {
         interaction.stop_token,
         options_.request_timeout));
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        interaction.notify(ai::AuthEvent{ai::AuthDeviceCode{
-            .user_code = device.user_code,
-            .verification_uri = device.verification_uri_complete,
-            .interval_seconds = device.interval_seconds,
-            .expires_in_seconds = device.expires_in_seconds,
-        }});
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (...) {
-        // Best-effort display: notify never vetoes login.
-    }
-#endif
+    notify_best_effort(interaction.notify,
+            ai::AuthDeviceCode{
+                    .user_code = device.user_code,
+                    .verification_uri = device.verification_uri_complete,
+                    .interval_seconds = device.interval_seconds,
+                    .expires_in_seconds = device.expires_in_seconds,
+            });
 
     CCH_TRY(token, co_await poll_for_token(
         http_client_,
@@ -533,21 +473,14 @@ KimiCodingOAuth::refresh(
         }
 
         auto json = support::read_json(response->body);
-        const auto* object = json ? json->get_if<support::JsonValue::object_t>() : nullptr;
-        const auto* error = object == nullptr
-            ? nullptr
-            : json_object_string_field(*object, "error");
-        const auto* description = object == nullptr
-            ? nullptr
-            : json_object_string_field(*object, "error_description");
-        const auto description_suffix = description == nullptr
-            ? std::string{}
-            : ": " + *description;
+        const auto* object = json ? json_object(*json) : nullptr;
+        const auto error = object ? json_string_member(*object, "error") : std::nullopt;
+        const auto description = object ? json_string_member(*object, "error_description") : std::nullopt;
+        const auto description_suffix = !description ? std::string{} : ": " + std::string{*description};
 
         // Unauthorized: the stored credential is dead; Models preserves it and
         // every subsequent request fails with re-auth guidance.
-        if (response->status_code == 401 || response->status_code == 403 ||
-            (error != nullptr && *error == "invalid_grant")) {
+        if (response->status_code == 401 || response->status_code == 403 || (error && *error == "invalid_grant")) {
             co_return std::unexpected(support::make_error(
                 support::ErrorCode::OAuth,
                 "Kimi Code token refresh unauthorized (status " +
@@ -591,36 +524,10 @@ ai::OAuthAuth make_kimi_coding_oauth_auth(
     if (!http_client) {
         http_client = std::make_shared<BoostBeastOAuthHttpClient>();
     }
-    auto impl = std::make_shared<KimiCodingOAuth>(
-        std::move(http_client),
-        std::move(options));
-    ai::OAuthAuth auth;
-    auth.name = "Kimi Code (subscription)";
-    auth.login = [impl](ai::AuthInteraction interaction) -> cch::support::AsyncResult<ai::OAuthCredential> {
-        return cch::support::detail::make_async_result(
-                [impl, interaction = std::move(interaction)]() mutable
-                        -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-                    co_return co_await impl->login(std::move(interaction));
-                });
-    };
+    auto impl = std::make_shared<KimiCodingOAuth>(std::move(http_client), std::move(options));
     // The request-path refresh is uncancellable: no stop token is passed,
     // reproducing pi's frozen Kimi refresh-signal defect as no-divergence.
-    auth.refresh = [impl](ai::OAuthCredential credential) -> cch::support::AsyncResult<ai::OAuthCredential> {
-        return cch::support::detail::make_async_result(
-                [impl, credential = std::move(credential)]()
-                        -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-                    co_return co_await impl->refresh(std::move(credential));
-                });
-    };
-    auth.to_auth = [impl](const ai::OAuthCredential& credential) -> cch::support::AsyncResult<ai::ModelAuth> {
-        return cch::support::detail::make_async_result(
-                [impl,
-                        credential =
-                                std::move(credential)]() -> boost::asio::awaitable<support::Expected<ai::ModelAuth>> {
-                    co_return co_await impl->to_auth(credential);
-                });
-    };
-    return auth;
+    return bind_oauth_auth("Kimi Code (subscription)", std::move(impl));
 }
 
 } // namespace cch::ai::auth

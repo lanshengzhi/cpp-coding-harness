@@ -1,5 +1,6 @@
 #include <cch/ai/Models.hpp>
 #include "ai/providers/StreamTransport.hpp"
+#include "support/AiScenarioKit.hpp"
 #include "support/ScriptedProvider.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
 #include "support/ModelFixture.hpp"
@@ -27,25 +28,15 @@ namespace {
 
 using tests::EmptyAuthContext;
 using tests::EmptyCredentialStore;
+using tests::event_names;
 using tests::partial_stop_reasons;
+using tests::read_fixture_text;
 using tests::run_async_result;
 using tests::run_awaitable;
+using tests::run_models;
+using tests::RunResult;
 using tests::ScriptedTransport;
 using tests::TransportAttempt;
-
-struct RunResult {
-    support::Expected<ai::AssistantMessage> result;
-    std::vector<ai::AssistantStreamEvent> events;
-};
-
-[[nodiscard]] std::string read_fixture_text(std::string_view relative_path) {
-    const std::string path = std::string{CCH_SOURCE_DIR} + "/fixtures/pi-ai/" +
-                             std::string{relative_path};
-    std::ifstream input(path, std::ios::binary);
-    return std::string{
-        std::istreambuf_iterator<char>{input},
-        std::istreambuf_iterator<char>{}};
-}
 
 [[nodiscard]] ai::Model deepseek_model() {
     auto model = tests::make_model(
@@ -63,26 +54,6 @@ struct RunResult {
         .cache_write = 3.0,
     };
     return model;
-}
-
-[[nodiscard]] std::shared_ptr<ai::Models> make_models(
-    const std::shared_ptr<ScriptedTransport>& transport,
-    const ai::Model& model) {
-    auto models = std::make_shared<ai::Models>(
-        std::make_shared<EmptyCredentialStore>(),
-        std::make_shared<EmptyAuthContext>());
-    tests::ScriptedProviderDefinition definition;
-    definition.definition = ai::ProviderDefinition{
-            .id = "deepseek",
-            .name = "deepseek",
-            .models = {model},
-            .auth = ai::providers::make_env_api_key_auth("API key", {}),
-    };
-    definition.transport.http_transport = transport;
-    if (auto registered = tests::apply_scripted_provider(*models, std::move(definition)); !registered) {
-        return nullptr;
-    }
-    return models;
 }
 
 [[nodiscard]] ai::AiContext request_context() {
@@ -149,46 +120,6 @@ struct RunResult {
     return context;
 }
 
-[[nodiscard]] RunResult run_models(
-    ai::Models& models,
-    const ai::Model& model,
-    ai::AiContext context,
-    ai::SimpleStreamOptions options) {
-    std::vector<ai::AssistantStreamEvent> events;
-    auto stream = models.stream(model, std::move(context), std::move(options));
-    auto result = run_async_result(
-        std::move(stream).run(
-        [&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
-            events.push_back(event);
-            return {};
-        }));
-    return RunResult{.result = std::move(result), .events = std::move(events)};
-}
-
-[[nodiscard]] std::string event_name(const ai::AssistantStreamEvent& event) {
-    if (std::holds_alternative<ai::AssistantStartEvent>(event)) return "start";
-    if (std::holds_alternative<ai::ThinkingStartEvent>(event)) return "thinking_start";
-    if (std::holds_alternative<ai::ThinkingDeltaEvent>(event)) return "thinking_delta";
-    if (std::holds_alternative<ai::ThinkingEndEvent>(event)) return "thinking_end";
-    if (std::holds_alternative<ai::TextStartEvent>(event)) return "text_start";
-    if (std::holds_alternative<ai::TextDeltaEvent>(event)) return "text_delta";
-    if (std::holds_alternative<ai::TextEndEvent>(event)) return "text_end";
-    if (std::holds_alternative<ai::ToolCallStartEvent>(event)) return "toolcall_start";
-    if (std::holds_alternative<ai::ToolCallDeltaEvent>(event)) return "toolcall_delta";
-    if (std::holds_alternative<ai::ToolCallEndEvent>(event)) return "toolcall_end";
-    if (std::holds_alternative<ai::AssistantDoneEvent>(event)) return "done";
-    return "error";
-}
-
-[[nodiscard]] std::vector<std::string> event_names(
-    const std::vector<ai::AssistantStreamEvent>& events) {
-    std::vector<std::string> result;
-    for (const auto& event : events) {
-        result.push_back(event_name(event));
-    }
-    return result;
-}
-
 [[nodiscard]] std::string terminal_sse(
     std::string type,
     std::string status,
@@ -210,7 +141,7 @@ TEST_CASE("DeepSeek Responses streams the frozen request and SSE sequence throug
         .chunks = {sse.substr(0, split), sse.substr(split)},
     });
     const auto model = deepseek_model();
-    auto models = make_models(transport, model);
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
     REQUIRE(models);
 
     ai::SimpleStreamOptions options;
@@ -277,7 +208,7 @@ TEST_CASE("DeepSeek Responses emits a string user message as one input_text and 
     REQUIRE_FALSE(sse.empty());
     transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
     const auto model = deepseek_model();
-    auto models = make_models(transport, model);
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
     REQUIRE(models);
 
     ai::SimpleStreamOptions options;
@@ -326,7 +257,7 @@ TEST_CASE("DeepSeek Responses emits an empty string user message as one input_te
     REQUIRE_FALSE(sse.empty());
     transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
     const auto model = deepseek_model();
-    auto models = make_models(transport, model);
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
     REQUIRE(models);
 
     ai::SimpleStreamOptions options;
@@ -372,7 +303,7 @@ TEST_CASE("DeepSeek Responses preserves post-merge transformed headers",
         .chunks = {terminal_sse("response.completed", "completed")},
     });
     const auto model = deepseek_model();
-    auto models = make_models(transport, model);
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
     REQUIRE(models);
     ai::SimpleStreamOptions options;
     options.api_key = "dummy-key";
@@ -397,7 +328,8 @@ TEST_CASE("DeepSeek Responses preserves post-merge transformed headers",
     deletion_transport->attempts.push_back(TransportAttempt{
         .chunks = {terminal_sse("response.completed", "completed")},
     });
-    auto deletion_models = make_models(deletion_transport, model);
+    auto deletion_models =
+            tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = deletion_transport});
     REQUIRE(deletion_models);
     ai::SimpleStreamOptions deletion_options;
     deletion_options.api_key = "dummy-key";
@@ -436,7 +368,7 @@ TEST_CASE("DeepSeek Responses partials start pending and flip to stop at final_a
         "\"status\":\"completed\",\"usage\":{\"input_tokens\":5,\"output_tokens\":1,\"total_tokens\":6}}}\n\n",
     }});
     const auto model = deepseek_model();
-    auto models = make_models(transport, model);
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
     REQUIRE(models);
     ai::SimpleStreamOptions options;
     options.api_key = "dummy-key";
@@ -472,7 +404,7 @@ TEST_CASE("DeepSeek Responses stream ending without a terminal event is a termin
     REQUIRE_FALSE(sse.empty());
     transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
     const auto model = deepseek_model();
-    auto models = make_models(transport, model);
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
     REQUIRE(models);
     ai::SimpleStreamOptions options;
     options.api_key = "dummy-deepseek-key";
@@ -539,7 +471,7 @@ TEST_CASE("DeepSeek Responses termination matrix does not treat DONE as terminal
         auto transport = std::make_shared<ScriptedTransport>();
         transport->attempts.push_back(TransportAttempt{.chunks = {test_case.sse}});
         const auto model = deepseek_model();
-        auto models = make_models(transport, model);
+        auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
         REQUIRE(models);
         ai::SimpleStreamOptions options;
         options.api_key = "dummy-key";
@@ -565,7 +497,7 @@ TEST_CASE("DeepSeek Responses surfaces SSE error data and ignores unknown events
         "event: error\ndata: deepseek exploded\n\n",
     }});
     const auto model = deepseek_model();
-    auto models = make_models(transport, model);
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
     REQUIRE(models);
     ai::SimpleStreamOptions options;
     options.api_key = "dummy-key";
@@ -592,7 +524,7 @@ TEST_CASE("DeepSeek Responses removes parser scratch state from partial failures
         "event: error\ndata: partial failure\n\n",
     }});
     const auto model = deepseek_model();
-    auto models = make_models(transport, model);
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
     REQUIRE(models);
     ai::SimpleStreamOptions options;
     options.api_key = "dummy-key";
@@ -637,7 +569,7 @@ TEST_CASE("DeepSeek Responses retries only eligible setup failures", "[ai][provi
         },
     };
     const auto model = deepseek_model();
-    auto models = make_models(transport, model);
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
     REQUIRE(models);
     ai::SimpleStreamOptions options;
     options.api_key = "dummy-key";
@@ -662,7 +594,8 @@ TEST_CASE("DeepSeek Responses retries only eligible setup failures", "[ai][provi
             .chunks = {terminal_sse("response.completed", "completed")},
         },
     };
-    auto network_models = make_models(network_transport, model);
+    auto network_models =
+            tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = network_transport});
     REQUIRE(network_models);
     ai::SimpleStreamOptions network_options;
     network_options.api_key = "dummy-key";
@@ -683,7 +616,8 @@ TEST_CASE("DeepSeek Responses retries only eligible setup failures", "[ai][provi
         },
         .chunks = {R"({"error":{"code":"insufficient_quota","message":"quota exhausted"}})"},
     });
-    auto terminal_models = make_models(terminal_transport, model);
+    auto terminal_models =
+            tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = terminal_transport});
     REQUIRE(terminal_models);
     ai::SimpleStreamOptions terminal_options;
     terminal_options.api_key = "dummy-key";
@@ -708,7 +642,7 @@ TEST_CASE("DeepSeek Responses cancellation yields one aborted terminal",
             "transport cancelled"),
     });
     const auto model = deepseek_model();
-    auto models = make_models(transport, model);
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
     REQUIRE(models);
     std::stop_source stop;
     transport->on_request = [&stop] {

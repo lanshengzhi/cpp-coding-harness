@@ -54,23 +54,7 @@ namespace {
 
     for (std::size_t attempt = 0; attempt < 16; ++attempt) {
         std::filesystem::path path;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        try {
-#endif
-            path = temp_directory /
-                std::format("pi-clipboard-{}{}", clipboard_uuid(), extension);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-        } catch (const std::exception& error) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Process,
-                "could not generate a clipboard image path",
-                error.what()));
-        } catch (...) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Process,
-                "could not generate a clipboard image path"));
-        }
-#endif
+        path = temp_directory / std::format("pi-clipboard-{}{}", clipboard_uuid(), extension);
         support::UniqueFd fd(::open(
             path.c_str(),
             O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
@@ -120,60 +104,23 @@ namespace {
 
 } // namespace
 
-boost::asio::awaitable<std::optional<std::string>> read_clipboard_insert_content(
-    AsyncClipboardReader& reader) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        auto image = co_await reader.read_image();
-        if (image && *image && !(*image)->bytes.empty()) {
-            const auto mime_type = sniff_supported_image_mime_type((*image)->bytes);
-            const auto extension = mime_type
-                ? extension_for_image_mime_type(*mime_type)
-                : std::nullopt;
-            if (extension) {
-                const auto path = write_clipboard_image((*image)->bytes, *extension);
-                if (path) {
-                    co_return path->string();
-                }
+boost::asio::awaitable<std::optional<std::string>> read_clipboard_insert_content(AsyncClipboardReader& reader) {
+    auto image = co_await reader.read_image();
+    if (image && *image && !(*image)->bytes.empty()) {
+        const auto mime_type = sniff_supported_image_mime_type((*image)->bytes);
+        const auto extension = mime_type ? extension_for_image_mime_type(*mime_type) : std::nullopt;
+        if (extension) {
+            const auto path = write_clipboard_image((*image)->bytes, *extension);
+            if (path) {
+                co_return path->string();
             }
         }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        const auto ignored = support::make_error(
-            support::ErrorCode::Unknown,
-            "clipboard image read failed",
-            error.what());
-        (void)ignored;
-    } catch (...) {
-        const auto ignored = support::make_error(
-            support::ErrorCode::Unknown,
-            "clipboard image read failed");
-        (void)ignored;
     }
-#endif
 
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        auto text = co_await reader.read_text();
-        if (text && *text && !(*text)->empty()) {
-            co_return std::move(**text);
-        }
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& error) {
-        const auto ignored = support::make_error(
-            support::ErrorCode::Unknown,
-            "clipboard text read failed",
-            error.what());
-        (void)ignored;
-    } catch (...) {
-        const auto ignored = support::make_error(
-            support::ErrorCode::Unknown,
-            "clipboard text read failed");
-        (void)ignored;
+    auto text = co_await reader.read_text();
+    if (text && *text && !(*text)->empty()) {
+        co_return std::move(**text);
     }
-#endif
     co_return std::nullopt;
 }
 

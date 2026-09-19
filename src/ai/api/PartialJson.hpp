@@ -2,6 +2,8 @@
 
 #include "support/Json.hpp"
 
+#include <cch/ai/Message.hpp>
+
 #include <algorithm>
 #include <cstddef>
 #include <optional>
@@ -360,6 +362,15 @@ inline void skip_blank(PartialJsonContext& context) {
         return std::move(*parsed);
     }
     return support::JsonValue::object_t{};
+}
+
+/// Terminal step for one streamed tool call: parses the accumulated raw
+/// arguments with the streaming-tolerant parse and marks them valid. Shared
+/// by every adapter's completion path.
+inline void finalize_tool_arguments(ai::ToolCallContent& tool) {
+    tool.arguments = parse_streaming_json(tool.raw_arguments);
+    tool.arguments_valid = true;
+    tool.argument_error = std::nullopt;
 }
 
 } // namespace cch::ai::api

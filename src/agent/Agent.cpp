@@ -12,9 +12,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
 #include <exception>
-#endif
 #include <functional>
 #include <memory>
 #include <optional>
@@ -33,17 +31,7 @@ struct AgentSubscriptionAnchor {
 };
 
 [[nodiscard]] support::ExpectedVoid invoke_weak_observer(AgentEventSink& sink, const AgentLifecycleEvent& event) {
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    try {
-#endif
-        return sink(event);
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-    } catch (const std::exception& exception) {
-        return std::unexpected(support::make_error(support::ErrorCode::Unknown, exception.what()));
-    } catch (...) {
-        return std::unexpected(support::make_error(support::ErrorCode::Unknown, "unknown exception"));
-    }
-#endif
+    return sink(event);
 }
 
 std::vector<std::string> tool_names(const std::vector<ai::Tool>& definitions) {

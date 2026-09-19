@@ -426,19 +426,7 @@ void InteractiveEngine::submit(
             [self, text = std::move(text), options = std::move(options), started_generation]() mutable
                     -> boost::asio::awaitable<support::ExpectedVoid> {
                 support::ExpectedVoid result;
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                try {
-#endif
-                    result = co_await self->session_->prompt(text, std::move(options));
-#if !defined(BOOST_ASIO_NO_EXCEPTIONS)
-                } catch (const std::exception& error) {
-                    result = std::unexpected(
-                            support::make_error(support::ErrorCode::Unknown, "Native TUI prompt failed", error.what()));
-                } catch (...) {
-                    result = std::unexpected(support::make_error(
-                            support::ErrorCode::Unknown, "Native TUI prompt failed", "unknown exception"));
-                }
-#endif
+                result = co_await self->session_->prompt(text, std::move(options));
                 self->prompt_finished(started_generation, std::move(result), text);
                 co_return support::ExpectedVoid{};
             });

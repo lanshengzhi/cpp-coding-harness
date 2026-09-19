@@ -1,5 +1,6 @@
 #include <cch/ai/Models.hpp>
 #include "ai/providers/StreamTransport.hpp"
+#include "support/AiScenarioKit.hpp"
 #include "support/ScriptedProvider.hpp"
 #include "ai/providers/KimiCatalog.hpp"
 #include "support/ModelFixture.hpp"
@@ -7,6 +8,8 @@
 #include "support/PiFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/Json.hpp"
+
+#include "support/ReadyResult.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -28,25 +31,15 @@ namespace {
 
 using tests::EmptyAuthContext;
 using tests::EmptyCredentialStore;
+using tests::event_names;
 using tests::partial_stop_reasons;
+using tests::read_fixture_text;
 using tests::run_async_result;
 using tests::run_awaitable;
+using tests::run_models;
+using tests::RunResult;
 using tests::ScriptedTransport;
 using tests::TransportAttempt;
-
-struct RunResult {
-    support::Expected<ai::AssistantMessage> result;
-    std::vector<ai::AssistantStreamEvent> events;
-};
-
-[[nodiscard]] std::string read_fixture_text(std::string_view relative_path) {
-    const std::string path = std::string{CCH_SOURCE_DIR} + "/fixtures/pi-ai/" +
-                             std::string{relative_path};
-    std::ifstream input(path, std::ios::binary);
-    return std::string{
-        std::istreambuf_iterator<char>{input},
-        std::istreambuf_iterator<char>{}};
-}
 
 [[nodiscard]] ai::Model kimi_model(std::string_view id = "kimi-for-coding") {
     for (auto model : ai::providers::kimi_coding_models()) {
@@ -60,21 +53,19 @@ struct RunResult {
 [[nodiscard]] ai::ProviderAuth header_auth() {
     ai::ApiKeyAuth api_key;
     api_key.name = "Kimi OAuth";
-    api_key.resolve = [](
-        const ai::AuthContext&,
-        std::optional<ai::ApiKeyCredential>)
-        -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
-        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
-            std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
-                ai::AuthResult{
-                    .auth = ai::ModelAuth{
-                        .api_key = std::nullopt,
-                        .headers = {{"Authorization", "Bearer dummy-kimi-oauth"}},
-                        .base_url = std::nullopt,
-                    },
-                    .env = {},
-                    .source = "Kimi OAuth",
-                }});
+    api_key.resolve =
+            [](const ai::AuthContext&,
+                    std::optional<ai::ApiKeyCredential>) -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+        return tests::ready_result<std::optional<ai::AuthResult>>(ai::AuthResult{
+                .auth =
+                        ai::ModelAuth{
+                                .api_key = std::nullopt,
+                                .headers = {{"Authorization", "Bearer dummy-kimi-oauth"}},
+                                .base_url = std::nullopt,
+                        },
+                .env = {},
+                .source = "Kimi OAuth",
+        });
     };
     return ai::ProviderAuth{.api_key = std::move(api_key)};
 }
@@ -188,46 +179,6 @@ struct RunResult {
         },
     });
     return context;
-}
-
-[[nodiscard]] RunResult run_models(
-    ai::Models& models,
-    const ai::Model& model,
-    ai::AiContext context,
-    ai::SimpleStreamOptions options) {
-    std::vector<ai::AssistantStreamEvent> events;
-    auto stream = models.stream(model, std::move(context), std::move(options));
-    auto result = run_async_result(
-        std::move(stream).run(
-        [&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
-            events.push_back(event);
-            return {};
-        }));
-    return RunResult{.result = std::move(result), .events = std::move(events)};
-}
-
-[[nodiscard]] std::string event_name(const ai::AssistantStreamEvent& event) {
-    if (std::holds_alternative<ai::AssistantStartEvent>(event)) return "start";
-    if (std::holds_alternative<ai::ThinkingStartEvent>(event)) return "thinking_start";
-    if (std::holds_alternative<ai::ThinkingDeltaEvent>(event)) return "thinking_delta";
-    if (std::holds_alternative<ai::ThinkingEndEvent>(event)) return "thinking_end";
-    if (std::holds_alternative<ai::TextStartEvent>(event)) return "text_start";
-    if (std::holds_alternative<ai::TextDeltaEvent>(event)) return "text_delta";
-    if (std::holds_alternative<ai::TextEndEvent>(event)) return "text_end";
-    if (std::holds_alternative<ai::ToolCallStartEvent>(event)) return "toolcall_start";
-    if (std::holds_alternative<ai::ToolCallDeltaEvent>(event)) return "toolcall_delta";
-    if (std::holds_alternative<ai::ToolCallEndEvent>(event)) return "toolcall_end";
-    if (std::holds_alternative<ai::AssistantDoneEvent>(event)) return "done";
-    return "error";
-}
-
-[[nodiscard]] std::vector<std::string> event_names(
-    const std::vector<ai::AssistantStreamEvent>& events) {
-    std::vector<std::string> names;
-    for (const auto& event : events) {
-        names.push_back(event_name(event));
-    }
-    return names;
 }
 
 [[nodiscard]] std::string terminal_sse(
