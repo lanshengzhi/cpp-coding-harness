@@ -1,73 +1,86 @@
 #include "Termination.hpp"
 
+#include <algorithm>
+#include <iterator>
 #include <string>
+#include <string_view>
 
 namespace cch::ai::api {
+namespace {
+
+struct TerminationMapping {
+    std::string_view status;
+    AssistantStopReason reason;
+    std::string_view error;
+    // `completed` doubles as the tool-call terminal: upgrade Stop to ToolUse
+    // when the assistant already holds a tool call.
+    bool upgrade_to_tool_use{false};
+    // `refusal` carries the provider's explanation when one is present.
+    bool prefer_explanation{false};
+};
+
+constexpr TerminationMapping kResponsesMappings[] = {
+        {"completed", AssistantStopReason::Stop, {}, true, false},
+        {"done", AssistantStopReason::Stop, {}, true, false},
+        {"incomplete", AssistantStopReason::Length, {}, false, false},
+        {"failed", AssistantStopReason::Error, "Responses request failed", false, false},
+        {"cancelled", AssistantStopReason::Error, "Responses request failed", false, false},
+        {"missing", AssistantStopReason::Error, "Responses stream ended without a terminal event", false, false},
+};
+
+constexpr TerminationMapping kAnthropicMappings[] = {
+        {"end_turn", AssistantStopReason::Stop, {}, false, false},
+        {"pause_turn", AssistantStopReason::Stop, {}, false, false},
+        {"stop_sequence", AssistantStopReason::Stop, {}, false, false},
+        {"max_tokens", AssistantStopReason::Length, {}, false, false},
+        {"tool_use", AssistantStopReason::ToolUse, {}, false, false},
+        {"refusal", AssistantStopReason::Error, "The model refused to complete the request", false, true},
+        {"sensitive", AssistantStopReason::Error, "Provider stopped with: sensitive", false, false},
+        {"missing", AssistantStopReason::Error, "Anthropic stream ended without message_stop", false, false},
+};
+
+[[nodiscard]] const TerminationMapping* find_mapping(
+        const TerminationMapping* begin, const TerminationMapping* end, std::string_view status) {
+    const auto found = std::ranges::find(begin, end, status, &TerminationMapping::status);
+    return found == end ? nullptr : found;
+}
+
+} // namespace
 
 support::Expected<TerminationResult> map_responses_termination(
     std::string_view terminal,
     bool has_tool_call) {
-    if (terminal == "completed" || terminal == "done") {
-        return TerminationResult{
-            .reason = has_tool_call ? AssistantStopReason::ToolUse : AssistantStopReason::Stop,
-        };
+    const std::string_view key = terminal.empty() ? "missing" : terminal;
+    const auto* mapping = find_mapping(std::begin(kResponsesMappings), std::end(kResponsesMappings), key);
+    if (!mapping) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Stream, "Unhandled Responses terminal status: " + std::string{terminal}));
     }
-    if (terminal == "incomplete") {
-        return TerminationResult{.reason = AssistantStopReason::Length};
+    TerminationResult result{.reason = mapping->reason};
+    if (mapping->upgrade_to_tool_use && has_tool_call) {
+        result.reason = AssistantStopReason::ToolUse;
     }
-    if (terminal == "failed" || terminal == "cancelled") {
-        return TerminationResult{
-            .reason = AssistantStopReason::Error,
-            .error_message = "Responses request failed",
-        };
+    if (mapping->reason == AssistantStopReason::Error) {
+        result.error_message = std::string{mapping->error};
     }
-    if (terminal.empty() || terminal == "missing") {
-        return TerminationResult{
-            .reason = AssistantStopReason::Error,
-            .error_message = "Responses stream ended without a terminal event",
-        };
-    }
-    return std::unexpected(support::make_error(
-        support::ErrorCode::Stream,
-        "Unhandled Responses terminal status: " + std::string{terminal}));
+    return result;
 }
 
 support::Expected<TerminationResult> map_anthropic_termination(
     std::string_view stop_reason,
     std::optional<std::string_view> refusal_explanation) {
-    if (stop_reason == "end_turn" || stop_reason == "pause_turn" ||
-        stop_reason == "stop_sequence") {
-        return TerminationResult{.reason = AssistantStopReason::Stop};
+    const std::string_view key = stop_reason.empty() ? "missing" : stop_reason;
+    const auto* mapping = find_mapping(std::begin(kAnthropicMappings), std::end(kAnthropicMappings), key);
+    if (!mapping) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Stream, "Unhandled Anthropic stop reason: " + std::string{stop_reason}));
     }
-    if (stop_reason == "max_tokens") {
-        return TerminationResult{.reason = AssistantStopReason::Length};
+    TerminationResult result{.reason = mapping->reason};
+    if (mapping->reason == AssistantStopReason::Error) {
+        result.error_message = mapping->prefer_explanation && refusal_explanation ? std::string{*refusal_explanation}
+                                                                                  : std::string{mapping->error};
     }
-    if (stop_reason == "tool_use") {
-        return TerminationResult{.reason = AssistantStopReason::ToolUse};
-    }
-    if (stop_reason == "refusal") {
-        return TerminationResult{
-            .reason = AssistantStopReason::Error,
-            .error_message = refusal_explanation
-                ? std::string{*refusal_explanation}
-                : "The model refused to complete the request",
-        };
-    }
-    if (stop_reason == "sensitive") {
-        return TerminationResult{
-            .reason = AssistantStopReason::Error,
-            .error_message = "Provider stopped with: sensitive",
-        };
-    }
-    if (stop_reason.empty() || stop_reason == "missing") {
-        return TerminationResult{
-            .reason = AssistantStopReason::Error,
-            .error_message = "Anthropic stream ended without message_stop",
-        };
-    }
-    return std::unexpected(support::make_error(
-        support::ErrorCode::Stream,
-        "Unhandled Anthropic stop reason: " + std::string{stop_reason}));
+    return result;
 }
 
 } // namespace cch::ai::api
