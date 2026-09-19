@@ -101,17 +101,15 @@ CommandResult run_command(const std::string& command, const fs::path& capture_di
 // Issue #472: a clean-prefix staging install produces only the relocatable
 // Runtime and its required notices, passes the dependency-closure audit, and
 // keeps working after relocation without network credentials.
-// [quarantine] (issue #734): the staged-install subprocess aborts intermittently across
-// lanes — main runs 35409541470 (GCC 16 Debug) and 35327789164 (Arch pinned), PR #730 and
-// PR #733 on GCC 16 Debug, PR #728 on Arch pinned — while the same tree passes repeatedly
-// offline (5 consecutive runs). Every lane except GCC 16 TSan already excludes the
-// `quarantine` label, so this tag removes the test from the lanes that cannot run it
-// reliably; TSan remains the canary that still executes it.
-// Re-enable (drop the tag) once the abort's root cause is fixed and dedicated-runner
-// measurements show the test stable with headroom. Never loosen the assertion to fit a
-// runner.
+// #734 (fixed): the abort was a torn read, not runner resourcing — under the parallel
+// ctest default the cch_parity_gate_production_build test rewrites this build tree's
+// parity build-gate depfile evidence while this case's `cmake --install` reads it, and
+// an invalid-JSON evidence file aborts the install Gate. Both tests now hold the
+// `cch-parity-build-gate-evidence` RESOURCE_LOCK (cmake/tests/CliTests.cmake,
+// cmake/tests/ArchitectureTests.cmake), so ctest serializes the writer against this
+// reader; the [quarantine] tag is dropped per its re-enable condition (root cause fixed).
 TEST_CASE("staged install contains only the relocatable Runtime and behaves after relocation",
-        "[cli][install][issue472][spec][quarantine]") {
+        "[cli][install][issue472][spec]") {
 #ifdef CCH_SANITIZER_BUILD
     // A sanitizer build links libasan/libubsan into every binary, so the
     // dependency-closure audit correctly refuses it: sanitizers gate the

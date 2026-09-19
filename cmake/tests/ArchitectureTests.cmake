@@ -101,8 +101,30 @@ include_guard(GLOBAL)
             -DCCH_PARITY_EXTERNAL_INCLUDE_ROOTS=${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/run-build-gate.cmake
     )
+    # The Gate self-check rewrites the shared build-gate depfile evidence in
+    # this build tree while the staged-install case's `cmake --install` reads
+    # it; the shared RESOURCE_LOCK serializes the two under the parallel
+    # ctest default (#734).
     set_tests_properties(cch_parity_gate_production_build PROPERTIES
-        LABELS "architecture;parity-gate;issue470;issue480;spec")
+        LABELS "architecture;parity-gate;issue470;issue480;spec"
+        RESOURCE_LOCK "cch-parity-build-gate-evidence")
+
+    # Evidence-publication atomicity (issue #734): the build-phase Gate
+    # artifacts are shared by concurrent Gate processes — this self-check and
+    # the `cmake --install` gate run the same record+validate cycle against
+    # one build directory — so publication must be atomic and a reader must
+    # never observe a partially written evidence document.
+    add_test(
+        NAME cch_parity_gate_evidence_atomicity
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/GateEvidenceAtomicityTest.py
+            --cmake ${CMAKE_COMMAND}
+            --source-dir ${CMAKE_CURRENT_SOURCE_DIR}
+            --build-dir ${CMAKE_BINARY_DIR}
+    )
+    set_tests_properties(cch_parity_gate_evidence_atomicity PROPERTIES
+        LABELS "architecture;parity-gate;issue734;spec")
 
     # Owner Interface standalone compile (ADR 0039; #469): every Owner
     # Interface header compiles alone with the include path restricted to its
