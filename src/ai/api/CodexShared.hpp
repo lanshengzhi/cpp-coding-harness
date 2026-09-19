@@ -46,4 +46,7 @@ struct CodexFailure {
 [[nodiscard]] ProviderHeaders codex_headers(
         const ProviderStreamOptions& options, std::string_view account_id, bool websocket);
 
+/// Wraps a Responses request body in the "response.create" WebSocket frame.
+[[nodiscard]] support::Expected<std::string> ws_frame_json(const support::JsonValue& body);
+
 } // namespace cch::ai::api
