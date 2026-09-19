@@ -17,8 +17,10 @@ cch_parity_declare_target(
         src/ai/ModelStream.cpp
         src/ai/SimpleOptions.cpp
         src/ai/Usage.cpp
+        src/ai/api/AnthropicEvents.cpp
         src/ai/api/AnthropicMessagesAdapter.cpp
         src/ai/api/AnthropicPayload.cpp
+        src/ai/api/AnthropicShared.cpp
         src/ai/api/CodexEvents.cpp
         src/ai/api/CodexShared.cpp
         src/ai/api/CodexWebSocketCache.cpp
@@ -33,7 +35,9 @@ cch_parity_declare_target(
         src/ai/auth/OAuthCallbackServer.cpp
         src/ai/auth/OAuthHttpClient.cpp
         src/ai/auth/OpenAICodexOAuth.cpp
+        src/ai/auth/OpenAICodexOAuthWire.cpp
         src/ai/auth/KimiCodingOAuth.cpp
+        src/ai/auth/KimiOAuthWire.cpp
         src/ai/auth/OauthPage.cpp
         src/ai/auth/Pkce.cpp
         src/ai/providers/BoostBeastStreamTransport.cpp
