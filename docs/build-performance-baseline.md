@@ -141,6 +141,12 @@ Measured on [run 35478886040](https://github.com/lanshengzhi/cpp-coding-harness/
 
 The small non-zero cold-run hit rates come from repeated identical compile invocations within a lane. Warm-cache Build-step measurements from this change's CI runs are recorded below once the first uncancelled warm run completes; the acceptance target is a Build step under three minutes per lane with cache-hit statistics in the job log.
 
+### Warm-cache measurements
+
+| Lane | Build step | ccache hit rate |
+| --- | ---: | ---: |
+| Pending first uncancelled warm run | — | — |
+
 ## Diagnosed causes
 
 ### 1. The test build is monolithic
