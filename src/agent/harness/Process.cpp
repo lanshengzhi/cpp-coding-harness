@@ -251,6 +251,13 @@ void close_child_fd(int fd) noexcept {
     }
 }
 
+/// The one child-side failure path: report the failing setup stage through
+/// the error pipe and exit with the conventional exec-failure code.
+[[noreturn]] void fail_child(int error_fd, ChildSetupStage stage, int error_number) noexcept {
+    report_child_setup_failure(error_fd, stage, error_number);
+    _exit(127);
+}
+
 [[noreturn]] void run_child(
     const std::string& executable,
     const std::string& working_directory,
@@ -266,29 +273,24 @@ void close_child_fd(int fd) noexcept {
     bool merge_stderr) noexcept {
     if (::setpgid(0, 0) == -1) {
         const int error_number = errno;
-        report_child_setup_failure(error_sink, ChildSetupStage::ProcessGroup, error_number);
-        _exit(127);
+        fail_child(error_sink, ChildSetupStage::ProcessGroup, error_number);
     }
     if (!working_directory.empty() && ::chdir(working_directory.c_str()) == -1) {
         const int error_number = errno;
-        report_child_setup_failure(error_sink, ChildSetupStage::WorkingDirectory, error_number);
-        _exit(127);
+        fail_child(error_sink, ChildSetupStage::WorkingDirectory, error_number);
     }
     if (::dup2(stdout_sink, STDOUT_FILENO) == -1) {
         const int error_number = errno;
-        report_child_setup_failure(error_sink, ChildSetupStage::Stdout, error_number);
-        _exit(127);
+        fail_child(error_sink, ChildSetupStage::Stdout, error_number);
     }
     if (merge_stderr) {
         if (::dup2(stdout_sink, STDERR_FILENO) == -1) {
             const int error_number = errno;
-            report_child_setup_failure(error_sink, ChildSetupStage::Stderr, error_number);
-            _exit(127);
+            fail_child(error_sink, ChildSetupStage::Stderr, error_number);
         }
     } else if (::dup2(stderr_sink, STDERR_FILENO) == -1) {
         const int error_number = errno;
-        report_child_setup_failure(error_sink, ChildSetupStage::Stderr, error_number);
-        _exit(127);
+        fail_child(error_sink, ChildSetupStage::Stderr, error_number);
     }
 
     close_child_fd(stdout_source);
@@ -302,8 +304,7 @@ void close_child_fd(int fd) noexcept {
     } else {
         ::execvp(executable.c_str(), arguments.data());
     }
-    report_child_setup_failure(error_sink, ChildSetupStage::Exec, errno);
-    _exit(127);
+    fail_child(error_sink, ChildSetupStage::Exec, errno);
 }
 
 [[nodiscard]] const char* child_setup_stage_name(ChildSetupStage stage) noexcept {

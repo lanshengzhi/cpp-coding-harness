@@ -274,28 +274,28 @@ constexpr std::string_view kTurnPrefixSummarizationPrompt =
     if (!message) {
         return std::nullopt;
     }
-    if (std::holds_alternative<ai::UserMessage>(*message)) {
-        return "user";
-    }
-    if (std::holds_alternative<ai::AssistantMessage>(*message)) {
-        return "assistant";
-    }
-    if (std::holds_alternative<ai::ToolResultMessage>(*message)) {
-        return "toolResult";
-    }
-    if (std::holds_alternative<ai::BashExecutionMessage>(*message)) {
-        return "bashExecution";
-    }
-    if (std::holds_alternative<ai::CustomMessage>(*message)) {
-        return "custom";
-    }
-    if (std::holds_alternative<ai::BranchSummaryMessage>(*message)) {
-        return "branchSummary";
-    }
-    if (std::holds_alternative<ai::CompactionSummaryMessage>(*message)) {
-        return "compactionSummary";
-    }
-    return std::nullopt;
+    return std::visit(
+            [](const auto& concrete) -> std::optional<std::string> {
+                using M = std::decay_t<decltype(concrete)>;
+                if constexpr (std::is_same_v<M, ai::UserMessage>) {
+                    return std::string{"user"};
+                } else if constexpr (std::is_same_v<M, ai::AssistantMessage>) {
+                    return std::string{"assistant"};
+                } else if constexpr (std::is_same_v<M, ai::ToolResultMessage>) {
+                    return std::string{"toolResult"};
+                } else if constexpr (std::is_same_v<M, ai::BashExecutionMessage>) {
+                    return std::string{"bashExecution"};
+                } else if constexpr (std::is_same_v<M, ai::CustomMessage>) {
+                    return std::string{"custom"};
+                } else if constexpr (std::is_same_v<M, ai::BranchSummaryMessage>) {
+                    return std::string{"branchSummary"};
+                } else if constexpr (std::is_same_v<M, ai::CompactionSummaryMessage>) {
+                    return std::string{"compactionSummary"};
+                } else {
+                    return std::nullopt;
+                }
+            },
+            *message);
 }
 
 [[nodiscard]] bool is_cut_point_role(std::string_view role) {
@@ -594,33 +594,38 @@ bool is_context_overflow(
 }
 
 std::size_t estimate_tokens(const ai::MessageVariant& message) {
-    std::size_t chars = 0;
-    if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
-        chars = estimate_text_and_image_chars(*user);
-    } else if (const auto* assistant = std::get_if<ai::AssistantMessage>(&message)) {
-        for (const auto& block : assistant->content) {
-            if (const auto* text = std::get_if<ai::TextContent>(&block)) {
-                chars += text->text.size();
-            } else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
-                chars += thinking->thinking.size();
-            } else if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
-                chars += call->name.size() + json_stringify(*call).size();
-            }
-        }
-    } else if (const auto* tool_result = std::get_if<ai::ToolResultMessage>(&message)) {
-        chars = estimate_content_chars(tool_result->content);
-    } else if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message)) {
-        chars = bash->command.size() + bash->output.size();
-    } else if (const auto* custom = std::get_if<ai::CustomMessage>(&message)) {
-        chars = estimate_content_chars(custom->content);
-    } else if (const auto* branch = std::get_if<ai::BranchSummaryMessage>(&message)) {
-        chars = branch->summary.size();
-    } else if (const auto* compaction =
-                   std::get_if<ai::CompactionSummaryMessage>(&message)) {
-        chars = compaction->summary.size();
-    } else {
-        return 0;
-    }
+    const auto chars = std::visit(
+            [](const auto& concrete) -> std::size_t {
+                using M = std::decay_t<decltype(concrete)>;
+                if constexpr (std::is_same_v<M, ai::UserMessage>) {
+                    return estimate_text_and_image_chars(concrete);
+                } else if constexpr (std::is_same_v<M, ai::AssistantMessage>) {
+                    std::size_t block_chars = 0;
+                    for (const auto& block : concrete.content) {
+                        if (const auto* text = std::get_if<ai::TextContent>(&block)) {
+                            block_chars += text->text.size();
+                        } else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
+                            block_chars += thinking->thinking.size();
+                        } else if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
+                            block_chars += call->name.size() + json_stringify(*call).size();
+                        }
+                    }
+                    return block_chars;
+                } else if constexpr (std::is_same_v<M, ai::ToolResultMessage>) {
+                    return estimate_content_chars(concrete.content);
+                } else if constexpr (std::is_same_v<M, ai::BashExecutionMessage>) {
+                    return concrete.command.size() + concrete.output.size();
+                } else if constexpr (std::is_same_v<M, ai::CustomMessage>) {
+                    return estimate_content_chars(concrete.content);
+                } else if constexpr (std::is_same_v<M, ai::BranchSummaryMessage>) {
+                    return concrete.summary.size();
+                } else if constexpr (std::is_same_v<M, ai::CompactionSummaryMessage>) {
+                    return concrete.summary.size();
+                } else {
+                    return 0;
+                }
+            },
+            message);
     return (chars + 3) / 4;
 }
 
