@@ -111,6 +111,79 @@ constexpr std::size_t kToolArgumentsDisplayBytes = 40;
     return {};
 }
 
+struct VisualLayoutState {
+    std::size_t indent{0};
+    bool just_branched{false};
+    bool show_connector{false};
+    bool is_last{false};
+    std::vector<TreeSelectorComponent::GutterInfo> gutters;
+    bool is_virtual_root_child{false};
+};
+
+template <typename NodeId, typename ChildLookup, typename Apply>
+void layout_tree(const std::vector<NodeId>& roots, bool multiple_roots, ChildLookup child_lookup, Apply apply) {
+    struct StackItem {
+        NodeId node;
+        VisualLayoutState layout;
+    };
+    std::vector<StackItem> stack;
+    for (std::size_t index = roots.size(); index > 0; --index) {
+        const bool is_last = index == roots.size();
+        stack.push_back(StackItem{
+                .node = roots[index - 1],
+                .layout =
+                        VisualLayoutState{
+                                .indent = multiple_roots ? std::size_t{1} : std::size_t{0},
+                                .just_branched = multiple_roots,
+                                .show_connector = multiple_roots,
+                                .is_last = is_last,
+                                .gutters = {},
+                                .is_virtual_root_child = multiple_roots,
+                        },
+        });
+    }
+
+    while (!stack.empty()) {
+        auto item = std::move(stack.back());
+        stack.pop_back();
+        if (!apply(item.node, item.layout)) continue;
+
+        const auto& children = child_lookup(item.node);
+        const bool multiple_children = children.size() > 1;
+        const std::size_t child_indent =
+                multiple_children ? item.layout.indent + 1
+                                  : (item.layout.just_branched && item.layout.indent > 0 ? item.layout.indent + 1
+                                                                                         : item.layout.indent);
+        const bool connector_displayed = item.layout.show_connector && !item.layout.is_virtual_root_child;
+        const std::size_t current_display_indent =
+                multiple_roots ? std::max<std::size_t>(0, item.layout.indent - 1) : item.layout.indent;
+        const std::size_t connector_position = std::max<std::size_t>(0, current_display_indent - 1);
+        std::vector<TreeSelectorComponent::GutterInfo> child_gutters = item.layout.gutters;
+        if (connector_displayed) {
+            child_gutters.push_back(TreeSelectorComponent::GutterInfo{
+                    .position = connector_position,
+                    .show = !item.layout.is_last,
+            });
+        }
+
+        for (std::size_t index = children.size(); index > 0; --index) {
+            const bool child_is_last = index == children.size();
+            stack.push_back(StackItem{
+                    .node = children[index - 1],
+                    .layout =
+                            VisualLayoutState{
+                                    .indent = child_indent,
+                                    .just_branched = multiple_children,
+                                    .show_connector = multiple_children,
+                                    .is_last = child_is_last,
+                                    .gutters = child_gutters,
+                                    .is_virtual_root_child = false,
+                            },
+            });
+        }
+    }
+}
+
 } // namespace
 
 // ── TreeSelectorComponent implementation ─────────────────────────────────────
@@ -138,6 +211,7 @@ TreeSelectorComponent::TreeSelectorComponent(
       max_visible_lines_(std::max<std::size_t>(5, terminal_height / 2)),
       multiple_roots_(tree_.size() > 1),
       label_input_(cch::tui::InputOptions{.keybindings = keybindings}) {
+    build_tree_index();
     flatten_tree();
     build_active_path();
     apply_filter();
@@ -186,36 +260,36 @@ std::string TreeSelectorComponent::format_label_timestamp(
     return std::format("{}/{}/{} {}", two(year_two), month, day, time);
 }
 
+void TreeSelectorComponent::build_tree_index() {
+    tree_index_.clear();
+    indexed_nodes_.clear();
+    for (auto& root : tree_) {
+        std::vector<harness::session::SessionTreeNode*> stack{&root};
+        while (!stack.empty()) {
+            auto* node = stack.back();
+            stack.pop_back();
+            indexed_nodes_.push_back(node);
+            tree_index_.emplace(node->entry.entry_id, node);
+            for (auto& child : node->children)
+                stack.push_back(&child);
+        }
+    }
+}
+
 void TreeSelectorComponent::flatten_tree() {
     flat_nodes_.clear();
     tool_call_map_.clear();
 
     // Determine which subtrees contain the active leaf (to sort the current
     // branch first), with an iterative post-order pass (pi flattenTree).
-    // tree_ is an owned non-const member, so the walk uses non-const
-    // pointers throughout (CODING_STANDARDS 9.6: no const_cast).
     std::map<harness::session::SessionTreeNode*, bool> contains_active;
-    std::vector<harness::session::SessionTreeNode*> all_nodes;
-    {
-        std::vector<harness::session::SessionTreeNode*> pre_order;
-        for (auto& root : tree_) pre_order.push_back(&root);
-        while (!pre_order.empty()) {
-            auto* node = pre_order.back();
-            pre_order.pop_back();
-            all_nodes.push_back(node);
-            for (auto it = node->children.rbegin(); it != node->children.rend(); ++it) {
-                pre_order.push_back(&*it);
-            }
+    for (auto it = indexed_nodes_.rbegin(); it != indexed_nodes_.rend(); ++it) {
+        auto* node = *it;
+        bool has = !current_leaf_id_.empty() && node->entry.entry_id == current_leaf_id_;
+        for (auto& child : node->children) {
+            if (contains_active[&child]) has = true;
         }
-        for (auto it = all_nodes.rbegin(); it != all_nodes.rend(); ++it) {
-            auto* node = *it;
-            bool has = !current_leaf_id_.empty() &&
-                node->entry.entry_id == current_leaf_id_;
-            for (auto& child : node->children) {
-                if (contains_active[&child]) has = true;
-            }
-            contains_active[node] = has;
-        }
+        contains_active[node] = has;
     }
 
     // Add roots in reverse order, prioritizing the one containing the active
@@ -233,132 +307,64 @@ void TreeSelectorComponent::flatten_tree() {
             return contains_active[first] && !contains_active[second];
         });
 
-    struct StackItem {
-        harness::session::SessionTreeNode* node{nullptr};
-        std::size_t indent{0};
-        bool just_branched{false};
-        bool show_connector{false};
-        bool is_last{false};
-        std::vector<GutterInfo> gutters;
-        bool is_virtual_root_child{false};
-    };
-    std::vector<StackItem> stack;
-    for (std::size_t index = ordered_roots.size(); index > 0; --index) {
-        auto* root = ordered_roots[index - 1];
-        const bool is_last = index == ordered_roots.size();
-        stack.push_back(StackItem{
-            .node = root,
-            .indent = multiple_roots_ ? std::size_t{1} : std::size_t{0},
-            .just_branched = multiple_roots_,
-            .show_connector = multiple_roots_,
-            .is_last = is_last,
-            .gutters = {},
-            .is_virtual_root_child = multiple_roots_,
-        });
+    std::unordered_map<harness::session::SessionTreeNode*, std::vector<harness::session::SessionTreeNode*>>
+            ordered_children;
+    for (auto* node : indexed_nodes_) {
+        auto& children = ordered_children[node];
+        for (auto& child : node->children)
+            children.push_back(&child);
+        std::stable_sort(children.begin(),
+                children.end(),
+                [&](harness::session::SessionTreeNode* first, harness::session::SessionTreeNode* second) {
+                    // The branch containing the active leaf comes first (pi:
+                    // `Number(containsActive.get(b)) - Number(containsActive.get(a))`).
+                    return contains_active[first] && !contains_active[second];
+                });
     }
 
-    while (!stack.empty()) {
-        auto item = std::move(stack.back());
-        stack.pop_back();
-        auto* node = item.node;
-
-        // Extract tool calls from assistant messages for later lookup.
-        if (node->entry.kind == harness::session::SessionEntryKind::Message &&
-            node->entry.message.has_value()) {
-            if (const auto* assistant =
-                    std::get_if<ai::AssistantMessage>(&*node->entry.message)) {
-                for (const auto& block : assistant->content) {
-                    if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
-                        tool_call_map_.emplace(
-                            call->id,
-                            ToolCallInfo{
-                                .name = call->name,
-                                .arguments = call->arguments.value_or(support::JsonValue{}),
-                            });
+    layout_tree(
+            ordered_roots,
+            multiple_roots_,
+            [&](harness::session::SessionTreeNode* node) -> const std::vector<harness::session::SessionTreeNode*>& {
+                return ordered_children.at(node);
+            },
+            [&](harness::session::SessionTreeNode* node, const VisualLayoutState& layout) {
+                // Extract tool calls from assistant messages for later lookup.
+                if (node->entry.kind == harness::session::SessionEntryKind::Message &&
+                        node->entry.message.has_value()) {
+                    if (const auto* assistant = std::get_if<ai::AssistantMessage>(&*node->entry.message)) {
+                        for (const auto& block : assistant->content) {
+                            if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
+                                tool_call_map_.emplace(call->id,
+                                        ToolCallInfo{
+                                                .name = call->name,
+                                                .arguments = call->arguments.value_or(support::JsonValue{}),
+                                        });
+                            }
+                        }
                     }
                 }
-            }
-        }
 
-        FlatNode flat;
-        flat.node = node;
-        flat.indent = item.indent;
-        flat.show_connector = item.show_connector;
-        flat.is_last = item.is_last;
-        flat.gutters = std::move(item.gutters);
-        flat.is_virtual_root_child = item.is_virtual_root_child;
-        flat_nodes_.push_back(std::move(flat));
-
-        // Order children so the branch containing the active leaf comes first.
-        std::vector<harness::session::SessionTreeNode*> ordered_children;
-        for (auto& child : node->children) ordered_children.push_back(&child);
-        std::stable_sort(
-            ordered_children.begin(),
-            ordered_children.end(),
-            [&](harness::session::SessionTreeNode* first,
-                harness::session::SessionTreeNode* second) {
-                // The branch containing the active leaf comes first (pi:
-                // `Number(containsActive.get(b)) - Number(containsActive.get(a))`).
-                return contains_active[first] && !contains_active[second];
+                FlatNode flat;
+                flat.node = node;
+                flat.indent = layout.indent;
+                flat.show_connector = layout.show_connector;
+                flat.is_last = layout.is_last;
+                flat.gutters = layout.gutters;
+                flat.is_virtual_root_child = layout.is_virtual_root_child;
+                flat_nodes_.push_back(std::move(flat));
+                return true;
             });
-
-        const bool multiple_children = ordered_children.size() > 1;
-        std::size_t child_indent;
-        if (multiple_children) {
-            child_indent = item.indent + 1;
-        } else if (item.just_branched && item.indent > 0) {
-            child_indent = item.indent + 1;
-        } else {
-            child_indent = item.indent;
-        }
-
-        const bool connector_displayed = item.show_connector && !item.is_virtual_root_child;
-        const std::size_t current_display_indent =
-            multiple_roots_ ? std::max<std::size_t>(0, item.indent - 1) : item.indent;
-        const std::size_t connector_position =
-            std::max<std::size_t>(0, current_display_indent - 1);
-        std::vector<GutterInfo> child_gutters = item.gutters;
-        if (connector_displayed) {
-            child_gutters.push_back(GutterInfo{
-                .position = connector_position,
-                .show = !item.is_last,
-            });
-        }
-
-        for (std::size_t index = ordered_children.size(); index > 0; --index) {
-            auto* child = ordered_children[index - 1];
-            const bool child_is_last = index == ordered_children.size();
-            stack.push_back(StackItem{
-                .node = child,
-                .indent = child_indent,
-                .just_branched = multiple_children,
-                .show_connector = multiple_children,
-                .is_last = child_is_last,
-                .gutters = child_gutters,
-                .is_virtual_root_child = false,
-            });
-        }
-    }
 }
 
 void TreeSelectorComponent::build_active_path() {
     active_path_ids_.clear();
     if (current_leaf_id_.empty()) return;
-    std::map<std::string, const harness::session::SessionTreeNode*> by_id;
-    for (auto& node : tree_) {
-        std::vector<harness::session::SessionTreeNode*> stack{&node};
-        while (!stack.empty()) {
-            auto* current = stack.back();
-            stack.pop_back();
-            by_id.emplace(current->entry.entry_id, current);
-            for (auto& child : current->children) stack.push_back(&child);
-        }
-    }
     std::optional<std::string> current = current_leaf_id_;
     while (current) {
         active_path_ids_.insert(*current);
-        auto node = by_id.find(*current);
-        if (node == by_id.end()) break;
+        const auto node = tree_index_.find(*current);
+        if (node == tree_index_.end()) break;
         const auto& parent = node->second->entry.parent_id;
         current = parent && !parent->empty()
             ? std::optional<std::string>{*parent}
@@ -522,30 +528,19 @@ void TreeSelectorComponent::recalculate_visual_structure() {
     for (const auto& flat : filtered_nodes_) {
         visible_ids.insert(flat.node->entry.entry_id);
     }
-    std::map<std::string, const harness::session::SessionTreeNode*> by_id;
-    for (const auto& node : tree_) {
-        std::vector<const harness::session::SessionTreeNode*> stack{&node};
-        while (!stack.empty()) {
-            const auto* current = stack.back();
-            stack.pop_back();
-            by_id.emplace(current->entry.entry_id, current);
-            for (const auto& child : current->children) stack.push_back(&child);
-        }
-    }
-
     // Find the nearest visible ancestor for a node.
     const auto find_visible_ancestor =
         [&](const std::string& node_id) -> std::optional<std::string> {
         std::optional<std::string> current;
-        const auto entry = by_id.find(node_id);
-        if (entry != by_id.end()) {
+        const auto entry = tree_index_.find(node_id);
+        if (entry != tree_index_.end()) {
             const auto& parent = entry->second->entry.parent_id;
             if (parent && !parent->empty()) current = *parent;
         }
         while (current) {
             if (visible_ids.contains(*current)) return current;
-            const auto node = by_id.find(*current);
-            if (node == by_id.end()) break;
+            const auto node = tree_index_.find(*current);
+            if (node == tree_index_.end()) break;
             const auto& parent = node->second->entry.parent_id;
             current = parent && !parent->empty()
                 ? std::optional<std::string>{*parent}
@@ -574,84 +569,28 @@ void TreeSelectorComponent::recalculate_visual_structure() {
         filtered_index.emplace(filtered_nodes_[index].node->entry.entry_id, index);
     }
 
-    struct StackItem {
-        std::string node_id;
-        std::size_t indent{0};
-        bool just_branched{false};
-        bool show_connector{false};
-        bool is_last{false};
-        std::vector<GutterInfo> gutters;
-        bool is_virtual_root_child{false};
-    };
-    std::vector<StackItem> stack;
-    for (std::size_t index = visible_root_ids.size(); index > 0; --index) {
-        const bool is_last = index == visible_root_ids.size();
-        stack.push_back(StackItem{
-            .node_id = visible_root_ids[index - 1],
-            .indent = multiple_roots_ ? std::size_t{1} : std::size_t{0},
-            .just_branched = multiple_roots_,
-            .show_connector = multiple_roots_,
-            .is_last = is_last,
-            .gutters = {},
-            .is_virtual_root_child = multiple_roots_,
-        });
-    }
-
-    while (!stack.empty()) {
-        auto item = std::move(stack.back());
-        stack.pop_back();
-        const auto found = filtered_index.find(item.node_id);
-        if (found == filtered_index.end()) continue;
-        auto& flat = filtered_nodes_[found->second];
-        flat.indent = item.indent;
-        flat.show_connector = item.show_connector;
-        flat.is_last = item.is_last;
-        flat.gutters = item.gutters;
-        flat.is_virtual_root_child = item.is_virtual_root_child;
-
-        const auto children_it = visible_children_map_.find(
-            std::optional<std::string>{item.node_id});
-        const auto& children =
-            children_it == visible_children_map_.end()
-            ? std::vector<std::string>{}
-            : children_it->second;
-        const bool multiple_children = children.size() > 1;
-
-        std::size_t child_indent;
-        if (multiple_children) {
-            child_indent = item.indent + 1;
-        } else if (item.just_branched && item.indent > 0) {
-            child_indent = item.indent + 1;
-        } else {
-            child_indent = item.indent;
-        }
-
-        const bool connector_displayed = item.show_connector && !item.is_virtual_root_child;
-        const std::size_t current_display_indent =
-            multiple_roots_ ? std::max<std::size_t>(0, item.indent - 1) : item.indent;
-        const std::size_t connector_position =
-            std::max<std::size_t>(0, current_display_indent - 1);
-        std::vector<GutterInfo> child_gutters = item.gutters;
-        if (connector_displayed) {
-            child_gutters.push_back(GutterInfo{
-                .position = connector_position,
-                .show = !item.is_last,
+    layout_tree(
+            visible_root_ids,
+            multiple_roots_,
+            [&](const std::string& node_id) -> const std::vector<std::string>& {
+                const auto children = visible_children_map_.find(std::optional<std::string>{node_id});
+                if (children == visible_children_map_.end()) {
+                    static const std::vector<std::string> empty_children;
+                    return empty_children;
+                }
+                return children->second;
+            },
+            [&](const std::string& node_id, const VisualLayoutState& layout) {
+                const auto found = filtered_index.find(node_id);
+                if (found == filtered_index.end()) return false;
+                auto& flat = filtered_nodes_[found->second];
+                flat.indent = layout.indent;
+                flat.show_connector = layout.show_connector;
+                flat.is_last = layout.is_last;
+                flat.gutters = layout.gutters;
+                flat.is_virtual_root_child = layout.is_virtual_root_child;
+                return true;
             });
-        }
-
-        for (std::size_t index = children.size(); index > 0; --index) {
-            const bool child_is_last = index == children.size();
-            stack.push_back(StackItem{
-                .node_id = children[index - 1],
-                .indent = child_indent,
-                .just_branched = multiple_children,
-                .show_connector = multiple_children,
-                .is_last = child_is_last,
-                .gutters = child_gutters,
-                .is_virtual_root_child = false,
-            });
-        }
-    }
 }
 
 std::size_t TreeSelectorComponent::find_nearest_visible_index(
@@ -659,16 +598,6 @@ std::size_t TreeSelectorComponent::find_nearest_visible_index(
     if (filtered_nodes_.empty()) return 0;
     if (!entry_id) return filtered_nodes_.size() - 1;
 
-    std::map<std::string, const harness::session::SessionTreeNode*> by_id;
-    for (const auto& node : tree_) {
-        std::vector<const harness::session::SessionTreeNode*> stack{&node};
-        while (!stack.empty()) {
-            const auto* current = stack.back();
-            stack.pop_back();
-            by_id.emplace(current->entry.entry_id, current);
-            for (const auto& child : current->children) stack.push_back(&child);
-        }
-    }
     std::map<std::string, std::size_t> visible_index;
     for (std::size_t index = 0; index < filtered_nodes_.size(); ++index) {
         visible_index.emplace(filtered_nodes_[index].node->entry.entry_id, index);
@@ -679,8 +608,8 @@ std::size_t TreeSelectorComponent::find_nearest_visible_index(
     while (current) {
         const auto visible = visible_index.find(*current);
         if (visible != visible_index.end()) return visible->second;
-        const auto node = by_id.find(*current);
-        if (node == by_id.end()) break;
+        const auto node = tree_index_.find(*current);
+        if (node == tree_index_.end()) break;
         const auto& parent = node->second->entry.parent_id;
         current = parent && !parent->empty()
             ? std::optional<std::string>{*parent}
@@ -871,23 +800,16 @@ void TreeSelectorComponent::copy_selected() {
 void TreeSelectorComponent::update_node_label(
     std::string entry_id,
     std::optional<std::string> label) {
-    std::vector<harness::session::SessionTreeNode*> stack;
-    for (auto& root : tree_) stack.push_back(&root);
-    while (!stack.empty()) {
-        auto* node = stack.back();
-        stack.pop_back();
-        if (node->entry.entry_id == entry_id) {
-            node->label = label;
-            if (label) {
-                const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+    const auto node = tree_index_.find(entry_id);
+    if (node != tree_index_.end()) {
+        node->second->label = label;
+        if (label) {
+            const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::system_clock::now().time_since_epoch());
-                node->label_timestamp = now.count();
-            } else {
-                node->label_timestamp = std::nullopt;
-            }
-            break;
+            node->second->label_timestamp = now.count();
+        } else {
+            node->second->label_timestamp = std::nullopt;
         }
-        for (auto& child : node->children) stack.push_back(&child);
     }
     apply_filter();
 }

@@ -29,6 +29,7 @@
 
 namespace cch::coding_agent {
 using detail::to_async_result;
+using detail::warning_diagnostic;
 namespace {
 
 /// pi `loadContextFileFromDir` candidate names (`resource-loader.ts`), in
@@ -47,17 +48,6 @@ constexpr std::array<std::string_view, 4> kContextFileCandidates{
         text.remove_suffix(1);
     }
     return text;
-}
-
-[[nodiscard]] ResourceDiagnostic warning_diagnostic(
-    std::string message,
-    std::optional<std::string> path = std::nullopt) {
-    return ResourceDiagnostic{
-        .type = ResourceDiagnosticType::Warning,
-        .message = std::move(message),
-        .path = std::move(path),
-        .collision = std::nullopt,
-    };
 }
 
 [[nodiscard]] ResourceDiagnostic error_diagnostic(
@@ -92,39 +82,6 @@ private:
     std::vector<ResourceDiagnostic>& kind_;
 };
 
-/// pi `dedupePrompts` collision diagnostic (`resource-loader.ts`):
-/// first loaded template wins; the loser carries winner/loser paths.
-[[nodiscard]] ResourceDiagnostic prompt_collision_diagnostic(
-    const ResourceCollision& collision) {
-    return ResourceDiagnostic{
-        .type = ResourceDiagnosticType::Collision,
-        .message = "name \"/" + collision.name + "\" collision",
-        .path = collision.loser_path,
-        .collision = collision,
-    };
-}
-
-/// pi `ResourceDiagnostic` collision for a duplicate skill name: the first
-/// loaded skill wins and the loser carries the winner/loser paths.
-[[nodiscard]] ResourceDiagnostic skill_collision_diagnostic(
-    const std::string& name,
-    const std::string& winner_path,
-    const std::string& loser_path) {
-    return ResourceDiagnostic{
-        .type = ResourceDiagnosticType::Collision,
-        .message = "name \"" + name + "\" collision",
-        .path = loser_path,
-        .collision = ResourceCollision{
-            .resource_type = ResourceCollisionResourceType::Skill,
-            .name = name,
-            .winner_path = winner_path,
-            .loser_path = loser_path,
-            .winner_source = std::nullopt,
-            .loser_source = std::nullopt,
-        },
-    };
-}
-
 /// Tracks loaded skill names to their first-seen source path so that
 /// cross-source duplicates produce pi-shaped collision diagnostics with
 /// winner/loser paths (pi's one `loadSkills` call shares its name map across
@@ -138,10 +95,11 @@ public:
         std::vector<Skill> incoming) {
         for (auto& skill : incoming) {
             if (auto it = by_name_.find(skill.name); it != by_name_.end()) {
-                sink.push(skill_collision_diagnostic(
-                    skill.name,
-                    it->second,
-                    skill.filePath));
+                sink.push(detail::make_collision_diagnostic("name \"" + skill.name + "\" collision",
+                        ResourceCollisionResourceType::Skill,
+                        skill.name,
+                        it->second,
+                        skill.filePath));
                 continue;
             }
             by_name_.emplace(skill.name, skill.filePath);
@@ -175,14 +133,11 @@ public:
         std::vector<PromptTemplate> incoming) {
         for (auto& tmpl : incoming) {
             if (auto it = by_name_.find(tmpl.name); it != by_name_.end()) {
-                sink.push(prompt_collision_diagnostic(ResourceCollision{
-                    .resource_type = ResourceCollisionResourceType::Prompt,
-                    .name = tmpl.name,
-                    .winner_path = it->second,
-                    .loser_path = tmpl.filePath,
-                    .winner_source = std::nullopt,
-                    .loser_source = std::nullopt,
-                }));
+                sink.push(detail::make_collision_diagnostic("name \"/" + tmpl.name + "\" collision",
+                        ResourceCollisionResourceType::Prompt,
+                        tmpl.name,
+                        it->second,
+                        tmpl.filePath));
                 continue;
             }
             by_name_.emplace(tmpl.name, tmpl.filePath);
