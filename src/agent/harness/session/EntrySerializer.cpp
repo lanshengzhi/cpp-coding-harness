@@ -1,6 +1,7 @@
 #include "EntrySerializer.hpp"
 
 #include "agent/harness/session/EntryRedaction.hpp"
+#include "agent/harness/session/RandomHex.hpp"
 #include "agent/harness/session/SessionMessageJson.hpp"
 #include "support/Json.hpp"
 
@@ -225,15 +226,7 @@ template <typename T>
 }
 
 [[nodiscard]] std::string generate_entry_id() {
-    thread_local std::random_device rd;
-    thread_local std::mt19937_64 gen(rd());
-    thread_local std::uniform_int_distribution<unsigned> dist(0, 15);
-    const char hex_chars[] = "0123456789abcdef";
-    std::string id(8, '0');
-    for (auto& c : id) {
-        c = hex_chars[dist(gen)];
-    }
-    return id;
+    return random_hex_id(8);
 }
 
 [[nodiscard]] std::int64_t ms_since_epoch() {
