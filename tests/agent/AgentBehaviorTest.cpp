@@ -2008,10 +2008,15 @@ TEST_CASE("prepareNextTurn thinking level is validated", "[agent][async][u8][spe
     };
 
     agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    // The hook runs only when the loop continues (#745): the rejection row
+    // continues the run with a queued follow-up.
+    REQUIRE(subject.follow_up(ai::user_text_message("continue")));
     auto run = run_agent(subject, "hi");
 
     REQUIRE_FALSE(run.result);
     CHECK(run.result.error().code == support::ErrorCode::Validation);
+    // The run aborted at the hook before another assistant response.
+    CHECK(client->requests.size() == 1);
 }
 
 TEST_CASE("prepareNextTurn rejected update does not persist partial model changes", "[agent][async][u8][spec]") {
@@ -2067,7 +2072,7 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
             make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
 
     bool prepared = false;
-    bool stop_observed_replacement = false;
+    bool stop_observed_pre_prepare_context = false;
     std::size_t first_prepare_new_message_count = 0;
     agent::AsyncAgentOptions options;
     options.max_turns = 4;
@@ -2087,10 +2092,12 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
                 support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{
                         agent::AgentLoopTurnUpdate{.context = std::move(replacement)}}};
     };
+    // pi runs `shouldStopAfterTurn` immediately after the turn, before
+    // prepare-next-turn: it observes the pre-prepare context (#745, ADR 0014).
     options.should_stop_after_turn = [&](const agent::PrepareNextTurnContext& context) -> support::AsyncResult<bool> {
-        if (context.context.system_prompt && *context.context.system_prompt == "replacement prompt" &&
-                context.context.messages.size() == 1) {
-            stop_observed_replacement = true;
+        if (context.context.system_prompt && context.context.system_prompt->empty() &&
+                context.context.messages.size() == 3) {
+            stop_observed_pre_prepare_context = true;
         }
         return support::AsyncResult<bool>{support::Expected<bool>{false}};
     };
@@ -2101,7 +2108,7 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     CHECK(run.result);
     CHECK(prepared);
     CHECK(first_prepare_new_message_count == 3);
-    CHECK(stop_observed_replacement);
+    CHECK(stop_observed_pre_prepare_context);
     REQUIRE(client->requests.size() == 2);
     REQUIRE(client->requests[1].context.system_prompt.has_value());
     CHECK(*client->requests[1].context.system_prompt == "replacement prompt");
@@ -2151,8 +2158,8 @@ TEST_CASE("between-turn context replacement keeps the invocation window valid", 
     options.model = tests::make_model("gpt-test");
     options.prepare_next_turn = [subject_holder, &replaced_once](const agent::PrepareNextTurnContext&)
             -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
-        // The hook also runs once after the run's final turn; the rebuilt
-        // context leaves nothing to replace there (the session's estimate gate
+        // The hook runs only when the loop continues, so the run's final turn
+        // never re-replaces the context (#745; the session's estimate gate
         // behaves the same way).
         if (replaced_once) {
             return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
@@ -2205,6 +2212,135 @@ TEST_CASE("between-turn context replacement keeps the invocation window valid", 
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(run.state.messages[0])) == "compacted history");
 }
 
+// pi's agent loop invokes `prepareNextTurn` only at the top of a continuing
+// inner-loop iteration: the run's final turn never reaches it (#745).
+TEST_CASE(
+        "prepareNextTurn is not invoked after the run's final turn", "[agent][async][u8][issue745][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("final answer"));
+
+    agent::ToolRegistry registry;
+
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    int prepare_calls = 0;
+    options.prepare_next_turn = [&prepare_calls](const agent::PrepareNextTurnContext&)
+            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+        ++prepare_calls;
+        return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::nullopt}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto run = run_agent(subject, "hi");
+
+    CHECK(run.result);
+    REQUIRE(client->requests.size() == 1);
+    CHECK(prepare_calls == 0);
+    CHECK(count_events<agent::TurnEndEvent>(run.events) == 1);
+}
+
+// A continuing run invokes the hook exactly once per completed turn, after
+// turn_end and before the next turn_start (#745, pi turn lifecycle).
+TEST_CASE("prepareNextTurn runs once per continuing turn before the next turn_start",
+        "[agent][async][u8][issue745][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("second"));
+
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+
+    // Shared observation point: the subscriber's event list, so the hook can
+    // pin its position between turn_end and the following turn_start.
+    auto events = std::make_shared<std::vector<agent::AgentLifecycleEvent>>();
+    int prepare_calls = 0;
+    std::vector<std::size_t> turn_starts_seen;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.prepare_next_turn = [&](const agent::PrepareNextTurnContext&)
+            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+        ++prepare_calls;
+        std::size_t turn_starts = 0;
+        for (const auto& event : *events) {
+            if (std::holds_alternative<agent::TurnStartEvent>(event)) {
+                ++turn_starts;
+            }
+        }
+        turn_starts_seen.push_back(turn_starts);
+        return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::nullopt}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    auto subscribed = subject.subscribe([&events](const agent::AgentLifecycleEvent& event) {
+        events->push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscribed);
+    auto subscription = std::move(*subscribed);
+    auto run = run_agent(subject, "read");
+
+    CHECK(run.result);
+    REQUIRE(client->requests.size() == 2);
+    // Exactly one invocation for the one completed continuing turn (turn 1);
+    // the final turn 2 invokes it zero times.
+    CHECK(prepare_calls == 1);
+    REQUIRE(turn_starts_seen.size() == 1);
+    // The hook ran after turn 1's turn_start and before turn 2's turn_start.
+    CHECK(turn_starts_seen[0] == 1);
+    CHECK(count_events<agent::TurnStartEvent>(run.events) == 2);
+}
+
+// pi agent-loop: preparation can be long-running (for example, compaction);
+// steering queued while it runs is picked up by the re-poll after it settles,
+// and the re-poll runs only when the earlier poll returned nothing so
+// one-at-a-time mode still delivers exactly one message per turn (#745).
+TEST_CASE("steering queued while prepare-next-turn runs is injected before the next response",
+        "[agent][async][u8][issue745][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("second"));
+
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+
+    auto subject_holder = std::make_shared<agent::Agent*>(nullptr);
+    int prepare_calls = 0;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.prepare_next_turn = [subject_holder, &prepare_calls](const agent::PrepareNextTurnContext&)
+            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+        ++prepare_calls;
+        // Simulate steering queued during a long preparation: nothing was
+        // queued when the earlier end-of-turn poll ran, so the re-poll after
+        // this hook settles must pick it up.
+        REQUIRE((**subject_holder).steer(ai::user_text_message("late steer")));
+        return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::nullopt}};
+    };
+
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    *subject_holder = &subject;
+    auto run = run_agent(subject, "read");
+
+    CHECK(run.result);
+    CHECK(prepare_calls == 1);
+    REQUIRE(client->requests.size() == 2);
+    // Turn 2's context: the turn-1 exchange plus exactly one injected steer.
+    REQUIRE(client->requests[1].context.messages.size() == 4);
+    const auto& steered = client->requests[1].context.messages.back();
+    REQUIRE(std::holds_alternative<ai::UserMessage>(steered));
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(steered)) == "late steer");
+    // The queue is empty after the single one-at-a-time delivery.
+    CHECK(run.state.input_queues.steering.messages.empty());
+}
+
 TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged", "[agent][async][u8][spec]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("first"));
@@ -2234,6 +2370,7 @@ TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged",
 TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent][async][u8][spec]") {
     auto client = std::make_shared<FakeStreamingClient>();
     client->responses.push_back(ai::assistant_text_message("first"));
+    client->responses.push_back(ai::assistant_text_message("second"));
 
     agent::ToolRegistry registry;
 
@@ -2250,10 +2387,13 @@ TEST_CASE("prepareNextTurn valid thinking level is preserved in state", "[agent]
     };
 
     agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+    // Continues the run so the update row reaches the hook (#745).
+    REQUIRE(subject.follow_up(ai::user_text_message("continue")));
     auto run = run_agent(subject, "hi");
 
     CHECK(run.result);
     CHECK(run.state.thinking_level == "high");
+    CHECK(client->requests.size() == 2);
 }
 
 TEST_CASE("prepareNextTurn model validation hook can reject unknown models", "[agent][async][u8][spec]") {
@@ -2307,6 +2447,9 @@ TEST_CASE("prepareNextTurn and turn-update validation failures abort cleanly", "
         };
 
         agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+        // The hook runs only when the loop continues (#745); the failure row
+        // continues the run with a queued follow-up.
+        REQUIRE(subject.follow_up(ai::user_text_message("continue")));
         auto run = run_agent(subject, "hi");
 
         REQUIRE_FALSE(run.result);
@@ -2334,6 +2477,7 @@ TEST_CASE("prepareNextTurn and turn-update validation failures abort cleanly", "
         };
 
         agent::Agent subject(client->factory(), std::move(registry), std::move(options));
+        REQUIRE(subject.follow_up(ai::user_text_message("continue")));
         auto run = run_agent(subject, "hi");
 
         REQUIRE_FALSE(run.result);

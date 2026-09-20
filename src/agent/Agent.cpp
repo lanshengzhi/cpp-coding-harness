@@ -882,6 +882,41 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
         next_turn_context.context = context;
         next_turn_context.new_messages = impl->invocation_messages();
 
+        // pi runs `shouldStopAfterTurn` immediately after the turn, before
+        // prepare-next-turn and the queue drains, so the hook observes the
+        // turn's pre-prepare context (#745, ADR 0014).
+        if (!stop_token.stop_requested() && policy.should_stop_after_turn) {
+            auto should_stop = co_await invoke_agent_hook(
+                    "shouldStopAfterTurn", *policy.should_stop_after_turn, next_turn_context);
+            if (!should_stop) {
+                CCH_TRY_VOID(emit_agent_end());
+                co_return std::unexpected(should_stop.error());
+            }
+            if (*should_stop) {
+                CCH_TRY_VOID(emit_agent_end());
+                co_return support::ExpectedVoid{};
+            }
+        }
+
+        if (!stop_token.stop_requested()) {
+            pending_messages = impl->drain(InputQueueKind::Steering);
+        }
+
+        const bool has_more_tool_calls = !calls.empty() && (!terminate_batch || stop_token.stop_requested());
+        if (!stop_token.stop_requested() && !has_more_tool_calls && pending_messages.empty()) {
+            pending_messages = impl->drain(InputQueueKind::FollowUp);
+        }
+
+        if (!has_more_tool_calls && pending_messages.empty()) {
+            CCH_TRY_VOID(emit_agent_end());
+            co_return support::ExpectedVoid{};
+        }
+
+        // pi invokes `prepareNextTurn` only at the top of a continuing
+        // inner-loop iteration: the run's final turn never invokes it, and a
+        // final threshold crossing is handled by the host's post-run dispatch
+        // instead (#745). The hook's update must land before the next stream
+        // call, so it runs here, after the continuation decision.
         if (!stop_token.stop_requested() && policy.prepare_next_turn) {
             auto update = co_await invoke_agent_hook("prepareNextTurn", *policy.prepare_next_turn, next_turn_context);
             if (!update) {
@@ -923,32 +958,12 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
             }
         }
 
-        next_turn_context.context = context;
-        if (!stop_token.stop_requested() && policy.should_stop_after_turn) {
-            auto should_stop = co_await invoke_agent_hook(
-                    "shouldStopAfterTurn", *policy.should_stop_after_turn, next_turn_context);
-            if (!should_stop) {
-                CCH_TRY_VOID(emit_agent_end());
-                co_return std::unexpected(should_stop.error());
-            }
-            if (*should_stop) {
-                CCH_TRY_VOID(emit_agent_end());
-                co_return support::ExpectedVoid{};
-            }
-        }
-
-        if (!stop_token.stop_requested()) {
+        // Preparation can be long-running (for example, compaction). Pick up
+        // steering queued while it ran. Only poll again if the earlier poll
+        // returned nothing; otherwise one-at-a-time mode would deliver two
+        // messages before one assistant response (pi agent-loop).
+        if (!stop_token.stop_requested() && pending_messages.empty()) {
             pending_messages = impl->drain(InputQueueKind::Steering);
-        }
-
-        const bool has_more_tool_calls = !calls.empty() && (!terminate_batch || stop_token.stop_requested());
-        if (!stop_token.stop_requested() && !has_more_tool_calls && pending_messages.empty()) {
-            pending_messages = impl->drain(InputQueueKind::FollowUp);
-        }
-
-        if (!has_more_tool_calls && pending_messages.empty()) {
-            CCH_TRY_VOID(emit_agent_end());
-            co_return support::ExpectedVoid{};
         }
     }
 

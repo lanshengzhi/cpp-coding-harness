@@ -912,3 +912,104 @@ TEST_CASE("between-turn threshold compaction replaces the run context before the
 
     session->close();
 }
+
+// pi invokes the between-turn preparation only when another assistant
+// response follows (#745): the run's final turn never compacts between turns,
+// and a final threshold crossing is handled by the post-run dispatch instead.
+TEST_CASE("the final turn skips the between-turn trigger; window-exceeding usage reports the post-run overflow reason",
+        "[coding_agent][compaction][issue745][compat-pi]") {
+    TestPaths paths;
+    tests::RuntimeFixture runtime;
+    // Same budget shape as the between-turn row: window 8000 - reserve 2000
+    // leaves a low threshold (6000) and a cut point.
+    paths.workspace.write("agent/settings.json",
+            R"({"compaction": {"enabled": true, "reserveTokens": 2000, "keepRecentTokens": 1000}})");
+    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", (paths.workspace.path() / "agent").string()};
+
+    const std::string prefill(12000, 'x');
+    auto under_test = make_trigger_session(paths,
+            runtime,
+            {
+                    // A large seed body gives the cut point something behind
+                    // the keep-recent budget (the between-turn row's shape).
+                    usage_assistant("seed answer " + std::string(5000, 'y'), 2000),
+                    // A successful final response whose reported usage already
+                    // exceeds the 8000-token window: pi's silent-overflow case.
+                    usage_assistant("final answer", 9000),
+                    summarization_response(),
+            },
+            /*context_window=*/8000);
+    auto* session = under_test.session.get();
+    auto* client = under_test.client;
+
+    std::vector<std::string> compaction_reasons;
+    auto events =
+            session->subscribe_session([&](const coding_agent::AgentSessionEvent& event) -> support::ExpectedVoid {
+                if (const auto* start = std::get_if<coding_agent::CompactionStartEvent>(&event)) {
+                    compaction_reasons.push_back(start->reason);
+                } else if (const auto* end = std::get_if<coding_agent::CompactionEndEvent>(&event)) {
+                    compaction_reasons.push_back(end->reason);
+                }
+                return {};
+            });
+    REQUIRE(events.has_value());
+
+    // Pre-seed turn: reported usage 2000 stays under the 6000 threshold, so
+    // nothing compacts yet.
+    REQUIRE(run_awaitable(runtime, session->prompt(prefill + " u1")).has_value());
+    REQUIRE(client->request_count == 1);
+    CHECK_FALSE(find_compaction_entry(paths).has_value());
+
+    // The trigger run's single turn is the run's final turn: the between-turn
+    // hook must not fire (zero preparations after the final turn), and the
+    // post-run dispatch compacts with the overflow reason (usage 9000
+    // already exceeds the 8000 window), not the threshold reason.
+    REQUIRE(run_awaitable(runtime, session->prompt("u2 trigger")).has_value());
+
+    // Requests: pre-seed, the run's final turn, and the summarization — no
+    // between-turn compaction request and no retry.
+    REQUIRE(client->request_count == 3);
+
+    // The observable trigger reason is the post-run one, not the between-turn
+    // threshold reason the extra invocation used to emit.
+    REQUIRE(compaction_reasons.size() == 2);
+    CHECK(compaction_reasons[0] == "overflow");
+    CHECK(compaction_reasons[1] == "overflow");
+
+    // The compaction entry lands after the run's final answer: the trigger is
+    // the post-run check, not the between-turn one (the between-turn row pins
+    // the opposite ordering).
+    auto loaded = harness::session::SessionStore::load(paths.session_file);
+    REQUIRE(loaded.has_value());
+    std::optional<std::size_t> compaction_index;
+    std::optional<std::size_t> final_answer_index;
+    for (std::size_t index = 0; index < loaded->entries.size(); ++index) {
+        const auto& entry = loaded->entries[index];
+        if (entry.kind == harness::session::SessionEntryKind::Compaction) {
+            compaction_index = index;
+            continue;
+        }
+        if (entry.kind != harness::session::SessionEntryKind::Message || !entry.message) {
+            continue;
+        }
+        const auto* assistant = std::get_if<ai::AssistantMessage>(&*entry.message);
+        if (assistant != nullptr && ai::text_from_assistant_content(assistant->content) == "final answer") {
+            final_answer_index = index;
+        }
+    }
+    REQUIRE(compaction_index.has_value());
+    REQUIRE(final_answer_index.has_value());
+    CHECK(*compaction_index > *final_answer_index);
+
+    // Live history is the rebuilt context; the final answer stays in the
+    // retained tail (no retry dropped or re-sent it).
+    const auto snapshot = session->snapshot();
+    REQUIRE_FALSE(snapshot.agent_state.messages.empty());
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(snapshot.agent_state.messages[0]));
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages.back()));
+    CHECK(ai::text_from_assistant_content(
+                  std::get<ai::AssistantMessage>(snapshot.agent_state.messages.back()).content) == "final answer");
+
+    session->close();
+    events->unsubscribe();
+}

@@ -589,12 +589,17 @@ TEST_CASE("model switch re-clamps the thinking level so an unsupported level nev
             .thinking_level = "max",
         });
 
+    // The switch must land before the next stream call; the corrected turn
+    // lifecycle runs prepare-next-turn only on a continuing turn (#745), so
+    // the switch row continues turn 1 with a queued follow-up message.
+    REQUIRE(subject.follow_up(ai::user_text_message("continue")));
     REQUIRE(run_prompt(subject, "first"));
-    REQUIRE(run_prompt(subject, "second"));
 
     REQUIRE(runtime->calls.size() == 2);
     CHECK(runtime->calls[0].options.reasoning == ai::ThinkingLevel::XHigh);
+    CHECK(runtime->calls[0].model.id == "gpt-partial");
     CHECK(runtime->calls[1].options.reasoning == std::nullopt);
+    CHECK(runtime->calls[1].model.id == "gpt-basic");
     CHECK(subject.state().model.id == "gpt-basic");
     CHECK(subject.state().thinking_level == "off");
 }

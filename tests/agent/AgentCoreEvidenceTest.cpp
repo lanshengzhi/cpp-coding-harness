@@ -498,6 +498,9 @@ TEST_CASE("loop lifecycle ordering golden covers the pi turn lifecycle end to en
     // prepare-next-turn runs after turn_end: its first update flips the
     // thinking level from medium to high, so the recorded per-turn reasoning
     // for calls 2/3 proves the update landed before the next stream call.
+    // #745 invocation points: exactly once per continuing turn (turns 1 and 2
+    // continue through tool calls and the queued follow-up), and zero after
+    // the run's final turn 3.
     options.prepare_next_turn = [&prepare_calls](const agent::PrepareNextTurnContext&)
             -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
         ++prepare_calls;
@@ -545,6 +548,9 @@ TEST_CASE("loop lifecycle ordering golden covers the pi turn lifecycle end to en
 
     REQUIRE(steered);
     REQUIRE(runtime->calls.size() == 3);
+    // Corrected invocation points: once per completed continuing turn, zero
+    // after the run's final turn (#745).
+    CHECK(prepare_calls == 2);
 
     support::JsonValue golden{support::JsonValue::object_t{}};
     golden.get_object().emplace("events", lifecycle_events_to_json(events));
@@ -654,9 +660,11 @@ TEST_CASE("thinking-level clamp golden covers creation and model-switch clamping
             .thinking_level = "max",
         });
 
-
+    // The switch must land before the next stream call; the corrected turn
+    // lifecycle runs prepare-next-turn only on a continuing turn (#745), so
+    // the switch row continues turn 1 with a queued follow-up message.
+    REQUIRE(subject.follow_up(ai::user_text_message("continue")));
     REQUIRE(run_prompt(subject, "think hard"));
-    REQUIRE(run_prompt(subject, "switch model"));
 
     REQUIRE(runtime->calls.size() == 2);
     expect_json_equal(
@@ -664,7 +672,10 @@ TEST_CASE("thinking-level clamp golden covers creation and model-switch clamping
         "thinking-level-clamp.json");
     // The wire-level facts the golden pins, asserted directly as well:
     CHECK(runtime->calls[0].options.reasoning == ai::ThinkingLevel::XHigh);
+    CHECK(runtime->calls[0].model.id == "gpt-partial");
     CHECK(runtime->calls[1].options.reasoning == std::nullopt);
+    CHECK(runtime->calls[1].model.id == "gpt-basic");
+    CHECK(subject.state().model.id == "gpt-basic");
     CHECK(subject.state().thinking_level == "off");
 }
 
