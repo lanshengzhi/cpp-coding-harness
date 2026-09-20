@@ -1,5 +1,6 @@
 #include <cch/coding_agent/Settings.hpp>
 
+#include "PrettyJson.hpp"
 #include "support/Json.hpp"
 
 #include <chrono>
@@ -328,80 +329,6 @@ void migrate_settings(JsonObject& settings) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pretty serialization (pi writes settings with `JSON.stringify(_, null, 2)`)
-// ─────────────────────────────────────────────────────────────────────────────
-
-[[nodiscard]] support::ExpectedVoid append_pretty_json(
-    const support::JsonValue& value,
-    std::string& output,
-    std::size_t indentation) {
-    const auto indent = [&output, indentation](std::size_t extra) {
-        output.append(indentation + extra, ' ');
-    };
-    if (const auto* object = value.get_if<JsonObject>()) {
-        output.push_back('{');
-        if (!object->empty()) {
-            output.push_back('\n');
-            auto current = object->begin();
-            while (current != object->end()) {
-                indent(2);
-                auto key = support::write_json(support::JsonValue{current->first});
-                if (!key) {
-                    return std::unexpected(key.error());
-                }
-                output.append(*key);
-                output.append(": ");
-                if (auto appended = append_pretty_json(current->second, output, indentation + 2); !appended) {
-                    return appended;
-                }
-                ++current;
-                if (current != object->end()) {
-                    output.push_back(',');
-                }
-                output.push_back('\n');
-            }
-            indent(0);
-        }
-        output.push_back('}');
-        return {};
-    }
-    if (const auto* array = value.get_if<support::JsonValue::array_t>()) {
-        output.push_back('[');
-        if (!array->empty()) {
-            output.push_back('\n');
-            for (std::size_t index = 0; index < array->size(); ++index) {
-                indent(2);
-                if (auto appended = append_pretty_json((*array)[index], output, indentation + 2); !appended) {
-                    return appended;
-                }
-                if (index + 1 != array->size()) {
-                    output.push_back(',');
-                }
-                output.push_back('\n');
-            }
-            indent(0);
-        }
-        output.push_back(']');
-        return {};
-    }
-    auto serialized = support::write_json(value);
-    if (!serialized) {
-        return std::unexpected(serialized.error());
-    }
-    output.append(*serialized);
-    return {};
-}
-
-[[nodiscard]] support::Expected<std::string> serialize_pretty(const JsonObject& object) {
-    std::string output;
-    if (auto appended = append_pretty_json(support::JsonValue{object}, output, 0); !appended) {
-        return std::unexpected(appended.error());
-    }
-    output.push_back('\n');
-    return output;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // proper-lockfile-compatible lock (`<path>.lock` directory; ELOCKED retry)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -635,7 +562,7 @@ private:
         return std::unexpected(object.error());
     }
     object->insert_or_assign(std::move(field), std::move(value));
-    auto serialized = serialize_pretty(*object);
+    auto serialized = detail::serialize_pretty_json(support::JsonValue{*object}, true);
     if (!serialized) {
         return std::unexpected(serialized.error());
     }
@@ -1153,7 +1080,7 @@ support::ExpectedVoid SettingsManager::set_enabled_models(
             return std::unexpected(object.error());
         }
         object->erase("enabledModels");
-        auto serialized = serialize_pretty(*object);
+        auto serialized = detail::serialize_pretty_json(support::JsonValue{*object}, true);
         if (!serialized) {
             return std::unexpected(serialized.error());
         }

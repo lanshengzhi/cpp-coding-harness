@@ -21,6 +21,7 @@
 #include <vector>
 
 namespace cch::coding_agent::tui {
+using detail::warning_diagnostic;
 namespace {
 
 [[nodiscard]] std::string combined_theme_error(const support::Error& error) {
@@ -120,38 +121,6 @@ namespace {
     return std::unexpected(support::make_error(
         support::ErrorCode::Validation,
         std::format("Theme not found: {}", name)));
-}
-
-[[nodiscard]] ResourceDiagnostic warning_diagnostic(
-    std::string message,
-    std::optional<std::string> path = std::nullopt) {
-    return ResourceDiagnostic{
-        .type = ResourceDiagnosticType::Warning,
-        .message = std::move(message),
-        .path = std::move(path),
-        .collision = std::nullopt,
-    };
-}
-
-/// pi `dedupeThemes` collision diagnostic (`resource-loader.ts`): the first
-/// loaded theme wins; the loser carries the winner/loser paths.
-[[nodiscard]] ResourceDiagnostic theme_collision_diagnostic(
-    const std::string& name,
-    const std::string& winner_path,
-    const std::string& loser_path) {
-    return ResourceDiagnostic{
-        .type = ResourceDiagnosticType::Collision,
-        .message = "name \"" + name + "\" collision",
-        .path = loser_path,
-        .collision = ResourceCollision{
-            .resource_type = ResourceCollisionResourceType::Theme,
-            .name = name,
-            .winner_path = winner_path,
-            .loser_path = loser_path,
-            .winner_source = std::nullopt,
-            .loser_source = std::nullopt,
-        },
-    };
 }
 
 void bound_diagnostics(std::vector<ResourceDiagnostic>& diagnostics) {
@@ -499,10 +468,11 @@ ThemeDiscoveryResult discover_themes(std::vector<LoadedThemeResource> documents)
         }
         const auto winner = names_to_winner_path.find(parsed->name);
         if (winner != names_to_winner_path.end()) {
-            diagnostics.push_back(theme_collision_diagnostic(
-                parsed->name,
-                winner->second,
-                document.path));
+            diagnostics.push_back(detail::make_collision_diagnostic("name \"" + parsed->name + "\" collision",
+                    ResourceCollisionResourceType::Theme,
+                    parsed->name,
+                    winner->second,
+                    document.path));
             continue;
         }
         names_to_winner_path.emplace(parsed->name, document.path);

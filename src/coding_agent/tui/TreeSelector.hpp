@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -139,6 +140,7 @@ public:
     };
 
 private:
+    void build_tree_index();
     void flatten_tree();
     void build_active_path();
     void apply_filter();
@@ -174,6 +176,11 @@ private:
     TreeInvalidateSink on_invalidate_;
 
     std::vector<harness::session::SessionTreeNode> tree_;
+    // Non-owning node pointers refer to nodes owned by tree_; they remain valid
+    // because this component's tree topology is immutable for its lifetime.
+    // Structural mutation would require rebuilding the index.
+    std::unordered_map<std::string, harness::session::SessionTreeNode*> tree_index_;
+    std::vector<harness::session::SessionTreeNode*> indexed_nodes_;
     std::vector<FlatNode> flat_nodes_;
     std::vector<FlatNode> filtered_nodes_;
     std::size_t selected_index_{0};

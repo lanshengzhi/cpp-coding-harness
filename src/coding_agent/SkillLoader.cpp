@@ -3,6 +3,7 @@
 #include "AsyncTask.hpp"
 #include "coding_agent/GitIgnoreMatcher.hpp"
 #include "LoaderPath.hpp"
+#include "coding_agent/ResourceDiagnosticPolicy.hpp"
 #include "coding_agent/SkillFrontmatterParser.hpp"
 #include <algorithm>
 #include <array>
@@ -109,18 +110,12 @@ constexpr std::array<std::string_view, 3> kIgnoreFileNames{
     const std::string& winner_path,
     const std::string& loser_path) {
     return SkillDiagnostic{
-        .type = "collision",
-        .code = SkillDiagnosticCode::collision,
-        .message = "name \"" + name + "\" collision",
-        .path = loser_path,
-        .collision = ResourceCollision{
-            .resource_type = ResourceCollisionResourceType::Skill,
-            .name = name,
-            .winner_path = winner_path,
-            .loser_path = loser_path,
-            .winner_source = std::nullopt,
-            .loser_source = std::nullopt,
-        },
+            .type = "collision",
+            .code = SkillDiagnosticCode::collision,
+            .message = "name \"" + name + "\" collision",
+            .path = loser_path,
+            .collision = detail::make_resource_collision(
+                    ResourceCollisionResourceType::Skill, name, winner_path, loser_path),
     };
 }
 

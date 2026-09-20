@@ -1,6 +1,7 @@
 #include <cch/coding_agent/AuthStorage.hpp>
 
 #include <cch/support/JsonValue.hpp>
+#include "PrettyJson.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -91,74 +92,6 @@ constexpr auto kAsyncLockRetryCount = 10;
             path.string()));
     }
     return *object;
-}
-
-[[nodiscard]] support::ExpectedVoid append_pretty_json(
-    const support::JsonValue& value,
-    std::string& output,
-    std::size_t indentation) {
-    if (const auto* object = value.get_if<JsonObject>()) {
-        output.push_back('{');
-        if (!object->empty()) {
-            output.push_back('\n');
-            auto current = object->begin();
-            while (current != object->end()) {
-                output.append(indentation + 2, ' ');
-                auto key = support::write_json(support::JsonValue{current->first});
-                if (!key) {
-                    return std::unexpected(key.error());
-                }
-                output.append(*key);
-                output.append(": ");
-                if (auto appended = append_pretty_json(current->second, output, indentation + 2); !appended) {
-                    return appended;
-                }
-                ++current;
-                if (current != object->end()) {
-                    output.push_back(',');
-                }
-                output.push_back('\n');
-            }
-            output.append(indentation, ' ');
-        }
-        output.push_back('}');
-        return {};
-    }
-
-    if (const auto* array = value.get_if<support::JsonValue::array_t>()) {
-        output.push_back('[');
-        if (!array->empty()) {
-            output.push_back('\n');
-            for (std::size_t index = 0; index < array->size(); ++index) {
-                output.append(indentation + 2, ' ');
-                if (auto appended = append_pretty_json((*array)[index], output, indentation + 2); !appended) {
-                    return appended;
-                }
-                if (index + 1 != array->size()) {
-                    output.push_back(',');
-                }
-                output.push_back('\n');
-            }
-            output.append(indentation, ' ');
-        }
-        output.push_back(']');
-        return {};
-    }
-
-    auto serialized = support::write_json(value);
-    if (!serialized) {
-        return std::unexpected(serialized.error());
-    }
-    output.append(*serialized);
-    return {};
-}
-
-[[nodiscard]] support::Expected<std::string> serialize_auth_data(const JsonObject& data) {
-    std::string output;
-    if (auto appended = append_pretty_json(support::JsonValue{data}, output, 0); !appended) {
-        return std::unexpected(appended.error());
-    }
-    return output;
 }
 
 [[nodiscard]] const std::string* string_field(const JsonObject& object, std::string_view name) {
@@ -669,7 +602,7 @@ struct AuthStorage::Impl {
 
         const support::JsonValue* current_json = current_it == current_data.end() ? nullptr : &current_it->second;
         current_data[provider_id] = support::JsonValue{credential_to_json(*next, current_json)};
-        CCH_TRY(serialized, serialize_auth_data(current_data));
+        CCH_TRY(serialized, detail::serialize_pretty_json(support::JsonValue{current_data}, false));
         CCH_TRY_VOID(write_file(auth_path_, serialized));
         if (!lease->valid()) {
             co_return std::unexpected(storage_error("auth file lock was compromised", auth_path_));
@@ -684,7 +617,7 @@ struct AuthStorage::Impl {
         CCH_TRY(current_data, read_current_data(auth_path_));
 
         current_data.erase(provider_id);
-        CCH_TRY(serialized, serialize_auth_data(current_data));
+        CCH_TRY(serialized, detail::serialize_pretty_json(support::JsonValue{current_data}, false));
         if (!lease->valid()) {
             co_return std::unexpected(storage_error("auth file lock was compromised", auth_path_));
         }
