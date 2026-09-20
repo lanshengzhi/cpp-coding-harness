@@ -195,29 +195,6 @@ std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_fi
     return fd;
 }
 
-support::Expected<std::string> WorkspaceFileSystem::read_existing_file(
-        const std::string& requested, std::stop_token stop_token) const {
-    std::uintmax_t ignored_size = 0;
-    auto fd = open_regular_file_for_read(requested, &ignored_size, stop_token);
-    if (!fd) {
-        return std::unexpected(workspace_error(fd.error().message));
-    }
-
-    std::string content;
-    char buffer[4096];
-    ssize_t n = 0;
-    while ((n = ::read(fd->get(), buffer, sizeof(buffer))) > 0) {
-        if (stop_token.stop_requested()) {
-            return std::unexpected(workspace_error("Operation aborted"));
-        }
-        content.append(buffer, static_cast<std::size_t>(n));
-    }
-    if (n < 0) {
-        return std::unexpected(workspace_error("could not read file: " + requested));
-    }
-    return content;
-}
-
 std::expected<std::string, FileError> WorkspaceFileSystem::read_existing_file_bounded(
         const std::string& requested, std::size_t max_bytes, std::stop_token stop_token) const {
     std::uintmax_t file_size = 0;

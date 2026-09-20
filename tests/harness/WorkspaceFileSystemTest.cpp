@@ -51,39 +51,39 @@ private:
 
 } // namespace
 
-TEST_CASE("WorkspaceFileSystem reads an existing file inside workspace", "[harness][filesystem][u2][spec]") {
+TEST_CASE("WorkspaceFileSystem readTextFile reads a file inside the workspace", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("note.txt", "hello world");
     auto guard = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(guard);
 
-    auto content = guard->read_existing_file("note.txt");
+    auto content = guard->readTextFile("note.txt");
     REQUIRE(content);
     CHECK(*content == "hello world");
 }
 
-TEST_CASE("WorkspaceFileSystem rejects final symlink when reading", "[harness][filesystem][u2][spec]") {
+TEST_CASE("WorkspaceFileSystem readTextFile rejects a final symlink", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("real.txt", "secret");
     std::filesystem::create_symlink(workspace.path() / "real.txt", workspace.path() / "link.txt");
     auto guard = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(guard);
 
-    auto content = guard->read_existing_file("link.txt");
+    auto content = guard->readTextFile("link.txt");
     REQUIRE_FALSE(content);
-    CHECK(content.error().detail.find("symlink") != std::string::npos);
+    CHECK(content.error().message.find("symlink") != std::string::npos);
 }
 
-TEST_CASE("WorkspaceFileSystem rejects symlink in parent path when reading", "[harness][filesystem][u2][spec]") {
+TEST_CASE("WorkspaceFileSystem readTextFile rejects a symlink parent", "[harness][filesystem][u2][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("real/target.txt", "secret");
     std::filesystem::create_symlink(workspace.path() / "real", workspace.path() / "fake");
     auto guard = harness::WorkspaceFileSystem::create(workspace.path());
     REQUIRE(guard);
 
-    auto content = guard->read_existing_file("fake/target.txt");
+    auto content = guard->readTextFile("fake/target.txt");
     REQUIRE_FALSE(content);
-    CHECK(content.error().code == support::ErrorCode::Workspace);
+    CHECK(content.error().code == harness::FileErrorCode::PermissionDenied);
 }
 
 TEST_CASE("WorkspaceFileSystem writes a file inside workspace", "[harness][filesystem][u2][spec]") {

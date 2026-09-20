@@ -40,9 +40,8 @@ public:
 
     [[nodiscard]] const std::filesystem::path& root() const { return root_; }
 
-    // Legacy tool-shaped operations used by private project-resource adapters.
-    [[nodiscard]] support::Expected<std::string> read_existing_file(
-            const std::string& requested, std::stop_token stop_token = {}) const;
+    // The bounded-write core shared by the pi-shaped `writeFile` and
+    // `appendFile` operations below.
     [[nodiscard]] support::Expected<std::size_t> write_file(const std::string& requested,
             std::string_view content,
             bool create_parents,
