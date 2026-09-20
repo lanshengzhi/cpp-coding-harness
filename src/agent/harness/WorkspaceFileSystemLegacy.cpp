@@ -1,6 +1,7 @@
 #include "WorkspaceFileSystem.hpp"
 
 #include "AtomicWrite.hpp"
+#include "WorkspaceFileSystemErrors.hpp"
 
 #include <cerrno>
 #include <cstdlib>
@@ -96,11 +97,7 @@ support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_to_cwd(con
 std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_file_for_read(
         const std::string& requested, std::uintmax_t* size, std::stop_token stop_token) const {
     if (stop_token.stop_requested()) {
-        return std::unexpected(FileError{
-                .code = FileErrorCode::Aborted,
-                .message = "Operation aborted",
-                .path = std::string{requested},
-        });
+return std::unexpected(operation_aborted_error(requested));
     }
 
     auto target = resolve_to_cwd(requested);
@@ -112,11 +109,7 @@ std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_fi
     auto parent_guard = open_parent_directory(*target, false, &parent_errno);
     if (!parent_guard) {
         if (parent_errno == ENOENT) {
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::NotFound,
-                    .message = "path not found: " + requested,
-                    .path = std::string{requested},
-            });
+return std::unexpected(path_not_found_error(requested));
         }
         return std::unexpected(util_error_to_file_error(parent_guard.error(), requested));
     }
@@ -130,11 +123,7 @@ std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_fi
     struct stat status{};
     if (::fstatat(parent_fd, filename.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
         if (errno == ENOENT) {
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::NotFound,
-                    .message = "path not found: " + requested,
-                    .path = std::string{requested},
-            });
+return std::unexpected(path_not_found_error(requested));
         }
         return std::unexpected(FileError{
                 .code = FileErrorCode::PermissionDenied,
@@ -169,11 +158,7 @@ std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_fi
             });
         }
         if (errno == ENOENT) {
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::NotFound,
-                    .message = "path not found: " + requested,
-                    .path = std::string{requested},
-            });
+return std::unexpected(path_not_found_error(requested));
         }
         return std::unexpected(FileError{
                 .code = FileErrorCode::PermissionDenied,
@@ -211,11 +196,7 @@ std::expected<std::string, FileError> WorkspaceFileSystem::read_bounded_from_ope
         std::size_t max_bytes,
         std::stop_token stop_token) const {
     if (file_size > max_bytes) {
-        return std::unexpected(FileError{
-                .code = FileErrorCode::ResourceLimit,
-                .message = "file exceeds the filesystem result limit",
-                .path = std::string{requested},
-        });
+        return std::unexpected(file_result_limit_error(requested));
     }
 
     std::string content;
@@ -224,19 +205,11 @@ std::expected<std::string, FileError> WorkspaceFileSystem::read_bounded_from_ope
     ssize_t n = 0;
     while ((n = ::read(file_fd, buffer, sizeof(buffer))) > 0) {
         if (stop_token.stop_requested()) {
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::Aborted,
-                    .message = "Operation aborted",
-                    .path = std::string{requested},
-            });
+            return std::unexpected(operation_aborted_error(requested));
         }
         const auto count = static_cast<std::size_t>(n);
         if (count > max_bytes - content.size()) {
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::ResourceLimit,
-                    .message = "file exceeds the filesystem result limit",
-                    .path = std::string{requested},
-            });
+            return std::unexpected(file_result_limit_error(requested));
         }
         content.append(buffer, count);
     }
