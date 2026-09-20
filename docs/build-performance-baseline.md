@@ -143,19 +143,19 @@ The small non-zero cold-run hit rates come from repeated identical compile invoc
 
 ### Warm-cache measurements
 
-Measured on [run 35481795283](https://github.com/lanshengzhi/cpp-coding-harness/actions/runs/35481795283) after raising the per-lane cache cap to 1 GiB:
+Measured on [run 35482549944](https://github.com/lanshengzhi/cpp-coding-harness/actions/runs/35482549944) after the per-lane cache cap was raised to 1 GiB:
 
 | Lane | Build step | ccache hit rate |
 | --- | ---: | ---: |
-| GCC 16 Debug | 34 s | 99.49% (389/391) |
-| GCC 16 Release | 8 s | 99.49% (389/391) |
+| GCC 16 Debug | 29 s | 99.49% (389/391) |
+| GCC 16 Release | 7 s | 99.49% (389/391) |
 | Clang 22 conformance | 21 s | 99.49% (389/391) |
-| GCC 16 ASan+UBSan | 178 s | 82.61% (323/391) |
-| GCC 16 TSan scenarios | 30 s | 99.49% (389/391) |
-| Arch pinned base-devel-20260809 | 38 s | 96.39% (1121/1163 cacheable calls) |
-| GCC 16 Release artifact (IPO/LTO) | 51 s | 98.99% (197/199) |
+| GCC 16 ASan+UBSan | 109 s | 99.49% (389/391) |
+| GCC 16 TSan scenarios | 37 s | 99.49% (389/391) |
+| Arch pinned base-devel-20260809 | 30 s | 96.39% (1121/1163 cacheable calls) |
+| GCC 16 Release artifact (IPO/LTO) | 42 s | 98.99% (197/199) |
 
-Every lane is below the three-minute Build target. The ASan lane was still filling the newly increased cache during this run; subsequent warm runs should retain the completed object set.
+Every lane is below the three-minute Build target, with the conformance, sanitizer, and release-artifact lanes retaining their real pinned toolchain assertions.
 
 ## Diagnosed causes
 
