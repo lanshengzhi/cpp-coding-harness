@@ -104,6 +104,59 @@ Slow translation units include:
 
 A standalone Debug compile of the leading hotspot took 32.7 seconds with GCC and 22.1 seconds with Clang. This supports a full Clang experiment, but not an immediate compiler-default change.
 
+## CI build-time evidence
+
+The supported-Linux CI lanes run on GitHub-hosted `ubuntu-24.04` runners (4 vCPU). The vcpkg dependency cache (#521) restores in about two seconds, so lane wall time is dominated by project compilation and the test run.
+
+### Before the compiler cache (#744)
+
+Measured on run [35440499959](https://github.com/lanshengzhi/cpp-coding-harness/actions/runs/35440499959) (PR #741), with no compiler cache configured:
+
+| Step | GCC 16 Debug (lane 21 min) | Arch pinned (lane 20 min) |
+| --- | ---: | ---: |
+| Build | 606 s | 528 s |
+| Run offline tests | 355 s | 308 s |
+| Configure | 107 s | 200 s |
+| Toolchain, container, checkout | ~40 s | ~25 s |
+
+The run's wall clock was set by the slowest lanes (GCC 16 ASan+UBSan 36 min, Clang 22 conformance 33 min).
+
+### With the compiler cache (#744)
+
+Every compiling lane of the toolchain workflow injects ccache as a workflow-level compiler launcher (the `CMAKE_<LANG>_COMPILER_LAUNCHER` environment variables; the pinned presets are untouched) with rolling per-lane GitHub Actions cache entries (each run saves a fresh snapshot keyed on lane and commit, and restores the most recent one through the lane's key prefix), and a `concurrency` block cancels superseded pull-request runs.
+
+### First ccache-enabled cold run
+
+Measured on [run 35478886040](https://github.com/lanshengzhi/cpp-coding-harness/actions/runs/35478886040), the first ccache-enabled run on this PR established the cold-build baseline:
+
+| Lane | Build step | ccache hit rate |
+| --- | ---: | ---: |
+| GCC 16 Debug | 687 s | 4.60% (18/391) |
+| GCC 16 Release | 715 s | 4.60% (18/391) |
+| Clang 22 conformance | 618 s | 4.60% (18/391) |
+| GCC 16 ASan+UBSan | 870 s | 4.60% (18/391) |
+| GCC 16 TSan scenarios | 614 s | 4.60% (18/391) |
+| Arch pinned base-devel-20260809 | 820 s | 17.88% (208/1163 cacheable calls) |
+| GCC 16 Release artifact (IPO/LTO) | 180 s | 4.02% (8/199) |
+
+The small non-zero cold-run hit rates come from repeated identical compile invocations within a lane. Warm-cache Build-step measurements from this change's CI runs are recorded below once the first uncancelled warm run completes; the acceptance target is a Build step under three minutes per lane with cache-hit statistics in the job log.
+
+### Warm-cache measurements
+
+Measured on [run 35482549944](https://github.com/lanshengzhi/cpp-coding-harness/actions/runs/35482549944) after the per-lane cache cap was raised to 1 GiB:
+
+| Lane | Build step | ccache hit rate |
+| --- | ---: | ---: |
+| GCC 16 Debug | 29 s | 99.49% (389/391) |
+| GCC 16 Release | 7 s | 99.49% (389/391) |
+| Clang 22 conformance | 21 s | 99.49% (389/391) |
+| GCC 16 ASan+UBSan | 109 s | 99.49% (389/391) |
+| GCC 16 TSan scenarios | 37 s | 99.49% (389/391) |
+| Arch pinned base-devel-20260809 | 30 s | 96.39% (1121/1163 cacheable calls) |
+| GCC 16 Release artifact (IPO/LTO) | 42 s | 98.99% (197/199) |
+
+Every lane is below the three-minute Build target, with the conformance, sanitizer, and release-artifact lanes retaining their real pinned toolchain assertions.
+
 ## Diagnosed causes
 
 ### 1. The test build is monolithic
