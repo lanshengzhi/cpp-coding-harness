@@ -1,6 +1,7 @@
 #include <cch/agent/Agent.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/support/Error.hpp>
+#include "agent/AgentMessageAccess.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/FakeTool.hpp"
@@ -2132,6 +2133,76 @@ TEST_CASE("prepareNextTurn replaces model context without publishing replacement
     REQUIRE(ended->messages.size() == 4);
     REQUIRE(std::holds_alternative<ai::UserMessage>(ended->messages[0]));
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(ended->messages[0])) == "read");
+}
+
+TEST_CASE("between-turn context replacement keeps the invocation window valid", "[agent][async][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(tool_call_response());
+    client->responses.push_back(ai::assistant_text_message("second"));
+
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(
+            make_fake_tool(ai::Tool{"read_file", "Read", test::permissive_object_tool_argument_contract()}).tool));
+
+    auto subject_holder = std::make_shared<agent::Agent*>(nullptr);
+    bool replaced_once = false;
+    agent::AsyncAgentOptions options;
+    options.max_turns = 4;
+    options.model = tests::make_model("gpt-test");
+    options.prepare_next_turn = [subject_holder, &replaced_once](const agent::PrepareNextTurnContext&)
+            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+        // The hook also runs once after the run's final turn; the rebuilt
+        // context leaves nothing to replace there (the session's estimate gate
+        // behaves the same way).
+        if (replaced_once) {
+            return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                    support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::nullopt}};
+        }
+        replaced_once = true;
+        // pi `_runAutoCompaction` replaces the live history between turns. The
+        // rebuilt context is shorter than the history that predates the run,
+        // so the invocation window must restart at the replacement.
+        auto& subject = **subject_holder;
+        std::vector<ai::MessageVariant> rebuilt;
+        rebuilt.push_back(ai::user_text_message("compacted history"));
+        if (auto replaced = agent::detail::AgentMessageAccess::replace_messages(subject, std::move(rebuilt));
+                !replaced) {
+            return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                    support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{std::unexpected(replaced.error())}};
+        }
+        agent::AgentLoopContextReplacement replacement;
+        replacement.system_prompt = "replacement prompt";
+        replacement.messages = subject.state().messages;
+        return support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>>{
+                support::Expected<std::optional<agent::AgentLoopTurnUpdate>>{
+                        agent::AgentLoopTurnUpdate{.context = std::move(replacement)}}};
+    };
+
+    agent::AgentInitialState initial_state;
+    initial_state.messages.push_back(ai::user_text_message("earlier prompt"));
+    initial_state.messages.push_back(ai::assistant_text_message("earlier answer"));
+    initial_state.messages.push_back(ai::user_text_message("earlier follow-up"));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
+    *subject_holder = &subject;
+
+    auto run = run_agent(subject, "read");
+
+    CHECK(run.result);
+    REQUIRE(client->requests.size() == 2);
+    REQUIRE(client->requests[1].context.messages.size() == 1);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(client->requests[1].context.messages[0])) ==
+            "compacted history");
+    // Only the message produced after the replacement is reported, and no
+    // position outside the replaced list is ever addressed.
+    const auto* ended = std::get_if<agent::AgentEndEvent>(&run.events.back());
+    REQUIRE(ended != nullptr);
+    REQUIRE(ended->messages.size() == 1);
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(ended->messages[0]));
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(ended->messages[0]).content) == "second");
+    // Live history is the replacement plus the answer produced after it.
+    REQUIRE(run.state.messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(run.state.messages[0]));
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(run.state.messages[0])) == "compacted history");
 }
 
 TEST_CASE("prepareNextTurn no update leaves model and thinking level unchanged", "[agent][async][u8][spec]") {

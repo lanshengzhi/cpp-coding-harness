@@ -13,6 +13,7 @@
 #include <cch/support/Error.hpp>
 #include "support/EnvVarGuard.hpp"
 #include "support/ExpectedMacros.hpp"
+#include "support/FakeTool.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
@@ -534,6 +535,42 @@ public:
     return model;
 }
 
+/// A deterministic tool that echoes a fixed result, so a run can be scripted
+/// across several turns without touching the workspace.
+[[nodiscard]] agent::Tool make_echo_tool() {
+    ai::Tool definition;
+    definition.name = "echo";
+    definition.description = "Echo back a fixed result";
+    definition.parameters = support::JsonValue::object_t{{"type", "object"}, {"additionalProperties", false}};
+    return tests::make_fake_tool(std::move(definition),
+            agent::ToolConcurrency::Exclusive,
+            [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                agent::AsyncToolExecutionResult result;
+                result.content.push_back(ai::text_content("echo: ok"));
+                co_return result;
+            });
+}
+
+/// Assistant message requesting one tool call with reported provider usage.
+[[nodiscard]] ai::AssistantMessage tool_call_assistant(std::string tool_name, std::int64_t total_tokens) {
+    auto message = ai::assistant_text_message("calling " + tool_name);
+    message.stop_reason = ai::AssistantStopReason::ToolUse;
+    message.usage = ai::Usage{};
+    message.usage.input = total_tokens;
+    message.usage.total_tokens = total_tokens;
+    message.content.emplace_back(ai::ToolCallContent{
+            .id = "call_1",
+            .name = std::move(tool_name),
+            .arguments = support::JsonValue{support::JsonValue::object_t{}},
+            .raw_arguments = {},
+            .thought_signature = std::nullopt,
+            .arguments_valid = true,
+            .argument_error = std::nullopt,
+    });
+    return message;
+}
+
 struct TriggerSessionUnderTest {
     std::unique_ptr<coding_agent::AgentSession> session;
     TriggerPolicyScriptedProvider* client{nullptr};
@@ -542,7 +579,8 @@ struct TriggerSessionUnderTest {
 [[nodiscard]] TriggerSessionUnderTest make_trigger_session(const TestPaths& paths,
         tests::RuntimeFixture& runtime,
         std::deque<ai::AssistantMessage> responses,
-        std::uint64_t context_window = 128000) {
+        std::uint64_t context_window = 128000,
+        std::vector<agent::Tool> tools = {}) {
     auto client = std::make_shared<TriggerPolicyScriptedProvider>();
     auto* client_ptr = client.get();
     client_ptr->responses = std::move(responses);
@@ -551,6 +589,7 @@ struct TriggerSessionUnderTest {
     options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file};
     options.workspace = paths.workspace.path();
     options.request_model = trigger_model(context_window);
+    options.custom_tools = std::move(tools);
     options.models = cch::tests::models_from_provider(std::move(client));
 
     auto models = std::move(options.models);
@@ -779,6 +818,97 @@ TEST_CASE("pre-prompt compaction check catches an aborted response over the thre
     // The u5 request runs on the compacted context.
     CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(
         client->requests[5].context.messages[0]));
+
+    session->close();
+}
+
+TEST_CASE("between-turn threshold compaction replaces the run context before the next response",
+        "[coding_agent][compaction][compat-pi]") {
+    // pi 0.84.4 (upstream #6879): "Pi now compacts between tool execution and
+    // the next assistant response in the same run".
+    TestPaths paths;
+    tests::RuntimeFixture runtime;
+    // A small retain budget and reserve leave a cut point and a low threshold:
+    // window 8000 - reserve 2000 = 6000 estimated tokens.
+    paths.workspace.write("agent/settings.json",
+            R"({"compaction": {"enabled": true, "reserveTokens": 2000, "keepRecentTokens": 1000}})");
+    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", (paths.workspace.path() / "agent").string()};
+
+    const std::string prefill(12000, 'x');
+    std::vector<agent::Tool> tools;
+    tools.push_back(make_echo_tool());
+    auto under_test = make_trigger_session(paths,
+            runtime,
+            {
+                    usage_assistant("a1 " + std::string(8000, 'y'), 2000),
+                    tool_call_assistant("echo", 7000),
+                    summarization_response(),
+                    usage_assistant("post-compaction answer", 2000),
+            },
+            /*context_window=*/8000,
+            std::move(tools));
+    auto* session = under_test.session.get();
+    auto* client = under_test.client;
+
+    // Pre-seed turn: ~5000 estimated tokens of live history, under the
+    // 6000-token threshold, so no compaction happens yet.
+    REQUIRE(run_awaitable(runtime, session->prompt(prefill + " u1")).has_value());
+    REQUIRE(client->request_count == 1);
+    CHECK_FALSE(find_compaction_entry(paths).has_value());
+
+    // The trigger run's first turn reports 7000 context tokens and adds a tool
+    // result. The between-turn check must compact before the run's next
+    // assistant response instead of sending the oversized context again.
+    REQUIRE(run_awaitable(runtime, session->prompt("u2 trigger")).has_value());
+
+    // Request order: pre-seed, tool turn, summarization, the run's final turn.
+    REQUIRE(client->request_count == 4);
+    // The tool turn still ran on the pre-compaction context (the check fires
+    // after its tool result, not before).
+    REQUIRE(client->requests[1].context.messages.size() == 3);
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(client->requests[3].context.messages[0]));
+    // The replacement context carries the session System Prompt forward.
+    REQUIRE(client->requests[3].context.system_prompt.has_value());
+    CHECK(*client->requests[3].context.system_prompt == *client->requests[1].context.system_prompt);
+    // The summarized pre-seed prompt never reaches the next request.
+    for (const auto& message : client->requests[3].context.messages) {
+        if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+            CHECK(ai::text_from_user_message(*user).find(prefill) == std::string::npos);
+        }
+    }
+
+    // The compaction entry lands between the tool turn and the run's final
+    // answer: the trigger is the between-turn check, not the post-run one.
+    auto loaded = harness::session::SessionStore::load(paths.session_file);
+    REQUIRE(loaded.has_value());
+    std::optional<std::size_t> compaction_index;
+    std::optional<std::size_t> final_answer_index;
+    for (std::size_t index = 0; index < loaded->entries.size(); ++index) {
+        const auto& entry = loaded->entries[index];
+        if (entry.kind == harness::session::SessionEntryKind::Compaction) {
+            compaction_index = index;
+            continue;
+        }
+        if (entry.kind != harness::session::SessionEntryKind::Message || !entry.message) {
+            continue;
+        }
+        const auto* assistant = std::get_if<ai::AssistantMessage>(&*entry.message);
+        if (assistant != nullptr && ai::text_from_assistant_content(assistant->content) == "post-compaction answer") {
+            final_answer_index = index;
+        }
+    }
+    REQUIRE(compaction_index.has_value());
+    REQUIRE(final_answer_index.has_value());
+    CHECK(*compaction_index < *final_answer_index);
+
+    // Live history is the rebuilt context plus the final answer.
+    const auto snapshot = session->snapshot();
+    REQUIRE_FALSE(snapshot.agent_state.messages.empty());
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(snapshot.agent_state.messages[0]));
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages.back()));
+    CHECK(ai::text_from_assistant_content(
+                  std::get<ai::AssistantMessage>(snapshot.agent_state.messages.back()).content) ==
+            "post-compaction answer");
 
     session->close();
 }

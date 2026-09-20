@@ -1237,13 +1237,15 @@ support::ExpectedVoid detail::AgentMessageAccess::replace_messages(
     if (!agent.impl_) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation, "agent is not initialized"));
     }
-    if (agent.impl_->active_run) {
-        return std::unexpected(
-                support::make_error(support::ErrorCode::Validation, "agent is busy (cannot replace session context)"));
-    }
     agent.impl_->state.messages = std::move(messages);
     agent.impl_->state.streaming_message.reset();
     agent.impl_->state.pending_tool_call_ids.clear();
+    // `invocation_messages()` is a state.messages window. A between-turn
+    // rebuild (pi `_runAutoCompaction` while the run continues) restarts it
+    // at the replacement so the window can never address a position outside
+    // the replaced vector; an idle rebuild is followed by a run start, which
+    // sets the same offset itself.
+    agent.impl_->invocation_message_offset = agent.impl_->state.messages.size();
     return {};
 }
 
