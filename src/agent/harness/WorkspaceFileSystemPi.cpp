@@ -1,5 +1,8 @@
 #include "WorkspaceFileSystem.hpp"
 
+#include "WorkspaceFileSystemErrors.hpp"
+#include "WorkspaceFileSystemIo.hpp"
+
 #include "AtomicWrite.hpp"
 
 #include <algorithm>
@@ -14,25 +17,6 @@
 #include <unistd.h>
 
 namespace cch::harness {
-namespace {
-
-/// Whether an errno names a permission failure. The metadata operations
-/// must report these as PermissionDenied instead of folding them into
-/// Invalid or NotFound (issue #702).
-[[nodiscard]] bool is_permission_errno(int errno_value) noexcept {
-    return errno_value == EACCES || errno_value == EPERM;
-}
-
-/// The honest outcome for a path the process may not resolve.
-[[nodiscard]] FileError permission_denied_error(const std::string& path) {
-    return FileError{
-            .code = FileErrorCode::PermissionDenied,
-            .message = "permission denied: " + path,
-            .path = path,
-    };
-}
-
-} // namespace
 
 std::expected<std::string, FileError> WorkspaceFileSystem::absolutePath(const std::string& path) const {
     auto resolved = resolve_to_cwd(path);
@@ -83,11 +67,7 @@ std::expected<std::vector<std::string>, FileError> WorkspaceFileSystem::readText
         return std::unexpected(fd.error());
     }
     if (file_size > kFileSystemCapacity.max_file_bytes) {
-        return std::unexpected(FileError{
-                .code = FileErrorCode::ResourceLimit,
-                .message = "file exceeds the filesystem result limit",
-                .path = std::string{path},
-        });
+        return std::unexpected(file_result_limit_error(path));
     }
 
     std::vector<std::string> lines;
@@ -96,107 +76,72 @@ std::expected<std::vector<std::string>, FileError> WorkspaceFileSystem::readText
     std::size_t result_bytes{0};
     std::size_t total_bytes{0};
     bool line_has_bytes{false};
-    char buffer[4096];
 
-    for (;;) {
-        if (stop_token.stop_requested()) {
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::Aborted,
-                    .message = "Operation aborted",
-                    .path = std::string{path},
-            });
+    // One line finalizer shared by the newline and EOF boundaries: the
+    // per-result byte check and the move into the result.
+    const auto finish_line = [&]() -> std::expected<void, FileError> {
+        if (line.size() > kFileSystemCapacity.max_text_lines_result_bytes - result_bytes) {
+            return std::unexpected(text_line_result_limit_error(path));
         }
-        const auto count = ::read(fd->get(), buffer, sizeof(buffer));
-        if (count < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::Unknown,
-                    .message = "could not read file: " + path,
-                    .path = std::string{path},
-            });
-        }
-        if (count == 0) {
-            break;
-        }
-        const auto bytes = static_cast<std::size_t>(count);
-        if (bytes > kFileSystemCapacity.max_file_bytes - total_bytes) {
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::ResourceLimit,
-                    .message = "file exceeds the filesystem result limit",
-                    .path = std::string{path},
-            });
-        }
-        total_bytes += bytes;
+        result_bytes += line.size();
+        lines.push_back(std::move(line));
+        line.clear();
+        line_has_bytes = false;
+        return {};
+    };
 
-        for (std::size_t index = 0; index < bytes; ++index) {
-            const char value = buffer[index];
-            if (value != '\n') {
-                if (lines.size() < line_limit) {
-                    if (line.size() >= kFileSystemCapacity.max_text_lines_result_bytes - result_bytes) {
-                        return std::unexpected(FileError{
-                                .code = FileErrorCode::ResourceLimit,
-                                .message = "text-line result exceeds the filesystem result limit",
-                                .path = std::string{path},
-                        });
+    auto read = read_file_chunks(
+            fd->get(), path, stop_token, [&](const char* buffer, std::size_t bytes) -> std::expected<void, FileError> {
+                if (bytes > kFileSystemCapacity.max_file_bytes - total_bytes) {
+                    return std::unexpected(file_result_limit_error(path));
+                }
+                total_bytes += bytes;
+
+                for (std::size_t index = 0; index < bytes; ++index) {
+                    const char value = buffer[index];
+                    if (value != '\n') {
+                        if (lines.size() < line_limit) {
+                            if (line.size() >= kFileSystemCapacity.max_text_lines_result_bytes - result_bytes) {
+                                return std::unexpected(text_line_result_limit_error(path));
+                            }
+                            line.push_back(value);
+                        }
+                        line_has_bytes = true;
+                        continue;
                     }
-                    line.push_back(value);
-                }
-                line_has_bytes = true;
-                continue;
-            }
 
-            if (lines.size() >= line_limit) {
-                if (!maxLines || requested_lines > kFileSystemCapacity.max_text_lines) {
-                    return std::unexpected(FileError{
-                            .code = FileErrorCode::ResourceLimit,
-                            .message = "text-line result exceeds the filesystem result limit",
-                            .path = std::string{path},
-                    });
-                }
-                line.clear();
-                line_has_bytes = false;
-                continue;
-            }
+                    if (lines.size() >= line_limit) {
+                        if (!maxLines || requested_lines > kFileSystemCapacity.max_text_lines) {
+                            return std::unexpected(text_line_result_limit_error(path));
+                        }
+                        line.clear();
+                        line_has_bytes = false;
+                        continue;
+                    }
 
-            if (!line.empty() && line.back() == '\r') {
-                line.pop_back();
-            }
-            if (line.size() > kFileSystemCapacity.max_text_lines_result_bytes - result_bytes) {
-                return std::unexpected(FileError{
-                        .code = FileErrorCode::ResourceLimit,
-                        .message = "text-line result exceeds the filesystem result limit",
-                        .path = std::string{path},
-                });
-            }
-            result_bytes += line.size();
-            lines.push_back(std::move(line));
-            line.clear();
-            line_has_bytes = false;
-        }
+                    if (!line.empty() && line.back() == '\r') {
+                        line.pop_back();
+                    }
+                    if (auto finished = finish_line(); !finished) {
+                        return std::unexpected(finished.error());
+                    }
+                }
+                return {};
+            });
+    if (!read) {
+        return std::unexpected(read.error());
     }
 
     if (line_has_bytes && lines.size() < line_limit) {
         if (!line.empty() && line.back() == '\r') {
             line.pop_back();
         }
-        if (line.size() > kFileSystemCapacity.max_text_lines_result_bytes - result_bytes) {
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::ResourceLimit,
-                    .message = "text-line result exceeds the filesystem result limit",
-                    .path = std::string{path},
-            });
+        if (auto finished = finish_line(); !finished) {
+            return std::unexpected(finished.error());
         }
-        result_bytes += line.size();
-        lines.push_back(std::move(line));
     } else if (line_has_bytes && lines.size() >= line_limit &&
                (!maxLines || requested_lines > kFileSystemCapacity.max_text_lines)) {
-        return std::unexpected(FileError{
-                .code = FileErrorCode::ResourceLimit,
-                .message = "text-line result exceeds the filesystem result limit",
-                .path = std::string{path},
-        });
+        return std::unexpected(text_line_result_limit_error(path));
     }
     return lines;
 }
@@ -209,52 +154,26 @@ std::expected<BinaryData, FileError> WorkspaceFileSystem::readBinaryFile(
         return std::unexpected(fd.error());
     }
     if (file_size > kFileSystemCapacity.max_file_bytes) {
-        return std::unexpected(FileError{
-                .code = FileErrorCode::ResourceLimit,
-                .message = "file exceeds the filesystem result limit",
-                .path = std::string{path},
-        });
+        return std::unexpected(file_result_limit_error(path));
     }
 
     BinaryData result;
     result.reserve(static_cast<std::size_t>(file_size));
-    char buffer[4096];
     std::size_t total_bytes{0};
-    for (;;) {
-        if (stop_token.stop_requested()) {
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::Aborted,
-                    .message = "Operation aborted",
-                    .path = std::string{path},
+    auto read = read_file_chunks(
+            fd->get(), path, stop_token, [&](const char* buffer, std::size_t bytes) -> std::expected<void, FileError> {
+                if (bytes > kFileSystemCapacity.max_file_bytes - total_bytes) {
+                    return std::unexpected(file_result_limit_error(path));
+                }
+                total_bytes += bytes;
+                result.reserve(total_bytes);
+                for (std::size_t index = 0; index < bytes; ++index) {
+                    result.push_back(static_cast<std::byte>(buffer[index]));
+                }
+                return {};
             });
-        }
-        const auto count = ::read(fd->get(), buffer, sizeof(buffer));
-        if (count < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::Unknown,
-                    .message = "could not read file: " + path,
-                    .path = std::string{path},
-            });
-        }
-        if (count == 0) {
-            break;
-        }
-        const auto bytes = static_cast<std::size_t>(count);
-        if (bytes > kFileSystemCapacity.max_file_bytes - total_bytes) {
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::ResourceLimit,
-                    .message = "file exceeds the filesystem result limit",
-                    .path = std::string{path},
-            });
-        }
-        total_bytes += bytes;
-        result.reserve(total_bytes);
-        for (std::size_t index = 0; index < bytes; ++index) {
-            result.push_back(static_cast<std::byte>(buffer[index]));
-        }
+    if (!read) {
+        return std::unexpected(read.error());
     }
     return result;
 }
@@ -284,11 +203,7 @@ std::expected<void, FileError> WorkspaceFileSystem::appendFile(
     // silently lose one another's suffix.
     std::unique_lock mutation_lock(temporary_state_->mutex);
     if (stop_token.stop_requested()) {
-        return std::unexpected(FileError{
-                .code = FileErrorCode::Aborted,
-                .message = "Operation aborted",
-                .path = std::string{path},
-        });
+        return std::unexpected(operation_aborted_error(path));
     }
 
     std::string_view data;
@@ -331,11 +246,7 @@ std::expected<void, FileError> WorkspaceFileSystem::appendFile(
         }
         if (target_status.st_size < 0 ||
                 static_cast<std::uintmax_t>(target_status.st_size) > kFileSystemCapacity.max_file_bytes) {
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::ResourceLimit,
-                    .message = "file exceeds the filesystem result limit",
-                    .path = std::string{path},
-            });
+            return std::unexpected(file_result_limit_error(path));
         }
 
         source.reset(::openat(parent_guard->get(), filename.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC));
@@ -404,32 +315,26 @@ std::expected<FileInfo, FileError> WorkspaceFileSystem::fileInfo(const std::stri
         auto root_fd = open_root_directory(*resolved, "root directory", &root_errno);
         if (!root_fd) {
             if (root_errno == ENOENT) {
-                return std::unexpected(FileError{
-                        .code = FileErrorCode::NotFound,
-                        .message = "path not found: " + path,
-                        .path = path,
-                });
+                return std::unexpected(path_not_found_error(path));
             }
             return std::unexpected(util_error_to_file_error(root_fd.error(), path));
         }
         if (::fstat(root_fd->get(), &st) != 0) {
-            return std::unexpected(FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+            return std::unexpected(path_not_found_error(path));
         }
     } else {
         int parent_errno = 0;
         auto parent_fd = open_parent_directory(*resolved, false, &parent_errno);
         if (!parent_fd) {
             if (parent_errno == ENOENT) {
-                return std::unexpected(
-                        FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+                return std::unexpected(path_not_found_error(path));
             }
             return std::unexpected(util_error_to_file_error(parent_fd.error(), path));
         }
         const auto filename = resolved->filename().string();
         if (::fstatat(parent_fd->get(), filename.c_str(), &st, AT_SYMLINK_NOFOLLOW) != 0) {
             if (errno == ENOENT) {
-                return std::unexpected(
-                        FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+                return std::unexpected(path_not_found_error(path));
             }
             if (is_permission_errno(errno)) {
                 return std::unexpected(permission_denied_error(path));
@@ -480,8 +385,7 @@ std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(
         auto parent_fd = open_parent_directory(*resolved, false, &parent_errno);
         if (!parent_fd) {
             if (parent_errno == ENOENT) {
-                return std::unexpected(
-                        FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+                return std::unexpected(path_not_found_error(path));
             }
             return std::unexpected(util_error_to_file_error(parent_fd.error(), path));
         }
@@ -489,8 +393,7 @@ std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(
         struct stat status{};
         if (::fstatat(parent_fd->get(), filename.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
             if (errno == ENOENT) {
-                return std::unexpected(
-                        FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+                return std::unexpected(path_not_found_error(path));
             }
             return std::unexpected(FileError{
                     FileErrorCode::PermissionDenied, "could not inspect directory: " + path, std::string{path}});
@@ -528,11 +431,7 @@ std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(
     for (;;) {
         if (stop_token.stop_requested()) {
             (void)::closedir(directory);
-            return std::unexpected(FileError{
-                    .code = FileErrorCode::Aborted,
-                    .message = "Operation aborted",
-                    .path = std::string{path},
-            });
+            return std::unexpected(operation_aborted_error(path));
         }
         errno = 0;
         const auto* entry = ::readdir(directory);
@@ -666,7 +565,7 @@ std::expected<void, FileError> WorkspaceFileSystem::createDir(const std::string&
     auto parent_fd = open_parent_directory(*resolved, recursive, &parent_errno);
     if (!parent_fd) {
         if (parent_errno == ENOENT) {
-            return std::unexpected(FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+            return std::unexpected(path_not_found_error(path));
         }
         return std::unexpected(util_error_to_file_error(parent_fd.error(), path));
     }
@@ -710,7 +609,7 @@ std::expected<void, FileError> WorkspaceFileSystem::remove(
     auto parent_fd = open_parent_directory(*resolved, false, &parent_errno);
     if (!parent_fd) {
         if (parent_errno == ENOENT) {
-            return std::unexpected(FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+            return std::unexpected(path_not_found_error(path));
         }
         return std::unexpected(util_error_to_file_error(parent_fd.error(), path));
     }
@@ -719,7 +618,7 @@ std::expected<void, FileError> WorkspaceFileSystem::remove(
     struct stat status{};
     if (::fstatat(parent_fd->get(), filename.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
         if (errno == ENOENT) {
-            return std::unexpected(FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+            return std::unexpected(path_not_found_error(path));
         }
         return std::unexpected(
                 FileError{FileErrorCode::PermissionDenied, "could not inspect path: " + path, std::string{path}});
@@ -730,8 +629,7 @@ std::expected<void, FileError> WorkspaceFileSystem::remove(
                 ::openat(parent_fd->get(), filename.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
         if (!directory_fd) {
             if (errno == ENOENT) {
-                return std::unexpected(
-                        FileError{FileErrorCode::NotFound, "path not found: " + path, std::string{path}});
+                return std::unexpected(path_not_found_error(path));
             }
             return std::unexpected(
                     FileError{FileErrorCode::PermissionDenied, "could not open directory: " + path, std::string{path}});

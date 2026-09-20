@@ -107,6 +107,34 @@ inline constexpr std::array<std::pair<ModelThinkingLevel, std::string_view>, 7> 
     return std::nullopt;
 }
 
+/// The stream `ThinkingLevel` named by a model thinking-level wire name:
+/// "minimal".."max" map to the stream level; "off", empty, or unknown names
+/// forward no reasoning (pi `createLoopConfig` derives the per-turn stream
+/// `reasoning` option from the thinking level: `off` → undefined).
+[[nodiscard]] inline std::optional<ThinkingLevel> parse_stream_thinking_level(std::string_view name) {
+    const auto level = parse_model_thinking_level(name);
+    if (!level) {
+        return std::nullopt;
+    }
+    switch (*level) {
+    case ModelThinkingLevel::Minimal:
+        return ThinkingLevel::Minimal;
+    case ModelThinkingLevel::Low:
+        return ThinkingLevel::Low;
+    case ModelThinkingLevel::Medium:
+        return ThinkingLevel::Medium;
+    case ModelThinkingLevel::High:
+        return ThinkingLevel::High;
+    case ModelThinkingLevel::XHigh:
+        return ThinkingLevel::XHigh;
+    case ModelThinkingLevel::Max:
+        return ThinkingLevel::Max;
+    case ModelThinkingLevel::Off:
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
 /// Clamp a wire-name thinking level ("off".."max") to the model's supported
 /// set and return the clamped wire name (pi-ai `clampThinkingLevel` applied to
 /// the agent-level string vocabulary). An unparseable request is returned

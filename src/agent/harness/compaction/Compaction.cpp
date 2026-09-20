@@ -1,6 +1,8 @@
 #include "Compaction.hpp"
 
 #include <cch/agent/harness/session/SessionStore.hpp>
+
+#include "agent/harness/session/RandomHex.hpp"
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/support/JsonValue.hpp>
@@ -11,7 +13,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <random>
 #include <regex>
 #include <set>
 #include <string>
@@ -273,28 +274,28 @@ constexpr std::string_view kTurnPrefixSummarizationPrompt =
     if (!message) {
         return std::nullopt;
     }
-    if (std::holds_alternative<ai::UserMessage>(*message)) {
-        return "user";
-    }
-    if (std::holds_alternative<ai::AssistantMessage>(*message)) {
-        return "assistant";
-    }
-    if (std::holds_alternative<ai::ToolResultMessage>(*message)) {
-        return "toolResult";
-    }
-    if (std::holds_alternative<ai::BashExecutionMessage>(*message)) {
-        return "bashExecution";
-    }
-    if (std::holds_alternative<ai::CustomMessage>(*message)) {
-        return "custom";
-    }
-    if (std::holds_alternative<ai::BranchSummaryMessage>(*message)) {
-        return "branchSummary";
-    }
-    if (std::holds_alternative<ai::CompactionSummaryMessage>(*message)) {
-        return "compactionSummary";
-    }
-    return std::nullopt;
+    return std::visit(
+            [](const auto& concrete) -> std::optional<std::string> {
+                using M = std::decay_t<decltype(concrete)>;
+                if constexpr (std::is_same_v<M, ai::UserMessage>) {
+                    return std::string{"user"};
+                } else if constexpr (std::is_same_v<M, ai::AssistantMessage>) {
+                    return std::string{"assistant"};
+                } else if constexpr (std::is_same_v<M, ai::ToolResultMessage>) {
+                    return std::string{"toolResult"};
+                } else if constexpr (std::is_same_v<M, ai::BashExecutionMessage>) {
+                    return std::string{"bashExecution"};
+                } else if constexpr (std::is_same_v<M, ai::CustomMessage>) {
+                    return std::string{"custom"};
+                } else if constexpr (std::is_same_v<M, ai::BranchSummaryMessage>) {
+                    return std::string{"branchSummary"};
+                } else if constexpr (std::is_same_v<M, ai::CompactionSummaryMessage>) {
+                    return std::string{"compactionSummary"};
+                } else {
+                    return std::nullopt;
+                }
+            },
+            *message);
 }
 
 [[nodiscard]] bool is_cut_point_role(std::string_view role) {
@@ -404,20 +405,10 @@ struct SummarizationCall {
         ai::user_text_message(std::move(prompt_text), 0));
     call.options.max_tokens = max_tokens;
     call.options.stop_token = std::move(stop_token);
-    if (model.reasoning && !thinking_level.empty() && thinking_level != "off") {
-        if (thinking_level == "minimal") {
-            call.options.reasoning = ai::ThinkingLevel::Minimal;
-        } else if (thinking_level == "low") {
-            call.options.reasoning = ai::ThinkingLevel::Low;
-        } else if (thinking_level == "medium") {
-            call.options.reasoning = ai::ThinkingLevel::Medium;
-        } else if (thinking_level == "high") {
-            call.options.reasoning = ai::ThinkingLevel::High;
-        } else if (thinking_level == "xhigh") {
-            call.options.reasoning = ai::ThinkingLevel::XHigh;
-        } else if (thinking_level == "max") {
-            call.options.reasoning = ai::ThinkingLevel::Max;
-        }
+    if (model.reasoning) {
+        // pi `generateSummaryWithUsage` forwards the reasoning level exactly
+        // like the agent loop's stream options: `off` forwards no reasoning.
+        call.options.reasoning = ai::parse_stream_thinking_level(thinking_level);
     }
     return call;
 }
@@ -471,17 +462,7 @@ struct SummarizationOutcome {
 
 /// Fresh session id for one summarization request: isolation only, so
 /// compaction never pollutes the session's cache affinity (pi `uuidv7()`).
-[[nodiscard]] std::string fresh_summarization_session_id() {
-    thread_local std::random_device rd;
-    thread_local std::mt19937_64 gen(rd());
-    thread_local std::uniform_int_distribution<unsigned> dist(0, 15);
-    const char hex_chars[] = "0123456789abcdef";
-    std::string id(32, '0');
-    for (auto& c : id) {
-        c = hex_chars[dist(gen)];
-    }
-    return id;
-}
+[[nodiscard]] std::string fresh_summarization_session_id() { return random_hex_id(32); }
 
 } // namespace
 
@@ -611,33 +592,38 @@ bool is_context_overflow(
 }
 
 std::size_t estimate_tokens(const ai::MessageVariant& message) {
-    std::size_t chars = 0;
-    if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
-        chars = estimate_text_and_image_chars(*user);
-    } else if (const auto* assistant = std::get_if<ai::AssistantMessage>(&message)) {
-        for (const auto& block : assistant->content) {
-            if (const auto* text = std::get_if<ai::TextContent>(&block)) {
-                chars += text->text.size();
-            } else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
-                chars += thinking->thinking.size();
-            } else if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
-                chars += call->name.size() + json_stringify(*call).size();
-            }
-        }
-    } else if (const auto* tool_result = std::get_if<ai::ToolResultMessage>(&message)) {
-        chars = estimate_content_chars(tool_result->content);
-    } else if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message)) {
-        chars = bash->command.size() + bash->output.size();
-    } else if (const auto* custom = std::get_if<ai::CustomMessage>(&message)) {
-        chars = estimate_content_chars(custom->content);
-    } else if (const auto* branch = std::get_if<ai::BranchSummaryMessage>(&message)) {
-        chars = branch->summary.size();
-    } else if (const auto* compaction =
-                   std::get_if<ai::CompactionSummaryMessage>(&message)) {
-        chars = compaction->summary.size();
-    } else {
-        return 0;
-    }
+    const auto chars = std::visit(
+            [](const auto& concrete) -> std::size_t {
+                using M = std::decay_t<decltype(concrete)>;
+                if constexpr (std::is_same_v<M, ai::UserMessage>) {
+                    return estimate_text_and_image_chars(concrete);
+                } else if constexpr (std::is_same_v<M, ai::AssistantMessage>) {
+                    std::size_t block_chars = 0;
+                    for (const auto& block : concrete.content) {
+                        if (const auto* text = std::get_if<ai::TextContent>(&block)) {
+                            block_chars += text->text.size();
+                        } else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
+                            block_chars += thinking->thinking.size();
+                        } else if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
+                            block_chars += call->name.size() + json_stringify(*call).size();
+                        }
+                    }
+                    return block_chars;
+                } else if constexpr (std::is_same_v<M, ai::ToolResultMessage>) {
+                    return estimate_content_chars(concrete.content);
+                } else if constexpr (std::is_same_v<M, ai::BashExecutionMessage>) {
+                    return concrete.command.size() + concrete.output.size();
+                } else if constexpr (std::is_same_v<M, ai::CustomMessage>) {
+                    return estimate_content_chars(concrete.content);
+                } else if constexpr (std::is_same_v<M, ai::BranchSummaryMessage>) {
+                    return concrete.summary.size();
+                } else if constexpr (std::is_same_v<M, ai::CompactionSummaryMessage>) {
+                    return concrete.summary.size();
+                } else {
+                    return 0;
+                }
+            },
+            message);
     return (chars + 3) / 4;
 }
 
@@ -1066,29 +1052,32 @@ void extract_file_ops_from_message(
     return preparation;
 }
 
-/// pi `generateSummaryWithUsage`: summarize `current_messages` into text plus
-/// usage through one `cacheRetention:"none"` + fresh-session-id request.
-[[nodiscard]] boost::asio::awaitable<support::Expected<SummarizationOutcome>>
-generate_summary_with_usage(
-    const std::vector<ai::MessageVariant>& current_messages,
-    const ai::Model& model,
-    std::optional<std::string> custom_instructions,
-    std::optional<std::string> previous_summary,
-    std::string_view thinking_level,
-    std::size_t max_tokens,
-    std::stop_token stop_token,
-    SummarizationStreamFn& stream_fn,
-    SummarizationSessionIdFactory& session_id_factory) {
-    auto call = make_summarization_call(
-        current_messages,
-        model,
-        previous_summary ? kUpdateSummarizationPrompt : kSummarizationPrompt,
-        kSummarizationSystemPrompt,
-        custom_instructions,
-        previous_summary,
-        thinking_level,
-        max_tokens,
-        stop_token);
+/// One summarization request through the injected stream seam: the
+/// cache-isolation options (`cacheRetention:"none"` + fresh session id,
+/// ADR 0033) and the shared failure shape run once, so the two pi
+/// summarization entries differ only in their prompt assembly.
+[[nodiscard]] boost::asio::awaitable<support::Expected<SummarizationOutcome>> run_summarization_request(
+        const std::vector<ai::MessageVariant>& messages,
+        const ai::Model& model,
+        std::string_view base_prompt,
+        std::optional<std::string> custom_instructions,
+        std::optional<std::string> previous_summary,
+        std::string_view thinking_level,
+        std::size_t max_tokens,
+        std::stop_token stop_token,
+        std::string_view aborted_fallback,
+        std::string_view failed_prefix,
+        SummarizationStreamFn& stream_fn,
+        SummarizationSessionIdFactory& session_id_factory) {
+    auto call = make_summarization_call(messages,
+            model,
+            base_prompt,
+            kSummarizationSystemPrompt,
+            custom_instructions,
+            previous_summary,
+            thinking_level,
+            max_tokens,
+            stop_token);
     call.options.cache_retention = ai::CacheRetention::None;
     call.options.session_id = session_id_factory();
 
@@ -1099,16 +1088,39 @@ generate_summary_with_usage(
     }
     if (response->stop_reason == ai::AssistantStopReason::Aborted ||
         response->stop_reason == ai::AssistantStopReason::Error) {
-        co_return std::unexpected(summarization_failure(
-            response->stop_reason,
-            response->error_message,
-            "Summarization aborted",
-            "Summarization failed: "));
+        co_return std::unexpected(
+                summarization_failure(response->stop_reason, response->error_message, aborted_fallback, failed_prefix));
     }
     co_return SummarizationOutcome{
         .text = ai::text_from_assistant_content(response->content),
         .usage = response->usage,
     };
+}
+
+/// pi `generateSummaryWithUsage`: summarize `current_messages` into text plus
+/// usage through one `cacheRetention:"none"` + fresh-session-id request.
+[[nodiscard]] boost::asio::awaitable<support::Expected<SummarizationOutcome>> generate_summary_with_usage(
+        const std::vector<ai::MessageVariant>& current_messages,
+        const ai::Model& model,
+        std::optional<std::string> custom_instructions,
+        std::optional<std::string> previous_summary,
+        std::string_view thinking_level,
+        std::size_t max_tokens,
+        std::stop_token stop_token,
+        SummarizationStreamFn& stream_fn,
+        SummarizationSessionIdFactory& session_id_factory) {
+    return run_summarization_request(current_messages,
+            model,
+            previous_summary ? kUpdateSummarizationPrompt : kSummarizationPrompt,
+            custom_instructions,
+            previous_summary,
+            thinking_level,
+            max_tokens,
+            stop_token,
+            "Summarization aborted",
+            "Summarization failed: ",
+            stream_fn,
+            session_id_factory);
 }
 
 /// pi `generateTurnPrefixSummary`: a separate smaller-budget summarization
@@ -1122,36 +1134,18 @@ generate_turn_prefix_summary(
     std::stop_token stop_token,
     SummarizationStreamFn& stream_fn,
     SummarizationSessionIdFactory& session_id_factory) {
-    auto call = make_summarization_call(
-        turn_prefix_messages,
-        model,
-        kTurnPrefixSummarizationPrompt,
-        kSummarizationSystemPrompt,
-        std::nullopt,
-        std::nullopt,
-        thinking_level,
-        max_tokens,
-        stop_token);
-    call.options.cache_retention = ai::CacheRetention::None;
-    call.options.session_id = session_id_factory();
-
-    auto response = co_await stream_fn(
-        std::move(call.context), std::move(call.options));
-    if (!response) {
-        co_return std::unexpected(response.error());
-    }
-    if (response->stop_reason == ai::AssistantStopReason::Aborted ||
-        response->stop_reason == ai::AssistantStopReason::Error) {
-        co_return std::unexpected(summarization_failure(
-            response->stop_reason,
-            response->error_message,
+    return run_summarization_request(turn_prefix_messages,
+            model,
+            kTurnPrefixSummarizationPrompt,
+            std::nullopt,
+            std::nullopt,
+            thinking_level,
+            max_tokens,
+            stop_token,
             "Turn prefix summarization aborted",
-            "Turn prefix summarization failed: "));
-    }
-    co_return SummarizationOutcome{
-        .text = ai::text_from_assistant_content(response->content),
-        .usage = response->usage,
-    };
+            "Turn prefix summarization failed: ",
+            stream_fn,
+            session_id_factory);
 }
 
 [[nodiscard]] std::size_t summary_max_tokens(
