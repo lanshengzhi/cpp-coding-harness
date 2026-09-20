@@ -25,8 +25,7 @@ struct SessionStore::Impl {
     /// Run one store-shaped append under the append lock against the active
     /// alternative and mirror every accepted entry into the live tree, so one
     /// append is a single persist-plus-tree step.
-    template <typename Op>
-    [[nodiscard]] support::ExpectedVoid append_via(Op op) {
+    template <typename Op> [[nodiscard]] support::ExpectedVoid append_via(Op op) {
         std::lock_guard lock(mutex);
         auto entries = std::visit([&](auto& active) { return std::invoke(op, active); }, store);
         if (!entries) {
@@ -144,9 +143,8 @@ support::ExpectedVoid SessionStore::append_label_change(
 support::ExpectedVoid SessionStore::append_compaction(
     std::optional<std::string> parent_id,
     CompactionEntryValue value) {
-    return impl_->append_via([&](auto& active) {
-        return active.append_compaction(std::move(parent_id), std::move(value));
-    });
+    return impl_->append_via(
+            [&](auto& active) { return active.append_compaction(std::move(parent_id), std::move(value)); });
 }
 
 support::ExpectedVoid SessionStore::append_branch_summary(
@@ -157,24 +155,22 @@ support::ExpectedVoid SessionStore::append_branch_summary(
     std::optional<bool> from_hook) {
     return impl_->append_via([&](auto& active) {
         return active.append_branch_summary(
-            std::move(parent_id), std::move(from_id), std::move(summary), std::move(details), from_hook);
+                std::move(parent_id), std::move(from_id), std::move(summary), std::move(details), from_hook);
     });
 }
 
 support::ExpectedVoid SessionStore::append_session_info(
     std::optional<std::string> parent_id,
     std::string name) {
-    return impl_->append_via([&](auto& active) {
-        return active.append_session_info(std::move(parent_id), std::move(name));
-    });
+    return impl_->append_via(
+            [&](auto& active) { return active.append_session_info(std::move(parent_id), std::move(name)); });
 }
 
 support::ExpectedVoid SessionStore::append_leaf(
     std::optional<std::string> parent_id,
     std::optional<std::string> target_id) {
-    return impl_->append_via([&](auto& active) {
-        return active.append_leaf(std::move(parent_id), std::move(target_id));
-    });
+    return impl_->append_via(
+            [&](auto& active) { return active.append_leaf(std::move(parent_id), std::move(target_id)); });
 }
 
 // --- Live tree queries (snapshots taken under the append lock) ---

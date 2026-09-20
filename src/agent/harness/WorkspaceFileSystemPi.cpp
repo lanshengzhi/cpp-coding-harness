@@ -91,8 +91,7 @@ std::expected<std::vector<std::string>, FileError> WorkspaceFileSystem::readText
     };
 
     auto read = read_file_chunks(
-            fd->get(), path, stop_token,
-            [&](const char* buffer, std::size_t bytes) -> std::expected<void, FileError> {
+            fd->get(), path, stop_token, [&](const char* buffer, std::size_t bytes) -> std::expected<void, FileError> {
                 if (bytes > kFileSystemCapacity.max_file_bytes - total_bytes) {
                     return std::unexpected(file_result_limit_error(path));
                 }
@@ -146,7 +145,6 @@ std::expected<std::vector<std::string>, FileError> WorkspaceFileSystem::readText
     }
     return lines;
 }
-
 
 std::expected<BinaryData, FileError> WorkspaceFileSystem::readBinaryFile(
         const std::string& path, std::stop_token stop_token) const {
@@ -205,7 +203,7 @@ std::expected<void, FileError> WorkspaceFileSystem::appendFile(
     // silently lose one another's suffix.
     std::unique_lock mutation_lock(temporary_state_->mutex);
     if (stop_token.stop_requested()) {
-return std::unexpected(operation_aborted_error(path));
+        return std::unexpected(operation_aborted_error(path));
     }
 
     std::string_view data;
@@ -248,7 +246,7 @@ return std::unexpected(operation_aborted_error(path));
         }
         if (target_status.st_size < 0 ||
                 static_cast<std::uintmax_t>(target_status.st_size) > kFileSystemCapacity.max_file_bytes) {
-return std::unexpected(file_result_limit_error(path));
+            return std::unexpected(file_result_limit_error(path));
         }
 
         source.reset(::openat(parent_guard->get(), filename.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC));
@@ -317,7 +315,7 @@ std::expected<FileInfo, FileError> WorkspaceFileSystem::fileInfo(const std::stri
         auto root_fd = open_root_directory(*resolved, "root directory", &root_errno);
         if (!root_fd) {
             if (root_errno == ENOENT) {
-return std::unexpected(path_not_found_error(path));
+                return std::unexpected(path_not_found_error(path));
             }
             return std::unexpected(util_error_to_file_error(root_fd.error(), path));
         }

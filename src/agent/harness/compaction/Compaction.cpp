@@ -462,9 +462,7 @@ struct SummarizationOutcome {
 
 /// Fresh session id for one summarization request: isolation only, so
 /// compaction never pollutes the session's cache affinity (pi `uuidv7()`).
-[[nodiscard]] std::string fresh_summarization_session_id() {
-    return random_hex_id(32);
-}
+[[nodiscard]] std::string fresh_summarization_session_id() { return random_hex_id(32); }
 
 } // namespace
 
@@ -1058,30 +1056,28 @@ void extract_file_ops_from_message(
 /// cache-isolation options (`cacheRetention:"none"` + fresh session id,
 /// ADR 0033) and the shared failure shape run once, so the two pi
 /// summarization entries differ only in their prompt assembly.
-[[nodiscard]] boost::asio::awaitable<support::Expected<SummarizationOutcome>>
-run_summarization_request(
-    const std::vector<ai::MessageVariant>& messages,
-    const ai::Model& model,
-    std::string_view base_prompt,
-    std::optional<std::string> custom_instructions,
-    std::optional<std::string> previous_summary,
-    std::string_view thinking_level,
-    std::size_t max_tokens,
-    std::stop_token stop_token,
-    std::string_view aborted_fallback,
-    std::string_view failed_prefix,
-    SummarizationStreamFn& stream_fn,
-    SummarizationSessionIdFactory& session_id_factory) {
-    auto call = make_summarization_call(
-        messages,
-        model,
-        base_prompt,
-        kSummarizationSystemPrompt,
-        custom_instructions,
-        previous_summary,
-        thinking_level,
-        max_tokens,
-        stop_token);
+[[nodiscard]] boost::asio::awaitable<support::Expected<SummarizationOutcome>> run_summarization_request(
+        const std::vector<ai::MessageVariant>& messages,
+        const ai::Model& model,
+        std::string_view base_prompt,
+        std::optional<std::string> custom_instructions,
+        std::optional<std::string> previous_summary,
+        std::string_view thinking_level,
+        std::size_t max_tokens,
+        std::stop_token stop_token,
+        std::string_view aborted_fallback,
+        std::string_view failed_prefix,
+        SummarizationStreamFn& stream_fn,
+        SummarizationSessionIdFactory& session_id_factory) {
+    auto call = make_summarization_call(messages,
+            model,
+            base_prompt,
+            kSummarizationSystemPrompt,
+            custom_instructions,
+            previous_summary,
+            thinking_level,
+            max_tokens,
+            stop_token);
     call.options.cache_retention = ai::CacheRetention::None;
     call.options.session_id = session_id_factory();
 
@@ -1092,11 +1088,8 @@ run_summarization_request(
     }
     if (response->stop_reason == ai::AssistantStopReason::Aborted ||
         response->stop_reason == ai::AssistantStopReason::Error) {
-        co_return std::unexpected(summarization_failure(
-            response->stop_reason,
-            response->error_message,
-            aborted_fallback,
-            failed_prefix));
+        co_return std::unexpected(
+                summarization_failure(response->stop_reason, response->error_message, aborted_fallback, failed_prefix));
     }
     co_return SummarizationOutcome{
         .text = ai::text_from_assistant_content(response->content),
@@ -1106,30 +1099,28 @@ run_summarization_request(
 
 /// pi `generateSummaryWithUsage`: summarize `current_messages` into text plus
 /// usage through one `cacheRetention:"none"` + fresh-session-id request.
-[[nodiscard]] boost::asio::awaitable<support::Expected<SummarizationOutcome>>
-generate_summary_with_usage(
-    const std::vector<ai::MessageVariant>& current_messages,
-    const ai::Model& model,
-    std::optional<std::string> custom_instructions,
-    std::optional<std::string> previous_summary,
-    std::string_view thinking_level,
-    std::size_t max_tokens,
-    std::stop_token stop_token,
-    SummarizationStreamFn& stream_fn,
-    SummarizationSessionIdFactory& session_id_factory) {
-    return run_summarization_request(
-        current_messages,
-        model,
-        previous_summary ? kUpdateSummarizationPrompt : kSummarizationPrompt,
-        custom_instructions,
-        previous_summary,
-        thinking_level,
-        max_tokens,
-        stop_token,
-        "Summarization aborted",
-        "Summarization failed: ",
-        stream_fn,
-        session_id_factory);
+[[nodiscard]] boost::asio::awaitable<support::Expected<SummarizationOutcome>> generate_summary_with_usage(
+        const std::vector<ai::MessageVariant>& current_messages,
+        const ai::Model& model,
+        std::optional<std::string> custom_instructions,
+        std::optional<std::string> previous_summary,
+        std::string_view thinking_level,
+        std::size_t max_tokens,
+        std::stop_token stop_token,
+        SummarizationStreamFn& stream_fn,
+        SummarizationSessionIdFactory& session_id_factory) {
+    return run_summarization_request(current_messages,
+            model,
+            previous_summary ? kUpdateSummarizationPrompt : kSummarizationPrompt,
+            custom_instructions,
+            previous_summary,
+            thinking_level,
+            max_tokens,
+            stop_token,
+            "Summarization aborted",
+            "Summarization failed: ",
+            stream_fn,
+            session_id_factory);
 }
 
 /// pi `generateTurnPrefixSummary`: a separate smaller-budget summarization
@@ -1143,19 +1134,18 @@ generate_turn_prefix_summary(
     std::stop_token stop_token,
     SummarizationStreamFn& stream_fn,
     SummarizationSessionIdFactory& session_id_factory) {
-    return run_summarization_request(
-        turn_prefix_messages,
-        model,
-        kTurnPrefixSummarizationPrompt,
-        std::nullopt,
-        std::nullopt,
-        thinking_level,
-        max_tokens,
-        stop_token,
-        "Turn prefix summarization aborted",
-        "Turn prefix summarization failed: ",
-        stream_fn,
-        session_id_factory);
+    return run_summarization_request(turn_prefix_messages,
+            model,
+            kTurnPrefixSummarizationPrompt,
+            std::nullopt,
+            std::nullopt,
+            thinking_level,
+            max_tokens,
+            stop_token,
+            "Turn prefix summarization aborted",
+            "Turn prefix summarization failed: ",
+            stream_fn,
+            session_id_factory);
 }
 
 [[nodiscard]] std::size_t summary_max_tokens(

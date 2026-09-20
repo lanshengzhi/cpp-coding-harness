@@ -97,7 +97,7 @@ support::Expected<std::filesystem::path> WorkspaceFileSystem::resolve_to_cwd(con
 std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_file_for_read(
         const std::string& requested, std::uintmax_t* size, std::stop_token stop_token) const {
     if (stop_token.stop_requested()) {
-return std::unexpected(operation_aborted_error(requested));
+        return std::unexpected(operation_aborted_error(requested));
     }
 
     auto target = resolve_to_cwd(requested);
@@ -109,7 +109,7 @@ return std::unexpected(operation_aborted_error(requested));
     auto parent_guard = open_parent_directory(*target, false, &parent_errno);
     if (!parent_guard) {
         if (parent_errno == ENOENT) {
-return std::unexpected(path_not_found_error(requested));
+            return std::unexpected(path_not_found_error(requested));
         }
         return std::unexpected(util_error_to_file_error(parent_guard.error(), requested));
     }
@@ -123,7 +123,7 @@ std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_fi
     struct stat status{};
     if (::fstatat(parent_fd, filename.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
         if (errno == ENOENT) {
-return std::unexpected(path_not_found_error(requested));
+            return std::unexpected(path_not_found_error(requested));
         }
         return std::unexpected(FileError{
                 .code = FileErrorCode::PermissionDenied,
@@ -158,7 +158,7 @@ return std::unexpected(path_not_found_error(requested));
             });
         }
         if (errno == ENOENT) {
-return std::unexpected(path_not_found_error(requested));
+            return std::unexpected(path_not_found_error(requested));
         }
         return std::unexpected(FileError{
                 .code = FileErrorCode::PermissionDenied,

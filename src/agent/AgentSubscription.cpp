@@ -24,8 +24,7 @@ void Agent::Impl::record_observer_diagnostic(const support::Error& failure) {
     if (state.diagnostics.size() == kMaxDiagnostics) {
         state.diagnostics.erase(state.diagnostics.begin());
     }
-    state.diagnostics.push_back(
-            support::make_error(failure.code, "agent event observer failed", std::move(detail)));
+    state.diagnostics.push_back(support::make_error(failure.code, "agent event observer failed", std::move(detail)));
     // Monotonic change marker for cheap observation (ADR 0052): the
     // bounded diagnostics vector rolls over, so its size cannot detect a
     // new entry.
@@ -51,8 +50,7 @@ void Agent::Impl::record_observer_diagnostic(const support::Error& failure) {
 }
 
 void Agent::Impl::remove_unregistered_subscribers() {
-    std::erase_if(
-            subscribers, [](const std::shared_ptr<Subscriber>& subscriber) { return !subscriber->registered; });
+    std::erase_if(subscribers, [](const std::shared_ptr<Subscriber>& subscriber) { return !subscriber->registered; });
 }
 
 void Agent::Impl::unsubscribe(std::size_t id) {

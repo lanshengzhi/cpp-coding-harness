@@ -64,25 +64,23 @@ namespace {
         return 1;
     }
     constexpr std::array<std::string_view, 8> multibyte_whitespace{
-        "\xc2\xa0",
-        "\xe1\x9a\x80",
-        "\xe2\x80\xa8",
-        "\xe2\x80\xa9",
-        "\xe2\x80\xaf",
-        "\xe2\x81\x9f",
-        "\xe3\x80\x80",
-        "\xef\xbb\xbf",
+            "\xc2\xa0",
+            "\xe1\x9a\x80",
+            "\xe2\x80\xa8",
+            "\xe2\x80\xa9",
+            "\xe2\x80\xaf",
+            "\xe2\x81\x9f",
+            "\xe3\x80\x80",
+            "\xef\xbb\xbf",
     };
     for (const auto whitespace : multibyte_whitespace) {
         if (text.starts_with(whitespace)) {
             return whitespace.size();
         }
     }
-    if (text.size() >= 3 &&
-        static_cast<unsigned char>(text[0]) == 0xe2 &&
-        static_cast<unsigned char>(text[1]) == 0x80 &&
-        static_cast<unsigned char>(text[2]) >= 0x80 &&
-        static_cast<unsigned char>(text[2]) <= 0x8a) {
+    if (text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xe2 &&
+            static_cast<unsigned char>(text[1]) == 0x80 && static_cast<unsigned char>(text[2]) >= 0x80 &&
+            static_cast<unsigned char>(text[2]) <= 0x8a) {
         return 3;
     }
     return 0;
@@ -117,22 +115,19 @@ namespace {
     }
     std::string candidate(text);
     if (candidate.size() > 2 && candidate[0] == '0' &&
-        (candidate[1] == 'b' || candidate[1] == 'B' ||
-         candidate[1] == 'o' || candidate[1] == 'O' ||
-         candidate[1] == 'x' || candidate[1] == 'X')) {
-        const int base = candidate[1] == 'b' || candidate[1] == 'B'
-                             ? 2
-                             : (candidate[1] == 'o' || candidate[1] == 'O' ? 8 : 16);
+            (candidate[1] == 'b' || candidate[1] == 'B' || candidate[1] == 'o' || candidate[1] == 'O' ||
+                    candidate[1] == 'x' || candidate[1] == 'X')) {
+        const int base =
+                candidate[1] == 'b' || candidate[1] == 'B' ? 2 : (candidate[1] == 'o' || candidate[1] == 'O' ? 8 : 16);
         boost::multiprecision::cpp_int integer = 0;
         for (std::size_t index = 2; index < candidate.size(); ++index) {
             const char character = candidate[index];
-            const int digit = character >= '0' && character <= '9'
-                                  ? character - '0'
-                                  : (character >= 'a' && character <= 'f'
-                                         ? character - 'a' + 10
-                                         : (character >= 'A' && character <= 'F'
-                                                ? character - 'A' + 10
-                                                : -1));
+            const int digit =
+                    character >= '0' && character <= '9'
+                            ? character - '0'
+                            : (character >= 'a' && character <= 'f'
+                                              ? character - 'a' + 10
+                                              : (character >= 'A' && character <= 'F' ? character - 'A' + 10 : -1));
             if (digit < 0 || digit >= base) {
                 return std::nullopt;
             }
@@ -151,11 +146,8 @@ namespace {
         }
     }
     double value = 0;
-    const auto [end, error] = std::from_chars(
-        decimal.data(),
-        decimal.data() + decimal.size(),
-        value,
-        std::chars_format::general);
+    const auto [end, error] =
+            std::from_chars(decimal.data(), decimal.data() + decimal.size(), value, std::chars_format::general);
     if (error != std::errc{} || end != decimal.data() + decimal.size() || !std::isfinite(value)) {
         return std::nullopt;
     }
@@ -167,8 +159,8 @@ namespace {
         return "0";
     }
     std::array<char, 64> buffer{};
-    const auto [end, error] = std::to_chars(
-        buffer.data(), buffer.data() + buffer.size(), value, std::chars_format::general);
+    const auto [end, error] =
+            std::to_chars(buffer.data(), buffer.data() + buffer.size(), value, std::chars_format::general);
     if (error != std::errc{}) {
         return {};
     }
@@ -197,7 +189,7 @@ namespace {
     const std::size_t mantissa_start = negative ? 1 : 0;
     const auto decimal_point = shortest.find('.', mantissa_start);
     const std::size_t digits_before_decimal =
-        (decimal_point == std::string::npos ? exponent_marker : decimal_point) - mantissa_start;
+            (decimal_point == std::string::npos ? exponent_marker : decimal_point) - mantissa_start;
     std::string digits = shortest.substr(mantissa_start, exponent_marker - mantissa_start);
     std::erase(digits, '.');
 
@@ -212,9 +204,7 @@ namespace {
             result += digits;
         } else if (decimal_position >= static_cast<int>(digits.size())) {
             result += digits;
-            result.append(
-                static_cast<std::size_t>(decimal_position) - digits.size(),
-                '0');
+            result.append(static_cast<std::size_t>(decimal_position) - digits.size(), '0');
         } else {
             result.append(digits, 0, static_cast<std::size_t>(decimal_position));
             result.push_back('.');
@@ -223,21 +213,16 @@ namespace {
         return result;
     }
 
-    return shortest.substr(0, exponent_marker) + "e" +
-           (exponent >= 0 ? "+" : "") + std::to_string(exponent);
+    return shortest.substr(0, exponent_marker) + "e" + (exponent >= 0 ? "+" : "") + std::to_string(exponent);
 }
 
 [[nodiscard]] bool includes_type(const CompiledSchema& schema, JsonType type) {
     return std::find(schema.types.begin(), schema.types.end(), type) != schema.types.end();
 }
 
-[[nodiscard]] bool value_satisfies(
-    const support::JsonValue& value,
-    const CompiledSchema& schema);
+[[nodiscard]] bool value_satisfies(const support::JsonValue& value, const CompiledSchema& schema);
 
-void coerce_with_union(
-    support::JsonValue& value,
-    const std::vector<CompiledSchema>& alternatives) {
+void coerce_with_union(support::JsonValue& value, const std::vector<CompiledSchema>& alternatives) {
     for (const auto& alternative : alternatives) {
         auto candidate = value;
         coerce_value(candidate, alternative);
@@ -248,10 +233,7 @@ void coerce_with_union(
     }
 }
 
-void add_failure(
-    std::vector<ValidationFailure>& failures,
-    std::string location,
-    std::string reason) {
+void add_failure(std::vector<ValidationFailure>& failures, std::string location, std::string reason) {
     if (failures.size() < kMaxValidationFailures) {
         failures.push_back({std::move(location), std::move(reason)});
     }
@@ -265,9 +247,7 @@ void add_failure(
     return std::min(std::abs(remainder), std::abs(remainder - divisor)) < 1e-10;
 }
 
-[[nodiscard]] bool value_satisfies(
-    const support::JsonValue& value,
-    const CompiledSchema& schema) {
+[[nodiscard]] bool value_satisfies(const support::JsonValue& value, const CompiledSchema& schema) {
     std::vector<ValidationFailure> failures;
     validate_value(value, schema, "root", failures);
     return failures.empty();
@@ -353,28 +333,24 @@ void add_failure(
 
 } // namespace
 
-
-void validate_value(
-    const support::JsonValue& value,
-    const CompiledSchema& schema,
-    std::string location,
-    std::vector<ValidationFailure>& failures) {
+void validate_value(const support::JsonValue& value,
+        const CompiledSchema& schema,
+        std::string location,
+        std::vector<ValidationFailure>& failures) {
     if (failures.size() >= kMaxValidationFailures) return;
     if (schema.reject_all) {
         add_failure(failures, std::move(location), "value is rejected by the boolean schema");
         return;
     }
 
-    if (!schema.types.empty() &&
-        !std::any_of(schema.types.begin(), schema.types.end(), [&](JsonType type) {
+    if (!schema.types.empty() && !std::any_of(schema.types.begin(), schema.types.end(), [&](JsonType type) {
             return matches_type(value, type);
         })) {
         add_failure(failures, location, "value does not match an allowed JSON type");
     }
-    if (schema.enum_values &&
-        std::none_of(schema.enum_values->begin(), schema.enum_values->end(), [&](const auto& candidate) {
-            return json_equal(value, candidate);
-        })) {
+    if (schema.enum_values && std::none_of(schema.enum_values->begin(),
+                                      schema.enum_values->end(),
+                                      [&](const auto& candidate) { return json_equal(value, candidate); })) {
         add_failure(failures, location, "value is not one of the allowed enum values");
     }
     if (schema.constant && !json_equal(value, *schema.constant)) {
@@ -426,34 +402,23 @@ void validate_value(
         }
         for (const auto& required : schema.required) {
             if (!object->contains(required)) {
-                add_failure(
-                    failures,
-                    instance_child_path(location, required),
-                    "required member is missing");
+                add_failure(failures, instance_child_path(location, required), "required member is missing");
             }
         }
         for (const auto& [name, property_schema] : schema.properties) {
             if (const auto it = object->find(name); it != object->end()) {
-                validate_value(
-                    it->second,
-                    property_schema,
-                    instance_child_path(location, name),
-                    failures);
+                validate_value(it->second, property_schema, instance_child_path(location, name), failures);
             }
         }
         for (const auto& [name, property_value] : *object) {
             if (schema.properties.contains(name)) continue;
             if (schema.additional_properties == AdditionalValueMode::Deny) {
-                add_failure(
-                    failures,
-                    instance_child_path(location, name),
-                    "additional member is not allowed");
+                add_failure(failures, instance_child_path(location, name), "additional member is not allowed");
             } else if (schema.additional_properties == AdditionalValueMode::Schema) {
-                validate_value(
-                    property_value,
-                    *schema.additional_properties_schema,
-                    instance_child_path(location, name),
-                    failures);
+                validate_value(property_value,
+                        *schema.additional_properties_schema,
+                        instance_child_path(location, name),
+                        failures);
             }
         }
     }
@@ -479,33 +444,29 @@ void validate_value(
         }
         if (schema.items == ItemsMode::Schema) {
             for (std::size_t index = 0; index < array->size(); ++index) {
-                validate_value(
-                    (*array)[index],
-                    *schema.item_schema,
-                    instance_child_path(location, std::to_string(index)),
-                    failures);
+                validate_value((*array)[index],
+                        *schema.item_schema,
+                        instance_child_path(location, std::to_string(index)),
+                        failures);
             }
         } else if (schema.items == ItemsMode::Tuple) {
             const auto count = std::min(array->size(), schema.tuple_items.size());
             for (std::size_t index = 0; index < count; ++index) {
-                validate_value(
-                    (*array)[index],
-                    schema.tuple_items[index],
-                    instance_child_path(location, std::to_string(index)),
-                    failures);
+                validate_value((*array)[index],
+                        schema.tuple_items[index],
+                        instance_child_path(location, std::to_string(index)),
+                        failures);
             }
             for (std::size_t index = schema.tuple_items.size(); index < array->size(); ++index) {
                 if (schema.additional_items == AdditionalValueMode::Deny) {
-                    add_failure(
-                        failures,
-                        instance_child_path(location, std::to_string(index)),
-                        "additional tuple element is not allowed");
+                    add_failure(failures,
+                            instance_child_path(location, std::to_string(index)),
+                            "additional tuple element is not allowed");
                 } else if (schema.additional_items == AdditionalValueMode::Schema) {
-                    validate_value(
-                        (*array)[index],
-                        *schema.additional_items_schema,
-                        instance_child_path(location, std::to_string(index)),
-                        failures);
+                    validate_value((*array)[index],
+                            *schema.additional_items_schema,
+                            instance_child_path(location, std::to_string(index)),
+                            failures);
                 }
             }
         }
@@ -515,21 +476,18 @@ void validate_value(
         validate_value(value, conjunct, location, failures);
     }
     if (schema.has_any_of) {
-        const bool matched = std::any_of(
-            schema.any_of.begin(), schema.any_of.end(), [&](const CompiledSchema& alternative) {
-                return value_satisfies(value, alternative);
-            });
+        const bool matched = std::any_of(schema.any_of.begin(),
+                schema.any_of.end(),
+                [&](const CompiledSchema& alternative) { return value_satisfies(value, alternative); });
         if (!matched) add_failure(failures, location, "value does not satisfy anyOf");
     }
     if (schema.has_one_of) {
-        const auto matches = std::count_if(
-            schema.one_of.begin(), schema.one_of.end(), [&](const CompiledSchema& alternative) {
-                return value_satisfies(value, alternative);
-            });
+        const auto matches = std::count_if(schema.one_of.begin(),
+                schema.one_of.end(),
+                [&](const CompiledSchema& alternative) { return value_satisfies(value, alternative); });
         if (matches != 1) add_failure(failures, location, "value does not satisfy exactly one oneOf branch");
     }
 }
-
 
 void coerce_value(support::JsonValue& value, const CompiledSchema& schema) {
     for (const auto& conjunct : schema.all_of) {
@@ -542,10 +500,10 @@ void coerce_value(support::JsonValue& value, const CompiledSchema& schema) {
         coerce_with_union(value, schema.one_of);
     }
 
-    const bool already_matches_union = schema.types.size() > 1 &&
-        std::any_of(schema.types.begin(), schema.types.end(), [&](JsonType type) {
-            return matches_type(value, type);
-        });
+    const bool already_matches_union =
+            schema.types.size() > 1 && std::any_of(schema.types.begin(), schema.types.end(), [&](JsonType type) {
+                return matches_type(value, type);
+            });
     if (!schema.types.empty() && !already_matches_union) {
         for (const auto type : schema.types) {
             auto candidate = coerce_primitive(value, type);
@@ -557,7 +515,7 @@ void coerce_value(support::JsonValue& value, const CompiledSchema& schema) {
     }
 
     if (auto* object = value.get_if<support::JsonValue::object_t>();
-        object != nullptr && includes_type(schema, JsonType::Object)) {
+            object != nullptr && includes_type(schema, JsonType::Object)) {
         for (auto& [name, property_schema] : schema.properties) {
             if (auto it = object->find(name); it != object->end()) {
                 coerce_value(it->second, property_schema);
@@ -573,7 +531,7 @@ void coerce_value(support::JsonValue& value, const CompiledSchema& schema) {
     }
 
     if (auto* array = value.get_if<support::JsonValue::array_t>();
-        array != nullptr && includes_type(schema, JsonType::Array)) {
+            array != nullptr && includes_type(schema, JsonType::Array)) {
         if (schema.items == ItemsMode::Schema) {
             for (auto& item : *array) {
                 coerce_value(item, *schema.item_schema);
@@ -587,15 +545,12 @@ void coerce_value(support::JsonValue& value, const CompiledSchema& schema) {
     }
 }
 
-
 [[nodiscard]] std::string validation_diagnostic(
-    const std::string& tool_name,
-    const std::vector<ValidationFailure>& failures) {
+        const std::string& tool_name, const std::vector<ValidationFailure>& failures) {
     std::string diagnostic = "Tool Argument Contract validation failed for tool \"" +
                              bounded_tool_argument_component(tool_name, 256) + "\":";
     for (const auto& failure : failures) {
-        diagnostic += "\n  - " +
-                      bounded_tool_argument_component(failure.location, 256) + ": " +
+        diagnostic += "\n  - " + bounded_tool_argument_component(failure.location, 256) + ": " +
                       bounded_tool_argument_component(failure.reason, 192);
     }
     if (failures.size() == kMaxValidationFailures) {

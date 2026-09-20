@@ -38,7 +38,6 @@ namespace {
     return support::make_error(support::ErrorCode::JsonParse,
             "tool argument preparation failed",
             support::bounded_redacted_text(std::move(diagnostic), 4096, " [diagnostic truncated]"));
-
 }
 
 [[nodiscard]] support::Expected<support::JsonValue> parse_and_clone_arguments(
@@ -100,6 +99,5 @@ support::Expected<support::JsonValue> prepare_tool_arguments(
     }
     return arguments;
 }
-
 
 } // namespace cch::agent

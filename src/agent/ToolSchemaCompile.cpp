@@ -57,38 +57,49 @@ namespace {
     // Schema. Recognized constructs outside it fail closed instead of becoming
     // accidental annotations.
     constexpr std::array<std::string_view, 19> unsupported{
-        "$dynamicRef", "$recursiveRef", "$ref", "contains", "dependentRequired",
-        "dependentSchemas", "dependencies", "else", "if", "maxContains",
-        "minContains", "not", "patternProperties", "prefixItems", "propertyNames",
-        "then", "unevaluatedItems", "unevaluatedProperties", "$recursiveAnchor",
+            "$dynamicRef",
+            "$recursiveRef",
+            "$ref",
+            "contains",
+            "dependentRequired",
+            "dependentSchemas",
+            "dependencies",
+            "else",
+            "if",
+            "maxContains",
+            "minContains",
+            "not",
+            "patternProperties",
+            "prefixItems",
+            "propertyNames",
+            "then",
+            "unevaluatedItems",
+            "unevaluatedProperties",
+            "$recursiveAnchor",
     };
     return std::find(unsupported.begin(), unsupported.end(), keyword) != unsupported.end();
 }
 
 [[nodiscard]] support::Expected<std::vector<JsonType>> compile_types(
-    const support::JsonValue& value,
-    const std::string& schema_path) {
+        const support::JsonValue& value, const std::string& schema_path) {
     std::vector<JsonType> result;
     auto add_type = [&](const support::JsonValue& candidate) -> support::ExpectedVoid {
         const auto* type_name = candidate.get_if<std::string>();
         if (type_name == nullptr) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Validation,
-                "invalid Tool Argument Contract",
-                schema_path + " must contain only JSON type names"));
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "invalid Tool Argument Contract",
+                    schema_path + " must contain only JSON type names"));
         }
         const auto type = json_type_from_name(*type_name);
         if (!type) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Validation,
-                "invalid Tool Argument Contract",
-                schema_path + " contains unsupported JSON type \"" + *type_name + "\""));
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "invalid Tool Argument Contract",
+                    schema_path + " contains unsupported JSON type \"" + *type_name + "\""));
         }
         if (std::find(result.begin(), result.end(), *type) != result.end()) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Validation,
-                "invalid Tool Argument Contract",
-                schema_path + " contains a duplicate JSON type"));
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "invalid Tool Argument Contract",
+                    schema_path + " contains a duplicate JSON type"));
         }
         result.push_back(*type);
         return {};
@@ -102,10 +113,9 @@ namespace {
     }
     const auto* values = value.get_if<support::JsonValue::array_t>();
     if (values == nullptr || values->empty()) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "invalid Tool Argument Contract",
-            schema_path + " must be a JSON type name or a non-empty array of unique type names"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "invalid Tool Argument Contract",
+                schema_path + " must be a JSON type name or a non-empty array of unique type names"));
     }
     for (const auto& candidate : *values) {
         if (auto added = add_type(candidate); !added) {
@@ -115,13 +125,8 @@ namespace {
     return result;
 }
 
-[[nodiscard]] support::Error schema_compile_error(
-    std::string message,
-    std::string detail) {
-    return support::make_error(
-        support::ErrorCode::Validation,
-        std::move(message),
-        std::move(detail));
+[[nodiscard]] support::Error schema_compile_error(std::string message, std::string detail) {
+    return support::make_error(support::ErrorCode::Validation, std::move(message), std::move(detail));
 }
 
 [[nodiscard]] bool is_supported_dialect(std::string_view dialect) {
@@ -134,21 +139,21 @@ namespace {
 
 [[nodiscard]] bool is_supported_vocabulary(std::string_view vocabulary) {
     constexpr std::array<std::string_view, 15> supported{
-        "https://json-schema.org/draft/2019-09/vocab/core",
-        "https://json-schema.org/draft/2019-09/vocab/applicator",
-        "https://json-schema.org/draft/2019-09/vocab/validation",
-        "https://json-schema.org/draft/2019-09/vocab/meta-data",
-        "https://json-schema.org/draft/2019-09/vocab/format",
-        "https://json-schema.org/draft/2019-09/vocab/content",
-        "https://json-schema.org/draft/2020-12/vocab/core",
-        "https://json-schema.org/draft/2020-12/vocab/applicator",
-        "https://json-schema.org/draft/2020-12/vocab/validation",
-        "https://json-schema.org/draft/2020-12/vocab/meta-data",
-        "https://json-schema.org/draft/2020-12/vocab/format-annotation",
-        "https://json-schema.org/draft/2020-12/vocab/format-assertion",
-        "https://json-schema.org/draft/2020-12/vocab/content",
-        "http://json-schema.org/draft-07/schema#",
-        "http://json-schema.org/draft-06/schema#",
+            "https://json-schema.org/draft/2019-09/vocab/core",
+            "https://json-schema.org/draft/2019-09/vocab/applicator",
+            "https://json-schema.org/draft/2019-09/vocab/validation",
+            "https://json-schema.org/draft/2019-09/vocab/meta-data",
+            "https://json-schema.org/draft/2019-09/vocab/format",
+            "https://json-schema.org/draft/2019-09/vocab/content",
+            "https://json-schema.org/draft/2020-12/vocab/core",
+            "https://json-schema.org/draft/2020-12/vocab/applicator",
+            "https://json-schema.org/draft/2020-12/vocab/validation",
+            "https://json-schema.org/draft/2020-12/vocab/meta-data",
+            "https://json-schema.org/draft/2020-12/vocab/format-annotation",
+            "https://json-schema.org/draft/2020-12/vocab/format-assertion",
+            "https://json-schema.org/draft/2020-12/vocab/content",
+            "http://json-schema.org/draft-07/schema#",
+            "http://json-schema.org/draft-06/schema#",
     };
     return std::find(supported.begin(), supported.end(), vocabulary) != supported.end();
 }
@@ -184,57 +189,48 @@ namespace {
 }
 
 [[nodiscard]] support::Expected<std::optional<double>> compile_number_keyword(
-    const support::JsonValue::object_t& object,
-    std::string_view keyword,
-    const std::string& schema_path,
-    bool positive = false) {
+        const support::JsonValue::object_t& object,
+        std::string_view keyword,
+        const std::string& schema_path,
+        bool positive = false) {
     const auto it = object.find(std::string(keyword));
     if (it == object.end()) {
         return std::optional<double>{};
     }
     const auto* number = it->second.get_if<double>();
     if (number == nullptr || !std::isfinite(*number) || (positive && *number <= 0)) {
-        return std::unexpected(schema_compile_error(
-            "invalid Tool Argument Contract",
-            child_path(schema_path, keyword) +
-                (positive ? " must be a finite number greater than zero"
-                          : " must be a finite number")));
+        return std::unexpected(schema_compile_error("invalid Tool Argument Contract",
+                child_path(schema_path, keyword) +
+                        (positive ? " must be a finite number greater than zero" : " must be a finite number")));
     }
     return std::optional<double>{*number};
 }
 
 [[nodiscard]] support::Expected<std::optional<std::size_t>> compile_size_keyword(
-    const support::JsonValue::object_t& object,
-    std::string_view keyword,
-    const std::string& schema_path) {
+        const support::JsonValue::object_t& object, std::string_view keyword, const std::string& schema_path) {
     const auto it = object.find(std::string(keyword));
     if (it == object.end()) {
         return std::optional<std::size_t>{};
     }
     const auto* number = it->second.get_if<double>();
-    if (number == nullptr || !std::isfinite(*number) || *number < 0 ||
-        std::trunc(*number) != *number ||
-        *number > static_cast<double>(std::numeric_limits<std::size_t>::max())) {
-        return std::unexpected(schema_compile_error(
-            "invalid Tool Argument Contract",
-            child_path(schema_path, keyword) + " must be a non-negative integer"));
+    if (number == nullptr || !std::isfinite(*number) || *number < 0 || std::trunc(*number) != *number ||
+            *number > static_cast<double>(std::numeric_limits<std::size_t>::max())) {
+        return std::unexpected(schema_compile_error("invalid Tool Argument Contract",
+                child_path(schema_path, keyword) + " must be a non-negative integer"));
     }
     return std::optional<std::size_t>{static_cast<std::size_t>(*number)};
 }
 
-
 } // namespace
 
-[[nodiscard]] support::Expected<CompiledSchema> compile_schema(
-    const support::JsonValue& schema,
-    std::string schema_path,
-    std::size_t depth,
-    CompilationState& state,
-    CompilationContext context) {
+[[nodiscard]] support::Expected<CompiledSchema> compile_schema(const support::JsonValue& schema,
+        std::string schema_path,
+        std::size_t depth,
+        CompilationState& state,
+        CompilationContext context) {
     if (depth > kMaxSchemaDepth || ++state.nodes > kMaxSchemaNodes) {
         return std::unexpected(schema_compile_error(
-            "invalid Tool Argument Contract",
-            schema_path + " exceeds the executable schema complexity limit"));
+                "invalid Tool Argument Contract", schema_path + " exceeds the executable schema complexity limit"));
     }
 
     if (const auto* boolean_schema = schema.get_if<bool>()) {
@@ -245,50 +241,43 @@ namespace {
     const auto* object = schema.get_if<support::JsonValue::object_t>();
     if (object == nullptr) {
         return std::unexpected(schema_compile_error(
-            "invalid Tool Argument Contract",
-            schema_path + " must be an object or boolean schema"));
+                "invalid Tool Argument Contract", schema_path + " must be an object or boolean schema"));
     }
 
     if (const auto it = object->find("$schema"); it != object->end()) {
         const auto* dialect = it->second.get_if<std::string>();
         if (dialect == nullptr || !is_supported_dialect(*dialect)) {
-            return std::unexpected(schema_compile_error(
-                "unsupported Tool Argument Contract",
-                child_path(schema_path, "$schema") + " declares an unsupported schema dialect"));
+            return std::unexpected(schema_compile_error("unsupported Tool Argument Contract",
+                    child_path(schema_path, "$schema") + " declares an unsupported schema dialect"));
         }
     }
     if (const auto it = object->find("$vocabulary"); it != object->end()) {
         const auto* vocabularies = it->second.get_if<support::JsonValue::object_t>();
         if (vocabularies == nullptr) {
             return std::unexpected(schema_compile_error(
-                "invalid Tool Argument Contract",
-                child_path(schema_path, "$vocabulary") + " must be an object"));
+                    "invalid Tool Argument Contract", child_path(schema_path, "$vocabulary") + " must be an object"));
         }
         for (const auto& [name, requirement] : *vocabularies) {
             const auto* required = requirement.get_if<bool>();
             if (required == nullptr) {
-                return std::unexpected(schema_compile_error(
-                    "invalid Tool Argument Contract",
-                    child_path(child_path(schema_path, "$vocabulary"), name) +
-                        " must be boolean"));
+                return std::unexpected(schema_compile_error("invalid Tool Argument Contract",
+                        child_path(child_path(schema_path, "$vocabulary"), name) + " must be boolean"));
             }
             if (*required && !is_supported_vocabulary(name)) {
-                return std::unexpected(schema_compile_error(
-                    "unsupported Tool Argument Contract",
-                    child_path(child_path(schema_path, "$vocabulary"), name) +
-                        " is a required unsupported vocabulary"));
+                return std::unexpected(schema_compile_error("unsupported Tool Argument Contract",
+                        child_path(child_path(schema_path, "$vocabulary"), name) +
+                                " is a required unsupported vocabulary"));
             }
             context.require_known_formats =
-                context.require_known_formats || (*required && is_format_assertion_vocabulary(name));
+                    context.require_known_formats || (*required && is_format_assertion_vocabulary(name));
         }
     }
 
     for (const auto& [keyword, _] : *object) {
         if (is_known_unsupported_keyword(keyword)) {
-            return std::unexpected(schema_compile_error(
-                "unsupported Tool Argument Contract",
-                child_path(schema_path, keyword) +
-                    " is a recognized executable construct outside the recorded profile"));
+            return std::unexpected(schema_compile_error("unsupported Tool Argument Contract",
+                    child_path(schema_path, keyword) +
+                            " is a recognized executable construct outside the recorded profile"));
         }
     }
 
@@ -305,15 +294,13 @@ namespace {
         const auto* values = it->second.get_if<support::JsonValue::array_t>();
         if (values == nullptr || values->empty()) {
             return std::unexpected(schema_compile_error(
-                "invalid Tool Argument Contract",
-                child_path(schema_path, "enum") + " must be a non-empty array"));
+                    "invalid Tool Argument Contract", child_path(schema_path, "enum") + " must be a non-empty array"));
         }
         for (std::size_t left = 0; left < values->size(); ++left) {
             for (std::size_t right = left + 1; right < values->size(); ++right) {
                 if (json_equal((*values)[left], (*values)[right])) {
-                    return std::unexpected(schema_compile_error(
-                        "invalid Tool Argument Contract",
-                        child_path(schema_path, "enum") + " values must be unique"));
+                    return std::unexpected(schema_compile_error("invalid Tool Argument Contract",
+                            child_path(schema_path, "enum") + " values must be unique"));
                 }
             }
         }
@@ -362,34 +349,28 @@ namespace {
         const auto* pattern = it->second.get_if<std::string>();
         if (pattern == nullptr) {
             return std::unexpected(schema_compile_error(
-                "invalid Tool Argument Contract",
-                child_path(schema_path, "pattern") + " must be a string"));
+                    "invalid Tool Argument Contract", child_path(schema_path, "pattern") + " must be a string"));
         }
-        const bool unsupported_unicode_escape =
-            pattern->find("\\p{") != std::string::npos ||
-            pattern->find("\\P{") != std::string::npos ||
-            pattern->find("\\u{") != std::string::npos;
+        const bool unsupported_unicode_escape = pattern->find("\\p{") != std::string::npos ||
+                                                pattern->find("\\P{") != std::string::npos ||
+                                                pattern->find("\\u{") != std::string::npos;
         bool non_bmp_literal_is_unrepresentable = false;
         if constexpr (sizeof(wchar_t) < 4) {
             const auto pattern_points = decode_utf8(*pattern);
             non_bmp_literal_is_unrepresentable = std::any_of(
-                pattern_points.begin(), pattern_points.end(),
-                [](std::uint32_t point) { return point > 0xffff; });
+                    pattern_points.begin(), pattern_points.end(), [](std::uint32_t point) { return point > 0xffff; });
         }
         if (unsupported_unicode_escape || non_bmp_literal_is_unrepresentable) {
-            return std::unexpected(schema_compile_error(
-                "unsupported Tool Argument Contract",
-                child_path(schema_path, "pattern") +
-                    " uses Unicode regular-expression syntax that cannot be enforced"));
+            return std::unexpected(schema_compile_error("unsupported Tool Argument Contract",
+                    child_path(schema_path, "pattern") +
+                            " uses Unicode regular-expression syntax that cannot be enforced"));
         }
         // libstdc++ cannot report a malformed pattern without exceptions
         // (issue #487): reject structurally invalid patterns before any
         // `std::regex` construction, same as SessionSelectorSearch.
         if (!structurally_valid_regex(*pattern)) {
-            return std::unexpected(schema_compile_error(
-                "unsupported Tool Argument Contract",
-                child_path(schema_path, "pattern") +
-                    " cannot be enforced as a regular expression"));
+            return std::unexpected(schema_compile_error("unsupported Tool Argument Contract",
+                    child_path(schema_path, "pattern") + " cannot be enforced as a regular expression"));
         }
         compiled.pattern.emplace(utf8_to_wide(*pattern), std::regex::ECMAScript);
     }
@@ -397,15 +378,12 @@ namespace {
         const auto* format = it->second.get_if<std::string>();
         if (format == nullptr) {
             return std::unexpected(schema_compile_error(
-                "invalid Tool Argument Contract",
-                child_path(schema_path, "format") + " must be a string"));
+                    "invalid Tool Argument Contract", child_path(schema_path, "format") + " must be a string"));
         }
         compiled.format = format_kind(*format);
         if (!compiled.format && context.require_known_formats) {
-            return std::unexpected(schema_compile_error(
-                "unsupported Tool Argument Contract",
-                child_path(schema_path, "format") +
-                    " names an unsupported format required as an assertion"));
+            return std::unexpected(schema_compile_error("unsupported Tool Argument Contract",
+                    child_path(schema_path, "format") + " names an unsupported format required as an assertion"));
         }
     }
 
@@ -413,16 +391,14 @@ namespace {
         const auto* properties = it->second.get_if<support::JsonValue::object_t>();
         if (properties == nullptr) {
             return std::unexpected(schema_compile_error(
-                "invalid Tool Argument Contract",
-                child_path(schema_path, "properties") + " must be an object"));
+                    "invalid Tool Argument Contract", child_path(schema_path, "properties") + " must be an object"));
         }
         for (const auto& [name, property_schema] : *properties) {
-            auto nested = compile_schema(
-                property_schema,
-                child_path(child_path(schema_path, "properties"), name),
-                depth + 1,
-                state,
-                context);
+            auto nested = compile_schema(property_schema,
+                    child_path(child_path(schema_path, "properties"), name),
+                    depth + 1,
+                    state,
+                    context);
             if (!nested) return std::unexpected(nested.error());
             compiled.properties.emplace(name, std::move(*nested));
         }
@@ -430,38 +406,28 @@ namespace {
     if (const auto it = object->find("required"); it != object->end()) {
         const auto* required = it->second.get_if<support::JsonValue::array_t>();
         if (required == nullptr) {
-            return std::unexpected(schema_compile_error(
-                "invalid Tool Argument Contract",
-                child_path(schema_path, "required") +
-                    " must be an array of unique property names"));
+            return std::unexpected(schema_compile_error("invalid Tool Argument Contract",
+                    child_path(schema_path, "required") + " must be an array of unique property names"));
         }
         std::set<std::string> seen;
         for (const auto& entry : *required) {
             const auto* name = entry.get_if<std::string>();
             if (name == nullptr || !seen.insert(*name).second) {
-                return std::unexpected(schema_compile_error(
-                    "invalid Tool Argument Contract",
-                    child_path(schema_path, "required") +
-                        " must contain unique string property names"));
+                return std::unexpected(schema_compile_error("invalid Tool Argument Contract",
+                        child_path(schema_path, "required") + " must contain unique string property names"));
             }
             compiled.required.push_back(*name);
         }
     }
     if (const auto it = object->find("additionalProperties"); it != object->end()) {
         if (const auto* allow = it->second.get_if<bool>()) {
-            compiled.additional_properties = *allow ? AdditionalValueMode::Allow
-                                                    : AdditionalValueMode::Deny;
+            compiled.additional_properties = *allow ? AdditionalValueMode::Allow : AdditionalValueMode::Deny;
         } else {
             auto nested = compile_schema(
-                it->second,
-                child_path(schema_path, "additionalProperties"),
-                depth + 1,
-                state,
-                context);
+                    it->second, child_path(schema_path, "additionalProperties"), depth + 1, state, context);
             if (!nested) return std::unexpected(nested.error());
             compiled.additional_properties = AdditionalValueMode::Schema;
-            compiled.additional_properties_schema =
-                std::make_unique<CompiledSchema>(std::move(*nested));
+            compiled.additional_properties_schema = std::make_unique<CompiledSchema>(std::move(*nested));
         }
     }
 
@@ -469,22 +435,16 @@ namespace {
         if (const auto* tuple = it->second.get_if<support::JsonValue::array_t>()) {
             compiled.items = ItemsMode::Tuple;
             for (std::size_t index = 0; index < tuple->size(); ++index) {
-                auto nested = compile_schema(
-                    (*tuple)[index],
-                    child_path(child_path(schema_path, "items"), std::to_string(index)),
-                    depth + 1,
-                    state,
-                    context);
+                auto nested = compile_schema((*tuple)[index],
+                        child_path(child_path(schema_path, "items"), std::to_string(index)),
+                        depth + 1,
+                        state,
+                        context);
                 if (!nested) return std::unexpected(nested.error());
                 compiled.tuple_items.push_back(std::move(*nested));
             }
         } else {
-            auto nested = compile_schema(
-                it->second,
-                child_path(schema_path, "items"),
-                depth + 1,
-                state,
-                context);
+            auto nested = compile_schema(it->second, child_path(schema_path, "items"), depth + 1, state, context);
             if (!nested) return std::unexpected(nested.error());
             compiled.items = ItemsMode::Schema;
             compiled.item_schema = std::make_unique<CompiledSchema>(std::move(*nested));
@@ -492,48 +452,39 @@ namespace {
     }
     if (const auto it = object->find("additionalItems"); it != object->end()) {
         if (const auto* allow = it->second.get_if<bool>()) {
-            compiled.additional_items = *allow ? AdditionalValueMode::Allow
-                                               : AdditionalValueMode::Deny;
+            compiled.additional_items = *allow ? AdditionalValueMode::Allow : AdditionalValueMode::Deny;
         } else {
-            auto nested = compile_schema(
-                it->second,
-                child_path(schema_path, "additionalItems"),
-                depth + 1,
-                state,
-                context);
+            auto nested =
+                    compile_schema(it->second, child_path(schema_path, "additionalItems"), depth + 1, state, context);
             if (!nested) return std::unexpected(nested.error());
             compiled.additional_items = AdditionalValueMode::Schema;
-            compiled.additional_items_schema =
-                std::make_unique<CompiledSchema>(std::move(*nested));
+            compiled.additional_items_schema = std::make_unique<CompiledSchema>(std::move(*nested));
         }
     }
     if (const auto it = object->find("uniqueItems"); it != object->end()) {
         const auto* unique = it->second.get_if<bool>();
         if (unique == nullptr) {
             return std::unexpected(schema_compile_error(
-                "invalid Tool Argument Contract",
-                child_path(schema_path, "uniqueItems") + " must be boolean"));
+                    "invalid Tool Argument Contract", child_path(schema_path, "uniqueItems") + " must be boolean"));
         }
         compiled.unique_items = *unique;
     }
 
-    auto compile_schema_list = [&](std::string_view keyword, std::vector<CompiledSchema>& output)
-        -> support::ExpectedVoid {
+    auto compile_schema_list = [&](std::string_view keyword,
+                                       std::vector<CompiledSchema>& output) -> support::ExpectedVoid {
         const auto it = object->find(std::string(keyword));
         if (it == object->end()) return {};
         const auto* schemas = it->second.get_if<support::JsonValue::array_t>();
         if (schemas == nullptr) {
-            return std::unexpected(schema_compile_error(
-                "invalid Tool Argument Contract",
-                child_path(schema_path, keyword) + " must be an array of schemas"));
+            return std::unexpected(schema_compile_error("invalid Tool Argument Contract",
+                    child_path(schema_path, keyword) + " must be an array of schemas"));
         }
         for (std::size_t index = 0; index < schemas->size(); ++index) {
-            auto nested = compile_schema(
-                (*schemas)[index],
-                child_path(child_path(schema_path, keyword), std::to_string(index)),
-                depth + 1,
-                state,
-                context);
+            auto nested = compile_schema((*schemas)[index],
+                    child_path(child_path(schema_path, keyword), std::to_string(index)),
+                    depth + 1,
+                    state,
+                    context);
             if (!nested) return std::unexpected(nested.error());
             output.push_back(std::move(*nested));
         }

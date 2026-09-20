@@ -37,8 +37,7 @@ struct AgentSubscriptionAnchor {
 
 /// The "run already in flight" rejection shared by prompt and continue_run.
 [[nodiscard]] inline support::Error agent_busy_error() {
-    return support::make_error(
-            support::ErrorCode::Validation, "agent is busy (prompt already in flight)");
+    return support::make_error(support::ErrorCode::Validation, "agent is busy (prompt already in flight)");
 }
 
 [[nodiscard]] inline std::vector<std::string> tool_names(const std::vector<ai::Tool>& definitions) {

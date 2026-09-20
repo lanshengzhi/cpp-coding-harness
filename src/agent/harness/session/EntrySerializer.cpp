@@ -225,9 +225,7 @@ template <typename T>
     return std::move(*parsed);
 }
 
-[[nodiscard]] std::string generate_entry_id() {
-    return random_hex_id(8);
-}
+[[nodiscard]] std::string generate_entry_id() { return random_hex_id(8); }
 
 [[nodiscard]] std::int64_t ms_since_epoch() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -604,16 +602,14 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
 /// The id/parent/timestamp triple every tree-entry DTO carries; one fill so
 /// the wire header fields cannot drift between the serialize and round-trip
 /// paths.
-template <typename Dto>
-void attach_entry_header(const EntryBaseResult& base, Dto& dto) {
+template <typename Dto> void attach_entry_header(const EntryBaseResult& base, Dto& dto) {
     dto.id = base.id;
     dto.parentId = nullable_string(base.parent_id);
     dto.timestamp = base.timestamp_text;
 }
 
 /// The round-trip base already carries wire-shaped fields.
-template <typename Dto>
-void attach_entry_header(const RoundTripBase& base, Dto& dto) {
+template <typename Dto> void attach_entry_header(const RoundTripBase& base, Dto& dto) {
     dto.id = std::move(base.id);
     dto.parentId = std::move(base.parent_id);
     dto.timestamp = std::move(base.timestamp);
@@ -622,9 +618,7 @@ void attach_entry_header(const RoundTripBase& base, Dto& dto) {
 /// Serialize one optional JSON details value into the DTO's raw-JSON field,
 /// naming the entry kind in the failure diagnostic.
 [[nodiscard]] support::ExpectedVoid attach_details(
-    const std::optional<support::JsonValue>& details,
-    std::optional<glz::raw_json>& field,
-    std::string_view what) {
+        const std::optional<support::JsonValue>& details, std::optional<glz::raw_json>& field, std::string_view what) {
     if (!details) {
         return {};
     }
@@ -639,7 +633,7 @@ void attach_entry_header(const RoundTripBase& base, Dto& dto) {
 /// Parse the DTO's optional usage payload, failing through the record's
 /// parse channel when the usage shape violates the wire contract.
 [[nodiscard]] support::Expected<std::optional<ai::Usage>> parse_usage_from_dto(
-    const std::optional<detail::UsageDto>& usage, std::string_view line) {
+        const std::optional<detail::UsageDto>& usage, std::string_view line) {
     if (!usage) {
         return std::nullopt;
     }
@@ -651,8 +645,7 @@ void attach_entry_header(const RoundTripBase& base, Dto& dto) {
 }
 
 /// Mirror an optional parsed usage into a DTO.
-template <typename Dto>
-void attach_usage(Dto& dto, const std::optional<ai::Usage>& usage) {
+template <typename Dto> void attach_usage(Dto& dto, const std::optional<ai::Usage>& usage) {
     if (usage) {
         dto.usage = detail::to_dto(*usage);
     }
@@ -661,7 +654,7 @@ void attach_usage(Dto& dto, const std::optional<ai::Usage>& usage) {
 /// Parse a DTO's optional retained tail into message variants, failing on the
 /// first message the session reader cannot parse (#665).
 [[nodiscard]] support::Expected<std::optional<std::vector<ai::MessageVariant>>> parse_retained_tail_from_dto(
-    const std::optional<std::vector<detail::MessageDto>>& retained_tail, std::string_view line) {
+        const std::optional<std::vector<detail::MessageDto>>& retained_tail, std::string_view line) {
     if (!retained_tail) {
         return std::nullopt;
     }
@@ -680,7 +673,7 @@ void attach_usage(Dto& dto, const std::optional<ai::Usage>& usage) {
 /// Mirror a retained-tail message list into session DTOs, failing on the
 /// first message the session writer cannot serialize (#665).
 [[nodiscard]] support::Expected<std::optional<std::vector<detail::MessageDto>>> retained_tail_to_dtos(
-    const std::optional<std::vector<ai::MessageVariant>>& retained_tail) {
+        const std::optional<std::vector<ai::MessageVariant>>& retained_tail) {
     if (!retained_tail) {
         return std::nullopt;
     }
@@ -695,12 +688,11 @@ void attach_usage(Dto& dto, const std::optional<ai::Usage>& usage) {
 /// parse, tree-field population, and value assembly, so the per-kind arms
 /// carry only their own value construction.
 template <typename Dto, typename Build>
-[[nodiscard]] support::Expected<SessionEntry> parse_typed_entry(
-    std::string_view line,
-    std::size_t line_number,
-    SessionEntryKind kind,
-    support::JsonValue payload,
-    Build build) {
+[[nodiscard]] support::Expected<SessionEntry> parse_typed_entry(std::string_view line,
+        std::size_t line_number,
+        SessionEntryKind kind,
+        support::JsonValue payload,
+        Build build) {
     auto dto = entry_from_line<Dto>(line, line_number);
     if (!dto) {
         return std::unexpected(dto.error());
@@ -719,7 +711,7 @@ template <typename Dto, typename Build>
 /// The message entry's own id fallback (`id` or legacy `entryId`) and
 /// `leafId` mirror make it the one arm that cannot share the typed template.
 [[nodiscard]] support::Expected<SessionEntry> parse_message_entry(
-    std::string_view line, std::size_t line_number, support::JsonValue payload) {
+        std::string_view line, std::size_t line_number, support::JsonValue payload) {
     auto dto = entry_from_line<detail::MessageEntryDto>(line, line_number);
     if (!dto) {
         return std::unexpected(dto.error());
@@ -813,7 +805,7 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
 
 /// Defined below `parse_entry`: the typed-kind dispatch arm.
 [[nodiscard]] support::Expected<SessionEntry> parse_typed_tree_entry(
-    std::string_view line, std::size_t line_number, SessionEntryKind kind, support::JsonValue payload);
+        std::string_view line, std::size_t line_number, SessionEntryKind kind, support::JsonValue payload);
 
 support::Expected<SessionEntry> EntrySerializer::parse_entry(
     std::string_view line,
@@ -851,71 +843,85 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
 /// sequence; each arm contributes only its own value construction, and the
 /// fallible arms keep their exact wire diagnostics (#665).
 [[nodiscard]] support::Expected<SessionEntry> parse_typed_tree_entry(
-    std::string_view line, std::size_t line_number, SessionEntryKind kind, support::JsonValue payload) {
+        std::string_view line, std::size_t line_number, SessionEntryKind kind, support::JsonValue payload) {
     switch (kind) {
     case SessionEntryKind::ModelChange:
-        return parse_typed_entry<detail::ModelChangeDto>(
-                line, line_number, kind, std::move(payload),
+        return parse_typed_entry<detail::ModelChangeDto>(line,
+                line_number,
+                kind,
+                std::move(payload),
                 [](detail::ModelChangeDto& dto, SessionEntry& entry) -> support::ExpectedVoid {
                     entry.value = ModelChangeValue{
-                        .provider = std::move(dto.provider),
-                        .model_id = std::move(dto.modelId),
+                            .provider = std::move(dto.provider),
+                            .model_id = std::move(dto.modelId),
                     };
                     return {};
                 });
     case SessionEntryKind::ThinkingLevelChange:
-        return parse_typed_entry<detail::ThinkingLevelChangeDto>(
-                line, line_number, kind, std::move(payload),
+        return parse_typed_entry<detail::ThinkingLevelChangeDto>(line,
+                line_number,
+                kind,
+                std::move(payload),
                 [](detail::ThinkingLevelChangeDto& dto, SessionEntry& entry) -> support::ExpectedVoid {
                     entry.value = ThinkingLevelChangeValue{.thinking_level = std::move(dto.thinkingLevel)};
                     return {};
                 });
     case SessionEntryKind::ActiveToolsChange:
-        return parse_typed_entry<detail::ActiveToolsChangeDto>(
-                line, line_number, kind, std::move(payload),
+        return parse_typed_entry<detail::ActiveToolsChangeDto>(line,
+                line_number,
+                kind,
+                std::move(payload),
                 [](detail::ActiveToolsChangeDto& dto, SessionEntry& entry) -> support::ExpectedVoid {
                     entry.value = ActiveToolsChangeValue{.active_tool_names = active_tool_names_from_dto(dto)};
                     return {};
                 });
     case SessionEntryKind::Custom:
-        return parse_typed_entry<detail::CustomDto>(
-                line, line_number, kind, std::move(payload),
+        return parse_typed_entry<detail::CustomDto>(line,
+                line_number,
+                kind,
+                std::move(payload),
                 [](detail::CustomDto& dto, SessionEntry& entry) -> support::ExpectedVoid {
                     entry.value = CustomEntryValue{
-                        .custom_type = std::move(dto.customType),
-                        .data = optional_json_field(entry.payload, "data"),
+                            .custom_type = std::move(dto.customType),
+                            .data = optional_json_field(entry.payload, "data"),
                     };
                     return {};
                 });
     case SessionEntryKind::CustomMessage:
-        return parse_typed_entry<detail::CustomMessageDto>(
-                line, line_number, kind, std::move(payload),
+        return parse_typed_entry<detail::CustomMessageDto>(line,
+                line_number,
+                kind,
+                std::move(payload),
                 [&line](detail::CustomMessageDto& dto, SessionEntry& entry) -> support::ExpectedVoid {
                     auto content = custom_message_content_from_dto(dto.content, line);
                     if (!content) {
                         return std::unexpected(content.error());
                     }
                     entry.value = CustomMessageEntryValue{
-                        .custom_type = std::move(dto.customType),
-                        .content = std::move(*content),
-                        .display = dto.display,
-                        .details = optional_json_field(entry.payload, "details"),
+                            .custom_type = std::move(dto.customType),
+                            .content = std::move(*content),
+                            .display = dto.display,
+                            .details = optional_json_field(entry.payload, "details"),
                     };
                     return {};
                 });
     case SessionEntryKind::Label:
-        return parse_typed_entry<detail::LabelDto>(
-                line, line_number, kind, std::move(payload),
+        return parse_typed_entry<detail::LabelDto>(line,
+                line_number,
+                kind,
+                std::move(payload),
                 [](detail::LabelDto& dto, SessionEntry& entry) -> support::ExpectedVoid {
                     entry.value = LabelEntryValue{
-                        .target_id = std::move(dto.targetId),
-                        .label = std::move(dto.label),
+                            .target_id = std::move(dto.targetId),
+                            .label = std::move(dto.label),
                     };
                     return {};
                 });
     case SessionEntryKind::Compaction:
-        return parse_typed_entry<detail::CompactionDto>(
-                line, line_number, kind, std::move(payload),
+        return parse_typed_entry<detail::CompactionDto>(line,
+                line_number,
+                kind,
+                std::move(payload),
                 [&line](detail::CompactionDto& dto, SessionEntry& entry) -> support::ExpectedVoid {
                     auto retained_tail = parse_retained_tail_from_dto(dto.retainedTail, line);
                     if (!retained_tail) {
@@ -926,43 +932,49 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
                         return std::unexpected(usage.error());
                     }
                     entry.value = CompactionEntryValue{
-                        .summary = std::move(dto.summary),
-                        .first_kept_entry_id = std::move(dto.firstKeptEntryId),
-                        .tokens_before = dto.tokensBefore,
-                        .retained_tail = std::move(*retained_tail),
-                        .details = optional_json_field(entry.payload, "details"),
-                        .usage = std::move(*usage),
-                        .from_hook = dto.fromHook,
+                            .summary = std::move(dto.summary),
+                            .first_kept_entry_id = std::move(dto.firstKeptEntryId),
+                            .tokens_before = dto.tokensBefore,
+                            .retained_tail = std::move(*retained_tail),
+                            .details = optional_json_field(entry.payload, "details"),
+                            .usage = std::move(*usage),
+                            .from_hook = dto.fromHook,
                     };
                     return {};
                 });
     case SessionEntryKind::BranchSummary:
-        return parse_typed_entry<detail::BranchSummaryDto>(
-                line, line_number, kind, std::move(payload),
+        return parse_typed_entry<detail::BranchSummaryDto>(line,
+                line_number,
+                kind,
+                std::move(payload),
                 [&line](detail::BranchSummaryDto& dto, SessionEntry& entry) -> support::ExpectedVoid {
                     auto usage = parse_usage_from_dto(dto.usage, line);
                     if (!usage) {
                         return std::unexpected(usage.error());
                     }
                     entry.value = BranchSummaryEntryValue{
-                        .from_id = std::move(dto.fromId),
-                        .summary = std::move(dto.summary),
-                        .details = optional_json_field(entry.payload, "details"),
-                        .usage = std::move(*usage),
-                        .from_hook = dto.fromHook,
+                            .from_id = std::move(dto.fromId),
+                            .summary = std::move(dto.summary),
+                            .details = optional_json_field(entry.payload, "details"),
+                            .usage = std::move(*usage),
+                            .from_hook = dto.fromHook,
                     };
                     return {};
                 });
     case SessionEntryKind::SessionInfo:
-        return parse_typed_entry<detail::SessionInfoDto>(
-                line, line_number, kind, std::move(payload),
+        return parse_typed_entry<detail::SessionInfoDto>(line,
+                line_number,
+                kind,
+                std::move(payload),
                 [](detail::SessionInfoDto& dto, SessionEntry& entry) -> support::ExpectedVoid {
                     entry.value = SessionInfoEntryValue{.name = std::move(dto.name)};
                     return {};
                 });
     case SessionEntryKind::Leaf:
-        return parse_typed_entry<detail::LeafDto>(
-                line, line_number, kind, std::move(payload),
+        return parse_typed_entry<detail::LeafDto>(line,
+                line_number,
+                kind,
+                std::move(payload),
                 [](detail::LeafDto& dto, SessionEntry& entry) -> support::ExpectedVoid {
                     entry.value = LeafEntryValue{.target_id = optional_from_nullable(dto.targetId)};
                     return {};
@@ -972,8 +984,7 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
     case SessionEntryKind::Unknown:
         break;
     }
-    return std::unexpected(session_error(
-        "unreachable kind", "parse_typed_tree_entry reached a non-typed kind"));
+    return std::unexpected(session_error("unreachable kind", "parse_typed_tree_entry reached a non-typed kind"));
 }
 
 support::Expected<std::string> EntrySerializer::serialize_message(const ai::MessageVariant& message) const {
@@ -1258,9 +1269,9 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
     // parsed pi line round-trips exactly. No redaction here — redaction is
     // append-time policy; round-trip fidelity is the contract.
     const auto base = RoundTripBase{
-        entry.entry_id,
-        nullable_string(entry.parent_id),
-        format_iso_timestamp_ms(static_cast<std::int64_t>(entry.timestamp)),
+            entry.entry_id,
+            nullable_string(entry.parent_id),
+            format_iso_timestamp_ms(static_cast<std::int64_t>(entry.timestamp)),
     };
 
     switch (entry.kind) {

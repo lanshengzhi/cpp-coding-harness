@@ -37,7 +37,7 @@ constexpr std::size_t kMaxValidationFailures = 8;
         const char character = pattern[index];
         if (character == '\\') {
             if (index + 1 >= pattern.size()) return false;
-            ++index;  // the escaped character is literal
+            ++index; // the escaped character is literal
             continue;
         }
         if (in_character_class) {
@@ -45,18 +45,18 @@ constexpr std::size_t kMaxValidationFailures = 8;
             continue;
         }
         switch (character) {
-            case '[':
-                in_character_class = true;
-                break;
-            case '(':
-                ++group_depth;
-                break;
-            case ')':
-                if (group_depth == 0) return false;
-                --group_depth;
-                break;
-            default:
-                break;
+        case '[':
+            in_character_class = true;
+            break;
+        case '(':
+            ++group_depth;
+            break;
+        case ')':
+            if (group_depth == 0) return false;
+            --group_depth;
+            break;
+        default:
+            break;
         }
     }
     return !in_character_class && group_depth == 0;
@@ -179,8 +179,7 @@ struct ValidationFailure {
     }
     if (const auto* array = left.get_if<support::JsonValue::array_t>()) {
         const auto& other = right.get<support::JsonValue::array_t>();
-        return array->size() == other.size() &&
-               std::equal(array->begin(), array->end(), other.begin(), json_equal);
+        return array->size() == other.size() && std::equal(array->begin(), array->end(), other.begin(), json_equal);
     }
 
     const auto& object = left.get<support::JsonValue::object_t>();
@@ -249,9 +248,7 @@ struct ValidationFailure {
 
 /// The tolerant byte-walk decoder the format validators share (the
 /// TypeBox-differential semantics: invalid sequences fall back per byte).
-[[nodiscard]] inline std::vector<std::uint32_t> utf8_code_points(std::string_view value) {
-    return decode_utf8(value);
-}
+[[nodiscard]] inline std::vector<std::uint32_t> utf8_code_points(std::string_view value) { return decode_utf8(value); }
 
 /// The format-assertion dispatch (compile unit stores FormatKind; the
 /// validators live in the format-validation unit).
@@ -265,23 +262,20 @@ struct ValidationFailure {
 /// The executable-profile seams the entry orchestrator routes through:
 /// schema compilation (compile unit), coercion, validation, and the failure
 /// diagnostic (validation unit).
-[[nodiscard]] support::Expected<CompiledSchema> compile_schema(
-    const support::JsonValue& schema,
-    std::string schema_path,
-    std::size_t depth,
-    CompilationState& state,
-    CompilationContext context);
+[[nodiscard]] support::Expected<CompiledSchema> compile_schema(const support::JsonValue& schema,
+        std::string schema_path,
+        std::size_t depth,
+        CompilationState& state,
+        CompilationContext context);
 
 void coerce_value(support::JsonValue& value, const CompiledSchema& schema);
 
-void validate_value(
-    const support::JsonValue& value,
-    const CompiledSchema& schema,
-    std::string location,
-    std::vector<ValidationFailure>& failures);
+void validate_value(const support::JsonValue& value,
+        const CompiledSchema& schema,
+        std::string location,
+        std::vector<ValidationFailure>& failures);
 
 [[nodiscard]] std::string validation_diagnostic(
-    const std::string& tool_name,
-    const std::vector<ValidationFailure>& failures);
+        const std::string& tool_name, const std::vector<ValidationFailure>& failures);
 
 } // namespace cch::agent

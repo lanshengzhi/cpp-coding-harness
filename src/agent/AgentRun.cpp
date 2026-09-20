@@ -49,9 +49,8 @@ void Agent::Impl::reduce_state(const AgentLifecycleEvent& event) {
     // Idempotent pending-id admission shared by the update, end, and start
     // arms; arms keep their own empty-id gate exactly as before.
     const auto track_pending_tool_call = [this](const std::string& tool_call_id) {
-        if (std::find(state.pending_tool_call_ids.begin(),
-                    state.pending_tool_call_ids.end(),
-                    tool_call_id) == state.pending_tool_call_ids.end()) {
+        if (std::find(state.pending_tool_call_ids.begin(), state.pending_tool_call_ids.end(), tool_call_id) ==
+                state.pending_tool_call_ids.end()) {
             state.pending_tool_call_ids.push_back(tool_call_id);
         }
     };
@@ -79,8 +78,7 @@ void Agent::Impl::reduce_state(const AgentLifecycleEvent& event) {
             state.streaming_message.reset();
             state.pending_tool_call_ids.clear();
             for (const auto& block : assistant->content) {
-                if (const auto* call = std::get_if<ai::ToolCallContent>(&block);
-                        call != nullptr && !call->id.empty()) {
+                if (const auto* call = std::get_if<ai::ToolCallContent>(&block); call != nullptr && !call->id.empty()) {
                     track_pending_tool_call(call->id);
                 }
             }
@@ -129,8 +127,8 @@ void Agent::Impl::reduce_state(const AgentLifecycleEvent& event) {
     };
 
     auto commitment_state = std::make_shared<CommitmentState>(CommitmentState{.commitment = std::move(commitment)});
-    auto result = co_await run_turns(
-            impl, commitment_state, std::move(user_message), impl->active_stop_source->get_token());
+    auto result =
+            co_await run_turns(impl, commitment_state, std::move(user_message), impl->active_stop_source->get_token());
     finish_run();
 
     if (commitment_state->failure) {

@@ -65,8 +65,8 @@ Agent::Impl::Impl(ai::ModelStreamFactory stream_factory,
         }
     }
     if (update.thinking_level && !is_valid_thinking_level(*update.thinking_level)) {
-        return std::unexpected(support::make_error(
-                support::ErrorCode::Validation, "invalid thinking level", *update.thinking_level));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "invalid thinking level", *update.thinking_level));
     }
 
     ai::Model next_model = state.model;
@@ -370,8 +370,8 @@ support::ExpectedVoid detail::AgentMessageAccess::append_bash_execution(
         return std::unexpected(agent_not_initialized());
     }
     if (agent.impl_->active_run) {
-        return std::unexpected(support::make_error(
-                support::ErrorCode::Validation, "agent is busy (cannot commit passive message)"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "agent is busy (cannot commit passive message)"));
     }
     agent.impl_->state.messages.emplace_back(std::move(message));
     return {};
@@ -410,4 +410,3 @@ support::ExpectedVoid detail::AgentMessageAccess::pop_trailing_assistant(Agent& 
 }
 
 } // namespace cch::agent
-

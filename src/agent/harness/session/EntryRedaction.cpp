@@ -38,15 +38,15 @@ namespace cch::harness::session {
 
 void redact_content(ai::Content& content) {
     std::visit(
-        [](auto& block) {
-            using T = std::decay_t<decltype(block)>;
-            if constexpr (std::is_same_v<T, ai::TextContent>) {
-                block.text = support::redact_text(std::move(block.text));
-            } else if constexpr (std::is_same_v<T, ai::ThinkingContent>) {
-                block.thinking = support::redact_text(std::move(block.thinking));
-            }
-        },
-        content);
+            [](auto& block) {
+                using T = std::decay_t<decltype(block)>;
+                if constexpr (std::is_same_v<T, ai::TextContent>) {
+                    block.text = support::redact_text(std::move(block.text));
+                } else if constexpr (std::is_same_v<T, ai::ThinkingContent>) {
+                    block.thinking = support::redact_text(std::move(block.thinking));
+                }
+            },
+            content);
 }
 
 void redact_custom_message_entry_content(CustomMessageEntryContent& content) {
@@ -64,23 +64,23 @@ void redact_custom_message_entry_content(CustomMessageEntryContent& content) {
 
 void redact_assistant_content(ai::AssistantContent& content) {
     std::visit(
-        [](auto& block) {
-            using T = std::decay_t<decltype(block)>;
-            if constexpr (std::is_same_v<T, ai::TextContent>) {
-                block.text = support::redact_text(std::move(block.text));
-            } else if constexpr (std::is_same_v<T, ai::ThinkingContent>) {
-                block.thinking = support::redact_text(std::move(block.thinking));
-            } else if constexpr (std::is_same_v<T, ai::ToolCallContent>) {
-                if (block.arguments) {
-                    block.arguments = redact_json_value(*block.arguments);
+            [](auto& block) {
+                using T = std::decay_t<decltype(block)>;
+                if constexpr (std::is_same_v<T, ai::TextContent>) {
+                    block.text = support::redact_text(std::move(block.text));
+                } else if constexpr (std::is_same_v<T, ai::ThinkingContent>) {
+                    block.thinking = support::redact_text(std::move(block.thinking));
+                } else if constexpr (std::is_same_v<T, ai::ToolCallContent>) {
+                    if (block.arguments) {
+                        block.arguments = redact_json_value(*block.arguments);
+                    }
+                    block.raw_arguments = support::redact_text(std::move(block.raw_arguments));
+                    if (block.argument_error) {
+                        block.argument_error = support::redact_text(std::move(*block.argument_error));
+                    }
                 }
-                block.raw_arguments = support::redact_text(std::move(block.raw_arguments));
-                if (block.argument_error) {
-                    block.argument_error = support::redact_text(std::move(*block.argument_error));
-                }
-            }
-        },
-        content);
+            },
+            content);
 }
 
 void redact_diagnostic_entry(ai::DiagnosticEntry& entry) {
@@ -106,73 +106,72 @@ void redact_diagnostic_entry(ai::DiagnosticEntry& entry) {
 [[nodiscard]] ai::MessageVariant redacted_message(const ai::MessageVariant& message) {
     auto redacted = message;
     std::visit(
-        [](auto& concrete) {
-            using T = std::decay_t<decltype(concrete)>;
-            if constexpr (std::is_same_v<T, ai::SystemMessage>) {
-                concrete.content = support::redact_text(std::move(concrete.content));
-            } else if constexpr (std::is_same_v<T, ai::AssistantMessage>) {
-                for (auto& block : concrete.content) {
-                    redact_assistant_content(block);
-                }
-                if (concrete.error_message) {
-                    concrete.error_message = support::redact_text(std::move(*concrete.error_message));
-                }
-                // Provider/tool diagnostics carry free-form error text; they
-                // were silently omitted before #666. ADR 0028 narrows the raw
-                // rule to User Bash text only and leaves non-User-Bash
-                // diagnostics under ADR 0026:23's mandatory redaction.
-                if (concrete.diagnostics) {
-                    for (auto& entry : *concrete.diagnostics) {
-                        redact_diagnostic_entry(entry);
+            [](auto& concrete) {
+                using T = std::decay_t<decltype(concrete)>;
+                if constexpr (std::is_same_v<T, ai::SystemMessage>) {
+                    concrete.content = support::redact_text(std::move(concrete.content));
+                } else if constexpr (std::is_same_v<T, ai::AssistantMessage>) {
+                    for (auto& block : concrete.content) {
+                        redact_assistant_content(block);
                     }
-                }
-            } else if constexpr (std::is_same_v<T, ai::BashExecutionMessage>) {
-                // Both User Bash text values are stored raw, so this branch
-                // carries no redaction. `command` (ADR 0028:30, re-proposal
-                // rejected) and `output` (ADR 0028's Output section, "No
-                // redaction", adjudicated in #677 option 甲 and applied here
-                // under #679).
-            } else if constexpr (std::is_same_v<T, ai::CustomMessage>) {
-                for (auto& block : concrete.content) {
-                    redact_content(block);
-                }
-                if (concrete.details) {
-                    concrete.details = redact_json_value(*concrete.details);
-                }
-            } else if constexpr (std::is_same_v<T, ai::BranchSummaryMessage>) {
-                // Summaries are model-generated from context that can contain
-                // raw User Bash text (ADR 0028) and stored model/user content,
-                // so "already plain" does not hold and they are redacted like
-                // any other conversational text (#666). The separate
-                // compaction/branch-summary *entry* writers build their DTOs
-                // directly instead of through this function, so they carry the
-                // same rule in `redact_summary_entry_text` (#675).
-                concrete.summary = support::redact_text(std::move(concrete.summary));
-            } else if constexpr (std::is_same_v<T, ai::CompactionSummaryMessage>) {
-                // Same rationale as BranchSummaryMessage above.
-                concrete.summary = support::redact_text(std::move(concrete.summary));
-            } else if constexpr (std::is_same_v<T, ai::UserMessage>) {
-                if (auto* text = std::get_if<std::string>(&concrete.content)) {
-                    *text = support::redact_text(std::move(*text));
-                } else {
-                    for (auto& block :
-                         std::get<std::vector<ai::Content>>(concrete.content)) {
+                    if (concrete.error_message) {
+                        concrete.error_message = support::redact_text(std::move(*concrete.error_message));
+                    }
+                    // Provider/tool diagnostics carry free-form error text; they
+                    // were silently omitted before #666. ADR 0028 narrows the raw
+                    // rule to User Bash text only and leaves non-User-Bash
+                    // diagnostics under ADR 0026:23's mandatory redaction.
+                    if (concrete.diagnostics) {
+                        for (auto& entry : *concrete.diagnostics) {
+                            redact_diagnostic_entry(entry);
+                        }
+                    }
+                } else if constexpr (std::is_same_v<T, ai::BashExecutionMessage>) {
+                    // Both User Bash text values are stored raw, so this branch
+                    // carries no redaction. `command` (ADR 0028:30, re-proposal
+                    // rejected) and `output` (ADR 0028's Output section, "No
+                    // redaction", adjudicated in #677 option 甲 and applied here
+                    // under #679).
+                } else if constexpr (std::is_same_v<T, ai::CustomMessage>) {
+                    for (auto& block : concrete.content) {
                         redact_content(block);
                     }
-                }
-            } else {
-                // ToolResultMessage
-                for (auto& block : concrete.content) {
-                    redact_content(block);
-                }
-                if constexpr (std::is_same_v<T, ai::ToolResultMessage>) {
                     if (concrete.details) {
                         concrete.details = redact_json_value(*concrete.details);
                     }
+                } else if constexpr (std::is_same_v<T, ai::BranchSummaryMessage>) {
+                    // Summaries are model-generated from context that can contain
+                    // raw User Bash text (ADR 0028) and stored model/user content,
+                    // so "already plain" does not hold and they are redacted like
+                    // any other conversational text (#666). The separate
+                    // compaction/branch-summary *entry* writers build their DTOs
+                    // directly instead of through this function, so they carry the
+                    // same rule in `redact_summary_entry_text` (#675).
+                    concrete.summary = support::redact_text(std::move(concrete.summary));
+                } else if constexpr (std::is_same_v<T, ai::CompactionSummaryMessage>) {
+                    // Same rationale as BranchSummaryMessage above.
+                    concrete.summary = support::redact_text(std::move(concrete.summary));
+                } else if constexpr (std::is_same_v<T, ai::UserMessage>) {
+                    if (auto* text = std::get_if<std::string>(&concrete.content)) {
+                        *text = support::redact_text(std::move(*text));
+                    } else {
+                        for (auto& block : std::get<std::vector<ai::Content>>(concrete.content)) {
+                            redact_content(block);
+                        }
+                    }
+                } else {
+                    // ToolResultMessage
+                    for (auto& block : concrete.content) {
+                        redact_content(block);
+                    }
+                    if constexpr (std::is_same_v<T, ai::ToolResultMessage>) {
+                        if (concrete.details) {
+                            concrete.details = redact_json_value(*concrete.details);
+                        }
+                    }
                 }
-            }
-        },
-        redacted);
+            },
+            redacted);
     return redacted;
 }
 

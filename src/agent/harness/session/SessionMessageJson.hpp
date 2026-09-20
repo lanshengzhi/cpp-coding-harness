@@ -481,8 +481,8 @@ template <typename Block, typename Convert>
 
 [[nodiscard]] inline support::Expected<std::vector<ai::AssistantContent>> assistant_content_from_dto(
         const std::vector<ContentDto>& content, std::string_view context) {
-    return convert_blocks_from_dto<ai::AssistantContent>(
-            content, context,
+    return convert_blocks_from_dto<ai::AssistantContent>(content,
+            context,
             [](const ContentDto& dto, std::string_view ctx) { return assistant_content_from_dto(dto, ctx); });
 }
 
