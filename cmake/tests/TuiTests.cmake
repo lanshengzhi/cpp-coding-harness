@@ -8,6 +8,7 @@ include_guard(GLOBAL)
         tests/tui/AutocompleteTest.cpp
         tests/tui/ContainerTest.cpp
         tests/tui/EditorTest.cpp
+        tests/tui/EditorLayoutTest.cpp
         tests/tui/FuzzyTest.cpp
         tests/tui/ImageTest.cpp
         tests/tui/InputTest.cpp
