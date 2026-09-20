@@ -351,12 +351,19 @@ template <typename T>
     return std::visit([](const auto& concrete) { return to_dto(concrete); }, content);
 }
 
-[[nodiscard]] inline support::Expected<ai::Content> content_from_dto(const ContentDto& dto, std::string_view context) {
+/// The text and thinking block conversions every message role shares (the
+/// wire shapes are identical); the role-specific discriminators — toolCall,
+/// image placement rules — stay with the caller.
+/// The shared block shape: text or thinking, the two wire-identical roles.
+using SharedContentBlock = std::variant<ai::TextContent, ai::ThinkingContent>;
+
+[[nodiscard]] inline support::Expected<std::optional<SharedContentBlock>> text_or_thinking_from_dto(
+        const ContentDto& dto, std::string_view context) {
     if (dto.type == "text") {
         if (auto required = require_field(dto.text, "text content", "text", context); !required) {
             return std::unexpected(required.error());
         }
-        return ai::Content{ai::TextContent{
+        return SharedContentBlock{ai::TextContent{
                 .text = *dto.text,
                 .text_signature = dto.textSignature,
         }};
@@ -365,11 +372,36 @@ template <typename T>
         if (auto required = require_field(dto.thinking, "thinking content", "thinking", context); !required) {
             return std::unexpected(required.error());
         }
-        return ai::Content{ai::ThinkingContent{
+        return SharedContentBlock{ai::ThinkingContent{
                 .thinking = *dto.thinking,
                 .thinking_signature = dto.thinkingSignature,
                 .redacted = dto.redacted.value_or(false),
         }};
+    }
+    return std::nullopt;
+}
+
+/// Convert a block array through a per-role single-block converter.
+template <typename Block, typename Convert>
+[[nodiscard]] inline support::Expected<std::vector<Block>> convert_blocks_from_dto(
+        const std::vector<ContentDto>& dtos, std::string_view context, Convert convert) {
+    std::vector<Block> converted;
+    converted.reserve(dtos.size());
+    for (const auto& dto : dtos) {
+        auto block = convert(dto, context);
+        if (!block) {
+            return std::unexpected(block.error());
+        }
+        converted.push_back(std::move(*block));
+    }
+    return converted;
+}
+
+[[nodiscard]] inline support::Expected<ai::Content> content_from_dto(const ContentDto& dto, std::string_view context) {
+    if (auto shared = text_or_thinking_from_dto(dto, context); !shared) {
+        return std::unexpected(shared.error());
+    } else if (shared->has_value()) {
+        return std::visit([](auto& block) { return ai::Content{std::move(block)}; }, **shared);
     }
     if (dto.type == "image") {
         if (auto required = require_field(dto.data, "image content", "data", context); !required) {
@@ -395,38 +427,16 @@ template <typename T>
 
 [[nodiscard]] inline support::Expected<std::vector<ai::Content>> content_from_dto(
         const std::vector<ContentDto>& content, std::string_view context) {
-    std::vector<ai::Content> converted;
-    converted.reserve(content.size());
-    for (const auto& dto : content) {
-        auto block = content_from_dto(dto, context);
-        if (!block) {
-            return std::unexpected(block.error());
-        }
-        converted.push_back(std::move(*block));
-    }
-    return converted;
+    return convert_blocks_from_dto<ai::Content>(
+            content, context, [](const ContentDto& dto, std::string_view ctx) { return content_from_dto(dto, ctx); });
 }
 
 [[nodiscard]] inline support::Expected<ai::AssistantContent> assistant_content_from_dto(
         const ContentDto& dto, std::string_view context) {
-    if (dto.type == "text") {
-        if (auto required = require_field(dto.text, "text content", "text", context); !required) {
-            return std::unexpected(required.error());
-        }
-        return ai::AssistantContent{ai::TextContent{
-                .text = *dto.text,
-                .text_signature = dto.textSignature,
-        }};
-    }
-    if (dto.type == "thinking") {
-        if (auto required = require_field(dto.thinking, "thinking content", "thinking", context); !required) {
-            return std::unexpected(required.error());
-        }
-        return ai::AssistantContent{ai::ThinkingContent{
-                .thinking = *dto.thinking,
-                .thinking_signature = dto.thinkingSignature,
-                .redacted = dto.redacted.value_or(false),
-        }};
+    if (auto shared = text_or_thinking_from_dto(dto, context); !shared) {
+        return std::unexpected(shared.error());
+    } else if (shared->has_value()) {
+        return std::visit([](auto& block) { return ai::AssistantContent{std::move(block)}; }, **shared);
     }
     if (dto.type == "toolCall") {
         if (auto required = require_field(dto.id, "toolCall content", "id", context); !required) {
@@ -471,16 +481,9 @@ template <typename T>
 
 [[nodiscard]] inline support::Expected<std::vector<ai::AssistantContent>> assistant_content_from_dto(
         const std::vector<ContentDto>& content, std::string_view context) {
-    std::vector<ai::AssistantContent> converted;
-    converted.reserve(content.size());
-    for (const auto& dto : content) {
-        auto block = assistant_content_from_dto(dto, context);
-        if (!block) {
-            return std::unexpected(block.error());
-        }
-        converted.push_back(std::move(*block));
-    }
-    return converted;
+    return convert_blocks_from_dto<ai::AssistantContent>(
+            content, context,
+            [](const ContentDto& dto, std::string_view ctx) { return assistant_content_from_dto(dto, ctx); });
 }
 
 [[nodiscard]] inline support::Expected<std::vector<ai::AssistantContent>> required_assistant_content_from_dto(
