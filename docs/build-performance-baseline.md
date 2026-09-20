@@ -143,9 +143,19 @@ The small non-zero cold-run hit rates come from repeated identical compile invoc
 
 ### Warm-cache measurements
 
+Measured on [run 35481795283](https://github.com/lanshengzhi/cpp-coding-harness/actions/runs/35481795283) after raising the per-lane cache cap to 1 GiB:
+
 | Lane | Build step | ccache hit rate |
 | --- | ---: | ---: |
-| Pending first uncancelled warm run | — | — |
+| GCC 16 Debug | 34 s | 99.49% (389/391) |
+| GCC 16 Release | 8 s | 99.49% (389/391) |
+| Clang 22 conformance | 21 s | 99.49% (389/391) |
+| GCC 16 ASan+UBSan | 178 s | 82.61% (323/391) |
+| GCC 16 TSan scenarios | 30 s | 99.49% (389/391) |
+| Arch pinned base-devel-20260809 | 38 s | 96.39% (1121/1163 cacheable calls) |
+| GCC 16 Release artifact (IPO/LTO) | 51 s | 98.99% (197/199) |
+
+Every lane is below the three-minute Build target. The ASan lane was still filling the newly increased cache during this run; subsequent warm runs should retain the completed object set.
 
 ## Diagnosed causes
 
