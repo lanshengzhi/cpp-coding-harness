@@ -125,7 +125,21 @@ The run's wall clock was set by the slowest lanes (GCC 16 ASan+UBSan 36 min, Cla
 
 Every compiling lane of the toolchain workflow injects ccache as a workflow-level compiler launcher (the `CMAKE_<LANG>_COMPILER_LAUNCHER` environment variables; the pinned presets are untouched) with rolling per-lane GitHub Actions cache entries (each run saves a fresh snapshot keyed on lane and commit, and restores the most recent one through the lane's key prefix), and a `concurrency` block cancels superseded pull-request runs.
 
-Warm-cache Build-step measurements from this change's CI runs are recorded here once the first warm run completes; the acceptance target is a Build step under three minutes per lane with cache-hit statistics in the job log.
+### First ccache-enabled cold run
+
+Measured on [run 35478886040](https://github.com/lanshengzhi/cpp-coding-harness/actions/runs/35478886040), the first ccache-enabled run on this PR established the cold-build baseline:
+
+| Lane | Build step | ccache hit rate |
+| --- | ---: | ---: |
+| GCC 16 Debug | 687 s | 4.60% (18/391) |
+| GCC 16 Release | 715 s | 4.60% (18/391) |
+| Clang 22 conformance | 618 s | 4.60% (18/391) |
+| GCC 16 ASan+UBSan | 870 s | 4.60% (18/391) |
+| GCC 16 TSan scenarios | 614 s | 4.60% (18/391) |
+| Arch pinned base-devel-20260809 | 820 s | 17.88% (208/1163 cacheable calls) |
+| GCC 16 Release artifact (IPO/LTO) | 180 s | 4.02% (8/199) |
+
+The small non-zero cold-run hit rates come from repeated identical compile invocations within a lane. Warm-cache Build-step measurements from this change's CI runs are recorded below once the first uncancelled warm run completes; the acceptance target is a Build step under three minutes per lane with cache-hit statistics in the job log.
 
 ## Diagnosed causes
 
