@@ -29,30 +29,12 @@ struct OutputLimitResult {
         return OutputLimitResult{.text = {}, .truncated = true};
     }
 
-    std::size_t start = input.size();
-    std::size_t bytes = 0;
-    std::size_t lines = 1;
-    while (start > 0 && bytes < limit.max_bytes) {
-        const char ch = input[start - 1];
-        if (ch == '\n' && lines >= limit.max_lines) {
-            break;
-        }
-        --start;
-        ++bytes;
-        if (ch == '\n') {
-            ++lines;
-        }
-    }
-
-    if (start > 0) {
-        while (start < input.size() &&
-               (static_cast<unsigned char>(input[start]) & 0xc0) == 0x80) {
-            ++start;
-        }
-        const auto marker = input.rfind(support::kRedactionMarker, start);
-        if (marker != std::string::npos && marker < start && marker + support::kRedactionMarker.size() > start) {
-            start = marker + support::kRedactionMarker.size();
-        }
+    // The byte/line walk and UTF-8 boundary repair are policy-free support
+    // mechanics. Redaction-marker repair remains local to this harness wrapper.
+    auto start = support::utf8_tail_start(input, limit.max_bytes, limit.max_lines);
+    const auto marker = input.rfind(support::kRedactionMarker, start);
+    if (marker != std::string::npos && marker < start && marker + support::kRedactionMarker.size() > start) {
+        start = marker + support::kRedactionMarker.size();
     }
 
     return OutputLimitResult{

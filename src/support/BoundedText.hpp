@@ -10,6 +10,11 @@
 
 namespace cch::support {
 
+struct Utf8TailResult {
+    std::string text;
+    bool truncated{false};
+};
+
 [[nodiscard]] inline std::string bounded_utf8(std::string_view text, std::size_t max_bytes) {
     std::string safe;
     safe.reserve(std::min(text.size(), max_bytes));
@@ -57,6 +62,47 @@ namespace cch::support {
         index += length;
     }
     return safe;
+}
+
+[[nodiscard]] inline std::size_t utf8_tail_start(std::string_view text, std::size_t max_bytes, std::size_t max_lines) {
+    if (text.empty()) {
+        return 0;
+    }
+    if (max_bytes == 0 || max_lines == 0) {
+        return text.size();
+    }
+
+    std::size_t start = text.size();
+    std::size_t bytes = 0;
+    std::size_t lines = 1;
+    while (start > 0 && bytes < max_bytes) {
+        const char ch = text[start - 1];
+        if (ch == '\n' && lines >= max_lines) {
+            break;
+        }
+        --start;
+        ++bytes;
+        if (ch == '\n') {
+            ++lines;
+        }
+    }
+
+    while (start < text.size() && (static_cast<unsigned char>(text[start]) & 0xc0) == 0x80) {
+        ++start;
+    }
+    return start;
+}
+
+[[nodiscard]] inline Utf8TailResult bounded_utf8_tail(
+        std::string_view text, std::size_t max_bytes, std::size_t max_lines) {
+    if (text.empty()) {
+        return {};
+    }
+    const auto start = utf8_tail_start(text, max_bytes, max_lines);
+    return Utf8TailResult{
+            .text = bounded_utf8(text.substr(start), max_bytes),
+            .truncated = start > 0,
+    };
 }
 
 [[nodiscard]] inline std::string bounded_text(

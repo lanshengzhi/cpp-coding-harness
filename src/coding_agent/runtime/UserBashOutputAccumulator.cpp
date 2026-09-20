@@ -1,6 +1,7 @@
 #include "UserBashOutputAccumulator.hpp"
 
 #include "coding_agent/BoundedText.hpp"
+#include "support/BoundedText.hpp"
 
 #include <algorithm>
 #include <format>
@@ -367,21 +368,8 @@ std::size_t UserBashOutputAccumulator::tail_newlines() const {
 }
 
 void UserBashOutputAccumulator::trim_tail() {
-    std::size_t start = tail_.size();
-    std::size_t bytes = 0;
-    std::size_t lines = 1;
-    while (start > 0 && bytes < limit_.max_bytes) {
-        const char ch = tail_[start - 1];
-        if (ch == '\n' && lines >= limit_.max_lines) break;
-        --start;
-        ++bytes;
-        if (ch == '\n') ++lines;
-    }
+    const auto start = support::utf8_tail_start(tail_, limit_.max_bytes, limit_.max_lines);
     if (start == 0) return;
-    while (start < tail_.size() &&
-           (static_cast<unsigned char>(tail_[start]) & 0xc0) == 0x80) {
-        ++start;
-    }
     truncated_ = true;
     tail_.erase(0, start);
 }

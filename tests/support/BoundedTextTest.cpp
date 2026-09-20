@@ -38,6 +38,37 @@ TEST_CASE("bounded_utf8 replaces invalid sequences with U+FFFD", "[support][boun
     CHECK(support::bounded_utf8("\xff", 2).empty());
 }
 
+TEST_CASE("bounded_utf8_tail returns the final lines within both budgets", "[support][bounded-text][utf8-tail][spec]") {
+    const auto result = support::bounded_utf8_tail("a\nb\nc", 1024, 2);
+    CHECK(result.text == "b\nc");
+    CHECK(result.truncated);
+}
+
+TEST_CASE("bounded_utf8_tail starts on a UTF-8 character boundary", "[support][bounded-text][utf8-tail][spec]") {
+    const std::string accented = "xx\xc3\xa9\xc3\xa9";
+    const auto result = support::bounded_utf8_tail(accented, 5, 2000);
+    CHECK(result.text == "x\xc3\xa9\xc3\xa9");
+    CHECK(result.truncated);
+}
+
+TEST_CASE("bounded_utf8_tail handles empty and zero-limit input", "[support][bounded-text][utf8-tail][spec]") {
+    CHECK_FALSE(support::bounded_utf8_tail("", 0, 0).truncated);
+
+    const auto zero_bytes = support::bounded_utf8_tail("text", 0, 10);
+    CHECK(zero_bytes.text.empty());
+    CHECK(zero_bytes.truncated);
+
+    const auto zero_lines = support::bounded_utf8_tail("text", 10, 0);
+    CHECK(zero_lines.text.empty());
+    CHECK(zero_lines.truncated);
+}
+
+TEST_CASE("bounded_utf8_tail returns an untruncated input unchanged", "[support][bounded-text][utf8-tail][spec]") {
+    const auto result = support::bounded_utf8_tail("a\né", 10, 10);
+    CHECK(result.text == "a\né");
+    CHECK_FALSE(result.truncated);
+}
+
 TEST_CASE("bounded_text returns the input when it fits", "[support][bounded-text][issue66][spec]") {
     CHECK(support::bounded_text("hi", 10) == "hi");
     CHECK(support::bounded_text("anything", 0).empty());
