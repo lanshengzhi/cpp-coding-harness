@@ -8,6 +8,8 @@ cch_parity_declare_target(
     OWNER cch_agent_core
     SOURCES
         src/agent/Agent.cpp
+        src/agent/AgentRun.cpp
+        src/agent/AgentSubscription.cpp
         src/agent/ToolArgumentPreparation.cpp
         src/agent/ToolCallExecutor.cpp
         src/agent/harness/AsyncLocalFileSystem.cpp
