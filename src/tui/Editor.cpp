@@ -1,9 +1,9 @@
 #include <cch/tui/Editor.hpp>
-#include "tui/EditorCompletionSession.hpp"
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/TruncatedText.hpp>
 #include <cch/tui/Utils.hpp>
-
+#include "tui/EditorCompletionSession.hpp"
+#include "tui/EditorLayout.hpp"
 #include "tui/InteractionUtils.hpp"
 #include "tui/TextBuffer.hpp"
 #include "tui/UnicodeWidth.hpp"
@@ -678,12 +678,7 @@ struct Editor::Impl {
         return buffer.empty();
     }
 
-    struct VisualLine {
-        std::size_t logical_line{0};
-        std::size_t start{0};
-        std::size_t end{0};
-        std::string text;
-    };
+    using VisualLine = detail::EditorVisualLine;
 
     [[nodiscard]] std::size_t find_current_visual_line(const std::vector<VisualLine>& visual) const {
         const auto cur = buffer.cursor();
@@ -780,43 +775,7 @@ struct Editor::Impl {
     }
 
     [[nodiscard]] std::vector<VisualLine> visual_lines(std::size_t width) const {
-        std::vector<VisualLine> result;
-        const auto& doc = buffer.document();
-        for (std::size_t line_index = 0; line_index < doc.size(); ++line_index) {
-            const auto& line = doc[line_index];
-            if (line.empty()) {
-                result.push_back({.logical_line = line_index, .start = 0, .end = 0, .text = {}});
-                continue;
-            }
-            std::size_t start = 0;
-            std::size_t used = 0;
-            std::string rendered;
-            for (std::size_t index = 0; index < line.size(); ++index) {
-                const auto segment_width = visible_width(line[index].text);
-                if (used != 0 && used + segment_width > width) {
-                    result.push_back({.logical_line = line_index, .start = start, .end = index, .text = std::move(rendered)});
-                    start = index;
-                    used = 0;
-                    rendered.clear();
-                }
-                if (segment_width > width) {
-                    for (const auto& grapheme : detail::split_graphemes(line[index].text)) {
-                        if (used != 0 && used + detail::grapheme_width(grapheme) > width) {
-                            result.push_back({.logical_line = line_index, .start = start, .end = index, .text = std::move(rendered)});
-                            rendered.clear();
-                            used = 0;
-                        }
-                        rendered += grapheme;
-                        used += detail::grapheme_width(grapheme);
-                    }
-                } else {
-                    rendered += line[index].text;
-                    used += segment_width;
-                }
-            }
-            result.push_back({.logical_line = line_index, .start = start, .end = line.size(), .text = std::move(rendered)});
-        }
-        return result;
+        return detail::EditorLayout::construct_visual_lines(buffer.document(), width);
     }
 
     /// Render pi's fake cursor (editor.ts render): reverse video on the grapheme
@@ -1205,75 +1164,31 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
     auto& impl = operation.impl;
     impl.wake_autocomplete();
     if (impl.callback_error) return std::unexpected(*impl.callback_error);
-    if (width == 0) {
-        return std::unexpected(support::make_error(support::ErrorCode::Validation, "Editor requires a positive visible width"));
-    }
+
     impl.layout_width = width;
-    for (const auto& logical_line : impl.buffer.document()) {
-        for (const auto& segment : logical_line) {
-            for (const auto& grapheme : detail::split_graphemes(segment.text)) {
-                if (detail::grapheme_width(grapheme) > width) {
-                    return std::unexpected(support::make_error(
-                        support::ErrorCode::Validation,
-                        "Editor grapheme is wider than the available visible width"));
-                }
-            }
-        }
+
+    auto layout_res = detail::EditorLayout::compute(detail::EditorLayoutOptions{
+            .document = &impl.buffer.document(),
+            .cursor = impl.buffer.cursor(),
+            .width = width,
+            .max_visible_lines = impl.options.max_visible_lines,
+            .available_height = impl.available_height,
+            .scroll_offset = impl.scroll_offset,
+            .theme = &impl.theme,
+            .autocomplete_menu = &impl.autocomplete_menu,
+            .include_autocomplete = true,
+    });
+    if (!layout_res) {
+        return std::unexpected(layout_res.error());
     }
-    const auto visual = impl.visual_lines(width);
-    std::size_t cursor_line = 0;
-    const auto cur = impl.buffer.cursor();
-    for (std::size_t index = 0; index < visual.size(); ++index) {
-        if (visual[index].logical_line == cur.line && cur.column >= visual[index].start &&
-            cur.column <= visual[index].end) {
-            cursor_line = index;
-            break;
-        }
-    }
-    const auto visible_count = std::max<std::size_t>(1, impl.content_height());
-    if (cursor_line < impl.scroll_offset) impl.scroll_offset = cursor_line;
-    if (cursor_line >= impl.scroll_offset + visible_count) impl.scroll_offset = cursor_line + 1 - visible_count;
-    std::vector<std::string> result;
-    if (impl.theme.border) {
-        auto top_border =
-                impl.scroll_offset > 0 ? impl.scroll_border("↑", impl.scroll_offset, width) : horizontal_rule(width);
-        auto styled_border = detail::apply_text_style(impl.theme.border, std::move(top_border), "Editor border");
-        if (!styled_border) return std::unexpected(styled_border.error());
-        result.push_back(std::move(*styled_border));
-    }
-    const auto end = std::min(visual.size(), impl.scroll_offset + visible_count);
-    for (std::size_t index = impl.scroll_offset; index < end; ++index) {
-        auto line = visual[index].text;
-        if (index == cursor_line) {
-            impl.insert_fake_cursor(visual[index], width, line);
-        }
-        const auto line_width = visible_width(line);
-        if (line_width < width) line.append(width - line_width, ' ');
-        auto styled = detail::apply_text_style(impl.theme.text, std::move(line), "Editor text");
-        if (!styled) return std::unexpected(styled.error());
-        result.push_back(std::move(*styled));
-    }
-    if (result.size() == (impl.theme.border ? 1 : 0)) {
-        auto styled = detail::apply_text_style(impl.theme.text, std::string(width, ' '), "Editor text");
-        if (!styled) return std::unexpected(styled.error());
-        result.push_back(std::move(*styled));
-    }
-    if (impl.theme.border) {
-        const auto shown = impl.scroll_offset + visible_count;
-        const auto lines_below = visual.size() > shown ? visual.size() - shown : 0;
-        auto bottom_border = lines_below > 0 ? impl.scroll_border("↓", lines_below, width) : horizontal_rule(width);
-        auto styled_border = detail::apply_text_style(impl.theme.border, std::move(bottom_border), "Editor border");
-        if (!styled_border) return std::unexpected(styled_border.error());
-        result.push_back(std::move(*styled_border));
-    }
-    if (auto appended = impl.append_autocomplete_lines(result, width); !appended) {
-        return std::unexpected(appended.error());
-    }
+
+    impl.scroll_offset = layout_res->scroll_offset;
+
     if (impl.options.terminal) {
-        impl.last_echo_line_count = result.size();
+        impl.last_echo_line_count = layout_res->lines.size();
         impl.last_echo_width = width;
     }
-    return RenderResult{.lines = std::move(result)};
+    return RenderResult{.lines = std::move(layout_res->lines)};
 }
 
 void Editor::invalidate() {}

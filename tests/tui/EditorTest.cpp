@@ -2286,3 +2286,30 @@ TEST_CASE("Editor latches dock write failure and aborts writes on format_lines e
     CHECK(narrow_rendered.error().code == cch::support::ErrorCode::Validation);
     CHECK(narrow_rendered.error().message == "Editor grapheme is wider than the available visible width");
 }
+
+TEST_CASE("Editor render routes through EditorLayout and propagates styling failures",
+        "[tui][editor][presentation][theme][issue751][spec]") {
+    cch::tui::Editor editor;
+    editor.set_text("hello");
+
+    cch::tui::EditorTheme theme;
+    // Styling hook violates invariant by changing visible width
+    theme.text = [](std::string) { return "widened hello"; };
+    editor.set_theme(std::move(theme));
+
+    const auto result = editor.render(20);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == cch::support::ErrorCode::Validation);
+    CHECK(result.error().message == "TUI Editor text style hook changed visible width");
+
+    // Border hook failure is also propagated
+    cch::tui::Editor border_editor;
+    cch::tui::EditorTheme border_theme;
+    border_theme.border = [](std::string) { return "widened border"; };
+    border_editor.set_theme(std::move(border_theme));
+
+    const auto border_result = border_editor.render(10);
+    REQUIRE_FALSE(border_result);
+    CHECK(border_result.error().code == cch::support::ErrorCode::Validation);
+    CHECK(border_result.error().message == "TUI Editor border style hook changed visible width");
+}
