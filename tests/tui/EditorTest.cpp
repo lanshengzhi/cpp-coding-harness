@@ -2313,3 +2313,59 @@ TEST_CASE("Editor render routes through EditorLayout and propagates styling fail
     CHECK(border_result.error().code == cch::support::ErrorCode::Validation);
     CHECK(border_result.error().message == "TUI Editor border style hook changed visible width");
 }
+
+TEST_CASE("Editor dock echo routes through EditorLayout and latches styling failures",
+        "[tui][editor][presentation][dock][theme][issue752][spec]") {
+    RecordingTerminal term;
+    std::size_t repaints = 0;
+    cch::tui::EditorOptions options{
+            .render_request = [&repaints]() -> cch::support::ExpectedVoid {
+                ++repaints;
+                return {};
+            },
+            .terminal = &term,
+            .dock_offset = 0,
+    };
+    cch::tui::Editor editor(std::move(options));
+
+    cch::tui::EditorTheme theme;
+    theme.text = [](std::string) { return "widened dock text"; };
+    editor.set_theme(std::move(theme));
+
+    term.log.clear();
+    type(editor, "a");
+
+    // Dock echo should fail before writing any output
+    CHECK(term.log.empty());
+    CHECK(repaints == 1);
+
+    const auto rendered = editor.render(20);
+    REQUIRE_FALSE(rendered);
+    CHECK(rendered.error().code == cch::support::ErrorCode::Validation);
+    CHECK(rendered.error().message == "TUI Editor text style hook changed visible width");
+}
+
+TEST_CASE("Editor dock echo and cursor_location share EditorLayout result",
+        "[tui][editor][presentation][dock][cursor][issue752][spec]") {
+    RecordingTerminal term;
+    cch::tui::EditorOptions options{
+            .max_visible_lines = 5,
+            .terminal = &term,
+            .dock_offset = 2,
+    };
+    cch::tui::Editor editor(std::move(options));
+    editor.set_focused(true);
+
+    term.log.clear();
+    editor.insert_text_at_cursor("hello\nworld");
+
+    // Terminal log should end with cursor positioned at dock_offset (2) + row (1), col (5)
+    REQUIRE(term.log.size() == 5);
+    CHECK(term.log.back() == DockTerminalOpVariant(DockCursorOp{.position = {.column = 5, .row = 3}}));
+
+    // cursor_location should report row 1, col 5
+    const auto loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->row == 1);
+    CHECK(loc->column == 5);
+}

@@ -2,12 +2,15 @@
 
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Style.hpp>
+#include <cch/tui/Terminal.hpp>
 #include "tui/EditorCompletionSession.hpp"
 #include "tui/TextBuffer.hpp"
 
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
+#include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -37,6 +40,7 @@ struct EditorLayoutOptions {
 struct EditorLayoutResult {
     std::vector<std::string> lines{};
     std::size_t scroll_offset{0};
+    std::optional<CursorPosition> cursor_position{std::nullopt};
 };
 
 /// Private presentation calculator for Editor rendering. Owns visual line
@@ -50,6 +54,14 @@ public:
 
     [[nodiscard]] static std::vector<EditorVisualLine> construct_visual_lines(
             const BufferDocument& document, std::size_t width);
+
+    [[nodiscard]] static std::optional<CursorPosition> compute_cursor_position(const BufferDocument& document,
+            std::span<const EditorVisualLine> visual,
+            BufferCursor cursor,
+            std::size_t border_rows,
+            std::size_t scroll_offset,
+            std::size_t visible_count,
+            std::optional<std::size_t> cursor_line = std::nullopt);
 
     [[nodiscard]] static support::Expected<EditorLayoutResult> compute(EditorLayoutOptions options);
 };

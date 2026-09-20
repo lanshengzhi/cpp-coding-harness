@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <format>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -154,6 +155,56 @@ std::vector<EditorVisualLine> EditorLayout::construct_visual_lines(const BufferD
     return result;
 }
 
+std::optional<CursorPosition> EditorLayout::compute_cursor_position(const BufferDocument& document,
+        std::span<const EditorVisualLine> visual,
+        BufferCursor cursor,
+        std::size_t border_rows,
+        std::size_t scroll_offset,
+        std::size_t visible_count,
+        std::optional<std::size_t> cursor_line) {
+    if (visual.empty()) return std::nullopt;
+
+    std::size_t visual_row = 0;
+    if (cursor_line && *cursor_line < visual.size() && visual[*cursor_line].logical_line == cursor.line &&
+            cursor.column >= visual[*cursor_line].start && cursor.column <= visual[*cursor_line].end) {
+        visual_row = *cursor_line;
+    } else {
+        bool found = false;
+        for (std::size_t index = 0; index < visual.size(); ++index) {
+            if (visual[index].logical_line == cursor.line && cursor.column >= visual[index].start &&
+                    cursor.column <= visual[index].end) {
+                visual_row = index;
+                found = true;
+                break;
+            }
+        }
+        if (!found) return std::nullopt;
+    }
+
+    if (visual_row < scroll_offset || visual_row >= scroll_offset + visible_count) {
+        return std::nullopt;
+    }
+
+    const std::size_t display_row = border_rows + visual_row - scroll_offset;
+
+    const auto& vl = visual[visual_row];
+    const std::size_t vl_text_width = visible_width(vl.text);
+    const std::size_t cursor_in_line = cursor.column - vl.start;
+    const std::size_t segs_in_line = vl.end - vl.start;
+    std::size_t col = 0;
+    if (segs_in_line > 0 && cursor_in_line <= segs_in_line) {
+        const std::size_t seg_end = vl.start + cursor_in_line;
+        if (vl.logical_line < document.size()) {
+            const auto& line = document[vl.logical_line];
+            for (std::size_t i = vl.start; i < seg_end && i < line.size(); ++i) {
+                col += visible_width(line[i].text);
+            }
+        }
+        col = std::min(col, vl_text_width);
+    }
+    return CursorPosition{.column = col, .row = display_row};
+}
+
 support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions options) {
     static const BufferDocument kEmptyDocument{BufferLine{}};
     const auto& doc = options.document ? *options.document : kEmptyDocument;
@@ -238,9 +289,13 @@ support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions 
         }
     }
 
+    std::optional<CursorPosition> cursor_position = compute_cursor_position(
+            doc, visual, options.cursor, border_rows, scroll_offset, visible_count, cursor_line);
+
     return EditorLayoutResult{
             .lines = std::move(result),
             .scroll_offset = scroll_offset,
+            .cursor_position = cursor_position,
     };
 }
 
