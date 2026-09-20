@@ -113,8 +113,8 @@ jobs:
       CCACHE_COMPRESS: "1"
       # Bounded per lane so the lane entries share the repository cache quota
       # with the vcpkg archives; ccache evicts least-recently-used entries
-      # beyond the cap.
-      CCACHE_MAXSIZE: "512M"
+      # beyond the 1G cap.
+      CCACHE_MAXSIZE: "1G"
 
     steps:
       - name: Check out harness
@@ -352,7 +352,7 @@ jobs:
       CMAKE_CXX_COMPILER_LAUNCHER: "ccache"
       CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
       CCACHE_COMPRESS: "1"
-      CCACHE_MAXSIZE: "512M"
+      CCACHE_MAXSIZE: "1G"
     steps:
       - name: Record the qualification run start
         run: echo "RUN_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
@@ -560,7 +560,7 @@ jobs:
       CMAKE_CXX_COMPILER_LAUNCHER: "ccache"
       CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
       CCACHE_COMPRESS: "1"
-      CCACHE_MAXSIZE: "512M"
+      CCACHE_MAXSIZE: "1G"
     steps:
       - name: Pin pacman to the image snapshot and install tool gaps
         run: |
