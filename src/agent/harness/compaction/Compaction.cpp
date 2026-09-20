@@ -404,20 +404,10 @@ struct SummarizationCall {
         ai::user_text_message(std::move(prompt_text), 0));
     call.options.max_tokens = max_tokens;
     call.options.stop_token = std::move(stop_token);
-    if (model.reasoning && !thinking_level.empty() && thinking_level != "off") {
-        if (thinking_level == "minimal") {
-            call.options.reasoning = ai::ThinkingLevel::Minimal;
-        } else if (thinking_level == "low") {
-            call.options.reasoning = ai::ThinkingLevel::Low;
-        } else if (thinking_level == "medium") {
-            call.options.reasoning = ai::ThinkingLevel::Medium;
-        } else if (thinking_level == "high") {
-            call.options.reasoning = ai::ThinkingLevel::High;
-        } else if (thinking_level == "xhigh") {
-            call.options.reasoning = ai::ThinkingLevel::XHigh;
-        } else if (thinking_level == "max") {
-            call.options.reasoning = ai::ThinkingLevel::Max;
-        }
+    if (model.reasoning) {
+        // pi `generateSummaryWithUsage` forwards the reasoning level exactly
+        // like the agent loop's stream options: `off` forwards no reasoning.
+        call.options.reasoning = ai::parse_stream_thinking_level(thinking_level);
     }
     return call;
 }

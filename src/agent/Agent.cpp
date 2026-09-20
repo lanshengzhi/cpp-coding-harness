@@ -44,8 +44,7 @@ std::vector<std::string> tool_names(const std::vector<ai::Tool>& definitions) {
 }
 
 [[nodiscard]] bool is_valid_thinking_level(std::string_view level) {
-    static const std::vector<std::string> allowed{"off", "minimal", "low", "medium", "high", "xhigh", "max"};
-    return std::find(allowed.begin(), allowed.end(), level) != allowed.end();
+    return ai::parse_model_thinking_level(level).has_value();
 }
 
 [[nodiscard]] std::size_t approximate_content_size(const ai::Content& block) {
@@ -179,35 +178,10 @@ struct StreamEventState {
     return emit_agent_event(emit, MessageEndEvent{context.messages.back()});
 }
 
-/// Per-turn `reasoning` streamSimple option (pi `agent-harness.ts`
-/// `createStreamFn` forwards `streamOptions.reasoning`, which
-/// `createLoopConfig` derives from the thinking level: `off` → undefined,
-/// otherwise the level). Empty or `off` forwards no reasoning; the other six
-/// levels map to the stream `ThinkingLevel`.
-[[nodiscard]] std::optional<ai::ThinkingLevel> stream_reasoning(std::string_view level) {
-    if (level.empty() || level == "off") {
-        return std::nullopt;
-    }
-    if (level == "minimal") {
-        return ai::ThinkingLevel::Minimal;
-    }
-    if (level == "low") {
-        return ai::ThinkingLevel::Low;
-    }
-    if (level == "medium") {
-        return ai::ThinkingLevel::Medium;
-    }
-    if (level == "high") {
-        return ai::ThinkingLevel::High;
-    }
-    if (level == "xhigh") {
-        return ai::ThinkingLevel::XHigh;
-    }
-    if (level == "max") {
-        return ai::ThinkingLevel::Max;
-    }
-    return std::nullopt;
-}
+/// Per-turn `reasoning` streamSimple option: the seven-level wire name maps
+/// through the shared vocabulary (pi `agent-harness.ts` `createStreamFn`
+/// forwards `streamOptions.reasoning`, which `createLoopConfig` derives from
+/// the thinking level: `off` → undefined, otherwise the level).
 
 } // namespace
 
@@ -645,7 +619,7 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
         if (!policy.session_id.empty()) {
             stream_options.session_id = policy.session_id;
         }
-        stream_options.reasoning = stream_reasoning(thinking_level);
+        stream_options.reasoning = ai::parse_stream_thinking_level(thinking_level);
         stream_options.cache_retention = policy.cache_retention;
         stream_options.timeout_ms = policy.timeout_ms;
         stream_options.max_retries = policy.max_retries;
