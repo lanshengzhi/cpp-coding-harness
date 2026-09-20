@@ -8,7 +8,6 @@
 
 #include <cstddef>
 #include <filesystem>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -166,12 +165,6 @@ private:
 
     /// The closed set of persistence alternatives.
     using StorageVariant = std::variant<JsonlSessionStore, InMemorySessionStore>;
-
-    /// Run `fn` under the append lock against the active alternative and
-    /// mirror every accepted entry into the live tree, so one append is a
-    /// single persist-plus-tree step.
-    [[nodiscard]] support::ExpectedVoid dispatch_append(
-        std::move_only_function<support::Expected<std::vector<SessionEntry>>(StorageVariant&)> fn);
 
     std::unique_ptr<Impl> impl_;
 };

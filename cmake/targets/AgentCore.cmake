@@ -23,6 +23,7 @@ cch_parity_declare_target(
         src/agent/harness/WorkspaceFileSystemTemp.cpp
         src/agent/harness/compaction/Compaction.cpp
         src/agent/harness/session/SessionJournal.cpp
+        src/agent/harness/session/EntryRedaction.cpp
         src/agent/harness/session/EntrySerializer.cpp
         src/agent/harness/session/InMemorySessionStore.cpp
         src/agent/harness/session/JsonlSessionStore.cpp

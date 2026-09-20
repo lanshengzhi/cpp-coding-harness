@@ -3,6 +3,7 @@
 #include "agent/harness/session/InMemorySessionStore.hpp"
 #include "agent/harness/session/JsonlSessionStore.hpp"
 
+#include <functional>
 #include <mutex>
 #include <utility>
 
@@ -20,6 +21,22 @@ struct SessionStore::Impl {
     // (Session Event Commitment channel) and the Session loop (session-
     // assembly appends, topology queries, context reconstruction).
     std::mutex mutex;
+
+    /// Run one store-shaped append under the append lock against the active
+    /// alternative and mirror every accepted entry into the live tree, so one
+    /// append is a single persist-plus-tree step.
+    template <typename Op>
+    [[nodiscard]] support::ExpectedVoid append_via(Op op) {
+        std::lock_guard lock(mutex);
+        auto entries = std::visit([&](auto& active) { return std::invoke(op, active); }, store);
+        if (!entries) {
+            return std::unexpected(entries.error());
+        }
+        for (auto& entry : *entries) {
+            tree.append_entry(std::move(entry));
+        }
+        return {};
+    }
 };
 
 SessionStore::SessionStore(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
@@ -68,19 +85,6 @@ SessionStore::SessionStore(SessionStore&&) noexcept = default;
 SessionStore& SessionStore::operator=(SessionStore&&) noexcept = default;
 SessionStore::~SessionStore() = default;
 
-support::ExpectedVoid SessionStore::dispatch_append(
-    std::move_only_function<support::Expected<std::vector<SessionEntry>>(StorageVariant&)> fn) {
-    std::lock_guard lock(impl_->mutex);
-    auto entries = fn(impl_->store);
-    if (!entries) {
-        return std::unexpected(entries.error());
-    }
-    for (auto& entry : *entries) {
-        impl_->tree.append_entry(std::move(entry));
-    }
-    return {};
-}
-
 support::ExpectedVoid SessionStore::append(const ai::MessageVariant& message) {
     std::lock_guard lock(impl_->mutex);
     if (auto* jsonl = std::get_if<JsonlSessionStore>(&impl_->store)) {
@@ -115,26 +119,16 @@ support::ExpectedVoid SessionStore::append_model_change(
     std::optional<std::string> parent_id,
     std::string provider,
     std::string model_id) {
-    return dispatch_append([&](StorageVariant& store) {
-        return std::visit(
-            [&](auto& active) {
-                return active.append_model_change(
-                    std::move(parent_id), std::move(provider), std::move(model_id));
-            },
-            store);
+    return impl_->append_via([&](auto& active) {
+        return active.append_model_change(std::move(parent_id), std::move(provider), std::move(model_id));
     });
 }
 
 support::ExpectedVoid SessionStore::append_thinking_level_change(
     std::optional<std::string> parent_id,
     std::string thinking_level) {
-    return dispatch_append([&](StorageVariant& store) {
-        return std::visit(
-            [&](auto& active) {
-                return active.append_thinking_level_change(
-                    std::move(parent_id), std::move(thinking_level));
-            },
-            store);
+    return impl_->append_via([&](auto& active) {
+        return active.append_thinking_level_change(std::move(parent_id), std::move(thinking_level));
     });
 }
 
@@ -142,25 +136,16 @@ support::ExpectedVoid SessionStore::append_label_change(
     std::optional<std::string> parent_id,
     std::string target_id,
     std::optional<std::string> label) {
-    return dispatch_append([&](StorageVariant& store) {
-        return std::visit(
-            [&](auto& active) {
-                return active.append_label_change(
-                    std::move(parent_id), std::move(target_id), std::move(label));
-            },
-            store);
+    return impl_->append_via([&](auto& active) {
+        return active.append_label_change(std::move(parent_id), std::move(target_id), std::move(label));
     });
 }
 
 support::ExpectedVoid SessionStore::append_compaction(
     std::optional<std::string> parent_id,
     CompactionEntryValue value) {
-    return dispatch_append([&](StorageVariant& store) {
-        return std::visit(
-            [&](auto& active) {
-                return active.append_compaction(std::move(parent_id), std::move(value));
-            },
-            store);
+    return impl_->append_via([&](auto& active) {
+        return active.append_compaction(std::move(parent_id), std::move(value));
     });
 }
 
@@ -170,41 +155,25 @@ support::ExpectedVoid SessionStore::append_branch_summary(
     std::string summary,
     std::optional<support::JsonValue> details,
     std::optional<bool> from_hook) {
-    return dispatch_append([&](StorageVariant& store) {
-        return std::visit(
-            [&](auto& active) {
-                return active.append_branch_summary(
-                    std::move(parent_id),
-                    std::move(from_id),
-                    std::move(summary),
-                    std::move(details),
-                    from_hook);
-            },
-            store);
+    return impl_->append_via([&](auto& active) {
+        return active.append_branch_summary(
+            std::move(parent_id), std::move(from_id), std::move(summary), std::move(details), from_hook);
     });
 }
 
 support::ExpectedVoid SessionStore::append_session_info(
     std::optional<std::string> parent_id,
     std::string name) {
-    return dispatch_append([&](StorageVariant& store) {
-        return std::visit(
-            [&](auto& active) {
-                return active.append_session_info(std::move(parent_id), std::move(name));
-            },
-            store);
+    return impl_->append_via([&](auto& active) {
+        return active.append_session_info(std::move(parent_id), std::move(name));
     });
 }
 
 support::ExpectedVoid SessionStore::append_leaf(
     std::optional<std::string> parent_id,
     std::optional<std::string> target_id) {
-    return dispatch_append([&](StorageVariant& store) {
-        return std::visit(
-            [&](auto& active) {
-                return active.append_leaf(std::move(parent_id), std::move(target_id));
-            },
-            store);
+    return impl_->append_via([&](auto& active) {
+        return active.append_leaf(std::move(parent_id), std::move(target_id));
     });
 }
 
