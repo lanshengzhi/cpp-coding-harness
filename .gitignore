@@ -4,6 +4,7 @@
 build/
 build-*/
 benchmark-build/
+benchmark-startup/
 .deps/
 .cpp-harness/sessions/*.jsonl
 vcpkg_installed/

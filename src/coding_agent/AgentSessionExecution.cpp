@@ -167,6 +167,19 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
         }
     }
     options.system_prompt = rebuild_system_prompt();
+    // pi `_installAgentNextTurnRefresh`: the between-turn trigger compacts
+    // before the next assistant response of the same run, so a long tool loop
+    // cannot grow past the context window (pi 0.84.4, #6879). The hook is
+    // stored inside the Agent, which this Impl owns and destroys with itself,
+    // so the captured `this` cannot outlive its target.
+    options.prepare_next_turn = [this](agent::PrepareNextTurnContext turn)
+            -> support::AsyncResult<std::optional<agent::AgentLoopTurnUpdate>> {
+        return support::detail::make_async_result(
+                [this, turn = std::move(turn)]() mutable
+                        -> boost::asio::awaitable<support::Expected<std::optional<agent::AgentLoopTurnUpdate>>> {
+                    co_return co_await compact_before_next_assistant_response(std::move(turn));
+                });
+    };
 
     // Resumed history is transferred exactly once into the authoritative Agent
     // state. AgentSession retains product metadata and durable storage only.

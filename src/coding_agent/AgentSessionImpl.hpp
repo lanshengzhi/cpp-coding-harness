@@ -238,6 +238,18 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     [[nodiscard]] boost::asio::awaitable<AutoCompactionOutcome> check_auto_compaction(
             const ai::AssistantMessage& assistant_message, bool skip_aborted_check);
 
+    /// Between-turn trigger policy (pi `_compactBeforeNextAssistantResponse`,
+    /// installed as the Agent's `prepare_next_turn` hook): compact when the
+    /// estimated live context crosses `contextWindow − reserveTokens` before
+    /// the next assistant response of the same run, then hand the rebuilt
+    /// compactionSummary + retained tail to the loop so the oversized context
+    /// never reaches the provider. Threshold only — no overflow
+    /// classification and no retry, exactly like pi's between-turn check.
+    /// Skips silently for in-memory sessions, the placeholder model, unknown
+    /// context windows, and disabled settings.
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<agent::AgentLoopTurnUpdate>>>
+    compact_before_next_assistant_response(agent::PrepareNextTurnContext turn);
+
     // ── State accessors & Projection Stream (ADR 0052) ───────────────────
 
     /// Copy one independent snapshot of authoritative Agent state plus

@@ -371,6 +371,50 @@ boost::asio::awaitable<AgentSession::Impl::AutoCompactionOutcome> AgentSession::
     co_return AutoCompactionOutcome::None;
 }
 
+boost::asio::awaitable<support::Expected<std::optional<agent::AgentLoopTurnUpdate>>>
+AgentSession::Impl::compact_before_next_assistant_response(agent::PrepareNextTurnContext turn) {
+    if (!agent_ || !session_.store || !session_.store->path()) {
+        // In-memory sessions have no tree/entry surface: the between-turn
+        // trigger is skipped silently, like the other automatic triggers.
+        co_return std::optional<agent::AgentLoopTurnUpdate>{};
+    }
+    const ai::Model model = agent_->state().model;
+    const std::size_t context_window = static_cast<std::size_t>(model.context_window);
+    if (model.id == agent::detail::kDefaultModel.id || context_window == 0) {
+        // pi `_compactBeforeNextAssistantResponse` skips `!model ||
+        // contextWindow <= 0`: the placeholder model is pike's "no model"
+        // state, and a model without a known window has no threshold (the
+        // recorded divergence shared with the threshold branch of
+        // `check_auto_compaction`).
+        co_return std::optional<agent::AgentLoopTurnUpdate>{};
+    }
+    // pi estimates from the live context (the last valid assistant usage plus
+    // the trailing messages), so a large tool result is seen before the next
+    // assistant response even when that usage is stale.
+    const auto estimate = harness::session::estimate_context_tokens(turn.context.messages);
+    if (!harness::session::should_compact(estimate.tokens, context_window, effective_compaction_settings())) {
+        co_return std::optional<agent::AgentLoopTurnUpdate>{};
+    }
+
+    // Threshold only and never a retry: the run continues with the rebuilt
+    // context returned below (pi `_runAutoCompaction("threshold", false)`).
+    (void)co_await run_auto_compaction(false, "threshold");
+
+    // pi returns `{...context, messages: this.agent.state.messages.slice()}`
+    // after `_runAutoCompaction`: the next request must use the rebuilt
+    // compactionSummary + retained tail instead of the oversized context,
+    // whether or not the door applied a compaction (a skipped preparation
+    // leaves the live context unchanged). The system prompt rides along
+    // because a context replacement replaces the whole model-facing context.
+    auto live_state = agent_->state();
+    agent::AgentLoopTurnUpdate update;
+    update.context = agent::AgentLoopContextReplacement{
+            .system_prompt = std::move(turn.context.system_prompt),
+            .messages = std::move(live_state.messages),
+    };
+    co_return std::optional<agent::AgentLoopTurnUpdate>{std::move(update)};
+}
+
 harness::session::CompactionSettings AgentSession::Impl::effective_compaction_settings() const {
     harness::session::CompactionSettings settings = harness::session::kDefaultCompactionSettings;
     if (!services_.settings_manager) {
