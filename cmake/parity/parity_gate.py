@@ -44,6 +44,7 @@ import re
 import struct
 import shlex
 import sys
+import tempfile
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
@@ -371,6 +372,38 @@ def _load_json(path: str, decode_rule_id: str) -> Any:
         raise SchemaViolation(
             decode_rule_id, f"evidence file '{path}' is not valid UTF-8 JSON: {exc}"
         ) from exc
+
+
+def _publish_json(document: Any, output_path: str) -> None:
+    """Publish an evidence document at ``output_path`` atomically.
+
+    The build-directory artifacts are shared: the production build-gate case
+    and the install gate run the same record+validate cycle against one build
+    directory, concurrently, and every cycle both writes the evidence and
+    reads it back (the Gate validator reads the depfile evidence, the install
+    freshness check reads it too). An in-place truncate-then-write exposes a
+    partially written document to those concurrent readers, which then reject
+    freshly recorded evidence as malformed (issue #734). Write the document to
+    a uniquely named sibling and publish it with ``os.replace``, so a reader
+    observes either the previous complete document or the new one.
+    """
+    directory = os.path.dirname(os.path.abspath(output_path))
+    descriptor, staged_path = tempfile.mkstemp(
+        dir=directory,
+        prefix=os.path.basename(output_path) + ".",
+        suffix=".tmp",
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(document, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        os.replace(staged_path, output_path)
+    except BaseException:
+        try:
+            os.unlink(staged_path)
+        except OSError:
+            pass
+        raise
 
 
 def parse_manifest(data: Any) -> Manifest:
@@ -2671,9 +2704,7 @@ def _emit_scan(sources: Sequence[str], output_path: str) -> None:
         "schema_version": DIRECT_INCLUDES_SCHEMA_VERSION,
         "sources": payload,
     }
-    with open(output_path, "w", encoding="utf-8") as handle:
-        json.dump(document, handle, indent=2, sort_keys=True)
-        handle.write("\n")
+    _publish_json(document, output_path)
 
 
 def _compute_config_digest(
@@ -2912,9 +2943,7 @@ def _record_depfiles(
         "deps_log_digest": deps_log_digest,
         "entries": entries,
     }
-    with open(output_path, "w", encoding="utf-8") as handle:
-        json.dump(document, handle, indent=2, sort_keys=True)
-        handle.write("\n")
+    _publish_json(document, output_path)
 
 def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(

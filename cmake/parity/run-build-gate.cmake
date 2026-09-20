@@ -93,12 +93,20 @@ execute_process(
 )
 
 # The machine-readable report is written on every run, pass or fail, so
-# automation always has the latest deterministic JSON diagnostics.
+# automation always has the latest deterministic JSON diagnostics. Like the
+# depfile evidence, this artifact lives in the shared build directory and is
+# read while concurrent Gate processes rewrite it (the install freshness
+# check reads it), so publication is atomic: a uniquely named sibling staging
+# file is renamed onto the report path, and a reader observes either the
+# previous complete report or the new one (issue #734).
+string(RANDOM LENGTH 12 ALPHABET 0123456789abcdef report_staging_suffix)
+set(report_staging "${CCH_PARITY_REPORT}.${report_staging_suffix}.tmp")
 if(gate_output STREQUAL "")
-    file(WRITE "${CCH_PARITY_REPORT}" "${gate_error}")
+    file(WRITE "${report_staging}" "${gate_error}")
 else()
-    file(WRITE "${CCH_PARITY_REPORT}" "${gate_output}")
+    file(WRITE "${report_staging}" "${gate_output}")
 endif()
+file(RENAME "${report_staging}" "${CCH_PARITY_REPORT}")
 
 if(NOT gate_result EQUAL 0)
     message(FATAL_ERROR

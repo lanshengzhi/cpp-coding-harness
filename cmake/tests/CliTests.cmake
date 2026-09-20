@@ -42,5 +42,17 @@ include_guard(GLOBAL)
     if(NOT CCH_SANITIZER STREQUAL "")
         target_compile_definitions(cch_tests_cli_arch PRIVATE CCH_SANITIZER_BUILD=1)
     endif()
-    catch_discover_tests(cch_tests_cli_arch ADD_TAGS_AS_LABELS)
+    # The staged-install case runs `cmake --install` against this build tree,
+    # whose install Gate reads the shared parity build-gate depfile evidence
+    # while the cch_parity_gate_production_build test rewrites it; a torn read
+    # aborts the install (#734). Discover it separately so it carries a
+    # RESOURCE_LOCK that serializes it against the Gate self-check under the
+    # parallel ctest default, while everything else discovers without the
+    # lock. The two discovery passes partition by the case's unique name
+    # prefix.
+    catch_discover_tests(cch_tests_cli_arch ADD_TAGS_AS_LABELS
+        TEST_SPEC "~staged install*")
+    catch_discover_tests(cch_tests_cli_arch ADD_TAGS_AS_LABELS
+        TEST_SPEC "staged install*"
+        PROPERTIES RESOURCE_LOCK "cch-parity-build-gate-evidence")
     add_dependencies(cch_tests_cli_arch ${CCH_PARITY_BUILD_GATE_TARGET})
