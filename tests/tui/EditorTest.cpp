@@ -1742,3 +1742,547 @@ TEST_CASE("Editor reports local dock terminal write failures", "[tui][editor][do
     CHECK(rendered.error().code == cch::support::ErrorCode::Validation);
     CHECK(rendered.error().message == "Virtual Terminal must be started before terminal operations");
 }
+
+// Focused test selection for #750 and following ticket #751:
+// ctest --preset vcpkg -LE architecture -L issue750
+// ctest --preset vcpkg -LE architecture -R '^Editor'
+
+TEST_CASE("Editor rejects non-positive visible widths with an exact validation failure",
+        "[tui][editor][presentation][validation][issue750][spec]") {
+    cch::tui::Editor editor;
+    const auto result = editor.render(0);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == cch::support::ErrorCode::Validation);
+    CHECK(result.error().message == "Editor requires a positive visible width");
+}
+
+TEST_CASE("Editor rejects graphemes wider than the viewport with an exact validation failure",
+        "[tui][editor][presentation][validation][issue750][spec]") {
+    cch::tui::Editor editor;
+    // CJK character "你" has visible grapheme width 2.
+    editor.set_text("你");
+    const auto result = editor.render(1);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == cch::support::ErrorCode::Validation);
+    CHECK(result.error().message == "Editor grapheme is wider than the available visible width");
+}
+
+TEST_CASE("Editor renders empty content with fake cursor padding and tracks focus cursor location",
+        "[tui][editor][presentation][cursor][issue750][spec]") {
+    cch::tui::Editor editor;
+    // When unfocused, cursor_location is nullopt even after rendering.
+    auto rendered = editor.render(10);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 1);
+    // Fake cursor occupies the first cell (reverse video space) followed by 9 padding spaces.
+    CHECK(rendered->lines[0] == "\x1b[7m \x1b[27m         ");
+    CHECK(cch::tui::visible_width(rendered->lines[0]) == 10);
+    CHECK(editor.cursor_location() == std::nullopt);
+
+    // When focused, cursor_location reports column 0, row 0.
+    editor.set_focused(true);
+    const auto loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->column == 0);
+    CHECK(loc->row == 0);
+
+    // With borders, empty content renders 3 rows (top border, content, bottom border).
+    cch::tui::EditorTheme theme;
+    theme.border = [](std::string s) { return s; };
+    editor.set_theme(std::move(theme));
+
+    const auto bordered = editor.render(6);
+    REQUIRE(bordered);
+    REQUIRE(bordered->lines.size() == 3);
+    CHECK(bordered->lines[0] == "──────");
+    CHECK(bordered->lines[1] == "\x1b[7m \x1b[27m     ");
+    CHECK(bordered->lines[2] == "──────");
+
+    // Freezes existing behavior: border_rows() (2) is added to visual row (0) -> row 2.
+    const auto bordered_loc = editor.cursor_location();
+    REQUIRE(bordered_loc.has_value());
+    CHECK(bordered_loc->column == 0);
+    CHECK(bordered_loc->row == 2);
+}
+
+TEST_CASE("Editor wraps multi-cell Unicode graphemes and computes exact visual cursor positions",
+        "[tui][editor][presentation][wrapping][cursor][issue750][spec]") {
+    cch::tui::Editor editor;
+    editor.set_focused(true);
+    // 4 CJK characters (each width 2, total 8 columns):
+    editor.set_text("你好世界");
+
+    // Width 5:
+    // Visual line 0 has doc segments 0 ("你") and 1 ("好"), visible width 4 + 1 space padding = 5.
+    // Visual line 1 has doc segments 2 ("世") and 3 ("界"), visible width 4 + 1 space padding = 5.
+    auto rendered = editor.render(5);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 2);
+    CHECK(cch::tui::visible_width(rendered->lines[0]) == 5);
+    CHECK(cch::tui::visible_width(rendered->lines[1]) == 5);
+
+    // Cursor at start (grapheme 0: "你"):
+    key(editor, "home");
+    rendered = editor.render(5);
+    REQUIRE(rendered);
+    CHECK(rendered->lines[0] == "\x1b[7m你\x1b[27m好 ");
+    auto loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->column == 0);
+    CHECK(loc->row == 0);
+
+    // Cursor at grapheme 1 ("好"):
+    key(editor, "right");
+    rendered = editor.render(5);
+    REQUIRE(rendered);
+    CHECK(rendered->lines[0] == "你\x1b[7m好\x1b[27m ");
+    loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->column == 2);
+    CHECK(loc->row == 0);
+
+    // Cursor at grapheme 2 (boundary after "好", displayed at end of visual line 0):
+    key(editor, "right");
+    rendered = editor.render(5);
+    REQUIRE(rendered);
+    CHECK(rendered->lines[0] == "你好\x1b[7m \x1b[27m");
+    loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->column == 4);
+    CHECK(loc->row == 0);
+
+    // Cursor at grapheme 3 ("界", on visual line 1):
+    key(editor, "right");
+    rendered = editor.render(5);
+    REQUIRE(rendered);
+    CHECK(rendered->lines[1] == "世\x1b[7m界\x1b[27m ");
+    loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->column == 2);
+    CHECK(loc->row == 1);
+
+    // Cursor at grapheme 4 (end of visual line 1):
+    key(editor, "right");
+    rendered = editor.render(5);
+    REQUIRE(rendered);
+    CHECK(rendered->lines[1] == "世界\x1b[7m \x1b[27m");
+    loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->column == 4);
+    CHECK(loc->row == 1);
+}
+
+TEST_CASE("Editor scrolls viewport across content lines without borders",
+        "[tui][editor][presentation][scroll][issue750][spec]") {
+    cch::tui::Editor editor(cch::tui::EditorOptions{.max_visible_lines = 2});
+    editor.set_focused(true);
+    editor.set_text("L0\nL1\nL2\nL3");
+    for (int i = 0; i < 3; ++i) {
+        key(editor, "up");
+    }
+
+    // Initially at L0: visual window is [L0, L1]
+    auto rendered = editor.render(10);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 2);
+    CHECK(rendered->lines[0] == "L0\x1b[7m \x1b[27m       ");
+    CHECK(rendered->lines[1] == "L1        ");
+    auto loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->row == 0);
+    CHECK(loc->column == 2);
+
+    // Move to L1: visual window remains [L0, L1]
+    key(editor, "down");
+    rendered = editor.render(10);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 2);
+    CHECK(rendered->lines[0] == "L0        ");
+    CHECK(rendered->lines[1] == "L1\x1b[7m \x1b[27m       ");
+    loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->row == 1);
+    CHECK(loc->column == 2);
+
+    // Move to L2: window scrolls down to [L1, L2]
+    key(editor, "down");
+    rendered = editor.render(10);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 2);
+    CHECK(rendered->lines[0] == "L1        ");
+    CHECK(rendered->lines[1] == "L2\x1b[7m \x1b[27m       ");
+    loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->row == 1);
+    CHECK(loc->column == 2);
+
+    // Move to L3: window scrolls down to [L2, L3]
+    key(editor, "down");
+    rendered = editor.render(10);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 2);
+    CHECK(rendered->lines[0] == "L2        ");
+    CHECK(rendered->lines[1] == "L3\x1b[7m \x1b[27m       ");
+    loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->row == 1);
+    CHECK(loc->column == 2);
+
+    // Move up once to L2: window remains [L2, L3] (L2 is top of visible window)
+    key(editor, "up");
+    rendered = editor.render(10);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 2);
+    CHECK(rendered->lines[0] == "L2\x1b[7m \x1b[27m       ");
+    CHECK(rendered->lines[1] == "L3        ");
+    loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->row == 0);
+    CHECK(loc->column == 2);
+
+    // Move up once more to L1: window scrolls up to [L1, L2]
+    key(editor, "up");
+    rendered = editor.render(10);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 2);
+    CHECK(rendered->lines[0] == "L1\x1b[7m \x1b[27m       ");
+    CHECK(rendered->lines[1] == "L2        ");
+    loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->row == 0);
+    CHECK(loc->column == 2);
+}
+
+TEST_CASE("Editor displays top and bottom scroll indicator borders while partially scrolled",
+        "[tui][editor][presentation][scroll][theme][issue750][spec]") {
+    cch::tui::Editor editor(cch::tui::EditorOptions{.max_visible_lines = 2});
+    cch::tui::EditorTheme theme;
+    theme.border = [](std::string text) { return text; };
+    editor.set_theme(std::move(theme));
+    editor.set_available_height(4); // 2 borders + 2 content lines
+    editor.set_text("A\nB\nC\nD\nE");
+
+    // Position at top line (A) and column 0: no lines above, 3 lines below (C, D, E)
+    for (int i = 0; i < 4; ++i) {
+        key(editor, "up");
+    }
+    key(editor, "home");
+    auto rendered = editor.render(16);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 4);
+    CHECK(rendered->lines[0] == "────────────────");
+    CHECK(rendered->lines[1] == "\x1b[7mA\x1b[27m               ");
+    CHECK(rendered->lines[2] == "B               ");
+    CHECK(rendered->lines[3] == "─── ↓ 3 more ───");
+
+    // Move down 2 times to line C: 1 line above (A), 2 lines below (D, E)
+    key(editor, "down");
+    key(editor, "down");
+    rendered = editor.render(16);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 4);
+    CHECK(rendered->lines[0] == "─── ↑ 1 more ───");
+    CHECK(rendered->lines[1] == "B               ");
+    CHECK(rendered->lines[2] == "\x1b[7mC\x1b[27m               ");
+    CHECK(rendered->lines[3] == "─── ↓ 2 more ───");
+
+    // Move down to line E (bottom): 3 lines above (A, B, C), no lines below
+    key(editor, "down");
+    key(editor, "down");
+    rendered = editor.render(16);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 4);
+    CHECK(rendered->lines[0] == "─── ↑ 3 more ───");
+    CHECK(rendered->lines[1] == "D               ");
+    CHECK(rendered->lines[2] == "\x1b[7mE\x1b[27m               ");
+    CHECK(rendered->lines[3] == "────────────────");
+}
+
+TEST_CASE("Editor truncates scroll indicator border on narrow widths with ellipsis",
+        "[tui][editor][presentation][scroll][theme][issue750][spec]") {
+    cch::tui::Editor editor(cch::tui::EditorOptions{.max_visible_lines = 2});
+    cch::tui::EditorTheme theme;
+    theme.border = [](std::string text) { return text; };
+    editor.set_theme(std::move(theme));
+    editor.set_available_height(4); // 2 border rows + 2 content rows
+    editor.set_text("1111\n2222\n3333\n4444\n5555");
+
+    // Scroll to the bottom
+    key(editor, "end");
+    key(editor, "down");
+    key(editor, "down");
+    key(editor, "down");
+    key(editor, "down");
+
+    // Render at narrow width 6:
+    // hidden lines above = 3 ("1111", "2222", "3333").
+    // Indicator "─── ↑ 3 more " has width 14 > 6.
+    // Ellipsis is "..." (width 3).
+    // Remaining width 6 - 3 = 3 -> sliced first 3 columns "───".
+    // Top border becomes "───...".
+    const auto rendered = editor.render(6);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 4);
+    CHECK(rendered->lines[0] == "───...");
+    CHECK(cch::tui::visible_width(rendered->lines[0]) == 6);
+    CHECK(rendered->lines[1] == "4444  ");
+    CHECK(rendered->lines[2] == "5555\x1b[7m \x1b[27m ");
+    CHECK(cch::tui::visible_width(rendered->lines[2]) == 6);
+    CHECK(rendered->lines[3] == "──────");
+    CHECK(cch::tui::visible_width(rendered->lines[3]) == 6);
+}
+
+TEST_CASE("Editor public render and local dock echo produce identical line content and cursor",
+        "[tui][editor][presentation][dock][issue750][spec]") {
+    cch::tui::VirtualTerminal terminal(cch::tui::VirtualTerminalOptions{
+            .columns = 30,
+            .rows = 10,
+    });
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+
+    cch::tui::EditorOptions options{
+            .max_visible_lines = 5,
+            .terminal = &terminal,
+            .dock_offset = 2,
+    };
+    cch::tui::Editor editor(std::move(options));
+    editor.set_focused(true);
+
+    CHECK(editor.has_local_echo());
+    CHECK(editor.terminal() == &terminal);
+    CHECK(editor.dock_offset() == 2);
+
+    // Insert multiline text at cursor, triggering local dock echo
+    editor.insert_text_at_cursor("alpha\nbeta");
+
+    const auto render_res = editor.render(30);
+    REQUIRE(render_res);
+    REQUIRE(render_res->lines.size() == 2);
+
+    const auto loc = editor.cursor_location();
+    REQUIRE(loc.has_value());
+    CHECK(loc->column == 4); // after "beta"
+    CHECK(loc->row == 1);
+
+    // Terminal screen at dock_offset (2) and dock_offset + 1 (3) matches rendered text stripped of ANSI
+    const auto screen = terminal.screen();
+    CHECK(screen[2] == cch::tui::strip_terminal_sequences(render_res->lines[0]));
+    CHECK(screen[3] == cch::tui::strip_terminal_sequences(render_res->lines[1]));
+    // Dock cursor position matches dock_offset + loc->row, loc->column
+    CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 4, .row = 3});
+}
+
+namespace {
+
+struct DockCursorOp {
+    cch::tui::CursorPosition position;
+    bool operator==(const DockCursorOp&) const = default;
+};
+
+struct DockWriteOp {
+    std::string text;
+    bool operator==(const DockWriteOp&) const = default;
+};
+
+using DockTerminalOpVariant = std::variant<DockCursorOp, DockWriteOp>;
+
+class RecordingTerminal final : public cch::tui::Terminal {
+public:
+    cch::tui::TerminalDimensions dims{.columns = 30, .rows = 10};
+    std::vector<DockTerminalOpVariant> log;
+    std::optional<cch::support::Error> set_dock_cursor_error;
+    std::optional<cch::support::Error> write_error;
+
+    cch::support::ExpectedVoid start(cch::tui::TerminalInputSink, cch::tui::TerminalResizeSink) override { return {}; }
+    cch::support::ExpectedVoid stop() override { return {}; }
+    cch::tui::TerminalDimensions dimensions() const override { return dims; }
+    cch::tui::TerminalCapabilities capabilities() const override { return {}; }
+    cch::tui::TerminalModeState modes() const override { return {}; }
+    cch::support::ExpectedVoid clear_screen() override { return {}; }
+    cch::support::ExpectedVoid write(std::string_view output) override {
+        log.emplace_back(DockWriteOp{.text = std::string(output)});
+        if (write_error) return std::unexpected(*write_error);
+        return {};
+    }
+    cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition) override { return {}; }
+    cch::support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
+    cch::support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
+    cch::support::ExpectedVoid reset_scroll_margins() override { return {}; }
+    cch::support::ExpectedVoid set_dock_cursor(std::size_t dock_row, std::size_t column) override {
+        log.emplace_back(DockCursorOp{.position = cch::tui::CursorPosition{.column = column, .row = dock_row}});
+        if (set_dock_cursor_error) return std::unexpected(*set_dock_cursor_error);
+        return {};
+    }
+    cch::support::Expected<cch::tui::TerminalImageHandle> place_image(const cch::tui::TerminalImage&) override {
+        return cch::tui::TerminalImageHandle{0};
+    }
+    cch::support::ExpectedVoid remove_image(cch::tui::TerminalImageHandle, const cch::tui::CellRegion&) override {
+        return {};
+    }
+    cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
+    cch::support::ExpectedVoid end_synchronized_update() override { return {}; }
+    cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }
+    cch::support::ExpectedVoid set_progress(bool) override { return {}; }
+    cch::support::ExpectedVoid drain_input(std::chrono::milliseconds = cch::tui::kDrainInputMaxMs,
+            std::chrono::milliseconds = cch::tui::kDrainInputIdleMs) override {
+        return {};
+    }
+};
+
+} // namespace
+
+TEST_CASE("Editor preserves dock terminal write ordering on render and line shrinking",
+        "[tui][editor][presentation][dock][issue750][spec]") {
+    RecordingTerminal term;
+    cch::tui::EditorOptions options{
+            .max_visible_lines = 5,
+            .terminal = &term,
+            .dock_offset = 3,
+    };
+    cch::tui::Editor editor(std::move(options));
+
+    // Single-line text mutation triggers exact write sequence:
+    // 1. set_dock_cursor(dock_offset + 0 = 3, 0)
+    // 2. write(rendered line)
+    // 3. set_dock_cursor(dock_offset + loc->row = 3, loc->column = 3)
+    term.log.clear();
+    editor.insert_text_at_cursor("abc");
+
+    const auto render1 = editor.render(30);
+    REQUIRE(render1);
+    REQUIRE(render1->lines.size() == 1);
+
+    REQUIRE(term.log.size() == 3);
+    CHECK(term.log[0] == DockTerminalOpVariant(DockCursorOp{.position = {.column = 0, .row = 3}}));
+    CHECK(term.log[1] == DockTerminalOpVariant(DockWriteOp{.text = render1->lines[0]}));
+    CHECK(term.log[2] == DockTerminalOpVariant(DockCursorOp{.position = {.column = 3, .row = 3}}));
+
+    // Add a second line via single atomic insertion
+    term.log.clear();
+    editor.insert_text_at_cursor("\ndef");
+
+    const auto render2 = editor.render(30);
+    REQUIRE(render2);
+    REQUIRE(render2->lines.size() == 2);
+
+    REQUIRE(term.log.size() == 5);
+    CHECK(term.log[0] == DockTerminalOpVariant(DockCursorOp{.position = {.column = 0, .row = 3}}));
+    CHECK(term.log[1] == DockTerminalOpVariant(DockWriteOp{.text = render2->lines[0]}));
+    CHECK(term.log[2] == DockTerminalOpVariant(DockCursorOp{.position = {.column = 0, .row = 4}}));
+    CHECK(term.log[3] == DockTerminalOpVariant(DockWriteOp{.text = render2->lines[1]}));
+    CHECK(term.log[4] == DockTerminalOpVariant(DockCursorOp{.position = {.column = 3, .row = 4}}));
+
+    // Shrink from 2 lines back to 1 line:
+    // Line 0 rendered, Line 1 cleared with width spaces, then final cursor positioned.
+    term.log.clear();
+    editor.set_text("xyz");
+
+    const auto render3 = editor.render(30);
+    REQUIRE(render3);
+    REQUIRE(render3->lines.size() == 1);
+
+    REQUIRE(term.log.size() == 5);
+    CHECK(term.log[0] == DockTerminalOpVariant(DockCursorOp{.position = {.column = 0, .row = 3}}));
+    CHECK(term.log[1] == DockTerminalOpVariant(DockWriteOp{.text = render3->lines[0]}));
+    CHECK(term.log[2] == DockTerminalOpVariant(DockCursorOp{.position = {.column = 0, .row = 4}}));
+    CHECK(term.log[3] == DockTerminalOpVariant(DockWriteOp{.text = std::string(30, ' ')}));
+    CHECK(term.log[4] == DockTerminalOpVariant(DockCursorOp{.position = {.column = 3, .row = 3}}));
+}
+
+TEST_CASE("Editor preserves dock position failure handling and render request notifications",
+        "[tui][editor][presentation][dock][issue750][spec]") {
+    SECTION("outside-dimensions dock position failure is recoverable and non-fatal") {
+        RecordingTerminal term;
+        std::size_t repaint_requests = 0;
+        cch::tui::EditorOptions options{
+                .render_request = [&repaint_requests]() -> cch::support::ExpectedVoid {
+                    ++repaint_requests;
+                    return {};
+                },
+                .terminal = &term,
+                .dock_offset = 1,
+        };
+        cch::tui::Editor editor(std::move(options));
+
+        term.set_dock_cursor_error = cch::support::make_error(
+                cch::support::ErrorCode::Validation, "terminal dock cursor position is outside its dimensions");
+        type(editor, "a");
+        CHECK(repaint_requests == 1);
+        const auto rendered = editor.render(30);
+        // Render succeeds because outside-dimensions error is non-fatal / recoverable
+        CHECK(rendered.has_value());
+    }
+
+    SECTION("generic dock position failure latches error and notifies render request") {
+        RecordingTerminal term;
+        std::size_t repaint_requests = 0;
+        cch::tui::EditorOptions options{
+                .render_request = [&repaint_requests]() -> cch::support::ExpectedVoid {
+                    ++repaint_requests;
+                    return {};
+                },
+                .terminal = &term,
+                .dock_offset = 1,
+        };
+        cch::tui::Editor editor(std::move(options));
+
+        term.set_dock_cursor_error =
+                cch::support::make_error(cch::support::ErrorCode::Process, "cursor positioning fault");
+        type(editor, "b");
+        CHECK(repaint_requests == 1);
+        const auto rendered = editor.render(30);
+        REQUIRE_FALSE(rendered);
+        CHECK(rendered.error().code == cch::support::ErrorCode::Process);
+        CHECK(rendered.error().message == "cursor positioning fault");
+    }
+}
+
+TEST_CASE("Editor latches dock write failure and aborts writes on format_lines error",
+        "[tui][editor][presentation][dock][issue750][spec]") {
+    RecordingTerminal term;
+    std::size_t repaint_requests = 0;
+    cch::tui::EditorOptions options{
+            .render_request = [&repaint_requests]() -> cch::support::ExpectedVoid {
+                ++repaint_requests;
+                return {};
+            },
+            .terminal = &term,
+            .dock_offset = 0,
+    };
+    cch::tui::Editor editor(std::move(options));
+
+    // Case 1: write error latches callback_error
+    term.write_error = cch::support::make_error(cch::support::ErrorCode::Process, "write pipe broken");
+    type(editor, "a");
+    CHECK(repaint_requests == 1);
+    const auto rendered = editor.render(30);
+    REQUIRE_FALSE(rendered);
+    CHECK(rendered.error().code == cch::support::ErrorCode::Process);
+    CHECK(rendered.error().message == "write pipe broken");
+
+    // Case 2: format_lines validation failure during dock echo (terminal width 1 with CJK char width 2)
+    RecordingTerminal narrow_term;
+    narrow_term.dims = {.columns = 1, .rows = 5};
+    std::size_t narrow_repaints = 0;
+    cch::tui::Editor narrow_editor(cch::tui::EditorOptions{
+            .render_request = [&narrow_repaints]() -> cch::support::ExpectedVoid {
+                ++narrow_repaints;
+                return {};
+            },
+            .terminal = &narrow_term,
+            .dock_offset = 0,
+    });
+
+    // Inserting "你" (width 2 > width 1) triggers format_lines validation error in echo_local
+    narrow_term.log.clear();
+    narrow_editor.insert_text_at_cursor("你");
+    // No terminal writes should have occurred because format_lines failed before writing
+    CHECK(narrow_term.log.empty());
+    CHECK(narrow_repaints == 1);
+    // The error is latched and reported by subsequent render
+    const auto narrow_rendered = narrow_editor.render(30);
+    REQUIRE_FALSE(narrow_rendered);
+    CHECK(narrow_rendered.error().code == cch::support::ErrorCode::Validation);
+    CHECK(narrow_rendered.error().message == "Editor grapheme is wider than the available visible width");
+}
