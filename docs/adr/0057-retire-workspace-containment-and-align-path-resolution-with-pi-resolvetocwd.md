@@ -7,9 +7,10 @@ status: accepted
 ADR 0026 introduced fail-closed workspace containment as an intentional security divergence from
 pi, and ADR 0034's #619 addendum later moved only the write/edit path scope to pi `resolveToCwd`,
 leaving three resolution scopes — addressed-path, read (workspace plus the #629
-`AuthorizedSkillRoots` allowlist), and write — behind one filesystem seam. Issue #696 measured the
-resulting fracture: an agent can write or edit a file under `/tmp` but cannot read it back; system
-headers, external repositories, and OS logs are unreadable; skills carrying absolute paths fail at
+`AuthorizedSkillRoots` allowlist), and write — behind one filesystem seam. Issue #695 captured the
+read-tool symptom; Issue #696 measured the resulting fracture: an agent can write or edit a file under
+`/tmp` but cannot read it back; system headers, external repositories, and OS logs are unreadable;
+skills carrying absolute paths fail at
 the tool-call boundary; and the codebase carries the split as cross-layer debt (three resolution
 entry points, the specialized `read_text_file_for_write`, and skill-root plumbing through Session
 assembly).
@@ -81,8 +82,9 @@ and is untouched.
 
 ## References
 
-- Issue [#696](https://github.com/lanshengzhi/cpp-coding-harness/issues/696) (problem statement,
-  implementation decisions) and [#697](https://github.com/lanshengzhi/cpp-coding-harness/issues/697)
+- Issue [#695](https://github.com/lanshengzhi/cpp-coding-harness/issues/695) (read-tool
+  alignment), Issue [#696](https://github.com/lanshengzhi/cpp-coding-harness/issues/696) (problem
+  statement and implementation decisions), and [#697](https://github.com/lanshengzhi/cpp-coding-harness/issues/697)
   (this record).
 - Issue #619 (write/edit realignment to `resolveToCwd`, closed), #629 (skill-root allowlist,
   closed; retired here), #630 (Kimi-style blocklist investigation, open; decided against in #696).

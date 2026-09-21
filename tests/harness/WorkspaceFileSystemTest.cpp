@@ -511,6 +511,28 @@ TEST_CASE("WorkspaceFileSystem honors absolute paths outside the workspace",
     CHECK(missing.error().code == harness::FileErrorCode::NotFound);
 }
 
+TEST_CASE("WorkspaceFileSystem reads a relative path outside the workspace after lexical normalization",
+        "[harness][filesystem][u2][spec][issue695]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace outside;
+    outside.write("note.txt", "outside body");
+    auto fs = harness::WorkspaceFileSystem::create(workspace.path());
+    REQUIRE(fs);
+
+    std::error_code relative_error;
+    const auto relative_target =
+            std::filesystem::relative(outside.path() / "note.txt", workspace.path(), relative_error);
+    REQUIRE_FALSE(relative_error);
+    REQUIRE(relative_target.is_relative());
+    REQUIRE(relative_target.generic_string().starts_with(".."));
+
+    // The read seam must apply pi lexical normalization before opening the
+    // file, not reject the path merely because it leaves the workspace root.
+    auto read = fs->readTextFile(relative_target.string());
+    REQUIRE(read);
+    CHECK(*read == "outside body");
+}
+
 TEST_CASE("WorkspaceFileSystem metadata listing and mutation operate outside the workspace",
         "[harness][filesystem][u2][spec][issue699]") {
     tests::TempWorkspace workspace;
