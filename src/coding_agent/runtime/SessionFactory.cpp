@@ -540,43 +540,28 @@ void cleanup_factory_filesystem(harness::AsyncFileSystem* filesystem) {
         }
     }
 
+    const auto first_match = [&](const auto& predicate) -> const ai::Model* {
+        const auto match = std::ranges::find_if(all_models, predicate);
+        return match == all_models.end() ? nullptr : &*match;
+    };
+
     // Exact id / provider+id matches without provider inference.
     const auto exact_match = [&](const ai::Model& model) {
         return lowercase(model.id) == lowercase(std::string{cli_model}) ||
                lowercase(model.provider + "/" + model.id) == lowercase(std::string{cli_model});
     };
-    if (!provider) {
-        for (const auto& model : all_models) {
-            if (exact_match(model)) {
-                return model;
-            }
-        }
-    }
+    const auto prov_exact = [&](const auto& m) { return (!provider || m.provider == *provider) && m.id == pattern; };
+    const auto provider_partial_match = [&](const auto& model) {
+        return (!provider || model.provider == *provider) &&
+               (model.id.find(pattern) != std::string::npos || model.name.find(pattern) != std::string::npos);
+    };
+    const auto inferred_match = [&](const auto& m) { return m.id.find(cli_model) != std::string::npos; };
 
-    // Exact id match within the resolved provider.
-    for (const auto& model : all_models) {
-        if ((!provider || model.provider == *provider) &&
-            model.id == pattern) {
-            return model;
-        }
-    }
-    // Partial id/name match within the resolved provider.
-    for (const auto& model : all_models) {
-        if ((!provider || model.provider == *provider) &&
-            (model.id.find(pattern) != std::string::npos ||
-             model.name.find(pattern) != std::string::npos)) {
-            return model;
-        }
-    }
-    // When a provider was inferred from the slash, retry the full input as a
-    // raw model id across all models (OpenRouter-style ids).
-    if (inferred_provider) {
-        for (const auto& model : all_models) {
-            if (model.id.find(cli_model) != std::string::npos) {
-                return model;
-            }
-        }
-    }
+    const ai::Model* matched_model = !provider ? first_match(exact_match) : nullptr;
+    if (!matched_model) matched_model = first_match(prov_exact);
+    if (!matched_model) matched_model = first_match(provider_partial_match);
+    if (!matched_model && inferred_provider) matched_model = first_match(inferred_match);
+    if (matched_model) return *matched_model;
 
     return std::unexpected(support::make_error(
         support::ErrorCode::ModelValidation,
@@ -712,22 +697,20 @@ struct SessionTargetNormalizationOptions {
         return std::unexpected(workspace.error());
     }
     options.workspace = std::move(*workspace);
+    const auto resolve_directory_override = [&]() -> support::Expected<std::optional<std::filesystem::path>> {
+        return resolve_cli_session_dir_override(
+                options.cli_session_dir, options.settings_session_dir, options.workspace);
+    };
 
-    if (const auto* default_target =
-            std::get_if<DefaultPersistedSessionTarget>(&target)) {
-        std::optional<std::filesystem::path> directory_override;
-        auto resolved = resolve_cli_session_dir_override(
-            options.cli_session_dir,
-            options.settings_session_dir,
-            options.workspace);
-        if (!resolved) {
-            return std::unexpected(resolved.error());
+    if (const auto* default_target = std::get_if<DefaultPersistedSessionTarget>(&target)) {
+        auto directory_override = resolve_directory_override();
+        if (!directory_override) {
+            return std::unexpected(directory_override.error());
         }
-        directory_override = std::move(*resolved);
         return NormalizedSessionTarget{AutomaticNewSessionTarget{
-            .workspace = std::move(options.workspace),
-            .directory_override = std::move(directory_override),
-            .session_id = default_target->session_id,
+                .workspace = std::move(options.workspace),
+                .directory_override = std::move(*directory_override),
+                .session_id = default_target->session_id,
         }};
     }
     if (auto* open_or_create =
@@ -745,35 +728,25 @@ struct SessionTargetNormalizationOptions {
         }};
     }
     if (auto* fork = std::get_if<ForkSessionTarget>(&target)) {
-        std::optional<std::filesystem::path> directory_override;
-        auto resolved = resolve_cli_session_dir_override(
-            options.cli_session_dir,
-            options.settings_session_dir,
-            options.workspace);
-        if (!resolved) {
-            return std::unexpected(resolved.error());
+        auto directory_override = resolve_directory_override();
+        if (!directory_override) {
+            return std::unexpected(directory_override.error());
         }
-        directory_override = std::move(*resolved);
         return NormalizedSessionTarget{ForkTarget{
-            .source_path = std::move(fork->source_path),
-            .session_id = std::move(fork->session_id),
-            .directory_override = std::move(directory_override),
-            .workspace = std::move(options.workspace),
+                .source_path = std::move(fork->source_path),
+                .session_id = std::move(fork->session_id),
+                .directory_override = std::move(*directory_override),
+                .workspace = std::move(options.workspace),
         }};
     }
     if (std::holds_alternative<ContinueRecentSessionTarget>(target)) {
-        std::optional<std::filesystem::path> directory_override;
-        auto resolved = resolve_cli_session_dir_override(
-            options.cli_session_dir,
-            options.settings_session_dir,
-            options.workspace);
-        if (!resolved) {
-            return std::unexpected(resolved.error());
+        auto directory_override = resolve_directory_override();
+        if (!directory_override) {
+            return std::unexpected(directory_override.error());
         }
-        directory_override = std::move(*resolved);
         return NormalizedSessionTarget{ContinueRecentTarget{
-            .directory_override = std::move(directory_override),
-            .workspace = std::move(options.workspace),
+                .directory_override = std::move(*directory_override),
+                .workspace = std::move(options.workspace),
         }};
     }
     if (const auto* in_memory = std::get_if<InMemorySessionTarget>(&target)) {
@@ -1025,16 +998,22 @@ struct PreparedAssemblyTarget final {
         NormalizedSessionTarget target, std::optional<std::filesystem::path> cwd_override) {
     const auto launch_cwd = std::visit([](const auto& value) { return value.workspace; }, target);
     PreparedAssemblyTarget result;
-
-    if (const auto* resume = std::get_if<ResumeSessionTarget>(&target)) {
-        auto prepared =
-                prepare_resume_target(resume->resume_path, resume->workspace, resume->workspace_explicit, cwd_override);
+    const auto adopt_prepared_resume = [&](support::Expected<PreparedResumeTarget> prepared) -> support::ExpectedVoid {
         if (!prepared) {
             return std::unexpected(prepared.error());
         }
         result.workspace = prepared->workspace;
         result.prepared_resume = std::move(*prepared);
         result.is_resume = true;
+        return {};
+    };
+
+    if (const auto* resume = std::get_if<ResumeSessionTarget>(&target)) {
+        if (auto adopted = adopt_prepared_resume(prepare_resume_target(
+                    resume->resume_path, resume->workspace, resume->workspace_explicit, cwd_override));
+                !adopted) {
+            return std::unexpected(adopted.error());
+        }
     } else if (const auto* open_or_create = std::get_if<OpenOrCreateSessionTarget>(&target)) {
         result.workspace = open_or_create->workspace;
         // pi `SessionManager.open`: an existing non-empty file resumes (cwd
@@ -1049,13 +1028,11 @@ struct PreparedAssemblyTarget final {
                     open_or_create->session_path.string()));
         }
         if (regular && std::filesystem::file_size(open_or_create->session_path, ec) > 0) {
-            auto prepared = prepare_resume_target(open_or_create->session_path, result.workspace, false, cwd_override);
-            if (!prepared) {
-                return std::unexpected(prepared.error());
+            if (auto adopted = adopt_prepared_resume(
+                        prepare_resume_target(open_or_create->session_path, result.workspace, false, cwd_override));
+                    !adopted) {
+                return std::unexpected(adopted.error());
             }
-            result.workspace = prepared->workspace;
-            result.prepared_resume = std::move(*prepared);
-            result.is_resume = true;
         } else {
             if (exists) {
                 std::error_code remove_ec;
@@ -1070,14 +1047,11 @@ struct PreparedAssemblyTarget final {
         }
     } else if (const auto* fork = std::get_if<ForkTarget>(&target)) {
         result.workspace = fork->workspace;
-        auto prepared =
-                prepare_fork_target(fork->source_path, result.workspace, fork->directory_override, fork->session_id);
-        if (!prepared) {
-            return std::unexpected(prepared.error());
+        if (auto adopted = adopt_prepared_resume(prepare_fork_target(
+                    fork->source_path, result.workspace, fork->directory_override, fork->session_id));
+                !adopted) {
+            return std::unexpected(adopted.error());
         }
-        result.prepared_resume = std::move(*prepared);
-        result.workspace = result.prepared_resume.workspace;
-        result.is_resume = true;
         result.transient_session_path = result.prepared_resume.resume_path;
     } else if (const auto* continue_recent = std::get_if<ContinueRecentTarget>(&target)) {
         result.workspace = continue_recent->workspace;
@@ -1092,13 +1066,11 @@ struct PreparedAssemblyTarget final {
                         : std::nullopt;
         if (auto most_recent = session_discovery::find_most_recent_session(
                 directory, cwd_filter)) {
-            auto prepared = prepare_resume_target(most_recent->path, result.workspace, false, cwd_override);
-            if (!prepared) {
-                return std::unexpected(prepared.error());
+            if (auto adopted = adopt_prepared_resume(
+                        prepare_resume_target(most_recent->path, result.workspace, false, cwd_override));
+                    !adopted) {
+                return std::unexpected(adopted.error());
             }
-            result.workspace = prepared->workspace;
-            result.prepared_resume = std::move(*prepared);
-            result.is_resume = true;
         } else {
             result.new_publication =
                     AutomaticPublication{result.workspace, continue_recent->directory_override, std::nullopt};
