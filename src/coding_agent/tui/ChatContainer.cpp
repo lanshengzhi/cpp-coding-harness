@@ -47,7 +47,13 @@ namespace {
     if (!rendered) return std::unexpected(rendered.error());
     return rendered;
 }
-
+[[nodiscard]] support::Expected<cch::tui::RenderResult> render_spaced_plain(
+        const LiveTheme& theme, std::string text, std::size_t width, ThemeToken token, bool add_spacer) {
+    auto rendered = render_plain(theme, std::move(text), width, token);
+    if (!rendered) return std::unexpected(rendered.error());
+    if (add_spacer) rendered->lines.insert(rendered->lines.begin(), std::string{});
+    return rendered;
+}
 /// Serializes tool-call arguments for presentation (pi JSON.stringify).
 [[nodiscard]] std::string serialized_arguments(const support::JsonValue& arguments) {
     if (auto serialized = support::write_json(arguments); serialized) {
@@ -720,33 +726,20 @@ struct ChatContainer::Impl {
         }
         return assistant.error_message.value_or("Provider ended before tool execution");
     }
-
     void apply_expanded_to_components() {
         for (auto& item : items) {
             auto* message = std::get_if<MessageItem>(&item);
             if (message == nullptr) continue;
-            if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message->message)) {
-                (void)bash;
-                if (message->component) {
-                    static_cast<BashExecutionComponent*>(message->component.get())->set_expanded(tools_expanded);
-                }
-            } else if (auto* custom = std::get_if<ai::CustomMessage>(&message->message)) {
-                (void)custom;
-                if (message->component) {
-                    static_cast<BoxedMessageComponent*>(message->component.get())->set_expanded(tools_expanded);
-                }
-            } else if (std::holds_alternative<ai::BranchSummaryMessage>(message->message) ||
-                       std::holds_alternative<ai::CompactionSummaryMessage>(message->message)) {
-                if (message->component) {
-                    static_cast<BoxedMessageComponent*>(message->component.get())->set_expanded(tools_expanded);
-                }
+            if (message->component != nullptr) {
+                if (auto* bash = dynamic_cast<BashExecutionComponent*>(message->component.get()); bash != nullptr)
+                    bash->set_expanded(tools_expanded);
+                else if (auto* boxed = dynamic_cast<BoxedMessageComponent*>(message->component.get()); boxed != nullptr)
+                    boxed->set_expanded(tools_expanded);
             }
-            for (auto* tool : message->tools) {
+            for (auto* tool : message->tools)
                 tool->component->set_expanded(tools_expanded);
-            }
         }
     }
-
     void apply_thinking_to_components() {
         for (auto& item : items) {
             auto* message = std::get_if<MessageItem>(&item);
@@ -757,7 +750,6 @@ struct ChatContainer::Impl {
             }
         }
     }
-
     void apply_output_pad_to_components() {
         for (auto& item : items) {
             auto* message = std::get_if<MessageItem>(&item);
@@ -768,10 +760,8 @@ struct ChatContainer::Impl {
             }
         }
     }
-
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render_item(
             ItemVariant& item, std::size_t width, std::size_t item_index) {
-        (void)item_index;
         if (auto* message = std::get_if<MessageItem>(&item)) {
             if (message->committed && message->cache.valid && message->cache.cached_width == width) {
                 ++cache_hit_count;
@@ -804,27 +794,10 @@ struct ChatContainer::Impl {
             return render_plain(theme, frontend->text, width, ThemeToken::Text);
         }
         if (const auto* trust_warning = std::get_if<TrustWarningItem>(&item)) {
-            // pi `renderProjectTrustWarningIfNeeded`: Spacer(1) above the
-            // warning-token text, only when the chat already has children.
-            cch::tui::RenderResult result;
-            if (item_index > 0) {
-                result.lines.emplace_back();
-            }
-            auto rendered = render_plain(theme, trust_warning->text, width, ThemeToken::Warning);
-            if (!rendered) return std::unexpected(rendered.error());
-            for (auto& line : rendered->lines)
-                result.lines.push_back(std::move(line));
-            return result;
+            return render_spaced_plain(theme, trust_warning->text, width, ThemeToken::Warning, item_index > 0);
         }
         if (const auto* status = std::get_if<StatusItem>(&item)) {
-            // pi showStatus: a Spacer row above the dim status text.
-            cch::tui::RenderResult result;
-            result.lines.emplace_back();
-            auto rendered = render_plain(theme, status->text, width, ThemeToken::Dim);
-            if (!rendered) return std::unexpected(rendered.error());
-            for (auto& line : rendered->lines)
-                result.lines.push_back(std::move(line));
-            return result;
+            return render_spaced_plain(theme, status->text, width, ThemeToken::Dim, true);
         }
         const auto& diagnostic = std::get<DiagnosticItem>(item);
         if (diagnostic.warning) {
