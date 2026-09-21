@@ -39,44 +39,45 @@
 #include <utility>
 #include <vector>
 #include <format>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 
 namespace {
 
 /// One isolated assembly fixture: a temp workspace for the session file and a
-/// temp Agent Config Directory (`PIKE_CODING_AGENT_DIR`) whose models.json /
+/// temp Agent Config Directory (`HOME`) whose models.json /
 /// settings.json drive the resolution chain deterministically. Ambient
 /// KIMI_API_KEY is unset so the built-in kimi-coding provider never resolves
 /// as configured unless the test says so.
 struct Fixture {
     cch::tests::TempWorkspace workspace;
-    cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
+    std::filesystem::path agent_dir;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
     tests::RuntimeFixture runtime;
 
     Fixture() {
-        dir_guard.set(agent_dir.path().string());
         home_guard.set(workspace.path().string());
+        agent_dir = tests::agent_root_under_home(workspace.path());
+        std::filesystem::create_directories(agent_dir);
         kimi_guard.unset();
         session_file = workspace.path() / "session.jsonl";
     }
 
     void write_models(std::string_view json) {
-        std::ofstream out(agent_dir.path() / "models.json", std::ios::binary);
+        std::ofstream out(agent_dir / "models.json", std::ios::binary);
         out << json;
     }
 
     void write_settings(std::string_view json) {
-        std::ofstream out(agent_dir.path() / "settings.json", std::ios::binary);
+        std::ofstream out(agent_dir / "settings.json", std::ios::binary);
         out << json;
     }
 
     [[nodiscard]] std::string read_settings() const {
-        std::ifstream in(agent_dir.path() / "settings.json", std::ios::binary);
+        std::ifstream in(agent_dir / "settings.json", std::ios::binary);
         return std::string{
             std::istreambuf_iterator<char>{in},
             std::istreambuf_iterator<char>{}};
@@ -139,7 +140,7 @@ constexpr std::string_view kKeylessBetaKeyedAlpha = R"({
 /// One keyed reasoning provider for thinking-persistence scenarios.
 constexpr std::string_view kKeyedReasoningProvider = R"({
   "providers": {
-    "deepseek": {
+    "alpha": {
       "baseUrl": "https://api.deepseek.example/v1",
       "api": "openai-responses",
       "apiKey": "dummy-deepseek-key",
@@ -358,7 +359,7 @@ TEST_CASE("resume restore failure with nothing available reports the no-models m
     // The catalog disappears entirely: the restore fails and the chain lands
     // on the unknown placeholder, so pi replaces the fallback message with
     // `formatNoModelsAvailableMessage()` (sdk.ts `if (!model)` branch).
-    std::filesystem::remove(fixture.agent_dir.path() / "models.json");
+    std::filesystem::remove(fixture.agent_dir / "models.json");
 
     auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
@@ -631,7 +632,7 @@ TEST_CASE("set_thinking_level persists a thinking_level_change entry and the set
 
     // A reloaded settings manager sees the merged default too.
     auto reloaded = coding_agent::SettingsManager::create(
-        fixture.workspace.path(), fixture.agent_dir.path(), /* project_trusted */ false);
+            fixture.workspace.path(), fixture.agent_dir, /* project_trusted */ false);
     CHECK(reloaded.settings().default_thinking_level == "high");
 }
 

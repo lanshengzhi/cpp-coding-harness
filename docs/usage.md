@@ -39,13 +39,11 @@ $BIN --fork PATH_OR_ID                         # copy history into a new session
 `--session-dir DIR` redirects automatic storage. Its precedence is:
 
 1. `--session-dir`;
-2. `PIKE_CODING_AGENT_SESSION_DIR`;
-3. `sessionDir` in `~/.pike/agent/settings.json`;
-4. the workspace-keyed default.
+2. `sessionDir` in `$XDG_CONFIG_HOME/pike/agent/settings.json`;
+3. the workspace-keyed default.
 
 ```bash
 $BIN --session-dir /data/sessions --print "hello"
-PIKE_CODING_AGENT_SESSION_DIR=/data/sessions $BIN --print "hello"
 ```
 
 `--no-session` leaves no transcript and takes precedence over create/resume/continue inputs; it cannot be combined with `--fork`. Session files remain sensitive even though persisted message content is redacted.
@@ -84,7 +82,7 @@ Kimi's `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY` examples target Anthropic-sh
 
 ## Agent configuration
 
-User state defaults to `~/.pike/agent/`; set `PIKE_CODING_AGENT_DIR` to replace that root.
+User state lives under `$XDG_CONFIG_HOME/pike/agent/` (defaulting to `~/.config/pike/agent/`); no environment variable relocates it.
 
 | Path | Purpose |
 | --- | --- |

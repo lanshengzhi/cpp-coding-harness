@@ -15,7 +15,7 @@
 //      diagnostics (pi report order).
 //
 // No live keys or network: providers resolve from a temp Agent Config
-// Directory (`PIKE_CODING_AGENT_DIR`) with env-template keys guarded by
+// Directory (`HOME`) with env-template keys guarded by
 // `EnvVarGuard`.
 
 #include <cch/ai/Models.hpp>
@@ -44,6 +44,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 namespace runtime = cch::coding_agent::runtime;
@@ -55,8 +56,7 @@ namespace {
 /// resolve as configured unless a test says so.
 struct AssemblyFixture {
     tests::TempWorkspace workspace;
-    tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
+    std::filesystem::path agent_dir;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard alpha_guard{"ALPHA_KEY"};
     tests::EnvVarGuard beta_guard{"BETA_KEY"};
@@ -66,14 +66,15 @@ struct AssemblyFixture {
     tests::RuntimeFixture runtime;
 
     AssemblyFixture() {
-        dir_guard.set(agent_dir.path().string());
         home_guard.set(workspace.path().string());
+        agent_dir = tests::agent_root_under_home(workspace.path());
+        std::filesystem::create_directories(agent_dir);
         kimi_guard.unset();
         deepseek_guard.unset();
     }
 
     void write_models(std::string_view json) {
-        std::ofstream out(agent_dir.path() / "models.json", std::ios::binary);
+        std::ofstream out(agent_dir / "models.json", std::ios::binary);
         out << json;
     }
 
@@ -263,7 +264,7 @@ TEST_CASE("Request Authentication precedence survives assembly unchanged",
     }
 
     // Level 2 (stored credential) beats the configured key.
-    coding_agent::AuthStorage storage(fix.agent_dir.path() / "auth.json");
+    coding_agent::AuthStorage storage(fix.agent_dir / "auth.json");
     auto stored = tests::run_async_result(storage.modify(
         "gamma",
         [](std::optional<ai::Credential>)
@@ -327,7 +328,7 @@ TEST_CASE("settings load errors surface as diagnostics ahead of resource diagnos
 
     // Broken global settings plus a duplicate project skill name: both kinds
     // of diagnostic fire in one creation attempt.
-    fix.agent_dir.write("settings.json", "{ this is not json");
+    fix.workspace.write(".config/pike/agent/settings.json", "{ this is not json");
     fix.workspace.write(
         ".pi/skills/first/SKILL.md",
         "---\nname: dupe-skill\ndescription: First skill.\n---\nFirst body.\n");

@@ -37,6 +37,7 @@
 #include <stop_token>
 #include <string>
 #include <vector>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 using tests::drain_ready;
@@ -55,22 +56,24 @@ constexpr std::string_view kKeyedModels = R"({
 })";
 
 /// One isolated assembly fixture: a temp workspace for the session files and
-/// a temp Agent Config Directory (`PIKE_CODING_AGENT_DIR`) whose models.json
+/// a temp Agent Config Directory (`HOME`) whose models.json
 /// drives runtime creation deterministically.
 struct Fixture {
     cch::tests::TempWorkspace workspace;
-    cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
+    std::filesystem::path agent_dir;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
 
     Fixture() {
-        dir_guard.set(agent_dir.path().string());
         home_guard.set(workspace.path().string());
+        agent_dir = tests::agent_root_under_home(workspace.path());
+        std::filesystem::create_directories(agent_dir);
+        agent_dir = tests::agent_root_under_home(workspace.path());
+        std::filesystem::create_directories(agent_dir);
         kimi_guard.unset();
         session_file = workspace.path() / "session.jsonl";
-        std::ofstream models(agent_dir.path() / "models.json", std::ios::binary);
+        std::ofstream models(agent_dir / "models.json", std::ios::binary);
         models << kKeyedModels;
     }
 
@@ -177,7 +180,7 @@ struct Running {
 
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
                        .with_session(*created.session)
-                       .with_agent_config_directory(fixture.agent_dir.path())
+                       .with_agent_config_directory(fixture.agent_dir)
                        .with_action_sink(actions->make_sink())
                        .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
                        .with_runtime_root(std::move(runtime_root))
@@ -369,7 +372,7 @@ TEST_CASE("a fresh in-memory session opens the tree on its initial thinking entr
     };
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
                        .with_session(*created.session)
-                       .with_agent_config_directory(fixture.agent_dir.path())
+                       .with_agent_config_directory(fixture.agent_dir)
                        .with_action_sink(actions->make_sink())
                        .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
                        .with_runtime_root(std::move(runtime_root))

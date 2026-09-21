@@ -9,6 +9,7 @@
 
 #include "coding_agent/runtime/AsyncCliRuntime.hpp"
 #include "support/Json.hpp"
+#include "support/AgentRootFixture.hpp"
 
 #include <algorithm>
 #include <array>
@@ -572,7 +573,7 @@ TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd",
     cch::tests::TempWorkspace original;
     cch::tests::TempWorkspace storage;
     cch::tests::TempWorkspace home;
-    home.write(".pike/agent/models.json", R"({
+    home.write(".config/pike/agent/models.json", R"({
       "providers": {
         "deepseek": {
           "baseUrl": "https://api.deepseek.example/v1",
@@ -587,8 +588,7 @@ TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd",
     // Seed a session whose header cwd (`original`) then vanishes while the
     // file survives (pi `getMissingSessionCwdIssue`).
     auto seeded = run_command_split("cd " + shell_quote(original.path()) + " && HOME=" + shell_quote(home.path()) +
-                                    " env -u PIKE_CODING_AGENT_DIR " + bin() + " --session " + shell_quote(session) +
-                                    " --model deepseek-v4-flash");
+                                    " " + bin() + " --session " + shell_quote(session) + " --model deepseek-v4-flash");
     REQUIRE(seeded.exit_code == 0);
     std::error_code ec;
     REQUIRE(std::filesystem::remove_all(original.path(), ec) > 0);
@@ -603,7 +603,6 @@ TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd",
         (void)::dup2(pty->slave.get(), STDOUT_FILENO);
         (void)::dup2(pty->slave.get(), STDERR_FILENO);
         (void)::setenv("HOME", home.path().string().c_str(), 1);
-        (void)::unsetenv("PIKE_CODING_AGENT_DIR");
         (void)::chdir(storage.path().string().c_str());
         ::execl(PIKE_EXECUTABLE, "pike", "--session", session.string().c_str(), static_cast<char*>(nullptr));
         ::_exit(127);
@@ -651,7 +650,7 @@ TEST_CASE("CLI --resume opens the startup-TUI picker on a real terminal",
         "[cli][startup-tui][issue417][issue528][spec][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    home.write(".pike/agent/models.json", R"({
+    home.write(".config/pike/agent/models.json", R"({
       "providers": {
         "deepseek": {
           "baseUrl": "https://api.deepseek.example/v1",
@@ -666,7 +665,7 @@ TEST_CASE("CLI --resume opens the startup-TUI picker on a real terminal",
     // print run still creates the session (pi). The picker's current-folder
     // scope lists it.
     auto seeded = run_command_split("cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) +
-                                    " env -u PIKE_CODING_AGENT_DIR " + bin() + " --model deepseek-v4-flash");
+                                    " " + bin() + " --model deepseek-v4-flash");
     REQUIRE(seeded.exit_code == 0);
 
     auto pty = cch::tests::open_pseudo_terminal(100, 40);
@@ -681,7 +680,6 @@ TEST_CASE("CLI --resume opens the startup-TUI picker on a real terminal",
         (void)::dup2(pty->slave.get(), STDOUT_FILENO);
         (void)::dup2(pty->slave.get(), STDERR_FILENO);
         (void)::setenv("HOME", home.path().string().c_str(), 1);
-        (void)::unsetenv("PIKE_CODING_AGENT_DIR");
         (void)::chdir(workspace.path().string().c_str());
         ::execl(PIKE_EXECUTABLE, "pike", "--print", "--resume", static_cast<char*>(nullptr));
         ::_exit(127);
@@ -832,7 +830,8 @@ TEST_CASE("CLI terminal auth failure after malformed settings keeps the warning 
         "[cli][settings][issue338][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
+    std::filesystem::create_directories(agent_dir);
     std::filesystem::create_directories(agent_dir);
     {
         std::ofstream settings(agent_dir / "settings.json");
@@ -840,7 +839,7 @@ TEST_CASE("CLI terminal auth failure after malformed settings keeps the warning 
     }
     auto session = workspace.path() / "settings-fallback-failure.jsonl";
     auto result = run_command_split("cd " + shell_quote(workspace.path()) +
-                                    " && PIKE_CODING_AGENT_DIR=" + shell_quote(agent_dir) + " env -u KIMI_API_KEY " +
+                                    " && HOME=" + shell_quote(agent_root.path().string()) + " env -u KIMI_API_KEY " +
                                     bin() + " --session " + shell_quote(session) + " hello");
 
     REQUIRE(result.exit_code == 1);
@@ -885,14 +884,14 @@ TEST_CASE("CLI project-controlled default trust store cannot authorize project s
                     "---\n"
                     "# Demo Skill\n\n"
                     "Do demo.\n");
-    workspace.write(".pike/agent/trust.json",
+    workspace.write(".config/pike/agent/trust.json",
             "{\"" + std::filesystem::weakly_canonical(workspace.path()).string() + "\":true}\n");
     auto session = workspace.path() / "project-controlled-trust.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session", session.string(), "/skill:demo"},
             .cwd = workspace.path(),
-            .env = {{"HOME", workspace.path().string()}, {"PIKE_CODING_AGENT_DIR", std::nullopt}},
+            .env = {{"HOME", workspace.path().string()}},
             .stdin_text = {},
     });
 
@@ -1171,13 +1170,13 @@ TEST_CASE("CLI text mode shows malformed project resource diagnostics on stderr"
 TEST_CASE("CLI applies settings.json model when CLI omits --model", "[cli][settings][spec][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    home.write(".pike/agent/settings.json", R"({"defaultModel":"config-model-name"})");
+    home.write(".config/pike/agent/settings.json", R"({"defaultModel":"config-model-name"})");
     auto session = workspace.path() / "settings-model-session.jsonl";
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session", session.string(), "hello"},
             .cwd = workspace.path(),
-            .env = {{"HOME", home.path().string()}, {"PIKE_CODING_AGENT_DIR", std::nullopt}},
+            .env = {{"HOME", home.path().string()}},
             .stdin_text = {},
     });
 
@@ -1310,8 +1309,8 @@ TEST_CASE("CLI resume falls back with a diagnostic when the stored model no long
         "[cli][resume][issue346][spec][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    const auto models_path = home.path() / ".pike" / "agent" / "models.json";
-    home.write(".pike/agent/models.json", R"({
+    const auto models_path = cch::tests::agent_root_under_home(home.path()) / "models.json";
+    home.write(".config/pike/agent/models.json", R"({
       "providers": {
         "deepseek": {
           "baseUrl": "https://api.deepseek.example/v1",
@@ -1326,8 +1325,7 @@ TEST_CASE("CLI resume falls back with a diagnostic when the stored model no long
     // Create a session that records deepseek/deepseek-v4-flash without
     // streaming: a no-prompt print run still creates the session (pi).
     auto first = run_command_split("cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) +
-                                   " env -u PIKE_CODING_AGENT_DIR " + bin() + " --session " + shell_quote(session) +
-                                   " --model deepseek-v4-flash");
+                                   " " + bin() + " --session " + shell_quote(session) + " --model deepseek-v4-flash");
     REQUIRE(first.exit_code == 0);
 
     // Remove the configured model, then resume: the stored identity no longer
@@ -1336,7 +1334,7 @@ TEST_CASE("CLI resume falls back with a diagnostic when the stored model no long
     // `modelFallbackMessage`); print mode drops it entirely.
     std::filesystem::remove(models_path);
     auto second = run_command_split("cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) +
-                                    " env -u PIKE_CODING_AGENT_DIR " + bin() + " --session " + shell_quote(session));
+                                    " " + bin() + " --session " + shell_quote(session));
 
     REQUIRE(second.exit_code == 0);
     CHECK(second.stderr_text.find("Could not restore model") == std::string::npos);
@@ -1400,13 +1398,14 @@ TEST_CASE("CLI default creation stores the session under the workspace-keyed age
         "[cli][default-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
+    std::filesystem::create_directories(agent_dir);
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
 
@@ -1423,22 +1422,23 @@ TEST_CASE(
     cch::tests::TempWorkspace real;
     cch::tests::TempWorkspace alias_root;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto alias = alias_root.path() / "workspace-link";
+    std::filesystem::create_directories(agent_dir);
     std::filesystem::create_directory_symlink(std::filesystem::canonical(real.path()), alias);
     const auto canonical_workspace = std::filesystem::canonical(real.path());
 
     auto direct = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"first"},
             .cwd = real.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(direct.exit_code == 0);
     auto aliased = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"second"},
             .cwd = alias,
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(aliased.exit_code == 0);
@@ -1469,13 +1469,14 @@ TEST_CASE(
 TEST_CASE("CLI piped print propagates the same default persisted target", "[cli][default-session][issue64][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
+    std::filesystem::create_directories(agent_dir);
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = "hello",
     });
 
@@ -1488,13 +1489,14 @@ TEST_CASE("CLI explicit session targets keep their exact paths outside the defau
         "[cli][default-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto explicit_session = workspace.path() / "explicit.jsonl";
+    std::filesystem::create_directories(agent_dir);
 
     auto created = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session", explicit_session.string(), "first"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(created.exit_code == 0);
@@ -1504,7 +1506,7 @@ TEST_CASE("CLI explicit session targets keep their exact paths outside the defau
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session", explicit_session.string(), "second"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(resumed.exit_code == 0);
@@ -1516,8 +1518,9 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
         "[cli][default-session][legacy][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto legacy_dir = workspace.path() / ".cpp-harness" / "sessions";
+    std::filesystem::create_directories(agent_dir);
     std::filesystem::create_directories(legacy_dir);
     const auto legacy_file = legacy_dir / "legacy.jsonl";
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
@@ -1525,7 +1528,7 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
     auto seed = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session", legacy_file.string(), "legacy-seed"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(seed.exit_code == 0);
@@ -1534,7 +1537,7 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(result.exit_code == 0);
@@ -1546,7 +1549,7 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session", legacy_file.string(), "second"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(resumed.exit_code == 0);
@@ -1555,31 +1558,12 @@ TEST_CASE("CLI default creation ignores the old project-local sessions directory
     CHECK(jsonl_files_under(agent_dir / "sessions").size() == 1);
 }
 
-TEST_CASE("CLI default creation fails explicitly when default storage is unsafe", "[cli][default-session][spec]") {
-    cch::tests::TempWorkspace workspace;
-    cch::tests::TempWorkspace blocker_root;
-    const auto blocker = blocker_root.path() / "not-a-directory";
-    {
-        std::ofstream output(blocker, std::ios::binary);
-        output << "regular file";
-    }
-
-    auto result = run_command_split("cd " + shell_quote(workspace.path()) +
-                                    " && PIKE_CODING_AGENT_DIR=" + shell_quote(blocker) + " " + bin() + " hello");
-
-    REQUIRE(result.exit_code != 0);
-    CHECK(result.stdout_text.empty());
-    CHECK(result.stderr_text.find("could not") != std::string::npos);
-    CHECK(result.stderr_text.find(blocker.string()) != std::string::npos);
-    CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
-}
-
 TEST_CASE("CLI default creation fails explicitly when no user-level root can be resolved",
         "[cli][default-session][spec]") {
     cch::tests::TempWorkspace workspace;
 
     auto result = run_command_split("cd " + shell_quote(workspace.path()) +
-                                    " && env -u HOME -u USERPROFILE -u PIKE_CODING_AGENT_DIR " + bin() + " hello");
+                                    " && env -u HOME -u USERPROFILE -u XDG_CONFIG_HOME " + bin() + " hello");
 
     REQUIRE(result.exit_code != 0);
     CHECK(result.stdout_text.empty());
@@ -1591,7 +1575,7 @@ TEST_CASE("CLI help describes automatic user-level session storage", "[cli][defa
     auto result = run_command(bin() + " --help");
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.output.find("PIKE_CODING_AGENT_DIR") != std::string::npos);
+    CHECK(result.output.find("$XDG_CONFIG_HOME/pike/agent") != std::string::npos);
     CHECK(result.output.find("sessions") != std::string::npos);
     CHECK(result.output.find("--session-id") != std::string::npos);
 }
@@ -1599,12 +1583,12 @@ TEST_CASE("CLI help describes automatic user-level session storage", "[cli][defa
 TEST_CASE("CLI failed assembly publishes no default session file", "[cli][default-session][assembly][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
-
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
+    std::filesystem::create_directories(agent_dir);
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--prompt-template", "missing.md", "hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
 
@@ -1630,12 +1614,12 @@ void require_no_session_filesystem_state(
 TEST_CASE("CLI --no-session runs a text prompt without publishing session state", "[cli][no-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
-
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
+    std::filesystem::create_directories(agent_dir);
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--no-session", "hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
 
@@ -1648,12 +1632,12 @@ TEST_CASE("CLI --no-session runs a text prompt without publishing session state"
 TEST_CASE("CLI --no-session sends /session to the model as an ordinary prompt", "[cli][no-session][issue64][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
-
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
+    std::filesystem::create_directories(agent_dir);
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--no-session", "--print", "/session"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
 
@@ -1665,13 +1649,14 @@ TEST_CASE("CLI --no-session sends /session to the model as an ordinary prompt", 
 TEST_CASE("CLI print mode sends /session to the model under default session storage", "[cli][no-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
+    std::filesystem::create_directories(agent_dir);
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"/session"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
 
@@ -1683,15 +1668,16 @@ TEST_CASE("CLI print mode sends /session to the model under default session stor
 TEST_CASE("CLI --no-session short-circuits silently over explicit create and resume", "[cli][no-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto explicit_session = workspace.path() / "explicit.jsonl";
+    std::filesystem::create_directories(agent_dir);
 
     // pi: --no-session wins silently over --session/--resume; the C++-today
     // conflict errors are deleted and no session file is ever written.
     auto created = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--no-session", "--session", explicit_session.string(), "hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(created.exit_code == 0);
@@ -1702,7 +1688,7 @@ TEST_CASE("CLI --no-session short-circuits silently over explicit create and res
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--no-session", "--resume", "hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(resumed.exit_code == 0);
@@ -1715,7 +1701,10 @@ TEST_CASE("CLI --no-session short-circuits silently over explicit create and res
 TEST_CASE("CLI --no-session does not consult default storage", "[cli][no-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace blocker_root;
-    const auto blocker = blocker_root.path() / "not-a-directory";
+    const auto blocker_home = blocker_root.path();
+    const auto blocker = cch::tests::agent_root_under_home(blocker_home);
+    std::filesystem::create_directories(blocker);
+    std::filesystem::create_directories(blocker.parent_path());
     {
         std::ofstream output(blocker, std::ios::binary);
         output << "regular file";
@@ -1724,7 +1713,7 @@ TEST_CASE("CLI --no-session does not consult default storage", "[cli][no-session
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--no-session", "hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", blocker.string()}},
+            .env = {{"HOME", blocker_home.string()}},
             .stdin_text = {},
     });
 
@@ -1738,13 +1727,14 @@ TEST_CASE("CLI --no-session does not consult default storage", "[cli][no-session
 TEST_CASE("CLI --no-session preserves tool execution and events", "[cli][no-session][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     std::ofstream(workspace.path() / "note.txt") << "in-memory tool text";
+    std::filesystem::create_directories(agent_dir);
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--no-session", "read note.txt"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
 
@@ -1759,12 +1749,12 @@ TEST_CASE(
         "CLI --no-session publishes no filesystem state after a startup failure", "[cli][no-session][assembly][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
-
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
+    std::filesystem::create_directories(agent_dir);
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--no-session", "--prompt-template", "missing.md", "hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
 
@@ -1777,14 +1767,15 @@ TEST_CASE("CLI --session-dir redirects automatic storage for one run", "[cli][se
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     cch::tests::TempWorkspace override_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto override_dir = override_root.path() / "sessions";
+    std::filesystem::create_directories(agent_dir);
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session-dir", override_dir.string(), "hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
 
@@ -1797,16 +1788,15 @@ TEST_CASE("CLI --session-dir redirects automatic storage for one run", "[cli][se
     CHECK_FALSE(std::filesystem::exists(workspace.path() / ".cpp-harness" / "sessions"));
 }
 
-TEST_CASE("CLI session directory precedence is flag over environment over settings", "[cli][session-dir][spec]") {
+TEST_CASE("CLI session directory precedence is flag over settings", "[cli][session-dir][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     cch::tests::TempWorkspace flag_root;
-    cch::tests::TempWorkspace env_root;
     cch::tests::TempWorkspace settings_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
+    std::filesystem::create_directories(agent_dir);
     std::filesystem::create_directories(agent_dir);
     const auto flag_dir = flag_root.path() / "flag-sessions";
-    const auto env_dir = env_root.path() / "env-sessions";
     const auto settings_dir = settings_root.path() / "settings-sessions";
     {
         std::ofstream settings(agent_dir / "settings.json");
@@ -1816,28 +1806,17 @@ TEST_CASE("CLI session directory precedence is flag over environment over settin
     auto flagged = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session-dir", flag_dir.string(), "first"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}, {"PIKE_CODING_AGENT_SESSION_DIR", env_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(flagged.exit_code == 0);
     CHECK(jsonl_files_under(flag_dir).size() == 1);
-    CHECK_FALSE(std::filesystem::exists(env_dir));
-    CHECK_FALSE(std::filesystem::exists(settings_dir));
-
-    auto from_env = cch::tests::run_cli(cch::tests::CliRunOptions{
-            .args = {"second"},
-            .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}, {"PIKE_CODING_AGENT_SESSION_DIR", env_dir.string()}},
-            .stdin_text = {},
-    });
-    REQUIRE(from_env.exit_code == 0);
-    CHECK(jsonl_files_under(env_dir).size() == 1);
     CHECK_FALSE(std::filesystem::exists(settings_dir));
 
     auto from_settings = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"third"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(from_settings.exit_code == 0);
@@ -1849,14 +1828,14 @@ TEST_CASE("CLI ignores the legacy pi session directory environment variable", "[
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     cch::tests::TempWorkspace legacy_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto legacy_dir = legacy_root.path() / "pi-sessions";
+    std::filesystem::create_directories(agent_dir);
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()},
-                    {"PI_CODING_AGENT_SESSION_DIR", legacy_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}, {"PI_CODING_AGENT_SESSION_DIR", legacy_dir.string()}},
             .stdin_text = {},
     });
 
@@ -1868,13 +1847,14 @@ TEST_CASE("CLI ignores the legacy pi session directory environment variable", "[
 TEST_CASE("CLI relative --session-dir resolves against the final workspace", "[cli][session-dir][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
+    std::filesystem::create_directories(agent_dir);
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session-dir", "my-sessions", "hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(result.exit_code == 0);
@@ -1886,7 +1866,7 @@ TEST_CASE("CLI relative --session-dir resolves against the final workspace", "[c
     auto again = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session-dir", "my-sessions", "again"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(again.exit_code == 0);
@@ -1897,13 +1877,14 @@ TEST_CASE("CLI session directory override expands a leading home marker", "[cli]
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     cch::tests::TempWorkspace home_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
+    std::filesystem::create_directories(agent_dir);
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session-dir", "~/tilde-sessions", "hello"},
             .cwd = workspace.path(),
-            .env = {{"HOME", home_root.path().string()}, {"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", home_root.path().string()}},
             .stdin_text = {},
     });
 
@@ -1917,14 +1898,15 @@ TEST_CASE("CLI explicit create and resume targets ignore session directory overr
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     cch::tests::TempWorkspace override_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto override_dir = override_root.path() / "sessions";
+    std::filesystem::create_directories(agent_dir);
     const auto explicit_session = workspace.path() / "explicit.jsonl";
 
     auto created = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session-dir", override_dir.string(), "--session", explicit_session.string(), "first"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(created.exit_code == 0);
@@ -1932,10 +1914,9 @@ TEST_CASE("CLI explicit create and resume targets ignore session directory overr
     CHECK_FALSE(std::filesystem::exists(override_dir));
 
     auto resumed = cch::tests::run_cli(cch::tests::CliRunOptions{
-            .args = {"--session", explicit_session.string(), "second"},
+            .args = {"--session-dir", override_dir.string(), "--session", explicit_session.string(), "second"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()},
-                    {"PIKE_CODING_AGENT_SESSION_DIR", override_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(resumed.exit_code == 0);
@@ -1948,13 +1929,14 @@ TEST_CASE("CLI --no-session ignores session directory overrides and publishes no
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     cch::tests::TempWorkspace override_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto override_dir = override_root.path() / "sessions";
+    std::filesystem::create_directories(agent_dir);
 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--no-session", "--session-dir", override_dir.string(), "hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
 
@@ -1968,7 +1950,8 @@ TEST_CASE("CLI --no-session ignores session directory overrides and publishes no
 TEST_CASE("CLI ignores a non-string settings sessionDir and uses the default root", "[cli][session-dir][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
+    std::filesystem::create_directories(agent_dir);
     std::filesystem::create_directories(agent_dir);
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
     {
@@ -1979,7 +1962,7 @@ TEST_CASE("CLI ignores a non-string settings sessionDir and uses the default roo
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
 
@@ -1990,7 +1973,8 @@ TEST_CASE("CLI ignores a non-string settings sessionDir and uses the default roo
 TEST_CASE("CLI malformed settings keep default session storage with a warning", "[cli][session-dir][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
+    std::filesystem::create_directories(agent_dir);
     std::filesystem::create_directories(agent_dir);
     const auto canonical_workspace = std::filesystem::canonical(workspace.path());
     {
@@ -2001,7 +1985,7 @@ TEST_CASE("CLI malformed settings keep default session storage with a warning", 
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
 
@@ -2014,8 +1998,9 @@ TEST_CASE("CLI unavailable session directory override fails explicitly without f
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace agent_root;
     cch::tests::TempWorkspace blocker_root;
-    const auto agent_dir = agent_root.path() / "agent";
+    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
     const auto blocker = blocker_root.path() / "not-a-directory";
+    std::filesystem::create_directories(agent_dir);
     {
         std::ofstream output(blocker, std::ios::binary);
         output << "regular file";
@@ -2024,7 +2009,7 @@ TEST_CASE("CLI unavailable session directory override fails explicitly without f
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session-dir", blocker.string(), "hello"},
             .cwd = workspace.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", agent_dir.string()}},
+            .env = {{"HOME", agent_root.path().string()}},
             .stdin_text = {},
     });
 
@@ -2148,11 +2133,11 @@ TEST_CASE("CLI --no-skills drops discovered skills but keeps the prompt", "[cli]
     CHECK(result.stdout_text.find("Do demo.") == std::string::npos);
 }
 
-TEST_CASE("CLI loads user skills from ~/.pike/agent/skills with root-level .md inclusion",
+TEST_CASE("CLI loads user skills from ~/.config/pike/agent/skills with root-level .md inclusion",
         "[cli][skill][issue412][spec][issue626]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
-    home.write(".pike/agent/skills/user-skill/SKILL.md",
+    home.write(".config/pike/agent/skills/user-skill/SKILL.md",
             "---\n"
             "name: user-skill\n"
             "description: User skill.\n"
@@ -2164,7 +2149,7 @@ TEST_CASE("CLI loads user skills from ~/.pike/agent/skills with root-level .md i
     auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
             .args = {"--session", session.string(), "/skill:user-skill"},
             .cwd = workspace.path(),
-            .env = {{"HOME", home.path().string()}, {"PIKE_CODING_AGENT_DIR", std::nullopt}},
+            .env = {{"HOME", home.path().string()}},
             .stdin_text = {},
     });
 

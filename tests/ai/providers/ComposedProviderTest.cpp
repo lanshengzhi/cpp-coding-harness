@@ -27,8 +27,7 @@ using tests::TransportAttempt;
 /// Runs one composed-provider stream over a scripted transport and returns the
 /// single request the adapter sent, so a test can inspect what actually left
 /// the provider.
-[[nodiscard]] ai::providers::StreamRequest run_stream(
-        const std::string& provider_id,
+[[nodiscard]] ai::providers::StreamRequest run_stream(const std::string& provider_id,
         ai::ProviderStreamOptions options,
         const std::shared_ptr<ScriptedTransport>& transport) {
     auto model = tests::make_model("gpt-5.6-luna", provider_id, "openai-responses");
@@ -58,7 +57,7 @@ using tests::TransportAttempt;
 
 [[nodiscard]] std::shared_ptr<ScriptedTransport> transport_with_one_attempt() {
     auto transport = std::make_shared<ScriptedTransport>();
-    transport->attempts.push_back(TransportAttempt{.head = {.status_code = 200}, .chunks = {}});
+    transport->attempts.push_back(TransportAttempt{.head = {.status_code = 200, .headers = {}}, .chunks = {}});
     return transport;
 }
 

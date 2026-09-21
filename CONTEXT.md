@@ -257,7 +257,7 @@ The user-controlled authorization decision governing whether project-authored re
 _Avoid_: Workspace configuration, project self-approval
 
 **Agent Config Directory**:
-The user-level root for durable harness state shared across workspaces, located at `~/.pike/agent` (overridable via `PIKE_CODING_AGENT_DIR`), retaining compatibility only for project-level `.pi/` resources.
+The single user-level root for durable harness state shared across workspaces, fixed at `$XDG_CONFIG_HOME/pike/agent` (`~/.config/pike/agent` by default) and never relocated by the environment; project-level `.pi/` resources stay separate.
 _Avoid_: Config home, user profile directory, shared pi user root
 
 **User Settings**:

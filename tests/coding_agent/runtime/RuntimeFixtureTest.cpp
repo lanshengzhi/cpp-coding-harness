@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 
@@ -120,16 +121,16 @@ private:
 
 struct SharedSessionFixture final {
     tests::TempWorkspace workspace;
-    tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR"};
+    std::filesystem::path agent_dir;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::ScriptedRuntimeFixture scripted;
     tests::RuntimeFixture runtime;
     std::shared_ptr<harness::RuntimeTarget> target;
 
     SharedSessionFixture() : target(runtime.make_target()) {
-        agent_dir_guard.set(agent_dir.path().string());
         home_guard.set(workspace.path().string());
+        agent_dir = tests::agent_root_under_home(workspace.path());
+        std::filesystem::create_directories(agent_dir);
     }
 
     [[nodiscard]] coding_agent::runtime::AgentSessionCreationRequest request() const {

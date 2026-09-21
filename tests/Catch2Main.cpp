@@ -50,20 +50,16 @@ public:
         isolation.root_ = std::move(*root);
 
         const auto home = isolation.create_directory("home");
-        const auto agent_config = isolation.create_directory("agent");
         const auto temporary = isolation.create_directory("tmp");
-        const auto xdg_config = isolation.create_directory("xdg-config");
         const auto xdg_cache = isolation.create_directory("xdg-cache");
         const auto xdg_data = isolation.create_directory("xdg-data");
-        if (!home || !agent_config || !temporary || !xdg_config || !xdg_cache || !xdg_data) {
+        if (!home || !temporary || !xdg_cache || !xdg_data) {
             return std::unexpected("could not create all test isolation directories");
         }
 
         const std::pair<const char*, const std::filesystem::path*> environment[] = {
                 {"HOME", &*home},
-                {"PIKE_CODING_AGENT_DIR", &*agent_config},
                 {"TMPDIR", &*temporary},
-                {"XDG_CONFIG_HOME", &*xdg_config},
                 {"XDG_CACHE_HOME", &*xdg_cache},
                 {"XDG_DATA_HOME", &*xdg_data},
         };
@@ -72,13 +68,11 @@ public:
                 return std::unexpected(std::move(result.error()));
             }
         }
-        for (const auto* name : {"PIKE_CODING_AGENT_SESSION_DIR",
-                     "PI_CODING_AGENT_DIR",
-                     "PI_CODING_AGENT_SESSION_DIR",
-                     "CCH_CODING_AGENT_DIR"}) {
-            if (auto result = unset_environment(name); !result) {
-                return std::unexpected(std::move(result.error()));
-            }
+        // `XDG_CONFIG_HOME` stays unset so the isolated `HOME` drives the fixed
+        // Agent Config Directory (`$HOME/.config/pike/agent`); tests that assert
+        // the XDG precedence set it themselves.
+        if (auto result = unset_environment("XDG_CONFIG_HOME"); !result) {
+            return std::unexpected(std::move(result.error()));
         }
         return isolation;
     }

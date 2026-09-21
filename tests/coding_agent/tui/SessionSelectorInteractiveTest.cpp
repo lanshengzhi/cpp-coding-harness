@@ -34,6 +34,7 @@
 #include <optional>
 #include <stop_token>
 #include <string>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 using tests::drain_ready;
@@ -52,27 +53,29 @@ constexpr std::string_view kKeyedModels = R"({
 })";
 
 /// One isolated assembly fixture: a temp workspace for the session files and
-/// a temp Agent Config Directory (`PIKE_CODING_AGENT_DIR`) whose models.json
+/// a temp Agent Config Directory (`HOME`) whose models.json
 /// and keybindings.json drive runtime creation and the unbound
 /// `app.session.*` triggers deterministically.
 struct Fixture {
     cch::tests::TempWorkspace workspace;
-    cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
+    std::filesystem::path agent_dir;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
 
     Fixture() {
-        dir_guard.set(agent_dir.path().string());
         home_guard.set(workspace.path().string());
+        agent_dir = tests::agent_root_under_home(workspace.path());
+        std::filesystem::create_directories(agent_dir);
+        agent_dir = tests::agent_root_under_home(workspace.path());
+        std::filesystem::create_directories(agent_dir);
         kimi_guard.unset();
         session_file = workspace.path() / "session.jsonl";
-        std::ofstream models(agent_dir.path() / "models.json", std::ios::binary);
+        std::ofstream models(agent_dir / "models.json", std::ios::binary);
         models << kKeyedModels;
         // The `app.session.*` main-editor actions are recognized-but-unbound
         // (pi defaultKeys []); a user-assigned keybinding triggers the flow.
-        std::ofstream keybindings(agent_dir.path() / "keybindings.json", std::ios::binary);
+        std::ofstream keybindings(agent_dir / "keybindings.json", std::ios::binary);
         keybindings << R"({"app.session.resume":"f6","app.session.fork":"f7","app.session.new":"f8"})";
     }
 
@@ -180,7 +183,7 @@ struct Running {
 
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
                        .with_session(*created.session)
-                       .with_agent_config_directory(fixture.agent_dir.path())
+                       .with_agent_config_directory(fixture.agent_dir)
                        .with_action_sink(actions->make_sink())
                        .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
                        .with_runtime_root(std::move(runtime_root))
@@ -468,7 +471,9 @@ TEST_CASE("fork flow pre-fills selectedText, switches sessions, and reports the 
     std::filesystem::path branched;
     for (const auto& entry :
          std::filesystem::directory_iterator(fixture.workspace.path())) {
-        if (entry.path() != fixture.session_file) branched = entry.path();
+        // The workspace also holds the isolated Agent Config Directory, so a
+        // branched transcript is selected by shape (a regular file).
+        if (entry.is_regular_file() && entry.path() != fixture.session_file) branched = entry.path();
     }
     REQUIRE(!branched.empty());
     auto loaded = harness::session::SessionStore::load(branched);

@@ -37,6 +37,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 namespace runtime = cch::coding_agent::runtime;
@@ -45,15 +46,15 @@ namespace {
 
 struct Fixture {
     tests::TempWorkspace workspace;
-    tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
+    std::filesystem::path agent_dir;
     tests::EnvVarGuard home_guard{"HOME"};
     std::filesystem::path session_file;
     tests::RuntimeFixture runtime;
 
     Fixture() {
-        dir_guard.set(agent_dir.path().string());
         home_guard.set(workspace.path().string());
+        agent_dir = tests::agent_root_under_home(workspace.path());
+        std::filesystem::create_directories(agent_dir);
         session_file = workspace.path() / "session.jsonl";
     }
 };

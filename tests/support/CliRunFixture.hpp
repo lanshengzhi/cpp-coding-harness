@@ -117,14 +117,14 @@ private:
         std::shared_ptr<coding_agent::ModelRuntime> model_runtime,
         bool model_runtime_cli_fake = false) {
     // Isolate ambient user configuration: when the test controls neither HOME
-    // nor PIKE_CODING_AGENT_DIR, point the agent config directory at a fresh
-    // temp root so no real user settings/sessions are consulted or written.
+    // nor XDG_CONFIG_HOME, point HOME at a fresh temp root so no real user
+    // settings/sessions are consulted or written.
     const bool controls_config_dir = std::any_of(options.env.begin(), options.env.end(), [](const auto& entry) {
-        return entry.first == "HOME" || entry.first == "PIKE_CODING_AGENT_DIR";
+        return entry.first == "HOME" || entry.first == "XDG_CONFIG_HOME";
     });
     TempWorkspace isolated_config;
     if (!controls_config_dir) {
-        options.env.emplace_back("PIKE_CODING_AGENT_DIR", isolated_config.path().string());
+        options.env.emplace_back("HOME", isolated_config.path().string());
     }
 
     // The in-process seam never touches the test process's terminal: a

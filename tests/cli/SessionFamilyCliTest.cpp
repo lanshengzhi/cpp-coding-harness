@@ -5,6 +5,7 @@
 #include "support/TempWorkspace.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "support/Json.hpp"
+#include "support/AgentRootFixture.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -29,11 +30,13 @@ const std::string kSessionIdValidationMessage =
 
 struct SessionFixture {
     TempWorkspace workspace;
+    std::filesystem::path home;
     std::filesystem::path agent_dir;
     std::vector<std::pair<std::string, std::optional<std::string>>> env;
 
-    explicit SessionFixture(std::string name = "agent") : agent_dir(workspace.path() / name) {
-        env.emplace_back("PIKE_CODING_AGENT_DIR", agent_dir.string());
+    explicit SessionFixture(std::string name = "agent")
+        : home(workspace.path() / name), agent_dir(cch::tests::agent_root_under_home(home)) {
+        env.emplace_back("HOME", home.string());
     }
 
     /// Run the CLI in the fixture workspace with the isolated agent dir.
@@ -775,9 +778,8 @@ TEST_CASE("session-family: the boot missing-cwd issue resolves per target", "[cl
     TempWorkspace continue_agent;
     TempWorkspace vanished_launch;
     // The direct assembly calls below resolve the sessions root from the
-    // process environment; point it at the continue-session agent dir.
-    EnvVarGuard agent_guard{"PIKE_CODING_AGENT_DIR"};
-    agent_guard.set(continue_agent.path().string());
+    // process environment; point HOME at the continue-session root.
+    cch::tests::EnvVarGuard continue_home{"HOME", continue_agent.path().string()};
 
     // A resume-shaped session whose header cwd (the fixture workspace) is
     // removed while the file survives.
@@ -796,7 +798,7 @@ TEST_CASE("session-family: the boot missing-cwd issue resolves per target", "[cl
         cch::coding_agent::session_paths::encode_workspace_key(
             std::filesystem::weakly_canonical(storage.path()));
     const auto storage_default_dir =
-        continue_agent.path() / "sessions" / storage_key;
+            cch::tests::agent_root_under_home(continue_agent.path()) / "sessions" / storage_key;
     std::filesystem::create_directories(storage_default_dir, ec);
     REQUIRE_FALSE(ec);
     const auto continue_session =
@@ -804,7 +806,7 @@ TEST_CASE("session-family: the boot missing-cwd issue resolves per target", "[cl
     auto launched = run_cli(CliRunOptions{
             .args = {"--session", continue_session.string(), "from-elsewhere"},
             .cwd = vanished_launch.path(),
-            .env = {{"PIKE_CODING_AGENT_DIR", continue_agent.path().string()}},
+            .env = {{"HOME", continue_agent.path().string()}},
             .stdin_text = {},
     });
     REQUIRE(launched.exit_code == 0);

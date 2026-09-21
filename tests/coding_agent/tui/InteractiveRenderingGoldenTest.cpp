@@ -58,6 +58,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 using tests::drain_ready;
@@ -246,20 +247,20 @@ constexpr std::string_view kReasoningAndPlainKeyed = R"({
 
 struct ModelFixture {
     std::filesystem::path workspace;
-    tests::TempWorkspace agent_dir;
+    std::filesystem::path agent_dir;
     tests::RuntimeFixture runtime;
-    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
 
     ModelFixture() {
         workspace = rendering_workspace_path("model-switch");
-        dir_guard.set(agent_dir.path().string());
         home_guard.set(workspace.string());
+        agent_dir = tests::agent_root_under_home(workspace);
+        std::filesystem::create_directories(agent_dir);
         kimi_guard.unset();
         session_file = workspace / "model-switch.jsonl";
-        std::ofstream models(agent_dir.path() / "models.json", std::ios::binary);
+        std::ofstream models(agent_dir / "models.json", std::ios::binary);
         models << kReasoningAndPlainKeyed;
     }
 };
@@ -409,15 +410,12 @@ TEST_CASE("rendering golden: Ctrl+L model selector switches the model with the p
     REQUIRE(session->model() == "alpha-1");
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
 
-    boost::asio::co_spawn(
-        running.io,
-        coding_agent::tui::run_interactive_mode(
-            running.terminal,
-            make_run(*created->session, fixture.agent_dir.path())),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            running.run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(running.io,
+            coding_agent::tui::run_interactive_mode(running.terminal, make_run(*created->session, fixture.agent_dir)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                running.run_result.emplace(std::move(result));
+            });
     drain_ready(running.io);
 
     // Ctrl+L opens the selector; Down + Enter selects beta-1 (pi
@@ -456,16 +454,15 @@ TEST_CASE("rendering golden: Ctrl+L model selector switches the model with the p
 TEST_CASE("rendering golden: the fork flow's user-message selector overlay",
         "[coding_agent][tui][rendering][issue422][compat-pi]") {
     auto workspace = rendering_workspace_path("fork");
-    tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
-    dir_guard.set(agent_dir.path().string());
     home_guard.set(workspace.string());
+    const auto agent_dir = tests::agent_root_under_home(workspace);
+    std::filesystem::create_directories(agent_dir);
     kimi_guard.unset();
     const auto session_file = workspace / "fork-session.jsonl";
     {
-        std::ofstream models(agent_dir.path() / "models.json", std::ios::binary);
+        std::ofstream models(agent_dir / "models.json", std::ios::binary);
         models << R"({
   "providers": {
     "alpha": {
@@ -478,8 +475,7 @@ TEST_CASE("rendering golden: the fork flow's user-message selector overlay",
 })";
         // The `app.session.fork` main-editor action is recognized-but-unbound
         // (pi defaultKeys []); a user-assigned keybinding triggers the flow.
-        std::ofstream keybindings(
-            agent_dir.path() / "keybindings.json", std::ios::binary);
+        std::ofstream keybindings(agent_dir / "keybindings.json", std::ios::binary);
         keybindings << R"({"app.session.fork":"f7"})";
     }
     auto store = harness::session::SessionStore::create_new(
@@ -528,15 +524,13 @@ TEST_CASE("rendering golden: the fork flow's user-message selector overlay",
 
     coding_agent::tui::testing::ActionSinkRecorder recorder;
 
-    boost::asio::co_spawn(
-        running.io,
-        coding_agent::tui::run_interactive_mode(
-            running.terminal,
-            make_run(*created->session, agent_dir.path(), recorder.make_sink())),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            running.run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(running.io,
+            coding_agent::tui::run_interactive_mode(
+                    running.terminal, make_run(*created->session, agent_dir, recorder.make_sink())),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                running.run_result.emplace(std::move(result));
+            });
     drain_ready(running.io);
 
     // f7 opens the user-message selector with the last message preselected

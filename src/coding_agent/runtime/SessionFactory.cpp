@@ -44,9 +44,9 @@ namespace {
 
 struct AutomaticNewSessionTarget {
     std::filesystem::path workspace;
-    /// Resolved CLI automatic-directory override (--session-dir, then
-    /// PIKE_CODING_AGENT_SESSION_DIR, then settings sessionDir). When absent
-    /// the workspace-keyed Agent Config Directory default applies.
+    /// Resolved CLI automatic-directory override (--session-dir, then settings
+    /// sessionDir). When absent the workspace-keyed Agent Config Directory
+    /// default applies.
     std::optional<std::filesystem::path> directory_override;
     /// pi `--session-id` warn-create: the new session's exact id.
     std::optional<std::string> session_id;
@@ -665,21 +665,15 @@ void cleanup_factory_filesystem(harness::AsyncFileSystem* filesystem) {
     return resolved;
 }
 
-/// CLI automatic-directory override precedence (--session-dir, then
-/// PIKE_CODING_AGENT_SESSION_DIR, then settings sessionDir, then the
-/// workspace-keyed default). The first non-empty value wins and resolves
-/// against the final canonical workspace.
+/// CLI automatic-directory override precedence (--session-dir, then the
+/// settings sessionDir, then the workspace-keyed default). The first non-empty
+/// value wins and resolves against the final canonical workspace.
 [[nodiscard]] support::Expected<std::optional<std::filesystem::path>> resolve_cli_session_dir_override(
-    const std::optional<std::string>& flag_value,
-    const std::optional<std::string>& settings_value,
-    const std::filesystem::path& canonical_workspace) {
-    std::optional<std::string> env_value;
-    if (const char* env = std::getenv("PIKE_CODING_AGENT_SESSION_DIR"); env != nullptr && env[0] != '\0') {
-        env_value = std::string{env};
-    }
+        const std::optional<std::string>& flag_value,
+        const std::optional<std::string>& settings_value,
+        const std::filesystem::path& canonical_workspace) {
     return session_paths::resolve_effective_session_dir(
-        flag_value, env_value, settings_value, canonical_workspace,
-        coding_agent::home_directory());
+            flag_value, settings_value, canonical_workspace, coding_agent::home_directory());
 }
 
 struct SessionTargetNormalizationOptions {

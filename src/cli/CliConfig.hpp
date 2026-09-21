@@ -53,9 +53,9 @@ struct CliConfig {
     std::optional<std::string> fork;
     std::optional<std::string> name;
     /// Raw --session-dir value: the highest-priority automatic-directory
-    /// override (pi: --session-dir, then PIKE_CODING_AGENT_SESSION_DIR, then
-    /// settings sessionDir). Consulted for default persisted creation and for
-    /// session listing during session-family resolution.
+    /// override (--session-dir, then settings sessionDir). Consulted for default
+    /// persisted creation and for session listing during session-family
+    /// resolution.
     std::optional<std::string> session_dir;
     /// pi `--thinking <level>` (off, minimal, low, medium, high, xhigh, max).
     std::optional<std::string> thinking;

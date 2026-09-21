@@ -39,6 +39,7 @@
 #include <stop_token>
 #include <string>
 #include <vector>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 using tests::drain_ready;
@@ -54,16 +55,18 @@ namespace {
     return text;
 }
 
-/// A TempWorkspace pointed to by PIKE_CODING_AGENT_DIR so the trust store and
+/// A TempWorkspace pointed to by HOME so the trust store and
 /// the interactive host's agent config directory are one deterministic
 /// location (the boot prompt and SessionFactory share
 /// `coding_agent::trust_store_file_path()`).
 struct TrustIsolatedWorkspace {
     tests::TempWorkspace workspace;
     std::filesystem::path agent_dir;
+    tests::EnvVarGuard home_guard{"HOME"};
 
     TrustIsolatedWorkspace() {
-        agent_dir = workspace.path() / "agent";
+        home_guard.set(workspace.path().string());
+        agent_dir = tests::agent_root_under_home(workspace.path());
         std::filesystem::create_directories(agent_dir);
     }
 
@@ -189,9 +192,7 @@ struct BootTrustRun {
 
 TEST_CASE("boot trust prompt shows getProjectTrustOptions choices as a main-TUI overlay",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
 
     BootTrustRun run;
@@ -212,9 +213,7 @@ TEST_CASE("boot trust prompt shows getProjectTrustOptions choices as a main-TUI 
 
 TEST_CASE("boot trust prompt selection saves the decision and binds a trusted session",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
 
     BootTrustRun run;
@@ -244,9 +243,7 @@ TEST_CASE("boot trust prompt selection saves the decision and binds a trusted se
 
 TEST_CASE("boot trust prompt cancel leaves the project untrusted with the chat warning",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
 
     BootTrustRun run;
@@ -269,9 +266,7 @@ TEST_CASE("boot trust prompt cancel leaves the project untrusted with the chat w
 
 TEST_CASE(
         "approve flag overrides the boot trust prompt for the run", "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
 
     auto request = boot_request(fixture);
@@ -290,9 +285,7 @@ TEST_CASE(
 
 TEST_CASE("no-approve flag overrides the boot trust prompt to untrusted",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
 
     auto request = boot_request(fixture);
@@ -314,9 +307,7 @@ TEST_CASE("no-approve flag overrides the boot trust prompt to untrusted",
 
 TEST_CASE("async trust detection failure aborts boot before session creation",
         "[coding_agent][tui][boot-trust][issue560][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
 
     auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>(fixture.workspace.path());
     filesystem->next_error = harness::FileError{
@@ -338,9 +329,7 @@ TEST_CASE("async trust detection failure aborts boot before session creation",
 
 TEST_CASE("explicit trust override bypasses a failing async detection",
         "[coding_agent][tui][boot-trust][issue560][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
 
     auto request = boot_request(fixture);
@@ -364,9 +353,7 @@ TEST_CASE("explicit trust override bypasses a failing async detection",
 }
 
 TEST_CASE("a saved trust decision skips the boot prompt", "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
 
     // A saved trusted decision for the workspace skips the prompt.
@@ -388,15 +375,11 @@ TEST_CASE("a saved trust decision skips the boot prompt", "[coding_agent][tui][b
 
 TEST_CASE("boot session-only trust survives an in-session session replacement",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
     // The recognized-but-unbound `app.session.new` action gets a key so the
     // in-session new-session flow is reachable (pi handleClearCommand).
-    fixture.write(
-        "agent/keybindings.json",
-        R"({"app.session.new":"f8"})");
+    fixture.write(".config/pike/agent/keybindings.json", R"({"app.session.new":"f8"})");
 
     BootTrustRun run;
     run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
@@ -448,13 +431,9 @@ TEST_CASE("CLI --approve and --no-approve override non-interactive ask to untrus
 
 TEST_CASE("default project trust always skips the boot prompt and trusts",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
-    fixture.write(
-        "agent/settings.json",
-        R"({"defaultProjectTrust": "always"})");
+    fixture.write(".config/pike/agent/settings.json", R"({"defaultProjectTrust": "always"})");
 
     BootTrustRun run;
     run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
@@ -468,13 +447,9 @@ TEST_CASE("default project trust always skips the boot prompt and trusts",
 
 TEST_CASE("default project trust never skips the boot prompt and warns",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
     fixture.write(".pi/skills/README.md", "project skill marker");
-    fixture.write(
-        "agent/settings.json",
-        R"({"defaultProjectTrust": "never"})");
+    fixture.write(".config/pike/agent/settings.json", R"({"defaultProjectTrust": "never"})");
 
     BootTrustRun run;
     run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
@@ -492,9 +467,7 @@ TEST_CASE("default project trust never skips the boot prompt and warns",
 
 TEST_CASE("boot session creation failure prints pi-style and stops the TUI",
         "[coding_agent][tui][boot-trust][issue413][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
 
     // A workspace that does not exist fails session creation.
     auto request = boot_request(fixture);
@@ -543,14 +516,12 @@ TEST_CASE("boot session creation failure prints pi-style and stops the TUI",
 
 TEST_CASE("boot registers discovered themes and the settings Theme submenu commits one",
         "[coding_agent][tui][boot-trust][issue415][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
     // All three pi sources: trust-gated project `.pi/themes`, the user
     // `<agent_config_directory>/themes` directory, and an explicit
     // `--theme` path.
     fixture.write(".pi/themes/solarized.json", tests::fixture_theme("solarized", "#abcdef"));
-    fixture.write("agent/themes/user-theme.json", tests::fixture_theme("user-theme", "#111111"));
+    fixture.write(".config/pike/agent/themes/user-theme.json", tests::fixture_theme("user-theme", "#111111"));
     fixture.write("cli-theme.json", tests::fixture_theme("cli-theme", "#222222"));
 
     auto request = boot_request(fixture);
@@ -608,9 +579,7 @@ TEST_CASE("boot registers discovered themes and the settings Theme submenu commi
 
 TEST_CASE("boot with a failing theme keeps the main screen and the dark fallback message",
         "[coding_agent][tui][boot-trust][issue425][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
     // An explicit `--theme` document that fails validation (missing required
     // color tokens) and the settings theme referencing the same broken name:
     // the boot discovers the document (huge validation diagnostic), the
@@ -620,7 +589,7 @@ TEST_CASE("boot with a failing theme keeps the main screen and the dark fallback
     fixture.write(
         "broken-theme.json",
         R"({"name":"broken","colors":{"background":"#ff0000"}})");
-    fixture.write("agent/settings.json", R"({"theme":"broken"})");
+    fixture.write(".config/pike/agent/settings.json", R"({"theme":"broken"})");
 
     auto request = boot_request(fixture);
     request.project_trust_override = true;
@@ -667,9 +636,7 @@ TEST_CASE("boot with a failing theme keeps the main screen and the dark fallback
 
 TEST_CASE("/reload persists the implicit project trust decision when resources appear",
         "[coding_agent][tui][boot-trust][reload][issue418][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
 
     BootTrustRun run;
     run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
@@ -708,9 +675,7 @@ TEST_CASE("/reload persists the implicit project trust decision when resources a
 
 TEST_CASE("/reload does not persist implicit trust when detection fails",
         "[coding_agent][tui][boot-trust][reload][issue560][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
 
     auto filesystem = std::make_shared<tests::FakeAsyncFileSystem>(fixture.workspace.path());
     filesystem->add_directory(".");
@@ -741,9 +706,7 @@ TEST_CASE("/reload does not persist implicit trust when detection fails",
 
 TEST_CASE("/reload without the implicit-trust condition keeps the plain pi status",
         "[coding_agent][tui][boot-trust][reload][issue418][spec]") {
-    tests::EnvVarGuard agent_dir("PIKE_CODING_AGENT_DIR");
     TrustIsolatedWorkspace fixture;
-    agent_dir.set(fixture.agent_dir.string());
 
     BootTrustRun run;
     run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());

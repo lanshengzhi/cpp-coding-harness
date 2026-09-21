@@ -16,6 +16,7 @@
 
 #include <sys/stat.h>
 #include <unistd.h>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 namespace session_paths = cch::coding_agent::session_paths;
@@ -132,9 +133,8 @@ TEST_CASE("automatic session target calculation is side effect free", "[coding_a
 TEST_CASE("automatic session publication correlates path header and identity",
         "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
-    tests::EnvVarGuard config_dir{"PIKE_CODING_AGENT_DIR"};
-    config_dir.set((temp.path() / "agent").string());
-    const auto sessions_root = temp.path() / "agent" / "sessions";
+    const tests::EnvVarGuard home{"HOME", temp.path().string()};
+    const auto sessions_root = tests::agent_root_under_home(temp.path()) / "sessions";
     const auto workspace = temp.path() / "workspace";
     std::filesystem::create_directory(workspace);
 
@@ -171,9 +171,8 @@ TEST_CASE("automatic session publication correlates path header and identity",
 TEST_CASE("automatic publication makes default directories and file private",
         "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
-    tests::EnvVarGuard config_dir{"PIKE_CODING_AGENT_DIR"};
-    config_dir.set((temp.path() / "agent").string());
-    const auto sessions_root = temp.path() / "agent" / "sessions";
+    const tests::EnvVarGuard home{"HOME", temp.path().string()};
+    const auto sessions_root = tests::agent_root_under_home(temp.path()) / "sessions";
     const auto workspace = temp.path() / "workspace";
     std::filesystem::create_directory(workspace);
     const auto workspace_directory = sessions_root / session_paths::encode_workspace_key(workspace);
@@ -363,11 +362,11 @@ TEST_CASE("explicit publication preserves custom directory mode while making fil
 TEST_CASE("automatic publication rejects symbolic link directories",
         "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
-    tests::EnvVarGuard config_dir{"PIKE_CODING_AGENT_DIR"};
     const auto config_root = temp.path() / "cfg";
     std::filesystem::create_directory(config_root);
-    config_dir.set(config_root.string());
-    const auto sessions_root = config_root / "sessions";
+    const tests::EnvVarGuard home{"HOME", config_root.string()};
+    const auto sessions_root = tests::agent_root_under_home(config_root) / "sessions";
+    std::filesystem::create_directories(sessions_root.parent_path());
     const auto real_root = temp.path() / "real-sessions";
     const auto workspace = temp.path() / "workspace";
     std::filesystem::create_directory(real_root);
@@ -392,11 +391,11 @@ TEST_CASE("automatic publication rejects symbolic link directories",
 TEST_CASE("automatic publication failures include attempted target and reason",
         "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
-    tests::EnvVarGuard config_dir{"PIKE_CODING_AGENT_DIR"};
     const auto config_root = temp.path() / "cfg";
     std::filesystem::create_directory(config_root);
-    config_dir.set(config_root.string());
-    const auto sessions_root = config_root / "sessions";
+    const tests::EnvVarGuard home{"HOME", config_root.string()};
+    const auto sessions_root = tests::agent_root_under_home(config_root) / "sessions";
+    std::filesystem::create_directories(sessions_root.parent_path());
     const auto workspace = temp.path() / "workspace";
     std::filesystem::create_directory(workspace);
     {
@@ -421,33 +420,30 @@ TEST_CASE("automatic publication failures include attempted target and reason",
 TEST_CASE("automatic publication rejects a relative sessions root",
         "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
-    tests::EnvVarGuard config_dir{"PIKE_CODING_AGENT_DIR"};
-    config_dir.set("relative-agent");
 
     auto published = runtime::publish_session(
-        runtime::AutomaticPublication{
-            .workspace = temp.path(),
-            .directory_override = std::nullopt,
-            .session_id = {},
-        },
-        "fake",
-        "fake-model");
+            runtime::AutomaticPublication{
+                    .workspace = temp.path(),
+                    .directory_override = std::filesystem::path{"relative-sessions"},
+                    .session_id = {},
+            },
+            "fake",
+            "fake-model");
 
     REQUIRE_FALSE(published);
-    const auto expected_root = (std::filesystem::path{"relative-agent"} / "sessions").string();
-    CHECK(published.error().detail.find(expected_root) != std::string::npos);
+    CHECK(published.error().detail.find("relative-sessions") != std::string::npos);
     CHECK(published.error().detail.find("must be absolute") != std::string::npos);
-    CHECK_FALSE(std::filesystem::exists("relative-agent"));
+    CHECK_FALSE(std::filesystem::exists("relative-sessions"));
 }
 
 TEST_CASE("automatic publication fails when the user sessions root is unresolved",
         "[coding_agent][session-path-policy][publication][spec]") {
     tests::TempWorkspace temp;
-    tests::EnvVarGuard config_dir{"PIKE_CODING_AGENT_DIR"};
     tests::EnvVarGuard home{"HOME"};
+    tests::EnvVarGuard xdg_config{"XDG_CONFIG_HOME"};
     tests::EnvVarGuard user_profile{"USERPROFILE"};
-    config_dir.set("");
     home.set("");
+    xdg_config.set("");
     user_profile.set("");
 
     auto published = runtime::publish_session(
