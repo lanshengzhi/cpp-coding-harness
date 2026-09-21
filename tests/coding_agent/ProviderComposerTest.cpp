@@ -1,15 +1,23 @@
 #include <cch/ai/Models.hpp>
 #include "coding_agent/ModelConfig.hpp"
 #include "coding_agent/ProviderComposer.hpp"
+#include "support/AsyncResultBridge.hpp"
+#include "support/Json.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/PiFixture.hpp"
+#include "support/ReadyResult.hpp"
 #include "support/TempWorkspace.hpp"
-#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/use_future.hpp>
+
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -41,6 +49,44 @@ namespace {
         }
     }
     return std::nullopt;
+}
+
+class ComposerAuthContext final : public ai::AuthContext {
+public:
+    [[nodiscard]] support::AsyncResult<std::optional<std::string>> environment(std::string name) const override {
+        const auto found = environment_values.find(name);
+        if (found == environment_values.end()) {
+            return tests::ready_result<std::optional<std::string>>(std::nullopt);
+        }
+        return tests::ready_result<std::optional<std::string>>(found->second);
+    }
+
+    [[nodiscard]] support::AsyncResult<bool> file_exists(std::string) const override {
+        return tests::ready_result<bool>(false);
+    }
+
+    std::map<std::string, std::string, std::less<>> environment_values;
+};
+
+template <typename T> [[nodiscard]] support::Expected<T> consume_async_result(support::AsyncResult<T> operation) {
+    boost::asio::io_context io;
+    auto future = boost::asio::co_spawn(
+            io,
+            [](support::AsyncResult<T> value) -> boost::asio::awaitable<support::Expected<T>> {
+                co_return co_await support::detail::await_async_result(std::move(value));
+            }(std::move(operation)),
+            boost::asio::use_future);
+    io.run();
+    return future.get();
+}
+
+[[nodiscard]] ai::ProviderDefinition composer_auth_definition(ai::ProviderAuth auth) {
+    return ai::ProviderDefinition{
+            .id = "fixture-provider",
+            .name = "Fixture Provider",
+            .models = {tests::make_model("fixture-model", "fixture-provider", "fixture-api")},
+            .auth = std::move(auth),
+    };
 }
 
 /// Compose fixture `models.json` model entries through the production config
@@ -488,6 +534,193 @@ TEST_CASE("custom model requires an api and baseUrl", "[coding_agent][provider-c
     REQUIRE(error.has_value());
     CHECK(error->find("no \"api\" specified") != std::string::npos);
     CHECK_FALSE(change.definition.has_value());
+}
+
+TEST_CASE("composed auth callbacks preserve inherited hooks and stored credentials",
+        "[coding_agent][provider-composer][auth][issue546][spec]") {
+    tests::TempWorkspace workspace;
+    const auto config = load_models_json(workspace, R"({
+      "providers": {"fixture-provider": {"baseUrl": "https://fixture.example"}}
+    })");
+
+    int check_calls = 0;
+    int resolve_calls = 0;
+    ai::ApiKeyAuth inherited;
+    inherited.name = "Inherited key";
+    inherited.check =
+            [&check_calls](const ai::AuthContext&,
+                    std::optional<ai::ApiKeyCredential>) -> support::AsyncResult<std::optional<ai::AuthCheck>> {
+        ++check_calls;
+        return tests::ready_result<std::optional<ai::AuthCheck>>(
+                ai::AuthCheck{.source = "inherited check", .type = ai::AuthType::ApiKey});
+    };
+    inherited.resolve = [&resolve_calls](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
+            -> support::AsyncResult<std::optional<ai::AuthResult>> {
+        ++resolve_calls;
+        ai::AuthResult result{
+                .auth = ai::ModelAuth{.api_key = credential && credential->key ? *credential->key : "ambient-key"},
+                .source = "inherited resolve",
+        };
+        return tests::ready_result<std::optional<ai::AuthResult>>(std::move(result));
+    };
+
+    std::optional<std::string> error;
+    auto change = coding_agent::compose_provider("fixture-provider",
+            composer_auth_definition(ai::ProviderAuth{.api_key = std::move(inherited)}),
+            config,
+            composer_options(),
+            error);
+    REQUIRE_FALSE(error.has_value());
+    REQUIRE(change.definition.has_value());
+    const ComposerAuthContext context;
+    auto& auth = *change.definition->auth.api_key;
+
+    auto checked = consume_async_result(auth.check(context, ai::ApiKeyCredential{.key = "stored-key"}));
+    REQUIRE(checked.has_value());
+    REQUIRE(checked->has_value());
+    CHECK(checked->value().source == "inherited check");
+
+    auto resolved = consume_async_result(auth.resolve(context, ai::ApiKeyCredential{.key = "stored-key"}));
+    REQUIRE(resolved.has_value());
+    REQUIRE(resolved->has_value());
+    CHECK(resolved->value().auth.api_key == std::optional<std::string>{"stored-key"});
+    CHECK(resolved->value().source == "inherited resolve");
+
+    auto ambient_check = consume_async_result(auth.check(context, std::nullopt));
+    REQUIRE(ambient_check.has_value());
+    REQUIRE(ambient_check->has_value());
+    CHECK(ambient_check->value().source == "inherited check");
+    auto ambient_resolve = consume_async_result(auth.resolve(context, std::nullopt));
+    REQUIRE(ambient_resolve.has_value());
+    REQUIRE(ambient_resolve->has_value());
+    CHECK(ambient_resolve->value().auth.api_key == std::optional<std::string>{"ambient-key"});
+    CHECK(check_calls == 2);
+    CHECK(resolve_calls == 2);
+}
+
+TEST_CASE("composed auth callbacks select configured keys and retain no-key behavior",
+        "[coding_agent][provider-composer][auth][issue546][spec]") {
+    tests::TempWorkspace workspace;
+    const auto configured = load_models_json(workspace, R"({
+      "providers": {"fixture-provider": {
+        "baseUrl": "https://fixture.example", "apiKey": "configured-key"
+      }}
+    })");
+    std::optional<std::string> error;
+    auto configured_change = coding_agent::compose_provider("fixture-provider",
+            composer_auth_definition(ai::ProviderAuth{.api_key = ai::ApiKeyAuth{.name = "key"}}),
+            configured,
+            composer_options(),
+            error);
+    REQUIRE_FALSE(error.has_value());
+    REQUIRE(configured_change.definition.has_value());
+    const ComposerAuthContext context;
+    auto& configured_auth = *configured_change.definition->auth.api_key;
+
+    auto checked = consume_async_result(configured_auth.check(context, std::nullopt));
+    REQUIRE(checked.has_value());
+    REQUIRE(checked->has_value());
+    CHECK(checked->value().source == "configured API key");
+    auto resolved = consume_async_result(configured_auth.resolve(context, std::nullopt));
+    REQUIRE(resolved.has_value());
+    REQUIRE(resolved->has_value());
+    CHECK(resolved->value().auth.api_key == std::optional<std::string>{"configured-key"});
+    CHECK(resolved->value().source == "configured API key");
+    auto stored_check = consume_async_result(configured_auth.check(context, ai::ApiKeyCredential{.key = "stored-key"}));
+    REQUIRE(stored_check.has_value());
+    REQUIRE(stored_check->has_value());
+    CHECK(stored_check->value().source == "stored credential");
+
+    auto stored = consume_async_result(configured_auth.resolve(context, ai::ApiKeyCredential{.key = "stored-key"}));
+    REQUIRE(stored.has_value());
+    REQUIRE(stored->has_value());
+    CHECK(stored->value().auth.api_key == std::optional<std::string>{"stored-key"});
+    CHECK(stored->value().source == "stored credential");
+
+    const auto no_key = load_models_json(workspace, R"({
+      "providers": {"fixture-provider": {"baseUrl": "https://fixture.example"}}
+    })");
+    error.reset();
+    auto no_key_change = coding_agent::compose_provider("fixture-provider",
+            composer_auth_definition(ai::ProviderAuth{.api_key = ai::ApiKeyAuth{.name = "key"}}),
+            no_key,
+            composer_options(),
+            error);
+    REQUIRE_FALSE(error.has_value());
+    REQUIRE(no_key_change.definition.has_value());
+    auto& no_key_auth = *no_key_change.definition->auth.api_key;
+    auto no_key_check = consume_async_result(no_key_auth.check(context, std::nullopt));
+    REQUIRE(no_key_check.has_value());
+    CHECK_FALSE(no_key_check->has_value());
+    auto no_key_resolve = consume_async_result(no_key_auth.resolve(context, std::nullopt));
+    REQUIRE(no_key_resolve.has_value());
+    CHECK_FALSE(no_key_resolve->has_value());
+}
+
+TEST_CASE("configured auth headers are resolved with the composed key",
+        "[coding_agent][provider-composer][auth][issue546][spec]") {
+    tests::TempWorkspace workspace;
+    const auto config = load_models_json(workspace, R"({
+      "providers": {"fixture-provider": {
+        "baseUrl": "https://fixture.example",
+        "apiKey": "configured-key",
+        "headers": {"X-Static": "fixed", "X-Token": "$HEADER_TOKEN"}
+      }}
+    })");
+    std::optional<std::string> error;
+    auto change = coding_agent::compose_provider("fixture-provider",
+            composer_auth_definition(ai::ProviderAuth{.api_key = ai::ApiKeyAuth{.name = "key"}}),
+            config,
+            composer_options(),
+            error);
+    REQUIRE_FALSE(error.has_value());
+    REQUIRE(change.definition.has_value());
+    ComposerAuthContext context;
+    context.environment_values.emplace("HEADER_TOKEN", "ambient-header");
+    auto result = consume_async_result(change.definition->auth.api_key->resolve(context, std::nullopt));
+    REQUIRE(result.has_value());
+    REQUIRE(result->has_value());
+    CHECK(result->value().auth.api_key == std::optional<std::string>{"configured-key"});
+    CHECK(result->value().auth.headers.at("X-Static") == "fixed");
+    CHECK(result->value().auth.headers.at("X-Token") == "ambient-header");
+}
+
+TEST_CASE("composed auth callbacks propagate inherited failures",
+        "[coding_agent][provider-composer][auth][issue546][spec]") {
+    tests::TempWorkspace workspace;
+    const auto config = load_models_json(workspace, R"({
+      "providers": {"fixture-provider": {"baseUrl": "https://fixture.example"}}
+    })");
+    ai::ApiKeyAuth failing;
+    failing.name = "failing key";
+    failing.check = [](const ai::AuthContext&,
+                            std::optional<ai::ApiKeyCredential>) -> support::AsyncResult<std::optional<ai::AuthCheck>> {
+        return tests::failed_result<std::optional<ai::AuthCheck>>(
+                support::make_error(support::ErrorCode::Auth, "inherited check failed"));
+    };
+    failing.resolve =
+            [](const ai::AuthContext&,
+                    std::optional<ai::ApiKeyCredential>) -> support::AsyncResult<std::optional<ai::AuthResult>> {
+        return tests::failed_result<std::optional<ai::AuthResult>>(
+                support::make_error(support::ErrorCode::Auth, "inherited resolve failed"));
+    };
+    std::optional<std::string> error;
+    auto change = coding_agent::compose_provider("fixture-provider",
+            composer_auth_definition(ai::ProviderAuth{.api_key = std::move(failing)}),
+            config,
+            composer_options(),
+            error);
+    REQUIRE_FALSE(error.has_value());
+    REQUIRE(change.definition.has_value());
+    const ComposerAuthContext context;
+    auto check = consume_async_result(change.definition->auth.api_key->check(context, std::nullopt));
+    REQUIRE_FALSE(check.has_value());
+    CHECK(check.error().code == support::ErrorCode::Auth);
+    CHECK(check.error().message == "inherited check failed");
+    auto resolve = consume_async_result(change.definition->auth.api_key->resolve(context, std::nullopt));
+    REQUIRE_FALSE(resolve.has_value());
+    CHECK(resolve.error().code == support::ErrorCode::Auth);
+    CHECK(resolve.error().message == "inherited resolve failed");
 }
 
 TEST_CASE(
