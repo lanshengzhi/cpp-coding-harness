@@ -878,20 +878,10 @@ std::string TreeSelectorComponent::format_tool_call(
         return std::format("[edit: {}]", path);
     }
     if (name == "bash") {
-        auto raw = argument_string(arguments, "command");
-        std::replace_if(
-            raw.begin(), raw.end(),
-            [](unsigned char value) { return value == '\n' || value == '\t'; },
-            ' ');
-        const auto first = raw.find_first_not_of(" \t\r\n");
-        if (first != std::string::npos) {
-            const auto last = raw.find_last_not_of(" \t\r\n");
-            raw = raw.substr(first, last - first + 1);
-        } else {
-            raw.clear();
-        }
         // pi's 50-char command budget with the truncation suffix (10.3).
-        return std::format("[bash: {}]", support::bounded_text(raw, kBashCommandDisplayBytes, "..."));
+        return std::format("[bash: {}]",
+                support::bounded_text(
+                        normalize(argument_string(arguments, "command")), kBashCommandDisplayBytes, "..."));
     }
     if (name == "grep") {
         const auto pattern = argument_string(arguments, "pattern");
@@ -1246,6 +1236,11 @@ cch::tui::InputAdmissionOutcome TreeSelectorComponent::handle_input(const cch::t
     const auto matches = [&](std::string_view action_id) {
         return keybindings_->matches(*key, action_id);
     };
+    const auto set_filter = [&](TreeFilterMode mode) {
+        filter_mode_ = filter_mode_ == mode ? TreeFilterMode::Default : mode;
+        folded_nodes_.clear();
+        apply_filter();
+    };
 
     if (matches("tui.select.up")) {
         if (!filtered_nodes_.empty()) {
@@ -1302,33 +1297,15 @@ cch::tui::InputAdmissionOutcome TreeSelectorComponent::handle_input(const cch::t
         }
         return cch::tui::InputAdmissionOutcome::Consumed;
     } else if (matches("app.tree.filter.default")) {
-        filter_mode_ = TreeFilterMode::Default;
-        folded_nodes_.clear();
-        apply_filter();
+        set_filter(TreeFilterMode::Default);
     } else if (matches("app.tree.filter.noTools")) {
-        filter_mode_ = filter_mode_ == TreeFilterMode::NoTools
-            ? TreeFilterMode::Default
-            : TreeFilterMode::NoTools;
-        folded_nodes_.clear();
-        apply_filter();
+        set_filter(TreeFilterMode::NoTools);
     } else if (matches("app.tree.filter.userOnly")) {
-        filter_mode_ = filter_mode_ == TreeFilterMode::UserOnly
-            ? TreeFilterMode::Default
-            : TreeFilterMode::UserOnly;
-        folded_nodes_.clear();
-        apply_filter();
+        set_filter(TreeFilterMode::UserOnly);
     } else if (matches("app.tree.filter.labeledOnly")) {
-        filter_mode_ = filter_mode_ == TreeFilterMode::LabeledOnly
-            ? TreeFilterMode::Default
-            : TreeFilterMode::LabeledOnly;
-        folded_nodes_.clear();
-        apply_filter();
+        set_filter(TreeFilterMode::LabeledOnly);
     } else if (matches("app.tree.filter.all")) {
-        filter_mode_ = filter_mode_ == TreeFilterMode::All
-            ? TreeFilterMode::Default
-            : TreeFilterMode::All;
-        folded_nodes_.clear();
-        apply_filter();
+        set_filter(TreeFilterMode::All);
     } else if (matches("app.tree.filter.cycleBackward")) {
         cycle_filter_mode(-1);
     } else if (matches("app.tree.filter.cycleForward")) {
