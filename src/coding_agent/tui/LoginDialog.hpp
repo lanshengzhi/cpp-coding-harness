@@ -83,12 +83,11 @@ public:
 
     /// Prompt view (pi `showPrompt`): message + optional `e.g.,` placeholder
     /// + input + cancel/submit hints. Appends without clearing (preserves a
-    /// previously shown URL). Resolves with the submitted text; rejects with
-    /// the stable cancelled error when the dialog or this prompt is
-    /// cancelled.
+    /// previously shown URL). Secret prompts mask the input and its submitted
+    /// echo. Resolves with the submitted text; rejects with the stable
+    /// cancelled error when the dialog or this prompt is cancelled.
     [[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> show_prompt(
-        std::string message,
-        std::optional<std::string> placeholder);
+            std::string message, std::optional<std::string> placeholder, bool secret = false);
     /// Manual-code input view (pi `showManualInput`): dim prompt + input +
     /// cancel hint. Same resolution contract as show_prompt.
     [[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> show_manual_input(
@@ -115,7 +114,9 @@ private:
     struct TextItem {
         std::string content;
     };
-    struct InputSlotItem {};
+    struct InputSlotItem {
+        bool secret{false};
+    };
     using ContentItem = std::variant<SpacerItem, TextItem, InputSlotItem>;
 
     [[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> run_prompt(

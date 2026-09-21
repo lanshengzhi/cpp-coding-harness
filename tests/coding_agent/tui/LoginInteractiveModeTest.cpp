@@ -458,7 +458,7 @@ TEST_CASE("login runs the Kimi device-code OAuth branch and renders the waiting 
 }
 
 TEST_CASE("login takes the DeepSeek API-key dialog branch through real models.json composition",
-        "[coding_agent][tui][login][issue406][spec]") {
+        "[coding_agent][tui][login][issue406][issue754][spec]") {
     LoginFixture fixture;
     std::ofstream(fixture.agent_dir / "models.json", std::ios::binary) << R"({
   "providers": {
@@ -488,9 +488,15 @@ TEST_CASE("login takes the DeepSeek API-key dialog branch through real models.js
     CHECK(screen.find("Login to DeepSeek") != std::string::npos);
     CHECK(screen.find("Enter API key") != std::string::npos);
 
-    run.type("dummy-deepseek-key\r");
+    run.type("dummy-deepseek-key");
+    screen = visible_screen(run.terminal);
+    CHECK(screen.find("dummy-deepseek-key") == std::string::npos);
+    CHECK(screen.find("•") != std::string::npos);
+
+    run.type("\r");
     run.wait_for_screen("Saved API key for DeepSeek.");
     screen = visible_screen(run.terminal);
+    CHECK(screen.find("dummy-deepseek-key") == std::string::npos);
     // The C++ frozen default-model table has no deepseek entry: pi's first
     // verbatim selection error follows the success status.
     const std::string expected_status =

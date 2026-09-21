@@ -617,22 +617,22 @@ boost::asio::awaitable<support::Expected<std::string>> AuthFlowController::show_
     }
     std::string message;
     std::optional<std::string> placeholder;
+    bool secret = false;
     if (const auto* text = std::get_if<ai::AuthPromptText>(&prompt.kind)) {
         message = text->message;
         placeholder = text->placeholder;
-    } else if (const auto* secret = std::get_if<ai::AuthPromptSecret>(&prompt.kind)) {
-        message = secret->message;
-        placeholder = secret->placeholder;
+    } else if (const auto* auth_secret = std::get_if<ai::AuthPromptSecret>(&prompt.kind)) {
+        message = auth_secret->message;
+        placeholder = auth_secret->placeholder;
+        secret = true;
     }
     if (!per_prompt) {
-        co_return co_await dialog->show_prompt(
-            std::move(message), std::move(placeholder));
+        co_return co_await dialog->show_prompt(std::move(message), std::move(placeholder), secret);
     }
     std::stop_callback on_abort(*per_prompt, [dialog] {
         dialog->cancel_pending_prompt();
     });
-    co_return co_await dialog->show_prompt(
-        std::move(message), std::move(placeholder));
+    co_return co_await dialog->show_prompt(std::move(message), std::move(placeholder), secret);
 }
 
 void AuthFlowController::notify_auth_dialog(

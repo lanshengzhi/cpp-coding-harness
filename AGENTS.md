@@ -7,6 +7,7 @@ This is an experimental C++23 coding-agent Runtime that preserves selected pi se
 1. Inspect `git status --short`. Treat every pre-existing modified or untracked file as user-owned; preserve unrelated work.
 2. Fetch any named GitHub issue or PRD, then read only the task-specific context linked below.
 3. Stop exploring once you can name the behavior, authoritative seam, constraints, and validation path.
+4. Settle a technical direction only after the smallest probe measures its cost; the rejected TOML direction exposed a 584-line `src/support/Toml.cpp` despite Glaze's `glz::read_toml`/`glz::write_toml`.
 
 ## Validation entry points
 
