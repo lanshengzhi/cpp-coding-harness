@@ -34,6 +34,10 @@ private:
 
 } // namespace
 
+support::Error detail::session_not_initialized_error() {
+    return support::make_error(support::ErrorCode::Validation, "session is not initialized");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pimpl definitions
 // ─────────────────────────────────────────────────────────────────────────────
@@ -250,9 +254,7 @@ support::ExpectedVoid AgentSession::prompt_blocking(
     std::string text,
     PromptOptions options) {
     const auto impl = impl_;
-    if (!impl) {
-        return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
-    }
+    if (!impl) return std::unexpected(detail::session_not_initialized_error());
     if (blocking_prompt_wait == impl.get()) {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "session is busy (prompt already in flight)"));
@@ -288,77 +290,45 @@ support::ExpectedVoid AgentSession::prompt_blocking(
 support::ExpectedVoid AgentSession::steer(
     std::string text,
     PromptOptions options) {
-    if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
     return impl_->steer(std::move(text), std::move(options.images), options.expand_prompt_templates);
 }
 
 support::ExpectedVoid AgentSession::follow_up(
     std::string text,
     PromptOptions options) {
-    if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
     return impl_->follow_up(std::move(text), std::move(options.images), options.expand_prompt_templates);
 }
 
 support::ExpectedVoid AgentSession::set_steering_mode(agent::InputQueueMode mode) {
-    if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
     return impl_->set_steering_mode(mode);
 }
 
 support::ExpectedVoid AgentSession::set_follow_up_mode(agent::InputQueueMode mode) {
-    if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
     return impl_->set_follow_up_mode(mode);
 }
 
 support::ExpectedVoid AgentSession::clear_steering_queue() {
-    if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
     return impl_->clear_steering_queue();
 }
 
 support::ExpectedVoid AgentSession::clear_follow_up_queue() {
-    if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
     return impl_->clear_follow_up_queue();
 }
 
 support::ExpectedVoid AgentSession::clear_input_queues() {
-    if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
     return impl_->clear_input_queues();
 }
 
 support::Expected<std::string> AgentSession::set_thinking_level(
     std::string_view level) {
-    if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
     return impl_->set_thinking_level(level);
 }
 
@@ -376,11 +346,7 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::set_model(
 
 support::ExpectedVoid AgentSession::set_model_blocking(ai::Model model) {
     const auto impl = impl_;
-    if (!impl) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl) return std::unexpected(detail::session_not_initialized_error());
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> result;
     // Same private completion bridge as prompt_blocking: the temporary
@@ -411,11 +377,7 @@ AgentSession::cycle_model(std::string direction) {
 support::Expected<std::optional<ModelCycleResult>> AgentSession::cycle_model_blocking(
     std::string direction) {
     const auto impl = impl_;
-    if (!impl) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl) return std::unexpected(detail::session_not_initialized_error());
     boost::asio::io_context io;
     std::optional<support::Expected<std::optional<ModelCycleResult>>> result;
     // Same private completion bridge as set_model_blocking: the temporary
@@ -441,11 +403,7 @@ support::Expected<std::optional<ModelCycleResult>> AgentSession::cycle_model_blo
 }
 
 support::Expected<std::optional<std::string>> AgentSession::cycle_thinking_level() {
-    if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
     return impl_->cycle_thinking_level();
 }
 
@@ -541,11 +499,7 @@ std::optional<std::string> AgentSession::session_name() const { return impl_ ? i
 
 support::Expected<std::optional<std::string>> AgentSession::set_session_name(
     std::string name) {
-    if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
     return impl_->set_session_name(std::move(name));
 }
 
@@ -681,32 +635,20 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::wait_for_idle() {
 }
 
 support::Expected<SessionTreeTopology> AgentSession::session_tree() const {
-    if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
     return impl_->session_tree();
 }
 
 support::Expected<TreeNavigationResult> AgentSession::navigate_tree(
     std::string_view target_id) {
-    if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
     return impl_->navigate_tree(target_id);
 }
 
 support::ExpectedVoid AgentSession::set_entry_label(
     std::string_view entry_id,
     std::optional<std::string> label) {
-    if (!impl_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "session is not initialized"));
-    }
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
     return impl_->set_entry_label(entry_id, std::move(label));
 }
 

@@ -17,6 +17,7 @@
 #include <cch/ai/Message.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/ProjectionStream.hpp>
+#include <cch/support/Error.hpp>
 #include "coding_agent/runtime/SessionFactory.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -340,6 +341,113 @@ void check_converged(const coding_agent::AgentSessionSnapshot& composed,
 }
 
 } // namespace
+
+TEST_CASE("AgentSession input queue mutations publish one projection update and reject after close",
+        "[coding_agent][projection][input_queue][spec]") {
+    tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    auto created = create_projection_session(runtime, workspace, tests::make_scripted_fake_provider());
+    REQUIRE(created.has_value());
+    auto& session = *created->session;
+
+    auto subscription = session.attach_projection([](const ProjectionStreamMessageVariant&) {});
+    REQUIRE(subscription.drain() == 1);
+
+    REQUIRE(session.set_steering_mode(agent::InputQueueMode::All));
+    CHECK(subscription.drain() == 1);
+    CHECK(session.snapshot().agent_state.input_queues.steering.mode == agent::InputQueueMode::All);
+
+    REQUIRE(session.set_follow_up_mode(agent::InputQueueMode::All));
+    CHECK(subscription.drain() == 1);
+    CHECK(session.snapshot().agent_state.input_queues.follow_up.mode == agent::InputQueueMode::All);
+
+    REQUIRE(session.steer("queued steering"));
+    CHECK(subscription.drain() == 1);
+    REQUIRE(session.follow_up("queued follow-up"));
+    CHECK(subscription.drain() == 1);
+
+    REQUIRE(session.clear_steering_queue());
+    CHECK(subscription.drain() == 1);
+    CHECK(session.snapshot().agent_state.input_queues.steering.messages.empty());
+    CHECK(session.snapshot().agent_state.input_queues.follow_up.messages.size() == 1);
+
+    REQUIRE(session.clear_follow_up_queue());
+    CHECK(subscription.drain() == 1);
+    CHECK(session.snapshot().agent_state.input_queues.follow_up.messages.empty());
+
+    REQUIRE(session.steer("queued steering again"));
+    CHECK(subscription.drain() == 1);
+    REQUIRE(session.follow_up("queued follow-up again"));
+    CHECK(subscription.drain() == 1);
+    REQUIRE(session.clear_input_queues());
+    CHECK(subscription.drain() == 1);
+    const auto cleared = session.snapshot();
+    CHECK(cleared.agent_state.input_queues.steering.messages.empty());
+    CHECK(cleared.agent_state.input_queues.follow_up.messages.empty());
+
+    session.close();
+    CHECK(subscription.drain() == 1);
+
+    auto steering_mode = session.set_steering_mode(agent::InputQueueMode::OneAtATime);
+    REQUIRE_FALSE(steering_mode);
+    CHECK(steering_mode.error().code == support::ErrorCode::Validation);
+    CHECK(steering_mode.error().message == "session is closed");
+    CHECK(subscription.drain() == 0);
+
+    auto follow_up_mode = session.set_follow_up_mode(agent::InputQueueMode::OneAtATime);
+    REQUIRE_FALSE(follow_up_mode);
+    CHECK(follow_up_mode.error().code == support::ErrorCode::Validation);
+    CHECK(follow_up_mode.error().message == "session is closed");
+    CHECK(subscription.drain() == 0);
+
+    auto steering_clear = session.clear_steering_queue();
+    REQUIRE_FALSE(steering_clear);
+    CHECK(steering_clear.error().code == support::ErrorCode::Validation);
+    CHECK(steering_clear.error().message == "session is closed");
+    CHECK(subscription.drain() == 0);
+
+    auto follow_up_clear = session.clear_follow_up_queue();
+    REQUIRE_FALSE(follow_up_clear);
+    CHECK(follow_up_clear.error().code == support::ErrorCode::Validation);
+    CHECK(follow_up_clear.error().message == "session is closed");
+    CHECK(subscription.drain() == 0);
+
+    auto input_clear = session.clear_input_queues();
+    REQUIRE_FALSE(input_clear);
+    CHECK(input_clear.error().code == support::ErrorCode::Validation);
+    CHECK(input_clear.error().message == "session is closed");
+    CHECK(subscription.drain() == 0);
+}
+
+TEST_CASE("AgentSession input queue mutations reject before initialization",
+        "[coding_agent][projection][input_queue][spec]") {
+    coding_agent::AgentSession session;
+
+    auto steering_mode = session.set_steering_mode(agent::InputQueueMode::OneAtATime);
+    REQUIRE_FALSE(steering_mode);
+    CHECK(steering_mode.error().code == support::ErrorCode::Validation);
+    CHECK(steering_mode.error().message == "session is not initialized");
+
+    auto follow_up_mode = session.set_follow_up_mode(agent::InputQueueMode::OneAtATime);
+    REQUIRE_FALSE(follow_up_mode);
+    CHECK(follow_up_mode.error().code == support::ErrorCode::Validation);
+    CHECK(follow_up_mode.error().message == "session is not initialized");
+
+    auto steering_clear = session.clear_steering_queue();
+    REQUIRE_FALSE(steering_clear);
+    CHECK(steering_clear.error().code == support::ErrorCode::Validation);
+    CHECK(steering_clear.error().message == "session is not initialized");
+
+    auto follow_up_clear = session.clear_follow_up_queue();
+    REQUIRE_FALSE(follow_up_clear);
+    CHECK(follow_up_clear.error().code == support::ErrorCode::Validation);
+    CHECK(follow_up_clear.error().message == "session is not initialized");
+
+    auto input_clear = session.clear_input_queues();
+    REQUIRE_FALSE(input_clear);
+    CHECK(input_clear.error().code == support::ErrorCode::Validation);
+    CHECK(input_clear.error().message == "session is not initialized");
+}
 
 TEST_CASE("Projection attach delivers a Base then ordered patches to concurrent subscribers",
         "[coding_agent][projection][issue617][spec]") {

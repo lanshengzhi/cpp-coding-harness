@@ -455,9 +455,7 @@ std::optional<ai::TimestampMs> AgentSession::Impl::latest_compaction_timestamp()
 
 boost::asio::awaitable<support::Expected<CompactionResult>> detail::session_compact(
         std::shared_ptr<AgentSession::Impl> impl, std::string custom_instructions) {
-    if (!impl) {
-        co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
-    }
+    if (!impl) co_return std::unexpected(detail::session_not_initialized_error());
     co_return co_await impl->compact(std::move(custom_instructions));
 }
 

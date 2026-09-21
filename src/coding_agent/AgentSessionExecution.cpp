@@ -778,9 +778,7 @@ boost::asio::awaitable<support::ExpectedVoid> detail::session_prompt(std::shared
         std::string text,
         std::vector<ai::ImageContent> images,
         bool expand_prompt_templates) {
-    if (!impl) {
-        co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
-    }
+    if (!impl) co_return std::unexpected(detail::session_not_initialized_error());
     co_return co_await impl->run_prompt(std::move(text), std::move(images), expand_prompt_templates);
 }
 

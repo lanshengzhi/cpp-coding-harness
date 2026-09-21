@@ -107,6 +107,15 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
             std::string text, std::vector<ai::ImageContent> images, bool expand_prompt_templates);
     [[nodiscard]] support::ExpectedVoid follow_up(
             std::string text, std::vector<ai::ImageContent> images, bool expand_prompt_templates);
+    enum class InputQueueMutation {
+        SetSteeringMode,
+        SetFollowUpMode,
+        ClearSteeringQueue,
+        ClearFollowUpQueue,
+        ClearInputQueues,
+    };
+    [[nodiscard]] support::ExpectedVoid apply_input_queue_mutation(
+            InputQueueMutation mutation, std::optional<agent::InputQueueMode> mode = std::nullopt);
     [[nodiscard]] support::ExpectedVoid set_steering_mode(agent::InputQueueMode mode);
     [[nodiscard]] support::ExpectedVoid set_follow_up_mode(agent::InputQueueMode mode);
     [[nodiscard]] support::ExpectedVoid clear_steering_queue();
@@ -587,6 +596,8 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     std::optional<agent::AgentEventSubscription> agent_event_subscription_{std::nullopt};
 };
 namespace detail {
+
+[[nodiscard]] support::Error session_not_initialized_error();
 
 /// Bounded, redacted observer-failure diagnostic (ADR 0017): the
 /// session-assembly mirror of the Agent's weak-observer diagnostics channel.

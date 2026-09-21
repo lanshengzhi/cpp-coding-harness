@@ -465,64 +465,50 @@ support::ExpectedVoid AgentSession::Impl::follow_up(
     return result;
 }
 
-support::ExpectedVoid AgentSession::Impl::set_steering_mode(agent::InputQueueMode mode) {
+support::ExpectedVoid AgentSession::Impl::apply_input_queue_mutation(
+        InputQueueMutation mutation, std::optional<agent::InputQueueMode> mode) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return rejected;
     }
-    auto result = agent_ ? agent_->set_steering_mode(mode)
-                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    if (!agent_) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
+    }
+
+    support::ExpectedVoid result;
+    if (mutation == InputQueueMutation::SetSteeringMode)
+        result = agent_->set_steering_mode(*mode);
+    else if (mutation == InputQueueMutation::SetFollowUpMode)
+        result = agent_->set_follow_up_mode(*mode);
+    else if (mutation == InputQueueMutation::ClearSteeringQueue)
+        result = agent_->clear_steering_queue();
+    else if (mutation == InputQueueMutation::ClearFollowUpQueue)
+        result = agent_->clear_follow_up_queue();
+    else
+        result = agent_->clear_input_queues();
     if (result) {
         update_projection();
     }
     return result;
+}
+
+support::ExpectedVoid AgentSession::Impl::set_steering_mode(agent::InputQueueMode mode) {
+    return apply_input_queue_mutation(InputQueueMutation::SetSteeringMode, mode);
 }
 
 support::ExpectedVoid AgentSession::Impl::set_follow_up_mode(agent::InputQueueMode mode) {
-    if (auto rejected = reject_if_closed(); !rejected) {
-        return rejected;
-    }
-    auto result = agent_ ? agent_->set_follow_up_mode(mode)
-                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
-    if (result) {
-        update_projection();
-    }
-    return result;
+    return apply_input_queue_mutation(InputQueueMutation::SetFollowUpMode, mode);
 }
 
 support::ExpectedVoid AgentSession::Impl::clear_steering_queue() {
-    if (auto rejected = reject_if_closed(); !rejected) {
-        return rejected;
-    }
-    auto result = agent_ ? agent_->clear_steering_queue()
-                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
-    if (result) {
-        update_projection();
-    }
-    return result;
+    return apply_input_queue_mutation(InputQueueMutation::ClearSteeringQueue);
 }
 
 support::ExpectedVoid AgentSession::Impl::clear_follow_up_queue() {
-    if (auto rejected = reject_if_closed(); !rejected) {
-        return rejected;
-    }
-    auto result = agent_ ? agent_->clear_follow_up_queue()
-                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
-    if (result) {
-        update_projection();
-    }
-    return result;
+    return apply_input_queue_mutation(InputQueueMutation::ClearFollowUpQueue);
 }
 
 support::ExpectedVoid AgentSession::Impl::clear_input_queues() {
-    if (auto rejected = reject_if_closed(); !rejected) {
-        return rejected;
-    }
-    auto result = agent_ ? agent_->clear_input_queues()
-                         : std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
-    if (result) {
-        update_projection();
-    }
-    return result;
+    return apply_input_queue_mutation(InputQueueMutation::ClearInputQueues);
 }
 
 support::Expected<std::string> AgentSession::Impl::set_thinking_level(std::string_view level) {
@@ -1413,25 +1399,19 @@ const std::vector<PromptTemplate>& AgentSession::Impl::templates() const { retur
 
 boost::asio::awaitable<support::ExpectedVoid> detail::session_set_model(
         std::shared_ptr<AgentSession::Impl> impl, ai::Model model) {
-    if (!impl) {
-        co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
-    }
+    if (!impl) co_return std::unexpected(detail::session_not_initialized_error());
     co_return co_await impl->set_model(std::move(model));
 }
 
 boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> detail::session_cycle_model(
         std::shared_ptr<AgentSession::Impl> impl, std::string direction) {
-    if (!impl) {
-        co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
-    }
+    if (!impl) co_return std::unexpected(detail::session_not_initialized_error());
     co_return co_await impl->cycle_model(std::move(direction));
 }
 
 boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> detail::session_reload(
         std::shared_ptr<AgentSession::Impl> impl, std::stop_token stop_token) {
-    if (!impl) {
-        co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
-    }
+    if (!impl) co_return std::unexpected(detail::session_not_initialized_error());
     co_return co_await impl->reload(stop_token);
 }
 
@@ -1458,9 +1438,7 @@ detail::AgentSessionInteractiveAccess::run_user_bash_impl(std::shared_ptr<AgentS
         std::string command,
         bool exclude_from_context,
         runtime::UserBashProgressSink progress_sink) {
-    if (!impl) {
-        co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is not initialized"));
-    }
+    if (!impl) co_return std::unexpected(detail::session_not_initialized_error());
     co_return co_await impl->run_user_bash(std::move(command), exclude_from_context, std::move(progress_sink));
 }
 
