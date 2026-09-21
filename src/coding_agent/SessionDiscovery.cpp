@@ -517,6 +517,26 @@ constexpr std::size_t kMaxEntryLineBytes = 4 * 1024 * 1024;
     return sessions;
 }
 
+template <typename Session, typename Scanner>
+[[nodiscard]] std::vector<Session> list_all_sessions_impl(const std::filesystem::path& sessions_root,
+        const std::optional<std::filesystem::path>& custom_directory,
+        Scanner scanner) {
+    if (custom_directory) return scanner(*custom_directory, std::nullopt);
+    if (sessions_root.empty()) return {};
+    std::vector<Session> sessions;
+    std::error_code ec;
+    if (!std::filesystem::is_directory(sessions_root, ec)) return sessions;
+    for (const auto& entry : std::filesystem::directory_iterator(sessions_root, ec)) {
+        if (ec) break;
+        if (!entry.is_directory(ec)) continue;
+        auto nested = scanner(entry.path(), std::nullopt);
+        sessions.insert(sessions.end(), std::make_move_iterator(nested.begin()), std::make_move_iterator(nested.end()));
+    }
+    std::ranges::sort(
+            sessions, [](const Session& first, const Session& second) { return first.modified > second.modified; });
+    return sessions;
+}
+
 /// pi `resolveSessionPath` id matching: an exact id match wins, then the
 /// first prefix match in list order (newest first).
 [[nodiscard]] std::optional<SessionInfoLite> find_id_match(
@@ -549,36 +569,7 @@ std::vector<SessionInfoLite> list_sessions_in_directory(
 std::vector<SessionInfoLite> list_all_sessions(
     const std::filesystem::path& sessions_root,
     const std::optional<std::filesystem::path>& custom_directory) {
-    if (custom_directory) {
-        return list_directory_sessions(*custom_directory, std::nullopt);
-    }
-    if (sessions_root.empty()) {
-        return {};
-    }
-    std::vector<SessionInfoLite> sessions;
-    std::error_code ec;
-    if (!std::filesystem::is_directory(sessions_root, ec)) {
-        return sessions;
-    }
-    for (const auto& entry : std::filesystem::directory_iterator(sessions_root, ec)) {
-        if (ec) {
-            break;
-        }
-        if (!entry.is_directory(ec)) {
-            continue;
-        }
-        auto nested = list_directory_sessions(entry.path(), std::nullopt);
-        sessions.insert(
-            sessions.end(),
-            std::make_move_iterator(nested.begin()),
-            std::make_move_iterator(nested.end()));
-    }
-    std::sort(
-        sessions.begin(), sessions.end(),
-        [](const SessionInfoLite& first, const SessionInfoLite& second) {
-            return first.modified > second.modified;
-        });
-    return sessions;
+    return list_all_sessions_impl<SessionInfoLite>(sessions_root, custom_directory, list_directory_sessions);
 }
 
 std::optional<SessionInfoLite> find_most_recent_session(
@@ -605,36 +596,7 @@ std::vector<SessionInfo> list_sessions_info(
 std::vector<SessionInfo> list_all_sessions_info(
     const std::filesystem::path& sessions_root,
     const std::optional<std::filesystem::path>& custom_directory) {
-    if (custom_directory) {
-        return list_directory_sessions_info(*custom_directory, std::nullopt);
-    }
-    if (sessions_root.empty()) {
-        return {};
-    }
-    std::vector<SessionInfo> sessions;
-    std::error_code ec;
-    if (!std::filesystem::is_directory(sessions_root, ec)) {
-        return sessions;
-    }
-    for (const auto& entry : std::filesystem::directory_iterator(sessions_root, ec)) {
-        if (ec) {
-            break;
-        }
-        if (!entry.is_directory(ec)) {
-            continue;
-        }
-        auto nested = list_directory_sessions_info(entry.path(), std::nullopt);
-        sessions.insert(
-            sessions.end(),
-            std::make_move_iterator(nested.begin()),
-            std::make_move_iterator(nested.end()));
-    }
-    std::sort(
-        sessions.begin(), sessions.end(),
-        [](const SessionInfo& first, const SessionInfo& second) {
-            return first.modified > second.modified;
-        });
-    return sessions;
+    return list_all_sessions_impl<SessionInfo>(sessions_root, custom_directory, list_directory_sessions_info);
 }
 
 std::optional<std::string> invalid_session_id_reason(const std::string& id) {
