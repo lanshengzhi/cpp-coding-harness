@@ -42,6 +42,7 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 using tests::drain_ready;
@@ -162,19 +163,21 @@ private:
 
 /// One isolated login fixture: a temp Agent Config Directory shared by the
 /// runtime's credential store and the interactive settings scope, plus a temp
-/// workspace. `PIKE_CODING_AGENT_DIR` isolates the runtime's agent dir; `HOME`
+/// workspace. `HOME` isolates the runtime's agent dir; `HOME`
 /// isolates ambient user state.
 struct LoginFixture {
     cch::tests::TempWorkspace workspace;
-    cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
+    std::filesystem::path agent_dir;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     tests::RuntimeFixture runtime;
 
     LoginFixture() {
-        dir_guard.set(agent_dir.path().string());
         home_guard.set(workspace.path().string());
+        agent_dir = tests::agent_root_under_home(workspace.path());
+        std::filesystem::create_directories(agent_dir);
+        agent_dir = tests::agent_root_under_home(workspace.path());
+        std::filesystem::create_directories(agent_dir);
         kimi_guard.unset();
     }
 
@@ -186,7 +189,7 @@ struct LoginFixture {
             std::vector<std::shared_ptr<ScriptedOAuthProvider>> replacements = {}) {
         if (replacements.empty()) {
             auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{
-                    .agent_dir = agent_dir.path(),
+                    .agent_dir = agent_dir,
             });
             return runtime ? std::move(*runtime) : nullptr;
         }
@@ -211,7 +214,7 @@ struct LoginFixture {
 
         auto runtime = coding_agent::create_model_runtime_for_testing(
                 coding_agent::ModelRuntimeOptions{
-                        .agent_dir = agent_dir.path(),
+                        .agent_dir = agent_dir,
                 },
                 coding_agent::ModelRuntimeTestOptions{
                         .providers = std::move(definitions),
@@ -219,9 +222,7 @@ struct LoginFixture {
         return runtime ? std::move(*runtime) : nullptr;
     }
 
-    [[nodiscard]] std::filesystem::path auth_path() const {
-        return agent_dir.path() / "auth.json";
-    }
+    [[nodiscard]] std::filesystem::path auth_path() const { return agent_dir / "auth.json"; }
 
     /// Create a session on the injected runtime (the private E2E seam), so
     /// the real resolution chain lands on the unknown placeholder while no
@@ -344,7 +345,7 @@ TEST_CASE("login picks the auth type, provider, runs the Codex OAuth branch, and
     REQUIRE(session);
 
     InteractiveRun run(fixture.runtime);
-    run.start(*session->session, fixture.agent_dir.path());
+    run.start(*session->session, fixture.agent_dir);
 
     // /login with no reference opens the auth-type picker (pi's generic
     // string-list selector).
@@ -399,7 +400,7 @@ TEST_CASE("login picks the auth type, provider, runs the Codex OAuth branch, and
     // default was written.
     const auto auth_text = read_text(fixture.auth_path());
     CHECK(auth_text.find("dummy-refresh") != std::string::npos);
-    const auto settings_text = read_text(fixture.agent_dir.path() / "settings.json");
+    const auto settings_text = read_text(fixture.agent_dir / "settings.json");
     CHECK(settings_text.find("\"defaultProvider\": \"openai-codex\"") != std::string::npos);
     CHECK(settings_text.find("\"defaultModel\": \"gpt-5.5\"") != std::string::npos);
 
@@ -432,7 +433,7 @@ TEST_CASE("login runs the Kimi device-code OAuth branch and renders the waiting 
     REQUIRE(session);
 
     InteractiveRun run(fixture.runtime);
-    run.start(*session->session, fixture.agent_dir.path());
+    run.start(*session->session, fixture.agent_dir);
 
     // A single (provider, auth-type) match skips both pickers (pi
     // startProviderLogin direct branch).
@@ -457,9 +458,9 @@ TEST_CASE("login runs the Kimi device-code OAuth branch and renders the waiting 
 }
 
 TEST_CASE("login takes the DeepSeek API-key dialog branch through real models.json composition",
-        "[coding_agent][tui][login][issue406][spec]") {
+        "[coding_agent][tui][login][issue406][issue754][spec]") {
     LoginFixture fixture;
-    std::ofstream(fixture.agent_dir.path() / "models.json", std::ios::binary) << R"({
+    std::ofstream(fixture.agent_dir / "models.json", std::ios::binary) << R"({
   "providers": {
     "deepseek": {
       "name": "DeepSeek",
@@ -479,7 +480,7 @@ TEST_CASE("login takes the DeepSeek API-key dialog branch through real models.js
     REQUIRE(session);
 
     InteractiveRun run(fixture.runtime);
-    run.start(*session->session, fixture.agent_dir.path());
+    run.start(*session->session, fixture.agent_dir);
 
     run.type("/login deepseek\r");
     run.wait_for_screen("Enter API key");
@@ -487,9 +488,15 @@ TEST_CASE("login takes the DeepSeek API-key dialog branch through real models.js
     CHECK(screen.find("Login to DeepSeek") != std::string::npos);
     CHECK(screen.find("Enter API key") != std::string::npos);
 
-    run.type("dummy-deepseek-key\r");
+    run.type("dummy-deepseek-key");
+    screen = visible_screen(run.terminal);
+    CHECK(screen.find("dummy-deepseek-key") == std::string::npos);
+    CHECK(screen.find("•") != std::string::npos);
+
+    run.type("\r");
     run.wait_for_screen("Saved API key for DeepSeek.");
     screen = visible_screen(run.terminal);
+    CHECK(screen.find("dummy-deepseek-key") == std::string::npos);
     // The C++ frozen default-model table has no deepseek entry: pi's first
     // verbatim selection error follows the success status.
     const std::string expected_status =
@@ -521,7 +528,7 @@ TEST_CASE("login cancellation suppresses the failure UI on the stable cancelled 
     REQUIRE(session);
 
     InteractiveRun run(fixture.runtime);
-    run.start(*session->session, fixture.agent_dir.path());
+    run.start(*session->session, fixture.agent_dir);
 
     run.type("/login openai-codex\r");
     run.wait_for_screen("Paste the authorization code");
@@ -562,7 +569,7 @@ TEST_CASE("login failure renders pi's failure message through the chat surface",
     REQUIRE(session);
 
     InteractiveRun run(fixture.runtime);
-    run.start(*session->session, fixture.agent_dir.path());
+    run.start(*session->session, fixture.agent_dir);
 
     run.type("/login openai-codex\r");
     run.wait_for_screen("Error: Failed to login");
@@ -597,7 +604,7 @@ TEST_CASE("login with an unmatched provider reference opens the searched provide
     REQUIRE(session);
 
     InteractiveRun run(fixture.runtime);
-    run.start(*session->session, fixture.agent_dir.path());
+    run.start(*session->session, fixture.agent_dir);
 
     run.type("/login no-such-provider\r");
     run.wait_for_screen("Select provider to configure:");
@@ -642,7 +649,7 @@ TEST_CASE("login select-type AuthPrompt resolves through the generic string-list
     REQUIRE(session);
 
     InteractiveRun run(fixture.runtime);
-    run.start(*session->session, fixture.agent_dir.path());
+    run.start(*session->session, fixture.agent_dir);
 
     run.type("/login openai-codex\r");
     run.wait_for_screen("Choose sign-in method");
@@ -677,7 +684,7 @@ TEST_CASE("login api-key ambient method shows the configured-outside info dialog
     REQUIRE(session);
 
     InteractiveRun run(fixture.runtime);
-    run.start(*session->session, fixture.agent_dir.path());
+    run.start(*session->session, fixture.agent_dir);
 
     // One provider with both auth types lands on the auth-type picker for
     // that provider (pi's same-id branch).
@@ -731,7 +738,7 @@ TEST_CASE(
     REQUIRE(session);
 
     InteractiveRun run(fixture.runtime);
-    run.start(*session->session, fixture.agent_dir.path());
+    run.start(*session->session, fixture.agent_dir);
 
     run.type("/logout\r");
     run.wait_for_screen("Select provider to logout:");
@@ -774,8 +781,8 @@ TEST_CASE("request-time re-auth guidance renders through the chat surface",
     "expires": 1
   }
 })";
-    std::ofstream(fixture.agent_dir.path() / "settings.json", std::ios::binary)
-        << R"({"defaultProvider": "openai-codex", "defaultModel": "gpt-5.5"})";
+    std::ofstream(fixture.agent_dir / "settings.json", std::ios::binary)
+            << R"({"defaultProvider": "openai-codex", "defaultModel": "gpt-5.5"})";
     auto codex = std::make_shared<ScriptedOAuthProvider>(
         "openai-codex",
         "OpenAI Codex",
@@ -796,7 +803,7 @@ TEST_CASE("request-time re-auth guidance renders through the chat surface",
     REQUIRE(session->session->snapshot().agent_state.model.id == "gpt-5.5");
 
     InteractiveRun run(fixture.runtime);
-    run.start(*session->session, fixture.agent_dir.path());
+    run.start(*session->session, fixture.agent_dir);
 
     run.type("hello\r");
     run.wait_for_screen("Authentication failed for \"openai-codex\"");

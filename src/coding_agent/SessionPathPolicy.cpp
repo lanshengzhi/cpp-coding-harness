@@ -132,7 +132,7 @@ support::Expected<std::filesystem::path> resolve_session_dir_value(
     if (value.empty()) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation,
                 "session directory override is empty",
-                "supply a non-empty --session-dir, PIKE_CODING_AGENT_SESSION_DIR, or settings sessionDir value"));
+                "supply a non-empty --session-dir or settings sessionDir value"));
     }
 
     std::filesystem::path resolved;
@@ -184,16 +184,13 @@ std::filesystem::path resolve_session_path_value(
 }
 
 support::Expected<std::optional<std::filesystem::path>> resolve_effective_session_dir(
-    const std::optional<std::string>& flag_value,
-    const std::optional<std::string>& env_value,
-    const std::optional<std::string>& settings_value,
-    const std::filesystem::path& canonical_workspace,
-    const std::filesystem::path& home_dir) {
+        const std::optional<std::string>& flag_value,
+        const std::optional<std::string>& settings_value,
+        const std::filesystem::path& canonical_workspace,
+        const std::filesystem::path& home_dir) {
     std::optional<std::string> value;
     if (flag_value && !flag_value->empty()) {
         value = flag_value;
-    } else if (env_value && !env_value->empty()) {
-        value = env_value;
     } else if (settings_value && !settings_value->empty()) {
         value = settings_value;
     }

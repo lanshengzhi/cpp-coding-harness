@@ -9,6 +9,7 @@
 #include "support/FakeUserShell.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
+#include "support/AgentRootFixture.hpp"
 
 #include <cch/ai/Content.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
@@ -304,12 +305,11 @@ TEST_CASE("Native TUI retry indicator counts down pi's backoff and clears on suc
         "[coding_agent][tui][status][retry][issue411][spec]") {
     ResumedSessionFixture fixture;
     // The session reads its settings from the Agent Config Directory.
-    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", fixture.config.path().string()};
+    const tests::EnvVarGuard agent_dir{"HOME", fixture.config.path().string()};
     fixture.create();
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
-    fixture.config.write(
-        "settings.json",
-        R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 2000}})");
+    fixture.config.write(".config/pike/agent/settings.json",
+            R"({"retry": {"enabled": true, "maxRetries": 3, "baseDelayMs": 2000}})");
     fixture.scripted.control->failure_kinds.push_back(ai::InferenceFailureKind::TransientTransportFailure);
     fixture.scripted.control->responses.push_back(retryable_error_terminal("overloaded_error"));
     fixture.scripted.control->responses.push_back(ai::assistant_text_message("Recovered after retry"));
@@ -375,11 +375,10 @@ TEST_CASE("Native TUI shows the overflow Compaction indicator and rebuilds the c
     // summarizable (pi's findCutPoint keeps the recent budget), so the
     // overflow auto-compaction runs without a huge transcript (which would
     // make every spinner frame's re-render too slow for the test loop).
-    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", fixture.config.path().string()};
+    const tests::EnvVarGuard agent_dir{"HOME", fixture.config.path().string()};
     fixture.create();
-    fixture.config.write(
-        "settings.json",
-        R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
+    fixture.config.write(".config/pike/agent/settings.json",
+            R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
     tests::ScriptedRuntimeFixture gated;
     gated.control->gate_at = 1;
     gated.control->failure_kinds.push_back(ai::InferenceFailureKind::ContextOverflow);
@@ -470,11 +469,10 @@ TEST_CASE("Native TUI /reload refuses during auto-compaction with pi's streaming
     // summarizable so the overflow auto-compaction runs (same shape as the
     // overflow Compaction indicator test).
     ResumedSessionFixture fixture;
-    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", fixture.config.path().string()};
+    const tests::EnvVarGuard agent_dir{"HOME", fixture.config.path().string()};
     fixture.create();
-    fixture.config.write(
-        "settings.json",
-        R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
+    fixture.config.write(".config/pike/agent/settings.json",
+            R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
     tests::ScriptedRuntimeFixture gated;
     gated.control->gate_at = 1;
     gated.control->failure_kinds.push_back(ai::InferenceFailureKind::ContextOverflow);
@@ -550,14 +548,13 @@ TEST_CASE("Native TUI /reload refuses during auto-compaction with pi's streaming
 TEST_CASE("Native TUI /reload refuses during a manual compaction with pi's compaction warning",
         "[coding_agent][tui][reload][compaction][issue418][spec]") {
     ResumedSessionFixture fixture;
-    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", fixture.config.path().string()};
+    const tests::EnvVarGuard agent_dir{"HOME", fixture.config.path().string()};
     fixture.create();
     // A tiny keepRecentTokens budget makes the small resumed session
     // summarizable (pi's findCutPoint keeps the recent budget), so the manual
     // compaction actually runs instead of failing "session too small".
-    fixture.config.write(
-        "settings.json",
-        R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
+    fixture.config.write(".config/pike/agent/settings.json",
+            R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
     // The manual compaction's summarization is the first model call; gating
     // it keeps `isCompacting` true while `isStreaming` stays false (the
     // signal pair pi's `handleReloadCommand` checks second).

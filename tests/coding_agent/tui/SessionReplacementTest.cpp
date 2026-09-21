@@ -51,6 +51,7 @@
 #include <stop_token>
 #include <string>
 #include <vector>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 using tests::drain_ready;
@@ -68,12 +69,17 @@ namespace {
 
 struct Fixture {
     tests::TempWorkspace workspace;
-    tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR"};
+    tests::TempWorkspace home;
+    std::filesystem::path agent_dir;
+    tests::EnvVarGuard home_guard{"HOME"};
     tests::RuntimeFixture runtime;
     tests::RuntimeLoopDriver runtime_driver;
 
-    Fixture() : runtime_driver(runtime) { agent_dir_guard.set(agent_dir.path().string()); }
+    Fixture() : runtime_driver(runtime) {
+        home_guard.set(home.path().string());
+        agent_dir = tests::agent_root_under_home(home.path());
+        std::filesystem::create_directories(agent_dir);
+    }
 };
 
 struct Running {
@@ -118,7 +124,7 @@ void boot(
     auto runtime_root = std::make_shared<harness::RuntimeRoot>(std::move(runtime_io), harness::RuntimeLimits{});
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
                        .with_defer_boot(std::move(request))
-                       .with_agent_config_directory(fixture.agent_dir.path())
+                       .with_agent_config_directory(fixture.agent_dir)
                        .with_action_sink(actions->make_sink())
                        .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
                        .with_runtime_root(std::move(runtime_root))

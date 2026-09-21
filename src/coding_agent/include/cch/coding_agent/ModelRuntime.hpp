@@ -30,8 +30,8 @@ struct ModelRuntimeTransportTestOptions;
 /// Directory.
 struct ModelRuntimeOptions {
     /// Product Config Directory override. When empty, the default
-    /// `agent_config_dir()` applies (`PIKE_CODING_AGENT_DIR`, then
-    /// `~/.pike/agent`).
+    /// `agent_config_dir()` applies (the fixed
+    /// `$XDG_CONFIG_HOME/pike/agent`).
     std::filesystem::path agent_dir{};
     /// models.json path. When unset, `<agentDir>/models.json`. An explicitly
     /// empty path disables the models.json surface (empty user config).

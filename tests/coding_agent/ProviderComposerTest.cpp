@@ -195,9 +195,12 @@ template <typename T> [[nodiscard]] support::Expected<T> consume_async_result(su
 TEST_CASE("builtin definitions carry the Codex 7 and Kimi 4 catalogs",
         "[coding_agent][provider-composer][issue546][spec]") {
     const auto builtins = ai::builtin_provider_definitions();
-    REQUIRE(builtins.size() == 2);
+    REQUIRE(builtins.size() == 6);
 
-    const auto& codex = builtins[0];
+    const auto codex_it =
+            std::find_if(builtins.begin(), builtins.end(), [](const auto& b) { return b.id == "openai-codex"; });
+    REQUIRE(codex_it != builtins.end());
+    const auto& codex = *codex_it;
     CHECK(codex.id == "openai-codex");
     CHECK(codex.name == "OpenAI Codex");
     CHECK(codex.auth.oauth.has_value());
@@ -211,7 +214,10 @@ TEST_CASE("builtin definitions carry the Codex 7 and Kimi 4 catalogs",
     CHECK(gpt55->api == "openai-codex-responses");
     CHECK(gpt55->base_url == "https://chatgpt.com/backend-api");
 
-    const auto& kimi = builtins[1];
+    const auto kimi_it =
+            std::find_if(builtins.begin(), builtins.end(), [](const auto& b) { return b.id == "kimi-coding"; });
+    REQUIRE(kimi_it != builtins.end());
+    const auto& kimi = *kimi_it;
     CHECK(kimi.id == "kimi-coding");
     CHECK(kimi.name == "Kimi For Coding");
     CHECK(kimi.auth.api_key.has_value());
@@ -276,9 +282,15 @@ TEST_CASE("builtin catalogs match the frozen baseline shard values",
     };
 
     const auto builtins = ai::builtin_provider_definitions();
-    REQUIRE(builtins.size() == 2);
-    check_shard(builtins[0].models, "models/openai-codex-shard.json", "openai-codex-responses");
-    check_shard(builtins[1].models, "models/kimi-coding-shard.json", "anthropic-messages");
+    REQUIRE(builtins.size() == 6);
+    const auto codex_it =
+            std::find_if(builtins.begin(), builtins.end(), [](const auto& b) { return b.id == "openai-codex"; });
+    const auto kimi_it =
+            std::find_if(builtins.begin(), builtins.end(), [](const auto& b) { return b.id == "kimi-coding"; });
+    REQUIRE(codex_it != builtins.end());
+    REQUIRE(kimi_it != builtins.end());
+    check_shard(codex_it->models, "models/openai-codex-shard.json", "openai-codex-responses");
+    check_shard(kimi_it->models, "models/kimi-coding-shard.json", "anthropic-messages");
 }
 
 TEST_CASE("the frozen complete Model fixture composes to the expected ai::Model",

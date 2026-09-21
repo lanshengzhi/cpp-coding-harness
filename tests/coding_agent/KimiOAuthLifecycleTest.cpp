@@ -5,7 +5,6 @@
 #include "ai/auth/KimiCodingOAuth.hpp"
 #include "ai/auth/OAuthHttpClient.hpp"
 #include "support/AsyncResultBridge.hpp"
-#include "ai/providers/KimiCatalog.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -28,6 +27,17 @@
 using namespace cch;
 
 namespace {
+
+/// The Kimi Coding models from the bundled catalog (ADR 0058), which replaced
+/// the deleted KimiCatalog translation unit.
+[[nodiscard]] std::vector<ai::Model> kimi_coding_models() {
+    for (auto& definition : ai::builtin_provider_definitions()) {
+        if (definition.id == "kimi-coding") {
+            return std::move(definition.models);
+        }
+    }
+    return {};
+}
 
 template <typename T>
 T run_awaitable(boost::asio::awaitable<T> operation) {
@@ -188,7 +198,7 @@ struct LoginHarness {
                         ai::ProviderDefinition{
                                 .id = "kimi-coding",
                                 .name = "Kimi For Coding",
-                                .models = ai::providers::kimi_coding_models(),
+                                .models = kimi_coding_models(),
                                 .auth = std::move(provider_auth),
                         },
         }));

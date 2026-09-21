@@ -42,6 +42,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 using tests::drain_ready;
@@ -124,14 +125,13 @@ constexpr std::string_view kReasoningAndPlainKeyed = R"({
 }
 
 /// One isolated assembly: a temp workspace for the session file and a temp
-/// Agent Config Directory (`PIKE_CODING_AGENT_DIR`) whose models.json and
+/// Agent Config Directory (`HOME`) whose models.json and
 /// settings.json drive runtime creation deterministically, plus the host
 /// hooks wired to the fixture's io_context like the interactive host's
 /// executor.
 struct ModelFlowFixture {
     cch::tests::TempWorkspace workspace;
-    cch::tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
+    std::filesystem::path agent_dir;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
 
@@ -149,18 +149,21 @@ struct ModelFlowFixture {
     std::shared_ptr<coding_agent::tui::ModelFlowController> flows;
 
     ModelFlowFixture() {
-        dir_guard.set(agent_dir.path().string());
         home_guard.set(workspace.path().string());
+        agent_dir = tests::agent_root_under_home(workspace.path());
+        std::filesystem::create_directories(agent_dir);
+        agent_dir = tests::agent_root_under_home(workspace.path());
+        std::filesystem::create_directories(agent_dir);
         kimi_guard.unset();
     }
 
     void write_models(std::string_view json) {
-        std::ofstream out(agent_dir.path() / "models.json", std::ios::binary);
+        std::ofstream out(agent_dir / "models.json", std::ios::binary);
         out << json;
     }
 
     [[nodiscard]] std::string read_settings() const {
-        std::ifstream in(agent_dir.path() / "settings.json", std::ios::binary);
+        std::ifstream in(agent_dir / "settings.json", std::ios::binary);
         return std::string{
             std::istreambuf_iterator<char>{in},
             std::istreambuf_iterator<char>{}};
@@ -179,8 +182,7 @@ struct ModelFlowFixture {
         REQUIRE(created.has_value());
         session = std::move(created->session);
         runtime_driver.emplace(runtime);
-        settings.emplace(
-            coding_agent::SettingsManager::create({}, agent_dir.path(), false));
+        settings.emplace(coding_agent::SettingsManager::create({}, agent_dir, false));
 
         coding_agent::tui::ModelFlowHostHooks hooks;
         hooks.is_live = [] { return true; };

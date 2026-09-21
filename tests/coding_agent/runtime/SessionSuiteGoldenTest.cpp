@@ -48,6 +48,7 @@
 #include <utility>
 #include <variant>
 #include <vector>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 
@@ -128,14 +129,17 @@ private:
 
 /// Deterministic agent config directory with a settings.json override.
 struct SettingsFixture {
-  tests::TempWorkspace agent_dir;
-  tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
+    tests::TempWorkspace home;
+    std::filesystem::path agent_dir;
+    tests::EnvVarGuard home_guard{"HOME"};
 
-  explicit SettingsFixture(std::string_view json) {
-    dir_guard.set(agent_dir.path().string());
-    std::ofstream out(agent_dir.path() / "settings.json", std::ios::binary);
-    out << json;
-  }
+    explicit SettingsFixture(std::string_view json) {
+        home_guard.set(home.path().string());
+        agent_dir = tests::agent_root_under_home(home.path());
+        std::filesystem::create_directories(agent_dir);
+        std::ofstream out(agent_dir / "settings.json", std::ios::binary);
+        out << json;
+    }
 };
 
 [[nodiscard]] ai::AssistantMessage text_turn(std::string text) {

@@ -24,6 +24,7 @@ include_guard(GLOBAL)
         tests/ai/auth/OpenAICodexOAuthTest.cpp
         tests/ai/providers/BoostBeastStreamTransportTest.cpp
         tests/ai/providers/BoostBeastWebSocketTransportTest.cpp
+        tests/ai/providers/ComposedProviderTest.cpp
         tests/ai/providers/ScriptedProviderTest.cpp
         tests/ai/providers/SseParserTest.cpp
         tests/ai/providers/StreamExecutionEngineTest.cpp

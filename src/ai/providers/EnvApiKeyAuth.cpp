@@ -47,6 +47,21 @@ namespace {
     std::vector<std::string> environment_names) {
     ApiKeyAuth api_key;
     api_key.name = std::move(provider_name);
+    // Zero-config onboarding (ADR 0058): the interactive login stores the key
+    // the user types, so an environment-only provider is still login-capable.
+    api_key.login = [](AuthInteraction interaction) -> cch::support::AsyncResult<ApiKeyCredential> {
+        return support::detail::make_async_result(
+                [interaction = std::move(
+                         interaction)]() mutable -> boost::asio::awaitable<support::Expected<ApiKeyCredential>> {
+                    CCH_TRY(key,
+                            co_await support::detail::await_async_result(interaction.prompt(AuthPrompt{
+                                    .kind = AuthPromptSecret{.message = "Enter API key"},
+                            })));
+                    ApiKeyCredential credential;
+                    credential.key = std::move(key);
+                    co_return credential;
+                });
+    };
     api_key.check =
             [environment_names](const AuthContext& context,
                     std::optional<ApiKeyCredential> credential) -> cch::support::AsyncResult<std::optional<AuthCheck>> {

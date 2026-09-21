@@ -18,6 +18,7 @@
 #include "support/RuntimeFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
+#include "support/AgentRootFixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -760,10 +761,8 @@ TEST_CASE("disabled compaction settings suppress both automatic triggers",
         "[coding_agent][compaction][issue359][compat-pi]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
-    paths.workspace.write(
-        "agent/settings.json",
-        R"({"compaction": {"enabled": false}})");
-    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", (paths.workspace.path() / "agent").string()};
+    paths.workspace.write("agent/.config/pike/agent/settings.json", R"({"compaction": {"enabled": false}})");
+    const tests::EnvVarGuard agent_dir{"HOME", (paths.workspace.path() / "agent").string()};
 
     auto under_test = make_trigger_session(paths, runtime, {overflow_terminal()});
     auto* session = under_test.session.get();
@@ -830,9 +829,9 @@ TEST_CASE("between-turn threshold compaction replaces the run context before the
     tests::RuntimeFixture runtime;
     // A small retain budget and reserve leave a cut point and a low threshold:
     // window 8000 - reserve 2000 = 6000 estimated tokens.
-    paths.workspace.write("agent/settings.json",
+    paths.workspace.write("agent/.config/pike/agent/settings.json",
             R"({"compaction": {"enabled": true, "reserveTokens": 2000, "keepRecentTokens": 1000}})");
-    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", (paths.workspace.path() / "agent").string()};
+    const tests::EnvVarGuard agent_dir{"HOME", (paths.workspace.path() / "agent").string()};
 
     const std::string prefill(12000, 'x');
     std::vector<agent::Tool> tools;
@@ -922,9 +921,9 @@ TEST_CASE("the final turn skips the between-turn trigger; window-exceeding usage
     tests::RuntimeFixture runtime;
     // Same budget shape as the between-turn row: window 8000 - reserve 2000
     // leaves a low threshold (6000) and a cut point.
-    paths.workspace.write("agent/settings.json",
+    paths.workspace.write("agent/.config/pike/agent/settings.json",
             R"({"compaction": {"enabled": true, "reserveTokens": 2000, "keepRecentTokens": 1000}})");
-    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", (paths.workspace.path() / "agent").string()};
+    const tests::EnvVarGuard agent_dir{"HOME", (paths.workspace.path() / "agent").string()};
 
     const std::string prefill(12000, 'x');
     auto under_test = make_trigger_session(paths,

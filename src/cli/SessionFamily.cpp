@@ -146,18 +146,10 @@ support::Expected<SessionFamilyAssembly> assemble_session_target(
     std::ostream& output,
     std::ostream& error,
     ResumePickerSink resume_picker) {
-    // Session directory chain: --session-dir, then
-    // PIKE_CODING_AGENT_SESSION_DIR, then the settings sessionDir value.
-    std::optional<std::string> env_value;
-    if (const char* env = std::getenv("PIKE_CODING_AGENT_SESSION_DIR"); env != nullptr && env[0] != '\0') {
-        env_value = std::string{env};
-    }
+    // Session directory chain: --session-dir, then the settings sessionDir
+    // value.
     auto effective = coding_agent::session_paths::resolve_effective_session_dir(
-        config.session_dir,
-        env_value,
-        settings_session_dir,
-        config.workspace,
-        coding_agent::home_directory());
+            config.session_dir, settings_session_dir, config.workspace, coding_agent::home_directory());
     if (!effective) {
         return std::unexpected(effective.error());
     }

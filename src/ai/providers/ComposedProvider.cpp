@@ -56,32 +56,44 @@ public:
         ai::AiContext context,
         ai::ProviderStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [self = shared_from_this(),
-             model = std::move(model),
-             context = std::move(context),
-             options = std::move(options)](
-                ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-                if (model.api == "openai-responses") {
-                    CCH_TRY(message, co_await self->responses_adapter_.stream(
-                        model, context, std::move(options), std::move(sink)));
-                    co_return message;
-                }
-                if (model.api == "openai-codex-responses") {
-                    CCH_TRY(message, co_await self->codex_adapter_.stream(
-                        model, context, std::move(options), std::move(sink)));
-                    co_return message;
-                }
-                if (model.api == "anthropic-messages") {
-                    CCH_TRY(message, co_await self->anthropic_adapter_.stream(
-                        model, context, std::move(options), std::move(sink)));
-                    co_return message;
-                }
-                co_return std::unexpected(support::make_error(
-                    support::ErrorCode::Stream,
-                    "Provider " + self->provider_id_ +
-                        " has no API implementation for \"" + model.api + "\""));
-            });
+                [self = shared_from_this(),
+                        model = std::move(model),
+                        context = std::move(context),
+                        options = std::move(options)](ai::AssistantEventSink sink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    if (self->provider_id_ == "opencode-go" && options.session_id && !options.session_id->empty()) {
+                        bool has_affinity_header = false;
+                        for (const auto& [name, _] : options.auth.headers) {
+                            if (name == "x-opencode-session") {
+                                has_affinity_header = true;
+                                break;
+                            }
+                        }
+                        if (!has_affinity_header) {
+                            options.auth.headers.insert_or_assign("x-opencode-session", *options.session_id);
+                        }
+                    }
+                    if (model.api == "openai-responses") {
+                        CCH_TRY(message,
+                                co_await self->responses_adapter_.stream(
+                                        model, context, std::move(options), std::move(sink)));
+                        co_return message;
+                    }
+                    if (model.api == "openai-codex-responses") {
+                        CCH_TRY(message,
+                                co_await self->codex_adapter_.stream(
+                                        model, context, std::move(options), std::move(sink)));
+                        co_return message;
+                    }
+                    if (model.api == "anthropic-messages") {
+                        CCH_TRY(message,
+                                co_await self->anthropic_adapter_.stream(
+                                        model, context, std::move(options), std::move(sink)));
+                        co_return message;
+                    }
+                    co_return std::unexpected(support::make_error(support::ErrorCode::Stream,
+                            "Provider " + self->provider_id_ + " has no API implementation for \"" + model.api + "\""));
+                });
     }
 
 private:

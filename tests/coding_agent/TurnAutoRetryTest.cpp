@@ -27,6 +27,7 @@
 #include "support/TempWorkspace.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
+#include "support/AgentRootFixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -94,7 +95,7 @@ struct TestPaths {
     }
 
     void write_settings(std::string json) const {
-        workspace.write("agent/settings.json", std::move(json));
+        workspace.write("agent/.config/pike/agent/settings.json", std::move(json));
     }
 };
 
@@ -250,7 +251,7 @@ struct RetrySessionUnderTest {
     // directory: an empty dir keeps pi's defaults, a test-provided
     // settings.json drives the knobs. The guard lives through session
     // creation, when the SettingsManager snapshot is read.
-    const tests::EnvVarGuard agent_dir{"PIKE_CODING_AGENT_DIR", (paths.workspace.path() / "agent").string()};
+    const tests::EnvVarGuard agent_dir{"HOME", (paths.workspace.path() / "agent").string()};
     if (!settings_json.empty()) {
         paths.write_settings(settings_json);
     }

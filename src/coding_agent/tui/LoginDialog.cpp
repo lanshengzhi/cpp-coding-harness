@@ -5,6 +5,7 @@
 #include "Theme.hpp"
 
 #include <cch/tui/Text.hpp>
+#include <cch/tui/Utils.hpp>
 
 #include <cch/support/Error.hpp>
 #include <boost/asio/post.hpp>
@@ -12,6 +13,7 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <string_view>
 #include <utility>
 
 namespace cch::coding_agent::tui {
@@ -30,6 +32,59 @@ namespace {
 
 [[nodiscard]] std::string click_hint() {
     return "Ctrl+click to open";
+}
+
+/// Issue #754 keeps secret-auth masking at this presentation layer: preserve
+/// generated terminal controls while replacing each visible secret character
+/// with one or more single-column bullets.
+[[nodiscard]] std::size_t escape_sequence_length(std::string_view text, std::size_t position) {
+    if (position + 1 >= text.size() || text[position] != '\x1b' || text[position + 1] != '[') {
+        return 1;
+    }
+    for (std::size_t index = position + 2; index < text.size(); ++index) {
+        const auto byte = static_cast<unsigned char>(text[index]);
+        if (byte >= 0x40 && byte <= 0x7e) return index - position + 1;
+    }
+    return text.size() - position;
+}
+
+[[nodiscard]] std::size_t utf8_character_length(std::string_view text, std::size_t position) {
+    const auto first = static_cast<unsigned char>(text[position]);
+    if (first < 0x80) return 1;
+    if ((first & 0xe0) == 0xc0 && position + 1 < text.size()) return 2;
+    if ((first & 0xf0) == 0xe0 && position + 2 < text.size()) return 3;
+    if ((first & 0xf8) == 0xf0 && position + 3 < text.size()) return 4;
+    return 1;
+}
+
+[[nodiscard]] std::string mask_secret_line(std::string_view line) {
+    constexpr std::string_view bullet = "•";
+    std::string masked;
+    std::size_t position = 0;
+    if (line.starts_with("> ")) {
+        masked.append(line, 0, 2);
+        position = 2;
+    }
+    while (position < line.size()) {
+        if (line[position] == '\x1b') {
+            const auto length = escape_sequence_length(line, position);
+            masked.append(line, position, length);
+            position += length;
+            continue;
+        }
+        if (line[position] == ' ' || line[position] == '\t') {
+            masked.push_back(line[position]);
+            ++position;
+            continue;
+        }
+        const auto length = utf8_character_length(line, position);
+        const auto character = line.substr(position, length);
+        const auto width = cch::tui::visible_width(character);
+        for (std::size_t index = 0; index < width; ++index)
+            masked += bullet;
+        position += length;
+    }
+    return masked;
 }
 
 } // namespace
@@ -142,8 +197,7 @@ void LoginDialogComponent::show_progress(std::string message) {
 }
 
 boost::asio::awaitable<support::Expected<std::string>> LoginDialogComponent::show_prompt(
-    std::string message,
-    std::optional<std::string> placeholder) {
+        std::string message, std::optional<std::string> placeholder, bool secret) {
     // pi `showPrompt`: appends (preserving a previously shown URL), then
     // clears the input value.
     std::vector<ContentItem> items;
@@ -153,7 +207,7 @@ boost::asio::awaitable<support::Expected<std::string>> LoginDialogComponent::sho
         items.emplace_back(TextItem{
             theme_.foreground(ThemeToken::Dim, "e.g., " + *placeholder)});
     }
-    items.emplace_back(InputSlotItem{});
+    items.emplace_back(InputSlotItem{.secret = secret});
     items.emplace_back(TextItem{
         "(" + key_hint(theme_, *keybindings_, "tui.select.cancel", "to cancel,") + " " +
         key_hint(theme_, *keybindings_, "tui.select.confirm", "to submit") + ")"});
@@ -260,6 +314,7 @@ support::Expected<cch::tui::RenderResult> LoginDialogComponent::render(std::size
             }
             continue;
         }
+        const auto* input_slot = std::get_if<InputSlotItem>(&item);
         // The input slot: render the persistent Input and cache its cursor
         // row for the focus lifecycle.
         if (input_visible_) {
@@ -272,7 +327,10 @@ support::Expected<cch::tui::RenderResult> LoginDialogComponent::render(std::size
                     .row = result.lines.size() + cursor->row,
                 };
             }
-            for (auto& line : rendered->lines) result.lines.push_back(std::move(line));
+            for (auto& line : rendered->lines) {
+                if (input_slot->secret) line = mask_secret_line(line);
+                result.lines.push_back(std::move(line));
+            }
         }
     }
 
@@ -315,8 +373,9 @@ cch::tui::InputAdmissionOutcome LoginDialogComponent::handle_input(const cch::tu
             // pi replaceInputWithSubmittedText: the input freezes into the
             // echoed submission line.
             for (auto& item : content_) {
-                if (std::holds_alternative<InputSlotItem>(item)) {
-                    item = TextItem{"> " + submitted};
+                if (const auto* input_slot = std::get_if<InputSlotItem>(&item)) {
+                    auto echo = "> " + submitted;
+                    item = input_slot->secret ? TextItem{mask_secret_line(echo)} : TextItem{std::move(echo)};
                 }
             }
             input_visible_ = false;

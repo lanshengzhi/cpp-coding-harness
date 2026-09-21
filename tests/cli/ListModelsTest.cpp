@@ -25,6 +25,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 
@@ -153,23 +154,23 @@ TEST_CASE("list-models with no models prints the no-models message and exits 0",
 TEST_CASE("list-models runs in-memory: no session file is created and help/version keep precedence",
         "[cli][list-models][issue404][spec]") {
     tests::TempWorkspace workspace;
-    tests::TempWorkspace agent_dir;
-    tests::EnvVarGuard dir_guard{"PIKE_CODING_AGENT_DIR"};
-    dir_guard.set(agent_dir.path().string());
+    const auto agent_dir = tests::agent_root_under_home(workspace.path());
+    std::filesystem::create_directories(agent_dir);
 
     auto result = tests::run_cli(tests::CliRunOptions{
             .args = {"--list-models"},
             .cwd = workspace.path(),
-            .env = {},
+            .env = {{"HOME", workspace.path().string()}},
             .stdin_text = {},
     });
 
     REQUIRE(result.exit_code == 0);
     // No session storage anywhere under the Agent Config Directory.
     std::error_code ec;
-    for (const auto& entry :
-         std::filesystem::recursive_directory_iterator(agent_dir.path(), ec)) {
-        CHECK_FALSE(entry.is_regular_file(ec));
+    if (std::filesystem::exists(agent_dir, ec)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(agent_dir, ec)) {
+            CHECK_FALSE(entry.is_regular_file(ec));
+        }
     }
     CHECK_FALSE(ec);
 }
@@ -181,9 +182,8 @@ TEST_CASE("list-models reports the models.json load error as a stderr warning",
     // built-in providers still compose structurally, so the table prints too.
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard agent_dir_guard{"PIKE_CODING_AGENT_DIR", std::nullopt};
     home_guard.set(home.path().string());
-    home.write(".pike/agent/models.json", "{not valid json");
+    home.write(".config/pike/agent/models.json", "{not valid json");
 
     auto runtime = coding_agent::ModelRuntime::create({});
     REQUIRE(runtime);
