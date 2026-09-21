@@ -314,6 +314,12 @@ struct RoundTripBase {
     };
 }
 
+template <typename Dto>
+[[nodiscard]] support::Expected<EntrySerializer::SerializationResult> finish_fresh_entry(
+        EntryBaseResult base, SessionEntryKind kind, const Dto& dto, SessionEntryValue value) {
+    return finish_entry(serialize_tree_entry(dto), make_entry(std::move(base), kind, std::move(value)));
+}
+
 [[nodiscard]] detail::NullableString nullable_string(const std::optional<std::string>& value) {
     if (value) {
         return detail::NullableString{*value};
@@ -1029,15 +1035,10 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     attach_entry_header(base, dto);
     dto.provider = provider;
     dto.modelId = model_id;
-    return finish_entry(
-        serialize_tree_entry(dto),
-        make_entry(
-            std::move(base),
+    return finish_fresh_entry(std::move(base),
             SessionEntryKind::ModelChange,
-            ModelChangeValue{
-                .provider = std::move(provider),
-                .model_id = std::move(model_id),
-            }));
+            dto,
+            ModelChangeValue{.provider = std::move(provider), .model_id = std::move(model_id)});
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_thinking_level_change(
@@ -1047,12 +1048,10 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     detail::ThinkingLevelChangeDto dto;
     attach_entry_header(base, dto);
     dto.thinkingLevel = thinking_level;
-    return finish_entry(
-        serialize_tree_entry(dto),
-        make_entry(
-            std::move(base),
+    return finish_fresh_entry(std::move(base),
             SessionEntryKind::ThinkingLevelChange,
-            ThinkingLevelChangeValue{.thinking_level = std::move(thinking_level)}));
+            dto,
+            ThinkingLevelChangeValue{.thinking_level = std::move(thinking_level)});
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_active_tools_change(
@@ -1062,12 +1061,10 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     detail::ActiveToolsChangeDto dto;
     attach_entry_header(base, dto);
     dto.activeToolNames = tools;
-    return finish_entry(
-        serialize_tree_entry(dto),
-        make_entry(
-            std::move(base),
+    return finish_fresh_entry(std::move(base),
             SessionEntryKind::ActiveToolsChange,
-            ActiveToolsChangeValue{.active_tool_names = std::move(tools)}));
+            dto,
+            ActiveToolsChangeValue{.active_tool_names = std::move(tools)});
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_custom_entry(
@@ -1081,15 +1078,13 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     if (auto attached = attach_details(data, dto.data, "custom entry data"); !attached) {
         return std::unexpected(attached.error());
     }
-    return finish_entry(
-        serialize_tree_entry(dto),
-        make_entry(
-            std::move(base),
+    return finish_fresh_entry(std::move(base),
             SessionEntryKind::Custom,
+            dto,
             CustomEntryValue{
-                .custom_type = std::move(custom_type),
-                .data = std::move(data),
-            }));
+                    .custom_type = std::move(custom_type),
+                    .data = std::move(data),
+            });
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_custom_message_entry(
@@ -1112,17 +1107,15 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     if (auto attached = attach_details(details, dto.details, "custom message details"); !attached) {
         return std::unexpected(attached.error());
     }
-    return finish_entry(
-        serialize_tree_entry(dto),
-        make_entry(
-            std::move(base),
+    return finish_fresh_entry(std::move(base),
             SessionEntryKind::CustomMessage,
+            dto,
             CustomMessageEntryValue{
-                .custom_type = std::move(custom_type),
-                .content = std::move(content),
-                .display = display,
-                .details = std::move(details),
-            }));
+                    .custom_type = std::move(custom_type),
+                    .content = std::move(content),
+                    .display = display,
+                    .details = std::move(details),
+            });
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_label_change(
@@ -1134,15 +1127,10 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     attach_entry_header(base, dto);
     dto.targetId = target_id;
     dto.label = label;
-    return finish_entry(
-        serialize_tree_entry(dto),
-        make_entry(
-            std::move(base),
+    return finish_fresh_entry(std::move(base),
             SessionEntryKind::Label,
-            LabelEntryValue{
-                .target_id = std::move(target_id),
-                .label = std::move(label),
-            }));
+            dto,
+            LabelEntryValue{.target_id = std::move(target_id), .label = std::move(label)});
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_compaction(
@@ -1182,12 +1170,7 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     }
     attach_usage(dto, value.usage);
     dto.fromHook = value.from_hook;
-    return finish_entry(
-        serialize_tree_entry(dto),
-        make_entry(
-            std::move(base),
-            SessionEntryKind::Compaction,
-            std::move(value)));
+    return finish_fresh_entry(std::move(base), SessionEntryKind::Compaction, dto, std::move(value));
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_branch_summary(
@@ -1211,18 +1194,16 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     }
     attach_usage(dto, usage);
     dto.fromHook = from_hook;
-    return finish_entry(
-        serialize_tree_entry(dto),
-        make_entry(
-            std::move(base),
+    return finish_fresh_entry(std::move(base),
             SessionEntryKind::BranchSummary,
+            dto,
             BranchSummaryEntryValue{
-                .from_id = std::move(from_id),
-                .summary = std::move(summary),
-                .details = std::move(details),
-                .usage = std::move(usage),
-                .from_hook = from_hook,
-            }));
+                    .from_id = std::move(from_id),
+                    .summary = std::move(summary),
+                    .details = std::move(details),
+                    .usage = std::move(usage),
+                    .from_hook = from_hook,
+            });
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_session_info(
@@ -1232,12 +1213,8 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     detail::SessionInfoDto dto;
     attach_entry_header(base, dto);
     dto.name = name;
-    return finish_entry(
-        serialize_tree_entry(dto),
-        make_entry(
-            std::move(base),
-            SessionEntryKind::SessionInfo,
-            SessionInfoEntryValue{.name = std::move(name)}));
+    return finish_fresh_entry(
+            std::move(base), SessionEntryKind::SessionInfo, dto, SessionInfoEntryValue{.name = std::move(name)});
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_leaf(
@@ -1247,12 +1224,8 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     detail::LeafDto dto;
     attach_entry_header(base, dto);
     dto.targetId = nullable_string(target_id);
-    return finish_entry(
-        serialize_tree_entry(dto),
-        make_entry(
-            std::move(base),
-            SessionEntryKind::Leaf,
-            LeafEntryValue{.target_id = std::move(target_id)}));
+    return finish_fresh_entry(
+            std::move(base), SessionEntryKind::Leaf, dto, LeafEntryValue{.target_id = std::move(target_id)});
 }
 
 std::string EntrySerializer::new_entry_id() {

@@ -7,7 +7,6 @@
 #include <cch/support/JsonValue.hpp>
 
 #include <cstddef>
-#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -58,10 +57,7 @@ public:
     /// Mirror a Leaf marker into the live tree state (pi `setLeafId`;
     /// nullopt target is the root position).
     [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_leaf(
-        std::optional<std::string> parent_id,
-        std::optional<std::string> target_id);
-
-    [[nodiscard]] std::optional<std::filesystem::path> path() const;
+            std::optional<std::string> parent_id, std::optional<std::string> target_id);
 };
 
 } // namespace cch::harness::session

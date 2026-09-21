@@ -116,8 +116,4 @@ support::Expected<std::vector<SessionEntry>> InMemorySessionStore::append_leaf(
     return single(std::move(entry));
 }
 
-std::optional<std::filesystem::path> InMemorySessionStore::path() const {
-    return std::nullopt;
-}
-
 } // namespace cch::harness::session
