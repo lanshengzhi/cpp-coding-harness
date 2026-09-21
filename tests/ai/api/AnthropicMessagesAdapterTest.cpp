@@ -2,7 +2,6 @@
 #include "ai/providers/StreamTransport.hpp"
 #include "support/AiScenarioKit.hpp"
 #include "support/ScriptedProvider.hpp"
-#include "ai/providers/KimiCatalog.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/PiEventSnapshot.hpp"
 #include "support/PiFixture.hpp"
@@ -41,8 +40,17 @@ using tests::RunResult;
 using tests::ScriptedTransport;
 using tests::TransportAttempt;
 
+[[nodiscard]] std::vector<ai::Model> builtin_models(std::string_view provider_id) {
+    for (const auto& definition : ai::builtin_provider_definitions()) {
+        if (definition.id == provider_id) {
+            return definition.models;
+        }
+    }
+    return {};
+}
+
 [[nodiscard]] ai::Model kimi_model(std::string_view id = "kimi-for-coding") {
-    for (auto model : ai::providers::kimi_coding_models()) {
+    for (auto model : builtin_models("kimi-coding")) {
         if (model.id == id) {
             return model;
         }
@@ -80,7 +88,7 @@ using tests::TransportAttempt;
     definition.definition = ai::ProviderDefinition{
             .id = "kimi-coding",
             .name = "Kimi For Coding",
-            .models = ai::providers::kimi_coding_models(),
+            .models = builtin_models("kimi-coding"),
             .auth = header_auth(),
     };
     definition.transport.http_transport = transport;
@@ -205,7 +213,7 @@ using tests::TransportAttempt;
 
 TEST_CASE("Kimi catalog carries the frozen Anthropic Messages compat values",
         "[ai][provider][anthropic][issue341][compat-pi]") {
-    const auto models = ai::providers::kimi_coding_models();
+    const auto models = builtin_models("kimi-coding");
 
     REQUIRE(models.size() == 4);
     CHECK(models[0].id == "k3");
