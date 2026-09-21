@@ -683,7 +683,8 @@ TEST_CASE("async read tool serves absolute paths inside and outside the workspac
     CHECK(missing->is_error);
 }
 
-TEST_CASE("async read tool strips '@' prefixes and expands '~' on external paths", "[tools][async][issue699][spec]") {
+TEST_CASE("async read tool strips '@' prefixes and expands '~' on external paths",
+        "[tools][async][issue695][issue699][spec]") {
     tests::TempWorkspace workspace;
     tests::TempWorkspace outside;
     outside.write("docs/file.md", "mention body");
@@ -696,6 +697,9 @@ TEST_CASE("async read tool strips '@' prefixes and expands '~' on external paths
     CHECK(tool.definition.description == "Read a text file at a relative or absolute path");
     CHECK(tool.definition.parameters.at("properties").at("path").at("description").get<std::string>() ==
             "Path to the file to read (relative or absolute)");
+    CHECK(tool.prompt_snippet == "Read file contents");
+    REQUIRE(tool.prompt_guidelines.size() == 1);
+    CHECK(tool.prompt_guidelines.front() == "Use read to examine files instead of cat or sed.");
 
     // Leading "@" prompt mentions strip before resolution (ADR 0057).
     const auto mentioned = "@" + (outside.path() / "docs" / "file.md").string();
