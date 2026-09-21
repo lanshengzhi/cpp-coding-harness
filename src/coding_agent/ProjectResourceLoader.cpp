@@ -817,6 +817,39 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
     return spec;
 }
 
+// The themes vector and KindedDiagnosticSink reference are owned by the awaiting
+// load_project_resources_task coroutine frame and must outlive every co_await;
+// this helper is awaited inline before the owner frame returns.
+[[nodiscard]] detail::AsyncTask<bool, harness::FileError> load_discovered_themes_task(
+        std::shared_ptr<harness::AsyncFileSystem> filesystem,
+        std::string directory_path,
+        std::string stored_path_root,
+        SourceScope scope,
+        std::vector<LoadedThemeResource>& themes,
+        KindedDiagnosticSink& theme_sink,
+        std::stop_token stop_token) {
+    auto listed = co_await std::move(filesystem->listDir(directory_path, stop_token));
+    if (!listed) {
+        if (loader_aborted(listed.error())) co_return std::unexpected(std::move(listed.error()));
+        if (listed.error().code != harness::FileErrorCode::NotFound)
+            theme_sink.push(warning_diagnostic(listed.error().message, stored_path_root));
+        co_return true;
+    }
+    std::ranges::sort(*listed, [](const auto& left, const auto& right) { return left.name < right.name; });
+    for (const auto& entry : *listed) {
+        if (entry.kind != harness::FileKind::File || !entry.name.ends_with(".json")) continue;
+        const auto file_path = directory_path + "/" + entry.name, stored_path = stored_path_root + "/" + entry.name;
+        auto content = co_await std::move(filesystem->readTextFile(file_path, stop_token));
+        if (!content) {
+            if (loader_aborted(content.error())) co_return std::unexpected(std::move(content.error()));
+            theme_sink.push(warning_diagnostic(content.error().message, stored_path));
+            continue;
+        }
+        themes.push_back({.path = stored_path, .json = std::move(*content), .scope = scope});
+    }
+    co_return true;
+}
+
 [[nodiscard]] detail::AsyncTask<ProjectResourceLoadingResult, harness::FileError> load_project_resources_task(
         ProjectResourceFileSystems filesystems,
         ProjectTrustStore trust_store,
@@ -1104,75 +1137,29 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
     // package. Directory listings are complete-or-error AsyncFileSystem
     // results, so ResourceLimit never produces a partial theme set.
     if (!request.no_themes && project_trusted) {
-        auto listed = co_await std::move(filesystems.workspace->listDir(".pi/themes", stop_token));
-        if (!listed) {
-            if (loader_aborted(listed.error())) {
-                co_return std::unexpected(std::move(listed.error()));
-            }
-            if (listed.error().code != harness::FileErrorCode::NotFound) {
-                theme_sink.push(warning_diagnostic(listed.error().message, ".pi/themes"));
-            }
-        } else {
-            std::sort(listed->begin(), listed->end(), [](const auto& left, const auto& right) {
-                return left.name < right.name;
-            });
-            for (const auto& entry : *listed) {
-                if (entry.kind != harness::FileKind::File || !entry.name.ends_with(".json")) {
-                    continue;
-                }
-                const auto path = std::string{".pi/themes/"} + entry.name;
-                auto content = co_await std::move(filesystems.workspace->readTextFile(path, stop_token));
-                if (!content) {
-                    if (loader_aborted(content.error())) {
-                        co_return std::unexpected(std::move(content.error()));
-                    }
-                    theme_sink.push(warning_diagnostic(content.error().message, path));
-                } else {
-                    result.resources.themes.push_back({
-                            .path = path,
-                            .json = std::move(*content),
-                            .scope = SourceScope::Project,
-                    });
-                }
-            }
+        auto loaded = co_await std::move(detail::to_async_result(load_discovered_themes_task(filesystems.workspace,
+                ".pi/themes",
+                ".pi/themes",
+                SourceScope::Project,
+                result.resources.themes,
+                theme_sink,
+                stop_token)));
+        if (!loaded) {
+            co_return std::unexpected(std::move(loaded.error()));
         }
     }
     if (!request.no_themes && filesystems.agent_config_directory && request.agent_config_directory &&
             !request.agent_config_directory->empty()) {
-        auto listed = co_await std::move(filesystems.agent_config_directory->listDir("themes", stop_token));
-        if (!listed) {
-            if (loader_aborted(listed.error())) {
-                co_return std::unexpected(std::move(listed.error()));
-            }
-            if (listed.error().code != harness::FileErrorCode::NotFound) {
-                theme_sink.push(warning_diagnostic(listed.error().message,
-                        normalized_absolute(*request.agent_config_directory / "themes").string()));
-            }
-        } else {
-            std::sort(listed->begin(), listed->end(), [](const auto& left, const auto& right) {
-                return left.name < right.name;
-            });
-            for (const auto& entry : *listed) {
-                if (entry.kind != harness::FileKind::File || !entry.name.ends_with(".json")) {
-                    continue;
-                }
-                const auto relative = std::string{"themes/"} + entry.name;
-                const auto display = normalized_absolute(*request.agent_config_directory / relative).string();
-                auto content =
-                        co_await std::move(filesystems.agent_config_directory->readTextFile(relative, stop_token));
-                if (!content) {
-                    if (loader_aborted(content.error())) {
-                        co_return std::unexpected(std::move(content.error()));
-                    }
-                    theme_sink.push(warning_diagnostic(content.error().message, display));
-                } else {
-                    result.resources.themes.push_back({
-                            .path = display,
-                            .json = std::move(*content),
-                            .scope = SourceScope::User,
-                    });
-                }
-            }
+        auto loaded = co_await std::move(
+                detail::to_async_result(load_discovered_themes_task(filesystems.agent_config_directory,
+                        "themes",
+                        normalized_absolute(*request.agent_config_directory / "themes").string(),
+                        SourceScope::User,
+                        result.resources.themes,
+                        theme_sink,
+                        stop_token)));
+        if (!loaded) {
+            co_return std::unexpected(std::move(loaded.error()));
         }
     }
     // Explicit --theme paths resolve once through the workspace capability's
