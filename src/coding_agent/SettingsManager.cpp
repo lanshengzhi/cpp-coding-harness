@@ -639,6 +639,38 @@ struct SettingsManager::Impl {
         return merged;
     }
 
+    void apply_scope(const std::filesystem::path& path,
+            SettingsScope scope,
+            bool allow_default_project_trust,
+            UserSettings& target,
+            bool& load_failed,
+            bool clear_on_failure) {
+        load_failed = false;
+        if (path.empty()) {
+            return;
+        }
+
+        auto parsed = load_scope(path, allow_default_project_trust);
+        if (!parsed) {
+            load_failed = true;
+            if (clear_on_failure) {
+                target = {};
+            }
+            errors.push_back(SettingsError{
+                    .scope = scope,
+                    .message = settings_error_text(parsed.error()),
+            });
+            return;
+        }
+        target = std::move(*parsed);
+    }
+
+    [[nodiscard]] bool global_write_suppressed() const noexcept { return global_load_failed || global_path.empty(); }
+
+    [[nodiscard]] support::ExpectedVoid persist_global_field(std::string field, support::JsonValue value) {
+        return persist_field(global_path, std::move(field), std::move(value));
+    }
+
     void recompute_merged() {
         merged_settings = merge(global_settings, project_settings);
     }
@@ -666,31 +698,21 @@ SettingsManager SettingsManager::create(
     impl->project_trusted = project_trusted;
 
     // Global scope always loads.
-    if (!impl->global_path.empty()) {
-        auto parsed = load_scope(impl->global_path, /* allow_default_project_trust */ true);
-        if (!parsed) {
-            impl->global_load_failed = true;
-            impl->errors.push_back(SettingsError{
-                .scope = SettingsScope::Global,
-                .message = settings_error_text(parsed.error()),
-            });
-        } else {
-            impl->global_settings = std::move(*parsed);
-        }
-    }
+    impl->apply_scope(impl->global_path,
+            SettingsScope::Global,
+            /* allow_default_project_trust */ true,
+            impl->global_settings,
+            impl->global_load_failed,
+            /* clear_on_failure */ false);
 
     // Project scope loads only while the project is trusted.
-    if (impl->project_trusted && !impl->project_path.empty()) {
-        auto parsed = load_scope(impl->project_path, /* allow_default_project_trust */ false);
-        if (!parsed) {
-            impl->project_load_failed = true;
-            impl->errors.push_back(SettingsError{
-                .scope = SettingsScope::Project,
-                .message = settings_error_text(parsed.error()),
-            });
-        } else {
-            impl->project_settings = std::move(*parsed);
-        }
+    if (impl->project_trusted) {
+        impl->apply_scope(impl->project_path,
+                SettingsScope::Project,
+                /* allow_default_project_trust */ false,
+                impl->project_settings,
+                impl->project_load_failed,
+                /* clear_on_failure */ false);
     }
 
     impl->recompute_merged();
@@ -752,19 +774,12 @@ support::ExpectedVoid SettingsManager::set_project_trusted(bool trusted) {
         impl_->recompute_merged();
         return support::ExpectedVoid{};
     }
-    impl_->project_load_failed = false;
-    if (!impl_->project_path.empty()) {
-        auto parsed = load_scope(impl_->project_path, /* allow_default_project_trust */ false);
-        if (!parsed) {
-            impl_->project_load_failed = true;
-            impl_->errors.push_back(SettingsError{
-                .scope = SettingsScope::Project,
-                .message = settings_error_text(parsed.error()),
-            });
-        } else {
-            impl_->project_settings = std::move(*parsed);
-        }
-    }
+    impl_->apply_scope(impl_->project_path,
+            SettingsScope::Project,
+            /* allow_default_project_trust */ false,
+            impl_->project_settings,
+            impl_->project_load_failed,
+            /* clear_on_failure */ false);
     impl_->recompute_merged();
     return support::ExpectedVoid{};
 }
@@ -774,32 +789,20 @@ support::ExpectedVoid SettingsManager::reload() {
     impl_->global_load_failed = false;
     impl_->project_load_failed = false;
 
-    if (!impl_->global_path.empty()) {
-        auto parsed = load_scope(impl_->global_path, /* allow_default_project_trust */ true);
-        if (!parsed) {
-            impl_->global_load_failed = true;
-            impl_->global_settings = {};
-            impl_->errors.push_back(SettingsError{
-                .scope = SettingsScope::Global,
-                .message = settings_error_text(parsed.error()),
-            });
-        } else {
-            impl_->global_settings = std::move(*parsed);
-        }
-    }
+    impl_->apply_scope(impl_->global_path,
+            SettingsScope::Global,
+            /* allow_default_project_trust */ true,
+            impl_->global_settings,
+            impl_->global_load_failed,
+            /* clear_on_failure */ true);
 
-    if (impl_->project_trusted && !impl_->project_path.empty()) {
-        auto parsed = load_scope(impl_->project_path, /* allow_default_project_trust */ false);
-        if (!parsed) {
-            impl_->project_load_failed = true;
-            impl_->project_settings = {};
-            impl_->errors.push_back(SettingsError{
-                .scope = SettingsScope::Project,
-                .message = settings_error_text(parsed.error()),
-            });
-        } else {
-            impl_->project_settings = std::move(*parsed);
-        }
+    if (impl_->project_trusted) {
+        impl_->apply_scope(impl_->project_path,
+                SettingsScope::Project,
+                /* allow_default_project_trust */ false,
+                impl_->project_settings,
+                impl_->project_load_failed,
+                /* clear_on_failure */ true);
     }
 
     impl_->recompute_merged();
@@ -903,13 +906,9 @@ std::size_t SettingsManager::output_pad() const noexcept {
 
 support::ExpectedVoid SettingsManager::set_hide_thinking_block(bool hide) {
     // pi `setHideThinkingBlock` always writes the global scope.
-    if (impl_->global_load_failed) {
+    if (impl_->global_write_suppressed()) {
         return support::ExpectedVoid{};
     }
-    if (impl_->global_path.empty()) {
-        return support::ExpectedVoid{};
-    }
-
     auto& target = impl_->global_settings;
     if (target.hide_thinking_block == hide) {
         return support::ExpectedVoid{};
@@ -917,9 +916,7 @@ support::ExpectedVoid SettingsManager::set_hide_thinking_block(bool hide) {
 
     // Persist first; the in-memory view advances only when the surgical write
     // succeeded, so a persist failure never leaves memory diverged from disk.
-    if (auto persisted = persist_field(
-            impl_->global_path, "hideThinkingBlock", support::JsonValue{hide});
-        !persisted) {
+    if (auto persisted = impl_->persist_global_field("hideThinkingBlock", support::JsonValue{hide}); !persisted) {
         return persisted;
     }
     target.hide_thinking_block = hide;
@@ -934,13 +931,9 @@ support::ExpectedVoid SettingsManager::set_output_pad(std::size_t padding) {
             "invalid outputPad",
             "outputPad must be 0 or 1"));
     }
-    if (impl_->global_load_failed) {
+    if (impl_->global_write_suppressed()) {
         return support::ExpectedVoid{};
     }
-    if (impl_->global_path.empty()) {
-        return support::ExpectedVoid{};
-    }
-
     auto& target = impl_->global_settings;
     if (target.output_pad == padding) {
         return support::ExpectedVoid{};
@@ -948,9 +941,8 @@ support::ExpectedVoid SettingsManager::set_output_pad(std::size_t padding) {
 
     // Persist first; the in-memory view advances only when the surgical write
     // succeeded, so a persist failure never leaves memory diverged from disk.
-    if (auto persisted = persist_field(
-            impl_->global_path, "outputPad", support::JsonValue{static_cast<double>(padding)});
-        !persisted) {
+    if (auto persisted = impl_->persist_global_field("outputPad", support::JsonValue{static_cast<double>(padding)});
+            !persisted) {
         return persisted;
     }
     target.output_pad = padding;
@@ -965,13 +957,9 @@ bool SettingsManager::get_enable_skill_commands() const noexcept {
 
 support::ExpectedVoid SettingsManager::set_enable_skill_commands(bool enabled) {
     // pi `setEnableSkillCommands` always writes the global scope.
-    if (impl_->global_load_failed) {
+    if (impl_->global_write_suppressed()) {
         return support::ExpectedVoid{};
     }
-    if (impl_->global_path.empty()) {
-        return support::ExpectedVoid{};
-    }
-
     auto& target = impl_->global_settings;
     if (target.enable_skill_commands == enabled) {
         return support::ExpectedVoid{};
@@ -979,9 +967,7 @@ support::ExpectedVoid SettingsManager::set_enable_skill_commands(bool enabled) {
 
     // Persist first; the in-memory view advances only when the surgical write
     // succeeded, so a persist failure never leaves memory diverged from disk.
-    if (auto persisted = persist_field(
-            impl_->global_path, "enableSkillCommands", support::JsonValue{enabled});
-        !persisted) {
+    if (auto persisted = impl_->persist_global_field("enableSkillCommands", support::JsonValue{enabled}); !persisted) {
         return persisted;
     }
     target.enable_skill_commands = enabled;
@@ -993,13 +979,9 @@ support::ExpectedVoid SettingsManager::set_default_project_trust(
     DefaultProjectTrust trust) {
     // pi `setDefaultProjectTrust` always writes the global scope and is
     // global-only (the project scope never carries a trust default).
-    if (impl_->global_load_failed) {
+    if (impl_->global_write_suppressed()) {
         return support::ExpectedVoid{};
     }
-    if (impl_->global_path.empty()) {
-        return support::ExpectedVoid{};
-    }
-
     auto& target = impl_->global_settings;
     if (target.default_project_trust == trust) {
         return support::ExpectedVoid{};
@@ -1007,11 +989,8 @@ support::ExpectedVoid SettingsManager::set_default_project_trust(
 
     // Persist first; the in-memory view advances only when the surgical write
     // succeeded, so a persist failure never leaves memory diverged from disk.
-    if (auto persisted = persist_field(
-            impl_->global_path,
-            "defaultProjectTrust",
-            support::JsonValue{to_string(trust)});
-        !persisted) {
+    if (auto persisted = impl_->persist_global_field("defaultProjectTrust", support::JsonValue{to_string(trust)});
+            !persisted) {
         return persisted;
     }
     target.default_project_trust = trust;
@@ -1023,13 +1002,9 @@ support::ExpectedVoid SettingsManager::set_default_model_and_provider(
     std::string provider,
     std::string model) {
     // pi `setDefaultModelAndProvider` always writes the global scope.
-    if (impl_->global_load_failed) {
+    if (impl_->global_write_suppressed()) {
         return support::ExpectedVoid{};
     }
-    if (impl_->global_path.empty()) {
-        return support::ExpectedVoid{};
-    }
-
     auto& target = impl_->global_settings;
     if (target.default_provider == provider && target.default_model == model) {
         return support::ExpectedVoid{};
@@ -1037,14 +1012,10 @@ support::ExpectedVoid SettingsManager::set_default_model_and_provider(
 
     // Persist first; the in-memory view advances only when the surgical write
     // succeeded, so a persist failure never leaves memory diverged from disk.
-    if (auto persisted = persist_field(
-            impl_->global_path, "defaultProvider", support::JsonValue{provider});
-        !persisted) {
+    if (auto persisted = impl_->persist_global_field("defaultProvider", support::JsonValue{provider}); !persisted) {
         return persisted;
     }
-    if (auto persisted = persist_field(
-            impl_->global_path, "defaultModel", support::JsonValue{model});
-        !persisted) {
+    if (auto persisted = impl_->persist_global_field("defaultModel", support::JsonValue{model}); !persisted) {
         return persisted;
     }
     target.default_provider = std::move(provider);
