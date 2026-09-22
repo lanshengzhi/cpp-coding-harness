@@ -7,6 +7,7 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_ai
     SOURCES
+        src/ai/DefaultModelsJson.cpp
         src/ai/BuiltinProviders.cpp
         src/ai/ContentUtil.cpp
         src/ai/InferenceFailure.cpp

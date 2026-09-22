@@ -1,0 +1,14 @@
+{
+  "schema": "cpp-coding-harness/vendor-model-provenance/1",
+  "specs": {
+    "kimi-coding": {
+      "path": "models/vendors/kimi-coding.json",
+      "sha256": "e4f79e0957788410af95ff0490b248af1848c8aa2584dd876218ad71a432856d",
+      "bytes": 2683,
+      "authority": {
+        "documentation": "https://www.kimi.com/code/docs/",
+        "decision_record": "docs/adr/0059-align-the-cch-ai-capability-subset-with-pi-ai-and-diverge-on-kimi-code.md"
+      }
+    }
+  }
+}
