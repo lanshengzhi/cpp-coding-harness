@@ -354,9 +354,9 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 
 ### Deferred Capabilities (absent from the surface — no placeholders, no compatibility shims)
 
-- Every pi adapter other than the four scoped ones (`openai-completions`, `openai-responses`,
-  `anthropic-messages`, `mistral-conversations`, `gemini`,
-  `claude-code`, `codex-cli`, images, bedrock, etc.); there is no registry placeholder.
+- Every pi adapter other than the four scoped ones (`openai-codex-responses`,
+  `openai-responses`, `openai-completions`, `anthropic-messages`; `mistral-conversations`,
+  `gemini`, `claude-code`, `codex-cli`, images, bedrock, etc.); there is no registry placeholder.
 - Every provider family outside the six bundled providers (`openai-codex`, `deepseek`,
   `kimi-coding`, `openai`, `openrouter`, and `opencode-go`), including their factories, auth
   methods, and catalogs.
