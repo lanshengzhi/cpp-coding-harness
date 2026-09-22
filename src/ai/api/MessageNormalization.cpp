@@ -47,6 +47,26 @@ constexpr std::string_view kToolImagePlaceholder = "(tool image omitted: model d
     if (adapter == AdapterKind::AnthropicMessages) {
         return normalize_id_part(value, false);
     }
+    if (adapter == AdapterKind::OpenAICompletions) {
+        const auto separator = value.find('|');
+        if (separator != std::string_view::npos) {
+            const auto call_id = normalize_id_part(value.substr(0, separator), true);
+            const auto raw_item_id = value.substr(separator + 1);
+            auto item_id = normalize_id_part(raw_item_id, true);
+            auto combined = item_id.empty() ? call_id : call_id + "_" + item_id;
+            if (combined.size() <= 40) {
+                return combined;
+            }
+            const auto hash = short_hash(value).substr(0, 8);
+            const auto prefix_size = std::max<std::size_t>(1, 40 - hash.size() - 1);
+            auto prefix = call_id.substr(0, std::min(prefix_size, call_id.size()));
+            return prefix + "_" + hash;
+        }
+        if (target.provider == "openai" && value.size() > 40) {
+            return std::string{value.substr(0, 40)};
+        }
+        return std::string{value};
+    }
     if (!responses_tool_call_provider(target.provider)) {
         return normalize_id_part(value, true);
     }

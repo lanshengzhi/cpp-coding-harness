@@ -3,6 +3,7 @@
 #include "ai/ModelStreamBridge.hpp"
 #include "ai/api/AnthropicMessagesAdapter.hpp"
 #include "ai/api/OpenAICodexResponsesAdapter.hpp"
+#include "ai/api/OpenAICompletionsAdapter.hpp"
 #include "ai/api/OpenAIResponsesAdapter.hpp"
 #include "support/ExpectedMacros.hpp"
 
@@ -34,6 +35,7 @@ public:
           models_(std::move(models)),
           auth_(std::move(auth)),
           responses_adapter_(http_transport),
+          completions_adapter_(http_transport),
           // The codex adapter takes the HTTP transport by value for its SSE
           // fallback; the anthropic adapter then takes the original so every
           // scoped adapter owns a usable transport (the anthropic adapter
@@ -79,6 +81,12 @@ public:
                                         model, context, std::move(options), std::move(sink)));
                         co_return message;
                     }
+                    if (model.api == "openai-completions") {
+                        CCH_TRY(message,
+                                co_await self->completions_adapter_.stream(
+                                        model, context, std::move(options), std::move(sink)));
+                        co_return message;
+                    }
                     if (model.api == "openai-codex-responses") {
                         CCH_TRY(message,
                                 co_await self->codex_adapter_.stream(
@@ -102,6 +110,7 @@ private:
     std::vector<ai::Model> models_;
     ai::ProviderAuth auth_;
     ai::api::OpenAIResponsesAdapter responses_adapter_;
+    ai::api::OpenAICompletionsAdapter completions_adapter_;
     ai::api::OpenAICodexResponsesAdapter codex_adapter_;
     ai::api::AnthropicMessagesAdapter anthropic_adapter_;
 };

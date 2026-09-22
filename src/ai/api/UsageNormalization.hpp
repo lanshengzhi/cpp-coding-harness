@@ -17,6 +17,15 @@ struct ResponsesUsageFields {
     std::int64_t total_tokens{0};
 };
 
+struct CompletionsUsageFields {
+    std::int64_t prompt_tokens{0};
+    std::int64_t completion_tokens{0};
+    std::optional<std::int64_t> cached_tokens{std::nullopt};
+    std::optional<std::int64_t> prompt_cache_hit_tokens{std::nullopt};
+    std::optional<std::int64_t> cache_write_tokens{std::nullopt};
+    std::optional<std::int64_t> reasoning_tokens{std::nullopt};
+};
+
 struct AnthropicUsageUpdate {
     std::optional<std::int64_t> input{std::nullopt};
     std::optional<std::int64_t> output{std::nullopt};
@@ -35,6 +44,9 @@ struct AnthropicUsageUpdate {
     std::int64_t output_tokens,
     std::int64_t cached_tokens,
     std::optional<std::int64_t> reasoning_tokens);
+[[nodiscard]] Usage normalize_completions_usage(
+    const Model& model,
+    const CompletionsUsageFields& fields);
 void apply_anthropic_usage_start(
     const Model& model,
     Usage& usage,

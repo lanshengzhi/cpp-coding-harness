@@ -25,9 +25,12 @@ cch_parity_declare_target(
         src/ai/api/CodexEvents.cpp
         src/ai/api/CodexShared.cpp
         src/ai/api/CodexWebSocketCache.cpp
+        src/ai/api/CompletionsEvents.cpp
+        src/ai/api/CompletionsPayload.cpp
         src/ai/api/MessageConversion.cpp
         src/ai/api/MessageNormalization.cpp
         src/ai/api/OpenAICodexResponsesAdapter.cpp
+        src/ai/api/OpenAICompletionsAdapter.cpp
         src/ai/api/OpenAIResponsesAdapter.cpp
         src/ai/api/ResponsesEventProcessor.cpp
         src/ai/api/ResponsesPayload.cpp

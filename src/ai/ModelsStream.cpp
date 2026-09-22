@@ -108,7 +108,9 @@ namespace {
 }
 
 [[nodiscard]] support::ExpectedVoid assert_request_auth(const Model& model, const ModelAuth& auth) {
-    const bool scoped_api = model.api == "openai-codex-responses" || model.api == "openai-responses" ||
+    const bool scoped_api = model.api == "openai-codex-responses" ||
+                            model.api == "openai-responses" ||
+                            model.api == "openai-completions" ||
                             model.api == "anthropic-messages";
     if (!scoped_api || (auth.api_key && !auth.api_key->empty()) ||
             has_non_empty_header(auth.headers, "authorization") || has_non_empty_header(auth.headers, "x-api-key") ||

@@ -127,6 +127,10 @@ namespace {
             compat.supports_developer_role = *value;
             populated = true;
         }
+        if (const auto value = bool_member(*compat_obj, "supportsStrictMode"); value.has_value()) {
+            compat.supports_strict_mode = *value;
+            populated = true;
+        }
         if (const auto value = string_member(*compat_obj, "maxTokensField"); value.has_value()) {
             if (*value == "max_tokens") {
                 compat.max_tokens_field = OpenAICompletionsMaxTokensField::MaxTokens;

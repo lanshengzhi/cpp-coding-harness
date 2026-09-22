@@ -124,11 +124,12 @@ void collect_string_leaves(const support::JsonValue& value, std::vector<std::str
             texts, [needle](const std::string& text) { return text.find(needle) != std::string::npos; });
 }
 
-/// The three frozen adapters every exclusion assertion drives, so the rule has
+/// The four frozen adapters every exclusion assertion drives, so the rule has
 /// one consumer list.
 constexpr std::array kConsumerAdapters{
         ai::api::AdapterKind::OpenAIResponses,
         ai::api::AdapterKind::OpenAICodexResponses,
+        ai::api::AdapterKind::OpenAICompletions,
         ai::api::AdapterKind::AnthropicMessages,
 };
 
