@@ -9,12 +9,19 @@ include_guard(GLOBAL)
     )
     set_tests_properties(cch_generated_catalog_regeneration PROPERTIES
         LABELS "ai;catalog;issue760;spec")
+    add_test(
+        NAME cch_pi_ai_provenance
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ai/PiAiProvenanceTest.py
+    )
+    set_tests_properties(cch_pi_ai_provenance PROPERTIES
+        LABELS "ai;catalog;issue765;compat-pi")
 
     # AI
     add_executable(cch_tests_ai
         tests/Catch2Main.cpp
         tests/support/ScriptedProvider.cpp
         tests/ai/BuiltinProvidersTest.cpp
+        tests/ai/CatalogParityTest.cpp
         tests/ai/MessageContractTest.cpp
         tests/ai/MessageConversionTest.cpp
         tests/ai/ModelTest.cpp
