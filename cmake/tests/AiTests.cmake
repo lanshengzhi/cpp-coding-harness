@@ -2,6 +2,14 @@ include_guard(GLOBAL)
 
 # Orchestration include: top-level CMakeLists.txt only (relies on CMAKE_CURRENT_SOURCE_DIR = repo root).
 
+    find_package(Python3 3.12 COMPONENTS Interpreter REQUIRED)
+    add_test(
+        NAME cch_generated_catalog_regeneration
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ai/GeneratedCatalogTest.py
+    )
+    set_tests_properties(cch_generated_catalog_regeneration PROPERTIES
+        LABELS "ai;catalog;issue760;spec")
+
     # AI
     add_executable(cch_tests_ai
         tests/Catch2Main.cpp
