@@ -27,10 +27,9 @@ namespace {
     if (std::isfinite(value) && (value >= 0 || value == kProviderRoutedCost)) {
         return {};
     }
-    return std::unexpected(support::make_error(
-        support::ErrorCode::Validation,
-        "invalid model cost",
-        std::format("{} must be finite, non-negative, or the provider-routed sentinel", field)));
+    return std::unexpected(support::make_error(support::ErrorCode::Validation,
+            "invalid model cost",
+            std::format("{} must be finite, non-negative, or the provider-routed sentinel", field)));
 }
 
 [[nodiscard]] bool is_valid_input(ModelInput input) {
