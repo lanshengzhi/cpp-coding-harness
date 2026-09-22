@@ -14,6 +14,7 @@ include_guard(GLOBAL)
         tests/ai/ProviderPolicyTest.cpp
         tests/ai/InferenceFailureTest.cpp
         tests/ai/SimpleOptionsTest.cpp
+        tests/ai/T0CostProbeTest.cpp
         tests/ai/ToolContractTest.cpp
         tests/ai/UsageTest.cpp
         tests/ai/api/AnthropicMessagesAdapterTest.cpp

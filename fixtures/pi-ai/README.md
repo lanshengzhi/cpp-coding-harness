@@ -5,7 +5,44 @@ compared by tests in this repository against the C++ surface, so the gate's evid
 checklist away. No fixture value is a live credential or derived from one; all credential-like
 strings are distinguishable `dummy-*` tokens (see [Sanitization rules](#sanitization-rules)).
 
-## Pinned baseline and shard artifact
+## Issue #758 T0 provenance snapshot
+
+The T0 catalog gate re-ran pi's generator at the exact upstream revision
+`1a584a7a56eb5e7b4ff8ccbd46430f1533282eed` (`1a584a7a5`). The run completed at
+`2026-09-22T05:24:23Z` from the pi checkout root with:
+
+```text
+node packages/ai/scripts/generate-models.ts --strict
+```
+
+The generator reads live catalog services (`models.dev`, NVIDIA NIM, OpenRouter, Vercel AI
+Gateway, and Radius), so the source revision alone does not reproduce the bytes. The six
+committed artifacts below bind this particular live snapshot by SHA-256. The complete
+machine-readable record, including every final model ID and API grouping, is
+[`models/provenance.json`](models/provenance.json); the artifacts are copied from
+`packages/ai/src/providers/data/` after that run.
+
+| Provider artifact | Models | API families | SHA-256 |
+| --- | ---: | --- | --- |
+| `models/providers/deepseek.json` | 2 | `openai-completions` | `549a7ddbdcfd4c59272f1ea9c7d6d9a70bbbfccad3df3a75fb16d6918ac54d0d` |
+| `models/providers/kimi-coding.json` | 4 | `anthropic-messages` | `9884f065fe5a0e68e3538590c28019476077712f0542198eef6fdb53b8edd2ee` |
+| `models/providers/openai.json` | 39 | `openai-responses` | `3df2916783a161926c0f597de68138499d0bdaef6aecc28d3a09d2f0dcf28e2e` |
+| `models/providers/openai-codex.json` | 6 | `openai-codex-responses` | `f4e2b200a94a878170686f8d36d3fbed7d16630b4e2f61f0bf187034eac76976` |
+| `models/providers/openrouter.json` | 378 | `openai-completions` | `83c2152eba09a067a3b796c401fbda79d5b366a056f70b62937be5130483c184` |
+| `models/providers/opencode-go.json` | 30 | `openai-completions`, `openai-responses`, `anthropic-messages` | `d471bdb6a9f940fc732687d6749f92d2f3c7c9302ff39d2ce0af062f2472a4ad` |
+
+The generator resolves the Codex discrepancy in favor of six models:
+`gpt-5.3-codex-spark`, `gpt-5.5`, `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, and
+`gpt-6-astra`. The old seven-model count is retained only as the discrepancy input in
+`provenance.json`, not as an acceptance target.
+
+The exact final sets are the artifact object keys and are repeated as sorted `model_ids` in
+`provenance.json`: DeepSeek (2), Kimi Code (4), OpenAI (39), Codex (6), OpenRouter (378),
+and OpenCode Go (30). This T0 bundle does not overwrite the legacy 83114817 fixtures below;
+those fixtures remain evidence for already-landed behavior until their dependent tickets
+replace them.
+
+## Legacy pinned baseline and shard artifact
 
 - **Frozen pi commit:** `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (the parity map [#2] baseline).
   The local pi checkout is `../pi`; `pi:` references resolve from that root.
