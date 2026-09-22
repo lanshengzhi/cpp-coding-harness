@@ -14,6 +14,22 @@
 namespace cch::ai::api {
 namespace {
 
+[[nodiscard]] bool anthropic_supports_temperature(const Model& model) {
+    if (!model.compat) {
+        return true;
+    }
+    const auto* compat = std::get_if<AnthropicMessagesCompat>(&*model.compat);
+    return compat == nullptr || compat->supports_temperature.value_or(true);
+}
+
+[[nodiscard]] bool anthropic_allows_empty_signature(const Model& model) {
+    if (!model.compat) {
+        return false;
+    }
+    const auto* compat = std::get_if<AnthropicMessagesCompat>(&*model.compat);
+    return compat != nullptr && compat->allow_empty_signature.value_or(false);
+}
+
 [[nodiscard]] support::JsonValue anthropic_image(const ImageContent& image) {
     return support::JsonValue::object_t{
             {"source",
@@ -124,7 +140,7 @@ namespace {
                         if (blank(thinking->thinking) && !has_signature) {
                             continue;
                         }
-                        const bool allow_empty = model.compat && model.compat->allow_empty_signature.value_or(false);
+                        const bool allow_empty = anthropic_allows_empty_signature(model);
                         if (!has_signature && !allow_empty) {
                             content.emplace_back(support::JsonValue::object_t{
                                     {"text", sanitize_text(thinking->thinking)},
@@ -286,6 +302,7 @@ void attach_cache_control_to_last_user(support::JsonValue::array_t& messages, Ca
         payload.emplace("system", support::JsonValue::array_t{std::move(system_block)});
     }
     bool thinking_enabled = false;
+    const auto* compat = model.compat ? std::get_if<AnthropicMessagesCompat>(&*model.compat) : nullptr;
     if (model.reasoning && !options.reasoning) {
         if (reasoning_off_supported(model)) {
             payload.emplace("thinking", support::JsonValue::object_t{{"type", "disabled"}});
@@ -296,7 +313,7 @@ void attach_cache_control_to_last_user(support::JsonValue::array_t& messages, Ca
             if (reasoning_off_supported(model)) {
                 payload.emplace("thinking", support::JsonValue::object_t{{"type", "disabled"}});
             }
-        } else if (model.compat && model.compat->force_adaptive_thinking.value_or(false)) {
+        } else if (compat && compat->force_adaptive_thinking.value_or(false)) {
             thinking_enabled = true;
             payload.emplace("thinking",
                     support::JsonValue::object_t{
@@ -309,7 +326,7 @@ void attach_cache_control_to_last_user(support::JsonValue::array_t& messages, Ca
                     "Budget-based Anthropic thinking is outside the supported adapter surface"));
         }
     }
-    if (options.temperature && !thinking_enabled) {
+    if (options.temperature && !thinking_enabled && anthropic_supports_temperature(model)) {
         payload.emplace("temperature", *options.temperature);
     }
     if (!context.tools.empty()) {

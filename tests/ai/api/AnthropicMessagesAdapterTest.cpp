@@ -218,22 +218,30 @@ TEST_CASE("Kimi catalog carries the frozen Anthropic Messages compat values",
     REQUIRE(models.size() == 4);
     CHECK(models[0].id == "k3");
     REQUIRE(models[0].compat);
-    CHECK(models[0].compat->force_adaptive_thinking == true);
-    CHECK(models[0].compat->allow_empty_signature == true);
+    const auto* k3_compat = std::get_if<ai::AnthropicMessagesCompat>(&*models[0].compat);
+    REQUIRE(k3_compat != nullptr);
+    CHECK(k3_compat->force_adaptive_thinking == true);
+    CHECK(k3_compat->allow_empty_signature == true);
     REQUIRE(models[0].thinking_level_map);
     CHECK(models[0].thinking_level_map->at(ai::ModelThinkingLevel::Off) == std::nullopt);
     CHECK(models[1].id == "k3-256k");
     REQUIRE(models[1].compat);
-    CHECK(models[1].compat->force_adaptive_thinking == true);
-    CHECK(models[1].compat->allow_empty_signature == std::nullopt);
+    const auto* k3_256k_compat = std::get_if<ai::AnthropicMessagesCompat>(&*models[1].compat);
+    REQUIRE(k3_256k_compat != nullptr);
+    CHECK(k3_256k_compat->force_adaptive_thinking == true);
+    CHECK(k3_256k_compat->allow_empty_signature == std::nullopt);
     CHECK(models[2].id == "kimi-for-coding");
     REQUIRE(models[2].compat);
-    CHECK(models[2].compat->force_adaptive_thinking == true);
-    CHECK(models[2].compat->allow_empty_signature == true);
+    const auto* kimi_compat = std::get_if<ai::AnthropicMessagesCompat>(&*models[2].compat);
+    REQUIRE(kimi_compat != nullptr);
+    CHECK(kimi_compat->force_adaptive_thinking == true);
+    CHECK(kimi_compat->allow_empty_signature == true);
     CHECK(models[3].id == "kimi-for-coding-highspeed");
     REQUIRE(models[3].compat);
-    CHECK(models[3].compat->force_adaptive_thinking == true);
-    CHECK(models[3].compat->allow_empty_signature == std::nullopt);
+    const auto* highspeed_compat = std::get_if<ai::AnthropicMessagesCompat>(&*models[3].compat);
+    REQUIRE(highspeed_compat != nullptr);
+    CHECK(highspeed_compat->force_adaptive_thinking == true);
+    CHECK(highspeed_compat->allow_empty_signature == std::nullopt);
 }
 
 TEST_CASE("Kimi Anthropic Messages streams the frozen request and repaired SSE sequence through Models",

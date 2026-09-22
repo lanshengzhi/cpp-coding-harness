@@ -100,6 +100,19 @@ support::ExpectedVoid Models::apply_provider(ProviderChange change) {
                     "provider change id does not match provider definition",
                     definition.id));
         }
+        for (const auto& model : definition.models) {
+            if (auto valid = validate_model(model); !valid) {
+                auto error = valid.error();
+                error.code = support::ErrorCode::ModelValidation;
+                error.message = "invalid model for provider \"" + definition.id + "\"";
+                if (error.detail.empty()) {
+                    error.detail = valid.error().message;
+                } else {
+                    error.detail = valid.error().message + ": " + error.detail;
+                }
+                return std::unexpected(std::move(error));
+            }
+        }
         return impl_->install_provider(make_default_provider(std::move(definition)));
     }
     if (change.provider_id.empty()) {

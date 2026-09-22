@@ -433,6 +433,30 @@ TEST_CASE("Models installs Provider Definitions and projects passive Provider In
     CHECK(models->provider_info().empty());
 }
 
+TEST_CASE("Models rejects a provider definition with a mismatched compatibility alternative",
+        "[ai][models][issue759][spec]") {
+    auto [credentials, auth_context, models] = ModelsFixture{};
+    auto model = tests::make_model("model-1", "definition-provider", "openai-responses");
+    model.compat = ai::ModelCompatVariant{ai::AnthropicMessagesCompat{.force_adaptive_thinking = true}};
+
+    const auto result = models->apply_provider(ai::ProviderChange{
+            .provider_id = "definition-provider",
+            .definition =
+                    ai::ProviderDefinition{
+                            .id = "definition-provider",
+                            .name = "Definition Provider",
+                            .models = {std::move(model)},
+                            .auth = keyless_auth(),
+                    },
+    });
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == support::ErrorCode::ModelValidation);
+    CHECK(result.error().message == "invalid model for provider \"definition-provider\"");
+    CHECK(result.error().detail.find("AnthropicMessagesCompat") != std::string::npos);
+    CHECK(models->provider_info().empty());
+}
+
 TEST_CASE("Models selects a long-lived Provider by Model provider identity", "[ai][models][issue338][spec]") {
     auto [credentials, auth_context, models] = ModelsFixture{};
     auto first = std::make_shared<RecordingProvider>("first");
