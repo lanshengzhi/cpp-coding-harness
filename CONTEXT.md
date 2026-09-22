@@ -117,7 +117,10 @@ The canonical model/authentication runtime for one Agent Config Directory: it co
 _Avoid_: Provider registry, session-scoped client, configuration snapshot
 
 **Credential**:
-A stored per-provider authentication value in api-key or OAuth shape. Secrets inside a Credential never enter passive values, session history, frontend status, diagnostics, or logs.
+A stored per-provider authentication value in api-key or OAuth shape. An OAuth-shaped record may
+carry an exchanged API key when a provider reuses that storage contract; the shape does not imply
+refresh or subscription semantics. Secrets inside a Credential never enter passive values, session
+history, frontend status, diagnostics, or logs.
 _Avoid_: Provider config field, session metadata
 
 **Request Authentication**:
@@ -285,7 +288,10 @@ The host-supplied, cancellable interaction object through which an OAuth login f
 _Avoid_: Login callback, rendered dialog, provider UI
 
 **OAuth Login**:
-An explicit, user-invoked login flow that produces a Credential through provider-owned steps (browser callback or device code) and persists it in the credential store. Never triggered by Session creation or ordinary requests.
+An explicit, user-invoked login flow that produces a Credential through provider-owned steps
+(browser callback or device code) and persists it in the credential store. The current OAuth
+providers are OpenAI Codex and OpenRouter; Kimi is API-key-only. Never triggered by Session
+creation or ordinary requests.
 _Avoid_: Auto-login, implicit authentication, login snapshot
 
 **Login Cancellation**:
@@ -293,7 +299,12 @@ A user-initiated abort of an in-flight OAuth Login through the Auth Interaction'
 _Avoid_: Failed login, error dialog
 
 **Credential Refresh**:
-Request-time renewal of a stored OAuth Credential whose expiry is within five minutes, serialized under the store lock with the rotated credential persisted before use; not cancellable in the request path, matching pi. Failure preserves the stored credential for retry and never falls back to a lower-precedence source.
+Request-time renewal of a stored OAuth Credential whose expiry is within five minutes, serialized
+under the store lock with the rotated credential persisted before use; not cancellable in the
+request path, matching pi. This applies only to a provider with a refresh hook (currently Codex);
+OpenRouter's OAuth-shaped API-key record has no refresh-token or request-time refresh-exchange
+semantics. Failure preserves the stored credential for retry and never falls back to a
+lower-precedence source.
 _Avoid_: Background refresh, proactive expiry notification
 
 **Re-auth Guidance**:
@@ -309,11 +320,21 @@ The local loopback HTTP server used by the Codex browser login flow to receive t
 _Avoid_: Webhook, remote endpoint
 
 **Adapter**:
-The private protocol executor that converts a Provider request into one wire API's format and consumes its stream back into the shared event model — one per supported API surface (`openai-codex-responses`, `openai-responses`, `anthropic-messages`). An adapter is selected by the Model's `api`, is never publicly registrable, and its existence alone never makes a Provider supported.
+The private protocol executor that converts a Provider request into one wire API's format and
+consumes its stream back into the shared event model — one per supported API surface
+(`openai-codex-responses`, `openai-responses`, `openai-completions`, `anthropic-messages`). An
+adapter is selected by the Model's `api`, is never publicly registrable, and its existence alone
+never makes a Provider supported.
 _Avoid_: API client, generic OpenAI client, public registry
 
 **Compat Field**:
-A per-API typed compatibility value on the Model that carries the behavior-bearing switches a built-in catalog model populates for the adapter (`forceAdaptiveThinking`, `allowEmptySignature`). Only the scoped APIs' typed shapes exist; a generic JSON compatibility bag is never carried, and models.json carries no compat surface.
+A per-API typed compatibility value on the Model that carries the behavior-bearing switches a
+built-in catalog model populates for the adapter. Current shipped shapes include the Anthropic
+fields (`forceAdaptiveThinking`, `allowEmptySignature`, and `supportsTemperature`), the
+OpenAI Completions fields, and the Responses fields `sessionAffinityFormat`, `supportsStrictMode`
+(ordinary-tool `strict:false` wire behavior), and `supportsExplicitPromptCacheMode`.
+`supportsMaxOutputTokens` is not represented in the current surface. Only typed shapes exist; a
+generic JSON compatibility bag is never carried, and models.json carries no compat surface.
 _Avoid_: Capability flag bag, models.json compat override
 
 **Transport**:

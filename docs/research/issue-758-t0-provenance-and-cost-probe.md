@@ -103,7 +103,7 @@ This adjusts dependent ticket scope from the old observations: OpenAI is 39
 (not 38), OpenRouter is 378 (not 274), OpenCode Go is 30 (not 18), DeepSeek's
 verified IDs are `deepseek-flash` and `deepseek-v4-pro`, and Codex is the
 verified six above. Kimi's generated artifact remains the upstream
-`anthropic-messages` source artifact; issue #763 implements the documented
+`anthropic-messages` source artifact; issue #763 has landed the documented
 vendor API-key and completions-family divergence in a separate vendor fixture,
 without mutating this upstream evidence.
 

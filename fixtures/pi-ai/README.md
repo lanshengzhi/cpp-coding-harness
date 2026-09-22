@@ -7,6 +7,9 @@ strings are distinguishable `dummy-*` tokens (see [Sanitization rules](#sanitiza
 
 ## Issue #758 T0 provenance snapshot
 
+The snapshot named below is the current #757/#766 catalog acceptance target. It is intentionally
+revision- and hash-pinned; an unpinned "latest" catalog is not a provenance reference.
+
 The T0 catalog gate re-ran pi's generator at the exact upstream revision
 `1a584a7a56eb5e7b4ff8ccbd46430f1533282eed` (`1a584a7a5`). The run completed at
 `2026-09-22T05:24:23Z` from the pi checkout root with:
@@ -68,12 +71,17 @@ the Kimi exception in ADR 0059. The upstream `models/providers/kimi-coding.json`
 verified as T0 provenance evidence but is deliberately not used as the production Kimi catalog:
 the upstream artifact remains an `anthropic-messages` snapshot, while production uses the vendor
 `openai-completions` path and API-key authentication.
+The vendor oracle is bound separately by
+[`models/vendors/provenance.json`](models/vendors/provenance.json) (`sha256`
+`e4f79e0957788410af95ff0490b248af1848c8aa2584dd876218ad71a432856d`) and its authority is the
+[Kimi Code documentation](https://www.kimi.com/code/docs/), not the upstream Kimi artifact.
 
-## Legacy pinned baseline and shard artifact
+## Historical pinned baseline and shard artifact (not the current acceptance target)
 
-- **Frozen pi commit:** `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (the parity map [#2] baseline).
+- **Historical pi commit:** `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (the parity map [#2]
+  baseline, not the current T0 baseline).
   The local pi checkout is `../pi`; `pi:` references resolve from that root.
-- **Published artifact:** `@earendil-works/pi-ai@0.83.0`, published at pi tag `v0.83.0`
+- **Historical published artifact:** `@earendil-works/pi-ai@0.83.0`, published at pi tag `v0.83.0`
   (commit `845d6ff1f`, released 2026-07-30). The generated provider shards ship as
   `dist/providers/data/<provider>.json` inside the package, alongside `.manifest.json`
   (`structureHash 5d82f5b1946bdf6d01733aa2a4e4410849c6d44a2ad3038171078c17aed367ce`).
@@ -132,7 +140,7 @@ this divergence cannot affect request payloads, only cost accounting.
   config plus the privately registered `openai-responses` adapter.
 - `models/openai-codex-shard.json` (#370) is a verbatim copy of the frozen-baseline Codex
   provider shard (`packages/ai/src/providers/data/openai-codex.json`), with the byte-hash pinned
-  in [Pinned baseline and shard artifact](#pinned-baseline-and-shard-artifact) above. Kimi's old
+  in [Historical pinned baseline and shard artifact](#historical-pinned-baseline-and-shard-artifact-not-the-current-acceptance-target) above. Kimi's old
   shard was removed when the provider moved to the vendor-authoritative API-key catalog; the
   upstream `models/providers/kimi-coding.json` record above is retained as explicit provenance,
   not a production model source.
@@ -346,19 +354,23 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 
 ### Deferred Capabilities (absent from the surface — no placeholders, no compatibility shims)
 
-- Every pi adapter other than the four scoped ones (`openai-completions`, `openai-responses`,
-  `anthropic-messages`, `mistral-conversations`, `gemini`,
-  `claude-code`, `codex-cli`, images, bedrock, etc.); there is no registry placeholder.
-- Every provider family other than `openai-codex`, `deepseek`, `kimi-coding`, including their
-  factories, auth methods, and catalogs.
-- `OpenAIResponsesCompat` (all seven pi fields fixed at frozen defaults/auto-detection; the typed
-  struct does not exist), `serviceTier` (usage multiplier unreachable), `reasoningSummary` (fixed
+- Every pi adapter other than the four scoped ones (`openai-codex-responses`,
+  `openai-responses`, `openai-completions`, `anthropic-messages`; `mistral-conversations`,
+  `gemini`, `claude-code`, `codex-cli`, images, bedrock, etc.); there is no registry placeholder.
+- Every provider family outside the six bundled providers (`openai-codex`, `deepseek`,
+  `kimi-coding`, `openai`, `openrouter`, and `opencode-go`), including their factories, auth
+  methods, and catalogs.
+- The shipped Responses compat shape contains `sessionAffinityFormat`,
+  `supportsStrictMode` (which carries ordinary-tool `strict:false` wire behavior), and
+  `supportsExplicitPromptCacheMode`; `supportsMaxOutputTokens` is not part of the current
+  surface. `serviceTier` (usage multiplier unreachable), `reasoningSummary` (fixed
   `"auto"`), `toolChoice` (fixed `"auto"`), `metadata`, `onPayload`/`onResponse`, `thinkingBudgets`,
-  `transport`, `websocketConnectTimeoutMs` (internal fixed 15s), raw per-API option structs.
+  `transport`, `websocketConnectTimeoutMs` (internal fixed 15s), and raw per-API option structs
+  remain deferred.
 - `models.json` `compat` overrides; grammar emission; tool search/`splitDeferredTools`/
   `addedToolNames` replay; Claude subscription-specific behavior; budget-based thinking
-  (`thinkingBudgetTokens`); strict-mode overrides; session-affinity format overrides; zstd SSE compression
-  (pi's plain-JSON branch).
+  (`thinkingBudgetTokens`); strict-schema generation; session-affinity format overrides; zstd SSE
+  compression (pi's plain-JSON branch).
 - Codex catalog flags `supportsOpenAIGrammarTools`/`supportsToolSearch` (no scoped producer).
 - Interactive login presentation (LoginDialog/OAuthSelector rendering, `/login` `/logout` commands,
   browser opening) — owned by the later pi-coding-agent gate, not by `cch_ai` (ADR 0032).
@@ -367,13 +379,15 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 
 ## Final classification
 
-Every capability scoped by the parity map for the three provider/auth paths
-(`openai-codex` → OAuth → `openai-codex-responses`; `deepseek` → api key + `deepseek-v4-flash` →
-`openai-responses`; `kimi-coding` → API key → `openai-completions`) is either a **Supported
-Capability** carrying the evidence in the checklist above, or a **Deferred Capability** absent from
-the surface. There are no partial placeholders, no compatibility shims, and no fallback reads: the
-legacy `ProviderRegistry`/`ProviderFactoryContext`/`AuthLoader`/`ProviderConfigResolution` and the
-`--auth`/`--api-key-env`/`--base-url` flags are removed from the surface.
+Every capability scoped by this gate across the six bundled provider catalogs
+(`openai-codex`, `deepseek`, `kimi-coding`, `openai`, `openrouter`, and `opencode-go`) and their
+API/auth paths is either a **Supported Capability** carrying the evidence in the checklist above,
+or a **Deferred Capability** absent from the surface. The inherited three-path parity rows remain
+covered by the `openai-codex` OAuth, DeepSeek API-key, and Kimi API-key paths; OpenRouter also
+supports its OAuth-shaped login path. There are no partial placeholders, no compatibility shims,
+and no fallback reads: the legacy `ProviderRegistry`/`ProviderFactoryContext`/`AuthLoader`/
+`ProviderConfigResolution` and the `--auth`/`--api-key-env`/`--base-url` flags are removed from the
+surface.
 
 The assistant-lifecycle classification was re-checked against reality while building rows 33–37
 (#375): the end-of-stream wording on the Responses family is pi's observably reachable
@@ -397,9 +411,10 @@ records `cacheWrite1h` on every `message_start`, defaulting to 0 when the provid
 
 - **Adapters** — request payload bytes, SSE/WS event sequences, full-payload TS event snapshots,
   terminal matrix, and usage/cost normalization are all covered by deterministic goldens:
-  `OpenAICodexResponsesAdapterTest` (23), `OpenAIResponsesAdapterTest` (11),
-  `AnthropicMessagesAdapterTest` (16), `ProviderPolicyTest` (2), `UsageTest` (2),
-  `MessageConversionTest` (9), plus the `ModelRuntime` re-drive of the DeepSeek wire path.
+  `OpenAICodexResponsesAdapterTest`, `OpenAIResponsesAdapterTest`,
+  `OpenAICompletionsAdapterTest`, and `AnthropicMessagesAdapterTest`, plus
+  `ProviderPolicyTest`, `UsageTest`, `MessageConversionTest`, and the `ModelRuntime` re-drive of
+  the DeepSeek wire path.
 - **OAuth lifecycle** — Codex login, refresh, logout, cancellation, and expiry-at-request-time
   are covered by `OpenAICodexOAuthTest` (21); shared persistence under locking is covered by
   `AuthStorageTest` (7). Kimi has no OAuth lifecycle by design.
