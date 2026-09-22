@@ -27,6 +27,7 @@ include_guard(GLOBAL)
         tests/ai/UsageTest.cpp
         tests/ai/api/AnthropicMessagesAdapterTest.cpp
         tests/ai/api/OpenAICodexResponsesAdapterTest.cpp
+        tests/ai/api/OpenAICompletionsAdapterTest.cpp
         tests/ai/api/OpenAIResponsesAdapterTest.cpp
         tests/ai/api/PartialJsonTest.cpp
         tests/ai/auth/KimiCodingOAuthTest.cpp

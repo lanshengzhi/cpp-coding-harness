@@ -161,6 +161,20 @@ TEST_CASE("the generated catalog pins provider counts API families and limits", 
     CHECK(kimi_model->thinking_level_map->at(ai::ModelThinkingLevel::Max) == "max");
     CHECK(kimi_model->thinking_level_map->at(ai::ModelThinkingLevel::Medium) == std::nullopt);
 
+    const auto deepseek_it =
+            std::find_if(definitions.begin(), definitions.end(), [](const auto& d) { return d.id == "deepseek"; });
+    REQUIRE(deepseek_it != definitions.end());
+    const auto deepseek_model = std::find_if(
+            deepseek_it->models.begin(),
+            deepseek_it->models.end(),
+            [](const ai::Model& model) { return model.id == "deepseek-flash"; });
+    REQUIRE(deepseek_model != deepseek_it->models.end());
+    REQUIRE(deepseek_model->compat);
+    const auto* deepseek_compat =
+            std::get_if<ai::OpenAICompletionsCompat>(&*deepseek_model->compat);
+    REQUIRE(deepseek_compat != nullptr);
+    CHECK(deepseek_compat->supports_strict_mode == true);
+
     const auto codex_it =
             std::find_if(definitions.begin(), definitions.end(), [](const auto& d) { return d.id == "openai-codex"; });
     REQUIRE(codex_it != definitions.end());

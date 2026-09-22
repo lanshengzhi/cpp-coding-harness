@@ -49,6 +49,7 @@ enum class OpenAICompletionsCacheControlFormat { Anthropic };
 struct OpenAICompletionsCompat {
     std::optional<bool> supports_store{std::nullopt};
     std::optional<bool> supports_developer_role{std::nullopt};
+    std::optional<bool> supports_strict_mode{std::nullopt};
     std::optional<OpenAICompletionsMaxTokensField> max_tokens_field{std::nullopt};
     std::optional<bool> requires_reasoning_content_on_assistant_messages{std::nullopt};
     std::optional<OpenAICompletionsThinkingFormat> thinking_format{std::nullopt};

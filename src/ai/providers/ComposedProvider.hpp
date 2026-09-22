@@ -13,7 +13,7 @@
 namespace cch::ai::providers {
 
 /// Unified provider execution engine composing models, authentication, and
-/// the three supported private wire adapters behind the abstract Provider interface.
+/// the four supported private wire adapters behind the abstract Provider interface.
 [[nodiscard]] std::shared_ptr<ai::Provider> make_composed_provider(
     std::string provider_id,
     std::string name,

@@ -13,4 +13,7 @@ namespace cch::ai::api {
 [[nodiscard]] support::Expected<support::JsonValue> build_anthropic_payload(
         const Model& model, const AiContext& context, const ProviderStreamOptions& options);
 
+[[nodiscard]] support::Expected<support::JsonValue> build_completions_payload(
+        const Model& model, const AiContext& context, const ProviderStreamOptions& options);
+
 } // namespace cch::ai::api
