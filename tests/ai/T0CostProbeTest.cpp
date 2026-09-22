@@ -1,3 +1,5 @@
+#include <cch/ai/Models.hpp>
+
 #include "ai/api/MessageConversion.hpp"
 #include "ai/providers/ComposedProvider.hpp"
 #include "support/Json.hpp"
@@ -9,6 +11,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 using namespace cch;
 
@@ -35,17 +38,39 @@ namespace {
 }
 
 [[nodiscard]] ai::Model budget_anthropic_model() {
-    auto model = tests::make_model("minimax-m3", "opencode-go", "anthropic-messages");
-    model.reasoning = true;
-    model.max_tokens = 8192;
-    return model;
+    for (const auto& definition : ai::builtin_provider_definitions()) {
+        if (definition.id != "opencode-go") {
+            continue;
+        }
+        for (const auto& model : definition.models) {
+            if (model.id == "minimax-m3") {
+                return model;
+            }
+        }
+    }
+    auto fallback = tests::make_model("minimax-m3", "opencode-go", "anthropic-messages");
+    fallback.reasoning = true;
+    fallback.max_tokens = 8192;
+    return fallback;
 }
 
-[[nodiscard]] ai::Model strict_responses_model() { return tests::make_model("gpt-4", "openai", "openai-responses"); }
+[[nodiscard]] ai::Model strict_responses_model() {
+    for (const auto& definition : ai::builtin_provider_definitions()) {
+        if (definition.id != "openai") {
+            continue;
+        }
+        for (const auto& model : definition.models) {
+            if (model.id == "gpt-4") {
+                return model;
+            }
+        }
+    }
+    return {};
+}
 
 } // namespace
 
-TEST_CASE("T0 probe records the reachable Anthropic budget-thinking limitation", "[ai][probe][issue758]") {
+TEST_CASE("T4 probe reaches Anthropic budget-based thinking", "[ai][probe][issue762]") {
     ai::ProviderStreamOptions options;
     options.max_tokens = 4096;
     options.reasoning = ai::ModelThinkingLevel::High;
@@ -53,22 +78,109 @@ TEST_CASE("T0 probe records the reachable Anthropic budget-thinking limitation",
     const auto result = ai::api::build_adapter_payload(
             ai::api::AdapterKind::AnthropicMessages, budget_anthropic_model(), probe_context(), options);
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == support::ErrorCode::ModelValidation);
-    CHECK(result.error().message == "Budget-based Anthropic thinking is outside the supported adapter surface");
+    REQUIRE(result);
+    CHECK(result->at("thinking").at("type").get_string() == "enabled");
+    CHECK(result->at("thinking").at("budget_tokens").get_number() == 3072);
+    CHECK_FALSE(result->get_object().contains("output_config"));
 }
 
-TEST_CASE("T0 probe records the ordinary Responses strict-false limitation", "[ai][probe][issue758]") {
+TEST_CASE("T4 Anthropic budget thinking follows harness levels and answer-room clamp", "[ai][probe][issue762]") {
+    struct BudgetCase {
+        ai::ModelThinkingLevel level;
+        double expected;
+    };
+    const std::vector<BudgetCase> cases{
+            {ai::ModelThinkingLevel::Minimal, 1024},
+            {ai::ModelThinkingLevel::Low, 2048},
+            {ai::ModelThinkingLevel::Medium, 8192},
+            {ai::ModelThinkingLevel::High, 16384},
+            {ai::ModelThinkingLevel::XHigh, 16384},
+            {ai::ModelThinkingLevel::Max, 16384},
+    };
+    for (const auto& test_case : cases) {
+        ai::ProviderStreamOptions options;
+        options.max_tokens = 32768;
+        options.reasoning = test_case.level;
+        const auto result = ai::api::build_adapter_payload(
+                ai::api::AdapterKind::AnthropicMessages, budget_anthropic_model(), probe_context(), options);
+        REQUIRE(result);
+        CHECK(result->at("thinking").at("budget_tokens").get_number() == test_case.expected);
+    }
+
+    ai::ProviderStreamOptions clamped_options;
+    clamped_options.max_tokens = 2048;
+    clamped_options.reasoning = ai::ModelThinkingLevel::High;
+    const auto clamped = ai::api::build_adapter_payload(
+            ai::api::AdapterKind::AnthropicMessages, budget_anthropic_model(), probe_context(), clamped_options);
+    REQUIRE(clamped);
+    CHECK(clamped->at("thinking").at("budget_tokens").get_number() == 1024);
+}
+
+TEST_CASE(
+        "T4 OpenCode Go Anthropic budget thinking preserves image auth and session behavior", "[ai][probe][issue762]") {
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .head = {.status_code = 200, .headers = {}},
+            .chunks =
+                    {
+                            "event: message_start\n"
+                            "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_opencode\","
+                            "\"model\":\"minimax-m3\",\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\n"
+                            "event: message_delta\n"
+                            "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},"
+                            "\"usage\":{\"output_tokens\":1}}\n\n"
+                            "event: message_stop\n"
+                            "data: {\"type\":\"message_stop\"}\n\n",
+                    },
+    });
+    const auto model = budget_anthropic_model();
+    auto provider = ai::providers::make_composed_provider("opencode-go", "OpenCode Go", {model}, {}, transport);
+    auto context = probe_context();
+    context.messages.push_back(ai::UserMessage{
+            .content =
+                    std::vector<ai::Content>{
+                            ai::text_content("image"),
+                            ai::image_content("YWJj", "image/png"),
+                    },
+            .timestamp = 2,
+    });
+
+    ai::ProviderStreamOptions options;
+    options.auth.api_key = "opencode-key";
+    options.max_tokens = 4096;
+    options.reasoning = ai::ModelThinkingLevel::High;
+    options.session_id = "opencode-session";
+    const auto result = tests::run_async_result(provider->stream(model, std::move(context), std::move(options))
+                    .run([](const ai::AssistantStreamEvent&) -> support::ExpectedVoid { return {}; }));
+
+    REQUIRE(result);
+    REQUIRE(transport->requests.size() == 1);
+    const auto& request = transport->requests.front();
+    CHECK(request.url == "https://opencode.ai/zen/go/v1/messages");
+    CHECK(request.headers.at("x-api-key") == "opencode-key");
+    CHECK(request.headers.at("x-opencode-session") == "opencode-session");
+    CHECK(request.headers.at("anthropic-version") == "2023-06-01");
+    const auto body = support::read_json(request.body);
+    REQUIRE(body);
+    CHECK(body->at("thinking").at("type").get_string() == "enabled");
+    CHECK(body->at("thinking").at("budget_tokens").get_number() == 3072);
+    CHECK(request.body.contains("\"type\":\"image\""));
+}
+
+TEST_CASE("T4 probe serializes Responses strict-false from the catalog flag", "[ai][probe][issue762]") {
     ai::ProviderStreamOptions options;
     options.max_tokens = 64;
 
-    const auto result = ai::api::build_adapter_payload(
-            ai::api::AdapterKind::OpenAIResponses, strict_responses_model(), probe_context(), options);
+    const auto model = strict_responses_model();
+    REQUIRE_FALSE(model.id.empty());
+    const auto result =
+            ai::api::build_adapter_payload(ai::api::AdapterKind::OpenAIResponses, model, probe_context(), options);
 
     REQUIRE(result);
     const auto& tools = result->at("tools").get_array();
     REQUIRE(tools.size() == 1);
-    CHECK(tools.front().get_object().find("strict") == tools.front().get_object().end());
+    CHECK(tools.front().at("strict").get_boolean() == false);
+    CHECK_FALSE(tools.front().at("parameters").get_object().contains("strict"));
 }
 
 TEST_CASE("T0 probe reaches the DeepSeek OpenAI Completions adapter", "[ai][probe][issue758][issue761]") {
@@ -125,7 +237,7 @@ TEST_CASE("T0 probe reaches the DeepSeek OpenAI Completions adapter", "[ai][prob
     CHECK(body->at("tools").get_array().front().at("function").at("strict").get_boolean() == false);
 }
 
-TEST_CASE("T0 probe keeps authenticated unknown APIs on the zero-transport path", "[ai][probe][issue758]") {
+TEST_CASE("T4 probe keeps authenticated unknown APIs on the zero-transport path", "[ai][probe][issue762]") {
     auto transport = std::make_shared<tests::ScriptedTransport>();
     auto model = tests::make_model("unknown", "deepseek", "unknown-api");
     auto provider = ai::providers::make_composed_provider("deepseek", "DeepSeek", {model}, {}, transport);
