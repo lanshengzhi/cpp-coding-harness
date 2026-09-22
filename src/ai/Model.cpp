@@ -21,13 +21,16 @@ namespace {
 }
 
 [[nodiscard]] support::ExpectedVoid validate_rate(double value, std::string_view field) {
-    if (std::isfinite(value) && value >= 0) {
+    // pi uses -1,000,000 for provider-routed models whose price is not
+    // published by the provider (OpenRouter's auto/auto-beta entries).
+    constexpr double kProviderRoutedCost = -1'000'000.0;
+    if (std::isfinite(value) && (value >= 0 || value == kProviderRoutedCost)) {
         return {};
     }
     return std::unexpected(support::make_error(
         support::ErrorCode::Validation,
         "invalid model cost",
-        std::format("{} must be finite and non-negative", field)));
+        std::format("{} must be finite, non-negative, or the provider-routed sentinel", field)));
 }
 
 [[nodiscard]] bool is_valid_input(ModelInput input) {

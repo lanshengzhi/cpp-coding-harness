@@ -91,6 +91,10 @@ TEST_CASE("Model validation rejects partial identity invalid cost and incompatib
     CHECK_FALSE(ai::validate_model(model));
 
     model = tests::make_model("model-1");
+    model.cost.input = -1'000'000.0;
+    CHECK(ai::validate_model(model));
+
+    model = tests::make_model("model-1");
     model.cost.input = std::numeric_limits<double>::infinity();
     CHECK_FALSE(ai::validate_model(model));
 
