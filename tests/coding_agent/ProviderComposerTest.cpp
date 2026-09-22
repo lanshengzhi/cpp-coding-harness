@@ -387,10 +387,10 @@ TEST_CASE("models.json overlay overrides the built-in baseUrl and upserts a cust
     CHECK(gpt55->max_tokens == 65536);
     CHECK(gpt55->base_url == "https://codex.example/v1");
     // The overlay's baseUrl propagates to every built-in model.
-    const auto gpt54 = std::find_if(models.begin(), models.end(),
-        [](const ai::Model& m) { return m.id == "gpt-5.4"; });
-    REQUIRE(gpt54 != models.end());
-    CHECK(gpt54->base_url == "https://codex.example/v1");
+    const auto gpt56_luna =
+            std::find_if(models.begin(), models.end(), [](const ai::Model& m) { return m.id == "gpt-5.6-luna"; });
+    REQUIRE(gpt56_luna != models.end());
+    CHECK(gpt56_luna->base_url == "https://codex.example/v1");
     // The built-in OAuth auth is preserved.
     CHECK(change.definition->auth.oauth.has_value());
 }

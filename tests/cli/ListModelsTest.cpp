@@ -10,6 +10,7 @@
 #include "support/CliRunFixture.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Model.hpp>
@@ -182,11 +183,14 @@ TEST_CASE("list-models reports the models.json load error as a stderr warning",
     // built-in providers still compose structurally, so the table prints too.
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard kimi_key_guard{"KIMI_API_KEY"};
     home_guard.set(home.path().string());
+    kimi_key_guard.set("dummy-kimi-key");
     home.write(".config/pike/agent/models.json", "{not valid json");
 
     auto runtime = coding_agent::ModelRuntime::create({});
     REQUIRE(runtime);
+    REQUIRE(tests::run_async_result((*runtime)->get_available()));
 
     std::ostringstream output;
     std::ostringstream error;

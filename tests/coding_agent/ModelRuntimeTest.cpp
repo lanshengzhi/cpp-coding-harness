@@ -193,7 +193,7 @@ TEST_CASE("ModelRuntime default-created runtime composes the built-in providers"
     CHECK_FALSE((*runtime)->get_error().has_value());
     CHECK((*runtime)->model("openai-codex", "gpt-5.5").has_value());
     CHECK((*runtime)->model("kimi-coding", "kimi-for-coding").has_value());
-    CHECK((*runtime)->model("deepseek", "deepseek-reasoner").has_value());
+    CHECK((*runtime)->model("deepseek", "deepseek-v4-pro").has_value());
 
     const auto providers = (*runtime)->providers();
     REQUIRE(providers.size() == 6);
@@ -260,7 +260,7 @@ TEST_CASE("ModelRuntime refresh reloads models.json and recomposes providers",
 
     auto runtime = coding_agent::ModelRuntime::create({});
     REQUIRE(runtime);
-    CHECK((*runtime)->model("deepseek", "deepseek-reasoner").has_value());
+    CHECK((*runtime)->model("deepseek", "deepseek-v4-pro").has_value());
 
     home.write(".config/pike/agent/models.json", R"({
       "providers": {
@@ -436,21 +436,20 @@ TEST_CASE("ModelRuntime rejects stale Kimi OAuth without fallback or deletion",
     kimi_key.set("ambient-kimi-key");
 
     auto store = std::make_shared<MemoryCredentialStore>();
-    store->records.emplace("kimi-coding", ai::Credential{ai::OAuthCredential{
-        .refresh = "dummy-stale-refresh",
-        .access = "dummy-stale-access",
-        .expires = 1,
-    }});
-    auto runtime = coding_agent::ModelRuntime::create(
-        coding_agent::ModelRuntimeOptions{.credentials = store});
+    store->records.emplace("kimi-coding",
+            ai::Credential{ai::OAuthCredential{
+                    .refresh = "dummy-stale-refresh",
+                    .access = "dummy-stale-access",
+                    .expires = 1,
+            }});
+    auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{.credentials = store});
     REQUIRE(runtime);
 
     const auto available = run_async_result((*runtime)->get_available());
     REQUIRE(available);
-    CHECK(std::none_of(
-        available->begin(),
-        available->end(),
-        [](const ai::Model& model) { return model.provider == "kimi-coding"; }));
+    CHECK(std::none_of(available->begin(), available->end(), [](const ai::Model& model) {
+        return model.provider == "kimi-coding";
+    }));
 
     auto checked = run_async_result((*runtime)->check_auth("kimi-coding"));
     REQUIRE(checked);
@@ -469,14 +468,10 @@ TEST_CASE("ModelRuntime rejects stale Kimi OAuth without fallback or deletion",
     // Explicit API-key login is the replacement path; ambient KIMI_API_KEY
     // above must not be consumed while the stale record exists.
     ai::AuthInteraction interaction;
-    interaction.prompt = [](ai::AuthPrompt)
-        -> cch::support::AsyncResult<std::string> {
+    interaction.prompt = [](ai::AuthPrompt) -> cch::support::AsyncResult<std::string> {
         return tests::ready_result<std::string>("replacement-kimi-key");
     };
-    REQUIRE(run_async_result((*runtime)->login(
-        "kimi-coding",
-        ai::AuthType::ApiKey,
-        std::move(interaction))));
+    REQUIRE(run_async_result((*runtime)->login("kimi-coding", ai::AuthType::ApiKey, std::move(interaction))));
     const auto replaced = run_async_result(store->read("kimi-coding"));
     REQUIRE(replaced);
     REQUIRE(replaced->has_value());
