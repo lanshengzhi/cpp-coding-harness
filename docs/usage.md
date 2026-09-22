@@ -67,6 +67,13 @@ Kimi Code is built in as provider `kimi-coding`, model `kimi-for-coding`:
 KIMI_API_KEY=... $BIN --model kimi-for-coding "summarize README.md"
 ```
 
+OpenRouter account authorization is available alongside its API-key
+environment variable:
+
+```text
+/login openrouter
+```
+
 Credentials can instead be stored in `~/.pike/agent/auth.json`:
 
 ```json

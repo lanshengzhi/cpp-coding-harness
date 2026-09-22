@@ -31,6 +31,7 @@ include_guard(GLOBAL)
         tests/ai/api/PartialJsonTest.cpp
         tests/ai/auth/KimiCodingOAuthTest.cpp
         tests/ai/auth/OpenAICodexOAuthTest.cpp
+        tests/ai/auth/OpenRouterOAuthTest.cpp
         tests/ai/providers/BoostBeastStreamTransportTest.cpp
         tests/ai/providers/BoostBeastWebSocketTransportTest.cpp
         tests/ai/providers/ComposedProviderTest.cpp

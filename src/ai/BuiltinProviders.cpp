@@ -4,6 +4,7 @@
 #include "support/Json.hpp"
 #include "ai/auth/KimiCodingOAuth.hpp"
 #include "ai/auth/OpenAICodexOAuth.hpp"
+#include "ai/auth/OpenRouterOAuth.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
 
 #include <cstdint>
@@ -363,6 +364,7 @@ void bind_provider_auth(std::string_view provider_id, ProviderAuth& auth) {
     } else if (provider_id == "openrouter") {
         auto env_auth = providers::make_env_api_key_auth("OpenRouter API key", {"OPENROUTER_API_KEY"});
         auth.api_key = std::move(*env_auth.api_key);
+        auth.oauth = auth::make_openrouter_oauth_auth();
     } else if (provider_id == "opencode-go") {
         auto env_auth = providers::make_env_api_key_auth("OpenCode API key", {"OPENCODE_API_KEY"});
         auth.api_key = std::move(*env_auth.api_key);

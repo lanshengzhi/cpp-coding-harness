@@ -8,6 +8,7 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/dispatch.hpp>
 #include <boost/asio/experimental/channel.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/redirect_error.hpp>
@@ -27,10 +28,8 @@
 namespace cch::ai::auth {
 namespace {
 
-using WaitChannel = boost::asio::experimental::channel<
-    void(boost::system::error_code, std::optional<std::string>)>;
-
-constexpr std::string_view kCallbackPath = "/auth/callback";
+using WaitResult = support::Expected<std::optional<std::string>>;
+using WaitChannel = boost::asio::experimental::channel<void(boost::system::error_code, WaitResult)>;
 
 struct ParsedTarget {
     std::string path{};
@@ -64,6 +63,7 @@ html_response(int status, std::string body) {
         static_cast<boost::beast::http::status>(status),
         /*version=*/11};
     response.set(boost::beast::http::field::content_type, "text/html; charset=utf-8");
+    response.set(boost::beast::http::field::cache_control, "no-store");
     response.keep_alive(false);
     response.body() = std::move(body);
     response.prepare_payload();
@@ -85,6 +85,8 @@ struct OAuthCallbackServer::Impl {
     WaitChannel wait_channel;
     bool closed{false};
     bool degraded{false};
+    bool claimed{false};
+    bool wait_cancelled{false};
 };
 
 OAuthCallbackServer::OAuthCallbackServer(std::shared_ptr<Impl> impl)
@@ -108,27 +110,37 @@ std::uint16_t OAuthCallbackServer::bound_port() const {
 
 boost::asio::awaitable<support::Expected<std::optional<std::string>>>
 OAuthCallbackServer::wait_for_code() {
-    std::optional<std::string> code;
+    WaitResult result{std::optional<std::string>{}};
     boost::system::error_code receive_error;
-    code = co_await impl_->wait_channel.async_receive(
-        boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
+    result = co_await impl_->wait_channel.async_receive(
+            boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
     if (receive_error) {
         co_return std::optional<std::string>{};
     }
-    co_return code;
+    co_return result;
 }
 
 void OAuthCallbackServer::cancel_wait() {
-    impl_->wait_channel.try_send(boost::system::error_code{}, std::nullopt);
+    const auto impl = impl_;
+    boost::asio::dispatch(impl->executor, [impl] {
+        if (impl->closed || impl->claimed || impl->wait_cancelled) {
+            return;
+        }
+        impl->wait_cancelled = true;
+        impl->wait_channel.try_send(boost::system::error_code{}, WaitResult{std::optional<std::string>{}});
+    });
 }
 
 void OAuthCallbackServer::close() {
-    if (impl_->closed) {
-        return;
-    }
-    impl_->closed = true;
-    boost::system::error_code error;
-    impl_->acceptor.close(error);
+    const auto impl = impl_;
+    boost::asio::dispatch(impl->executor, [impl] {
+        if (impl->closed) {
+            return;
+        }
+        impl->closed = true;
+        boost::system::error_code error;
+        impl->acceptor.close(error);
+    });
 }
 
 boost::asio::awaitable<support::Expected<std::shared_ptr<OAuthCallbackServer>>>
@@ -162,76 +174,91 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
     if (error) {
         // Listen errors degrade to manual input only (pi settleWait(null)).
         impl->degraded = true;
-        impl->wait_channel.try_send(boost::system::error_code{}, std::nullopt);
+        impl->wait_cancelled = true;
+        impl->wait_channel.try_send(boost::system::error_code{}, WaitResult{std::optional<std::string>{}});
         co_return std::make_shared<OAuthCallbackServer>(impl);
     }
 
     const auto expected_state = impl->options.state;
+    const auto callback_path = impl->options.path;
     co_spawn(
-        executor,
-        [impl, expected_state]() -> asio::awaitable<void> {
-            while (!impl->closed) {
-                boost::asio::basic_stream_socket<tcp, TransportExecutor> socket(impl->executor);
-                boost::system::error_code accept_error;
-                co_await impl->acceptor.async_accept(
-                    socket,
-                    asio::redirect_error(asio::use_awaitable, accept_error));
-                if (accept_error) {
-                    break;
+            executor,
+            [impl, expected_state, callback_path]() -> asio::awaitable<void> {
+                while (!impl->closed) {
+                    boost::asio::basic_stream_socket<tcp, TransportExecutor> socket(impl->executor);
+                    boost::system::error_code accept_error;
+                    co_await impl->acceptor.async_accept(
+                            socket, asio::redirect_error(asio::use_awaitable, accept_error));
+                    if (accept_error) {
+                        break;
+                    }
+                    co_spawn(
+                            impl->executor,
+                            [impl, expected_state, callback_path, socket = std::move(socket)]() mutable
+                                    -> asio::awaitable<void> {
+                                namespace http = boost::beast::http;
+                                auto response = html_response(
+                                        500, oauth_error_html("Internal error while processing OAuth callback."));
+                                TransportTcpStream stream(std::move(socket));
+                                beast::flat_buffer buffer;
+                                http::request<http::string_body> request;
+                                boost::system::error_code handler_error;
+                                co_await http::async_read(stream,
+                                        buffer,
+                                        request,
+                                        asio::redirect_error(asio::use_awaitable, handler_error));
+                                if (!handler_error) {
+                                    const auto target = parse_target(request.target());
+                                    if (request.method() != http::verb::get || target.path != callback_path) {
+                                        response = html_response(404, oauth_error_html("Callback route not found."));
+                                    } else if (impl->wait_cancelled || impl->claimed) {
+                                        response = html_response(
+                                                409, oauth_error_html("This OAuth callback has already been used."));
+                                    } else if (impl->options.validate_state && target.state != expected_state) {
+                                        response = html_response(400, oauth_error_html("State mismatch."));
+                                    } else if (target.code.empty()) {
+                                        response = html_response(400, oauth_error_html("Missing authorization code."));
+                                    } else {
+                                        impl->claimed = true;
+                                        if (impl->options.callback_handler) {
+                                            auto callback_result = co_await impl->options.callback_handler(target.code);
+                                            if (callback_result) {
+                                                response = html_response(
+                                                        200, oauth_success_html(impl->options.success_message));
+                                                impl->wait_channel.try_send(boost::system::error_code{},
+                                                        WaitResult{std::optional<std::string>{
+                                                                std::move(*callback_result)}});
+                                            } else {
+                                                auto callback_error = std::move(callback_result.error());
+                                                std::string details = callback_error.message;
+                                                if (!callback_error.detail.empty()) {
+                                                    details += ": ";
+                                                    details += callback_error.detail;
+                                                }
+                                                response = html_response(502,
+                                                        oauth_error_html(
+                                                                impl->options.exchange_error_message, details));
+                                                impl->wait_channel.try_send(boost::system::error_code{},
+                                                        WaitResult{std::unexpected(std::move(callback_error))});
+                                            }
+                                        } else {
+                                            response = html_response(
+                                                    200, oauth_success_html(impl->options.success_message));
+                                            impl->wait_channel.try_send(boost::system::error_code{},
+                                                    WaitResult{std::optional<std::string>{std::move(target.code)}});
+                                        }
+                                    }
+                                    co_await http::async_write(
+                                            stream, response, asio::redirect_error(asio::use_awaitable, handler_error));
+                                }
+                                // Best-effort session: any read/write failure still
+                                // leaves the 500 page and a valid callback settles the
+                                // wait before the write fails.
+                            },
+                            asio::detached);
                 }
-                co_spawn(
-                    impl->executor,
-                    [impl, expected_state, socket = std::move(socket)]()
-                        mutable -> asio::awaitable<void> {
-                        namespace http = boost::beast::http;
-                        auto response = html_response(
-                            500,
-                            oauth_error_html(
-                                "Internal error while processing OAuth callback."));
-                        TransportTcpStream stream(std::move(socket));
-                        beast::flat_buffer buffer;
-                        http::request<http::string_body> request;
-                        boost::system::error_code handler_error;
-                        co_await http::async_read(
-                            stream,
-                            buffer,
-                            request,
-                            asio::redirect_error(asio::use_awaitable, handler_error));
-                        if (!handler_error) {
-                            const auto target = parse_target(request.target());
-                            if (target.path != kCallbackPath) {
-                                response = html_response(
-                                    404,
-                                    oauth_error_html("Callback route not found."));
-                            } else if (target.state != expected_state) {
-                                response = html_response(
-                                    400,
-                                    oauth_error_html("State mismatch."));
-                            } else if (target.code.empty()) {
-                                response = html_response(
-                                    400,
-                                    oauth_error_html("Missing authorization code."));
-                            } else {
-                                response = html_response(
-                                    200,
-                                    oauth_success_html(
-                                        "OpenAI authentication completed. You can close this window."));
-                                impl->wait_channel.try_send(
-                                    boost::system::error_code{}, target.code);
-                            }
-                            co_await http::async_write(
-                                stream,
-                                response,
-                                asio::redirect_error(asio::use_awaitable, handler_error));
-                        }
-                        // Best-effort session: any read/write failure still
-                        // leaves the 500 page and a valid callback settles the
-                        // wait before the write fails.
-                    },
-                    asio::detached);
-            }
-        },
-        asio::detached);
+            },
+            asio::detached);
 
     co_return std::make_shared<OAuthCallbackServer>(impl);
 }
