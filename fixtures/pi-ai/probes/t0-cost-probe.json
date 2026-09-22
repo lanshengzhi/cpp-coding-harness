@@ -1,0 +1,339 @@
+{
+  "cases": {
+    "anthropic-budget-thinking": {
+      "body": {
+        "max_tokens": 6144,
+        "messages": [
+          {
+            "content": [
+              {
+                "text": "hello",
+                "type": "text"
+              }
+            ],
+            "role": "user"
+          }
+        ],
+        "model": "minimax-m3",
+        "stream": true,
+        "system": [
+          {
+            "text": "system",
+            "type": "text"
+          }
+        ],
+        "thinking": {
+          "budget_tokens": 2048,
+          "display": "summarized",
+          "type": "enabled"
+        },
+        "tools": [
+          {
+            "description": "Look up a value",
+            "eager_input_streaming": true,
+            "input_schema": {
+              "properties": {
+                "q": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "type": "object"
+            },
+            "name": "lookup"
+          }
+        ]
+      },
+      "label": "anthropic-budget-thinking",
+      "method": "POST",
+      "on_payload_seen": true,
+      "payload": {
+        "betas": [
+          "interleaved-thinking-2025-05-14"
+        ],
+        "max_tokens": 6144,
+        "messages": [
+          {
+            "content": [
+              {
+                "text": "hello",
+                "type": "text"
+              }
+            ],
+            "role": "user"
+          }
+        ],
+        "model": "minimax-m3",
+        "stream": true,
+        "system": [
+          {
+            "text": "system",
+            "type": "text"
+          }
+        ],
+        "thinking": {
+          "budget_tokens": 2048,
+          "display": "summarized",
+          "type": "enabled"
+        },
+        "tools": [
+          {
+            "description": "Look up a value",
+            "eager_input_streaming": true,
+            "input_schema": {
+              "properties": {
+                "q": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "type": "object"
+            },
+            "name": "lookup"
+          }
+        ]
+      },
+      "raw_body": "{\"model\":\"minimax-m3\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}],\"max_tokens\":6144,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"system\"}],\"tools\":[{\"name\":\"lookup\",\"description\":\"Look up a value\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\"}},\"required\":[\"q\"]}}],\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":2048,\"display\":\"summarized\"}}",
+      "raw_body_sha256": "becf6c3779861c2d88f73c0405cb4cebdfe5cb4d9bb06ecbd6fc603e8b9750c9",
+      "stream_error": null,
+      "stream_stop_reason": "stop",
+      "transport_calls": 1,
+      "url": "https://opencode.ai/zen/go/v1/messages?beta=true"
+    },
+    "openai-completions": {
+      "body": {
+        "max_tokens": 4096,
+        "messages": [
+          {
+            "content": "system",
+            "role": "system"
+          },
+          {
+            "content": [
+              {
+                "text": "hello",
+                "type": "text"
+              }
+            ],
+            "role": "user"
+          }
+        ],
+        "model": "deepseek-flash",
+        "reasoning_effort": "high",
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "thinking": {
+          "type": "enabled"
+        },
+        "tools": [
+          {
+            "function": {
+              "description": "Look up a value",
+              "name": "lookup",
+              "parameters": {
+                "properties": {
+                  "q": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "q"
+                ],
+                "type": "object"
+              },
+              "strict": false
+            },
+            "type": "function"
+          }
+        ]
+      },
+      "label": "openai-completions",
+      "method": "POST",
+      "on_payload_seen": true,
+      "payload": {
+        "max_tokens": 4096,
+        "messages": [
+          {
+            "content": "system",
+            "role": "system"
+          },
+          {
+            "content": [
+              {
+                "text": "hello",
+                "type": "text"
+              }
+            ],
+            "role": "user"
+          }
+        ],
+        "model": "deepseek-flash",
+        "reasoning_effort": "high",
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "thinking": {
+          "type": "enabled"
+        },
+        "tools": [
+          {
+            "function": {
+              "description": "Look up a value",
+              "name": "lookup",
+              "parameters": {
+                "properties": {
+                  "q": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "q"
+                ],
+                "type": "object"
+              },
+              "strict": false
+            },
+            "type": "function"
+          }
+        ]
+      },
+      "raw_body": "{\"model\":\"deepseek-flash\",\"messages\":[{\"role\":\"system\",\"content\":\"system\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":4096,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"description\":\"Look up a value\",\"parameters\":{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\"}},\"required\":[\"q\"]},\"strict\":false}}],\"thinking\":{\"type\":\"enabled\"},\"reasoning_effort\":\"high\"}",
+      "raw_body_sha256": "53317fc16570d8760e78ff354625f62a6c8e2ce3e67379599ab99dae345c1020",
+      "stream_error": null,
+      "stream_stop_reason": "stop",
+      "transport_calls": 1,
+      "url": "https://api.deepseek.com/chat/completions"
+    },
+    "responses-strict-false": {
+      "body": {
+        "input": [
+          {
+            "content": "system",
+            "role": "system"
+          },
+          {
+            "content": [
+              {
+                "text": "hello",
+                "type": "input_text"
+              }
+            ],
+            "role": "user"
+          }
+        ],
+        "max_output_tokens": 64,
+        "model": "gpt-4",
+        "store": false,
+        "stream": true,
+        "tools": [
+          {
+            "description": "Look up a value",
+            "name": "lookup",
+            "parameters": {
+              "properties": {
+                "q": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "type": "object"
+            },
+            "strict": false,
+            "type": "function"
+          }
+        ]
+      },
+      "label": "responses-strict-false",
+      "method": "POST",
+      "on_payload_seen": true,
+      "payload": {
+        "input": [
+          {
+            "content": "system",
+            "role": "system"
+          },
+          {
+            "content": [
+              {
+                "text": "hello",
+                "type": "input_text"
+              }
+            ],
+            "role": "user"
+          }
+        ],
+        "max_output_tokens": 64,
+        "model": "gpt-4",
+        "store": false,
+        "stream": true,
+        "tools": [
+          {
+            "description": "Look up a value",
+            "name": "lookup",
+            "parameters": {
+              "properties": {
+                "q": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "type": "object"
+            },
+            "strict": false,
+            "type": "function"
+          }
+        ]
+      },
+      "raw_body": "{\"model\":\"gpt-4\",\"input\":[{\"role\":\"system\",\"content\":\"system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hello\"}]}],\"stream\":true,\"store\":false,\"max_output_tokens\":64,\"tools\":[{\"type\":\"function\",\"name\":\"lookup\",\"description\":\"Look up a value\",\"parameters\":{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\"}},\"required\":[\"q\"]},\"strict\":false}]}",
+      "raw_body_sha256": "a44b15c152f40bfbf5031c47668170d33b737e73c6956533eb8279aa7e108848",
+      "stream_error": null,
+      "stream_stop_reason": "stop",
+      "transport_calls": 1,
+      "url": "https://api.openai.com/v1/responses"
+    }
+  },
+  "limitations": [
+    "The probe measures real baseline request construction and the current C++ payload seam; it is not a production adapter implementation.",
+    "Fake SSE only proves request construction and parser entry; provider acceptance and billing require manual live validation with credentials.",
+    "Source byte/line counts are an observed scope indicator, not an engineering-time estimate."
+  ],
+  "measured_source_surface": [
+    {
+      "bytes": 62871,
+      "lines": 1726,
+      "path": "packages/ai/src/api/openai-completions.ts"
+    },
+    {
+      "bytes": 50697,
+      "lines": 1520,
+      "path": "packages/ai/src/api/anthropic-messages.ts"
+    },
+    {
+      "bytes": 14282,
+      "lines": 397,
+      "path": "packages/ai/src/api/openai-responses.ts"
+    },
+    {
+      "bytes": 30087,
+      "lines": 793,
+      "path": "packages/ai/src/api/openai-responses-shared.ts"
+    }
+  ],
+  "probe": {
+    "context": "one system prompt, one user text, one ordinary JSON-schema tool",
+    "pi_revision": "1a584a7a56eb5e7b4ff8ccbd46430f1533282eed",
+    "transport": "in-process fake fetch; no provider network or credentials"
+  },
+  "schema": "cpp-coding-harness/issue-758-t0-cost-probe/1"
+}
