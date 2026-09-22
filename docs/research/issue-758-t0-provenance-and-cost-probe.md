@@ -107,6 +107,19 @@ verified six above. Kimi's generated artifact remains the upstream
 completions-family divergence remains a later implementation decision, not a
 silent mutation of this upstream evidence.
 
+## Validation
+
+The provenance checker and a second run of the local Node probe both pass; the
+second probe output is byte-identical to the committed JSON. The focused CMake
+build compiled the production libraries, then its build-phase Parity
+Architecture Gate rejected the generated Ninja dependency evidence with
+`PARITY-6003` for 189 sources before `cch_tests_ai` linked. No source
+compilation diagnostic was reported. Using those completed libraries, the
+three new C++ cases were compiled and linked in a small local test executable;
+the `[issue758]` filter passed all 3 cases and 10 assertions. The direct
+fallback confirms the T0 assertions but does not replace the repository's
+architecture-gate requirement.
+
 ## Limits and rerun commands
 
 The probe does not prove provider acceptance, billing, live authentication, or
