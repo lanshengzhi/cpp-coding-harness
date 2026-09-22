@@ -4,13 +4,58 @@ status: accepted
 
 # Align the cch_ai capability subset with pi-ai at a new baseline and diverge on Kimi Code
 
-The `cch_ai` capability subset is re-pinned from the frozen baseline `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (the `@earendil-works/pi-ai@0.83.0`-correlated commit) to `1a584a7a5`, the `../pi` checkout's current `HEAD` after `v0.87.0`. This decides four things that [ADR 0033](0033-own-the-supported-api-adapter-surface-for-the-three-provider-paths.md) fixed at the old baseline, and one thing it did not cover. It implements [#757](https://github.com/lanshengzhi/cpp-coding-harness/issues/757).
+The `cch_ai` capability subset is re-pinned from the historical baseline
+`83114817c68f5413e4d7ba6d7003ddc511cd31d2` (the `@earendil-works/pi-ai@0.83.0`-correlated
+commit) to upstream revision `1a584a7a56eb5e7b4ff8ccbd46430f1533282eed` (`1a584a7a5`), the
+`../pi` checkout's `HEAD` after `v0.87.0`. This decides four things that [ADR
+0033](0033-own-the-supported-api-adapter-surface-for-the-three-provider-paths.md) fixed at the
+old baseline, and one thing it did not cover. It implements [#757](https://github.com/lanshengzhi/cpp-coding-harness/issues/757).
+
+## Amendment and #766 close-out
+
+This accepted ADR is amended by [#766](https://github.com/lanshengzhi/cpp-coding-harness/issues/766)
+after [#758](https://github.com/lanshengzhi/cpp-coding-harness/issues/758) through
+[#765](https://github.com/lanshengzhi/cpp-coding-harness/issues/765) landed. The following
+statements are the current decisions; provisional observations and alternatives below are
+historical where this amendment says otherwise.
+
+- **OpenRouter OAuth credential semantics:** OpenRouter reuses the existing
+  `OAuthCredential` storage shape because the login hook is OAuth-shaped, but the exchanged value
+  is resolved at request time as `ModelAuth.api_key`. It has no refresh-token or request-time
+  refresh exchange, and this record makes no subscription or entitlement claim.
+- **Responses compat reconciliation:** the shipped typed `OpenAIResponsesCompat` carries the
+  snapshot/code fields `sessionAffinityFormat`, `supportsStrictMode`, and
+  `supportsExplicitPromptCacheMode`. `supportsStrictMode` is consumed for the supported
+  ordinary-tool `strict:false` wire behavior. `supportsMaxOutputTokens` is not represented in the
+  current shipped surface.
+- **Round boundary:** Kimi OAuth removal and its required downstream integration cleanup landed
+  in [#763](https://github.com/lanshengzhi/cpp-coding-harness/issues/763) in this round. Other
+  downstream work remains downstream: TUI/session integration and strict-schema generation.
+- **Strictness scope:** ordinary tools carrying `strict:false` are supported wire behavior;
+  strict-schema generation, grammar-constrained tools, and tool search remain Deferred.
+- **Kimi effort aliases:** the vendor-documented aliases are accepted/normalized and are not
+  rejection cases (`ultra`/`max`/`xhigh` → `max`, `high`/`medium` → `high`, and
+  `low`/`minimum`/`light` → `low`). Rejection evidence must use a genuinely undocumented
+  effort value. `kimi-for-coding-highspeed` has no effort knob, so thinking stays enabled without
+  sending an effort parameter.
+
+The exact upstream revision, generation timestamp, generator command, artifact hashes, and the
+separate vendor Kimi oracle are recorded in
+[`fixtures/pi-ai/README.md`](../../fixtures/pi-ai/README.md) and
+[`fixtures/pi-ai/models/provenance.json`](../../fixtures/pi-ai/models/provenance.json).
 
 ## One built-in provider is a mirror of the same-id pi built-in
 
 Every built-in provider `cch_ai` ships must mirror the pi built-in of the same id: same id, same `baseUrl`, the same set of APIs, and the same authentication methods. A provider whose `baseUrl` or API family differs from its pi namesake is not an aligned subset of it; it is a separate capability wearing the same name, and its "semantic parity" has no oracle to be checked against.
 
-This is measured, not assumed. pi's `deepseek` and `openrouter` providers have used `openai-completions` since the previous baseline, and `opencode-go` has always mixed three API families; the C++ entries for all three were synthesized from the user-`models.json` fixture (`fixtures/pi-ai/models/models.json`, a config-only `deepseek` provider using `openai-responses`) and promoted to built-ins. The consequence is a table of drift that cannot be closed by editing catalog data: `deepseek`, `openrouter`, and `opencode-go` are wrong in their API family, and `openai` is wrong in both its `baseUrl` (`.../v1/responses` instead of `.../v1`) and its model count (4 against pi's 38).
+This is measured, not assumed. At the time #757 was written, pi's `deepseek` and `openrouter`
+providers had used `openai-completions` since the previous baseline, and `opencode-go` had
+already mixed three API families; the C++ entries for all three were synthesized from the
+user-`models.json` fixture (`fixtures/pi-ai/models/models.json`, a config-only `deepseek` provider
+using `openai-responses`) and promoted to built-ins. The resulting drift table — including
+`openai` at 4 models against pi's then-observed 38 — is historical, not a current acceptance
+target. The verified T0 snapshot now contains DeepSeek 2, upstream Kimi 4, OpenAI 39, Codex 6,
+OpenRouter 378, and OpenCode Go 30 models; its hashes and model sets are authoritative.
 
 Two consequences follow. The private adapter count rises from three to four, so **the exact three-adapter surface of ADR 0033 is replaced by four adapters** — `openai-codex-responses`, `openai-responses`, `anthropic-messages`, and `openai-completions` — while the "no registry, no placeholder, registration stays private" rule of ADR 0033 stands. And the supported/Deferred criterion of ADR 0033 is applied to the newest pi surface: a compat field is Supported when a shipped catalog populates it and a scoped consumer can reach it, and Deferred when only unscoped producers can.
 
@@ -22,31 +67,74 @@ The reason is a vendor contract, not a preference. Kimi Code's documentation dir
 
 **Consequences of the exception.** Kimi's catalog oracle is the vendor documentation rather than a pi data file, so its values are pinned by a cited fixture with each divergence from pi's catalog recorded — `kimi-for-coding`'s context window is `1048576` per the vendor's K2.8 Preview rollout against pi's `262144`, and the effort-capable models keep the vendor's three real levels (`low`/`high`/`max`, `off` unsupported). The `anthropic-messages` adapter's only remaining consumer is `opencode-go`'s four Anthropic-family models. Treating the exception as recorded rather than silent is what keeps the mirror rule above falsifiable.
 
-**Every Kimi reasoning map is fully populated, and the no-knob model declares no usable effort level.** Reasoning-effort resolution consults the model's map only when the requested level's key is *present*; a missing key falls through to the level's own name. The vendor rejects an unknown effort value outright, so upstream's sparse maps — and its outright absent map on `kimi-for-coding-highspeed` — would put a rejected value on the wire. The three effort-capable models therefore carry all seven keys with the three real levels mapped and the rest explicitly unsupported, and `kimi-for-coding-highspeed`, which the vendor documents as thinking-always-on with no effort control, maps every level to unsupported so that resolution yields no effort parameter at all. A model with reasoning enabled and no selectable level is deliberate here, not an oversight.
+**Every Kimi reasoning map is fully populated, and the no-knob model declares no usable effort level.**
+Reasoning-effort resolution consults the model's map only when the requested level's key is
+*present*; a missing key falls through to the level's own name. The vendor documents aliases
+(`ultra`/`max`/`xhigh` → `max`, `high`/`medium` → `high`, and `low`/`minimum`/`light` → `low`)
+as accepted and normalized, so they are not rejection cases. Only a genuinely undocumented
+effort value is a rejection case. The three effort-capable models therefore carry all seven keys
+with the three real levels mapped and the rest explicitly unsupported, and
+`kimi-for-coding-highspeed`, which the vendor documents as thinking-always-on with no effort
+control, maps every level to unsupported so that resolution yields no effort parameter at all. A
+model with reasoning enabled and no selectable level is deliberate here, not an oversight.
 
 ## The bundled catalog becomes generated output
 
-A faithful mirror of the six providers is 343 models and roughly 141 KB of data, 110 KB of it `openrouter` alone. Hand-transcribing that into `DefaultModelsJson.hpp` guarantees drift, and the previous 466-line header already drifted on two providers. The catalog is therefore generated: `src/ai/DefaultModelsJson.cpp` is produced by a committed script from the vendored pinned pi data, with a regeneration test asserting byte-identical output. The bundled, offline catalog of [ADR 0058](0058-fix-the-product-state-root-under-xdg-in-pi-json-shapes.md) is unchanged in kind — compile-time data parsed by the existing support JSON reader — and only its authorship and storage unit change.
+A faithful mirror of the six providers is the verified T0 snapshot of 459 provider model records
+(DeepSeek 2, upstream Kimi 4, OpenAI 39, Codex 6, OpenRouter 378, and OpenCode Go 30). The
+exact artifact hashes and model sets are recorded in the fixture provenance. Hand-transcribing
+that snapshot into `DefaultModelsJson.hpp` guarantees drift, as the historical 466-line header
+already did for two providers. The catalog is therefore generated:
+`src/ai/DefaultModelsJson.cpp` is produced by a committed script from the vendored pinned pi data,
+with a regeneration test asserting byte-identical output. The bundled, offline catalog of [ADR
+0058](0058-fix-the-product-state-root-under-xdg-in-pi-json-shapes.md) is unchanged in kind —
+compile-time data parsed by the existing support JSON reader — and only its authorship and storage
+unit change.
 
 ## Considered options
 
 - **Keep the six built-ins but only refresh their model data**: rejected — three of them are wrong in API family, not merely stale, so refreshing ids would leave providers whose observable wire behavior differs from their pi namesake while claiming its name.
 - **Drop the three synthesized providers and keep `openai-codex`, `kimi-coding`, `openai`** (no fourth adapter): rejected on measured usage — `deepseek`, `openrouter`, and `opencode-go` are in daily use, so the "simplification" would remove working providers rather than remove complexity.
-- **Narrow to `openai-responses` only**: measured at roughly 15% of `src/ai` (the Anthropic adapter, Kimi OAuth, and their shared branches) while abandoning the Kimi and OpenCode Go paths; the complexity of `cch_ai` is concentrated in the Owner Interface contract, the transports, the Responses-family payload/event processing, and OAuth, none of which the cut touches.
+- **Narrow to `openai-responses` only**: measured at roughly 15% of `src/ai` (the Anthropic
+  adapter, the then-scoped Kimi OAuth branch, and their shared branches) while abandoning the
+  Kimi and OpenCode Go paths; the complexity of `cch_ai` is concentrated in the Owner Interface
+  contract, the transports, the Responses-family payload/event processing, and OAuth, none of
+  which the cut touches.
 - **Keep the hardcoded legacy Kimi CLI client identifier**: rejected — the vendor documents it as a violation, and it makes our requests claim an identity that is not ours.
-- **Carry `supportsStrictMode` without implementing strict tool schema conversion**: rejected — the field is wire-visible (`strict` on tool definitions) and its producer is a tool declaration in `cch_agent` that does not exist yet, so the field would be inert (ADR 0019).
+- **Carry an inert `supportsStrictMode` field**: rejected — the landed reconciliation instead
+  carries the catalog field and emits ordinary-tool `strict:false`; strict-schema generation,
+  grammar-constrained tools, and tool search remain Deferred because their downstream producers
+  are not in this scope (ADR 0019).
 - **Reintroduce a generic compat JSON bag**: rejected, unchanged from ADR 0033 — compat stays typed per API, and only the fields a shipped catalog populates are representable.
 
 ## Consequences
 
 - **Four private adapters.** `openai-completions` is selected only by a Model whose `api` is `openai-completions`; its typed compat is limited to `supportsStore`, `supportsDeveloperRole`, `maxTokensField`, `requiresReasoningContentOnAssistantMessages`, `thinkingFormat` (`deepseek`, `openrouter`, `qwen`), `cacheControlFormat` (`anthropic`), `supportsLongCacheRetention`, and `supportsReasoningEffort`. The remaining pi `thinkingFormat` values and compat fields are unrepresentable rather than defaulted.
-- **Typed compat gains a second API.** `OpenAICompletionsCompat` is new; `OpenAIResponsesCompat` is introduced with only the wire-affecting fields a shipped catalog populates (`supportsMaxOutputTokens`, `supportsExplicitPromptCacheMode`). `AnthropicMessagesCompat` keeps `forceAdaptiveThinking`/`allowEmptySignature` and gains the fields the `opencode-go` catalog populates.
-- **Deferred, with no placeholders**: strict/grammar tool schemas and tool search, mid-conversation system messages (`SystemMessage.sections`/`toolsAdded`/`toolsRemoved`), dynamic catalog refresh (`refreshModels`/`filterModels`/`ModelsStore` — none of the six providers declares one), `inputLimits`/image preprocessing, `samplingParams`, `toolChoice`, `metadata`, `onPayload`/`onResponse`, deferred responses, `promptCache`, telemetry, images API, and every provider family outside the six.
-- **`openrouter` gains OAuth** alongside its API key, matching pi: a PKCE flow whose exchange yields a permanent API key, so the credential is api-key-shaped and has no refresh path.
+- **Typed compat gains a second API.** `OpenAICompletionsCompat` is new; the shipped
+  `OpenAIResponsesCompat` carries the snapshot/code fields `sessionAffinityFormat`,
+  `supportsStrictMode`, and `supportsExplicitPromptCacheMode`. The ordinary-tool consumer emits
+  `strict:false` when the catalog advertises strict support. `supportsMaxOutputTokens` is not
+  represented in the current surface. `AnthropicMessagesCompat` keeps
+  `forceAdaptiveThinking`/`allowEmptySignature` and carries the fields the `opencode-go` catalog
+  populates.
+- **Deferred, with no placeholders**: strict-schema generation, grammar-constrained tool
+  schemas, tool search, mid-conversation system messages
+  (`SystemMessage.sections`/`toolsAdded`/`toolsRemoved`), dynamic catalog refresh
+  (`refreshModels`/`filterModels`/`ModelsStore` — none of the six providers declares one),
+  `inputLimits`/image preprocessing, `samplingParams`, `toolChoice`, `metadata`,
+  `onPayload`/`onResponse`, deferred responses, `promptCache`, telemetry, images API, and every
+  provider family outside the six.
+- **`openrouter` gains OAuth** alongside its API key, matching pi's PKCE flow. The exchanged API
+  key is stored using the existing `OAuthCredential` shape and resolved as an API key at request
+  time; there is no refresh-token or request-time refresh-exchange semantics, and no subscription
+  or entitlement semantics.
 - **Client identity is the harness's own.** No catalog or adapter sends another tool's identifier; the vendor-documented prohibition is the reason the Kimi catalog's `User-Agent` value is deleted rather than updated.
 - **Catalog parity is a tested property.** pi's six provider data files are vendored verbatim under `fixtures/pi-ai/models/providers/`, sha256-pinned, and one exhaustive comparison test asserts every field `Model` carries for every built-in model. A drifted catalog fails; the hand-written shard expectations it replaces could not.
 - **The baseline is reproducible.** `fixtures/pi-ai/README.md` and this ADR name the exact commit `1a584a7a5`, so "latest" is never implicit.
-- **Downstream, next round**: the `cch_agent`-side tool declarations (strict sampling) remain outside this catalog decision. Kimi's login presentation now uses the shared API-key path; no provider-specific OAuth surface is required.
+- **Downstream, next round**: the Kimi OAuth removal's required integration cleanup is part of
+  #763 and this round. TUI/session integration and strict-schema generation remain downstream.
+  Kimi's login presentation now uses the shared API-key path; no provider-specific OAuth surface
+  is required.
 
 ## References
 
