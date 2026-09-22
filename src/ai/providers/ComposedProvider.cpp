@@ -1,6 +1,7 @@
 #include "ComposedProvider.hpp"
 
 #include "ai/ModelStreamBridge.hpp"
+#include "ai/Headers.hpp"
 #include "ai/api/AnthropicMessagesAdapter.hpp"
 #include "ai/api/OpenAICodexResponsesAdapter.hpp"
 #include "ai/api/OpenAICompletionsAdapter.hpp"
@@ -64,14 +65,7 @@ public:
                         options = std::move(options)](ai::AssistantEventSink sink) mutable
                         -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                     if (self->provider_id_ == "opencode-go" && options.session_id && !options.session_id->empty()) {
-                        bool has_affinity_header = false;
-                        for (const auto& [name, _] : options.auth.headers) {
-                            if (name == "x-opencode-session") {
-                                has_affinity_header = true;
-                                break;
-                            }
-                        }
-                        if (!has_affinity_header) {
+                        if (!find_header(options.auth.headers, "x-opencode-session")) {
                             options.auth.headers.insert_or_assign("x-opencode-session", *options.session_id);
                         }
                     }

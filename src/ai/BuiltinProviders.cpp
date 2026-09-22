@@ -183,6 +183,18 @@ namespace {
     if (api == "openai-responses") {
         OpenAIResponsesCompat compat;
         bool populated = false;
+        if (const auto value = string_member(*compat_obj, "sessionAffinityFormat"); value.has_value()) {
+            if (*value == "openai") {
+                compat.session_affinity_format = OpenAIResponsesSessionAffinityFormat::OpenAI;
+                populated = true;
+            } else if (*value == "openai-nosession") {
+                compat.session_affinity_format = OpenAIResponsesSessionAffinityFormat::OpenAINoSession;
+                populated = true;
+            } else if (*value == "openrouter") {
+                compat.session_affinity_format = OpenAIResponsesSessionAffinityFormat::OpenRouter;
+                populated = true;
+            }
+        }
         if (const auto value = bool_member(*compat_obj, "supportsStrictMode"); value.has_value()) {
             compat.supports_strict_mode = *value;
             populated = true;
@@ -191,9 +203,8 @@ namespace {
             compat.supports_explicit_prompt_cache_mode = *value;
             populated = true;
         }
-        // The pinned snapshot has sessionAffinityFormat only for OpenCode Go,
-        // and no supportsMaxOutputTokens field. Those conflicting candidates
-        // stay out of the value contract until a scoped consumer exists.
+        // The pinned snapshot has no supportsMaxOutputTokens field. It stays
+        // out of the value contract until a scoped consumer exists.
         if (populated) {
             return ModelCompatVariant{std::move(compat)};
         }

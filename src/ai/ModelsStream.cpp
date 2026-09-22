@@ -152,14 +152,21 @@ struct PreparedProviderRequest {
 };
 
 /// Per-API session headers for cache reuse: Codex clamps the prompt cache
-/// key and aliases it as session-id; openai-responses passes it through.
-void apply_session_headers(RequestHeaders& headers, std::string_view api, const std::string& session_id) {
-    if (api == "openai-codex-responses") {
+/// key and aliases it as session-id; openai-responses may suppress its
+/// session_id affinity field while retaining x-client-request-id.
+void apply_session_headers(RequestHeaders& headers, const Model& model, const std::string& session_id) {
+    if (model.api == "openai-codex-responses") {
         const auto codex_session_id = detail::clamp_openai_prompt_cache_key(session_id);
         set_header(headers, "session-id", codex_session_id);
         set_header(headers, "x-client-request-id", codex_session_id);
-    } else if (api == "openai-responses") {
-        set_header(headers, "session_id", session_id);
+    } else if (model.api == "openai-responses") {
+        const auto* compat = model.compat ? std::get_if<OpenAIResponsesCompat>(&*model.compat) : nullptr;
+        const bool suppress_session_id =
+                compat != nullptr &&
+                compat->session_affinity_format == OpenAIResponsesSessionAffinityFormat::OpenAINoSession;
+        if (!suppress_session_id) {
+            set_header(headers, "session_id", session_id);
+        }
         set_header(headers, "x-client-request-id", session_id);
     }
 }
@@ -180,7 +187,7 @@ void apply_session_headers(RequestHeaders& headers, std::string_view api, const 
 
     auto request_headers = request_headers_from_auth(auth_result.auth);
     if (request_session_id) {
-        apply_session_headers(request_headers, model.api, *request_session_id);
+        apply_session_headers(request_headers, model, *request_session_id);
     }
     merge_headers(request_headers, options.headers);
     auto transformed_headers = transform_request_headers(std::move(request_headers), options.transform_headers);

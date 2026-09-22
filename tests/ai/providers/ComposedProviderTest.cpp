@@ -1,7 +1,9 @@
 #include <cch/ai/Models.hpp>
+#include "ai/Headers.hpp"
 
 #include "ai/providers/ComposedProvider.hpp"
 #include "support/AsyncResultBridge.hpp"
+#include "support/AiScenarioKit.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
 
@@ -62,8 +64,8 @@ using tests::TransportAttempt;
 }
 
 [[nodiscard]] std::optional<std::string> affinity_header(const ai::providers::StreamRequest& request) {
-    const auto it = request.headers.find("x-opencode-session");
-    return it == request.headers.end() ? std::nullopt : std::optional<std::string>{it->second};
+    const auto value = ai::find_header(request.headers, "x-opencode-session");
+    return value ? std::optional<std::string>{std::string{*value}} : std::nullopt;
 }
 
 } // namespace
@@ -87,7 +89,7 @@ TEST_CASE("an affinity header the caller already set is not replaced", "[ai][pro
     options.max_tokens = 16;
     options.auth.api_key = std::string{"test-key"};
     options.session_id = std::string{"session-abc"};
-    options.auth.headers["x-opencode-session"] = "caller-value";
+    options.auth.headers["X-OpenCode-Session"] = "caller-value";
 
     const auto request = run_stream("opencode-go", std::move(options), transport);
 
@@ -116,4 +118,88 @@ TEST_CASE("other providers never receive the affinity header", "[ai][providers][
     const auto request = run_stream("openai", std::move(options), transport);
 
     CHECK_FALSE(affinity_header(request).has_value());
+}
+
+TEST_CASE("OpenCode Go no-session affinity keeps API and provider headers on the wire",
+        "[ai][providers][opencode-go][issue762][spec]") {
+    ai::Model model;
+    for (const auto& definition : ai::builtin_provider_definitions()) {
+        if (definition.id != "opencode-go") {
+            continue;
+        }
+        for (const auto& candidate : definition.models) {
+            if (candidate.id == "gpt-5.6-luna") {
+                model = candidate;
+            }
+        }
+    }
+    REQUIRE_FALSE(model.id.empty());
+
+    auto transport = std::make_shared<ScriptedTransport>();
+    transport->attempts.push_back(TransportAttempt{
+            .head = {.status_code = 200, .headers = {}},
+            .chunks =
+                    {
+                            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_opencode\","
+                            "\"status\":\"completed\"}}\n\n",
+                    },
+    });
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    options.api_key = "test-key";
+    options.max_tokens = 16;
+    options.session_id = "session-abc";
+    const auto run = tests::run_models(*models, model, {}, std::move(options));
+
+    REQUIRE(run.result);
+    REQUIRE(transport->requests.size() == 1);
+    const auto& request = transport->requests.front();
+    CHECK_FALSE(ai::find_header(request.headers, "session_id").has_value());
+    REQUIRE(ai::find_header(request.headers, "x-client-request-id").has_value());
+    CHECK(*ai::find_header(request.headers, "x-client-request-id") == "session-abc");
+    REQUIRE(affinity_header(request).has_value());
+    CHECK(*affinity_header(request) == "session-abc");
+}
+
+TEST_CASE("OpenCode Go preserves a model affinity header regardless of its casing",
+        "[ai][providers][opencode-go][issue762][spec]") {
+    ai::Model model;
+    for (const auto& definition : ai::builtin_provider_definitions()) {
+        if (definition.id != "opencode-go") {
+            continue;
+        }
+        for (const auto& candidate : definition.models) {
+            if (candidate.id == "gpt-5.6-luna") {
+                model = candidate;
+            }
+        }
+    }
+    REQUIRE_FALSE(model.id.empty());
+    model.headers = ai::ModelHeaders{{"X-OpenCode-Session", "model-value"}};
+
+    auto transport = std::make_shared<ScriptedTransport>();
+    transport->attempts.push_back(TransportAttempt{
+            .head = {.status_code = 200, .headers = {}},
+            .chunks =
+                    {
+                            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_opencode\","
+                            "\"status\":\"completed\"}}\n\n",
+                    },
+    });
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    options.api_key = "test-key";
+    options.max_tokens = 16;
+    options.session_id = "session-abc";
+    const auto run = tests::run_models(*models, model, {}, std::move(options));
+
+    REQUIRE(run.result);
+    REQUIRE(transport->requests.size() == 1);
+    const auto& request = transport->requests.front();
+    REQUIRE(affinity_header(request).has_value());
+    CHECK(*affinity_header(request) == "model-value");
 }

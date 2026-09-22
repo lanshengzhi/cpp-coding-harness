@@ -43,6 +43,7 @@ struct ModelCost {
 enum class OpenAICompletionsMaxTokensField { MaxCompletionTokens, MaxTokens };
 enum class OpenAICompletionsThinkingFormat { OpenAI, OpenRouter, DeepSeek, Qwen };
 enum class OpenAICompletionsCacheControlFormat { Anthropic };
+enum class OpenAIResponsesSessionAffinityFormat { OpenAI, OpenAINoSession, OpenRouter };
 
 /// Typed compatibility values populated by the shipped openai-completions
 /// catalog. An absent member keeps the adapter's scoped upstream detection.
@@ -61,8 +62,9 @@ struct OpenAICompletionsCompat {
 /// Typed compatibility values populated by the shipped openai-responses
 /// catalog and consumed by the current Responses payload seam. The pinned
 /// snapshot has `sessionAffinityFormat` only on OpenCode Go and has no
-/// `supportsMaxOutputTokens`; neither stale/conflicting field is represented.
+/// `supportsMaxOutputTokens`; the latter remains unrepresented.
 struct OpenAIResponsesCompat {
+    std::optional<OpenAIResponsesSessionAffinityFormat> session_affinity_format{std::nullopt};
     std::optional<bool> supports_strict_mode{std::nullopt};
     std::optional<bool> supports_explicit_prompt_cache_mode{std::nullopt};
 };
