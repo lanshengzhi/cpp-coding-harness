@@ -902,7 +902,7 @@ TEST_CASE("Models prepares Codex session affinity headers", "[ai][models][issue3
     CHECK(provider->seen_options.front().session_id == std::string(65, 's'));
 }
 
-TEST_CASE("Models accepts Kimi header authentication and suppresses none-retention affinity",
+TEST_CASE("Models accepts header authentication and suppresses none-retention affinity",
         "[ai][models][auth][issue339][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
@@ -921,10 +921,10 @@ TEST_CASE("Models accepts Kimi header authentication and suppresses none-retenti
     };
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>(
-        "kimi-coding", ai::ProviderAuth{.api_key = std::move(api_key)});
+        "provider", ai::ProviderAuth{.api_key = std::move(api_key)});
     REQUIRE(install_provider(models, provider));
     auto model = tests::make_model(
-        "kimi-for-coding", "kimi-coding", "anthropic-messages");
+        "generic-model", "provider", "openai-completions");
     ai::SimpleStreamOptions options;
     options.session_id = "ignored-session";
     options.cache_retention = ai::CacheRetention::None;

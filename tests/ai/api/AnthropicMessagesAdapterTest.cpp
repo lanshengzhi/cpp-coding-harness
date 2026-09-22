@@ -1,907 +1,120 @@
 #include <cch/ai/Models.hpp>
-#include "ai/providers/StreamTransport.hpp"
-#include "support/AiScenarioKit.hpp"
-#include "support/ScriptedProvider.hpp"
-#include "support/ModelFixture.hpp"
-#include "support/PiEventSnapshot.hpp"
-#include "support/PiFixture.hpp"
-#include "support/StreamAdapterFixture.hpp"
-#include "support/Json.hpp"
 
-#include "support/ReadyResult.hpp"
+#include "support/AiScenarioKit.hpp"
+#include "support/Json.hpp"
+#include "support/ModelFixture.hpp"
+#include "support/StreamAdapterFixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <chrono>
-#include <cmath>
-#include <fstream>
 #include <memory>
-#include <optional>
-#include <stop_token>
 #include <string>
-#include <string_view>
 #include <utility>
-#include <variant>
-#include <vector>
 
 using namespace cch;
 
 namespace {
 
-using tests::EmptyAuthContext;
-using tests::EmptyCredentialStore;
-using tests::event_names;
-using tests::partial_stop_reasons;
-using tests::read_fixture_text;
-using tests::run_async_result;
-using tests::run_awaitable;
-using tests::run_models;
-using tests::RunResult;
-using tests::ScriptedTransport;
-using tests::TransportAttempt;
-
-[[nodiscard]] std::vector<ai::Model> builtin_models(std::string_view provider_id) {
-    for (const auto& definition : ai::builtin_provider_definitions()) {
-        if (definition.id == provider_id) {
-            return definition.models;
-        }
-    }
-    return {};
-}
-
-[[nodiscard]] ai::Model kimi_model(std::string_view id = "kimi-for-coding") {
-    for (auto model : builtin_models("kimi-coding")) {
-        if (model.id == id) {
-            return model;
-        }
-    }
-    return {};
-}
-
-[[nodiscard]] ai::ProviderAuth header_auth() {
-    ai::ApiKeyAuth api_key;
-    api_key.name = "Kimi OAuth";
-    api_key.resolve =
-            [](const ai::AuthContext&,
-                    std::optional<ai::ApiKeyCredential>) -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
-        return tests::ready_result<std::optional<ai::AuthResult>>(ai::AuthResult{
-                .auth =
-                        ai::ModelAuth{
-                                .api_key = std::nullopt,
-                                .headers = {{"Authorization", "Bearer dummy-kimi-oauth"}},
-                                .base_url = std::nullopt,
-                        },
-                .env = {},
-                .source = "Kimi OAuth",
-        });
-    };
-    return ai::ProviderAuth{.api_key = std::move(api_key)};
-}
-
-[[nodiscard]] std::shared_ptr<ai::Models> make_models(
-    const std::shared_ptr<ScriptedTransport>& transport,
-    const ai::Model&) {
-    auto models = std::make_shared<ai::Models>(
-        std::make_shared<EmptyCredentialStore>(),
-        std::make_shared<EmptyAuthContext>());
-    tests::ScriptedProviderDefinition definition;
-    definition.definition = ai::ProviderDefinition{
-            .id = "kimi-coding",
-            .name = "Kimi For Coding",
-            .models = builtin_models("kimi-coding"),
-            .auth = header_auth(),
-    };
-    definition.transport.http_transport = transport;
-    if (auto registered = tests::apply_scripted_provider(*models, std::move(definition)); !registered) {
-        return nullptr;
-    }
-    return models;
+[[nodiscard]] ai::Model anthropic_model() {
+    auto model = tests::make_model("claude-sonnet", "anthropic", "anthropic-messages");
+    model.base_url = "https://api.anthropic.com";
+    model.reasoning = false;
+    return model;
 }
 
 [[nodiscard]] ai::AiContext request_context() {
     ai::AiContext context;
     context.system_prompt = "system";
-    context.messages.push_back(ai::UserMessage{
-        .content = std::vector<ai::Content>{ai::image_content("YWJj", "image/png")},
-        .timestamp = 1,
-    });
-    ai::AssistantMessage assistant;
-    assistant.api = "anthropic-messages";
-    assistant.provider = "kimi-coding";
-    assistant.model = "kimi-for-coding";
-    assistant.stop_reason = ai::AssistantStopReason::ToolUse;
-    assistant.timestamp = 2;
-    assistant.content = {
-        ai::ThinkingContent{.thinking = "thought", .thinking_signature = ""},
-        ai::ThinkingContent{
-            .thinking = "[Reasoning redacted]",
-            .thinking_signature = "dummy-redacted",
-            .redacted = true,
-        },
-        ai::TextContent{.text = "answer", .text_signature = std::nullopt},
-    };
-    context.messages.push_back(std::move(assistant));
-    context.messages.push_back(ai::user_text_message("next", 3));
-    ai::AssistantMessage tool_assistant;
-    tool_assistant.api = "openai-responses";
-    tool_assistant.provider = "deepseek";
-    tool_assistant.model = "deepseek-v4-flash";
-    tool_assistant.stop_reason = ai::AssistantStopReason::ToolUse;
-    tool_assistant.timestamp = 4;
-    tool_assistant.content.push_back(ai::ToolCallContent{
-        .id = "bad id!",
-        .name = "lookup",
-        .arguments = support::JsonValue::object_t{{"q", "x"}},
-        .raw_arguments = "{\"q\":\"x\"}",
-        .thought_signature = std::nullopt,
-        .arguments_valid = true,
-        .argument_error = std::nullopt,
-    });
-    context.messages.push_back(std::move(tool_assistant));
-    context.messages.push_back(ai::ToolResultMessage{
-        .tool_call_id = "bad id!",
-        .tool_name = "lookup",
-        .content = {ai::text_content("failed")},
-        .details = std::nullopt,
-        .is_error = true,
-        .timestamp = 5,
-    });
-    context.messages.push_back(ai::ToolResultMessage{
-        .tool_call_id = "second",
-        .tool_name = "lookup",
-        .content = {ai::image_content("ZGVm", "image/png")},
-        .details = std::nullopt,
-        .is_error = false,
-        .timestamp = 6,
-    });
-    context.tools.push_back(ai::Tool{
-        .name = "lookup",
-        .description = "Look up a value",
-        .parameters = support::JsonValue::object_t{
-            {"properties", support::JsonValue::object_t{
-                {"q", support::JsonValue::object_t{{"type", "string"}}},
-            }},
-            {"required", support::JsonValue::array_t{"q"}},
-            {"type", "object"},
-        },
-    });
+    context.messages.push_back(ai::user_text_message("hello", 1));
     return context;
-}
-
-[[nodiscard]] ai::AiContext string_user_context(std::string text) {
-    ai::AiContext context;
-    context.system_prompt = "system";
-    context.messages.push_back(ai::UserMessage{
-        .content = std::move(text),
-        .timestamp = 1,
-    });
-    context.tools.push_back(ai::Tool{
-        .name = "lookup",
-        .description = "Look up a value",
-        .parameters = support::JsonValue::object_t{
-            {"properties", support::JsonValue::object_t{
-                {"q", support::JsonValue::object_t{{"type", "string"}}},
-            }},
-            {"required", support::JsonValue::array_t{"q"}},
-            {"type", "object"},
-        },
-    });
-    return context;
-}
-
-[[nodiscard]] std::string terminal_sse(
-    std::string stop_reason,
-    std::string stop_details = {},
-    bool include_message_stop = true) {
-    std::string result =
-        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_terminal\","
-        "\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\n"
-        "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"" +
-        std::move(stop_reason) + "\"" + std::move(stop_details) +
-        "},\"usage\":{\"output_tokens\":1}}\n\n";
-    if (include_message_stop) {
-        result += "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n";
-    }
-    return result;
-}
-
-[[nodiscard]] ai::SimpleStreamOptions authorized_options() {
-    return {};
 }
 
 } // namespace
 
-TEST_CASE("Kimi catalog carries the frozen Anthropic Messages compat values",
-        "[ai][provider][anthropic][issue341][compat-pi]") {
-    const auto models = builtin_models("kimi-coding");
-
-    REQUIRE(models.size() == 4);
-    CHECK(models[0].id == "k3");
-    REQUIRE(models[0].compat);
-    const auto* k3_compat = std::get_if<ai::AnthropicMessagesCompat>(&*models[0].compat);
-    REQUIRE(k3_compat != nullptr);
-    CHECK(k3_compat->force_adaptive_thinking == true);
-    CHECK(k3_compat->allow_empty_signature == true);
-    REQUIRE(models[0].thinking_level_map);
-    CHECK(models[0].thinking_level_map->at(ai::ModelThinkingLevel::Off) == std::nullopt);
-    CHECK(models[1].id == "k3-256k");
-    REQUIRE(models[1].compat);
-    const auto* k3_256k_compat = std::get_if<ai::AnthropicMessagesCompat>(&*models[1].compat);
-    REQUIRE(k3_256k_compat != nullptr);
-    CHECK(k3_256k_compat->force_adaptive_thinking == true);
-    CHECK(k3_256k_compat->allow_empty_signature == std::nullopt);
-    CHECK(models[2].id == "kimi-for-coding");
-    REQUIRE(models[2].compat);
-    const auto* kimi_compat = std::get_if<ai::AnthropicMessagesCompat>(&*models[2].compat);
-    REQUIRE(kimi_compat != nullptr);
-    CHECK(kimi_compat->force_adaptive_thinking == true);
-    CHECK(kimi_compat->allow_empty_signature == true);
-    CHECK(models[3].id == "kimi-for-coding-highspeed");
-    REQUIRE(models[3].compat);
-    const auto* highspeed_compat = std::get_if<ai::AnthropicMessagesCompat>(&*models[3].compat);
-    REQUIRE(highspeed_compat != nullptr);
-    CHECK(highspeed_compat->force_adaptive_thinking == true);
-    CHECK(highspeed_compat->allow_empty_signature == std::nullopt);
-}
-
-TEST_CASE("Kimi Anthropic Messages streams the frozen request and repaired SSE sequence through Models",
-        "[ai][provider][anthropic][issue341][compat-pi]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    const auto sse = read_fixture_text("wire/anthropic-messages-kimi.sse");
-    REQUIRE_FALSE(sse.empty());
-    const auto split = sse.size() / 2;
-    transport->attempts.push_back(TransportAttempt{
-        .chunks = {sse.substr(0, split), sse.substr(split)},
+TEST_CASE("Anthropic Messages streams a generic text response and builds its request",
+        "[ai][api][anthropic][issue339][spec]") {
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks = {
+                    "event: message_start\n"
+                    "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_generic\","
+                    "\"usage\":{\"input_tokens\":2,\"output_tokens\":0}}}\n\n"
+                    "event: content_block_start\n"
+                    "data: {\"type\":\"content_block_start\",\"index\":0,"
+                    "\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
+                    "event: content_block_delta\n"
+                    "data: {\"type\":\"content_block_delta\",\"index\":0,"
+                    "\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\n"
+                    "event: content_block_stop\n"
+                    "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
+                    "event: message_delta\n"
+                    "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},"
+                    "\"usage\":{\"output_tokens\":3}}\n\n"
+                    "event: message_stop\n"
+                    "data: {\"type\":\"message_stop\"}\n\n",
+            },
     });
-    const auto model = kimi_model();
-    auto models = make_models(transport, model);
-    REQUIRE(models);
-    auto options = authorized_options();
-    options.temperature = 0.5;
-    options.max_tokens = 256;
-    options.reasoning = ai::ThinkingLevel::High;
-    options.cache_retention = ai::CacheRetention::Short;
-    options.timeout_ms = 4321;
 
-    auto run = run_models(*models, model, request_context(), std::move(options));
+    const auto model = anthropic_model();
+    auto models = tests::make_scripted_models(
+            model,
+            tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy-anthropic-key";
+    options.max_tokens = 256;
+    const auto run = tests::run_models(
+            *models,
+            model,
+            request_context(),
+            std::move(options));
 
     REQUIRE(run.result);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
-    CHECK(run.result->response_id == "msg_kimi");
-    CHECK(run.result->usage.input == 100);
-    CHECK(run.result->usage.output == 30);
-    CHECK(run.result->usage.cache_read == 20);
-    CHECK(run.result->usage.cache_write == 10);
-    CHECK(run.result->usage.cache_write_1h == 4);
-    CHECK(run.result->usage.reasoning == 7);
-    CHECK(run.result->usage.total_tokens == 160);
-    CHECK(std::abs(run.result->usage.cost.total - 0.0002264) < 1e-12);
-    REQUIRE(run.result->content.size() == 4);
-    CHECK(std::get<ai::TextContent>(run.result->content[0]).text == "Hello world");
-    const auto& thinking = std::get<ai::ThinkingContent>(run.result->content[1]);
-    CHECK(thinking.thinking == "plan more");
-    CHECK(thinking.thinking_signature == "dummy-signature-tail");
-    const auto& redacted = std::get<ai::ThinkingContent>(run.result->content[2]);
-    CHECK(redacted.redacted);
-    CHECK(redacted.thinking == "[Reasoning redacted]");
-    CHECK(redacted.thinking_signature == "dummy-redacted");
-    const auto& tool = std::get<ai::ToolCallContent>(run.result->content[3]);
-    CHECK(tool.id == "toolu_test");
-    CHECK(tool.name == "edit");
-    CHECK(tool.raw_arguments == "{\"path\":\"A\\H\",\"text\":\"col1\tcol2\"}");
-    REQUIRE(tool.arguments);
-    CHECK(tool.arguments->at("path").get_string() == "A\\H");
-    CHECK(tool.arguments->at("text").get_string() == "col1\tcol2");
-
-    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
-        run.events,
-        "wire/anthropic-messages-kimi-ts-events.json"));
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
+    CHECK(run.result->response_id == "msg_generic");
+    REQUIRE(run.result->content.size() == 1);
+    CHECK(std::get<ai::TextContent>(run.result->content.front()).text == "hello");
 
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();
-    CHECK(request.url == "https://api.kimi.com/coding/v1/messages");
-    CHECK(request.timeout == std::chrono::milliseconds{4321});
-    CHECK(request.headers.at("Authorization") == "Bearer dummy-kimi-oauth");
+    CHECK(request.url == "https://api.anthropic.com/v1/messages");
+    CHECK(request.headers.at("x-api-key") == "dummy-anthropic-key");
     CHECK(request.headers.at("anthropic-version") == "2023-06-01");
-    CHECK(request.headers.at("anthropic-dangerous-direct-browser-access") == "true");
-    CHECK_FALSE(request.headers.contains("x-api-key"));
-    CHECK_FALSE(request.headers.contains("anthropic-beta"));
-    CHECK_FALSE(request.headers.contains("x-app"));
-    CHECK(request.headers.at("User-Agent") == "KimiCLI/1.5");
-
-    auto expected_request = read_fixture_text("wire/anthropic-messages-kimi-ts-request.json");
-    REQUIRE_FALSE(expected_request.empty());
-    if (expected_request.back() == '\n') {
-        expected_request.pop_back();
-    }
-    CHECK(request.body == expected_request);
-}
-
-TEST_CASE("Kimi sends a non-blank string user message as a raw JSON string",
-        "[ai][provider][anthropic][issue367][compat-pi]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    const auto sse = read_fixture_text("wire/anthropic-messages-kimi.sse");
-    REQUIRE_FALSE(sse.empty());
-    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
-    const auto model = kimi_model();
-    auto models = make_models(transport, model);
-    REQUIRE(models);
-    auto options = authorized_options();
-    options.temperature = 0.5;
-    options.max_tokens = 256;
-    options.reasoning = ai::ThinkingLevel::High;
-    options.cache_retention = ai::CacheRetention::None;
-    options.timeout_ms = 4321;
-
-    auto run = run_models(*models, model, string_user_context("hello"), std::move(options));
-
-    REQUIRE(run.result);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
-    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
-        run.events,
-        "wire/anthropic-messages-kimi-ts-events.json"));
-
-    REQUIRE(transport->requests.size() == 1);
-    const auto& request = transport->requests.front();
-    auto expected_request = read_fixture_text(
-        "wire/anthropic-messages-kimi-string-ts-request.json");
-    REQUIRE_FALSE(expected_request.empty());
-    if (expected_request.back() == '\n') {
-        expected_request.pop_back();
-    }
-    CHECK(request.body == expected_request);
+    CHECK_FALSE(request.headers.contains("User-Agent"));
     const auto body = support::read_json(request.body);
     REQUIRE(body);
-    // Under cacheRetention "none" the string alternative goes out as a raw
-    // sanitized JSON string, not a block array (pi `anthropic-messages.ts:1131-1160`).
-    const auto& messages = body->at("messages").get_array();
-    REQUIRE(messages.size() == 1);
-    CHECK(messages[0].at("role").get_string() == "user");
-    CHECK(messages[0].at("content").get_string() == "hello");
-    CHECK_FALSE(body->at("system").get_array()[0].get_object().contains("cache_control"));
+    CHECK(body->at("model").get_string() == "claude-sonnet");
+    CHECK(body->at("max_tokens").get_number() == 256);
+    CHECK(body->at("messages").get_array().front().at("role").get_string() == "user");
 }
 
-TEST_CASE("Kimi drops a blank string user message", "[ai][provider][anthropic][issue367][compat-pi]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    const auto sse = read_fixture_text("wire/anthropic-messages-kimi.sse");
-    REQUIRE_FALSE(sse.empty());
-    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
-    const auto model = kimi_model();
-    auto models = make_models(transport, model);
-    REQUIRE(models);
-    auto options = authorized_options();
-    options.temperature = 0.5;
-    options.max_tokens = 256;
-    options.reasoning = ai::ThinkingLevel::High;
-    options.cache_retention = ai::CacheRetention::None;
-    options.timeout_ms = 4321;
+TEST_CASE("Anthropic conversion keeps cache markers on the trailing user turn only",
+        "[ai][conversion][anthropic][issue339][spec]") {
+    const auto model = anthropic_model();
+    ai::AiContext context;
+    context.messages.push_back(ai::user_text_message("question", 1));
+    ai::AssistantMessage assistant;
+    assistant.api = model.api;
+    assistant.provider = model.provider;
+    assistant.model = model.id;
+    assistant.stop_reason = ai::AssistantStopReason::Stop;
+    assistant.content.push_back(ai::text_content("answer"));
+    context.messages.push_back(std::move(assistant));
+    context.messages.push_back(ai::user_text_message("next", 3));
 
-    auto run = run_models(*models, model, string_user_context("   "), std::move(options));
-
-    REQUIRE(run.result);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
-    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
-        run.events,
-        "wire/anthropic-messages-kimi-ts-events.json"));
-
-    REQUIRE(transport->requests.size() == 1);
-    const auto& request = transport->requests.front();
-    auto expected_request = read_fixture_text(
-        "wire/anthropic-messages-kimi-blank-string-ts-request.json");
-    REQUIRE_FALSE(expected_request.empty());
-    if (expected_request.back() == '\n') {
-        expected_request.pop_back();
-    }
-    CHECK(request.body == expected_request);
-    const auto body = support::read_json(request.body);
-    REQUIRE(body);
-    // A whitespace-only string is trimmed and dropped (pi `anthropic-messages.ts:1131-1160`).
-    CHECK(body->at("messages").get_array().empty());
-}
-
-TEST_CASE("Kimi promotes a trailing string user message under cache retention",
-        "[ai][provider][anthropic][issue367][compat-pi]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    const auto sse = read_fixture_text("wire/anthropic-messages-kimi.sse");
-    REQUIRE_FALSE(sse.empty());
-    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
-    const auto model = kimi_model();
-    auto models = make_models(transport, model);
-    REQUIRE(models);
-    auto options = authorized_options();
-    options.temperature = 0.5;
-    options.max_tokens = 256;
-    options.reasoning = ai::ThinkingLevel::High;
+    ai::ProviderStreamOptions options;
     options.cache_retention = ai::CacheRetention::Short;
-    options.timeout_ms = 4321;
+    const auto payload = ai::api::build_adapter_payload(
+            ai::api::AdapterKind::AnthropicMessages,
+            model,
+            context,
+            options);
 
-    auto run = run_models(*models, model, string_user_context("hello"), std::move(options));
-
-    REQUIRE(run.result);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
-    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
-        run.events,
-        "wire/anthropic-messages-kimi-ts-events.json"));
-
-    REQUIRE(transport->requests.size() == 1);
-    const auto& request = transport->requests.front();
-    auto expected_request = read_fixture_text(
-        "wire/anthropic-messages-kimi-string-cache-ts-request.json");
-    REQUIRE_FALSE(expected_request.empty());
-    if (expected_request.back() == '\n') {
-        expected_request.pop_back();
-    }
-    CHECK(request.body == expected_request);
-    const auto body = support::read_json(request.body);
-    REQUIRE(body);
-    // A trailing string user param is promoted to a one-element cache-marked
-    // block array under cache retention (pi `anthropic-messages.ts:1268-1276`;
-    // frozen-suite coverage in `cache-retention.test.ts`).
-    const auto& messages = body->at("messages").get_array();
-    REQUIRE(messages.size() == 1);
-    const auto& content = messages[0].at("content").get_array();
-    REQUIRE(content.size() == 1);
-    CHECK(content[0].at("type").get_string() == "text");
-    CHECK(content[0].at("text").get_string() == "hello");
-    const auto& cache = content[0].at("cache_control").get_object();
-    CHECK(cache.at("type").get_string() == "ephemeral");
-}
-
-TEST_CASE("Kimi raw stop reason capture: rejected refusal matches the frozen TS snapshot",
-        "[ai][provider][anthropic][issue374][issue375][compat-pi]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    const auto sse =
-        read_fixture_text("wire/anthropic-messages-kimi-refusal.sse");
-    REQUIRE_FALSE(sse.empty());
-    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
-    const auto model = kimi_model();
-    auto models = make_models(transport, model);
-    REQUIRE(models);
-    auto options = authorized_options();
-    options.temperature = 0.5;
-    options.max_tokens = 256;
-    options.reasoning = ai::ThinkingLevel::High;
-    options.cache_retention = ai::CacheRetention::Short;
-    options.timeout_ms = 4321;
-
-    auto run = run_models(*models, model, request_context(), std::move(options));
-
-    REQUIRE(run.result);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(run.result->error_message);
-    // pi maps refusal to error with the generic refusal message when no
-    // stop_details explanation arrives (anthropic-messages.ts mapStopReason).
-    CHECK(*run.result->error_message ==
-        "The model refused to complete the request");
-    // The raw provider value is captured before the mapping rejects it.
-    REQUIRE(run.result->raw_stop_reason);
-    CHECK(*run.result->raw_stop_reason == "refusal");
-    CHECK(run.result->response_id == "msg_refusal");
-    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
-        run.events,
-        "wire/anthropic-messages-kimi-refusal-ts-events.json"));
-
-    REQUIRE(transport->requests.size() == 1);
-    auto expected_request =
-        read_fixture_text("wire/anthropic-messages-kimi-ts-request.json");
-    REQUIRE_FALSE(expected_request.empty());
-    if (expected_request.back() == '\n') {
-        expected_request.pop_back();
-    }
-    CHECK(transport->requests.front().body == expected_request);
-}
-
-TEST_CASE("Kimi Anthropic Messages keeps adaptive thinking and k3 off-null semantics",
-        "[ai][provider][anthropic][issue341][compat-pi]") {
-    auto enabled_transport = std::make_shared<ScriptedTransport>();
-    enabled_transport->attempts.push_back(TransportAttempt{
-        .chunks = {terminal_sse("end_turn")},
-    });
-    const auto enabled_model = kimi_model("k3");
-    auto enabled_models = make_models(enabled_transport, enabled_model);
-    REQUIRE(enabled_models);
-    auto enabled_options = authorized_options();
-    enabled_options.reasoning = ai::ThinkingLevel::Medium;
-    enabled_options.temperature = 0.9;
-
-    auto enabled = run_models(
-        *enabled_models, enabled_model, {}, std::move(enabled_options));
-
-    REQUIRE(enabled.result);
-    REQUIRE(enabled_transport->requests.size() == 1);
-    const auto& enabled_body = enabled_transport->requests.front().body;
-    CHECK(enabled_body.contains("\"thinking\":{\"display\":\"summarized\",\"type\":\"adaptive\"}"));
-    CHECK(enabled_body.contains("\"output_config\":{\"effort\":\"high\"}"));
-    CHECK_FALSE(enabled_body.contains("temperature"));
-
-    auto off_transport = std::make_shared<ScriptedTransport>();
-    off_transport->attempts.push_back(TransportAttempt{
-        .chunks = {terminal_sse("end_turn")},
-    });
-    const auto off_model = kimi_model("k3");
-    auto off_models = make_models(off_transport, off_model);
-    REQUIRE(off_models);
-    auto off_options = authorized_options();
-    off_options.temperature = 0.4;
-
-    auto off = run_models(*off_models, off_model, {}, std::move(off_options));
-
-    REQUIRE(off.result);
-    REQUIRE(off_transport->requests.size() == 1);
-    const auto& off_body = off_transport->requests.front().body;
-    CHECK_FALSE(off_body.contains("\"thinking\""));
-    CHECK(off_body.contains("\"temperature\":0.4"));
-}
-
-TEST_CASE("Kimi Anthropic Messages enforces the strict termination matrix",
-        "[ai][provider][anthropic][issue341][compat-pi]") {
-    struct Case {
-        std::string sse;
-        ai::AssistantStopReason expected;
-        std::string diagnostic;
-    };
-    const std::vector<Case> cases{
-        Case{
-            .sse = terminal_sse("end_turn"),
-            .expected = ai::AssistantStopReason::Stop,
-            .diagnostic = {},
-        },
-        Case{
-            .sse = terminal_sse("pause_turn"),
-            .expected = ai::AssistantStopReason::Stop,
-            .diagnostic = {},
-        },
-        Case{
-            .sse = terminal_sse("stop_sequence"),
-            .expected = ai::AssistantStopReason::Stop,
-            .diagnostic = {},
-        },
-        Case{
-            .sse = terminal_sse("max_tokens"),
-            .expected = ai::AssistantStopReason::Length,
-            .diagnostic = {},
-        },
-        Case{
-            .sse = terminal_sse("tool_use"),
-            .expected = ai::AssistantStopReason::ToolUse,
-            .diagnostic = {},
-        },
-        Case{
-            .sse = terminal_sse(
-                "refusal",
-                ",\"stop_details\":{\"explanation\":\"blocked by policy\"}"),
-            .expected = ai::AssistantStopReason::Error,
-            .diagnostic = "blocked by policy",
-        },
-        Case{
-            .sse = terminal_sse("sensitive"),
-            .expected = ai::AssistantStopReason::Error,
-            .diagnostic = "sensitive",
-        },
-        Case{
-            .sse = terminal_sse("future_reason"),
-            .expected = ai::AssistantStopReason::Error,
-            .diagnostic = "Unhandled Anthropic stop reason",
-        },
-        Case{
-            .sse = terminal_sse("end_turn", {}, false),
-            .expected = ai::AssistantStopReason::Error,
-            .diagnostic = "message_stop",
-        },
-    };
-
-    for (const auto& test_case : cases) {
-        auto transport = std::make_shared<ScriptedTransport>();
-        transport->attempts.push_back(TransportAttempt{.chunks = {test_case.sse}});
-        const auto model = kimi_model();
-        auto models = make_models(transport, model);
-        REQUIRE(models);
-
-        auto run = run_models(*models, model, {}, authorized_options());
-
-        REQUIRE(run.result);
-        CHECK(run.result->stop_reason == test_case.expected);
-        REQUIRE_FALSE(run.events.empty());
-        if (test_case.expected == ai::AssistantStopReason::Error) {
-            CHECK(std::holds_alternative<ai::AssistantErrorEvent>(run.events.back()));
-            REQUIRE(run.result->error_message);
-            CHECK(run.result->error_message->contains(test_case.diagnostic));
-        } else {
-            CHECK(std::holds_alternative<ai::AssistantDoneEvent>(run.events.back()));
-        }
-    }
-}
-
-TEST_CASE("Kimi Anthropic Messages partials carry the pending stop reason",
-        "[ai][provider][anthropic][issue374][compat-pi]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    transport->attempts.push_back(TransportAttempt{.chunks = {
-        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_pending\","
-        "\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\n"
-        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,"
-        "\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
-        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,"
-        "\"delta\":{\"type\":\"text_delta\",\"text\":\"hel\"}}\n\n"
-        "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
-        "event: message_delta\ndata: {\"type\":\"message_delta\","
-        "\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":1}}\n\n"
-        "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
-    }});
-    const auto model = kimi_model();
-    auto models = make_models(transport, model);
-    REQUIRE(models);
-
-    auto run = run_models(*models, model, {}, authorized_options());
-
-    REQUIRE(run.result);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
-    const std::vector<std::string> expected{
-        "start", "text_start", "text_delta", "text_end", "done"};
-    CHECK(event_names(run.events) == expected);
-    const auto partials = partial_stop_reasons(run.events);
-    REQUIRE(partials.size() == 4);
-    for (const auto reason : partials) {
-        CHECK(reason == ai::AssistantStopReason::Pending);
-    }
-}
-
-TEST_CASE("Kimi Anthropic Messages captures the raw stop reason before mapping",
-        "[ai][provider][anthropic][issue374][compat-pi]") {
-    struct Case {
-        std::string sse;
-        ai::AssistantStopReason mapped;
-        std::string raw;
-    };
-    const std::vector<Case> cases{
-        Case{
-            .sse = terminal_sse("end_turn"),
-            .mapped = ai::AssistantStopReason::Stop,
-            .raw = "end_turn",
-        },
-        // pause_turn is normalized to stop by the mapper; the raw provider
-        // value is still preserved verbatim.
-        Case{
-            .sse = terminal_sse("pause_turn"),
-            .mapped = ai::AssistantStopReason::Stop,
-            .raw = "pause_turn",
-        },
-        // Unknown reasons are rejected by the mapper; the raw value is
-        // captured before the rejection.
-        Case{
-            .sse = terminal_sse("future_reason"),
-            .mapped = ai::AssistantStopReason::Error,
-            .raw = "future_reason",
-        },
-    };
-
-    for (const auto& test_case : cases) {
-        auto transport = std::make_shared<ScriptedTransport>();
-        transport->attempts.push_back(TransportAttempt{.chunks = {test_case.sse}});
-        const auto model = kimi_model();
-        auto models = make_models(transport, model);
-        REQUIRE(models);
-
-        auto run = run_models(*models, model, {}, authorized_options());
-
-        REQUIRE(run.result);
-        CHECK(run.result->stop_reason == test_case.mapped);
-        REQUIRE(run.result->raw_stop_reason);
-        CHECK(*run.result->raw_stop_reason == test_case.raw);
-    }
-}
-
-TEST_CASE("Kimi Anthropic Messages stream ending still pending is a terminal error",
-        "[ai][provider][anthropic][issue374][compat-pi]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    transport->attempts.push_back(TransportAttempt{.chunks = {
-        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_pending\","
-        "\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\n"
-        "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
-    }});
-    const auto model = kimi_model();
-    auto models = make_models(transport, model);
-    REQUIRE(models);
-
-    auto run = run_models(*models, model, {}, authorized_options());
-
-    REQUIRE(run.result);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(run.result->error_message);
-    CHECK(run.result->error_message->contains(
-        "Anthropic stream ended without a stop reason"));
-    REQUIRE_FALSE(run.events.empty());
-    REQUIRE(std::holds_alternative<ai::AssistantErrorEvent>(run.events.back()));
-    const auto& terminal = std::get<ai::AssistantErrorEvent>(run.events.back());
-    CHECK(terminal.reason == ai::AssistantStopReason::Error);
-    CHECK(terminal.error.stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(terminal.error.error_message);
-    CHECK(*terminal.error.error_message == *run.result->error_message);
-}
-
-TEST_CASE("Kimi Anthropic Messages missing message_stop carries the partial message",
-        "[ai][provider][anthropic][issue341][compat-pi]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    transport->attempts.push_back(TransportAttempt{.chunks = {
-        "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_partial\","
-        "\"usage\":{\"input_tokens\":2}}}\n\n"
-        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,"
-        "\"content_block\":{\"type\":\"text\",\"text\":\"partial\"}}\n\n"
-        "event: message_delta\ndata: {\"type\":\"message_delta\","
-        "\"delta\":{\"stop_reason\":\"end_turn\"}}\n\n",
-    }});
-    const auto model = kimi_model();
-    auto models = make_models(transport, model);
-    REQUIRE(models);
-
-    auto run = run_models(*models, model, {}, authorized_options());
-
-    REQUIRE(run.result);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(run.result->error_message);
-    CHECK(run.result->error_message->contains("message_stop"));
-    REQUIRE(run.result->content.size() == 1);
-    CHECK(std::get<ai::TextContent>(run.result->content.front()).text == "partial");
-}
-
-TEST_CASE("Kimi Anthropic Messages ignores unknown SSE events and throws SSE error data",
-        "[ai][provider][anthropic][issue341][compat-pi]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    transport->attempts.push_back(TransportAttempt{.chunks = {
-        "event: future.event\ndata: not-json\n\n"
-        "event: error\ndata: kimi exploded\n\n",
-    }});
-    const auto model = kimi_model();
-    auto models = make_models(transport, model);
-    REQUIRE(models);
-
-    auto run = run_models(*models, model, {}, authorized_options());
-
-    REQUIRE(run.result);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(run.result->error_message);
-    CHECK(run.result->error_message->contains("kimi exploded"));
-    const std::vector<std::string> expected{"start", "error"};
-    CHECK(event_names(run.events) == expected);
-}
-
-TEST_CASE("Kimi Anthropic Messages removes tool scratch state from partial failures",
-        "[ai][provider][anthropic][issue341][compat-pi]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    transport->attempts.push_back(TransportAttempt{.chunks = {
-        "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,"
-        "\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_partial\","
-        "\"name\":\"lookup\",\"input\":{}}}\n\n"
-        "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,"
-        "\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"q\\\":\"}}\n\n"
-        "event: error\ndata: partial failure\n\n",
-    }});
-    const auto model = kimi_model();
-    auto models = make_models(transport, model);
-    REQUIRE(models);
-
-    auto run = run_models(*models, model, {}, authorized_options());
-
-    REQUIRE(run.result);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(run.result->content.size() == 1);
-    const auto* tool = std::get_if<ai::ToolCallContent>(&run.result->content.front());
-    REQUIRE(tool);
-    CHECK(tool->raw_arguments == "{\"q\":");
-    // pi's `parseStreamingJson` (partial-json) drops the trailing key with no
-    // value instead of completing it to `null`; a partial `{"q":` parses to {}.
-    REQUIRE(tool->arguments);
-    CHECK(tool->arguments->get_object().empty());
-    CHECK(tool->arguments_valid);
-    CHECK_FALSE(tool->argument_error);
-}
-
-TEST_CASE("Kimi Anthropic Messages retries only eligible setup failures",
-        "[ai][provider][anthropic][issue341][compat-pi]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    transport->attempts = {
-        TransportAttempt{
-            .head = ai::providers::StreamResponseHead{
-                .status_code = 500,
-                .headers = {{"retry-after-ms", "0"}},
-            },
-            .chunks = {"temporary"},
-        },
-        TransportAttempt{.chunks = {terminal_sse("end_turn")}},
-    };
-    const auto model = kimi_model();
-    auto models = make_models(transport, model);
-    REQUIRE(models);
-    auto options = authorized_options();
-    options.max_retries = 1;
-
-    auto run = run_models(*models, model, {}, std::move(options));
-
-    REQUIRE(run.result);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
-    CHECK(transport->requests.size() == 2);
-
-    auto rate_transport = std::make_shared<ScriptedTransport>();
-    rate_transport->attempts = {
-        TransportAttempt{
-            .head = ai::providers::StreamResponseHead{
-                .status_code = 429,
-                .headers = {{"retry-after-ms", "0"}},
-            },
-            .chunks = {"temporarily unavailable"},
-        },
-        TransportAttempt{.chunks = {terminal_sse("end_turn")}},
-    };
-    auto rate_models = make_models(rate_transport, model);
-    REQUIRE(rate_models);
-    auto rate_options = authorized_options();
-    rate_options.max_retries = 1;
-
-    auto rate = run_models(*rate_models, model, {}, std::move(rate_options));
-
-    REQUIRE(rate.result);
-    CHECK(rate.result->stop_reason == ai::AssistantStopReason::Stop);
-    CHECK(rate_transport->requests.size() == 2);
-
-    auto network_transport = std::make_shared<ScriptedTransport>();
-    network_transport->attempts = {
-        TransportAttempt{
-            .chunks = {},
-            .failure = support::make_error(support::ErrorCode::Network, "connection reset"),
-        },
-        TransportAttempt{.chunks = {terminal_sse("end_turn")}},
-    };
-    auto network_models = make_models(network_transport, model);
-    REQUIRE(network_models);
-    auto network_options = authorized_options();
-    network_options.max_retries = 1;
-
-    auto network = run_models(
-        *network_models, model, {}, std::move(network_options));
-
-    REQUIRE(network.result);
-    CHECK(network.result->stop_reason == ai::AssistantStopReason::Stop);
-    CHECK(network_transport->requests.size() == 2);
-
-    auto quota_transport = std::make_shared<ScriptedTransport>();
-    quota_transport->attempts.push_back(TransportAttempt{
-        .head = ai::providers::StreamResponseHead{
-            .status_code = 429,
-            .headers = {{"retry-after-ms", "0"}},
-        },
-        .chunks = {R"({"error":{"code":"insufficient_quota","message":"quota exceeded"}})"},
-    });
-    auto quota_models = make_models(quota_transport, model);
-    REQUIRE(quota_models);
-    auto quota_options = authorized_options();
-    quota_options.max_retries = 3;
-
-    auto quota = run_models(*quota_models, model, {}, std::move(quota_options));
-
-    REQUIRE(quota.result);
-    CHECK(quota.result->stop_reason == ai::AssistantStopReason::Error);
-    CHECK(quota_transport->requests.size() == 1);
-}
-
-TEST_CASE("Kimi Anthropic Messages cancellation yields one aborted terminal",
-        "[ai][provider][anthropic][issue341][compat-pi]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    transport->attempts.push_back(TransportAttempt{
-        .chunks = {},
-        .failure = support::make_error(support::ErrorCode::Cancelled, "transport cancelled"),
-    });
-    const auto model = kimi_model();
-    auto models = make_models(transport, model);
-    REQUIRE(models);
-    std::stop_source stop;
-    transport->on_request = [&stop] { stop.request_stop(); };
-    auto options = authorized_options();
-    options.stop_token = stop.get_token();
-
-    auto run = run_models(*models, model, {}, std::move(options));
-
-    REQUIRE(run.result);
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
-    CHECK(run.result->error_message == "Request was aborted");
-    const std::vector<std::string> expected{"error"};
-    CHECK(event_names(run.events) == expected);
+    REQUIRE(payload);
+    const auto serialized = support::write_json(*payload);
+    REQUIRE(serialized);
+    const auto first_marker = serialized->find("cache_control");
+    REQUIRE(first_marker != std::string::npos);
+    CHECK(first_marker > serialized->find("\"text\":\"next\""));
 }

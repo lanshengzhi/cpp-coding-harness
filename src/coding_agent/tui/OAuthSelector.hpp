@@ -55,8 +55,10 @@ using AuthProviderCancelSink = std::move_only_function<void()>;
 
 /// The OAuth selector (pi `oauth-selector.ts`): a fuzzy-searchable provider
 /// list for the login and logout flows, rendering per-row auth-status
-/// indicators and — when the list mixes auth types — `[subscription]` /
-/// `[API key]` labels. Selection reports the provider id and auth type;
+/// indicators and — when the list mixes auth types — `[subscription]`,
+/// `[account]`, or `[API key]` labels. OpenRouter's OAuth row is rendered as
+/// `[account]` because that flow yields an API key rather than subscription
+/// access. Selection still reports the provider id and OAuth auth type;
 /// cancellation reports the cancel sink.
 ///
 /// List presentation, the embedded search input, fuzzy ranking and cursor

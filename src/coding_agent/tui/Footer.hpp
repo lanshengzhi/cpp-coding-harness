@@ -47,8 +47,9 @@ struct FooterData {
     std::string thinking_level{"off"};
     /// Whether the active model supports reasoning.
     bool model_reasoning{false};
-    /// pi `usingSubscription`: kimi-coding, or any provider authenticating
-    /// through OAuth — renders the ` (sub)` cost marker.
+    /// Whether the active credential represents a subscription-backed
+    /// provider — renders the ` (sub)` cost marker. API-key Kimi and
+    /// OpenRouter account OAuth are deliberately excluded.
     bool using_subscription{false};
     /// Unique providers with available models (pi
     /// `getAvailableProviderCount`); >1 renders the `(provider)` prefix.

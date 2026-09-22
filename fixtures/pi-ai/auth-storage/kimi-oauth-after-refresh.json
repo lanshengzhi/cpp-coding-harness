@@ -1,8 +1,0 @@
-{
-  "kimi-coding": {
-    "access": "dummy-rotated-access-token",
-    "expires": 0,
-    "refresh": "dummy-rotated-refresh-token",
-    "type": "oauth"
-  }
-}

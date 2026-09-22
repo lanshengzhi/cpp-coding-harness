@@ -125,9 +125,11 @@ public:
 
     /// Side-effect-free; OAuth credentials are never refreshed.
     [[nodiscard]] support::AsyncResult<std::optional<ai::AuthCheck>> check_auth(std::string provider_id);
-    /// True when the provider currently resolves as configured (snapshot).
+    /// True when the provider has an active resolved credential in the
+    /// availability snapshot; structural auth methods alone do not count.
     [[nodiscard]] bool has_configured_auth(std::string_view provider_id) const;
-    /// True when the provider authenticates through an OAuth credential.
+    /// True when the active resolved credential is OAuth. Provider capability
+    /// metadata alone never makes this true.
     [[nodiscard]] bool is_using_oauth(std::string_view provider_id) const;
 
     /// Install a process-lifetime, in-memory runtime API key override for one

@@ -126,13 +126,13 @@ TEST_CASE("LoginDialog renders the auth URL view and opens the browser", "[codin
 TEST_CASE("LoginDialog renders the device code view with the waiting hint",
         "[coding_agent][tui][login][issue406][spec]") {
     DialogFixture fixture;
-    auto dialog = fixture.make("Login to Kimi For Coding");
+    auto dialog = fixture.make("Login to OpenAI Codex");
 
-    dialog.show_device_code("ABCD-EFGH", "https://kimi.example/device");
+    dialog.show_device_code("ABCD-EFGH", "https://auth.openai.example/device");
     dialog.show_waiting("Waiting for authentication...");
 
     const auto screen = screen_of(dialog);
-    CHECK(screen.find("https://kimi.example/device") != std::string::npos);
+    CHECK(screen.find("https://auth.openai.example/device") != std::string::npos);
     CHECK(screen.find("Enter code: ABCD-EFGH") != std::string::npos);
     CHECK(screen.find("Waiting for authentication...") != std::string::npos);
     CHECK(screen.find("to cancel") != std::string::npos);
