@@ -1,4 +1,5 @@
 #include <cch/ai/Models.hpp>
+#include "ai/api/PayloadBuilders.hpp"
 
 #include "support/AiScenarioKit.hpp"
 #include "support/Json.hpp"
@@ -112,9 +113,13 @@ TEST_CASE("Anthropic conversion keeps cache markers on the trailing user turn on
             options);
 
     REQUIRE(payload);
-    const auto serialized = support::write_json(*payload);
-    REQUIRE(serialized);
-    const auto first_marker = serialized->find("cache_control");
-    REQUIRE(first_marker != std::string::npos);
-    CHECK(first_marker > serialized->find("\"text\":\"next\""));
+    const auto& messages = payload->at("messages").get_array();
+    REQUIRE(messages.size() == 3);
+    CHECK_FALSE(messages[0].at("content").get_array().front().get_object().contains("cache_control"));
+    CHECK_FALSE(messages[1].at("content").get_array().front().get_object().contains("cache_control"));
+    const auto& trailing_content = messages.back().at("content").get_array();
+    REQUIRE(trailing_content.size() == 1);
+    CHECK(trailing_content.front().at("text").get_string() == "next");
+    REQUIRE(trailing_content.front().get_object().contains("cache_control"));
+    CHECK(trailing_content.front().at("cache_control").at("type").get_string() == "ephemeral");
 }

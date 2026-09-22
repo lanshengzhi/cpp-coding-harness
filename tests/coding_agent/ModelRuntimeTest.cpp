@@ -8,6 +8,7 @@
 #include "support/ModelsFixture.hpp"
 #include "support/PiEventSnapshot.hpp"
 #include "support/PiFixture.hpp"
+#include "support/ReadyResult.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/Json.hpp"

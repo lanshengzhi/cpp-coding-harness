@@ -1567,7 +1567,7 @@ TEST_CASE(
         "the six raw provider artifacts agree with their provenance model sets and API topology",
         "[ai][catalog][issue765][compat-pi]") {
     const auto result = verify_provenance_snapshot();
-    INFO(result ? "" : result.error());
+    INFO((result ? "" : result.error()));
     REQUIRE(result);
 }
 
@@ -1589,7 +1589,7 @@ TEST_CASE(
 
     for (const auto provider : kMirrorProviders) {
         auto expected = load_catalog(provider);
-        INFO(expected ? "" : expected.error());
+        INFO((expected ? "" : expected.error()));
         REQUIRE(expected);
         const auto* actual_provider = find_provider(definitions, provider);
         REQUIRE(actual_provider != nullptr);
@@ -1609,7 +1609,7 @@ TEST_CASE(
             REQUIRE(actual != actual_models.end());
 
             const auto valid = ai::validate_model(*actual->second);
-            INFO(valid ? "" : valid.error().detail);
+            INFO((valid ? "" : valid.error().detail));
             CHECK(valid);
 
             const auto mismatches = compare_models(expected_model, *actual->second);
@@ -1776,15 +1776,15 @@ TEST_CASE(
         REQUIRE(expected_model != expected->models.end());
         CHECK(expected_model->second.cost.input == -1'000'000.0);
         CHECK(expected_model->second.cost.output == -1'000'000.0);
-        CHECK(expected_model->second.cost.cache_read == -1'000'000.0);
-        CHECK(expected_model->second.cost.cache_write == -1'000'000.0);
+        CHECK(expected_model->second.cost.cache_read == 0.0);
+        CHECK(expected_model->second.cost.cache_write == 0.0);
 
         const auto* actual_model = find_model(*openrouter, model_id);
         REQUIRE(actual_model != nullptr);
         CHECK(actual_model->cost.input == -1'000'000.0);
         CHECK(actual_model->cost.output == -1'000'000.0);
-        CHECK(actual_model->cost.cache_read == -1'000'000.0);
-        CHECK(actual_model->cost.cache_write == -1'000'000.0);
+        CHECK(actual_model->cost.cache_read == 0.0);
+        CHECK(actual_model->cost.cache_write == 0.0);
     }
 }
 

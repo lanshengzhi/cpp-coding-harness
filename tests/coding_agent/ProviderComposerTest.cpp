@@ -192,7 +192,7 @@ template <typename T> [[nodiscard]] support::Expected<T> consume_async_result(su
 // ProviderComposer: built-in/config composition (pi provider-composer subset)
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("builtin definitions carry the Codex 7 and Kimi 4 catalogs",
+TEST_CASE("builtin definitions carry the Codex 6 and Kimi 4 catalogs",
         "[coding_agent][provider-composer][issue546][spec]") {
     const auto builtins = ai::builtin_provider_definitions();
     REQUIRE(builtins.size() == 6);
@@ -205,9 +205,9 @@ TEST_CASE("builtin definitions carry the Codex 7 and Kimi 4 catalogs",
     CHECK(codex.name == "OpenAI Codex");
     CHECK(codex.auth.oauth.has_value());
     CHECK_FALSE(codex.auth.api_key.has_value());
-    REQUIRE(codex.models.size() == 7);
+    REQUIRE(codex.models.size() == 6);
     CHECK(codex.models.front().id == "gpt-5.3-codex-spark");
-    CHECK(codex.models.back().id == "gpt-5.6-terra");
+    CHECK(codex.models.back().id == "gpt-6-astra");
     const auto gpt55 = std::find_if(
             codex.models.begin(), codex.models.end(), [](const ai::Model& m) { return m.id == "gpt-5.5"; });
     REQUIRE(gpt55 != codex.models.end());
@@ -231,11 +231,12 @@ TEST_CASE("builtin definitions carry the Codex 7 and Kimi 4 catalogs",
     CHECK_FALSE(kimi_coding->headers.has_value());
 }
 
-TEST_CASE("builtin catalogs match the frozen baseline shard values",
+TEST_CASE("builtin catalogs match the hash-pinned snapshot shard values",
         "[coding_agent][provider-composer][issue370][spec]") {
-    // The Codex shard is a frozen-baseline parity artifact. Kimi deliberately
-    // diverges from its upstream shard and uses the vendor-authoritative
-    // catalog instead. The shard compat members are excluded (see
+    // The Codex shard is the current hash-pinned T0 parity artifact. Kimi
+    // deliberately diverges from its upstream shard and uses the
+    // vendor-authoritative catalog instead. The shard compat members are
+    // excluded (see
     // `model_field_mismatch`); the deferred Codex catalog compat flags
     // (supportsOpenAIGrammarTools / supportsToolSearch) remain absent from the
     // C++ surface by design.
@@ -287,7 +288,7 @@ TEST_CASE("builtin catalogs match the frozen baseline shard values",
             std::find_if(builtins.begin(), builtins.end(), [](const auto& b) { return b.id == "kimi-coding"; });
     REQUIRE(codex_it != builtins.end());
     REQUIRE(kimi_it != builtins.end());
-    check_shard(codex_it->models, "models/openai-codex-shard.json", "openai-codex-responses");
+    check_shard(codex_it->models, "models/providers/openai-codex.json", "openai-codex-responses");
     check_shard(kimi_it->models, "models/vendors/kimi-coding.json", "openai-completions");
 }
 
@@ -351,7 +352,7 @@ TEST_CASE("built-in without models.json config is submitted unchanged",
     REQUIRE(change.definition.has_value());
     CHECK(change.definition->id == "openai-codex");
     CHECK(change.definition->name == "OpenAI Codex");
-    CHECK(change.definition->models.size() == 7);
+    CHECK(change.definition->models.size() == 6);
     CHECK(change.definition->auth.oauth.has_value());
 }
 
