@@ -64,6 +64,15 @@ TEST_CASE("Built-in provider definitions preserve the frozen catalogs and auth m
         CHECK(static_cast<bool>(it->auth.api_key->resolve));
         CHECK_FALSE(it->models.empty());
     }
+
+    const auto openrouter_it =
+            std::find_if(definitions.begin(), definitions.end(), [](const auto& d) { return d.id == "openrouter"; });
+    REQUIRE(openrouter_it != definitions.end());
+    REQUIRE(openrouter_it->auth.oauth);
+    CHECK(openrouter_it->auth.oauth->name == "OpenRouter OAuth");
+    CHECK(static_cast<bool>(openrouter_it->auth.oauth->login));
+    CHECK(static_cast<bool>(openrouter_it->auth.oauth->refresh));
+    CHECK(static_cast<bool>(openrouter_it->auth.oauth->to_auth));
 }
 
 TEST_CASE("Built-in provider definitions are fresh on every call", "[ai][providers][issue545][compat-pi]") {

@@ -1,8 +1,10 @@
 #include <cch/ai/Models.hpp>
 #include <cch/support/Error.hpp>
 #include "ai/ModelStreamBridge.hpp"
+#include "ai/auth/OpenRouterOAuth.hpp"
 #include "support/ScriptedProvider.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
+#include "support/FakeOAuthHttpClient.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/ExpectedMacros.hpp"
@@ -668,6 +670,40 @@ TEST_CASE("Models refreshes OAuth under the store mutation and checkAuth never r
     CHECK(stored.access == "new-access");
 }
 
+TEST_CASE("Models resolves stored OpenRouter OAuth as an API key without refresh traffic",
+        "[ai][models][auth][issue764][spec]") {
+    auto credentials = std::make_shared<MemoryCredentialStore>();
+    credentials->records.emplace("openrouter",
+            ai::OAuthCredential{
+                    .refresh = {},
+                    .access = "sk-or-stored",
+                    .expires = 9007199254740991LL,
+            });
+    auto auth_context = std::make_shared<FakeAuthContext>();
+    auto http = std::make_shared<tests::FakeOAuthHttpClient>();
+    auto models = make_models(credentials, auth_context);
+    auto provider = std::make_shared<RecordingProvider>("openrouter",
+            ai::ProviderAuth{
+                    .oauth = ai::auth::make_openrouter_oauth_auth(http),
+            });
+    REQUIRE(install_provider(models, provider));
+
+    auto checked = run_async_result(models->check_auth("openrouter"));
+    REQUIRE(checked);
+    REQUIRE(*checked);
+    CHECK((**checked).type == ai::AuthType::OAuth);
+    CHECK(credentials->modify_count == 0);
+
+    auto resolved = run_async_result(models->get_auth("openrouter"));
+    REQUIRE(resolved);
+    REQUIRE(*resolved);
+    CHECK((**resolved).auth.api_key == "sk-or-stored");
+    CHECK((**resolved).auth.headers.empty());
+    CHECK((**resolved).source == "OAuth");
+    CHECK(credentials->modify_count == 0);
+    CHECK(http->requests.empty());
+}
+
 TEST_CASE("Models preserves stored OAuth when refresh fails", "[ai][models][auth][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     ai::OAuthCredential original{
@@ -1228,6 +1264,45 @@ TEST_CASE("Models login persists the provider OAuth credential via CredentialSto
     REQUIRE(stored != nullptr);
     CHECK(stored->access == "dummy-access");
     CHECK(stored->refresh == "dummy-refresh");
+}
+
+TEST_CASE("Models persists OpenRouter account authorization through CredentialStore modify",
+        "[ai][models][auth][issue764][spec]") {
+    auto [credentials, auth_context, models] = ModelsFixture{};
+    auto http = std::make_shared<tests::FakeOAuthHttpClient>();
+    http->responses["https://openrouter.ai/api/v1/auth/keys"] = {
+            {200, R"({"key":"sk-or-login"})"},
+    };
+    auto provider = std::make_shared<RecordingProvider>("openrouter",
+            ai::ProviderAuth{
+                    .oauth = ai::auth::make_openrouter_oauth_auth(http),
+            });
+    REQUIRE(install_provider(models, provider));
+
+    ai::AuthInteraction interaction;
+    interaction.notify = [](const ai::AuthEvent&) {};
+    interaction.prompt = [](ai::AuthPrompt) -> cch::support::AsyncResult<std::string> {
+        return tests::ready_result<std::string>("manual-code");
+    };
+    auto result = run_async_result(models->login("openrouter", ai::AuthType::OAuth, std::move(interaction)));
+
+    REQUIRE(result);
+    const auto* login_credential = std::get_if<ai::OAuthCredential>(&*result);
+    REQUIRE(login_credential != nullptr);
+    CHECK(login_credential->access == "sk-or-login");
+    CHECK(login_credential->refresh.empty());
+    CHECK(login_credential->expires == 9007199254740991LL);
+    CHECK(credentials->modify_count == 1);
+    const auto* stored = std::get_if<ai::OAuthCredential>(&credentials->records.at("openrouter"));
+    REQUIRE(stored != nullptr);
+    CHECK(stored->access == "sk-or-login");
+    CHECK(stored->refresh.empty());
+
+    auto resolved = run_async_result(models->get_auth("openrouter"));
+    REQUIRE(resolved);
+    REQUIRE(*resolved);
+    CHECK((**resolved).auth.api_key == "sk-or-login");
+    CHECK(http->requests.size() == 1);
 }
 
 TEST_CASE("Models login flow failure propagates unwrapped to the host", "[ai][models][auth][issue343][spec]") {
