@@ -221,7 +221,24 @@ struct ParsedTextSignature {
     return result;
 }
 
-[[nodiscard]] support::JsonValue::array_t responses_tools(AdapterKind adapter, const std::vector<Tool>& tools) {
+[[nodiscard]] bool responses_supports_strict_mode(const Model& model) {
+    if (!model.compat) {
+        return false;
+    }
+    const auto* compat = std::get_if<OpenAIResponsesCompat>(&*model.compat);
+    return compat != nullptr && compat->supports_strict_mode.value_or(false);
+}
+
+[[nodiscard]] bool responses_supports_explicit_prompt_cache_mode(const Model& model) {
+    if (!model.compat) {
+        return false;
+    }
+    const auto* compat = std::get_if<OpenAIResponsesCompat>(&*model.compat);
+    return compat != nullptr && compat->supports_explicit_prompt_cache_mode.value_or(false);
+}
+
+[[nodiscard]] support::JsonValue::array_t responses_tools(
+        AdapterKind adapter, const Model& model, const std::vector<Tool>& tools) {
     support::JsonValue::array_t result;
     for (const auto& tool : tools) {
         support::JsonValue::object_t converted{
@@ -232,6 +249,8 @@ struct ParsedTextSignature {
         };
         if (adapter == AdapterKind::OpenAICodexResponses) {
             converted.emplace("strict", nullptr);
+        } else if (adapter == AdapterKind::OpenAIResponses && responses_supports_strict_mode(model)) {
+            converted.emplace("strict", support::JsonValue{false});
         }
         result.emplace_back(std::move(converted));
     }
@@ -295,6 +314,9 @@ struct ParsedTextSignature {
         if (options.cache_retention == CacheRetention::Long) {
             payload.emplace("prompt_cache_retention", "24h");
         }
+        if (options.cache_retention == CacheRetention::None && responses_supports_explicit_prompt_cache_mode(model)) {
+            payload.emplace("prompt_cache_options", support::JsonValue::object_t{{"mode", "explicit"}});
+        }
     }
     if (options.session_id && options.cache_retention != CacheRetention::None) {
         payload.emplace("prompt_cache_key", detail::clamp_openai_prompt_cache_key(*options.session_id));
@@ -303,7 +325,7 @@ struct ParsedTextSignature {
         payload.emplace("temperature", *options.temperature);
     }
     if (!context.tools.empty()) {
-        payload.emplace("tools", responses_tools(adapter, context.tools));
+        payload.emplace("tools", responses_tools(adapter, model, context.tools));
     }
     if (model.reasoning) {
         auto effort = responses_effort(model, options.reasoning);

@@ -9,6 +9,9 @@ support::Expected<support::JsonValue> build_adapter_payload(
     const Model& model,
     const AiContext& context,
     const ProviderStreamOptions& options) {
+    if (auto valid = validate_model(model); !valid) {
+        return std::unexpected(valid.error());
+    }
     if (adapter == AdapterKind::AnthropicMessages) {
         return build_anthropic_payload(model, context, options);
     }

@@ -5,6 +5,7 @@
 #include <cmath>
 #include <format>
 #include <string_view>
+#include <type_traits>
 
 namespace cch::ai {
 namespace {
@@ -109,11 +110,24 @@ support::ExpectedVoid validate_model(const Model& model) {
             }
         }
     }
-    if (model.compat && model.api != "anthropic-messages") {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "invalid model compat",
-            "AnthropicMessagesCompat requires api 'anthropic-messages'"));
+    if (model.compat) {
+        const auto [compat_name, expected_api] = std::visit(
+                [](const auto& compat) -> std::pair<std::string_view, std::string_view> {
+                    using Compat = std::decay_t<decltype(compat)>;
+                    if constexpr (std::is_same_v<Compat, AnthropicMessagesCompat>) {
+                        return {"AnthropicMessagesCompat", "anthropic-messages"};
+                    } else if constexpr (std::is_same_v<Compat, OpenAICompletionsCompat>) {
+                        return {"OpenAICompletionsCompat", "openai-completions"};
+                    } else {
+                        return {"OpenAIResponsesCompat", "openai-responses"};
+                    }
+                },
+                *model.compat);
+        if (model.api != expected_api) {
+            return std::unexpected(support::make_error(support::ErrorCode::ModelValidation,
+                    "invalid model compat",
+                    std::format("{} requires api '{}', but model api is '{}'", compat_name, expected_api, model.api)));
+        }
     }
     return {};
 }

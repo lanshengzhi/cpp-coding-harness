@@ -52,6 +52,143 @@ namespace {
     return tiers;
 }
 
+[[nodiscard]] std::optional<bool> bool_member(const support::JsonValue::object_t& object, std::string_view key) {
+    const auto found = object.find(std::string{key});
+    if (found == object.end()) {
+        return std::nullopt;
+    }
+    if (const auto* value = found->second.get_if<bool>()) {
+        return *value;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::optional<std::string_view> string_member(
+        const support::JsonValue::object_t& object, std::string_view key) {
+    const auto found = object.find(std::string{key});
+    if (found == object.end()) {
+        return std::nullopt;
+    }
+    if (const auto* value = found->second.get_if<std::string>()) {
+        return *value;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::optional<ModelCompatVariant> model_compat_from_catalog(
+        std::string_view api, const support::JsonValue::object_t& model_obj) {
+    const auto found = model_obj.find("compat");
+    if (found == model_obj.end()) {
+        return std::nullopt;
+    }
+    const auto* compat_obj = found->second.get_if<support::JsonValue::object_t>();
+    if (compat_obj == nullptr) {
+        return std::nullopt;
+    }
+
+    if (api == "anthropic-messages") {
+        AnthropicMessagesCompat compat;
+        bool populated = false;
+        if (const auto value = bool_member(*compat_obj, "forceAdaptiveThinking"); value.has_value()) {
+            compat.force_adaptive_thinking = *value;
+            populated = true;
+        }
+        if (const auto value = bool_member(*compat_obj, "allowEmptySignature"); value.has_value()) {
+            compat.allow_empty_signature = *value;
+            populated = true;
+        }
+        if (const auto value = bool_member(*compat_obj, "supportsTemperature"); value.has_value()) {
+            compat.supports_temperature = *value;
+            populated = true;
+        }
+        if (populated) {
+            return ModelCompatVariant{std::move(compat)};
+        }
+        return std::nullopt;
+    }
+
+    if (api == "openai-completions") {
+        OpenAICompletionsCompat compat;
+        bool populated = false;
+        if (const auto value = bool_member(*compat_obj, "supportsStore"); value.has_value()) {
+            compat.supports_store = *value;
+            populated = true;
+        }
+        if (const auto value = bool_member(*compat_obj, "supportsDeveloperRole"); value.has_value()) {
+            compat.supports_developer_role = *value;
+            populated = true;
+        }
+        if (const auto value = string_member(*compat_obj, "maxTokensField"); value.has_value()) {
+            if (*value == "max_tokens") {
+                compat.max_tokens_field = OpenAICompletionsMaxTokensField::MaxTokens;
+                populated = true;
+            } else if (*value == "max_completion_tokens") {
+                compat.max_tokens_field = OpenAICompletionsMaxTokensField::MaxCompletionTokens;
+                populated = true;
+            }
+        }
+        if (const auto value = bool_member(*compat_obj, "requiresReasoningContentOnAssistantMessages");
+                value.has_value()) {
+            compat.requires_reasoning_content_on_assistant_messages = *value;
+            populated = true;
+        }
+        if (const auto value = string_member(*compat_obj, "thinkingFormat"); value.has_value()) {
+            if (*value == "openai") {
+                compat.thinking_format = OpenAICompletionsThinkingFormat::OpenAI;
+                populated = true;
+            } else if (*value == "openrouter") {
+                compat.thinking_format = OpenAICompletionsThinkingFormat::OpenRouter;
+                populated = true;
+            } else if (*value == "deepseek") {
+                compat.thinking_format = OpenAICompletionsThinkingFormat::DeepSeek;
+                populated = true;
+            } else if (*value == "qwen") {
+                compat.thinking_format = OpenAICompletionsThinkingFormat::Qwen;
+                populated = true;
+            }
+        }
+        if (const auto value = string_member(*compat_obj, "cacheControlFormat");
+                value.has_value() && *value == "anthropic") {
+            compat.cache_control_format = OpenAICompletionsCacheControlFormat::Anthropic;
+            populated = true;
+        }
+        if (const auto value = bool_member(*compat_obj, "supportsLongCacheRetention"); value.has_value()) {
+            compat.supports_long_cache_retention = *value;
+            populated = true;
+        }
+        if (const auto value = bool_member(*compat_obj, "supportsReasoningEffort"); value.has_value()) {
+            compat.supports_reasoning_effort = *value;
+            populated = true;
+        }
+        if (populated) {
+            return ModelCompatVariant{std::move(compat)};
+        }
+        return std::nullopt;
+    }
+
+    if (api == "openai-responses") {
+        OpenAIResponsesCompat compat;
+        bool populated = false;
+        if (const auto value = bool_member(*compat_obj, "supportsStrictMode"); value.has_value()) {
+            compat.supports_strict_mode = *value;
+            populated = true;
+        }
+        if (const auto value = bool_member(*compat_obj, "supportsExplicitPromptCacheMode"); value.has_value()) {
+            compat.supports_explicit_prompt_cache_mode = *value;
+            populated = true;
+        }
+        // The pinned snapshot has sessionAffinityFormat only for OpenCode Go,
+        // and no supportsMaxOutputTokens field. Those conflicting candidates
+        // stay out of the value contract until a scoped consumer exists.
+        if (populated) {
+            return ModelCompatVariant{std::move(compat)};
+        }
+    }
+    // Codex compat flags and other catalog-only fields are intentionally
+    // ignored: the current Codex seam has no consumer for them.
+    return std::nullopt;
+}
+
 [[nodiscard]] Model model_from_catalog(std::string_view provider_id,
         const support::JsonValue::object_t& model_obj,
         std::string_view default_api,
@@ -162,15 +299,20 @@ namespace {
 
     if (provider_id == "kimi-coding") {
         model.input = {ModelInput::Text, ModelInput::Image};
-        model.compat = AnthropicMessagesCompat{
-                .force_adaptive_thinking = true,
-                .allow_empty_signature =
-                        (model.id == "k3" || model.id == "kimi-for-coding") ? std::optional<bool>{true} : std::nullopt,
-        };
     } else if (provider_id == "openai-codex" && model.id != "gpt-5.3-codex-spark") {
         model.input = {ModelInput::Text, ModelInput::Image};
     } else {
         model.input = {ModelInput::Text};
+    }
+
+    if (const auto compat = model_compat_from_catalog(model.api, model_obj); compat) {
+        model.compat = *compat;
+    } else if (provider_id == "kimi-coding") {
+        model.compat = ModelCompatVariant{AnthropicMessagesCompat{
+                .force_adaptive_thinking = true,
+                .allow_empty_signature =
+                        (model.id == "k3" || model.id == "kimi-for-coding") ? std::optional<bool>{true} : std::nullopt,
+        }};
     }
 
     return model;

@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace cch::ai {
@@ -39,12 +40,48 @@ struct ModelCost {
     std::optional<std::vector<ModelCostTier>> tiers{std::nullopt};
 };
 
-/// The only behavior-bearing per-API compatibility value in the supported
-/// adapter surface (ADR 0033). Missing booleans retain provider defaults.
+enum class OpenAICompletionsMaxTokensField { MaxCompletionTokens, MaxTokens };
+enum class OpenAICompletionsThinkingFormat { OpenAI, OpenRouter, DeepSeek, Qwen };
+enum class OpenAICompletionsCacheControlFormat { Anthropic };
+
+/// Typed compatibility values populated by the shipped openai-completions
+/// catalog. An absent member keeps the adapter's scoped upstream detection.
+struct OpenAICompletionsCompat {
+    std::optional<bool> supports_store{std::nullopt};
+    std::optional<bool> supports_developer_role{std::nullopt};
+    std::optional<OpenAICompletionsMaxTokensField> max_tokens_field{std::nullopt};
+    std::optional<bool> requires_reasoning_content_on_assistant_messages{std::nullopt};
+    std::optional<OpenAICompletionsThinkingFormat> thinking_format{std::nullopt};
+    std::optional<OpenAICompletionsCacheControlFormat> cache_control_format{std::nullopt};
+    std::optional<bool> supports_long_cache_retention{std::nullopt};
+    std::optional<bool> supports_reasoning_effort{std::nullopt};
+};
+
+/// Typed compatibility values populated by the shipped openai-responses
+/// catalog and consumed by the current Responses payload seam. The pinned
+/// snapshot has `sessionAffinityFormat` only on OpenCode Go and has no
+/// `supportsMaxOutputTokens`; neither stale/conflicting field is represented.
+struct OpenAIResponsesCompat {
+    std::optional<bool> supports_strict_mode{std::nullopt};
+    std::optional<bool> supports_explicit_prompt_cache_mode{std::nullopt};
+};
+
+/// Typed compatibility values populated by the shipped
+/// anthropic-messages catalog. Missing booleans retain provider defaults.
 struct AnthropicMessagesCompat {
     std::optional<bool> force_adaptive_thinking{std::nullopt};
     std::optional<bool> allow_empty_signature{std::nullopt};
+    std::optional<bool> supports_temperature{std::nullopt};
 };
+
+using ModelCompatVariant = std::variant<AnthropicMessagesCompat, OpenAICompletionsCompat, OpenAIResponsesCompat>;
+
+/// A missing thinking format means the ordinary OpenAI format, matching
+/// pi's scoped upstream resolution rather than inventing a provider default.
+[[nodiscard]] inline OpenAICompletionsThinkingFormat resolve_openai_completions_thinking_format(
+        const OpenAICompletionsCompat& compat) noexcept {
+    return compat.thinking_format.value_or(OpenAICompletionsThinkingFormat::OpenAI);
+}
 
 /// Complete passive, credential-free identity and capability value for one
 /// model (ADR 0019). Provider and API identities are independent: provider
@@ -64,7 +101,7 @@ struct Model {
     std::uint64_t context_window{0};
     std::uint64_t max_tokens{0};
     std::optional<ModelHeaders> headers{std::nullopt};
-    std::optional<AnthropicMessagesCompat> compat{std::nullopt};
+    std::optional<ModelCompatVariant> compat{std::nullopt};
 };
 
 [[nodiscard]] cch::support::ExpectedVoid validate_model(const Model& model);

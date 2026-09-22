@@ -22,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 using namespace cch;
@@ -228,7 +229,9 @@ TEST_CASE("builtin definitions carry the Codex 7 and Kimi 4 catalogs",
     REQUIRE(kimi_coding != kimi.models.end());
     CHECK(kimi_coding->api == "anthropic-messages");
     CHECK(kimi_coding->compat.has_value());
-    CHECK(kimi_coding->compat->allow_empty_signature == true);
+    const auto* kimi_compat = std::get_if<ai::AnthropicMessagesCompat>(&*kimi_coding->compat);
+    REQUIRE(kimi_compat != nullptr);
+    CHECK(kimi_compat->allow_empty_signature == true);
 }
 
 TEST_CASE("builtin catalogs match the frozen baseline shard values",

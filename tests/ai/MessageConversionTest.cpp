@@ -343,10 +343,10 @@ TEST_CASE("Anthropic conversion matches the frozen Kimi payload golden", "[ai][c
         "kimi-for-coding", "kimi-coding", "anthropic-messages");
     model.reasoning = true;
     model.input = {ai::ModelInput::Text, ai::ModelInput::Image};
-    model.compat = ai::AnthropicMessagesCompat{
-        .force_adaptive_thinking = true,
-        .allow_empty_signature = true,
-    };
+    model.compat = ai::ModelCompatVariant{ai::AnthropicMessagesCompat{
+            .force_adaptive_thinking = true,
+            .allow_empty_signature = true,
+    }};
     ai::AiContext context;
     context.system_prompt = "system";
     context.messages.push_back(ai::UserMessage{
