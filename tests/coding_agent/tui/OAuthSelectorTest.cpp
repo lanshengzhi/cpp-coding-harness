@@ -131,11 +131,10 @@ TEST_CASE("OAuthSelector warns when the stored credential type differs from the 
     using coding_agent::tui::AuthSelectorType;
     std::vector<coding_agent::tui::AuthSelectorProvider> providers;
     // An API-key row while the dual-auth provider currently authenticates via OAuth.
-    providers.push_back(provider(
-        "openrouter",
-        "OpenRouter",
-        AuthSelectorType::ApiKey,
-        AuthSelectorStatus{.type = AuthSelectorType::OAuth, .source = "OAuth"}));
+    providers.push_back(provider("openrouter",
+            "OpenRouter",
+            AuthSelectorType::ApiKey,
+            AuthSelectorStatus{.type = AuthSelectorType::OAuth, .source = "OAuth"}));
 
     coding_agent::tui::OAuthSelectorComponent selector(
         theme,
@@ -151,28 +150,26 @@ TEST_CASE("OAuthSelector warns when the stored credential type differs from the 
     CHECK(screen.find("[API key]") == std::string::npos);
 }
 
-TEST_CASE("OAuthSelector labels OpenRouter OAuth as an account login",
-        "[coding_agent][tui][login][issue763][spec]") {
+TEST_CASE("OAuthSelector labels OpenRouter OAuth as an account login", "[coding_agent][tui][login][issue763][spec]") {
     auto theme = test_theme();
     using coding_agent::tui::AuthSelectorType;
     std::vector<coding_agent::tui::AuthSelectorProvider> providers;
-    providers.push_back(provider(
-        "openrouter",
-        "OpenRouter",
-        AuthSelectorType::OAuth,
-        coding_agent::tui::AuthSelectorStatus{
-            .type = AuthSelectorType::OAuth,
-            .source = "OAuth",
-        }));
+    providers.push_back(provider("openrouter",
+            "OpenRouter",
+            AuthSelectorType::OAuth,
+            coding_agent::tui::AuthSelectorStatus{
+                    .type = AuthSelectorType::OAuth,
+                    .source = "OAuth",
+            }));
     providers.push_back(provider("kimi-coding", "Kimi For Coding", AuthSelectorType::ApiKey));
 
     coding_agent::tui::OAuthSelectorComponent selector(
-        theme,
-        test_keybindings(),
-        coding_agent::tui::AuthSelectorMode::Login,
-        std::move(providers),
-        [](std::string, AuthSelectorType) -> support::ExpectedVoid { return {}; },
-        [] {});
+            theme,
+            test_keybindings(),
+            coding_agent::tui::AuthSelectorMode::Login,
+            std::move(providers),
+            [](std::string, AuthSelectorType) -> support::ExpectedVoid { return {}; },
+            [] {});
 
     const auto screen = screen_of(selector);
     CHECK(screen.find("OpenRouter [account] ✓ configured") != std::string::npos);

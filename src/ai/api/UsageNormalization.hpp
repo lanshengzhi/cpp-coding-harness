@@ -44,9 +44,7 @@ struct AnthropicUsageUpdate {
     std::int64_t output_tokens,
     std::int64_t cached_tokens,
     std::optional<std::int64_t> reasoning_tokens);
-[[nodiscard]] Usage normalize_completions_usage(
-    const Model& model,
-    const CompletionsUsageFields& fields);
+[[nodiscard]] Usage normalize_completions_usage(const Model& model, const CompletionsUsageFields& fields);
 void apply_anthropic_usage_start(
     const Model& model,
     Usage& usage,

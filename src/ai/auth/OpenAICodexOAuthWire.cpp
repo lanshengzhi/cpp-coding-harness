@@ -63,24 +63,6 @@ namespace cch::ai::auth {
     return *parsed.code;
 }
 
-/// pi `fetchWithLoginCancellation`: an aborted request normalizes to the
-/// stable "Login cancelled" error; other transport failures propagate.
-[[nodiscard]] boost::asio::awaitable<support::Expected<OAuthHttpResponse>> post_with_login_cancellation(
-        const std::shared_ptr<OAuthHttpClient>& http_client,
-        std::string url,
-        std::map<std::string, std::string, std::less<>> headers,
-        std::string body,
-        std::stop_token stop_token) {
-    auto response = co_await http_client->post(std::move(url), std::move(headers), std::move(body), stop_token);
-    if (!response) {
-        if (stop_token.stop_requested()) {
-            co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
-        }
-        co_return std::unexpected(std::move(response.error()));
-    }
-    co_return *response;
-}
-
 /// pi `readTokenResponse`: non-2xx and missing-field responses carry the
 /// frozen message with the raw body; success yields the OAuth token with
 /// `expires` as a wall-clock millisecond timestamp.

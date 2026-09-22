@@ -15,8 +15,7 @@ namespace cch::ai::api {
 /// single-threaded executor (StreamTransport executor contract).
 class OpenAICompletionsAdapter final {
 public:
-    explicit OpenAICompletionsAdapter(
-            std::shared_ptr<providers::StreamTransport> transport);
+    explicit OpenAICompletionsAdapter(std::shared_ptr<providers::StreamTransport> transport);
     OpenAICompletionsAdapter(OpenAICompletionsAdapter&&) noexcept;
     OpenAICompletionsAdapter& operator=(OpenAICompletionsAdapter&&) noexcept;
     ~OpenAICompletionsAdapter();
@@ -25,10 +24,7 @@ public:
 
     /// Borrowed model and context must outlive the returned awaitable.
     [[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> stream(
-            const Model& model,
-            const AiContext& context,
-            ProviderStreamOptions options,
-            AssistantEventSink sink);
+            const Model& model, const AiContext& context, ProviderStreamOptions options, AssistantEventSink sink);
 
 private:
     std::shared_ptr<providers::StreamTransport> transport_;

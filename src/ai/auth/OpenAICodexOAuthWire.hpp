@@ -61,13 +61,6 @@ inline const std::map<std::string, std::string, std::less<>> kJsonHeaders{
 [[nodiscard]] support::Expected<std::string> parse_manual_code(
         const std::string& input, const std::string& expected_state);
 
-[[nodiscard]] boost::asio::awaitable<support::Expected<OAuthHttpResponse>> post_with_login_cancellation(
-        const std::shared_ptr<OAuthHttpClient>& http_client,
-        std::string url,
-        std::map<std::string, std::string, std::less<>> headers,
-        std::string body,
-        std::stop_token stop_token);
-
 [[nodiscard]] support::Expected<OAuthToken> read_token_response(
         const OAuthHttpResponse& response, std::string_view operation);
 

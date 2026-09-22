@@ -26,10 +26,8 @@ struct ResolvedCompletionsCompat {
     bool supports_reasoning_effort{true};
     bool requires_reasoning_content{false};
     bool supports_long_cache_retention{true};
-    OpenAICompletionsMaxTokensField max_tokens_field{
-            OpenAICompletionsMaxTokensField::MaxCompletionTokens};
-    OpenAICompletionsThinkingFormat thinking_format{
-            OpenAICompletionsThinkingFormat::OpenAI};
+    OpenAICompletionsMaxTokensField max_tokens_field{OpenAICompletionsMaxTokensField::MaxCompletionTokens};
+    OpenAICompletionsThinkingFormat thinking_format{OpenAICompletionsThinkingFormat::OpenAI};
     std::optional<OpenAICompletionsCacheControlFormat> cache_control_format{std::nullopt};
 };
 
@@ -62,35 +60,31 @@ struct ResolvedCompletionsCompat {
 }
 
 [[nodiscard]] ResolvedCompletionsCompat resolve_compat(const Model& model) {
-    const bool is_deepseek =
-            model.provider == "deepseek" || contains_case_insensitive(model.base_url, "deepseek.com");
+    // debt: replace URL heuristics with explicit provider metadata when custom
+    // provider composition carries that identity through the model contract.
+    const bool is_deepseek = model.provider == "deepseek" || contains_case_insensitive(model.base_url, "deepseek.com");
     const bool is_openrouter =
             model.provider == "openrouter" || contains_case_insensitive(model.base_url, "openrouter.ai");
     const bool openrouter_developer_model =
-            is_openrouter &&
-            (model.id.starts_with("openai/") || model.id.starts_with("anthropic/"));
+            is_openrouter && (model.id.starts_with("openai/") || model.id.starts_with("anthropic/"));
 
     ResolvedCompletionsCompat resolved{
             .supports_store = !is_deepseek,
-            .supports_developer_role =
-                    openrouter_developer_model || (!is_openrouter && !is_deepseek),
-            .supports_strict_mode = true,
+            .supports_developer_role = openrouter_developer_model || (!is_openrouter && !is_deepseek),
+            .supports_strict_mode = false,
             .supports_reasoning_effort = true,
             .requires_reasoning_content = is_deepseek,
             .supports_long_cache_retention = true,
-            .max_tokens_field = is_deepseek
-                    ? OpenAICompletionsMaxTokensField::MaxTokens
-                    : OpenAICompletionsMaxTokensField::MaxCompletionTokens,
-            .thinking_format = is_deepseek
-                    ? OpenAICompletionsThinkingFormat::DeepSeek
-                    : is_openrouter
-                            ? OpenAICompletionsThinkingFormat::OpenRouter
-                            : OpenAICompletionsThinkingFormat::OpenAI,
-            .cache_control_format = is_openrouter &&
-                                    model.id.starts_with("anthropic/")
-                    ? std::optional<OpenAICompletionsCacheControlFormat>{
-                              OpenAICompletionsCacheControlFormat::Anthropic}
-                    : std::nullopt,
+            .max_tokens_field = is_deepseek ? OpenAICompletionsMaxTokensField::MaxTokens
+                                            : OpenAICompletionsMaxTokensField::MaxCompletionTokens,
+            .thinking_format = is_deepseek     ? OpenAICompletionsThinkingFormat::DeepSeek
+                               : is_openrouter ? OpenAICompletionsThinkingFormat::OpenRouter
+                                               : OpenAICompletionsThinkingFormat::OpenAI,
+            .cache_control_format =
+                    is_openrouter && model.id.starts_with("anthropic/")
+                            ? std::optional<OpenAICompletionsCacheControlFormat>{OpenAICompletionsCacheControlFormat::
+                                              Anthropic}
+                            : std::nullopt,
     };
     if (const auto* compat = completions_compat(model)) {
         if (compat->supports_store) {
@@ -106,8 +100,7 @@ struct ResolvedCompletionsCompat {
             resolved.max_tokens_field = *compat->max_tokens_field;
         }
         if (compat->requires_reasoning_content_on_assistant_messages) {
-            resolved.requires_reasoning_content =
-                    *compat->requires_reasoning_content_on_assistant_messages;
+            resolved.requires_reasoning_content = *compat->requires_reasoning_content_on_assistant_messages;
         }
         if (compat->thinking_format) {
             resolved.thinking_format = *compat->thinking_format;
@@ -116,8 +109,7 @@ struct ResolvedCompletionsCompat {
             resolved.cache_control_format = *compat->cache_control_format;
         }
         if (compat->supports_long_cache_retention) {
-            resolved.supports_long_cache_retention =
-                    *compat->supports_long_cache_retention;
+            resolved.supports_long_cache_retention = *compat->supports_long_cache_retention;
         }
         if (compat->supports_reasoning_effort) {
             resolved.supports_reasoning_effort = *compat->supports_reasoning_effort;
@@ -127,14 +119,12 @@ struct ResolvedCompletionsCompat {
 }
 
 [[nodiscard]] std::optional<std::string> mapped_effort(
-        const Model& model,
-        std::optional<ModelThinkingLevel> requested) {
+        const Model& model, std::optional<ModelThinkingLevel> requested) {
     if (!requested || *requested == ModelThinkingLevel::Off) {
         return std::nullopt;
     }
     if (model.thinking_level_map) {
-        if (const auto found = model.thinking_level_map->find(*requested);
-                found != model.thinking_level_map->end()) {
+        if (const auto found = model.thinking_level_map->find(*requested); found != model.thinking_level_map->end()) {
             return found->second;
         }
     }
@@ -171,8 +161,7 @@ struct ResolvedCompletionsCompat {
     };
 }
 
-[[nodiscard]] support::JsonValue::array_t user_content(
-        const std::vector<Content>& content) {
+[[nodiscard]] support::JsonValue::array_t user_content(const std::vector<Content>& content) {
     support::JsonValue::array_t result;
     for (const auto& block : content) {
         if (const auto* text = std::get_if<TextContent>(&block)) {
@@ -189,8 +178,7 @@ struct ResolvedCompletionsCompat {
     return result;
 }
 
-[[nodiscard]] support::JsonValue tool_result_text(
-        const std::vector<Content>& content) {
+[[nodiscard]] support::JsonValue tool_result_text(const std::vector<Content>& content) {
     std::string text;
     bool has_image = false;
     for (const auto& block : content) {
@@ -206,32 +194,25 @@ struct ResolvedCompletionsCompat {
     if (!text.empty()) {
         return sanitize_text(text);
     }
-    return has_image ? support::JsonValue{"(see attached image)"}
-                     : support::JsonValue{"(no tool output)"};
+    return has_image ? support::JsonValue{"(see attached image)"} : support::JsonValue{"(no tool output)"};
 }
 
-[[nodiscard]] std::optional<support::JsonValue> signature_json(
-        const std::optional<std::string>& signature) {
+[[nodiscard]] std::optional<support::JsonValue> signature_json(const std::optional<std::string>& signature) {
     if (!signature || signature->empty()) {
         return std::nullopt;
     }
     auto parsed = support::read_json(*signature);
-    if (!parsed ||
-            (!parsed->holds<support::JsonValue::array_t>() &&
-                    !parsed->holds<support::JsonValue::object_t>())) {
+    if (!parsed || (!parsed->holds<support::JsonValue::array_t>() && !parsed->holds<support::JsonValue::object_t>())) {
         return std::nullopt;
     }
     return std::move(*parsed);
 }
 
 [[nodiscard]] bool is_reasoning_field(std::string_view signature) {
-    return signature == "reasoning" ||
-           signature == "reasoning_content" ||
-           signature == "reasoning_text";
+    return signature == "reasoning" || signature == "reasoning_content" || signature == "reasoning_text";
 }
 
-[[nodiscard]] support::Expected<std::string> tool_arguments(
-        const ToolCallContent& call) {
+[[nodiscard]] support::Expected<std::string> tool_arguments(const ToolCallContent& call) {
     if (call.arguments) {
         return support::write_json(*call.arguments);
     }
@@ -241,9 +222,7 @@ struct ResolvedCompletionsCompat {
     return std::string{"{}"};
 }
 
-[[nodiscard]] std::string normalize_completions_id(
-        const Model& model,
-        std::string_view value) {
+[[nodiscard]] std::string normalize_completions_id(const Model& model, std::string_view value) {
     const auto separator = value.find('|');
     if (separator == std::string_view::npos) {
         if (model.provider == "openai" && value.size() > 40) {
@@ -263,9 +242,7 @@ struct ResolvedCompletionsCompat {
 }
 
 [[nodiscard]] support::Expected<JsonObject> assistant_message(
-        const AssistantMessage& assistant,
-        const Model& model,
-        const ResolvedCompletionsCompat& compat) {
+        const AssistantMessage& assistant, const Model& model, const ResolvedCompletionsCompat& compat) {
     std::string text;
     std::vector<const ThinkingContent*> thinking;
     std::vector<const ToolCallContent*> calls;
@@ -282,8 +259,7 @@ struct ResolvedCompletionsCompat {
     }
 
     JsonObject result{
-            {"content", text.empty() ? support::JsonValue{nullptr}
-                                     : support::JsonValue{std::move(text)}},
+            {"content", text.empty() ? support::JsonValue{nullptr} : support::JsonValue{std::move(text)}},
             {"role", "assistant"},
     };
     std::optional<std::string> reasoning_field;
@@ -299,8 +275,7 @@ struct ResolvedCompletionsCompat {
         if (!reasoning_details) {
             reasoning_details = signature_json(block->thinking_signature);
         }
-        if (!reasoning_field && block->thinking_signature &&
-                is_reasoning_field(*block->thinking_signature)) {
+        if (!reasoning_field && block->thinking_signature && is_reasoning_field(*block->thinking_signature)) {
             reasoning_field = *block->thinking_signature;
         }
     }
@@ -314,8 +289,7 @@ struct ResolvedCompletionsCompat {
     } else if (!reasoning_text.empty() && reasoning_field) {
         result.emplace(*reasoning_field, std::move(reasoning_text));
     }
-    if (compat.requires_reasoning_content && model.reasoning &&
-            !result.contains("reasoning_content")) {
+    if (compat.requires_reasoning_content && model.reasoning && !result.contains("reasoning_content")) {
         result.emplace("reasoning_content", "");
     }
 
@@ -342,23 +316,17 @@ struct ResolvedCompletionsCompat {
     return result;
 }
 
-[[nodiscard]] bool has_tool_history(
-        const std::vector<MessageVariant>& messages) {
+[[nodiscard]] bool has_tool_history(const std::vector<MessageVariant>& messages) {
     return std::ranges::any_of(messages, [](const MessageVariant& message) {
         if (const auto* assistant = std::get_if<AssistantMessage>(&message)) {
-            return std::ranges::any_of(
-                    assistant->content,
-                    [](const AssistantContent& content) {
-                        return std::holds_alternative<ToolCallContent>(content);
-                    });
+            return std::ranges::any_of(assistant->content,
+                    [](const AssistantContent& content) { return std::holds_alternative<ToolCallContent>(content); });
         }
         return std::holds_alternative<ToolResultMessage>(message);
     });
 }
 
-[[nodiscard]] bool add_cache_control_to_content(
-        JsonObject& message,
-        const support::JsonValue& cache_control) {
+[[nodiscard]] bool add_cache_control_to_content(JsonObject& message, const support::JsonValue& cache_control) {
     auto found = message.find("content");
     if (found == message.end()) {
         return false;
@@ -367,12 +335,11 @@ struct ResolvedCompletionsCompat {
         if (text->empty()) {
             return false;
         }
-        found->second = support::JsonValue::array_t{
-                JsonObject{
-                        {"cache_control", cache_control},
-                        {"text", std::move(*text)},
-                        {"type", "text"},
-                }};
+        found->second = support::JsonValue::array_t{JsonObject{
+                {"cache_control", cache_control},
+                {"text", std::move(*text)},
+                {"type", "text"},
+        }};
         return true;
     }
     auto* blocks = found->second.get_if<support::JsonValue::array_t>();
@@ -385,8 +352,7 @@ struct ResolvedCompletionsCompat {
             continue;
         }
         const auto type = block->find("type");
-        if (type != block->end() && type->second.holds<std::string>() &&
-                type->second.get_string() == "text") {
+        if (type != block->end() && type->second.holds<std::string>() && type->second.get_string() == "text") {
             block->emplace("cache_control", cache_control);
             return true;
         }
@@ -394,8 +360,7 @@ struct ResolvedCompletionsCompat {
     return false;
 }
 
-void apply_cache_control(
-        support::JsonValue::array_t& messages,
+void apply_cache_control(support::JsonValue::array_t& messages,
         support::JsonValue::array_t& tools,
         CacheRetention retention,
         bool long_retention) {
@@ -414,9 +379,8 @@ void apply_cache_control(
         }
         const auto role = object->find("role");
         if (role != object->end() && role->second.holds<std::string>() &&
-                (role->second.get_string() == "system" ||
-                        role->second.get_string() == "developer")) {
-            (void)add_cache_control_to_content(*object, cache_control);
+                (role->second.get_string() == "system" || role->second.get_string() == "developer")) {
+            static_cast<void>(add_cache_control_to_content(*object, cache_control));
             break;
         }
     }
@@ -430,8 +394,7 @@ void apply_cache_control(
         }
         const auto role = object->find("role");
         if (role != object->end() && role->second.holds<std::string>() &&
-                (role->second.get_string() == "user" ||
-                        role->second.get_string() == "assistant" ||
+                (role->second.get_string() == "user" || role->second.get_string() == "assistant" ||
                         role->second.get_string() == "tool") &&
                 add_cache_control_to_content(*object, cache_control)) {
             break;
@@ -439,18 +402,15 @@ void apply_cache_control(
     }
 }
 
-[[nodiscard]] support::Expected<support::JsonValue::array_t> convert_messages(
-        const Model& model,
+[[nodiscard]] support::Expected<support::JsonValue::array_t> convert_messages(const Model& model,
         const AiContext& context,
+        const std::vector<MessageVariant>& messages,
         const ResolvedCompletionsCompat& compat) {
-    const auto messages = normalize_history(AdapterKind::OpenAICompletions, model, context);
     support::JsonValue::array_t result;
     if (context.system_prompt && !context.system_prompt->empty()) {
         result.emplace_back(JsonObject{
                 {"content", sanitize_text(*context.system_prompt)},
-                {"role", model.reasoning && compat.supports_developer_role
-                        ? "developer"
-                        : "system"},
+                {"role", model.reasoning && compat.supports_developer_role ? "developer" : "system"},
         });
     }
     for (const auto& message : messages) {
@@ -475,32 +435,24 @@ void apply_cache_control(
                 return std::unexpected(converted.error());
             }
             const auto& content = converted->at("content");
-            const bool has_content =
-                    content.holds<std::string>() && !content.get_string().empty();
+            const bool has_content = content.holds<std::string>() && !content.get_string().empty();
             const auto tool_calls = converted->find("tool_calls");
-            if (has_content || (tool_calls != converted->end() &&
-                    !tool_calls->second.get_array().empty())) {
+            if (has_content || (tool_calls != converted->end() && !tool_calls->second.get_array().empty())) {
                 result.emplace_back(std::move(*converted));
             }
         } else if (const auto* tool_result = std::get_if<ToolResultMessage>(&message)) {
             result.emplace_back(JsonObject{
                     {"content", tool_result_text(tool_result->content)},
                     {"role", "tool"},
-                    {"tool_call_id", normalize_completions_id(
-                            model,
-                            tool_result->tool_call_id)},
+                    {"tool_call_id", normalize_completions_id(model, tool_result->tool_call_id)},
             });
-            if (supports_images(model) &&
-                    std::ranges::any_of(
-                            tool_result->content,
-                            [](const Content& content) {
-                                return std::holds_alternative<ImageContent>(content);
-                            })) {
-                support::JsonValue::array_t attached{
-                        JsonObject{
-                                {"text", "Attached image(s) from tool result:"},
-                                {"type", "text"},
-                        }};
+            if (supports_images(model) && std::ranges::any_of(tool_result->content, [](const Content& content) {
+                    return std::holds_alternative<ImageContent>(content);
+                })) {
+                support::JsonValue::array_t attached{JsonObject{
+                        {"text", "Attached image(s) from tool result:"},
+                        {"type", "text"},
+                }};
                 for (const auto& content : tool_result->content) {
                     if (const auto* image = std::get_if<ImageContent>(&content)) {
                         attached.emplace_back(image_part(*image));
@@ -517,8 +469,7 @@ void apply_cache_control(
 }
 
 [[nodiscard]] support::JsonValue::array_t completions_tools(
-        const ResolvedCompletionsCompat& compat,
-        const std::vector<Tool>& tools) {
+        const ResolvedCompletionsCompat& compat, const std::vector<Tool>& tools) {
     support::JsonValue::array_t result;
     for (const auto& tool : tools) {
         JsonObject function{
@@ -537,9 +488,7 @@ void apply_cache_control(
     return result;
 }
 
-[[nodiscard]] std::optional<std::string> reasoning_off(
-        const Model& model,
-        const ResolvedCompletionsCompat& compat) {
+[[nodiscard]] std::optional<std::string> reasoning_off(const Model& model, const ResolvedCompletionsCompat& compat) {
     if (!model.reasoning || !compat.supports_reasoning_effort) {
         return std::nullopt;
     }
@@ -549,11 +498,10 @@ void apply_cache_control(
 } // namespace
 
 support::Expected<support::JsonValue> build_completions_payload(
-        const Model& model,
-        const AiContext& context,
-        const ProviderStreamOptions& options) {
+        const Model& model, const AiContext& context, const ProviderStreamOptions& options) {
     const auto compat = resolve_compat(model);
-    auto messages = convert_messages(model, context, compat);
+    const auto normalized = normalize_history(AdapterKind::OpenAICompletions, model, context);
+    auto messages = convert_messages(model, context, normalized, compat);
     if (!messages) {
         return std::unexpected(messages.error());
     }
@@ -562,18 +510,12 @@ support::Expected<support::JsonValue> build_completions_payload(
     if (!context.tools.empty()) {
         tools = completions_tools(compat, context.tools);
     } else {
-        const auto normalized = normalize_history(AdapterKind::OpenAICompletions, model, context);
         if (has_tool_history(normalized)) {
             tools = {};
         }
     }
-    if (compat.cache_control_format &&
-            *compat.cache_control_format == OpenAICompletionsCacheControlFormat::Anthropic) {
-        apply_cache_control(
-                *messages,
-                tools,
-                options.cache_retention,
-                compat.supports_long_cache_retention);
+    if (compat.cache_control_format && *compat.cache_control_format == OpenAICompletionsCacheControlFormat::Anthropic) {
+        apply_cache_control(*messages, tools, options.cache_retention, compat.supports_long_cache_retention);
     }
 
     support::JsonValue::object_t payload{
@@ -581,9 +523,7 @@ support::Expected<support::JsonValue> build_completions_payload(
             {"model", model.id},
             {"stream", true},
     };
-    payload.emplace(
-            "stream_options",
-            JsonObject{{"include_usage", true}});
+    payload.emplace("stream_options", JsonObject{{"include_usage", true}});
     if (compat.supports_store) {
         payload.emplace("store", false);
     }
@@ -591,16 +531,13 @@ support::Expected<support::JsonValue> build_completions_payload(
         if (compat.max_tokens_field == OpenAICompletionsMaxTokensField::MaxTokens) {
             payload.emplace("max_tokens", static_cast<double>(options.max_tokens));
         } else {
-            payload.emplace(
-                    "max_completion_tokens",
-                    static_cast<double>(options.max_tokens));
+            payload.emplace("max_completion_tokens", static_cast<double>(options.max_tokens));
         }
     }
     if (options.temperature) {
         payload.emplace("temperature", *options.temperature);
     }
-    if (!tools.empty() || has_tool_history(
-            normalize_history(AdapterKind::OpenAICompletions, model, context))) {
+    if (!tools.empty() || has_tool_history(normalized)) {
         payload.emplace("tools", std::move(tools));
     }
 
@@ -622,9 +559,7 @@ support::Expected<support::JsonValue> build_completions_payload(
     }
     case OpenAICompletionsThinkingFormat::OpenRouter: {
         if (model.reasoning && (effort || supports_reasoning_off(model))) {
-            payload.emplace(
-                    "reasoning",
-                    JsonObject{{"effort", effort.value_or(off.value_or("none"))}});
+            payload.emplace("reasoning", JsonObject{{"effort", effort.value_or(off.value_or("none"))}});
         }
         break;
     }
@@ -648,19 +583,14 @@ support::Expected<support::JsonValue> build_completions_payload(
         break;
     }
     }
-    if (options.cache_retention == CacheRetention::Long &&
-            compat.supports_long_cache_retention) {
+    if (options.cache_retention == CacheRetention::Long && compat.supports_long_cache_retention) {
         payload.emplace("prompt_cache_retention", "24h");
         if (options.session_id) {
-            payload.emplace(
-                    "prompt_cache_key",
-                    detail::clamp_openai_prompt_cache_key(*options.session_id));
+            payload.emplace("prompt_cache_key", detail::clamp_openai_prompt_cache_key(*options.session_id));
         }
     } else if (contains_case_insensitive(model.base_url, "api.openai.com") &&
-            options.cache_retention != CacheRetention::None && options.session_id) {
-        payload.emplace(
-                "prompt_cache_key",
-                detail::clamp_openai_prompt_cache_key(*options.session_id));
+               options.cache_retention != CacheRetention::None && options.session_id) {
+        payload.emplace("prompt_cache_key", detail::clamp_openai_prompt_cache_key(*options.session_id));
     }
     return support::JsonValue{std::move(payload)};
 }

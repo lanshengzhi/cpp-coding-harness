@@ -316,7 +316,7 @@ The session policy that starts another Agent Run with exponential backoff after 
 _Avoid_: Infinite retry, silent retry, adapter-level retry
 
 **OAuth Callback Server**:
-The local loopback HTTP server used by the Codex browser login flow to receive the authorization-code redirect, raced against manual code entry.
+The local loopback HTTP server used by the Codex and OpenRouter browser login flows to receive an authorization-code redirect, raced against manual code entry.
 _Avoid_: Webhook, remote endpoint
 
 **Adapter**:

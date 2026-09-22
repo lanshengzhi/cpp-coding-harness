@@ -33,7 +33,7 @@ artifact. The resulting sets are:
 | `kimi-coding` | 4 | `anthropic-messages` |
 | `openai` | 39 | `openai-responses` |
 | `openai-codex` | 6 | `openai-codex-responses` |
-| `openrouter` | 378 | `openai-completions` |
+| `openrouter` | 378 | `anthropic-messages`, `openai-completions` |
 | `opencode-go` | 30 | `openai-completions`, `openai-responses`, `anthropic-messages` |
 
 The Codex discrepancy is resolved by the generator, not by the old fixture:

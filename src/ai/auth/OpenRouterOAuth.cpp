@@ -118,24 +118,8 @@ const std::map<std::string, std::string, std::less<>> kJsonHeaders{
             support::make_error(support::ErrorCode::OAuth, "OpenRouter OAuth response carries no \"key\""));
 }
 
-[[nodiscard]] boost::asio::awaitable<support::Expected<OAuthHttpResponse>> post_with_login_cancellation(
-        const std::shared_ptr<OAuthHttpClient>& http_client,
-        std::string url,
-        std::map<std::string, std::string, std::less<>> headers,
-        std::string body,
-        std::stop_token stop_token) {
-    auto response = co_await http_client->post(std::move(url), std::move(headers), std::move(body), stop_token);
-    if (!response) {
-        if (stop_token.stop_requested() || response.error().code == support::ErrorCode::Cancelled) {
-            co_return std::unexpected(login_cancelled());
-        }
-        co_return std::unexpected(std::move(response.error()));
-    }
-    co_return *response;
-}
-
 [[nodiscard]] boost::asio::awaitable<support::Expected<std::string>> exchange_authorization_code(
-        const std::shared_ptr<OAuthHttpClient>& http_client,
+        std::shared_ptr<OAuthHttpClient> http_client,
         std::string code,
         std::string verifier,
         std::stop_token stop_token) {
@@ -168,7 +152,6 @@ const std::map<std::string, std::string, std::less<>> kJsonHeaders{
 struct ManualState {
     std::mutex mutex;
     std::stop_source manual_stop;
-    bool prompt_settled{false};
     std::optional<std::string> manual_input{std::nullopt};
     std::optional<support::Error> manual_error{std::nullopt};
 };
@@ -180,6 +163,8 @@ using PromptDoneChannel = boost::asio::experimental::channel<void(boost::system:
 OpenRouterOAuth::OpenRouterOAuth(std::shared_ptr<OAuthHttpClient> http_client, OpenRouterOAuthOptions options)
     : http_client_(std::move(http_client)), options_(std::move(options)) {}
 
+OpenRouterOAuth::OpenRouterOAuth(OpenRouterOAuth&&) noexcept = default;
+OpenRouterOAuth& OpenRouterOAuth::operator=(OpenRouterOAuth&&) noexcept = default;
 OpenRouterOAuth::~OpenRouterOAuth() = default;
 
 boost::asio::awaitable<support::Expected<std::string>> OpenRouterOAuth::exchange_code(
@@ -263,7 +248,6 @@ boost::asio::awaitable<support::Expected<ai::OAuthCredential>> OpenRouterOAuth::
                     } else {
                         manual_state->manual_error = std::move(result.error());
                     }
-                    manual_state->prompt_settled = true;
                 }
                 server->cancel_wait();
                 prompt_done->try_send(boost::system::error_code{});

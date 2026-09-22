@@ -52,9 +52,10 @@ constexpr std::size_t kMaxVisible = 8;
         return theme.foreground(ThemeToken::Muted, " • unconfigured");
     }
     if (provider.status->type != provider.auth_type) {
-        const std::string label = provider.status->type == AuthSelectorType::OAuth
-            ? (provider.id == "openrouter" ? "account configured" : "subscription configured")
-            : "API key configured";
+        const std::string label =
+                provider.status->type == AuthSelectorType::OAuth
+                        ? (provider.id == "openrouter" ? "account configured" : "subscription configured")
+                        : "API key configured";
         return theme.foreground(ThemeToken::Muted, " • ") + theme.foreground(ThemeToken::Warning, label);
     }
     if (!provider.status->source || *provider.status->source == "OAuth" ||
@@ -93,8 +94,7 @@ constexpr std::size_t kMaxVisible = 8;
     for (const auto& provider : providers) {
         std::string label = provider.name;
         if (show_type_labels) {
-            label += theme.foreground(ThemeToken::Muted,
-                    " [" + std::string{auth_type_label(provider)} + "]");
+            label += theme.foreground(ThemeToken::Muted, " [" + std::string{auth_type_label(provider)} + "]");
         }
         label += status_indicator(theme, provider);
         std::string search_text = provider.name + " " + provider.id + " " +

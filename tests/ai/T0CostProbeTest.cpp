@@ -72,15 +72,16 @@ namespace {
 
 TEST_CASE("T4 probe reaches Anthropic budget-based thinking", "[ai][probe][issue762]") {
     ai::ProviderStreamOptions options;
-    options.max_tokens = 4096;
-    options.reasoning = ai::ModelThinkingLevel::High;
+    options.max_tokens = 6144;
+    options.reasoning = ai::ModelThinkingLevel::Low;
 
     const auto result = ai::api::build_adapter_payload(
             ai::api::AdapterKind::AnthropicMessages, budget_anthropic_model(), probe_context(), options);
 
     REQUIRE(result);
     CHECK(result->at("thinking").at("type").get_string() == "enabled");
-    CHECK(result->at("thinking").at("budget_tokens").get_number() == 3072);
+    CHECK(result->at("thinking").at("budget_tokens").get_number() == 2048);
+    CHECK(result->at("thinking").at("display").get_string() == "summarized");
     CHECK_FALSE(result->get_object().contains("output_config"));
 }
 
@@ -164,6 +165,7 @@ TEST_CASE(
     REQUIRE(body);
     CHECK(body->at("thinking").at("type").get_string() == "enabled");
     CHECK(body->at("thinking").at("budget_tokens").get_number() == 3072);
+    CHECK(body->at("thinking").at("display").get_string() == "summarized");
     CHECK(request.body.contains("\"type\":\"image\""));
 }
 
@@ -189,29 +191,30 @@ TEST_CASE("T0 probe reaches the DeepSeek OpenAI Completions adapter", "[ai][prob
     model.base_url = "https://api.deepseek.com";
     model.reasoning = true;
     model.thinking_level_map = ai::ThinkingLevelMap{
-        {ai::ModelThinkingLevel::High, "high"},
+            {ai::ModelThinkingLevel::High, "high"},
     };
     model.compat = ai::ModelCompatVariant{ai::OpenAICompletionsCompat{
-        .supports_store = false,
-        .supports_strict_mode = true,
-        .max_tokens_field = ai::OpenAICompletionsMaxTokensField::MaxTokens,
-        .requires_reasoning_content_on_assistant_messages = true,
-        .thinking_format = ai::OpenAICompletionsThinkingFormat::DeepSeek,
+            .supports_store = false,
+            .supports_strict_mode = true,
+            .max_tokens_field = ai::OpenAICompletionsMaxTokensField::MaxTokens,
+            .requires_reasoning_content_on_assistant_messages = true,
+            .thinking_format = ai::OpenAICompletionsThinkingFormat::DeepSeek,
     }};
     transport->attempts.push_back(tests::TransportAttempt{
-        .chunks = {
-            "data: {\"id\":\"chatcmpl-probe\",\"model\":\"deepseek-flash\","
-            "\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"plan\"},"
-            "\"finish_reason\":null}]}\n\n"
-            "data: {\"id\":\"chatcmpl-probe\",\"model\":\"deepseek-flash\","
-            "\"choices\":[{\"index\":0,\"delta\":{\"content\":\"answer\"},"
-            "\"finish_reason\":null}]}\n\n"
-            "data: {\"id\":\"chatcmpl-probe\",\"model\":\"deepseek-flash\","
-            "\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"
-            "data: {\"id\":\"chatcmpl-probe\",\"model\":\"deepseek-flash\","
-            "\"choices\":[],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":2}}\n\n"
-            "data: [DONE]\n\n",
-        },
+            .chunks =
+                    {
+                            "data: {\"id\":\"chatcmpl-probe\",\"model\":\"deepseek-flash\","
+                            "\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"plan\"},"
+                            "\"finish_reason\":null}]}\n\n"
+                            "data: {\"id\":\"chatcmpl-probe\",\"model\":\"deepseek-flash\","
+                            "\"choices\":[{\"index\":0,\"delta\":{\"content\":\"answer\"},"
+                            "\"finish_reason\":null}]}\n\n"
+                            "data: {\"id\":\"chatcmpl-probe\",\"model\":\"deepseek-flash\","
+                            "\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"
+                            "data: {\"id\":\"chatcmpl-probe\",\"model\":\"deepseek-flash\","
+                            "\"choices\":[],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":2}}\n\n"
+                            "data: [DONE]\n\n",
+                    },
     });
     auto provider = ai::providers::make_composed_provider("deepseek", "DeepSeek", {model}, {}, transport);
 
@@ -246,7 +249,7 @@ TEST_CASE("T4 probe keeps authenticated unknown APIs on the zero-transport path"
     options.auth.api_key = "dummy-probe-key";
     auto stream = provider->stream(model, probe_context(), std::move(options));
     const auto result = tests::run_async_result(
-        std::move(stream).run([](const ai::AssistantStreamEvent&) -> support::ExpectedVoid { return {}; }));
+            std::move(stream).run([](const ai::AssistantStreamEvent&) -> support::ExpectedVoid { return {}; }));
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == support::ErrorCode::Stream);

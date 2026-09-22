@@ -373,8 +373,7 @@ support::AsyncResult<std::optional<ai::AuthCheck>> ModelRuntime::check_auth(std:
     return support::detail::make_async_result(
             [this, provider_id = std::move(provider_id)]() mutable
                     -> boost::asio::awaitable<support::Expected<std::optional<ai::AuthCheck>>> {
-                auto checked = co_await support::detail::await_async_result(
-                        impl_->models->check_auth(provider_id));
+                auto checked = co_await support::detail::await_async_result(impl_->models->check_auth(provider_id));
                 if (!checked) {
                     co_return std::unexpected(checked.error());
                 }
@@ -396,8 +395,7 @@ bool ModelRuntime::has_configured_auth(std::string_view provider_id) const {
 
 bool ModelRuntime::is_using_oauth(std::string_view provider_id) const {
     const auto found = impl_->auth_snapshot.find(provider_id);
-    return found != impl_->auth_snapshot.end() &&
-           found->second.type == ai::AuthType::OAuth;
+    return found != impl_->auth_snapshot.end() && found->second.type == ai::AuthType::OAuth;
 }
 
 support::ExpectedVoid ModelRuntime::set_runtime_api_key(
@@ -457,8 +455,7 @@ std::optional<ModelRuntimeAuthStatus> ModelRuntime::get_provider_auth_status(
     }
     if (impl_->stored_providers.contains(std::string{provider_id})) {
         const auto stored_type = impl_->stored_auth_types.find(provider_id);
-        if (stored_type != impl_->stored_auth_types.end() &&
-            stored_type->second == "oauth") {
+        if (stored_type != impl_->stored_auth_types.end() && stored_type->second == "oauth") {
             // A stored OAuth record is authoritative for this provider. If
             // the provider has no OAuth method (Kimi), it must not fall
             // through to an environment/configured API key.
@@ -500,8 +497,7 @@ support::AsyncResult<void> ModelRuntime::login(
                 CCH_TRY_VOID(co_await support::detail::await_async_result(
                         impl_->models->login(provider_id, type, std::move(interaction))));
                 impl_->stored_providers.insert(provider_id);
-                impl_->stored_auth_types[provider_id] =
-                        type == ai::AuthType::OAuth ? "oauth" : "api_key";
+                impl_->stored_auth_types[provider_id] = type == ai::AuthType::OAuth ? "oauth" : "api_key";
                 impl_->auth_snapshot[provider_id] = ai::AuthCheck{
                         .source = type == ai::AuthType::OAuth ? "OAuth" : "stored credential",
                         .type = type,

@@ -36,10 +36,8 @@ public:
     CompletionsEventProcessor& operator=(const CompletionsEventProcessor&) = delete;
 
     [[nodiscard]] support::Expected<CompletionsProcessOutcome> process(
-            support::JsonValue::object_t event,
-            AssistantMessage& assistant,
-            AssistantEventSink& sink);
-    [[nodiscard]] support::ExpectedVoid finish(AssistantMessage& assistant);
+            support::JsonValue::object_t event, AssistantMessage& assistant, AssistantEventSink& sink);
+    [[nodiscard]] support::ExpectedVoid finish(AssistantMessage& assistant, AssistantEventSink& sink);
 
 private:
     struct Impl;

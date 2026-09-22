@@ -31,7 +31,7 @@ machine-readable record, including every final model ID and API grouping, is
 | `models/providers/kimi-coding.json` | 4 | `anthropic-messages` (upstream provenance only) | `9884f065fe5a0e68e3538590c28019476077712f0542198eef6fdb53b8edd2ee` |
 | `models/providers/openai.json` | 39 | `openai-responses` | `3df2916783a161926c0f597de68138499d0bdaef6aecc28d3a09d2f0dcf28e2e` |
 | `models/providers/openai-codex.json` | 6 | `openai-codex-responses` | `f4e2b200a94a878170686f8d36d3fbed7d16630b4e2f61f0bf187034eac76976` |
-| `models/providers/openrouter.json` | 378 | `openai-completions` | `83c2152eba09a067a3b796c401fbda79d5b366a056f70b62937be5130483c184` |
+| `models/providers/openrouter.json` | 378 | `anthropic-messages`, `openai-completions` | `83c2152eba09a067a3b796c401fbda79d5b366a056f70b62937be5130483c184` |
 | `models/providers/opencode-go.json` | 30 | `openai-completions`, `openai-responses`, `anthropic-messages` | `d471bdb6a9f940fc732687d6749f92d2f3c7c9302ff39d2ce0af062f2472a4ad` |
 
 The generator resolves the Codex discrepancy in favor of six models:
@@ -164,6 +164,11 @@ shared by the scoped adapters:
 
 ### Wire goldens (`wire/`)
 
+- `wire/openai-completions-deepseek-ts-request.json` + `.sse` + `-ts-events.json`
+  (`#761`): the current-baseline pi-ai DeepSeek Chat Completions request bytes, raw SSE
+  sequence, and full assistant event snapshot. Regenerate from the sibling pinned checkout
+  with `../pi/node_modules/.bin/tsx fixtures/pi-ai/capture/capture-completions-ts-events.mts`;
+  the script refuses any checkout other than `1a584a7a5`.
 - `wire/openai-responses-deepseek-ts-request.json` + `.sse` + `-ts-events.json` (#340): the frozen
   DeepSeek `openai-responses` request bytes, raw SSE sequence, and TS assistant event snapshot. The
   final `response.completed` frame is SSE-terminated (a single trailing `\n\n`) so strict SSE

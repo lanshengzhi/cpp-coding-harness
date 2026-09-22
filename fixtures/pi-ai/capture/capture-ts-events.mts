@@ -98,7 +98,7 @@ function canonicalSignature(signature: string): string {
 	return signature;
 }
 
-const SCRATCH_KEYS = new Set(["index", "partialJson", "customInput"]);
+const SCRATCH_KEYS = new Set(["index", "partialJson", "customInput", "partialArgs", "streamIndex"]);
 
 function normalizeContentBlock(block: any): void {
 	for (const key of Object.keys(block)) {

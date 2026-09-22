@@ -920,11 +920,9 @@ TEST_CASE("Models accepts header authentication and suppresses none-retention af
         });
     };
     auto models = make_models(credentials, auth_context);
-    auto provider = std::make_shared<RecordingProvider>(
-        "provider", ai::ProviderAuth{.api_key = std::move(api_key)});
+    auto provider = std::make_shared<RecordingProvider>("provider", ai::ProviderAuth{.api_key = std::move(api_key)});
     REQUIRE(install_provider(models, provider));
-    auto model = tests::make_model(
-        "generic-model", "provider", "openai-completions");
+    auto model = tests::make_model("generic-model", "provider", "openai-completions");
     ai::SimpleStreamOptions options;
     options.session_id = "ignored-session";
     options.cache_retention = ai::CacheRetention::None;

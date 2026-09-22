@@ -12,8 +12,7 @@
 
 namespace cch::ai::auth {
 
-using OAuthCallbackHandler =
-        std::move_only_function<boost::asio::awaitable<support::Expected<std::string>>(std::string)>;
+using OAuthCallbackHook = std::move_only_function<boost::asio::awaitable<support::Expected<std::string>>(std::string)>;
 
 struct OAuthCallbackServerOptions {
     /// Bind host; the frozen default is 127.0.0.1 with PI_OAUTH_CALLBACK_HOST
@@ -34,7 +33,7 @@ struct OAuthCallbackServerOptions {
     std::string exchange_error_message{"OAuth callback exchange failed."};
     /// Optional provider-owned exchange. When absent, the callback result is
     /// the authorization code, preserving the Codex behavior.
-    OAuthCallbackHandler callback_handler{};
+    OAuthCallbackHook callback_handler{};
 };
 
 /// Local loopback callback server for the Codex browser login flow. Serves

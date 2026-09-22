@@ -36,40 +36,35 @@ TEST_CASE("Anthropic Messages streams a generic text response and builds its req
         "[ai][api][anthropic][issue339][spec]") {
     auto transport = std::make_shared<tests::ScriptedTransport>();
     transport->attempts.push_back(tests::TransportAttempt{
-            .chunks = {
-                    "event: message_start\n"
-                    "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_generic\","
-                    "\"usage\":{\"input_tokens\":2,\"output_tokens\":0}}}\n\n"
-                    "event: content_block_start\n"
-                    "data: {\"type\":\"content_block_start\",\"index\":0,"
-                    "\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
-                    "event: content_block_delta\n"
-                    "data: {\"type\":\"content_block_delta\",\"index\":0,"
-                    "\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\n"
-                    "event: content_block_stop\n"
-                    "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
-                    "event: message_delta\n"
-                    "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},"
-                    "\"usage\":{\"output_tokens\":3}}\n\n"
-                    "event: message_stop\n"
-                    "data: {\"type\":\"message_stop\"}\n\n",
-            },
+            .chunks =
+                    {
+                            "event: message_start\n"
+                            "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_generic\","
+                            "\"usage\":{\"input_tokens\":2,\"output_tokens\":0}}}\n\n"
+                            "event: content_block_start\n"
+                            "data: {\"type\":\"content_block_start\",\"index\":0,"
+                            "\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
+                            "event: content_block_delta\n"
+                            "data: {\"type\":\"content_block_delta\",\"index\":0,"
+                            "\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\n"
+                            "event: content_block_stop\n"
+                            "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
+                            "event: message_delta\n"
+                            "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},"
+                            "\"usage\":{\"output_tokens\":3}}\n\n"
+                            "event: message_stop\n"
+                            "data: {\"type\":\"message_stop\"}\n\n",
+                    },
     });
 
     const auto model = anthropic_model();
-    auto models = tests::make_scripted_models(
-            model,
-            tests::ScriptedTransportOptions{.http_transport = transport});
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
     REQUIRE(models);
 
     ai::SimpleStreamOptions options;
     options.api_key = "dummy-anthropic-key";
     options.max_tokens = 256;
-    const auto run = tests::run_models(
-            *models,
-            model,
-            request_context(),
-            std::move(options));
+    const auto run = tests::run_models(*models, model, request_context(), std::move(options));
 
     REQUIRE(run.result);
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
@@ -106,11 +101,8 @@ TEST_CASE("Anthropic conversion keeps cache markers on the trailing user turn on
 
     ai::ProviderStreamOptions options;
     options.cache_retention = ai::CacheRetention::Short;
-    const auto payload = ai::api::build_adapter_payload(
-            ai::api::AdapterKind::AnthropicMessages,
-            model,
-            context,
-            options);
+    const auto payload =
+            ai::api::build_adapter_payload(ai::api::AdapterKind::AnthropicMessages, model, context, options);
 
     REQUIRE(payload);
     const auto& messages = payload->at("messages").get_array();

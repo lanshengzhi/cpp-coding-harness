@@ -157,29 +157,23 @@ private:
 /// and login presentation without manufacturing an OAuth method.
 class ScriptedApiKeyProvider final : public tests::ScriptedProvider {
 public:
-    ScriptedApiKeyProvider(
-            std::string provider_id,
+    ScriptedApiKeyProvider(std::string provider_id,
             std::string provider_name,
             std::vector<ai::Model> models,
             std::string method_name = {})
-        : tests::ScriptedProvider(std::move(provider_id), ai::ProviderAuth{}),
-          provider_name_(std::move(provider_name)),
+        : tests::ScriptedProvider(std::move(provider_id), ai::ProviderAuth{}), provider_name_(std::move(provider_name)),
           models_(std::move(models)) {
         ai::ApiKeyAuth api_key;
-        api_key.name = method_name.empty()
-            ? provider_name_ + " API key"
-            : std::move(method_name);
+        api_key.name = method_name.empty() ? provider_name_ + " API key" : std::move(method_name);
         api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-            -> cch::support::AsyncResult<std::optional<ai::AuthCheck>> {
+                -> cch::support::AsyncResult<std::optional<ai::AuthCheck>> {
             return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
-                std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
-                    std::optional<ai::AuthCheck>{}});
+                    std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{std::optional<ai::AuthCheck>{}});
         };
         api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
-            -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+                -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
             return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
-                std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
-                    std::optional<ai::AuthResult>{}});
+                    std::expected<std::optional<ai::AuthResult>, cch::support::Error>{std::optional<ai::AuthResult>{}});
         };
         provider_auth().api_key = std::move(api_key);
     }
@@ -190,10 +184,10 @@ public:
     [[nodiscard]] ai::ModelStream stream(
             ai::Model, ai::AiContext, coding_agent::ModelRuntimeTestStreamOptions) override {
         return ai::detail::make_model_stream(
-            [](ai::AssistantEventSink) mutable -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-                co_return std::unexpected(
-                    support::make_error(support::ErrorCode::Provider, "scripted provider does not stream"));
-            });
+                [](ai::AssistantEventSink) mutable -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    co_return std::unexpected(
+                            support::make_error(support::ErrorCode::Provider, "scripted provider does not stream"));
+                });
     }
 
 private:
@@ -379,13 +373,12 @@ TEST_CASE("login picks the auth type, provider, runs the Codex OAuth branch, and
         "OpenAI Codex",
         std::vector<ai::Model>{tests::scripted_request_model("openai-codex", "gpt-5.5")},
         codex_url_then_manual_code(submitted_code));
-    auto openrouter = std::make_shared<ScriptedOAuthProvider>(
-        "openrouter",
-        "OpenRouter",
-        std::vector<ai::Model>{tests::scripted_request_model("openrouter", "openai/gpt-5")},
-        [](ai::AuthInteraction) -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-            co_return dummy_oauth_credential();
-        });
+    auto openrouter = std::make_shared<ScriptedOAuthProvider>("openrouter",
+            "OpenRouter",
+            std::vector<ai::Model>{tests::scripted_request_model("openrouter", "openai/gpt-5")},
+            [](ai::AuthInteraction) -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
+                co_return dummy_oauth_credential();
+            });
     openrouter->install_ambient_api_key("OpenRouter API key");
     auto runtime = fixture.create_runtime({codex, openrouter});
     REQUIRE(runtime != nullptr);
@@ -667,11 +660,10 @@ TEST_CASE("login select-type AuthPrompt resolves through the generic string-list
 TEST_CASE("login api-key ambient method shows the configured-outside info dialog",
         "[coding_agent][tui][login][issue406][spec]") {
     LoginFixture fixture;
-    auto kimi = std::make_shared<ScriptedApiKeyProvider>(
-        "kimi-coding",
-        "Kimi For Coding",
-        std::vector<ai::Model>{tests::scripted_request_model("kimi-coding", "kimi-for-coding")},
-        "Kimi API key");
+    auto kimi = std::make_shared<ScriptedApiKeyProvider>("kimi-coding",
+            "Kimi For Coding",
+            std::vector<ai::Model>{tests::scripted_request_model("kimi-coding", "kimi-for-coding")},
+            "Kimi API key");
     auto runtime = fixture.create_runtime({kimi});
     REQUIRE(runtime != nullptr);
     auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));

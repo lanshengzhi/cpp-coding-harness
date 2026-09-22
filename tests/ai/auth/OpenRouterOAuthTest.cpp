@@ -37,6 +37,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -54,22 +55,28 @@ struct CallbackEndpoint {
     std::string path{};
 };
 
-CallbackEndpoint callback_endpoint(std::string_view callback_url) {
+[[nodiscard]] CallbackEndpoint callback_endpoint(std::string_view callback_url) {
     const auto authority_start = callback_url.find("://");
     const auto host_start = authority_start == std::string_view::npos ? 0 : authority_start + 3;
     const auto path_start = callback_url.find('/', host_start);
     const auto authority = callback_url.substr(host_start,
             path_start == std::string_view::npos ? callback_url.size() - host_start : path_start - host_start);
     const auto port_start = authority.rfind(':');
+    if (port_start == std::string_view::npos) {
+        return {};
+    }
     CallbackEndpoint endpoint;
     endpoint.host = std::string{authority.substr(0, port_start)};
     const auto port_text = authority.substr(port_start + 1);
-    std::from_chars(port_text.data(), port_text.data() + port_text.size(), endpoint.port);
+    const auto parsed = std::from_chars(port_text.data(), port_text.data() + port_text.size(), endpoint.port);
+    if (parsed.ec != std::errc{} || parsed.ptr != port_text.data() + port_text.size()) {
+        return {};
+    }
     endpoint.path = path_start == std::string_view::npos ? "/" : std::string{callback_url.substr(path_start)};
     return endpoint;
 }
 
-std::string query_param(std::string_view url, std::string_view key) {
+[[nodiscard]] std::string query_param(std::string_view url, std::string_view key) {
     const auto query_start = url.find('?');
     if (query_start == std::string_view::npos) {
         return {};
@@ -79,8 +86,8 @@ std::string query_param(std::string_view url, std::string_view key) {
     return found == pairs.end() ? std::string{} : found->second;
 }
 
-boost::asio::awaitable<std::pair<int, std::string>> http_get(
-        const std::string& host, std::uint16_t port, const std::string& target) {
+[[nodiscard]] boost::asio::awaitable<std::pair<int, std::string>> http_get(
+        std::string host, std::uint16_t port, std::string target) {
     namespace asio = boost::asio;
     namespace beast = boost::beast;
     namespace http = boost::beast::http;
@@ -116,12 +123,16 @@ struct LoginHarness {
     std::optional<std::pair<int, std::string>> duplicate_response{std::nullopt};
     std::optional<std::pair<int, std::string>> first_response{std::nullopt};
 
-    std::function<ai::AuthPromptHook(boost::asio::any_io_executor)> prompt_factory;
+    std::move_only_function<ai::AuthPromptHook(boost::asio::any_io_executor)> prompt_factory;
 
+    /// Runs the event loop to completion before returning; callbacks may borrow
+    /// this harness, which the caller must keep alive for the duration.
     [[nodiscard]] support::Expected<ai::OAuthCredential> run(
-            std::function<boost::asio::awaitable<void>(const std::string&)> on_auth_url = nullptr) {
+            std::move_only_function<boost::asio::awaitable<void>(std::string)> on_auth_url = {}) {
         boost::asio::io_context io;
         auto executor = io.get_executor();
+        tests::EnvVarGuard callback_host_guard{"PI_OAUTH_CALLBACK_HOST"};
+        callback_host_guard.unset();
 
         ai::AuthInteraction interaction;
         interaction.stop_token = login_stop_token;
@@ -153,8 +164,9 @@ struct LoginHarness {
 
         auto login_future = boost::asio::co_spawn(
                 io,
-                [this, &interaction]() -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-                    auto auth = ai::auth::make_openrouter_oauth_auth(http, options);
+                [http = http, options = options, interaction = std::move(interaction)]() mutable
+                        -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
+                    auto auth = ai::auth::make_openrouter_oauth_auth(std::move(http), std::move(options));
                     co_return co_await support::detail::await_async_result(auth.login(std::move(interaction)));
                 },
                 boost::asio::use_future);
@@ -162,7 +174,7 @@ struct LoginHarness {
         if (on_auth_url) {
             boost::asio::co_spawn(
                     io,
-                    [url_seen, on_auth_url = std::move(on_auth_url)]() -> boost::asio::awaitable<void> {
+                    [url_seen, on_auth_url = std::move(on_auth_url)]() mutable -> boost::asio::awaitable<void> {
                         std::string url;
                         boost::system::error_code receive_error;
                         url = co_await url_seen->async_receive(
@@ -179,6 +191,8 @@ struct LoginHarness {
     }
 };
 
+/// The returned hook may borrow `harness` until its asynchronous result completes.
+/// `LoginHarness::run` keeps that lifetime valid by waiting for the login.
 ai::AuthPromptHook pending_manual_prompt(LoginHarness& harness, boost::asio::any_io_executor executor) {
     auto cancelled = std::make_shared<SignalChannel>(executor, 1);
     return [&harness, cancelled](ai::AuthPrompt prompt) -> support::AsyncResult<std::string> {
@@ -403,8 +417,8 @@ TEST_CASE("OpenRouter OAuth accepts a manual redirect URL and bare code", "[ai][
 }
 
 TEST_CASE("OpenRouter OAuth respects the callback host override", "[ai][auth][issue764][spec]") {
-    tests::EnvVarGuard callback_host("PI_OAUTH_CALLBACK_HOST", "127.0.0.2");
     LoginHarness harness;
+    harness.options.callback_host = "127.0.0.2";
     harness.http->responses[std::string{kTokenUrl}] = {
             {200, R"({"key":"sk-or-host"})"},
     };

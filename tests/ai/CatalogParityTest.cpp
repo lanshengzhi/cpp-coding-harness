@@ -31,8 +31,7 @@ using JsonValue = support::JsonValue;
 using Object = JsonValue::object_t;
 using ParseError = std::string;
 
-template <typename T>
-using ParseResult = std::expected<T, ParseError>;
+template <typename T> using ParseResult = std::expected<T, ParseError>;
 
 constexpr std::array<std::string_view, 6> kUpstreamProviders{
         "deepseek",
@@ -87,8 +86,8 @@ constexpr std::array<std::string_view, 4> kDeferredResizeLeaves{
 // T1 carries only the typed fields represented by Model.hpp. The remaining
 // catalog flags are explicit Deferred fields: grammar/tool-search/additional
 // tools, mid-conversation system/tool additions, session-affinity request
-// flags, and effort detection. supportsStrictMode is carried for Responses
-// but remains Deferred when an upstream Completions/Codex entry publishes it.
+// flags and effort detection. Strict mode is carried for both Responses and
+// Completions; grammar-constrained tool schemas remain deferred.
 constexpr std::array<std::string_view, 7> kDeferredCompatFields{
         "supportsOpenAIGrammarTools",
         "supportsToolSearch",
@@ -131,8 +130,7 @@ template <std::size_t N>
     return std::ranges::find(values, value) != values.end();
 }
 
-template <typename T>
-[[nodiscard]] ParseResult<T> fail(std::string path, std::string message) {
+template <typename T> [[nodiscard]] ParseResult<T> fail(std::string path, std::string message) {
     return std::unexpected(std::move(path) + ": " + std::move(message));
 }
 
@@ -142,63 +140,49 @@ template <typename T>
 }
 
 [[nodiscard]] ParseResult<const JsonValue*> required_member(
-        const Object& object,
-        std::string_view key,
-        std::string_view path) {
+        const Object& object, std::string_view key, std::string_view path) {
     if (const auto* value = member(object, key)) {
         return value;
     }
     return fail<const JsonValue*>(std::string{path} + "." + std::string{key}, "missing field");
 }
 
-[[nodiscard]] ParseResult<const std::string*> required_string(
-        const JsonValue& value,
-        std::string path) {
+[[nodiscard]] ParseResult<const std::string*> required_string(const JsonValue& value, std::string path) {
     if (const auto* text = value.get_if<std::string>()) {
         return text;
     }
     return fail<const std::string*>(std::move(path), "expected string");
 }
 
-[[nodiscard]] ParseResult<const Object*> required_object(
-        const JsonValue& value,
-        std::string path) {
+[[nodiscard]] ParseResult<const Object*> required_object(const JsonValue& value, std::string path) {
     if (const auto* object = value.get_if<Object>()) {
         return object;
     }
     return fail<const Object*>(std::move(path), "expected object");
 }
 
-[[nodiscard]] ParseResult<const JsonValue::array_t*> required_array(
-        const JsonValue& value,
-        std::string path) {
+[[nodiscard]] ParseResult<const JsonValue::array_t*> required_array(const JsonValue& value, std::string path) {
     if (const auto* array = value.get_if<JsonValue::array_t>()) {
         return array;
     }
     return fail<const JsonValue::array_t*>(std::move(path), "expected array");
 }
 
-[[nodiscard]] ParseResult<bool> required_bool(
-        const JsonValue& value,
-        std::string path) {
+[[nodiscard]] ParseResult<bool> required_bool(const JsonValue& value, std::string path) {
     if (const auto* flag = value.get_if<bool>()) {
         return *flag;
     }
     return fail<bool>(std::move(path), "expected boolean");
 }
 
-[[nodiscard]] ParseResult<double> required_number(
-        const JsonValue& value,
-        std::string path) {
+[[nodiscard]] ParseResult<double> required_number(const JsonValue& value, std::string path) {
     if (const auto* number = value.get_if<double>(); number != nullptr && std::isfinite(*number)) {
         return *number;
     }
     return fail<double>(std::move(path), "expected finite number");
 }
 
-[[nodiscard]] ParseResult<std::uint64_t> required_uint64(
-        const JsonValue& value,
-        std::string path) {
+[[nodiscard]] ParseResult<std::uint64_t> required_uint64(const JsonValue& value, std::string path) {
     auto number = required_number(value, path);
     if (!number) {
         return std::unexpected(number.error());
@@ -211,9 +195,7 @@ template <typename T>
 }
 
 [[nodiscard]] ParseResult<const std::string*> required_string_member(
-        const Object& object,
-        std::string_view key,
-        std::string_view path) {
+        const Object& object, std::string_view key, std::string_view path) {
     auto value = required_member(object, key, path);
     if (!value) {
         return std::unexpected(value.error());
@@ -222,9 +204,7 @@ template <typename T>
 }
 
 [[nodiscard]] ParseResult<std::optional<bool>> optional_scalar_bool(
-        const Object& object,
-        std::string_view key,
-        std::string_view path) {
+        const Object& object, std::string_view key, std::string_view path) {
     const auto* value = member(object, key);
     if (value == nullptr) {
         return std::nullopt;
@@ -237,9 +217,7 @@ template <typename T>
 }
 
 [[nodiscard]] ParseResult<std::optional<std::string>> optional_scalar_string(
-        const Object& object,
-        std::string_view key,
-        std::string_view path) {
+        const Object& object, std::string_view key, std::string_view path) {
     const auto* value = member(object, key);
     if (value == nullptr) {
         return std::nullopt;
@@ -282,9 +260,7 @@ template <typename T>
                 continue;
             }
             if (image_key != "resize") {
-                return fail<void>(
-                        std::format("{}.images.{}", path, image_key),
-                        "unknown Deferred image-limit field");
+                return fail<void>(std::format("{}.images.{}", path, image_key), "unknown Deferred image-limit field");
             }
 
             auto resize = required_object(image_child, std::format("{}.images.resize", path));
@@ -294,12 +270,9 @@ template <typename T>
             for (const auto& [resize_key, resize_child] : **resize) {
                 if (!contains(kDeferredResizeLeaves, resize_key)) {
                     return fail<void>(
-                            std::format("{}.images.resize.{}", path, resize_key),
-                            "unknown Deferred resize field");
+                            std::format("{}.images.resize.{}", path, resize_key), "unknown Deferred resize field");
                 }
-                auto number = required_number(
-                        resize_child,
-                        std::format("{}.images.resize.{}", path, resize_key));
+                auto number = required_number(resize_child, std::format("{}.images.resize.{}", path, resize_key));
                 if (!number) {
                     return std::unexpected(number.error());
                 }
@@ -352,9 +325,7 @@ template <typename T>
             }
             for (const auto& [tier_key, tier_child] : **tier) {
                 if (!contains(kTierFields, tier_key)) {
-                    return fail<void>(
-                            std::format("{}.{}", tier_path, tier_key),
-                            "unknown cost tier field");
+                    return fail<void>(std::format("{}.{}", tier_path, tier_key), "unknown cost tier field");
                 }
                 auto number = required_number(tier_child, std::format("{}.{}", tier_path, tier_key));
                 if (!number) {
@@ -376,9 +347,7 @@ template <typename T>
             return fail<void>(std::format("{}.{}", path, key), "unknown thinking level");
         }
         if (!child.holds<JsonValue::null_t>() && child.get_if<std::string>() == nullptr) {
-            return fail<void>(
-                    std::format("{}.{}", path, key),
-                    "expected string or JSON null");
+            return fail<void>(std::format("{}.{}", path, key), "expected string or JSON null");
         }
     }
     return {};
@@ -404,9 +373,10 @@ template <typename T>
 [[nodiscard]] bool carried_compat_field(std::string_view api, std::string_view key) {
     if (api == "openai-completions") {
         return contains(
-                std::array<std::string_view, 8>{
+                std::array<std::string_view, 9>{
                         "supportsStore",
                         "supportsDeveloperRole",
+                        "supportsStrictMode",
                         "maxTokensField",
                         "requiresReasoningContentOnAssistantMessages",
                         "thinkingFormat",
@@ -437,23 +407,20 @@ template <typename T>
     return false;
 }
 
-[[nodiscard]] bool deferred_compat_field(std::string_view api, std::string_view key) {
+[[nodiscard]] bool deferred_compat_field(std::string_view key) {
     if (contains(kDeferredCompatFields, key)) {
         return true;
     }
-    return key == "supportsStrictMode" && api != "openai-responses";
+    return false;
 }
 
-[[nodiscard]] ParseResult<void> audit_compat(
-        std::string_view api,
-        const JsonValue& value,
-        std::string path) {
+[[nodiscard]] ParseResult<void> audit_compat(std::string_view api, const JsonValue& value, std::string path) {
     auto compat = required_object(value, path);
     if (!compat) {
         return std::unexpected(compat.error());
     }
     for (const auto& [key, child] : **compat) {
-        if (!carried_compat_field(api, key) && !deferred_compat_field(api, key)) {
+        if (!carried_compat_field(api, key) && !deferred_compat_field(key)) {
             return fail<void>(std::format("{}.{}", path, key), "unknown compatibility field");
         }
         if (contains(kBooleanCompatFields, key)) {
@@ -467,18 +434,13 @@ template <typename T>
                 return std::unexpected(text.error());
             }
         } else {
-            return fail<void>(
-                    std::format("{}.{}", path, key),
-                    "compatibility field has no declared scalar type");
+            return fail<void>(std::format("{}.{}", path, key), "compatibility field has no declared scalar type");
         }
     }
     return {};
 }
 
-[[nodiscard]] ParseResult<void> audit_model_fields(
-        std::string_view api,
-        const Object& model,
-        std::string path) {
+[[nodiscard]] ParseResult<void> audit_model_fields(std::string_view api, const Object& model, std::string path) {
     for (const auto& [key, value] : model) {
         if (!contains(kCarriedModelFields, key) && key != "inputLimits") {
             return fail<void>(std::format("{}.{}", path, key), "unknown raw model field");
@@ -509,9 +471,7 @@ template <typename T>
                 return std::unexpected(headers.error());
             }
             for (const auto& [header_name, header_value] : **headers) {
-                auto text = required_string(
-                        header_value,
-                        std::format("{}.headers.{}", path, header_name));
+                auto text = required_string(header_value, std::format("{}.headers.{}", path, header_name));
                 if (!text) {
                     return std::unexpected(text.error());
                 }
@@ -526,9 +486,7 @@ template <typename T>
     return {};
 }
 
-[[nodiscard]] ParseResult<ai::ModelInput> parse_input_modality(
-        std::string_view value,
-        std::string path) {
+[[nodiscard]] ParseResult<ai::ModelInput> parse_input_modality(std::string_view value, std::string path) {
     if (value == "text") {
         return ai::ModelInput::Text;
     }
@@ -538,9 +496,7 @@ template <typename T>
     return fail<ai::ModelInput>(std::move(path), "unknown input modality");
 }
 
-[[nodiscard]] ParseResult<ai::ModelCost> parse_cost(
-        const JsonValue& value,
-        std::string path) {
+[[nodiscard]] ParseResult<ai::ModelCost> parse_cost(const JsonValue& value, std::string path) {
     auto object = required_object(value, path);
     if (!object) {
         return std::unexpected(object.error());
@@ -597,9 +553,7 @@ template <typename T>
             if (!input_tokens) {
                 return std::unexpected(input_tokens.error());
             }
-            auto parsed_input_tokens = required_uint64(
-                    **input_tokens,
-                    std::format("{}.inputTokensAbove", tier_path));
+            auto parsed_input_tokens = required_uint64(**input_tokens, std::format("{}.inputTokensAbove", tier_path));
             if (!parsed_input_tokens) {
                 return std::unexpected(parsed_input_tokens.error());
             }
@@ -612,8 +566,7 @@ template <typename T>
 }
 
 [[nodiscard]] ParseResult<std::optional<ai::ThinkingLevelMap>> parse_thinking_map(
-        const Object& model,
-        std::string path) {
+        const Object& model, std::string path) {
     const auto* value = member(model, "thinkingLevelMap");
     if (value == nullptr) {
         return std::nullopt;
@@ -627,8 +580,7 @@ template <typename T>
         const auto level = ai::parse_model_thinking_level(key);
         if (!level) {
             return fail<std::optional<ai::ThinkingLevelMap>>(
-                    std::format("{}.thinkingLevelMap.{}", path, key),
-                    "unknown thinking level");
+                    std::format("{}.thinkingLevelMap.{}", path, key), "unknown thinking level");
         }
         if (child.holds<JsonValue::null_t>()) {
             map.emplace(*level, std::nullopt);
@@ -636,16 +588,13 @@ template <typename T>
             map.emplace(*level, *text);
         } else {
             return fail<std::optional<ai::ThinkingLevelMap>>(
-                    std::format("{}.thinkingLevelMap.{}", path, key),
-                    "expected string or JSON null");
+                    std::format("{}.thinkingLevelMap.{}", path, key), "expected string or JSON null");
         }
     }
     return std::optional<ai::ThinkingLevelMap>{std::move(map)};
 }
 
-[[nodiscard]] ParseResult<std::optional<ai::ModelHeaders>> parse_headers(
-        const Object& model,
-        std::string path) {
+[[nodiscard]] ParseResult<std::optional<ai::ModelHeaders>> parse_headers(const Object& model, std::string path) {
     const auto* value = member(model, "headers");
     if (value == nullptr) {
         return std::nullopt;
@@ -666,9 +615,7 @@ template <typename T>
 }
 
 [[nodiscard]] ParseResult<std::optional<ai::ModelCompatVariant>> parse_compat(
-        std::string_view api,
-        const Object& model,
-        std::string path) {
+        std::string_view api, const Object& model, std::string path) {
     const auto* value = member(model, "compat");
     if (value == nullptr) {
         return std::nullopt;
@@ -699,8 +646,7 @@ template <typename T>
             }
         }
         if (populated) {
-            return std::optional<ai::ModelCompatVariant>{
-                    ai::ModelCompatVariant{std::move(compat)}};
+            return std::optional<ai::ModelCompatVariant>{ai::ModelCompatVariant{std::move(compat)}};
         }
         return std::nullopt;
     }
@@ -709,12 +655,12 @@ template <typename T>
         ai::OpenAICompletionsCompat compat;
         bool populated = false;
         for (const auto& [key, target] : std::array{
-                     std::pair<std::string_view, std::optional<bool>*>(
-                             "supportsStore", &compat.supports_store),
+                     std::pair<std::string_view, std::optional<bool>*>("supportsStore", &compat.supports_store),
                      std::pair<std::string_view, std::optional<bool>*>(
                              "supportsDeveloperRole", &compat.supports_developer_role),
                      std::pair<std::string_view, std::optional<bool>*>(
-                             "requiresReasoningContentOnAssistantMessages",
+                             "supportsStrictMode", &compat.supports_strict_mode),
+                     std::pair<std::string_view, std::optional<bool>*>("requiresReasoningContentOnAssistantMessages",
                              &compat.requires_reasoning_content_on_assistant_messages),
                      std::pair<std::string_view, std::optional<bool>*>(
                              "supportsLongCacheRetention", &compat.supports_long_cache_retention),
@@ -742,14 +688,12 @@ template <typename T>
                 compat.max_tokens_field = ai::OpenAICompletionsMaxTokensField::MaxCompletionTokens;
             } else {
                 return fail<std::optional<ai::ModelCompatVariant>>(
-                        std::format("{}.compat.maxTokensField", path),
-                        "unknown max token field");
+                        std::format("{}.compat.maxTokensField", path), "unknown max token field");
             }
             populated = true;
         }
 
-        auto thinking_format =
-                optional_scalar_string(**object, "thinkingFormat", std::format("{}.compat", path));
+        auto thinking_format = optional_scalar_string(**object, "thinkingFormat", std::format("{}.compat", path));
         if (!thinking_format) {
             return std::unexpected(thinking_format.error());
         }
@@ -764,29 +708,25 @@ template <typename T>
                 compat.thinking_format = ai::OpenAICompletionsThinkingFormat::Qwen;
             } else {
                 return fail<std::optional<ai::ModelCompatVariant>>(
-                        std::format("{}.compat.thinkingFormat", path),
-                        "unknown thinking format");
+                        std::format("{}.compat.thinkingFormat", path), "unknown thinking format");
             }
             populated = true;
         }
 
-        auto cache_format =
-                optional_scalar_string(**object, "cacheControlFormat", std::format("{}.compat", path));
+        auto cache_format = optional_scalar_string(**object, "cacheControlFormat", std::format("{}.compat", path));
         if (!cache_format) {
             return std::unexpected(cache_format.error());
         }
         if ((*cache_format).has_value()) {
             if (**cache_format != "anthropic") {
                 return fail<std::optional<ai::ModelCompatVariant>>(
-                        std::format("{}.compat.cacheControlFormat", path),
-                        "unknown cache-control format");
+                        std::format("{}.compat.cacheControlFormat", path), "unknown cache-control format");
             }
             compat.cache_control_format = ai::OpenAICompletionsCacheControlFormat::Anthropic;
             populated = true;
         }
         if (populated) {
-            return std::optional<ai::ModelCompatVariant>{
-                    ai::ModelCompatVariant{std::move(compat)}};
+            return std::optional<ai::ModelCompatVariant>{ai::ModelCompatVariant{std::move(compat)}};
         }
         return std::nullopt;
     }
@@ -808,8 +748,7 @@ template <typename T>
                 compat.session_affinity_format = ai::OpenAIResponsesSessionAffinityFormat::OpenRouter;
             } else {
                 return fail<std::optional<ai::ModelCompatVariant>>(
-                        std::format("{}.compat.sessionAffinityFormat", path),
-                        "unknown session-affinity format");
+                        std::format("{}.compat.sessionAffinityFormat", path), "unknown session-affinity format");
             }
             populated = true;
         }
@@ -817,8 +756,7 @@ template <typename T>
                      std::pair<std::string_view, std::optional<bool>*>(
                              "supportsStrictMode", &compat.supports_strict_mode),
                      std::pair<std::string_view, std::optional<bool>*>(
-                             "supportsExplicitPromptCacheMode",
-                             &compat.supports_explicit_prompt_cache_mode),
+                             "supportsExplicitPromptCacheMode", &compat.supports_explicit_prompt_cache_mode),
              }) {
             auto parsed = optional_scalar_bool(**object, key, std::format("{}.compat", path));
             if (!parsed) {
@@ -830,17 +768,13 @@ template <typename T>
             }
         }
         if (populated) {
-            return std::optional<ai::ModelCompatVariant>{
-                    ai::ModelCompatVariant{std::move(compat)}};
+            return std::optional<ai::ModelCompatVariant>{ai::ModelCompatVariant{std::move(compat)}};
         }
     }
     return std::nullopt;
 }
 
-[[nodiscard]] ParseResult<ai::Model> parse_model(
-        std::string_view api,
-        const Object& object,
-        std::string path) {
+[[nodiscard]] ParseResult<ai::Model> parse_model(std::string_view api, const Object& object, std::string path) {
     auto id = required_string_member(object, "id", path);
     auto name = required_string_member(object, "name", path);
     auto model_api = required_string_member(object, "api", path);
@@ -906,9 +840,7 @@ template <typename T>
     std::vector<ai::ModelInput> input;
     input.reserve((*input_array)->size());
     for (std::size_t index = 0; index < (*input_array)->size(); ++index) {
-        auto modality = required_string(
-                (*input_array)->at(index),
-                std::format("{}.input[{}]", path, index));
+        auto modality = required_string((*input_array)->at(index), std::format("{}.input[{}]", path, index));
         if (!modality) {
             return std::unexpected(modality.error());
         }
@@ -954,9 +886,7 @@ struct ExpectedCatalog {
     std::map<std::string, std::vector<std::string>> model_ids_by_api;
 };
 
-[[nodiscard]] ParseResult<ExpectedCatalog> parse_catalog(
-        std::string_view provider_id,
-        const JsonValue& raw) {
+[[nodiscard]] ParseResult<ExpectedCatalog> parse_catalog(std::string_view provider_id, const JsonValue& raw) {
     auto root = required_object(raw, std::string{provider_id});
     if (!root) {
         return std::unexpected(root.error());
@@ -975,9 +905,7 @@ struct ExpectedCatalog {
             return std::unexpected(models.error());
         }
         if ((*models)->empty()) {
-            return fail<ExpectedCatalog>(
-                    std::format("{}/{}", provider_id, api),
-                    "API group is empty");
+            return fail<ExpectedCatalog>(std::format("{}/{}", provider_id, api), "API group is empty");
         }
         auto& ids = catalog.model_ids_by_api[api];
         for (const auto& [model_id, model_value] : **models) {
@@ -1002,14 +930,10 @@ struct ExpectedCatalog {
                 return fail<ExpectedCatalog>(path + ".id", "model key disagrees with id");
             }
             if (**raw_api != api) {
-                return fail<ExpectedCatalog>(
-                        path + ".api",
-                        "model api disagrees with the outer API group");
+                return fail<ExpectedCatalog>(path + ".api", "model api disagrees with the outer API group");
             }
             if (**raw_provider != provider_id) {
-                return fail<ExpectedCatalog>(
-                        path + ".provider",
-                        "model provider disagrees with the artifact provider");
+                return fail<ExpectedCatalog>(path + ".provider", "model provider disagrees with the artifact provider");
             }
 
             auto audited = audit_model_fields(api, **model_object, path);
@@ -1029,18 +953,21 @@ struct ExpectedCatalog {
     return catalog;
 }
 
-[[nodiscard]] ParseResult<ExpectedCatalog> load_catalog(std::string_view provider_id) {
-    const auto path = std::string{"models/providers/"} + std::string{provider_id} + ".json";
-    auto raw = tests::read_pi_fixture(path);
+[[nodiscard]] ParseResult<ExpectedCatalog> load_catalog_fixture(
+        std::string_view provider_id, std::string_view fixture_path) {
+    auto raw = tests::read_pi_fixture(fixture_path);
     if (!raw) {
-        return fail<ExpectedCatalog>(path, raw.error().message);
+        return fail<ExpectedCatalog>(std::string{fixture_path}, raw.error().message);
     }
     return parse_catalog(provider_id, *raw);
 }
 
-[[nodiscard]] ParseResult<std::vector<std::string>> parse_string_array(
-        const JsonValue& value,
-        std::string path) {
+[[nodiscard]] ParseResult<ExpectedCatalog> load_catalog(std::string_view provider_id) {
+    const auto path = std::string{"models/providers/"} + std::string{provider_id} + ".json";
+    return load_catalog_fixture(provider_id, path);
+}
+
+[[nodiscard]] ParseResult<std::vector<std::string>> parse_string_array(const JsonValue& value, std::string path) {
     auto array = required_array(value, path);
     if (!array) {
         return std::unexpected(array.error());
@@ -1058,9 +985,7 @@ struct ExpectedCatalog {
 }
 
 [[nodiscard]] ParseResult<std::uint64_t> required_uint64_member(
-        const Object& object,
-        std::string_view key,
-        std::string_view path) {
+        const Object& object, std::string_view key, std::string_view path) {
     auto value = required_member(object, key, path);
     if (!value) {
         return std::unexpected(value.error());
@@ -1191,9 +1116,7 @@ struct ExpectedCatalog {
         if (!recorded_apis_value) {
             return std::unexpected(recorded_apis_value.error());
         }
-        auto recorded_ids = parse_string_array(
-                **recorded_ids_value,
-                provider_path + ".model_ids");
+        auto recorded_ids = parse_string_array(**recorded_ids_value, provider_path + ".model_ids");
         if (!recorded_ids) {
             return std::unexpected(recorded_ids.error());
         }
@@ -1219,9 +1142,7 @@ struct ExpectedCatalog {
             if (recorded_api == nullptr) {
                 return fail<void>(provider_path + ".apis." + api, "missing API group");
             }
-            auto expected_api_ids = parse_string_array(
-                    *recorded_api,
-                    provider_path + ".apis." + api);
+            auto expected_api_ids = parse_string_array(*recorded_api, provider_path + ".apis." + api);
             if (!expected_api_ids) {
                 return std::unexpected(expected_api_ids.error());
             }
@@ -1234,12 +1155,9 @@ struct ExpectedCatalog {
 }
 
 [[nodiscard]] const ai::ProviderDefinition* find_provider(
-        const std::vector<ai::ProviderDefinition>& definitions,
-        std::string_view provider_id) {
+        const std::vector<ai::ProviderDefinition>& definitions, std::string_view provider_id) {
     const auto found = std::ranges::find(
-            definitions,
-            provider_id,
-            [](const auto& definition) -> std::string_view { return definition.id; });
+            definitions, provider_id, [](const auto& definition) -> std::string_view { return definition.id; });
     return found == definitions.end() ? nullptr : &*found;
 }
 
@@ -1260,13 +1178,10 @@ struct ExpectedCatalog {
     return std::format("level-{}", static_cast<int>(level));
 }
 
-void add_mismatch(std::vector<std::string>& mismatches, std::string path) {
-    mismatches.push_back(std::move(path));
-}
+void add_mismatch(std::vector<std::string>& mismatches, std::string path) { mismatches.push_back(std::move(path)); }
 
 template <typename T>
-void compare_optional(
-        const std::optional<T>& expected,
+void compare_optional(const std::optional<T>& expected,
         const std::optional<T>& actual,
         std::string path,
         std::vector<std::string>& mismatches) {
@@ -1277,8 +1192,7 @@ void compare_optional(
     }
 }
 
-void compare_thinking_maps(
-        const std::optional<ai::ThinkingLevelMap>& expected,
+void compare_thinking_maps(const std::optional<ai::ThinkingLevelMap>& expected,
         const std::optional<ai::ThinkingLevelMap>& actual,
         std::string path,
         std::vector<std::string>& mismatches) {
@@ -1305,8 +1219,7 @@ void compare_thinking_maps(
     }
 }
 
-void compare_costs(
-        const ai::ModelCost& expected,
+void compare_costs(const ai::ModelCost& expected,
         const ai::ModelCost& actual,
         std::string path,
         std::vector<std::string>& mismatches) {
@@ -1355,8 +1268,7 @@ void compare_costs(
     }
 }
 
-void compare_headers(
-        const std::optional<ai::ModelHeaders>& expected,
+void compare_headers(const std::optional<ai::ModelHeaders>& expected,
         const std::optional<ai::ModelHeaders>& actual,
         std::string path,
         std::vector<std::string>& mismatches) {
@@ -1382,8 +1294,7 @@ void compare_headers(
     }
 }
 
-void compare_compat(
-        const std::optional<ai::ModelCompatVariant>& expected,
+void compare_compat(const std::optional<ai::ModelCompatVariant>& expected,
         const std::optional<ai::ModelCompatVariant>& actual,
         std::vector<std::string>& mismatches) {
     if (expected.has_value() != actual.has_value()) {
@@ -1403,75 +1314,65 @@ void compare_compat(
                 using Actual = std::decay_t<decltype(actual_value)>;
                 if constexpr (std::is_same_v<Expected, Actual>) {
                     if constexpr (std::is_same_v<Expected, ai::AnthropicMessagesCompat>) {
-                        compare_optional(
-                                expected_value.force_adaptive_thinking,
+                        compare_optional(expected_value.force_adaptive_thinking,
                                 actual_value.force_adaptive_thinking,
                                 "compat.forceAdaptiveThinking",
                                 mismatches);
-                        compare_optional(
-                                expected_value.allow_empty_signature,
+                        compare_optional(expected_value.allow_empty_signature,
                                 actual_value.allow_empty_signature,
                                 "compat.allowEmptySignature",
                                 mismatches);
-                        compare_optional(
-                                expected_value.supports_temperature,
+                        compare_optional(expected_value.supports_temperature,
                                 actual_value.supports_temperature,
                                 "compat.supportsTemperature",
                                 mismatches);
                     } else if constexpr (std::is_same_v<Expected, ai::OpenAICompletionsCompat>) {
-                        compare_optional(
-                                expected_value.supports_store,
+                        compare_optional(expected_value.supports_store,
                                 actual_value.supports_store,
                                 "compat.supportsStore",
                                 mismatches);
-                        compare_optional(
-                                expected_value.supports_developer_role,
+                        compare_optional(expected_value.supports_developer_role,
                                 actual_value.supports_developer_role,
                                 "compat.supportsDeveloperRole",
                                 mismatches);
-                        compare_optional(
-                                expected_value.max_tokens_field,
+                        compare_optional(expected_value.supports_strict_mode,
+                                actual_value.supports_strict_mode,
+                                "compat.supportsStrictMode",
+                                mismatches);
+                        compare_optional(expected_value.max_tokens_field,
                                 actual_value.max_tokens_field,
                                 "compat.maxTokensField",
                                 mismatches);
-                        compare_optional(
-                                expected_value.requires_reasoning_content_on_assistant_messages,
+                        compare_optional(expected_value.requires_reasoning_content_on_assistant_messages,
                                 actual_value.requires_reasoning_content_on_assistant_messages,
                                 "compat.requiresReasoningContentOnAssistantMessages",
                                 mismatches);
-                        compare_optional(
-                                expected_value.thinking_format,
+                        compare_optional(expected_value.thinking_format,
                                 actual_value.thinking_format,
                                 "compat.thinkingFormat",
                                 mismatches);
-                        compare_optional(
-                                expected_value.cache_control_format,
+                        compare_optional(expected_value.cache_control_format,
                                 actual_value.cache_control_format,
                                 "compat.cacheControlFormat",
                                 mismatches);
-                        compare_optional(
-                                expected_value.supports_long_cache_retention,
+                        compare_optional(expected_value.supports_long_cache_retention,
                                 actual_value.supports_long_cache_retention,
                                 "compat.supportsLongCacheRetention",
                                 mismatches);
-                        compare_optional(
-                                expected_value.supports_reasoning_effort,
+                        compare_optional(expected_value.supports_reasoning_effort,
                                 actual_value.supports_reasoning_effort,
                                 "compat.supportsReasoningEffort",
                                 mismatches);
                     } else {
-                        compare_optional(
-                                expected_value.session_affinity_format,
+                        compare_optional(expected_value.session_affinity_format,
                                 actual_value.session_affinity_format,
                                 "compat.sessionAffinityFormat",
                                 mismatches);
-                        compare_optional(
-                                expected_value.supports_strict_mode,
+                        compare_optional(expected_value.supports_strict_mode,
                                 actual_value.supports_strict_mode,
                                 "compat.supportsStrictMode",
                                 mismatches);
-                        compare_optional(
-                                expected_value.supports_explicit_prompt_cache_mode,
+                        compare_optional(expected_value.supports_explicit_prompt_cache_mode,
                                 actual_value.supports_explicit_prompt_cache_mode,
                                 "compat.supportsExplicitPromptCacheMode",
                                 mismatches);
@@ -1482,9 +1383,7 @@ void compare_compat(
             *actual);
 }
 
-[[nodiscard]] std::vector<std::string> compare_models(
-        const ai::Model& expected,
-        const ai::Model& actual) {
+[[nodiscard]] std::vector<std::string> compare_models(const ai::Model& expected, const ai::Model& actual) {
     std::vector<std::string> mismatches;
     if (expected.id != actual.id) {
         add_mismatch(mismatches, "id");
@@ -1504,19 +1403,13 @@ void compare_compat(
     if (expected.reasoning != actual.reasoning) {
         add_mismatch(mismatches, "reasoning");
     }
-    compare_thinking_maps(
-            expected.thinking_level_map,
-            actual.thinking_level_map,
-            "thinkingLevelMap",
-            mismatches);
+    compare_thinking_maps(expected.thinking_level_map, actual.thinking_level_map, "thinkingLevelMap", mismatches);
     if (expected.input.size() != actual.input.size()) {
         add_mismatch(mismatches, "input");
     } else {
         for (std::size_t index = 0; index < expected.input.size(); ++index) {
             if (expected.input[index] != actual.input[index]) {
-                add_mismatch(
-                        mismatches,
-                        std::format("input[{}] ({})", index, input_name(expected.input[index])));
+                add_mismatch(mismatches, std::format("input[{}] ({})", index, input_name(expected.input[index])));
             }
         }
     }
@@ -1532,12 +1425,8 @@ void compare_compat(
     return mismatches;
 }
 
-[[nodiscard]] bool has_mismatch_path(
-        const std::vector<std::string>& mismatches,
-        std::string_view path) {
-    return std::ranges::any_of(mismatches, [&](const auto& mismatch) {
-        return mismatch.starts_with(path);
-    });
+[[nodiscard]] bool has_mismatch_path(const std::vector<std::string>& mismatches, std::string_view path) {
+    return std::ranges::any_of(mismatches, [&](const auto& mismatch) { return mismatch.starts_with(path); });
 }
 
 [[nodiscard]] std::string mismatch_summary(const std::vector<std::string>& mismatches) {
@@ -1551,29 +1440,22 @@ void compare_compat(
     return summary;
 }
 
-[[nodiscard]] const ai::Model* find_model(
-        const ai::ProviderDefinition& definition,
-        std::string_view model_id) {
+[[nodiscard]] const ai::Model* find_model(const ai::ProviderDefinition& definition, std::string_view model_id) {
     const auto found = std::ranges::find(
-            definition.models,
-            model_id,
-            [](const auto& model) -> std::string_view { return model.id; });
+            definition.models, model_id, [](const auto& model) -> std::string_view { return model.id; });
     return found == definition.models.end() ? nullptr : &*found;
 }
 
 } // namespace
 
-TEST_CASE(
-        "the six raw provider artifacts agree with their provenance model sets and API topology",
+TEST_CASE("the six raw provider artifacts agree with their provenance model sets and API topology",
         "[ai][catalog][issue765][compat-pi]") {
     const auto result = verify_provenance_snapshot();
     INFO((result ? "" : result.error()));
     REQUIRE(result);
 }
 
-TEST_CASE(
-        "the built-in catalog matches every carried raw vendored field",
-        "[ai][catalog][issue765][compat-pi]") {
+TEST_CASE("the built-in catalog matches every carried raw vendored field", "[ai][catalog][issue765][compat-pi]") {
     const auto definitions = ai::builtin_provider_definitions();
     REQUIRE(definitions.size() == kUpstreamProviders.size());
 
@@ -1631,9 +1513,31 @@ TEST_CASE(
     CHECK(kimi->models.size() == 4);
 }
 
-TEST_CASE(
-        "raw catalog topology rejects wrong outer and model API identities",
-        "[ai][catalog][issue765][compat-pi]") {
+TEST_CASE("the built-in Kimi catalog matches every vendor-pinned field", "[ai][catalog][issue763][compat-vendor]") {
+    const auto expected = load_catalog_fixture("kimi-coding", "models/vendors/kimi-coding.json");
+    INFO((expected ? "" : expected.error()));
+    REQUIRE(expected);
+
+    const auto definitions = ai::builtin_provider_definitions();
+    const auto* actual_provider = find_provider(definitions, "kimi-coding");
+    REQUIRE(actual_provider != nullptr);
+    REQUIRE(actual_provider->models.size() == expected->models.size());
+
+    std::map<std::string, const ai::Model*> actual_models;
+    for (const auto& model : actual_provider->models) {
+        actual_models.emplace(model.id, &model);
+    }
+    for (const auto& [model_id, expected_model] : expected->models) {
+        const auto actual = actual_models.find(model_id);
+        INFO("kimi-coding/" + model_id);
+        REQUIRE(actual != actual_models.end());
+        const auto mismatches = compare_models(expected_model, *actual->second);
+        INFO(mismatch_summary(mismatches));
+        CHECK(mismatches.empty());
+    }
+}
+
+TEST_CASE("raw catalog topology rejects wrong outer and model API identities", "[ai][catalog][issue765][compat-pi]") {
     auto raw = tests::read_pi_fixture("models/providers/deepseek.json");
     REQUIRE(raw);
 
@@ -1661,9 +1565,7 @@ TEST_CASE(
     CHECK(wrong_outer_api.error().find("outer API group") != std::string::npos);
 }
 
-TEST_CASE(
-        "typed compatibility alternatives reject wrong API identities",
-        "[ai][catalog][issue765][compat-pi]") {
+TEST_CASE("typed compatibility alternatives reject wrong API identities", "[ai][catalog][issue765][compat-pi]") {
     auto expected_catalog = load_catalog("deepseek");
     REQUIRE(expected_catalog);
     const auto expected = expected_catalog->models.find("deepseek-flash");
@@ -1675,8 +1577,7 @@ TEST_CASE(
     REQUIRE_FALSE(invalid_api);
 
     auto wrong_alternative = expected->second;
-    wrong_alternative.compat = ai::ModelCompatVariant{
-            ai::OpenAIResponsesCompat{.supports_strict_mode = true}};
+    wrong_alternative.compat = ai::ModelCompatVariant{ai::OpenAIResponsesCompat{.supports_strict_mode = true}};
     const auto invalid_alternative = ai::validate_model(wrong_alternative);
     REQUIRE_FALSE(invalid_alternative);
 
@@ -1684,9 +1585,7 @@ TEST_CASE(
     CHECK(has_mismatch_path(mismatches, "compat"));
 }
 
-TEST_CASE(
-        "the comparator catches dropped nested cost and thinking fields",
-        "[ai][catalog][issue765][compat-pi]") {
+TEST_CASE("the comparator catches dropped nested cost and thinking fields", "[ai][catalog][issue765][compat-pi]") {
     auto codex_catalog = load_catalog("openai-codex");
     REQUIRE(codex_catalog);
     const auto cost_model = codex_catalog->models.find("gpt-5.5");
@@ -1707,9 +1606,7 @@ TEST_CASE(
     CHECK(has_mismatch_path(thinking_mismatches, "thinkingLevelMap.high"));
 }
 
-TEST_CASE(
-        "the raw-field audit rejects an unknown nested upstream field",
-        "[ai][catalog][issue765][compat-pi]") {
+TEST_CASE("the raw-field audit rejects an unknown nested upstream field", "[ai][catalog][issue765][compat-pi]") {
     auto raw = tests::read_pi_fixture("models/providers/deepseek.json");
     REQUIRE(raw);
 
@@ -1734,8 +1631,7 @@ TEST_CASE(
     CHECK(unknown_cost.error().find("cost.futureRate") != std::string::npos);
 }
 
-TEST_CASE(
-        "raw optional semantics preserve missing fields and explicit false values",
+TEST_CASE("raw optional semantics preserve missing fields and explicit false values",
         "[ai][catalog][issue765][compat-pi]") {
     auto deepseek = load_catalog("deepseek");
     REQUIRE(deepseek);
@@ -1760,8 +1656,7 @@ TEST_CASE(
     CHECK_FALSE(deepseek_pro->second.thinking_level_map->contains(ai::ModelThinkingLevel::Off));
 }
 
-TEST_CASE(
-        "OpenRouter retains provider-routed dynamic cost sentinels and generated counts",
+TEST_CASE("OpenRouter retains provider-routed dynamic cost sentinels and generated counts",
         "[ai][catalog][issue765][compat-pi]") {
     auto expected = load_catalog("openrouter");
     REQUIRE(expected);
@@ -1787,4 +1682,3 @@ TEST_CASE(
         CHECK(actual_model->cost.cache_write == 0.0);
     }
 }
-

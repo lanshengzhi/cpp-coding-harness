@@ -819,10 +819,8 @@ TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through API-key guidance",
     // whose provider resolves no auth fails the prompt before any stream with
     // the provider-specific API-key guidance.
     REQUIRE(result.exit_code == 1);
-    CHECK(result.output.find("loop failed: No API key found for kimi-coding") !=
-          std::string::npos);
-    CHECK(result.output.find("Use /login to log into a provider via API key.") !=
-          std::string::npos);
+    CHECK(result.output.find("loop failed: No API key found for kimi-coding") != std::string::npos);
+    CHECK(result.output.find("Use /login to log into a provider via API key.") != std::string::npos);
     CHECK(result.output.find("OAuth") == std::string::npos);
     CHECK(std::filesystem::exists(session));
 }

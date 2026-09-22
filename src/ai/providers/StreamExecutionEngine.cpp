@@ -306,7 +306,7 @@ execute_sse_stream(SseStreamExecutionOptions execution_options) {
                 started);
         }
         if (finalize_hook) {
-            if (auto finalized = finalize_hook(assistant); !finalized) {
+            if (auto finalized = finalize_hook(assistant, guarded_sink); !finalized) {
                 if (sink_failure) {
                     co_return std::unexpected(*sink_failure);
                 }

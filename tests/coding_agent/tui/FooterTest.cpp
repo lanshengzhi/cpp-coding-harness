@@ -139,8 +139,7 @@ TEST_CASE("Footer omits zero stats parts like pi", "[coding_agent][tui][footer][
     CHECK(stats_line.find("deepseek-chat") != std::string::npos);
 }
 
-TEST_CASE("Footer shows the subscription marker and provider prefix",
-        "[coding_agent][tui][footer][issue411][spec]") {
+TEST_CASE("Footer shows the subscription marker and provider prefix", "[coding_agent][tui][footer][issue411][spec]") {
     auto fixture = FooterFixture{};
     auto& footer = fixture.footer;
     coding_agent::tui::FooterData data;
@@ -159,8 +158,7 @@ TEST_CASE("Footer shows the subscription marker and provider prefix",
     CHECK(stats_line.find("(openai-codex) gpt-5.5") != std::string::npos);
 }
 
-TEST_CASE("Footer does not mark API-key Kimi as a subscription",
-        "[coding_agent][tui][footer][issue763][spec]") {
+TEST_CASE("Footer does not mark API-key Kimi as a subscription", "[coding_agent][tui][footer][issue763][spec]") {
     auto fixture = FooterFixture{};
     coding_agent::tui::FooterData data;
     data.cwd = "/tmp";

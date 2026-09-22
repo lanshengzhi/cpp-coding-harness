@@ -109,12 +109,12 @@ unit change.
 
 ## Consequences
 
-- **Four private adapters.** `openai-completions` is selected only by a Model whose `api` is `openai-completions`; its typed compat is limited to `supportsStore`, `supportsDeveloperRole`, `maxTokensField`, `requiresReasoningContentOnAssistantMessages`, `thinkingFormat` (`deepseek`, `openrouter`, `qwen`), `cacheControlFormat` (`anthropic`), `supportsLongCacheRetention`, and `supportsReasoningEffort`. The remaining pi `thinkingFormat` values and compat fields are unrepresentable rather than defaulted.
+- **Four private adapters.** `openai-completions` is selected only by a Model whose `api` is `openai-completions`; its typed compat is limited to `supportsStore`, `supportsDeveloperRole`, `supportsStrictMode`, `maxTokensField`, `requiresReasoningContentOnAssistantMessages`, `thinkingFormat` (`deepseek`, `openrouter`, `qwen`), `cacheControlFormat` (`anthropic`), `supportsLongCacheRetention`, and `supportsReasoningEffort`. The remaining pi `thinkingFormat` values and compat fields are unrepresentable rather than defaulted.
 - **Typed compat gains a second API.** `OpenAICompletionsCompat` is new; the shipped
-  `OpenAIResponsesCompat` carries the snapshot/code fields `sessionAffinityFormat`,
-  `supportsStrictMode`, and `supportsExplicitPromptCacheMode`. The ordinary-tool consumer emits
-  `strict:false` when the catalog advertises strict support. `supportsMaxOutputTokens` is not
-  represented in the current surface. `AnthropicMessagesCompat` keeps
+  `OpenAIResponsesCompat` carries the snapshot/code fields `sessionAffinityFormat` and
+  `supportsExplicitPromptCacheMode`; both OpenAI API compat shapes carry `supportsStrictMode`.
+  The ordinary-tool consumer emits `strict:false` when the catalog advertises strict support.
+  `supportsMaxOutputTokens` is not represented in the current surface. `AnthropicMessagesCompat` keeps
   `forceAdaptiveThinking`/`allowEmptySignature` and carries the fields the `opencode-go` catalog
   populates.
 - **Deferred, with no placeholders**: strict-schema generation, grammar-constrained tool

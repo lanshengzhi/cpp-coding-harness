@@ -27,8 +27,8 @@ using SseAttemptHook = std::move_only_function<
     support::Expected<SseEventHook>()>;
 
 /// Optional post-stream finalization hook (e.g. verifying terminal event received).
-using SseFinalizeHook = std::move_only_function<
-    support::ExpectedVoid(AssistantMessage& assistant)>;
+using SseFinalizeHook =
+        std::move_only_function<support::ExpectedVoid(AssistantMessage& assistant, AssistantEventSink& sink)>;
 
 /// Options configuring one execution of the SSE streaming pipeline.
 struct SseStreamExecutionOptions {

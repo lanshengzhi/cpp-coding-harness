@@ -360,6 +360,7 @@ constexpr std::uint64_t kAnthropicMinimumAnswerTokens = 1024;
                     support::JsonValue::object_t{
                             {"budget_tokens",
                                     static_cast<double>(clamped_anthropic_thinking_budget(level, options.max_tokens))},
+                            {"display", "summarized"},
                             {"type", "enabled"},
                     });
         }

@@ -23,9 +23,11 @@ struct OpenRouterOAuthOptions {
 /// OpenRouter account authorization through its PKCE flow. The exchanged
 /// value is an API key carried in the existing OAuthCredential contract; no
 /// request-time refresh traffic is needed.
-class OpenRouterOAuth final : public std::enable_shared_from_this<OpenRouterOAuth> {
+class OpenRouterOAuth final {
 public:
     explicit OpenRouterOAuth(std::shared_ptr<OAuthHttpClient> http_client, OpenRouterOAuthOptions options = {});
+    OpenRouterOAuth(OpenRouterOAuth&&) noexcept;
+    OpenRouterOAuth& operator=(OpenRouterOAuth&&) noexcept;
     ~OpenRouterOAuth();
     OpenRouterOAuth(const OpenRouterOAuth&) = delete;
     OpenRouterOAuth& operator=(const OpenRouterOAuth&) = delete;

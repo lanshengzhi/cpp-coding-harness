@@ -23,20 +23,15 @@ class ComposedProvider final
     : public ai::Provider,
       public std::enable_shared_from_this<ComposedProvider> {
 public:
-    ComposedProvider(
-        std::string provider_id,
-        std::string name,
-        std::vector<ai::Model> models,
-        ai::ProviderAuth auth,
-        std::shared_ptr<StreamTransport> http_transport,
-        std::shared_ptr<WebSocketTransport> ws_transport,
-        CodexWebSocketCacheConfig cache_config)
-        : provider_id_(std::move(provider_id)),
-          name_(std::move(name)),
-          models_(std::move(models)),
-          auth_(std::move(auth)),
-          responses_adapter_(http_transport),
-          completions_adapter_(http_transport),
+    ComposedProvider(std::string provider_id,
+            std::string name,
+            std::vector<ai::Model> models,
+            ai::ProviderAuth auth,
+            std::shared_ptr<StreamTransport> http_transport,
+            std::shared_ptr<WebSocketTransport> ws_transport,
+            CodexWebSocketCacheConfig cache_config)
+        : provider_id_(std::move(provider_id)), name_(std::move(name)), models_(std::move(models)),
+          auth_(std::move(auth)), responses_adapter_(http_transport), completions_adapter_(http_transport),
           // The codex adapter takes the HTTP transport by value for its SSE
           // fallback; the anthropic adapter then takes the original so every
           // scoped adapter owns a usable transport (the anthropic adapter
