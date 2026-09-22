@@ -7,7 +7,8 @@
 
 namespace cch::ai::api {
 
-/// Private protocol executor for the frozen `anthropic-messages` Kimi surface.
+/// Private protocol executor for the remaining `anthropic-messages` models,
+/// currently the Anthropic-family models routed through OpenCode Go.
 /// Provider composition owns registration; callers select it only through a
 /// Model whose api identity is `anthropic-messages`.
 ///

@@ -952,7 +952,8 @@ AgentSessionSnapshot AgentSession::Impl::create_snapshot() const {
             .workspace = session_.workspace,
             .using_subscription =
                     !state.model.id.empty() && runtime &&
-                    (state.model.provider == "kimi-coding" || runtime->is_using_oauth(state.model.provider)),
+                    state.model.provider != "openrouter" &&
+                    runtime->is_using_oauth(state.model.provider),
             .available_provider_count = providers.size(),
             .tool_executions = tool_executions_,
             .run_state = run_state_,

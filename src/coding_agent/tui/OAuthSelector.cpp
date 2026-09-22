@@ -36,6 +36,16 @@ constexpr std::size_t kMaxVisible = 8;
     return false;
 }
 
+[[nodiscard]] std::string_view auth_type_label(const AuthSelectorProvider& provider) {
+    // OpenRouter OAuth exchanges directly for an API key and is an account
+    // login, not a subscription entitlement. Keep AuthSelectorType::OAuth so
+    // selection still invokes the OAuth flow, but do not present it as one.
+    if (provider.id == "openrouter" && provider.auth_type == AuthSelectorType::OAuth) {
+        return "account";
+    }
+    return format_auth_selector_provider_type(provider.auth_type);
+}
+
 /// pi `formatStatusIndicator`, branch for branch.
 [[nodiscard]] std::string status_indicator(const LiveTheme& theme, const AuthSelectorProvider& provider) {
     if (!provider.status) {
@@ -43,7 +53,7 @@ constexpr std::size_t kMaxVisible = 8;
     }
     if (provider.status->type != provider.auth_type) {
         const std::string label = provider.status->type == AuthSelectorType::OAuth
-            ? "subscription configured"
+            ? (provider.id == "openrouter" ? "account configured" : "subscription configured")
             : "API key configured";
         return theme.foreground(ThemeToken::Muted, " • ") + theme.foreground(ThemeToken::Warning, label);
     }
@@ -64,8 +74,8 @@ constexpr std::size_t kMaxVisible = 8;
 
 /// One `SelectItem` per provider row, in provider order. The label carries
 /// the full visible row (display name, the optional `[subscription]` /
-/// `[API key]` type label when the list mixes auth types, and the colored
-/// status indicator) so rows render exactly as before; `value` holds the
+/// `[account]` / `[API key]` type label when the list mixes auth types, and the
+/// colored status indicator) so rows render exactly as before; `value` holds the
 /// stable provider-id/auth-type identity used to resolve selection; the
 /// hidden `search_text` keeps the historical name + id + auth type +
 /// method-name search surface.
@@ -84,7 +94,7 @@ constexpr std::size_t kMaxVisible = 8;
         std::string label = provider.name;
         if (show_type_labels) {
             label += theme.foreground(ThemeToken::Muted,
-                    " [" + std::string{format_auth_selector_provider_type(provider.auth_type)} + "]");
+                    " [" + std::string{auth_type_label(provider)} + "]");
         }
         label += status_indicator(theme, provider);
         std::string search_text = provider.name + " " + provider.id + " " +

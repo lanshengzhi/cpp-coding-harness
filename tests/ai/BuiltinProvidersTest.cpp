@@ -48,11 +48,7 @@ TEST_CASE("Built-in provider definitions preserve the frozen catalogs and auth m
     CHECK(static_cast<bool>(kimi.auth.api_key->check));
     CHECK(static_cast<bool>(kimi.auth.api_key->resolve));
     CHECK(static_cast<bool>(kimi.auth.api_key->login));
-    REQUIRE(kimi.auth.oauth);
-    CHECK(kimi.auth.oauth->name == "Kimi Code (subscription)");
-    CHECK(static_cast<bool>(kimi.auth.oauth->login));
-    CHECK(static_cast<bool>(kimi.auth.oauth->refresh));
-    CHECK(static_cast<bool>(kimi.auth.oauth->to_auth));
+    CHECK_FALSE(kimi.auth.oauth);
 
     // Verify presence of all newly onboarded zero-config providers: each is
     // login-capable from `/login` without any user configuration.

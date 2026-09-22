@@ -2,7 +2,6 @@
 
 #include "DefaultModelsJson.hpp"
 #include "support/Json.hpp"
-#include "ai/auth/KimiCodingOAuth.hpp"
 #include "ai/auth/OpenAICodexOAuth.hpp"
 #include "ai/auth/OpenRouterOAuth.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
@@ -359,7 +358,6 @@ void bind_provider_auth(std::string_view provider_id, ProviderAuth& auth) {
     if (provider_id == "openai-codex") {
         auth.oauth = auth::make_openai_codex_oauth_auth();
     } else if (provider_id == "kimi-coding") {
-        auth.oauth = auth::make_kimi_coding_oauth_auth();
         auto env_auth = providers::make_env_api_key_auth("Kimi API key", {"KIMI_API_KEY"});
         auth.api_key = std::move(*env_auth.api_key);
     } else if (provider_id == "deepseek") {

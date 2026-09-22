@@ -82,6 +82,20 @@ namespace {
     return model;
 }
 
+[[nodiscard]] ai::Model kimi_model(std::string_view id) {
+    for (const auto& definition : ai::builtin_provider_definitions()) {
+        if (definition.id != "kimi-coding") {
+            continue;
+        }
+        for (const auto& model : definition.models) {
+            if (model.id == id) {
+                return model;
+            }
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 TEST_CASE("DeepSeek Chat Completions streams reasoning text tool calls and usage",
@@ -254,6 +268,62 @@ TEST_CASE("OpenRouter Chat Completions selects developer reasoning and affinity 
     CHECK(body->at("store").get_boolean() == false);
     CHECK(body->at("reasoning").at("effort").get_string() == "high");
     CHECK(body->at("tools").get_array().front().at("function").at("strict").get_boolean() == false);
+}
+
+TEST_CASE("Kimi Coding uses the vendor Completions catalog and omits effort for highspeed",
+        "[ai][api][completions][kimi][issue763][spec]") {
+    const auto highspeed = kimi_model("kimi-for-coding-highspeed");
+    REQUIRE_FALSE(highspeed.id.empty());
+    CHECK(highspeed.api == "openai-completions");
+    CHECK(highspeed.provider == "kimi-coding");
+    CHECK(highspeed.base_url == "https://api.kimi.com/coding/v1");
+    CHECK_FALSE(highspeed.headers.has_value());
+    REQUIRE(highspeed.thinking_level_map);
+    CHECK(highspeed.thinking_level_map->size() == 7);
+    for (const auto level : {
+                 ai::ModelThinkingLevel::Off,
+                 ai::ModelThinkingLevel::Minimal,
+                 ai::ModelThinkingLevel::Low,
+                 ai::ModelThinkingLevel::Medium,
+                 ai::ModelThinkingLevel::High,
+                 ai::ModelThinkingLevel::XHigh,
+                 ai::ModelThinkingLevel::Max,
+         }) {
+        CHECK(highspeed.thinking_level_map->contains(level));
+        CHECK_FALSE(highspeed.thinking_level_map->at(level).has_value());
+    }
+
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks = {
+                    "data: {\"id\":\"kimi-1\",\"model\":\"kimi-for-coding-highspeed\","
+                    "\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},"
+                    "\"finish_reason\":\"stop\"}]}\n\n"
+                    "data: [DONE]\n\n",
+            },
+    });
+    auto models = tests::make_scripted_models(
+            highspeed,
+            tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy-kimi-key";
+    options.max_tokens = 512;
+    options.reasoning = ai::ThinkingLevel::High;
+    const auto run = tests::run_models(*models, highspeed, {}, std::move(options));
+
+    REQUIRE(run.result);
+    REQUIRE(transport->requests.size() == 1);
+    const auto& request = transport->requests.front();
+    CHECK(request.url == "https://api.kimi.com/coding/v1/chat/completions");
+    CHECK(request.headers.at("Authorization") == "Bearer dummy-kimi-key");
+    CHECK_FALSE(request.headers.contains("User-Agent"));
+    const auto body = support::read_json(request.body);
+    REQUIRE(body);
+    CHECK(body->at("max_completion_tokens").get_number() == 512);
+    CHECK_FALSE(body->get_object().contains("reasoning_effort"));
+    CHECK_FALSE(body->get_object().contains("effort"));
 }
 
 TEST_CASE("Completions replay normalizes reasoning and pipe-separated tool history",

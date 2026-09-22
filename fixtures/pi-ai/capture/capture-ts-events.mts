@@ -56,9 +56,6 @@ if (head !== FROZEN_COMMIT) {
 const aiSrc = (rel: string): string =>
 	pathToFileURL(path.join(piCheckout, "packages/ai/src", rel)).href;
 
-const { streamSimple: streamSimpleAnthropic } = await import(
-	aiSrc("api/anthropic-messages.ts")
-);
 const { streamSimple: streamSimpleResponses } = await import(
 	aiSrc("api/openai-responses.ts")
 );
@@ -146,15 +143,6 @@ function normalizeEvent(event: any): any {
 
 // ── Shared model/context builders (mirror the C++ adapter test inputs) ─────
 
-const ZERO_USAGE = {
-	input: 0,
-	output: 0,
-	cacheRead: 0,
-	cacheWrite: 0,
-	totalTokens: 0,
-	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-};
-
 const LOOKUP_TOOL = {
 	name: "lookup",
 	description: "Look up a value",
@@ -211,84 +199,6 @@ function codexModel(): any {
 		cost: { input: 2.0, output: 4.0, cacheRead: 1.0, cacheWrite: 3.0 },
 		contextWindow: 100000,
 		maxTokens: 4096,
-	};
-}
-
-/** Kimi model pinned to the frozen-baseline shard (the C++ catalog source). */
-function kimiModel(): any {
-	const shard = JSON.parse(
-		readFileSync(
-			path.join(piCheckout, "packages/ai/src/providers/data/kimi-coding.json"),
-			"utf8",
-		),
-	);
-	return shard["anthropic-messages"]["kimi-for-coding"];
-}
-
-function kimiContext(): any {
-	return {
-		systemPrompt: "system",
-		messages: [
-			{
-				role: "user",
-				content: [{ type: "image", data: "YWJj", mimeType: "image/png" }],
-				timestamp: 1,
-			},
-			{
-				role: "assistant",
-				content: [
-					{ type: "thinking", thinking: "thought", thinkingSignature: "" },
-					{
-						type: "thinking",
-						thinking: "[Reasoning redacted]",
-						thinkingSignature: "dummy-redacted",
-						redacted: true,
-					},
-					{ type: "text", text: "answer" },
-				],
-				api: "anthropic-messages",
-				provider: "kimi-coding",
-				model: "kimi-for-coding",
-				usage: structuredClone(ZERO_USAGE),
-				stopReason: "toolUse",
-				timestamp: 2,
-			},
-			{ role: "user", content: [{ type: "text", text: "next" }], timestamp: 3 },
-			{
-				role: "assistant",
-				content: [
-					{
-						type: "toolCall",
-						id: "bad id!",
-						name: "lookup",
-						arguments: { q: "x" },
-					},
-				],
-				api: "openai-responses",
-				provider: "deepseek",
-				model: "deepseek-v4-flash",
-				usage: structuredClone(ZERO_USAGE),
-				stopReason: "toolUse",
-				timestamp: 4,
-			},
-			{
-				role: "toolResult",
-				toolCallId: "bad id!",
-				toolName: "lookup",
-				content: [{ type: "text", text: "failed" }],
-				isError: true,
-				timestamp: 5,
-			},
-			{
-				role: "toolResult",
-				toolCallId: "second",
-				toolName: "lookup",
-				content: [{ type: "image", data: "ZGVm", mimeType: "image/png" }],
-				isError: false,
-				timestamp: 6,
-			},
-		],
-		tools: [LOOKUP_TOOL],
 	};
 }
 
@@ -514,67 +424,6 @@ async function captureResponsesNoTerminal(): Promise<void> {
 		"deepseek no-terminal",
 	);
 	writeSnapshot("wire/openai-responses-deepseek-no-terminal-ts-events.json", events);
-}
-
-async function captureKimi(): Promise<void> {
-	const recorded: RecordedRequest[] = [];
-	const events = await collectEvents(
-		streamSimpleAnthropic(kimiModel(), kimiContext(), {
-			headers: { Authorization: "Bearer dummy-kimi-oauth" },
-			temperature: 0.5,
-			maxTokens: 256,
-			reasoning: "high",
-			cacheRetention: "short",
-			timeoutMs: 4321,
-			fetch: sseFetch(readFixture("wire/anthropic-messages-kimi.sse"), recorded),
-		} as any),
-	);
-	if (recorded.length !== 1) {
-		throw new Error(`kimi: expected 1 request, got ${recorded.length}`);
-	}
-	assertCanonicalRequest(
-		recorded[0].body,
-		JSON.parse(readFixture("wire/anthropic-messages-kimi-ts-request.json")),
-		"kimi",
-	);
-	writeSnapshot("wire/anthropic-messages-kimi-ts-events.json", events);
-}
-
-/**
- * H2-T2 (issue #375): the pre-mapping raw-stop-reason capture, exercised by
- * the frozen `anthropic-sse-parsing.test.ts` (refusal / sensitive cases).
- * Same kimi request bytes as the happy path; the terminal `message_delta`
- * carries a stop reason the mapper rejects, and the raw value is preserved on
- * the terminal error message (pi `anthropic-messages.ts` captures
- * `output.rawStopReason` before `mapStopReason`).
- */
-async function captureKimiRefusal(): Promise<void> {
-	const recorded: RecordedRequest[] = [];
-	const events = await collectEvents(
-		streamSimpleAnthropic(kimiModel(), kimiContext(), {
-			headers: { Authorization: "Bearer dummy-kimi-oauth" },
-			temperature: 0.5,
-			maxTokens: 256,
-			reasoning: "high",
-			cacheRetention: "short",
-			timeoutMs: 4321,
-			fetch: sseFetch(
-				readFixture("wire/anthropic-messages-kimi-refusal.sse"),
-				recorded,
-			),
-		} as any),
-	);
-	if (recorded.length !== 1) {
-		throw new Error(
-			`kimi refusal: expected 1 request, got ${recorded.length}`,
-		);
-	}
-	assertCanonicalRequest(
-		recorded[0].body,
-		JSON.parse(readFixture("wire/anthropic-messages-kimi-ts-request.json")),
-		"kimi refusal",
-	);
-	writeSnapshot("wire/anthropic-messages-kimi-refusal-ts-events.json", events);
 }
 
 async function captureCodexWebSocket(): Promise<void> {
@@ -827,103 +676,11 @@ async function captureCodexEmptyStringWs(): Promise<void> {
 	);
 }
 
-// ── T3 (issue #367): Anthropic string-alternative requests (Kimi path) ──────
-// Request-only differential fixtures mirroring #366. Note pi resolves an
-// absent cacheRetention to the `"short"` default (`resolveCacheRetention`),
-// so the raw-string and blank-drop behaviors are captured under an explicit
-// `cacheRetention: "none"`; the promotion behavior under `"short"` (pi
-// `anthropic-messages.ts:1131-1160, 1268-1276`; frozen-suite coverage in
-// `cache-retention.test.ts` "should add cache_control to string user
-// messages").
-
-/** Context: a single string user message (Kimi). */
-function kimiStringContext(text: string): any {
-	return {
-		systemPrompt: "system",
-		messages: [{ role: "user", content: text, timestamp: 1 }],
-		tools: [LOOKUP_TOOL],
-	};
-}
-
-async function captureKimiString(): Promise<void> {
-	const recorded: RecordedRequest[] = [];
-	await collectEvents(
-		streamSimpleAnthropic(kimiModel(), kimiStringContext("hello"), {
-			headers: { Authorization: "Bearer dummy-kimi-oauth" },
-			temperature: 0.5,
-			maxTokens: 256,
-			reasoning: "high",
-			cacheRetention: "none",
-			timeoutMs: 4321,
-			fetch: sseFetch(readFixture("wire/anthropic-messages-kimi.sse"), recorded),
-		} as any),
-	);
-	if (recorded.length !== 1) {
-		throw new Error(`kimi string: expected 1 request, got ${recorded.length}`);
-	}
-	captureRequestFixture(
-		"wire/anthropic-messages-kimi-string-ts-request.json",
-		JSON.parse(recorded[0].body),
-		"kimi string",
-	);
-}
-
-async function captureKimiBlankString(): Promise<void> {
-	const recorded: RecordedRequest[] = [];
-	await collectEvents(
-		streamSimpleAnthropic(kimiModel(), kimiStringContext("   "), {
-			headers: { Authorization: "Bearer dummy-kimi-oauth" },
-			temperature: 0.5,
-			maxTokens: 256,
-			reasoning: "high",
-			cacheRetention: "none",
-			timeoutMs: 4321,
-			fetch: sseFetch(readFixture("wire/anthropic-messages-kimi.sse"), recorded),
-		} as any),
-	);
-	if (recorded.length !== 1) {
-		throw new Error(`kimi blank-string: expected 1 request, got ${recorded.length}`);
-	}
-	captureRequestFixture(
-		"wire/anthropic-messages-kimi-blank-string-ts-request.json",
-		JSON.parse(recorded[0].body),
-		"kimi blank-string",
-	);
-}
-
-async function captureKimiStringCache(): Promise<void> {
-	const recorded: RecordedRequest[] = [];
-	await collectEvents(
-		streamSimpleAnthropic(kimiModel(), kimiStringContext("hello"), {
-			headers: { Authorization: "Bearer dummy-kimi-oauth" },
-			temperature: 0.5,
-			maxTokens: 256,
-			reasoning: "high",
-			cacheRetention: "short",
-			timeoutMs: 4321,
-			fetch: sseFetch(readFixture("wire/anthropic-messages-kimi.sse"), recorded),
-		} as any),
-	);
-	if (recorded.length !== 1) {
-		throw new Error(`kimi string-cache: expected 1 request, got ${recorded.length}`);
-	}
-	captureRequestFixture(
-		"wire/anthropic-messages-kimi-string-cache-ts-request.json",
-		JSON.parse(recorded[0].body),
-		"kimi string-cache",
-	);
-}
-
 await captureDeepseek();
 await captureResponsesNoTerminal();
-await captureKimi();
-await captureKimiRefusal();
 await captureCodexWebSocket();
 await captureCodexSseFallback();
 await captureDeepseekStringContent();
 await captureDeepseekEmptyString();
 await captureCodexStringContentWs();
 await captureCodexEmptyStringWs();
-await captureKimiString();
-await captureKimiBlankString();
-await captureKimiStringCache();

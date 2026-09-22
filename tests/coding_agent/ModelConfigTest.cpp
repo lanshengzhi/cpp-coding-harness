@@ -170,9 +170,9 @@ TEST_CASE("the frozen complete Model fixture preserves the null-aware thinking l
     const auto fixture = tests::read_pi_fixture_text("models/complete-anthropic-model.json");
     REQUIRE(fixture);
     const auto config = load_models_json(
-            workspace, R"({"providers":{"kimi-coding":{"apiKey":"dummy-fixture-key","models":[)" + *fixture + "]}}}");
+            workspace, R"({"providers":{"anthropic":{"apiKey":"dummy-fixture-key","models":[)" + *fixture + "]}}}");
     CHECK_FALSE(config.error().has_value());
-    const auto provider = config.provider("kimi-coding");
+    const auto provider = config.provider("anthropic");
     REQUIRE(provider.has_value());
     REQUIRE(provider->models.has_value());
     const auto& map = provider->models->front().thinking_level_map;
