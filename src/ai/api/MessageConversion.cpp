@@ -9,8 +9,14 @@ support::Expected<support::JsonValue> build_adapter_payload(
     const Model& model,
     const AiContext& context,
     const ProviderStreamOptions& options) {
+    if (auto valid = validate_model(model); !valid) {
+        return std::unexpected(valid.error());
+    }
     if (adapter == AdapterKind::AnthropicMessages) {
         return build_anthropic_payload(model, context, options);
+    }
+    if (adapter == AdapterKind::OpenAICompletions) {
+        return build_completions_payload(model, context, options);
     }
     return build_responses_payload(adapter, model, context, options);
 }

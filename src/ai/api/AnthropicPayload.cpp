@@ -5,6 +5,8 @@
 #include "ai/SimpleOptions.hpp"
 #include "support/Json.hpp"
 
+#include <algorithm>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -13,6 +15,22 @@
 
 namespace cch::ai::api {
 namespace {
+
+[[nodiscard]] bool anthropic_supports_temperature(const Model& model) {
+    if (!model.compat) {
+        return true;
+    }
+    const auto* compat = std::get_if<AnthropicMessagesCompat>(&*model.compat);
+    return compat == nullptr || compat->supports_temperature.value_or(true);
+}
+
+[[nodiscard]] bool anthropic_allows_empty_signature(const Model& model) {
+    if (!model.compat) {
+        return false;
+    }
+    const auto* compat = std::get_if<AnthropicMessagesCompat>(&*model.compat);
+    return compat != nullptr && compat->allow_empty_signature.value_or(false);
+}
 
 [[nodiscard]] support::JsonValue anthropic_image(const ImageContent& image) {
     return support::JsonValue::object_t{
@@ -124,7 +142,7 @@ namespace {
                         if (blank(thinking->thinking) && !has_signature) {
                             continue;
                         }
-                        const bool allow_empty = model.compat && model.compat->allow_empty_signature.value_or(false);
+                        const bool allow_empty = anthropic_allows_empty_signature(model);
                         if (!has_signature && !allow_empty) {
                             content.emplace_back(support::JsonValue::object_t{
                                     {"text", sanitize_text(thinking->thinking)},
@@ -260,6 +278,37 @@ void attach_cache_control_to_last_user(support::JsonValue::array_t& messages, Ca
     }
 }
 
+constexpr std::uint64_t kAnthropicMinimumAnswerTokens = 1024;
+
+[[nodiscard]] std::uint64_t default_anthropic_thinking_budget(ModelThinkingLevel level) {
+    switch (level) {
+    case ModelThinkingLevel::Minimal:
+        return 1024;
+    case ModelThinkingLevel::Low:
+        return 2048;
+    case ModelThinkingLevel::Medium:
+        return 8192;
+    case ModelThinkingLevel::High:
+    case ModelThinkingLevel::XHigh:
+    case ModelThinkingLevel::Max:
+        return 16384;
+    case ModelThinkingLevel::Off:
+        return 1024;
+    }
+    return 1024;
+}
+
+/// Keep budget-based thinking inside the already-clamped response ceiling.
+/// The fallback mirrors pi's Anthropic parameter builder for ceilings that
+/// cannot leave the usual 1024-token answer room.
+[[nodiscard]] std::uint64_t clamped_anthropic_thinking_budget(ModelThinkingLevel level, std::uint64_t max_tokens) {
+    const auto default_budget = default_anthropic_thinking_budget(level);
+    if (max_tokens <= kAnthropicMinimumAnswerTokens) {
+        return kAnthropicMinimumAnswerTokens;
+    }
+    return std::min(default_budget, max_tokens - kAnthropicMinimumAnswerTokens);
+}
+
 } // namespace
 
 [[nodiscard]] support::Expected<support::JsonValue> build_anthropic_payload(
@@ -286,6 +335,7 @@ void attach_cache_control_to_last_user(support::JsonValue::array_t& messages, Ca
         payload.emplace("system", support::JsonValue::array_t{std::move(system_block)});
     }
     bool thinking_enabled = false;
+    const auto* compat = model.compat ? std::get_if<AnthropicMessagesCompat>(&*model.compat) : nullptr;
     if (model.reasoning && !options.reasoning) {
         if (reasoning_off_supported(model)) {
             payload.emplace("thinking", support::JsonValue::object_t{{"type", "disabled"}});
@@ -296,7 +346,7 @@ void attach_cache_control_to_last_user(support::JsonValue::array_t& messages, Ca
             if (reasoning_off_supported(model)) {
                 payload.emplace("thinking", support::JsonValue::object_t{{"type", "disabled"}});
             }
-        } else if (model.compat && model.compat->force_adaptive_thinking.value_or(false)) {
+        } else if (compat && compat->force_adaptive_thinking.value_or(false)) {
             thinking_enabled = true;
             payload.emplace("thinking",
                     support::JsonValue::object_t{
@@ -305,11 +355,17 @@ void attach_cache_control_to_last_user(support::JsonValue::array_t& messages, Ca
                     });
             payload.emplace("output_config", support::JsonValue::object_t{{"effort", anthropic_effort(model, level)}});
         } else {
-            return std::unexpected(support::make_error(support::ErrorCode::ModelValidation,
-                    "Budget-based Anthropic thinking is outside the supported adapter surface"));
+            thinking_enabled = true;
+            payload.emplace("thinking",
+                    support::JsonValue::object_t{
+                            {"budget_tokens",
+                                    static_cast<double>(clamped_anthropic_thinking_budget(level, options.max_tokens))},
+                            {"display", "summarized"},
+                            {"type", "enabled"},
+                    });
         }
     }
-    if (options.temperature && !thinking_enabled) {
+    if (options.temperature && !thinking_enabled && anthropic_supports_temperature(model)) {
         payload.emplace("temperature", *options.temperature);
     }
     if (!context.tools.empty()) {

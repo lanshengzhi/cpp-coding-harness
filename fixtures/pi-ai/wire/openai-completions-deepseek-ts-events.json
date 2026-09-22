@@ -1,0 +1,512 @@
+[
+  {
+    "type": "start",
+    "partial": {
+      "role": "assistant",
+      "content": [],
+      "api": "openai-completions",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0
+    }
+  },
+  {
+    "type": "thinking_start",
+    "contentIndex": 0,
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "reasoning_content"
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "chatcmpl-1"
+    }
+  },
+  {
+    "type": "thinking_delta",
+    "contentIndex": 0,
+    "delta": "plan",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "reasoning_content"
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "chatcmpl-1"
+    }
+  },
+  {
+    "type": "text_start",
+    "contentIndex": 1,
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "reasoning_content"
+        },
+        {
+          "type": "text",
+          "text": "answer"
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "chatcmpl-1"
+    }
+  },
+  {
+    "type": "text_delta",
+    "contentIndex": 1,
+    "delta": "answer",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "reasoning_content"
+        },
+        {
+          "type": "text",
+          "text": "answer"
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "chatcmpl-1"
+    }
+  },
+  {
+    "type": "toolcall_start",
+    "contentIndex": 2,
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "reasoning_content"
+        },
+        {
+          "type": "text",
+          "text": "answer"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_1",
+          "name": "lookup",
+          "arguments": {}
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "chatcmpl-1"
+    }
+  },
+  {
+    "type": "toolcall_delta",
+    "contentIndex": 2,
+    "delta": "{\"q\":",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "reasoning_content"
+        },
+        {
+          "type": "text",
+          "text": "answer"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_1",
+          "name": "lookup",
+          "arguments": {}
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "chatcmpl-1"
+    }
+  },
+  {
+    "type": "toolcall_delta",
+    "contentIndex": 2,
+    "delta": "\"x\"}",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "reasoning_content"
+        },
+        {
+          "type": "text",
+          "text": "answer"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_1",
+          "name": "lookup",
+          "arguments": {
+            "q": "x"
+          }
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "pending",
+      "timestamp": 0,
+      "responseId": "chatcmpl-1"
+    }
+  },
+  {
+    "type": "thinking_end",
+    "contentIndex": 0,
+    "content": "plan",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "reasoning_content"
+        },
+        {
+          "type": "text",
+          "text": "answer"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_1",
+          "name": "lookup",
+          "arguments": {
+            "q": "x"
+          }
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "usage": {
+        "input": 90,
+        "output": 30,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "reasoning": 7,
+        "totalTokens": 150,
+        "cost": {
+          "input": 0.00017999999999999998,
+          "output": 0.00011999999999999999,
+          "cacheRead": 0.000019999999999999998,
+          "cacheWrite": 0.00003,
+          "total": 0.00035
+        }
+      },
+      "stopReason": "toolUse",
+      "timestamp": 0,
+      "responseId": "chatcmpl-1",
+      "rawStopReason": "tool_calls"
+    }
+  },
+  {
+    "type": "text_end",
+    "contentIndex": 1,
+    "content": "answer",
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "reasoning_content"
+        },
+        {
+          "type": "text",
+          "text": "answer"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_1",
+          "name": "lookup",
+          "arguments": {
+            "q": "x"
+          }
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "usage": {
+        "input": 90,
+        "output": 30,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "reasoning": 7,
+        "totalTokens": 150,
+        "cost": {
+          "input": 0.00017999999999999998,
+          "output": 0.00011999999999999999,
+          "cacheRead": 0.000019999999999999998,
+          "cacheWrite": 0.00003,
+          "total": 0.00035
+        }
+      },
+      "stopReason": "toolUse",
+      "timestamp": 0,
+      "responseId": "chatcmpl-1",
+      "rawStopReason": "tool_calls"
+    }
+  },
+  {
+    "type": "toolcall_end",
+    "contentIndex": 2,
+    "toolCall": {
+      "type": "toolCall",
+      "id": "call_1",
+      "name": "lookup",
+      "arguments": {
+        "q": "x"
+      }
+    },
+    "partial": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "reasoning_content"
+        },
+        {
+          "type": "text",
+          "text": "answer"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_1",
+          "name": "lookup",
+          "arguments": {
+            "q": "x"
+          }
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "usage": {
+        "input": 90,
+        "output": 30,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "reasoning": 7,
+        "totalTokens": 150,
+        "cost": {
+          "input": 0.00017999999999999998,
+          "output": 0.00011999999999999999,
+          "cacheRead": 0.000019999999999999998,
+          "cacheWrite": 0.00003,
+          "total": 0.00035
+        }
+      },
+      "stopReason": "toolUse",
+      "timestamp": 0,
+      "responseId": "chatcmpl-1",
+      "rawStopReason": "tool_calls"
+    }
+  },
+  {
+    "type": "done",
+    "reason": "toolUse",
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "plan",
+          "thinkingSignature": "reasoning_content"
+        },
+        {
+          "type": "text",
+          "text": "answer"
+        },
+        {
+          "type": "toolCall",
+          "id": "call_1",
+          "name": "lookup",
+          "arguments": {
+            "q": "x"
+          }
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "usage": {
+        "input": 90,
+        "output": 30,
+        "cacheRead": 20,
+        "cacheWrite": 10,
+        "reasoning": 7,
+        "totalTokens": 150,
+        "cost": {
+          "input": 0.00017999999999999998,
+          "output": 0.00011999999999999999,
+          "cacheRead": 0.000019999999999999998,
+          "cacheWrite": 0.00003,
+          "total": 0.00035
+        }
+      },
+      "stopReason": "toolUse",
+      "timestamp": 0,
+      "responseId": "chatcmpl-1",
+      "rawStopReason": "tool_calls"
+    }
+  }
+]

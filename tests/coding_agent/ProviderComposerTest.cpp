@@ -22,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 using namespace cch;
@@ -124,8 +125,7 @@ template <typename T> [[nodiscard]] support::Expected<T> consume_async_result(su
 /// `ai::Model` composed from the same frozen shard entry, or nullopt when they
 /// match. `compat` is not compared: the C++ `models.json` schema has no compat
 /// surface (`ModelConfig.hpp`), so a shard entry's compat member never reaches
-/// the config path; `AnthropicMessagesAdapterTest` pins the Kimi catalog compat
-/// values instead.
+/// the config path.
 [[nodiscard]] std::optional<std::string> model_field_mismatch(const ai::Model& expected, const ai::Model& actual) {
     if (auto mismatch = string_field_mismatch("id", expected.id, actual.id)) {
         return mismatch;
@@ -192,7 +192,7 @@ template <typename T> [[nodiscard]] support::Expected<T> consume_async_result(su
 // ProviderComposer: built-in/config composition (pi provider-composer subset)
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("builtin definitions carry the Codex 7 and Kimi 4 catalogs",
+TEST_CASE("builtin definitions carry the Codex 6 and Kimi 4 catalogs",
         "[coding_agent][provider-composer][issue546][spec]") {
     const auto builtins = ai::builtin_provider_definitions();
     REQUIRE(builtins.size() == 6);
@@ -205,9 +205,9 @@ TEST_CASE("builtin definitions carry the Codex 7 and Kimi 4 catalogs",
     CHECK(codex.name == "OpenAI Codex");
     CHECK(codex.auth.oauth.has_value());
     CHECK_FALSE(codex.auth.api_key.has_value());
-    REQUIRE(codex.models.size() == 7);
+    REQUIRE(codex.models.size() == 6);
     CHECK(codex.models.front().id == "gpt-5.3-codex-spark");
-    CHECK(codex.models.back().id == "gpt-5.6-terra");
+    CHECK(codex.models.back().id == "gpt-6-astra");
     const auto gpt55 = std::find_if(
             codex.models.begin(), codex.models.end(), [](const ai::Model& m) { return m.id == "gpt-5.5"; });
     REQUIRE(gpt55 != codex.models.end());
@@ -221,23 +221,22 @@ TEST_CASE("builtin definitions carry the Codex 7 and Kimi 4 catalogs",
     CHECK(kimi.id == "kimi-coding");
     CHECK(kimi.name == "Kimi For Coding");
     CHECK(kimi.auth.api_key.has_value());
-    CHECK(kimi.auth.oauth.has_value());
+    CHECK_FALSE(kimi.auth.oauth.has_value());
     REQUIRE(kimi.models.size() == 4);
     const auto kimi_coding = std::find_if(
             kimi.models.begin(), kimi.models.end(), [](const ai::Model& m) { return m.id == "kimi-for-coding"; });
     REQUIRE(kimi_coding != kimi.models.end());
-    CHECK(kimi_coding->api == "anthropic-messages");
-    CHECK(kimi_coding->compat.has_value());
-    CHECK(kimi_coding->compat->allow_empty_signature == true);
+    CHECK(kimi_coding->api == "openai-completions");
+    CHECK(kimi_coding->base_url == "https://api.kimi.com/coding/v1");
+    CHECK_FALSE(kimi_coding->headers.has_value());
 }
 
-TEST_CASE("builtin catalogs match the frozen baseline shard values",
+TEST_CASE("builtin catalogs match the hash-pinned snapshot shard values",
         "[coding_agent][provider-composer][issue370][spec]") {
-    // The committed shard goldens (fixtures/pi-ai/models/*-shard.json) are
-    // verbatim copies of the frozen-baseline pi shards (byte-hashes pinned in
-    // the pi-ai fixture README). Every built-in catalog model must equal the
-    // `ai::Model` the production models.json path composes from its baseline
-    // shard entry. The shard compat members are excluded (see
+    // The Codex shard is the current hash-pinned T0 parity artifact. Kimi
+    // deliberately diverges from its upstream shard and uses the
+    // vendor-authoritative catalog instead. The shard compat members are
+    // excluded (see
     // `model_field_mismatch`); the deferred Codex catalog compat flags
     // (supportsOpenAIGrammarTools / supportsToolSearch) remain absent from the
     // C++ surface by design.
@@ -289,8 +288,8 @@ TEST_CASE("builtin catalogs match the frozen baseline shard values",
             std::find_if(builtins.begin(), builtins.end(), [](const auto& b) { return b.id == "kimi-coding"; });
     REQUIRE(codex_it != builtins.end());
     REQUIRE(kimi_it != builtins.end());
-    check_shard(codex_it->models, "models/openai-codex-shard.json", "openai-codex-responses");
-    check_shard(kimi_it->models, "models/kimi-coding-shard.json", "anthropic-messages");
+    check_shard(codex_it->models, "models/providers/openai-codex.json", "openai-codex-responses");
+    check_shard(kimi_it->models, "models/vendors/kimi-coding.json", "openai-completions");
 }
 
 TEST_CASE("the frozen complete Model fixture composes to the expected ai::Model",
@@ -304,12 +303,12 @@ TEST_CASE("the frozen complete Model fixture composes to the expected ai::Model"
     const auto fixture = tests::read_pi_fixture_text("models/complete-anthropic-model.json");
     REQUIRE(fixture);
     tests::TempWorkspace workspace;
-    const auto composed = compose_fixture_models(workspace, "kimi-coding", {*fixture});
+    const auto composed = compose_fixture_models(workspace, "anthropic", {*fixture});
     REQUIRE(composed.size() == 1);
 
-    auto expected = tests::make_model("kimi-for-coding", "kimi-coding", "anthropic-messages");
-    expected.name = "Kimi for Coding";
-    expected.base_url = "https://api.kimi.com/coding";
+    auto expected = tests::make_model("claude-complete", "anthropic", "anthropic-messages");
+    expected.name = "Claude Complete";
+    expected.base_url = "https://api.anthropic.com";
     expected.reasoning = true;
     expected.thinking_level_map = ai::ThinkingLevelMap{
             {ai::ModelThinkingLevel::Minimal, std::string{"low"}},
@@ -353,7 +352,7 @@ TEST_CASE("built-in without models.json config is submitted unchanged",
     REQUIRE(change.definition.has_value());
     CHECK(change.definition->id == "openai-codex");
     CHECK(change.definition->name == "OpenAI Codex");
-    CHECK(change.definition->models.size() == 7);
+    CHECK(change.definition->models.size() == 6);
     CHECK(change.definition->auth.oauth.has_value());
 }
 
@@ -388,10 +387,10 @@ TEST_CASE("models.json overlay overrides the built-in baseUrl and upserts a cust
     CHECK(gpt55->max_tokens == 65536);
     CHECK(gpt55->base_url == "https://codex.example/v1");
     // The overlay's baseUrl propagates to every built-in model.
-    const auto gpt54 = std::find_if(models.begin(), models.end(),
-        [](const ai::Model& m) { return m.id == "gpt-5.4"; });
-    REQUIRE(gpt54 != models.end());
-    CHECK(gpt54->base_url == "https://codex.example/v1");
+    const auto gpt56_luna =
+            std::find_if(models.begin(), models.end(), [](const ai::Model& m) { return m.id == "gpt-5.6-luna"; });
+    REQUIRE(gpt56_luna != models.end());
+    CHECK(gpt56_luna->base_url == "https://codex.example/v1");
     // The built-in OAuth auth is preserved.
     CHECK(change.definition->auth.oauth.has_value());
 }
@@ -517,7 +516,7 @@ TEST_CASE("composition failure falls back to the built-in and records the error"
     CHECK(change.definition->id == "kimi-coding");
     CHECK(change.definition->name == "Kimi For Coding");
     CHECK(change.definition->models.size() == 4);
-    CHECK(change.definition->auth.oauth.has_value());
+    CHECK_FALSE(change.definition->auth.oauth.has_value());
     CHECK(change.definition->auth.api_key.has_value());
 }
 

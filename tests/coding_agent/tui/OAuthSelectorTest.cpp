@@ -105,11 +105,6 @@ TEST_CASE("OAuthSelector renders the login title and provider rows with auth-sta
     providers.push_back(provider(
         "kimi-coding",
         "Kimi For Coding",
-        AuthSelectorType::OAuth,
-        AuthSelectorStatus{.type = AuthSelectorType::OAuth, .source = "OAuth"}));
-    providers.push_back(provider(
-        "kimi-coding",
-        "Kimi For Coding",
         AuthSelectorType::ApiKey,
         AuthSelectorStatus{.type = AuthSelectorType::ApiKey, .source = "KIMI_API_KEY"}));
 
@@ -125,9 +120,7 @@ TEST_CASE("OAuthSelector renders the login title and provider rows with auth-sta
     CHECK(screen.find("Select provider to configure:") != std::string::npos);
     // Unconfigured provider: muted "• unconfigured".
     CHECK(screen.find("→ OpenAI Codex [subscription] • unconfigured") != std::string::npos);
-    // Stored OAuth credential: success "✓ configured".
-    CHECK(screen.find("Kimi For Coding [subscription] ✓ configured") != std::string::npos);
-    // Environment source: success "✓ env: <VAR>".
+    // Kimi has only an API-key row and is reported as an API key.
     CHECK(screen.find("Kimi For Coding [API key] ✓ env: KIMI_API_KEY") != std::string::npos);
 }
 
@@ -137,12 +130,11 @@ TEST_CASE("OAuthSelector warns when the stored credential type differs from the 
     using coding_agent::tui::AuthSelectorStatus;
     using coding_agent::tui::AuthSelectorType;
     std::vector<coding_agent::tui::AuthSelectorProvider> providers;
-    // An API-key row while the provider currently authenticates via OAuth.
-    providers.push_back(provider(
-        "kimi-coding",
-        "Kimi For Coding",
-        AuthSelectorType::ApiKey,
-        AuthSelectorStatus{.type = AuthSelectorType::OAuth, .source = "OAuth"}));
+    // An API-key row while the dual-auth provider currently authenticates via OAuth.
+    providers.push_back(provider("openrouter",
+            "OpenRouter",
+            AuthSelectorType::ApiKey,
+            AuthSelectorStatus{.type = AuthSelectorType::OAuth, .source = "OAuth"}));
 
     coding_agent::tui::OAuthSelectorComponent selector(
         theme,
@@ -153,9 +145,36 @@ TEST_CASE("OAuthSelector warns when the stored credential type differs from the 
         [] {});
 
     const auto screen = screen_of(selector);
-    CHECK(screen.find("• subscription configured") != std::string::npos);
-    // A single auth type across the list: no [subscription]/[API key] labels.
+    CHECK(screen.find("• account configured") != std::string::npos);
+    // A single auth type across the list: no auth-type labels.
     CHECK(screen.find("[API key]") == std::string::npos);
+}
+
+TEST_CASE("OAuthSelector labels OpenRouter OAuth as an account login", "[coding_agent][tui][login][issue763][spec]") {
+    auto theme = test_theme();
+    using coding_agent::tui::AuthSelectorType;
+    std::vector<coding_agent::tui::AuthSelectorProvider> providers;
+    providers.push_back(provider("openrouter",
+            "OpenRouter",
+            AuthSelectorType::OAuth,
+            coding_agent::tui::AuthSelectorStatus{
+                    .type = AuthSelectorType::OAuth,
+                    .source = "OAuth",
+            }));
+    providers.push_back(provider("kimi-coding", "Kimi For Coding", AuthSelectorType::ApiKey));
+
+    coding_agent::tui::OAuthSelectorComponent selector(
+            theme,
+            test_keybindings(),
+            coding_agent::tui::AuthSelectorMode::Login,
+            std::move(providers),
+            [](std::string, AuthSelectorType) -> support::ExpectedVoid { return {}; },
+            [] {});
+
+    const auto screen = screen_of(selector);
+    CHECK(screen.find("OpenRouter [account] ✓ configured") != std::string::npos);
+    CHECK(screen.find("OpenRouter [subscription]") == std::string::npos);
+    CHECK(screen.find("Kimi For Coding [API key] • unconfigured") != std::string::npos);
 }
 
 TEST_CASE("OAuthSelector fuzzy-filters providers through the search input",
@@ -164,7 +183,7 @@ TEST_CASE("OAuthSelector fuzzy-filters providers through the search input",
     using coding_agent::tui::AuthSelectorType;
     std::vector<coding_agent::tui::AuthSelectorProvider> providers;
     providers.push_back(provider("openai-codex", "OpenAI Codex", AuthSelectorType::OAuth));
-    providers.push_back(provider("kimi-coding", "Kimi For Coding", AuthSelectorType::OAuth));
+    providers.push_back(provider("kimi-coding", "Kimi For Coding", AuthSelectorType::ApiKey));
     providers.push_back(provider("deepseek", "DeepSeek", AuthSelectorType::ApiKey));
 
     coding_agent::tui::OAuthSelectorComponent selector(
@@ -225,14 +244,14 @@ TEST_CASE("OAuthSelector submits the highlighted provider with id and auth type"
     CHECK(selected->second == AuthSelectorType::ApiKey);
 }
 
-TEST_CASE("OAuthSelector distinguishes auth methods that share a provider id",
+TEST_CASE("OAuthSelector distinguishes OpenRouter auth methods that share a provider id",
         "[coding_agent][tui][login][issue406][spec]") {
     auto theme = test_theme();
     using coding_agent::tui::AuthSelectorType;
     std::optional<std::pair<std::string, AuthSelectorType>> selected;
     std::vector<coding_agent::tui::AuthSelectorProvider> providers;
-    providers.push_back(provider("kimi-coding", "Kimi For Coding", AuthSelectorType::OAuth));
-    providers.push_back(provider("kimi-coding", "Kimi For Coding", AuthSelectorType::ApiKey));
+    providers.push_back(provider("openrouter", "OpenRouter", AuthSelectorType::OAuth));
+    providers.push_back(provider("openrouter", "OpenRouter", AuthSelectorType::ApiKey));
 
     coding_agent::tui::OAuthSelectorComponent selector(
             theme,
@@ -245,7 +264,7 @@ TEST_CASE("OAuthSelector distinguishes auth methods that share a provider id",
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(selected.has_value());
-    CHECK(selected->first == "kimi-coding");
+    CHECK(selected->first == "openrouter");
     CHECK(selected->second == AuthSelectorType::ApiKey);
 }
 

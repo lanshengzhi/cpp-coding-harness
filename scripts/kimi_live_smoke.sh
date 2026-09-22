@@ -30,9 +30,8 @@ cmd=(
 	"$binary"
 	--workspace "$workspace"
 	--session "$session"
-	--base-url https://api.kimi.com/coding/v1
+	--provider kimi-coding
 	--model kimi-for-coding
-	--api-key-env KIMI_API_KEY
 	--max-turns 3
 	"Reply with exactly: kimi live smoke ok"
 )

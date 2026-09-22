@@ -56,6 +56,7 @@ struct ModelRuntime::Impl {
     std::vector<ai::Model> available_models;
     std::set<std::string, std::less<>> configured_providers;
     std::set<std::string, std::less<>> stored_providers;
+    std::map<std::string, std::string, std::less<>> stored_auth_types;
     std::set<std::string, std::less<>> runtime_providers;
     std::map<std::string, ai::AuthCheck, std::less<>> auth_snapshot;
     std::optional<std::string> availability_error;
@@ -119,10 +120,21 @@ struct ModelRuntime::Impl {
 
     void update_snapshot() {
         all_models = models->models();
+        // Provider definitions expose structural auth methods, not active
+        // credentials. Preserve only live auth results already established by
+        // check_auth/get_available; a refresh must not make every provider
+        // appear configured merely because it has an auth hook.
         configured_providers.clear();
+        std::set<std::string, std::less<>> installed_providers;
         for (const auto& provider_value : models->provider_info()) {
-            if (!provider_value.auth_methods.empty()) {
+            installed_providers.insert(provider_value.id);
+            if (auth_snapshot.contains(provider_value.id)) {
                 configured_providers.insert(provider_value.id);
+            }
+        }
+        for (const auto& provider_id : runtime_providers) {
+            if (installed_providers.contains(provider_id)) {
+                configured_providers.insert(provider_id);
             }
         }
         recompute_available_models();
@@ -160,6 +172,7 @@ ModelRuntime::ModelRuntime(std::shared_ptr<ai::Models> models)
               .available_models = {},
               .configured_providers = {},
               .stored_providers = {},
+              .stored_auth_types = {},
               .runtime_providers = {},
               .auth_snapshot = {},
               .availability_error = {},
@@ -167,13 +180,7 @@ ModelRuntime::ModelRuntime(std::shared_ptr<ai::Models> models)
     if (!impl_->models) {
         std::terminate();
     }
-    impl_->all_models = impl_->models->models();
-    for (const auto& info : impl_->models->provider_info()) {
-        if (!info.auth_methods.empty()) {
-            impl_->configured_providers.insert(info.id);
-        }
-    }
-    impl_->recompute_available_models();
+    impl_->update_snapshot();
 }
 
 ModelRuntime::ModelRuntime(ModelRuntime&&) noexcept = default;
@@ -227,6 +234,7 @@ support::Expected<std::shared_ptr<ModelRuntime>> ModelRuntime::create_impl(Model
             .available_models = {},
             .configured_providers = {},
             .stored_providers = {},
+            .stored_auth_types = {},
             .runtime_providers = {},
             .auth_snapshot = {},
             .availability_error = {},
@@ -348,8 +356,10 @@ support::AsyncResult<std::vector<ai::Model>> ModelRuntime::get_available(std::op
                 impl_->configured_providers = std::move(configured);
                 impl_->auth_snapshot = std::move(auth);
                 impl_->stored_providers.clear();
+                impl_->stored_auth_types.clear();
                 for (const auto& entry : stored) {
                     impl_->stored_providers.insert(entry.provider_id);
+                    impl_->stored_auth_types.emplace(entry.provider_id, entry.type);
                 }
                 impl_->recompute_available_models();
                 impl_->availability_error = std::move(failure);
@@ -363,8 +373,19 @@ support::AsyncResult<std::optional<ai::AuthCheck>> ModelRuntime::check_auth(std:
     return support::detail::make_async_result(
             [this, provider_id = std::move(provider_id)]() mutable
                     -> boost::asio::awaitable<support::Expected<std::optional<ai::AuthCheck>>> {
-                co_return co_await support::detail::await_async_result(
-                        impl_->models->check_auth(std::move(provider_id)));
+                auto checked = co_await support::detail::await_async_result(impl_->models->check_auth(provider_id));
+                if (!checked) {
+                    co_return std::unexpected(checked.error());
+                }
+                if (*checked) {
+                    impl_->auth_snapshot[provider_id] = **checked;
+                    impl_->configured_providers.insert(provider_id);
+                } else {
+                    impl_->auth_snapshot.erase(provider_id);
+                    impl_->configured_providers.erase(provider_id);
+                }
+                impl_->recompute_available_models();
+                co_return *checked;
             });
 }
 
@@ -373,13 +394,8 @@ bool ModelRuntime::has_configured_auth(std::string_view provider_id) const {
 }
 
 bool ModelRuntime::is_using_oauth(std::string_view provider_id) const {
-    const auto selected = provider(provider_id);
-    if (!selected) {
-        return false;
-    }
-    return std::any_of(selected->auth_methods.begin(),
-            selected->auth_methods.end(),
-            [](const ai::AuthMethodInfo& method) { return method.type == ai::AuthType::OAuth; });
+    const auto found = impl_->auth_snapshot.find(provider_id);
+    return found != impl_->auth_snapshot.end() && found->second.type == ai::AuthType::OAuth;
 }
 
 support::ExpectedVoid ModelRuntime::set_runtime_api_key(
@@ -438,6 +454,13 @@ std::optional<ModelRuntimeAuthStatus> ModelRuntime::get_provider_auth_status(
         return ModelRuntimeAuthStatus{.configured = true, .source = "runtime"};
     }
     if (impl_->stored_providers.contains(std::string{provider_id})) {
+        const auto stored_type = impl_->stored_auth_types.find(provider_id);
+        if (stored_type != impl_->stored_auth_types.end() && stored_type->second == "oauth") {
+            // A stored OAuth record is authoritative for this provider. If
+            // the provider has no OAuth method (Kimi), it must not fall
+            // through to an environment/configured API key.
+            return ModelRuntimeAuthStatus{.configured = false, .source = "stored_oauth"};
+        }
         return ModelRuntimeAuthStatus{.configured = true, .source = "stored"};
     }
     if (const auto& configured = impl_->config.provider(provider_id)) {
@@ -473,6 +496,12 @@ support::AsyncResult<void> ModelRuntime::login(
                     -> boost::asio::awaitable<support::ExpectedVoid> {
                 CCH_TRY_VOID(co_await support::detail::await_async_result(
                         impl_->models->login(provider_id, type, std::move(interaction))));
+                impl_->stored_providers.insert(provider_id);
+                impl_->stored_auth_types[provider_id] = type == ai::AuthType::OAuth ? "oauth" : "api_key";
+                impl_->auth_snapshot[provider_id] = ai::AuthCheck{
+                        .source = type == ai::AuthType::OAuth ? "OAuth" : "stored credential",
+                        .type = type,
+                };
                 // Post-login refresh failures are recorded in the composition-errors
                 // map and never fail the login call (ADR 0032).
                 static_cast<void>(refresh());
@@ -484,6 +513,9 @@ support::AsyncResult<void> ModelRuntime::logout(std::string provider_id) {
     return support::detail::make_async_result(
             [this, provider_id = std::move(provider_id)]() -> boost::asio::awaitable<support::ExpectedVoid> {
                 CCH_TRY_VOID(co_await support::detail::await_async_result(impl_->models->logout(provider_id)));
+                impl_->stored_providers.erase(provider_id);
+                impl_->stored_auth_types.erase(provider_id);
+                impl_->auth_snapshot.erase(provider_id);
                 // Credential-dependent composition is reset before the unconfigured
                 // provider is recomposed by refresh (pi: logout → recomposeProvider →
                 // refresh; order preserved).

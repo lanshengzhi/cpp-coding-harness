@@ -50,7 +50,6 @@ include_guard(GLOBAL)
         tests/coding_agent/AuthStorageTest.cpp
         tests/coding_agent/BuiltinSlashCommandsTest.cpp
         tests/coding_agent/ImageInputTest.cpp
-        tests/coding_agent/KimiOAuthLifecycleTest.cpp
         tests/coding_agent/ModelConfigTest.cpp
         tests/coding_agent/ModelCycleTest.cpp
         tests/coding_agent/ModelResolutionTest.cpp

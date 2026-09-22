@@ -11,6 +11,7 @@ namespace cch::ai::api {
 enum class AdapterKind {
     OpenAICodexResponses,
     OpenAIResponses,
+    OpenAICompletions,
     AnthropicMessages,
 };
 

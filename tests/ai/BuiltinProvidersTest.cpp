@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <concepts>
+#include <cstddef>
+#include <set>
 #include <string_view>
 #include <vector>
 
@@ -23,9 +25,9 @@ TEST_CASE("Built-in provider definitions preserve the frozen catalogs and auth m
     REQUIRE(codex_it != definitions.end());
     const auto& codex = *codex_it;
     CHECK(codex.name == "OpenAI Codex");
-    REQUIRE(codex.models.size() == 7);
+    REQUIRE(codex.models.size() == 6);
     CHECK(codex.models.front().id == "gpt-5.3-codex-spark");
-    CHECK(codex.models.back().id == "gpt-5.6-terra");
+    CHECK(codex.models.back().id == "gpt-6-astra");
     REQUIRE(codex.auth.oauth);
     CHECK(codex.auth.oauth->name == "OpenAI (ChatGPT Plus/Pro)");
     CHECK(static_cast<bool>(codex.auth.oauth->login));
@@ -46,11 +48,7 @@ TEST_CASE("Built-in provider definitions preserve the frozen catalogs and auth m
     CHECK(static_cast<bool>(kimi.auth.api_key->check));
     CHECK(static_cast<bool>(kimi.auth.api_key->resolve));
     CHECK(static_cast<bool>(kimi.auth.api_key->login));
-    REQUIRE(kimi.auth.oauth);
-    CHECK(kimi.auth.oauth->name == "Kimi Code (subscription)");
-    CHECK(static_cast<bool>(kimi.auth.oauth->login));
-    CHECK(static_cast<bool>(kimi.auth.oauth->refresh));
-    CHECK(static_cast<bool>(kimi.auth.oauth->to_auth));
+    CHECK_FALSE(kimi.auth.oauth);
 
     // Verify presence of all newly onboarded zero-config providers: each is
     // login-capable from `/login` without any user configuration.
@@ -62,6 +60,15 @@ TEST_CASE("Built-in provider definitions preserve the frozen catalogs and auth m
         CHECK(static_cast<bool>(it->auth.api_key->resolve));
         CHECK_FALSE(it->models.empty());
     }
+
+    const auto openrouter_it =
+            std::find_if(definitions.begin(), definitions.end(), [](const auto& d) { return d.id == "openrouter"; });
+    REQUIRE(openrouter_it != definitions.end());
+    REQUIRE(openrouter_it->auth.oauth);
+    CHECK(openrouter_it->auth.oauth->name == "OpenRouter OAuth");
+    CHECK(static_cast<bool>(openrouter_it->auth.oauth->login));
+    CHECK(static_cast<bool>(openrouter_it->auth.oauth->refresh));
+    CHECK(static_cast<bool>(openrouter_it->auth.oauth->to_auth));
 }
 
 TEST_CASE("Built-in provider definitions are fresh on every call", "[ai][providers][issue545][compat-pi]") {
@@ -99,50 +106,25 @@ TEST_CASE("Built-in provider definitions are fresh on every call", "[ai][provide
 
 namespace {
 
-/// One built-in provider's pinned wire surface (issue #754): the base URL, the
-/// API, and the model order the bundled catalog must produce. A typo in the
-/// embedded document changes one of these and fails here.
+/// The T0 provenance record owns the exhaustive model IDs. This smaller
+/// catalog seam check keeps the shipped provider counts and API families
+/// visible while the independent exhaustive parity test remains in T7.
 struct PinnedProvider {
     std::string_view id;
-    std::string_view base_url;
-    std::string_view api;
-    std::vector<std::string_view> model_ids;
+    std::size_t model_count;
+    std::set<std::string_view> apis;
 };
 
 } // namespace
 
-TEST_CASE("the bundled catalog pins each provider's wire surface and limits", "[ai][providers][issue754][spec]") {
+TEST_CASE("the generated catalog pins provider counts API families and limits", "[ai][providers][issue760][spec]") {
     const std::vector<PinnedProvider> pinned{
-            {"deepseek",
-                    "https://api.deepseek.com/responses",
-                    "openai-responses",
-                    {"deepseek-chat", "deepseek-reasoner"}},
-            {"openrouter",
-                    "https://openrouter.ai/api/v1/responses",
-                    "openai-responses",
-                    {"anthropic/claude-3.7-sonnet", "deepseek/deepseek-r1", "openai/gpt-4o"}},
-            {"opencode-go",
-                    "https://opencode.ai/zen/go/v1/responses",
-                    "openai-responses",
-                    {"gpt-5.6-luna", "grok-4.5"}},
-            {"openai",
-                    "https://api.openai.com/v1/responses",
-                    "openai-responses",
-                    {"gpt-4o", "gpt-4o-mini", "o1", "o3-mini"}},
-            {"openai-codex",
-                    "https://chatgpt.com/backend-api",
-                    "openai-codex-responses",
-                    {"gpt-5.3-codex-spark",
-                            "gpt-5.4",
-                            "gpt-5.4-mini",
-                            "gpt-5.5",
-                            "gpt-5.6-luna",
-                            "gpt-5.6-sol",
-                            "gpt-5.6-terra"}},
-            {"kimi-coding",
-                    "https://api.kimi.com/coding",
-                    "anthropic-messages",
-                    {"k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"}},
+            {"deepseek", 2, {"openai-completions"}},
+            {"kimi-coding", 4, {"openai-completions"}},
+            {"openai", 39, {"openai-responses"}},
+            {"openai-codex", 6, {"openai-codex-responses"}},
+            {"openrouter", 378, {"anthropic-messages", "openai-completions"}},
+            {"opencode-go", 30, {"anthropic-messages", "openai-completions", "openai-responses"}},
     };
 
     const auto definitions = ai::builtin_provider_definitions();
@@ -154,30 +136,82 @@ TEST_CASE("the bundled catalog pins each provider's wire surface and limits", "[
         });
         REQUIRE(it != definitions.end());
 
-        std::vector<std::string_view> model_ids;
-        model_ids.reserve(it->models.size());
+        CHECK(it->models.size() == want.model_count);
+        std::set<std::string_view> apis;
         for (const auto& model : it->models) {
-            model_ids.push_back(model.id);
-            CHECK(model.base_url == want.base_url);
-            CHECK(model.api == want.api);
-            // The catalog states the limits explicitly; the parser's fallbacks
-            // are a safety net, never the intended value.
+            apis.insert(model.api);
+            CHECK_FALSE(model.base_url.empty());
+            CHECK_FALSE(model.input.empty());
             CHECK(model.context_window > 0);
             CHECK(model.max_tokens > 0);
         }
-        CHECK(model_ids == want.model_ids);
+        CHECK(apis == want.apis);
     }
+
+    const auto kimi_it =
+            std::find_if(definitions.begin(), definitions.end(), [](const auto& d) { return d.id == "kimi-coding"; });
+    REQUIRE(kimi_it != definitions.end());
+    const auto kimi_model = std::find_if(kimi_it->models.begin(), kimi_it->models.end(), [](const auto& model) {
+        return model.id == "kimi-for-coding";
+    });
+    REQUIRE(kimi_model != kimi_it->models.end());
+    CHECK(kimi_model->base_url == "https://api.kimi.com/coding/v1");
+    CHECK(kimi_model->context_window == 1048576);
+    CHECK(kimi_model->max_tokens == 32768);
+    CHECK(kimi_model->input == std::vector<ai::ModelInput>{ai::ModelInput::Text, ai::ModelInput::Image});
+    CHECK_FALSE(kimi_model->headers.has_value());
+    REQUIRE(kimi_model->thinking_level_map);
+    CHECK(kimi_model->thinking_level_map->at(ai::ModelThinkingLevel::Low) == "low");
+    CHECK(kimi_model->thinking_level_map->at(ai::ModelThinkingLevel::High) == "high");
+    CHECK(kimi_model->thinking_level_map->at(ai::ModelThinkingLevel::Max) == "max");
+    CHECK(kimi_model->thinking_level_map->at(ai::ModelThinkingLevel::Medium) == std::nullopt);
+
+    const auto deepseek_it =
+            std::find_if(definitions.begin(), definitions.end(), [](const auto& d) { return d.id == "deepseek"; });
+    REQUIRE(deepseek_it != definitions.end());
+    const auto deepseek_model = std::find_if(deepseek_it->models.begin(),
+            deepseek_it->models.end(),
+            [](const ai::Model& model) { return model.id == "deepseek-flash"; });
+    REQUIRE(deepseek_model != deepseek_it->models.end());
+    REQUIRE(deepseek_model->compat);
+    const auto* deepseek_compat = std::get_if<ai::OpenAICompletionsCompat>(&*deepseek_model->compat);
+    REQUIRE(deepseek_compat != nullptr);
+    CHECK(deepseek_compat->supports_strict_mode == true);
+
+    const auto codex_it =
+            std::find_if(definitions.begin(), definitions.end(), [](const auto& d) { return d.id == "openai-codex"; });
+    REQUIRE(codex_it != definitions.end());
+    const auto codex_model = std::find_if(
+            codex_it->models.begin(), codex_it->models.end(), [](const auto& model) { return model.id == "gpt-5.5"; });
+    REQUIRE(codex_model != codex_it->models.end());
+    REQUIRE(codex_model->cost.tiers);
+    CHECK(codex_model->cost.tiers->front().input_tokens_above == 272000);
 }
 
-TEST_CASE("every bundled model except k3-256k carries token rates", "[ai][providers][issue754][spec]") {
-    // k3-256k ships without published rates, so the catalog leaves its cost
-    // table as zeros. Every other model must carry at least one non-zero rate:
-    // a silently zeroed table would otherwise look like a free model.
+TEST_CASE("the generated catalog preserves published token rates and zero-cost sentinels",
+        "[ai][providers][issue760][spec]") {
     for (const auto& definition : ai::builtin_provider_definitions()) {
         for (const auto& model : definition.models) {
             const bool has_rates = model.cost.input > 0.0 || model.cost.output > 0.0 || model.cost.cache_read > 0.0 ||
                                    model.cost.cache_write > 0.0;
-            CHECK(has_rates == (model.id != "k3-256k"));
+            const bool is_unpriced_kimi = model.id == "k3-256k";
+            const bool is_provider_routed_openrouter =
+                    model.id == "openrouter/auto" || model.id == "openrouter/auto-beta";
+            const bool is_zero_cost_openrouter =
+                    definition.id == "openrouter" &&
+                    (model.id == "auto" || std::string_view{model.id}.ends_with(":free") ||
+                            model.id == "openrouter/free" || model.id == "openrouter/fusion");
+            CHECK((has_rates || is_unpriced_kimi || is_provider_routed_openrouter || is_zero_cost_openrouter));
+            if (is_provider_routed_openrouter) {
+                CHECK(model.cost.input == -1000000.0);
+                CHECK(model.cost.output == -1000000.0);
+            }
+            if (is_zero_cost_openrouter) {
+                CHECK(model.cost.input == 0.0);
+                CHECK(model.cost.output == 0.0);
+                CHECK(model.cost.cache_read == 0.0);
+                CHECK(model.cost.cache_write == 0.0);
+            }
         }
     }
 }

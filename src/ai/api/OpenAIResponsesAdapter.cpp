@@ -213,7 +213,7 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAIResponsesAdapt
         };
     };
 
-    auto finalize_hook = [attempt_state](AssistantMessage& assistant) -> support::ExpectedVoid {
+    auto finalize_hook = [attempt_state](AssistantMessage& assistant, AssistantEventSink&) -> support::ExpectedVoid {
         return attempt_state->processor->finish(assistant);
     };
 

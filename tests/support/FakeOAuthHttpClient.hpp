@@ -5,6 +5,7 @@
 #include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>

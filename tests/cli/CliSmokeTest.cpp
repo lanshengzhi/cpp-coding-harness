@@ -804,7 +804,7 @@ TEST_CASE("CLI real-provider mode reports missing API key as a terminal auth out
     CHECK(result.stderr_text.find("Unknown provider: unknown") != std::string::npos);
 }
 
-TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through the preflight re-auth guidance",
+TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through API-key guidance",
         "[cli][kimi][u3][issue338][issue360][spec]") {
     cch::tests::TempWorkspace workspace;
     cch::tests::TempWorkspace home;
@@ -817,12 +817,11 @@ TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through the preflight re-a
 
     // T11 preflight (pi `prompt()` hasConfiguredAuth check): a real model
     // whose provider resolves no auth fails the prompt before any stream with
-    // pi's verbatim OAuth re-auth guidance (kimi-coding is OAuth-typed).
+    // the provider-specific API-key guidance.
     REQUIRE(result.exit_code == 1);
-    CHECK(result.output.find("loop failed: Authentication failed for \"kimi-coding\"") !=
-          std::string::npos);
-    CHECK(result.output.find("Run '/login kimi-coding' to re-authenticate.") !=
-          std::string::npos);
+    CHECK(result.output.find("loop failed: No API key found for kimi-coding") != std::string::npos);
+    CHECK(result.output.find("Use /login to log into a provider via API key.") != std::string::npos);
+    CHECK(result.output.find("OAuth") == std::string::npos);
     CHECK(std::filesystem::exists(session));
 }
 

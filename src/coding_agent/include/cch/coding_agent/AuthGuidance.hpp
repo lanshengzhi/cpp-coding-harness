@@ -18,14 +18,16 @@ inline constexpr std::string_view kUnknownProvider = "unknown";
 /// The committed re-auth goldens pin this default.
 inline constexpr std::string_view kDefaultAuthGuidanceDocsPath = "~/.pike/docs";
 
-/// pi `getProviderLoginHelp` (`auth-guidance.ts`): the verbatim "Use /login"
-/// help block, with the two docs-path lines resolved from `docs_path`.
+/// pi `getProviderLoginHelp` (`auth-guidance.ts`): the "Use /login" help
+/// block, with the two docs-path lines resolved from `docs_path`. Kimi is an
+/// explicit API-key-only exception and must not be presented as OAuth-capable.
 [[nodiscard]] inline std::string get_provider_login_help(
-    const std::filesystem::path& docs_path) {
-    return "Use /login to log into a provider via OAuth or API key. See:\n"
+        const std::filesystem::path& docs_path, std::string_view provider = {}) {
+    const std::string_view auth_methods = provider == "kimi-coding" ? "API key" : "OAuth or API key";
+    return "Use /login to log into a provider via " + std::string{auth_methods} +
+           ". See:\n"
            "  " +
-           (docs_path / "providers.md").string() + "\n" +
-           "  " + (docs_path / "models.md").string();
+           (docs_path / "providers.md").string() + "\n" + "  " + (docs_path / "models.md").string();
 }
 
 /// pi `formatNoModelsAvailableMessage` (`auth-guidance.ts`), verbatim: the
@@ -44,8 +46,8 @@ inline constexpr std::string_view kDefaultAuthGuidanceDocsPath = "~/.pike/docs";
     const std::filesystem::path& docs_path) {
     const std::string_view provider_display =
         provider == kUnknownProvider ? "the selected model" : provider;
-    return "No API key found for " + std::string{provider_display} +
-           ".\n\n" + get_provider_login_help(docs_path);
+    return "No API key found for " + std::string{provider_display} + ".\n\n" +
+           get_provider_login_help(docs_path, provider);
 }
 
 /// pi `agent-session.ts` `_getRequiredRequestAuth` OAuth branch, verbatim:

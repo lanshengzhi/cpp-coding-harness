@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 
 using namespace cch;
 
@@ -90,15 +91,73 @@ TEST_CASE("Model validation rejects partial identity invalid cost and incompatib
     CHECK_FALSE(ai::validate_model(model));
 
     model = tests::make_model("model-1");
+    model.cost.input = -1'000'000.0;
+    CHECK(ai::validate_model(model));
+
+    model = tests::make_model("model-1");
     model.cost.input = std::numeric_limits<double>::infinity();
     CHECK_FALSE(ai::validate_model(model));
 
     model = tests::make_model("model-1");
-    model.compat = ai::AnthropicMessagesCompat{.force_adaptive_thinking = true};
+    model.compat = ai::ModelCompatVariant{ai::AnthropicMessagesCompat{.force_adaptive_thinking = true}};
     CHECK_FALSE(ai::validate_model(model));
 
     model.api = "anthropic-messages";
     CHECK(ai::validate_model(model));
+}
+
+TEST_CASE("Model compatibility alternatives validate against their API identity", "[ai][model][issue759][spec]") {
+    auto model = tests::make_model("model-1", "deepseek", "openai-responses");
+    model.compat = ai::ModelCompatVariant{ai::OpenAICompletionsCompat{
+            .supports_store = false,
+            .thinking_format = ai::OpenAICompletionsThinkingFormat::DeepSeek,
+    }};
+
+    auto invalid = ai::validate_model(model);
+    REQUIRE_FALSE(invalid);
+    CHECK(invalid.error().message == "invalid model compat");
+    CHECK(invalid.error().detail.find("OpenAICompletionsCompat") != std::string::npos);
+    CHECK(invalid.error().detail.find("openai-completions") != std::string::npos);
+    CHECK(invalid.error().detail.find("openai-responses") != std::string::npos);
+
+    model.api = "openai-completions";
+    CHECK(ai::validate_model(model));
+    const auto* completions = std::get_if<ai::OpenAICompletionsCompat>(&*model.compat);
+    REQUIRE(completions != nullptr);
+    CHECK(completions->supports_store == false);
+    CHECK(ai::resolve_openai_completions_thinking_format(*completions) ==
+            ai::OpenAICompletionsThinkingFormat::DeepSeek);
+}
+
+TEST_CASE("Model compatibility preserves absent fields and explicit false overrides", "[ai][model][issue759][spec]") {
+    auto model = tests::make_model("gpt-5.6-luna", "openai", "openai-responses");
+    model.compat = ai::ModelCompatVariant{ai::OpenAIResponsesCompat{
+            .supports_strict_mode = false,
+            .supports_explicit_prompt_cache_mode = true,
+    }};
+
+    REQUIRE(ai::validate_model(model));
+    const auto* responses = std::get_if<ai::OpenAIResponsesCompat>(&*model.compat);
+    REQUIRE(responses != nullptr);
+    CHECK(responses->supports_strict_mode == false);
+    CHECK(responses->supports_explicit_prompt_cache_mode == true);
+
+    model.compat = ai::ModelCompatVariant{ai::OpenAICompletionsCompat{}};
+    model.api = "openai-completions";
+    REQUIRE(ai::validate_model(model));
+    const auto* completions = std::get_if<ai::OpenAICompletionsCompat>(&*model.compat);
+    REQUIRE(completions != nullptr);
+    CHECK_FALSE(completions->thinking_format.has_value());
+    CHECK_FALSE(completions->supports_strict_mode.has_value());
+    CHECK(ai::resolve_openai_completions_thinking_format(*completions) == ai::OpenAICompletionsThinkingFormat::OpenAI);
+
+    model.compat = ai::ModelCompatVariant{ai::OpenAICompletionsCompat{
+            .supports_strict_mode = false,
+    }};
+    REQUIRE(ai::validate_model(model));
+    completions = std::get_if<ai::OpenAICompletionsCompat>(&*model.compat);
+    REQUIRE(completions != nullptr);
+    CHECK(completions->supports_strict_mode == false);
 }
 
 TEST_CASE("Thinking level wire vocabulary is public on the Model interface", "[ai][model][issue651][spec]") {

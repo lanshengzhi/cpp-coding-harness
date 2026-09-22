@@ -255,16 +255,13 @@ flowing through the single `cch::support::Expected` error value (the #326 six-ca
 
 ### Re-auth guidance goldens (`re-auth-guidance-*.txt`)
 
-The committed verbatim re-auth guidance goldens ([#360], T11): pi's two branches at both trigger
-points, byte-compared by `ReAuthGuidanceTest` `[issue360]`.
+The committed re-auth guidance goldens ([#360], T11) cover the shared branches; Kimi's
+API-key-only wording is asserted directly by `ReAuthGuidanceTest`.
 
 - `re-auth-guidance-preflight-no-key.txt` — the prompt preflight (pi `agent-session.ts`
   `prompt()` `hasConfiguredAuth` check) failing a keyless provider with pi's verbatim
   `formatNoApiKeyFoundMessage` text through the `auth` category of the single
   `cch::support::Expected` channel (no second exception hierarchy);
-- `re-auth-guidance-preflight-oauth.txt` — the same preflight on an OAuth-typed provider with no
-  stored credential failing with pi's verbatim `Run '/login kimi-coding' to re-authenticate.`
-  re-auth branch;
 - `re-auth-guidance-request-no-key.txt` — request time (pi `_getRequiredRequestAuth`): an
   `auth`-category terminal from the stream is rewritten to the no-key branch in the terminal
   `AssistantMessage` (category preserved, exactly-one-terminal contract);

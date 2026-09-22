@@ -1,8 +1,10 @@
 #include "ComposedProvider.hpp"
 
 #include "ai/ModelStreamBridge.hpp"
+#include "ai/Headers.hpp"
 #include "ai/api/AnthropicMessagesAdapter.hpp"
 #include "ai/api/OpenAICodexResponsesAdapter.hpp"
+#include "ai/api/OpenAICompletionsAdapter.hpp"
 #include "ai/api/OpenAIResponsesAdapter.hpp"
 #include "support/ExpectedMacros.hpp"
 
@@ -21,19 +23,15 @@ class ComposedProvider final
     : public ai::Provider,
       public std::enable_shared_from_this<ComposedProvider> {
 public:
-    ComposedProvider(
-        std::string provider_id,
-        std::string name,
-        std::vector<ai::Model> models,
-        ai::ProviderAuth auth,
-        std::shared_ptr<StreamTransport> http_transport,
-        std::shared_ptr<WebSocketTransport> ws_transport,
-        CodexWebSocketCacheConfig cache_config)
-        : provider_id_(std::move(provider_id)),
-          name_(std::move(name)),
-          models_(std::move(models)),
-          auth_(std::move(auth)),
-          responses_adapter_(http_transport),
+    ComposedProvider(std::string provider_id,
+            std::string name,
+            std::vector<ai::Model> models,
+            ai::ProviderAuth auth,
+            std::shared_ptr<StreamTransport> http_transport,
+            std::shared_ptr<WebSocketTransport> ws_transport,
+            CodexWebSocketCacheConfig cache_config)
+        : provider_id_(std::move(provider_id)), name_(std::move(name)), models_(std::move(models)),
+          auth_(std::move(auth)), responses_adapter_(http_transport), completions_adapter_(http_transport),
           // The codex adapter takes the HTTP transport by value for its SSE
           // fallback; the anthropic adapter then takes the original so every
           // scoped adapter owns a usable transport (the anthropic adapter
@@ -62,20 +60,19 @@ public:
                         options = std::move(options)](ai::AssistantEventSink sink) mutable
                         -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                     if (self->provider_id_ == "opencode-go" && options.session_id && !options.session_id->empty()) {
-                        bool has_affinity_header = false;
-                        for (const auto& [name, _] : options.auth.headers) {
-                            if (name == "x-opencode-session") {
-                                has_affinity_header = true;
-                                break;
-                            }
-                        }
-                        if (!has_affinity_header) {
+                        if (!find_header(options.auth.headers, "x-opencode-session")) {
                             options.auth.headers.insert_or_assign("x-opencode-session", *options.session_id);
                         }
                     }
                     if (model.api == "openai-responses") {
                         CCH_TRY(message,
                                 co_await self->responses_adapter_.stream(
+                                        model, context, std::move(options), std::move(sink)));
+                        co_return message;
+                    }
+                    if (model.api == "openai-completions") {
+                        CCH_TRY(message,
+                                co_await self->completions_adapter_.stream(
                                         model, context, std::move(options), std::move(sink)));
                         co_return message;
                     }
@@ -102,6 +99,7 @@ private:
     std::vector<ai::Model> models_;
     ai::ProviderAuth auth_;
     ai::api::OpenAIResponsesAdapter responses_adapter_;
+    ai::api::OpenAICompletionsAdapter completions_adapter_;
     ai::api::OpenAICodexResponsesAdapter codex_adapter_;
     ai::api::AnthropicMessagesAdapter anthropic_adapter_;
 };

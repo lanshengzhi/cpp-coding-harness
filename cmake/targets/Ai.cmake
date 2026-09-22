@@ -7,6 +7,7 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_ai
     SOURCES
+        src/ai/DefaultModelsJson.cpp
         src/ai/BuiltinProviders.cpp
         src/ai/ContentUtil.cpp
         src/ai/InferenceFailure.cpp
@@ -24,9 +25,12 @@ cch_parity_declare_target(
         src/ai/api/CodexEvents.cpp
         src/ai/api/CodexShared.cpp
         src/ai/api/CodexWebSocketCache.cpp
+        src/ai/api/CompletionsEvents.cpp
+        src/ai/api/CompletionsPayload.cpp
         src/ai/api/MessageConversion.cpp
         src/ai/api/MessageNormalization.cpp
         src/ai/api/OpenAICodexResponsesAdapter.cpp
+        src/ai/api/OpenAICompletionsAdapter.cpp
         src/ai/api/OpenAIResponsesAdapter.cpp
         src/ai/api/ResponsesEventProcessor.cpp
         src/ai/api/ResponsesPayload.cpp
@@ -35,11 +39,10 @@ cch_parity_declare_target(
         src/ai/api/UsageNormalization.cpp
         src/ai/auth/OAuthCallbackServer.cpp
         src/ai/auth/OAuthHttpClient.cpp
-        src/ai/auth/KimiCodingOAuth.cpp
-        src/ai/auth/KimiOAuthWire.cpp
         src/ai/auth/OauthPage.cpp
         src/ai/auth/OpenAICodexOAuth.cpp
         src/ai/auth/OpenAICodexOAuthWire.cpp
+        src/ai/auth/OpenRouterOAuth.cpp
         src/ai/auth/Pkce.cpp
         src/ai/providers/BoostBeastStreamTransport.cpp
         src/ai/providers/BoostBeastWebSocketTransport.cpp

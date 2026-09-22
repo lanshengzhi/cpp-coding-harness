@@ -52,7 +52,7 @@ TEST_CASE("StreamExecutionEngine processes SSE stream and emits start/done event
         };
     };
 
-    auto finalize = [](ai::AssistantMessage& assistant) -> support::ExpectedVoid {
+    auto finalize = [](ai::AssistantMessage& assistant, ai::AssistantEventSink&) -> support::ExpectedVoid {
         assistant.stop_reason = ai::AssistantStopReason::Stop;
         return {};
     };
@@ -133,7 +133,7 @@ TEST_CASE("StreamExecutionEngine retries on 429 and resets state via factory", "
         };
     };
 
-    auto finalize = [](ai::AssistantMessage& assistant) -> support::ExpectedVoid {
+    auto finalize = [](ai::AssistantMessage& assistant, ai::AssistantEventSink&) -> support::ExpectedVoid {
         assistant.stop_reason = ai::AssistantStopReason::Stop;
         return {};
     };

@@ -1,6 +1,6 @@
 // The interactive login/logout presentation end to end (pi
 // `interactive-mode.ts` login flows, #328; G2 decision 4): the auth-type
-// picker and provider selector, the Codex/Kimi OAuth dialog branches, the
+// picker and provider selector, the Codex OAuth dialog branch, the
 // DeepSeek API-key dialog branch through real models.json composition,
 // post-login default-model auto-selection with the four verbatim
 // selection-error messages, Login Cancellation suppression on the stable
@@ -153,6 +153,48 @@ private:
     std::vector<ai::Model> models_;
 };
 
+/// One scripted API-key-only provider used to exercise ambient configuration
+/// and login presentation without manufacturing an OAuth method.
+class ScriptedApiKeyProvider final : public tests::ScriptedProvider {
+public:
+    ScriptedApiKeyProvider(std::string provider_id,
+            std::string provider_name,
+            std::vector<ai::Model> models,
+            std::string method_name = {})
+        : tests::ScriptedProvider(std::move(provider_id), ai::ProviderAuth{}), provider_name_(std::move(provider_name)),
+          models_(std::move(models)) {
+        ai::ApiKeyAuth api_key;
+        api_key.name = method_name.empty() ? provider_name_ + " API key" : std::move(method_name);
+        api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
+                -> cch::support::AsyncResult<std::optional<ai::AuthCheck>> {
+            return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
+                    std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{std::optional<ai::AuthCheck>{}});
+        };
+        api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential>)
+                -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
+            return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
+                    std::expected<std::optional<ai::AuthResult>, cch::support::Error>{std::optional<ai::AuthResult>{}});
+        };
+        provider_auth().api_key = std::move(api_key);
+    }
+
+    [[nodiscard]] std::string_view name() const noexcept override { return provider_name_; }
+    [[nodiscard]] std::vector<ai::Model> models() const override { return models_; }
+
+    [[nodiscard]] ai::ModelStream stream(
+            ai::Model, ai::AiContext, coding_agent::ModelRuntimeTestStreamOptions) override {
+        return ai::detail::make_model_stream(
+                [](ai::AssistantEventSink) mutable -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    co_return std::unexpected(
+                            support::make_error(support::ErrorCode::Provider, "scripted provider does not stream"));
+                });
+    }
+
+private:
+    std::string provider_name_;
+    std::vector<ai::Model> models_;
+};
+
 [[nodiscard]] ai::OAuthCredential dummy_oauth_credential() {
     ai::OAuthCredential credential;
     credential.refresh = "dummy-refresh";
@@ -186,7 +228,7 @@ struct LoginFixture {
     /// the given providers with scripted definitions through the private
     /// ModelRuntime test seam.
     [[nodiscard]] std::shared_ptr<coding_agent::ModelRuntime> create_runtime(
-            std::vector<std::shared_ptr<ScriptedOAuthProvider>> replacements = {}) {
+            std::vector<std::shared_ptr<tests::ScriptedProvider>> replacements = {}) {
         if (replacements.empty()) {
             auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{
                     .agent_dir = agent_dir,
@@ -331,15 +373,14 @@ TEST_CASE("login picks the auth type, provider, runs the Codex OAuth branch, and
         "OpenAI Codex",
         std::vector<ai::Model>{tests::scripted_request_model("openai-codex", "gpt-5.5")},
         codex_url_then_manual_code(submitted_code));
-    auto kimi = std::make_shared<ScriptedOAuthProvider>(
-        "kimi-coding",
-        "Kimi For Coding",
-        std::vector<ai::Model>{tests::scripted_request_model("kimi-coding", "kimi-for-coding")},
-        [](ai::AuthInteraction) -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-            co_return dummy_oauth_credential();
-        });
-    kimi->install_ambient_api_key("Kimi API key");
-    auto runtime = fixture.create_runtime({codex, kimi});
+    auto openrouter = std::make_shared<ScriptedOAuthProvider>("openrouter",
+            "OpenRouter",
+            std::vector<ai::Model>{tests::scripted_request_model("openrouter", "openai/gpt-5")},
+            [](ai::AuthInteraction) -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
+                co_return dummy_oauth_credential();
+            });
+    openrouter->install_ambient_api_key("OpenRouter API key");
+    auto runtime = fixture.create_runtime({codex, openrouter});
     REQUIRE(runtime != nullptr);
     auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
     REQUIRE(session);
@@ -362,11 +403,10 @@ TEST_CASE("login picks the auth type, provider, runs the Codex OAuth branch, and
     screen = visible_screen(run.terminal);
     CHECK(screen.find("Select provider to configure:") != std::string::npos);
     CHECK(screen.find("OpenAI Codex") != std::string::npos);
-    CHECK(screen.find("Kimi For Coding") != std::string::npos);
+    CHECK(screen.find("OpenRouter") != std::string::npos);
     CHECK(screen.find("unconfigured") != std::string::npos);
 
-    // Kimi sorts before OpenAI; move to OpenAI Codex and confirm.
-    run.type("\x1b[B");
+    // OpenAI Codex sorts before OpenRouter and is selected first.
     run.type("\r");
     run.wait_for_screen("Paste the authorization code");
     screen = visible_screen(run.terminal);
@@ -403,56 +443,6 @@ TEST_CASE("login picks the auth type, provider, runs the Codex OAuth branch, and
     const auto settings_text = read_text(fixture.agent_dir / "settings.json");
     CHECK(settings_text.find("\"defaultProvider\": \"openai-codex\"") != std::string::npos);
     CHECK(settings_text.find("\"defaultModel\": \"gpt-5.5\"") != std::string::npos);
-
-    run.exit();
-}
-
-TEST_CASE("login runs the Kimi device-code OAuth branch and renders the waiting view",
-        "[coding_agent][tui][login][issue406][spec]") {
-    LoginFixture fixture;
-    auto kimi = std::make_shared<ScriptedOAuthProvider>(
-        "kimi-coding",
-        "Kimi For Coding",
-        std::vector<ai::Model>{tests::scripted_request_model("kimi-coding", "kimi-for-coding")},
-        [](ai::AuthInteraction interaction)
-            -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-            interaction.notify(ai::AuthEvent{ai::AuthDeviceCode{
-                .user_code = "ABCD-EFGH",
-                .verification_uri = "https://kimi.example/device",
-            }});
-            auto acknowledged = co_await cch::support::detail::await_async_result(interaction.prompt(ai::AuthPrompt{
-                    .kind = ai::AuthPromptText{.message = "Press enter after approving"},
-                    .stop_token = std::nullopt,
-            }));
-            if (!acknowledged) co_return std::unexpected(std::move(acknowledged.error()));
-            co_return dummy_oauth_credential();
-        });
-    auto runtime = fixture.create_runtime({kimi});
-    REQUIRE(runtime != nullptr);
-    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
-    REQUIRE(session);
-
-    InteractiveRun run(fixture.runtime);
-    run.start(*session->session, fixture.agent_dir);
-
-    // A single (provider, auth-type) match skips both pickers (pi
-    // startProviderLogin direct branch).
-    run.type("/login kimi-coding\r");
-    run.wait_for_screen("Waiting for authentication...");
-    auto screen = visible_screen(run.terminal);
-    CHECK(screen.find("Select authentication method") == std::string::npos);
-    CHECK(screen.find("Login to Kimi For Coding") != std::string::npos);
-    CHECK(screen.find("https://kimi.example/device") != std::string::npos);
-    CHECK(screen.find("Enter code: ABCD-EFGH") != std::string::npos);
-    CHECK(screen.find("Waiting for authentication...") != std::string::npos);
-
-    run.type("\r");
-    run.wait_for_screen("Logged in to Kimi For Coding.");
-    screen = visible_screen(run.terminal);
-    const std::string expected_status =
-        "Logged in to Kimi For Coding. Selected kimi-for-coding. Credentials saved to " +
-        fixture.auth_path().string();
-    CHECK(screen.find(expected_status) != std::string::npos);
 
     run.exit();
 }
@@ -670,14 +660,10 @@ TEST_CASE("login select-type AuthPrompt resolves through the generic string-list
 TEST_CASE("login api-key ambient method shows the configured-outside info dialog",
         "[coding_agent][tui][login][issue406][spec]") {
     LoginFixture fixture;
-    auto kimi = std::make_shared<ScriptedOAuthProvider>(
-        "kimi-coding",
-        "Kimi For Coding",
-        std::vector<ai::Model>{tests::scripted_request_model("kimi-coding", "kimi-for-coding")},
-        [](ai::AuthInteraction) -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-            co_return dummy_oauth_credential();
-        });
-    kimi->install_ambient_api_key("Kimi API key");
+    auto kimi = std::make_shared<ScriptedApiKeyProvider>("kimi-coding",
+            "Kimi For Coding",
+            std::vector<ai::Model>{tests::scripted_request_model("kimi-coding", "kimi-for-coding")},
+            "Kimi API key");
     auto runtime = fixture.create_runtime({kimi});
     REQUIRE(runtime != nullptr);
     auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
@@ -686,17 +672,12 @@ TEST_CASE("login api-key ambient method shows the configured-outside info dialog
     InteractiveRun run(fixture.runtime);
     run.start(*session->session, fixture.agent_dir);
 
-    // One provider with both auth types lands on the auth-type picker for
-    // that provider (pi's same-id branch).
+    // Kimi has one API-key method, so the provider reference goes directly to
+    // its configured-outside dialog.
     run.type("/login kimi-coding\r");
-    run.wait_for_screen("Select authentication method for Kimi For Coding:");
-    auto screen = visible_screen(run.terminal);
-    CHECK(screen.find("Select authentication method for Kimi For Coding:") != std::string::npos);
-
-    // The api-key method has no login hook: pi shows the ambient info dialog.
-    run.type("\x1b[B");
-    run.type("\r");
     run.wait_for_screen("Kimi For Coding setup");
+    auto screen = visible_screen(run.terminal);
+    CHECK(screen.find("Select authentication method for Kimi For Coding:") == std::string::npos);
     screen = visible_screen(run.terminal);
     CHECK(screen.find("Kimi For Coding setup") != std::string::npos);
     CHECK(screen.find("Kimi API key is configured outside cch.") != std::string::npos);

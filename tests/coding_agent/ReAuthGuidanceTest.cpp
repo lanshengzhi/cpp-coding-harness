@@ -3,13 +3,13 @@
 // … Use /login to log into a provider via OAuth or API key"), OAuth
 // credential missing/expired → "Authentication failed for X. Credentials may
 // have expired or network is unavailable. Run '/login X' to re-authenticate."
-// — at both trigger points. Preflight mirrors pi `agent-session.ts`
+// — at both trigger points. Kimi's API-key-only guidance is asserted
+// separately. Preflight mirrors pi `agent-session.ts`
 // `prompt()`'s `hasConfiguredAuth || checkAuth` check; request time mirrors
 // `_getRequiredRequestAuth` through the session-layer stream decorator
 // (`apply_auth_guidance`) driven by scripted auth terminals on the narrow
 // `ModelStream` fake and scripted-client seams. No live keys or network:
-// every request is served by scripted runtimes. Committed verbatim goldens
-// pin both branches at both trigger points under `fixtures/pi-agent-core/`.
+// every request is served by scripted runtimes.
 
 #include "ai/ModelStreamBridge.hpp"
 #include <cch/ai/Content.hpp>
@@ -293,12 +293,12 @@ TEST_CASE("preflight no-key branch fails the prompt with pi's verbatim formatNoA
     result->session->close();
 }
 
-TEST_CASE("preflight OAuth branch fails the prompt with pi's verbatim re-auth guidance",
-        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
+TEST_CASE("preflight Kimi API-key branch does not suggest OAuth",
+        "[coding_agent][re-auth-guidance][issue360][issue763][spec]") {
     Fixture fixture;
 
-    // No models.json: the built-in kimi-coding provider (OAuth + ambient API
-    // key) resolves with no stored credential and no KIMI_API_KEY.
+    // No models.json: the built-in API-key-only Kimi provider resolves with no
+    // stored credential and no KIMI_API_KEY.
     auto request = cli_request(fixture);
     request.session_facts.provider = "kimi-coding";
     request.session_facts.model = "kimi-for-coding";
@@ -309,10 +309,8 @@ TEST_CASE("preflight OAuth branch fails the prompt with pi's verbatim re-auth gu
     auto prompted = result->session->prompt_blocking("hello");
     REQUIRE_FALSE(prompted.has_value());
     CHECK(prompted.error().code == support::ErrorCode::Auth);
-    CHECK(prompted.error().message ==
-          read_golden_text("re-auth-guidance-preflight-oauth.txt"));
-    CHECK(prompted.error().message ==
-          default_oauth_guidance("kimi-coding"));
+    CHECK(prompted.error().message == default_no_key_guidance("kimi-coding"));
+    CHECK(prompted.error().message.find("OAuth") == std::string::npos);
     result->session->close();
 }
 

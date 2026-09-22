@@ -106,6 +106,8 @@ struct AgentSessionSnapshot {
     /// They are copied into the read model so a projection never reaches back
     /// into the live Session or ModelRuntime for business state.
     std::filesystem::path workspace{};
+    /// True only for an active subscription-backed credential. This is not
+    /// inferred from provider capabilities or the provider id alone.
     bool using_subscription{false};
     std::size_t available_provider_count{0};
     std::vector<ToolExecutionSnapshot> tool_executions{};
