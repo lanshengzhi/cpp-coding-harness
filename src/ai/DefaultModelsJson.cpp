@@ -1,9 +1,13 @@
 #include "DefaultModelsJson.hpp"
 
+#include <array>
+#include <cstddef>
+
 namespace cch::ai {
 
-[[nodiscard]] std::string_view default_models_json() noexcept {
-    return R"cch_catalog(
+namespace {
+
+constexpr char kCatalogPart0[] = R"cch_catalog(
 {
   "providers": {
     "deepseek": {
@@ -2268,7 +2272,8 @@ namespace cch::ai {
           ],
           "inputLimits": {
             "images": {
-              "resize": {
+)cch_catalog";
+constexpr char kCatalogPart1[] = R"cch_catalog(              "resize": {
                 "jpegQuality": 80,
                 "maxBytes": 4718592,
                 "maxHeight": 2000,
@@ -4478,7 +4483,8 @@ namespace cch::ai {
                 "maxHeight": 2000,
                 "maxWidth": 2000
               }
-            }
+)cch_catalog";
+constexpr char kCatalogPart2[] = R"cch_catalog(            }
           },
           "maxTokens": 128000,
           "name": "Anthropic: Claude Sonnet 4.6 (batch)",
@@ -6609,7 +6615,8 @@ namespace cch::ai {
           "provider": "openrouter",
           "reasoning": true,
           "thinkingLevelMap": {
-            "high": "high",
+)cch_catalog";
+constexpr char kCatalogPart3[] = R"cch_catalog(            "high": "high",
             "low": "low",
             "max": null,
             "medium": "medium",
@@ -8740,7 +8747,8 @@ namespace cch::ai {
           "compat": {
             "sendSessionAffinityHeaders": true,
             "supportsDeveloperRole": false,
-            "supportsStrictMode": true,
+)cch_catalog";
+constexpr char kCatalogPart4[] = R"cch_catalog(            "supportsStrictMode": true,
             "thinkingFormat": "openrouter"
           },
           "contextWindow": 262144,
@@ -10938,7 +10946,8 @@ namespace cch::ai {
             "image"
           ],
           "inputLimits": {
-            "images": {
+)cch_catalog";
+constexpr char kCatalogPart5[] = R"cch_catalog(            "images": {
               "resize": {
                 "jpegQuality": 80,
                 "maxBytes": 4718592,
@@ -13122,7 +13131,8 @@ namespace cch::ai {
           "cost": {
             "cacheRead": 0,
             "cacheWrite": 0,
-            "input": 0.2,
+)cch_catalog";
+constexpr char kCatalogPart6[] = R"cch_catalog(            "input": 0.2,
             "output": 2.4
           },
           "id": "qwen/qwen3-30b-a3b-thinking-2507",
@@ -15285,7 +15295,8 @@ namespace cch::ai {
             "off": "none",
             "xhigh": null
           }
-        },
+)cch_catalog";
+constexpr char kCatalogPart7[] = R"cch_catalog(        },
         {
           "api": "openai-completions",
           "baseUrl": "https://openrouter.ai/api/v1",
@@ -16986,6 +16997,31 @@ namespace cch::ai {
   }
 }
 )cch_catalog";
+
+template <std::size_t DestinationSize, std::size_t PartSize>
+void append_catalog_part(
+        std::array<char, DestinationSize>& destination, std::size_t& offset, const char (&part)[PartSize]) {
+    for (std::size_t index = 0; index + 1 < PartSize; ++index) {
+        destination[offset++] = part[index];
+    }
 }
+
+const std::array<char, 478011> kCatalogData = [] {
+    std::array<char, 478011> result{};
+    std::size_t offset = 0;
+    append_catalog_part(result, offset, kCatalogPart0);
+    append_catalog_part(result, offset, kCatalogPart1);
+    append_catalog_part(result, offset, kCatalogPart2);
+    append_catalog_part(result, offset, kCatalogPart3);
+    append_catalog_part(result, offset, kCatalogPart4);
+    append_catalog_part(result, offset, kCatalogPart5);
+    append_catalog_part(result, offset, kCatalogPart6);
+    append_catalog_part(result, offset, kCatalogPart7);
+    return result;
+}();
+
+} // namespace
+
+[[nodiscard]] std::string_view default_models_json() noexcept { return {kCatalogData.data(), kCatalogData.size()}; }
 
 } // namespace cch::ai

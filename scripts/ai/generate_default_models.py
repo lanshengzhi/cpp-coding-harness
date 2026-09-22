@@ -14,7 +14,8 @@ The output is deterministic:
 * object keys are sorted recursively;
 * arrays retain their data order (the input modality order is meaningful);
 * JSON uses UTF-8, two-space indentation, and one final LF;
-* the generated C++ wrapper uses a fixed raw-string delimiter and LF endings.
+* the generated C++ wrapper uses a fixed raw-string delimiter, warning-safe
+  chunks, and LF endings.
 
 Run ``python3 scripts/ai/generate_default_models.py`` from the repository root
 to regenerate ``src/ai/DefaultModelsJson.hpp`` and
@@ -52,6 +53,7 @@ KIMI_PROVIDER = "kimi-coding"
 KIMI_VENDOR_PATH = "models/vendors/kimi-coding.json"
 KIMI_BASE_URL = "https://api.kimi.com/coding/v1"
 RAW_STRING_DELIMITER = "cch_catalog"
+RAW_STRING_MAX_BYTES = 60 * 1024
 
 REQUIRED_MODEL_FIELDS = (
     "id",
@@ -351,19 +353,69 @@ def _render_cpp(document: str) -> bytes:
         f"){RAW_STRING_DELIMITER}\"" not in document,
         "catalog contains the generated C++ raw-string delimiter",
     )
-    source = (
-        '#include "DefaultModelsJson.hpp"\n'
-        "\n"
-        "namespace cch::ai {\n"
-        "\n"
-        "[[nodiscard]] std::string_view default_models_json() noexcept {\n"
-        f'    return R"{RAW_STRING_DELIMITER}(\n'
-        f"{document}"
-        f'){RAW_STRING_DELIMITER}";\n'
-        "}\n"
-        "\n"
-        "} // namespace cch::ai\n"
-    )
+    chunks: list[str] = []
+    current: list[str] = []
+    current_bytes = 0
+    for line in document.splitlines(keepends=True):
+        line_bytes = len(line.encode("utf-8"))
+        _require(line_bytes <= RAW_STRING_MAX_BYTES, "catalog line exceeds the raw-string chunk limit")
+        if current and current_bytes + line_bytes > RAW_STRING_MAX_BYTES:
+            chunks.append("".join(current))
+            current = []
+            current_bytes = 0
+        current.append(line)
+        current_bytes += line_bytes
+    if current:
+        chunks.append("".join(current))
+
+    raw_literals: list[str] = []
+    for index, chunk in enumerate(chunks):
+        prefix = "\n" if index == 0 else ""
+        raw_literals.append(f'R"{RAW_STRING_DELIMITER}({prefix}{chunk}){RAW_STRING_DELIMITER}"')
+    total_bytes = sum(len(chunk.encode("utf-8")) for chunk in chunks) + 1
+    part_declarations = [
+        f"constexpr char kCatalogPart{index}[] = {literal};"
+        for index, literal in enumerate(raw_literals)
+    ]
+    part_appends = [
+        f"    append_catalog_part(result, offset, kCatalogPart{index});"
+        for index in range(len(raw_literals))
+    ]
+    source_lines = [
+        '#include "DefaultModelsJson.hpp"',
+        "",
+        "#include <array>",
+        "#include <cstddef>",
+        "",
+        "namespace cch::ai {",
+        "",
+        "namespace {",
+        "",
+        *part_declarations,
+        "",
+        "template <std::size_t DestinationSize, std::size_t PartSize>",
+        "void append_catalog_part(",
+        "        std::array<char, DestinationSize>& destination, std::size_t& offset, const char (&part)[PartSize]) {",
+        "    for (std::size_t index = 0; index + 1 < PartSize; ++index) {",
+        "        destination[offset++] = part[index];",
+        "    }",
+        "}",
+        "",
+        f"const std::array<char, {total_bytes}> kCatalogData = [] {{",
+        f"    std::array<char, {total_bytes}> result{{}};",
+        "    std::size_t offset = 0;",
+        *part_appends,
+        "    return result;",
+        "}();",
+        "",
+        "} // namespace",
+        "",
+        "[[nodiscard]] std::string_view default_models_json() noexcept { return {kCatalogData.data(), kCatalogData.size()}; }",
+        "",
+        "} // namespace cch::ai",
+        "",
+    ]
+    source = "\n".join(source_lines)
     return source.encode("utf-8")
 
 
