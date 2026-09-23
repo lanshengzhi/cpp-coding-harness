@@ -1,5 +1,6 @@
 #include "coding_agent/tui/ExternalEditor.hpp"
 
+#include "coding_agent/TextBom.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
 
 #include <cch/tui/Tui.hpp>
@@ -167,6 +168,10 @@ edit_in_external_editor(std::string command, std::string content) {
     }
 
     auto edited = read_file(file_path);
+    // pi `external-editor.ts`: the resumed content strips a leading UTF-8
+    // BOM (`utils/text.ts` `stripBom`) before the trailing newline is
+    // dropped.
+    edited = std::string{strip_bom(edited)};
     if (!edited.empty() && edited.back() == '\n') {
         edited.pop_back();
     }

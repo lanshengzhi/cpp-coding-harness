@@ -48,11 +48,8 @@ constexpr std::array<std::string_view, 3> kIgnoreFileNames{
             "name contains invalid characters "
             "(must be lowercase a-z, 0-9, hyphens only)");
     }
-    if (!name.empty() && name.front() == '-') {
-        errors.push_back("name must not start with a hyphen");
-    }
-    if (!name.empty() && name.back() == '-') {
-        errors.push_back("name must not end with a hyphen");
+    if (!name.empty() && (name.front() == '-' || name.back() == '-')) {
+        errors.push_back("name must not start or end with a hyphen");
     }
     if (name.find("--") != std::string::npos) {
         errors.push_back("name must not contain consecutive hyphens");
@@ -257,6 +254,12 @@ struct ResolvedSymlinkTarget {
         co_return std::unexpected(async_aborted_error(display_file_path));
     }
 
+    // pi v0.87.1 `loadSkillFromFile`: a declared skill file is named
+    // SKILL.md; every other .md path (root files in "pi" discovery mode,
+    // explicit --skill files) is a non-declared skill file that requires a
+    // description to load.
+    const bool is_declared_skill = std::filesystem::path{display_file_path}.filename() == "SKILL.md";
+
     const auto read_path = async_read_path(fs, read_file_path);
     const auto absolute_path = async_absolute_path(fs, display_file_path);
     auto content = co_await std::move(fs.readTextFile(read_path, stop_token));
@@ -276,19 +279,61 @@ struct ResolvedSymlinkTarget {
 
     auto parsed = parseFrontmatter(*content);
     if (!parsed) {
-        result.diagnostics.push_back(SkillDiagnostic{
-                .type = "warning",
-                .code = SkillDiagnosticCode::parse_failed,
-                .message = parsed.error().message,
-                .path = display_file_path,
-                .collision = std::nullopt,
-        });
+        // pi surfaces the parse diagnostic only for a declared SKILL.md; a
+        // non-declared skill file that fails to parse is skipped silently.
+        if (is_declared_skill) {
+            result.diagnostics.push_back(SkillDiagnostic{
+                    .type = "warning",
+                    .code = SkillDiagnosticCode::parse_failed,
+                    .message = parsed.error().message,
+                    .path = display_file_path,
+                    .collision = std::nullopt,
+            });
+        }
         co_return result;
     }
 
     const auto& fields = parsed->fields;
+    const auto& non_string_fields = parsed->non_string_fields;
+
+    // pi: the description must be a YAML string whose trim is non-empty; a
+    // non-string scalar (null, boolean, number, collection) is not one.
+    std::string description;
+    if (const auto description_it = fields.find("description");
+            description_it != fields.end() && !non_string_fields.contains("description")) {
+        description = description_it->second;
+        while (!description.empty() && (description.front() == ' ' || description.front() == '\t')) {
+            description.erase(0, 1);
+        }
+        while (!description.empty() && (description.back() == ' ' || description.back() == '\t')) {
+            description.pop_back();
+        }
+    }
+    const bool has_description = !description.empty();
+
+    // pi: a non-declared skill file requires a description; without one it
+    // is skipped silently, before any description or name diagnostics.
+    if (!is_declared_skill && !has_description) {
+        co_return result;
+    }
+
+    // pi validates the description before the name, and validates the name
+    // even when the description gate rejects the skill.
+    for (const auto& error : validateDescription(description)) {
+        result.diagnostics.push_back(SkillDiagnostic{
+                .type = "warning",
+                .code = SkillDiagnosticCode::invalid_metadata,
+                .message = error,
+                .path = display_file_path,
+                .collision = std::nullopt,
+        });
+    }
+
+    // Use the frontmatter name when it is a non-empty YAML string; fall back
+    // to the parent directory name otherwise.
     std::string name;
-    if (const auto name_it = fields.find("name"); name_it != fields.end()) {
+    if (const auto name_it = fields.find("name");
+            name_it != fields.end() && !non_string_fields.contains("name") && !name_it->second.empty()) {
         name = name_it->second;
     } else {
         name = parentDirName(display_file_path);
@@ -303,35 +348,19 @@ struct ResolvedSymlinkTarget {
         });
     }
 
-    std::string description;
-    if (const auto description_it = fields.find("description"); description_it != fields.end()) {
-        description = description_it->second;
-        while (!description.empty() && (description.front() == ' ' || description.front() == '\t')) {
-            description.erase(0, 1);
-        }
-        while (!description.empty() && (description.back() == ' ' || description.back() == '\t')) {
-            description.pop_back();
-        }
-    }
-
-    bool description_empty = false;
-    for (const auto& error : validateDescription(description)) {
-        description_empty = description_empty || error == "description is required";
-        result.diagnostics.push_back(SkillDiagnostic{
-                .type = "warning",
-                .code = SkillDiagnosticCode::invalid_metadata,
-                .message = error,
-                .path = display_file_path,
-                .collision = std::nullopt,
-        });
-    }
-    if (description_empty) {
+    // Still load the skill even with warnings, unless the description is
+    // missing or empty (pi `if (!hasDescription) return`).
+    if (!has_description) {
         co_return result;
     }
 
+    // pi `frontmatter["disable-model-invocation"] === true`: a YAML boolean
+    // true (unquoted) enables it; a quoted "true" string does not.
     bool disable_model_invocation = false;
-    if (const auto disable_it = fields.find("disable-model-invocation"); disable_it != fields.end()) {
-        disable_model_invocation = disable_it->second == "true";
+    if (const auto disable_it = fields.find("disable-model-invocation");
+            disable_it != fields.end() && non_string_fields.contains("disable-model-invocation") &&
+            (disable_it->second == "true" || disable_it->second == "True" || disable_it->second == "TRUE")) {
+        disable_model_invocation = true;
     }
 
     result.skills.push_back(Skill{

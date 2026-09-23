@@ -115,14 +115,21 @@ namespace {
         co_return result;
     }
 
+    // pi `loadTemplateFromFile`: description and argument-hint are accepted
+    // only when the frontmatter value is a YAML string (pi
+    // `typeof frontmatter[...] === "string"`); non-string scalars and
+    // collections are rejected without a diagnostic, and an empty string
+    // value leaves the field unset.
     std::optional<std::string> description;
     if (const auto description_it = parsed->fields.find("description");
-            description_it != parsed->fields.end() && !description_it->second.empty()) {
+            description_it != parsed->fields.end() && !parsed->non_string_fields.contains("description") &&
+            !description_it->second.empty()) {
         description = description_it->second;
     }
     std::optional<std::string> argument_hint;
     if (const auto hint_it = parsed->fields.find("argument-hint");
-            hint_it != parsed->fields.end() && !hint_it->second.empty()) {
+            hint_it != parsed->fields.end() && !parsed->non_string_fields.contains("argument-hint") &&
+            !hint_it->second.empty()) {
         argument_hint = hint_it->second;
     }
 

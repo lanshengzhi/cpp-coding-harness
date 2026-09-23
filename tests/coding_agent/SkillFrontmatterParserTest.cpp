@@ -177,4 +177,69 @@ TEST_CASE("parseFrontmatter trims whitespace around body", "[coding_agent][skill
     CHECK(result->body == "Body after blank line.");
 }
 
+TEST_CASE("parseFrontmatter strips a UTF-8 BOM before the delimiters", "[coding_agent][skill][u2][spec]") {
+    std::string content = "\xEF\xBB\xBF"
+                          "---\n"
+                          "name: my-skill\n"
+                          "description: BOM-prefixed.\n"
+                          "---\n"
+                          "Body after BOM.\n";
+
+    auto result = coding_agent::parseFrontmatter(content);
+    REQUIRE(result.has_value());
+
+    // Without the strip the BOM bytes would defeat the `---` prefix check and
+    // the whole document would degrade to body text.
+    CHECK(result->fields.at("name") == "my-skill");
+    CHECK(result->fields.at("description") == "BOM-prefixed.");
+    CHECK(result->body == "Body after BOM.");
+}
+
+TEST_CASE("parseFrontmatter records non-string YAML scalar shapes", "[coding_agent][skill][u2][spec]") {
+    std::string_view content = "---\n"
+                               "count: 42\n"
+                               "ratio: 1.5\n"
+                               "enabled: true\n"
+                               "missing:\n"
+                               "tags: [a, b]\n"
+                               "meta: {k: v}\n"
+                               "quoted: \"42\"\n"
+                               "text: <PR-URL>\n"
+                               "---\n"
+                               "Body.\n";
+
+    auto result = coding_agent::parseFrontmatter(content);
+    REQUIRE(result.has_value());
+
+    CHECK(result->non_string_fields.count("count") == 1);
+    CHECK(result->non_string_fields.count("ratio") == 1);
+    CHECK(result->non_string_fields.count("enabled") == 1);
+    CHECK(result->non_string_fields.count("missing") == 1);
+    CHECK(result->non_string_fields.count("tags") == 1);
+    CHECK(result->non_string_fields.count("meta") == 1);
+    CHECK_FALSE(result->non_string_fields.count("quoted"));
+    CHECK_FALSE(result->non_string_fields.count("text"));
+    // The raw text is still stored for callers that only compare strings.
+    CHECK(result->fields.at("quoted") == "42");
+}
+
+TEST_CASE("parseFrontmatter treats block sequences as a non-string value", "[coding_agent][skill][u2][spec]") {
+    std::string_view content = "---\n"
+                               "argument-hint:\n"
+                               "  - a\n"
+                               "  - b\n"
+                               "description: Block sequence value.\n"
+                               "---\n"
+                               "Body.\n";
+
+    auto result = coding_agent::parseFrontmatter(content);
+    REQUIRE(result.has_value());
+
+    // pi's YAML parse yields a sequence (never a string); the flat parser
+    // must not fail the whole document on the `- ` lines.
+    CHECK(result->non_string_fields.count("argument-hint") == 1);
+    CHECK(result->fields.at("description") == "Block sequence value.");
+    CHECK(result->body == "Body.");
+}
+
 } // namespace

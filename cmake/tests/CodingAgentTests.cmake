@@ -42,6 +42,7 @@ include_guard(GLOBAL)
         tests/support/ScriptedProvider.cpp
         tests/support/ModelRuntimeTestSupport.cpp
         tests/coding_agent/tui/AssistantMessageComponentTest.cpp
+        tests/coding_agent/tui/ExternalEditorTest.cpp
         tests/coding_agent/tui/ChatContainerTest.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
         tests/coding_agent/PiImportTest.cpp

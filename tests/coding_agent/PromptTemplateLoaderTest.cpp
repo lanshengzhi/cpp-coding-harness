@@ -282,3 +282,104 @@ TEST_CASE("loadPromptTemplates loads templates from absolute paths outside the w
     CHECK(result.templates[1].filePath == (external.path() / "outside-file.md").string());
     CHECK(result.diagnostics.empty());
 }
+
+TEST_CASE("loadPromptTemplateFromFile rejects a non-string argument-hint", "[coding_agent][prompt][loader][spec]") {
+    LoaderTestFixture fix;
+    // pi `typeof frontmatter["argument-hint"] === "string"`: a number, a
+    // boolean, and a flow sequence are all rejected (the template still
+    // loads, without a hint and without a diagnostic).
+    fix.writeFile("numeric.md",
+            "---\n"
+            "description: Numeric hint\n"
+            "argument-hint: 42\n"
+            "---\n"
+            "Body\n");
+    fix.writeFile("boolean.md",
+            "---\n"
+            "description: Boolean hint\n"
+            "argument-hint: true\n"
+            "---\n"
+            "Body\n");
+    fix.writeFile("sequence.md",
+            "---\n"
+            "description: Sequence hint\n"
+            "argument-hint:\n"
+            "  - a\n"
+            "  - b\n"
+            "---\n"
+            "Body\n");
+
+    for (const auto* name : {"numeric", "boolean", "sequence"}) {
+        auto result = coding_agent::loadPromptTemplateFromFile(fix.fs, std::string{name} + ".md");
+        REQUIRE(result.templates.size() == 1);
+        CHECK_FALSE(result.templates[0].argument_hint.has_value());
+        CHECK(result.templates[0].description.has_value());
+        CHECK(result.diagnostics.empty());
+    }
+}
+
+TEST_CASE("loadPromptTemplateFromFile accepts a quoted numeric argument-hint", "[coding_agent][prompt][loader][spec]") {
+    LoaderTestFixture fix;
+    fix.writeFile("quoted.md",
+            "---\n"
+            "description: Quoted hint\n"
+            "argument-hint: \"42\"\n"
+            "---\n"
+            "Body\n");
+
+    auto result = coding_agent::loadPromptTemplateFromFile(fix.fs, "quoted.md");
+
+    // A quoted value is a YAML string and stays accepted.
+    REQUIRE(result.templates.size() == 1);
+    CHECK(result.templates[0].argument_hint == "42");
+    CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("loadPromptTemplateFromFile surfaces pi-shaped read and parse diagnostics",
+        "[coding_agent][prompt][loader][spec]") {
+    LoaderTestFixture fix;
+    // Read failure (pi: warning with the fs error message and the path).
+    auto unreadable = coding_agent::loadPromptTemplateFromFile(fix.fs, "missing.md");
+    CHECK(unreadable.templates.empty());
+    REQUIRE(unreadable.diagnostics.size() == 1);
+    CHECK(unreadable.diagnostics[0].type == "warning");
+    CHECK(unreadable.diagnostics[0].code == coding_agent::PromptTemplateDiagnosticCode::read_failed);
+    CHECK_FALSE(unreadable.diagnostics[0].message.empty());
+    CHECK(unreadable.diagnostics[0].path == "missing.md");
+
+    // Parse failure (pi: warning with the parse error message and the path).
+    fix.writeFile("broken.md",
+            "---\n"
+            "this line has no colon\n"
+            "---\n"
+            "Body\n");
+    auto unparseable = coding_agent::loadPromptTemplateFromFile(fix.fs, "broken.md");
+    CHECK(unparseable.templates.empty());
+    REQUIRE(unparseable.diagnostics.size() == 1);
+    CHECK(unparseable.diagnostics[0].type == "warning");
+    CHECK(unparseable.diagnostics[0].code == coding_agent::PromptTemplateDiagnosticCode::parse_failed);
+    CHECK_FALSE(unparseable.diagnostics[0].message.empty());
+    CHECK(unparseable.diagnostics[0].path == "broken.md");
+}
+
+TEST_CASE("loadPromptTemplateFromFile strips a UTF-8 BOM", "[coding_agent][prompt][loader][spec]") {
+    LoaderTestFixture fix;
+    fix.writeFile("bom.md",
+            "\xEF\xBB\xBF"
+            "---\n"
+            "description: BOM-prefixed template\n"
+            "argument-hint: \"<PR-URL>\"\n"
+            "---\n"
+            "Body after BOM\n");
+
+    auto result = coding_agent::loadPromptTemplateFromFile(fix.fs, "bom.md");
+
+    // Without the strip the BOM bytes would defeat the `---` prefix and the
+    // template would load with no frontmatter at all.
+    REQUIRE(result.templates.size() == 1);
+    CHECK(result.templates[0].name == "bom");
+    CHECK(result.templates[0].description == "BOM-prefixed template");
+    CHECK(result.templates[0].argument_hint == "<PR-URL>");
+    CHECK(result.templates[0].content == "Body after BOM");
+    CHECK(result.diagnostics.empty());
+}

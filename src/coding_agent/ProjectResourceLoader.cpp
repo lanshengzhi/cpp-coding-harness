@@ -2,6 +2,7 @@
 
 #include "AsyncTask.hpp"
 #include "LoaderPath.hpp"
+#include "coding_agent/TextBom.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/support/Error.hpp>
 
@@ -538,7 +539,9 @@ struct AsyncGitPaths {
         }
         result.file = prompt::ProjectContextFile{
                 .path = path.string(),
-                .content = std::move(*content),
+                // pi `loadContextFileFromDir`: the content strips a leading
+                // UTF-8 BOM (`utils/text.ts` `stripBom`).
+                .content = std::string{strip_bom(*content)},
         };
         break;
     }
@@ -769,7 +772,9 @@ struct AsyncResolvedPrompt {
         result.text = std::move(input);
         co_return result;
     }
-    result.text = std::move(*content);
+    // pi `resolvePromptInput`: the file content strips a leading UTF-8 BOM
+    // (`utils/text.ts` `stripBom`).
+    result.text = std::string{strip_bom(*content)};
     co_return result;
 }
 
@@ -845,7 +850,12 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
             theme_sink.push(warning_diagnostic(content.error().message, stored_path));
             continue;
         }
-        themes.push_back({.path = stored_path, .json = std::move(*content), .scope = scope});
+        themes.push_back({.path = stored_path,
+                // pi `theme.ts` `parseThemeJsonContent`: theme JSON strips a
+                // leading UTF-8 BOM; the loader carries the document, so the
+                // strip happens at the read.
+                .json = std::string{strip_bom(*content)},
+                .scope = scope});
     }
     co_return true;
 }
@@ -1223,9 +1233,12 @@ void append_prompt_load_diagnostics(KindedDiagnosticSink& sink,
                 }
                 theme_sink.push(warning_diagnostic(content.error().message, file));
             } else {
+                // pi `theme.ts` `parseThemeJsonContent`: the theme JSON
+                // strips a leading UTF-8 BOM before parsing; the loader
+                // carries the document, so the strip happens at the read.
                 result.resources.themes.push_back({
                         .path = file,
-                        .json = std::move(*content),
+                        .json = std::string{strip_bom(*content)},
                         .scope = SourceScope::Temporary,
                 });
             }
