@@ -69,7 +69,8 @@ struct ApplicationTemplate {
             make_application_template(
                     "app.session.toggleNamedFilter", {"ctrl+n"}, "Toggle named session filter", "Sessions"),
             make_application_template("app.editor.external", {"ctrl+g"}, "Open external editor", "Application"),
-            make_application_template("app.message.copy", {"ctrl+x"}, "Copy message to clipboard", "Display and queue"),
+            make_application_template(
+                    "app.message.copy", {"ctrl+x"}, "Copy selection or last assistant message", "Display and queue"),
             make_application_template(
                     "app.message.followUp", {"alt+enter"}, "Queue follow-up message", "Display and queue"),
             make_application_template(

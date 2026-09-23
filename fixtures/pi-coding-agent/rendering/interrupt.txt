@@ -10,11 +10,11 @@ Press ctrl+o to show full startup help and loaded resources.
                                                                         
                                                                         
  Operation aborted                                                      
-
-
-
-
-
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
                                                                         
                                                                         
 ────────────────────────────────────────────────────────────────────────

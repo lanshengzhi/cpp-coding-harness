@@ -591,7 +591,7 @@ TEST_CASE("rendering golden: app.interrupt aborts the active run and renders the
     // on the painted outcome itself before capturing the settled screen.
     REQUIRE(tests::pump_until(io, [&] {
         const auto s = visible_screen(terminal);
-        return s.find("Operation aborted") != std::string::npos && s.find("Working...") == std::string::npos;
+        return s.find("Operation aborted") != std::string::npos && s.find("Working") == std::string::npos;
     }));
 
     const auto screen = visible_screen(terminal);

@@ -806,6 +806,7 @@ struct Editor::Impl {
                 .theme = &theme,
                 .autocomplete_menu = &autocomplete_menu,
                 .include_autocomplete = include_autocomplete,
+                .top_border_override = options.top_border_override ? &options.top_border_override : nullptr,
         });
         if (!layout_res) {
             record_terminal_failure(layout_res.error());
@@ -1004,6 +1005,7 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
             .theme = &impl.theme,
             .autocomplete_menu = &impl.autocomplete_menu,
             .include_autocomplete = true,
+            .top_border_override = impl.options.top_border_override ? &impl.options.top_border_override : nullptr,
     });
     if (!layout_res) {
         return std::unexpected(layout_res.error());

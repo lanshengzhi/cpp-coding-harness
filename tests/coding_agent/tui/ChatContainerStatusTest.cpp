@@ -117,6 +117,16 @@ TEST_CASE("ChatContainer status lines replace the newest status like pi showStat
     }
 }
 
+TEST_CASE("ChatContainer error lines follow the live output pad", "[coding_agent][tui][issue786]") {
+    auto theme = test_theme();
+    coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
+    chat.set_output_pad(3);
+    chat.append_diagnostic("padded failure");
+
+    const auto screen = screen_of(chat);
+    CHECK(screen.find("   Error: padded failure") != std::string::npos);
+}
+
 TEST_CASE("ChatContainer trust warning renders pi's untrusted-project line", "[coding_agent][tui][issue413][spec]") {
     auto theme = test_theme();
     coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());

@@ -62,6 +62,12 @@ public:
     void set_message(std::string message);
     void set_indicator(std::optional<LoaderIndicatorOptions> indicator = std::nullopt);
 
+    /// The currently rendered spinner frame with its spinner style applied
+    /// (pi `Loader.getRenderedIndicator`): no padding, no message. Coding-agent
+    /// status indicators render it inside the editor border when the message
+    /// row does not fit.
+    [[nodiscard]] support::Expected<std::string> rendered_indicator() const;
+
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
 

@@ -230,10 +230,11 @@ public:
     void append_trust_warning(std::string text);
     void append_status_message(std::string text);
 
-    /// pi `showStatusIndicator` surface over the status container: the
-    /// active indicator replaces the previous one (Working/Compaction on
-    /// accent, Retry on warning) and animates through the TUI Loader.
-    void show_status_working(std::string message = "Working...");
+    /// pi `showStatusIndicator` surface: the active indicator replaces the
+    /// previous one and embeds into the editor's top border (pi v0.87.1
+    /// `embedWorkingStatus`); with an editor-slot replacement active it
+    /// renders in the standalone status container like pi's non-opted editors.
+    void show_status_working(std::string message = "Working");
 
     /// pi `RetryStatusIndicator` countdown tick: rewrite the retry message
     /// without replacing the loader.
@@ -301,11 +302,24 @@ private:
 
     /// Replace the active status indicator (pi `showStatusIndicator`
     /// disposes the previous one first); the loader's render requests flow
-    /// through the view's invalidate sink.
-    void replace_status_indicator(StatusIndicator::Kind kind, std::string message);
+    /// through the view's invalidate sink. `working_color` carries pi's
+    /// embedded Working colorFn (the thinking-level border hook).
+    void replace_status_indicator(
+            StatusIndicator::Kind kind, std::string message, cch::tui::TextStyleHook working_color = {});
+
+    /// pi `CustomEditor.renderTopBorder` seam: the editor-border row carrying
+    /// the active indicator; nullopt keeps the default border. The editor
+    /// invokes the sink synchronously during its render.
+    [[nodiscard]] support::Expected<std::optional<std::string>> render_embedded_status_border(
+            std::size_t width, std::size_t hidden_line_count);
     void invoke_follow_up();
     void restore_editor_text(const std::vector<std::string>& messages);
     [[nodiscard]] bool unsubmitted_bash_mode() const;
+
+    /// pi `editor.borderColor ?? getThinkingBorderColor(level)`: the border
+    /// hook the editor and the embedded working status render with (bash mode
+    /// keeps the bashMode token, otherwise the thinking-level token).
+    [[nodiscard]] cch::tui::TextStyleHook status_border_style();
 
     std::shared_ptr<SharedKeybindings> keybindings_;
     InvalidateSink on_invalidate_;
