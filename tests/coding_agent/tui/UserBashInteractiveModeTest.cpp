@@ -388,14 +388,18 @@ TEST_CASE("focused User Bash commits included and excluded results through the p
     const auto second_update = running_screen.find("second update");
     REQUIRE(first_update != std::string::npos);
     CHECK(second_update > first_update);
-    CHECK(created->session->snapshot().agent_state.messages.empty());
+    const auto before_completion = created->session->snapshot().agent_state.messages;
+    REQUIRE(before_completion.size() == 1);
+    const auto* system = std::get_if<ai::SystemMessage>(&before_completion.front());
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
 
     shell_pointer->release();
     drain_ready(io);
     auto snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 1);
-    const auto* included = std::get_if<ai::BashExecutionMessage>(
-        &snapshot.agent_state.messages[0]);
+    REQUIRE(snapshot.agent_state.messages.size() == 2);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    const auto* included = std::get_if<ai::BashExecutionMessage>(&snapshot.agent_state.messages[1]);
     REQUIRE(included != nullptr);
     CHECK(included->command == "echo included");
     CHECK(included->output == "first update\nsecond update\nincluded output");
@@ -406,9 +410,8 @@ TEST_CASE("focused User Bash commits included and excluded results through the p
     REQUIRE(terminal.inject_input("!! echo excluded\r"));
     drain_ready(io);
     snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 2);
-    const auto* excluded = std::get_if<ai::BashExecutionMessage>(
-        &snapshot.agent_state.messages[1]);
+    REQUIRE(snapshot.agent_state.messages.size() == 3);
+    const auto* excluded = std::get_if<ai::BashExecutionMessage>(&snapshot.agent_state.messages[2]);
     REQUIRE(excluded != nullptr);
     CHECK(excluded->command == "echo excluded");
     CHECK(excluded->output == "excluded output");
@@ -564,9 +567,9 @@ TEST_CASE("User Bash sanitizes and bounds retained output and spills the complet
     CHECK(lifecycle_events == 0);
 
     const auto snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 1);
-    const auto* bash = std::get_if<ai::BashExecutionMessage>(
-        &snapshot.agent_state.messages[0]);
+    REQUIRE(snapshot.agent_state.messages.size() == 2);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    const auto* bash = std::get_if<ai::BashExecutionMessage>(&snapshot.agent_state.messages[1]);
     REQUIRE(bash != nullptr);
     CHECK(bash->command == raw_command);
     // ADR 0028: output follows pi's recipe — no redaction; a secret-bearing
@@ -612,10 +615,12 @@ TEST_CASE("User Bash sanitizes and bounds retained output and spills the complet
     CHECK(persisted_text.find(secret) != std::string::npos);
     auto resumed = harness::session::resume_session(session_path);
     REQUIRE(resumed);
-    REQUIRE(resumed->history.size() == 1);
-    const auto& resumed_bash = std::get<ai::BashExecutionMessage>(resumed->history[0]);
-    CHECK(resumed_bash.command == bash->command);
-    CHECK(resumed_bash.full_output_path == bash->full_output_path);
+    REQUIRE(resumed->history.size() == 2);
+    CHECK(std::holds_alternative<ai::SystemMessage>(resumed->history[0]));
+    const auto* resumed_bash = std::get_if<ai::BashExecutionMessage>(&resumed->history[1]);
+    REQUIRE(resumed_bash != nullptr);
+    CHECK(resumed_bash->command == bash->command);
+    CHECK(resumed_bash->full_output_path == bash->full_output_path);
 
     // The recorded path remains valid after Session Close.
     created->session->close();
@@ -669,7 +674,9 @@ TEST_CASE("User Shell infrastructure failure creates no Bash message and leaves 
 
     REQUIRE(terminal.inject_input("!  fail\r"));
     drain_ready(io);
-    CHECK(created->session->snapshot().agent_state.messages.empty());
+    const auto after_failure = created->session->snapshot().agent_state.messages;
+    REQUIRE(after_failure.size() == 1);
+    CHECK(std::holds_alternative<ai::SystemMessage>(after_failure.front()));
     auto screen = visible_screen(terminal);
     CHECK(screen.find("spawn failed") != std::string::npos);
     // ADR 0028: shell-error diagnostics pass through without redaction, and
@@ -681,7 +688,7 @@ TEST_CASE("User Shell infrastructure failure creates no Bash message and leaves 
     REQUIRE(terminal.inject_input("\x03later prompt\r"));
     drain_ready(io);
     REQUIRE(client_pointer->requests.size() == 1);
-    CHECK(created->session->snapshot().agent_state.messages.size() == 2);
+    CHECK(created->session->snapshot().agent_state.messages.size() == 3);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -742,7 +749,9 @@ TEST_CASE("User Shell progress callback failure creates no Bash message and leav
 
     REQUIRE(completion);
     REQUIRE_FALSE(*completion);
-    CHECK(created->session->snapshot().agent_state.messages.empty());
+    const auto after_failure = created->session->snapshot().agent_state.messages;
+    REQUIRE(after_failure.size() == 1);
+    CHECK(std::holds_alternative<ai::SystemMessage>(after_failure.front()));
     CHECK(completion->error().message == "progress rejected");
     CHECK(completion->error().detail ==
         "api_key=" + secret + " " +
@@ -760,7 +769,7 @@ TEST_CASE("User Shell progress callback failure creates no Bash message and leav
     REQUIRE(prompt_result);
     CHECK(*prompt_result);
     CHECK(client_pointer->requests.size() == 1);
-    CHECK(created->session->snapshot().agent_state.messages.size() == 2);
+    CHECK(created->session->snapshot().agent_state.messages.size() == 3);
 }
 
 TEST_CASE("private User Bash cancellation commits one cancelled terminal outcome without events",
@@ -825,12 +834,13 @@ TEST_CASE("private User Bash cancellation commits one cancelled terminal outcome
     CHECK(lifecycle_events == 0);
 
     const auto snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 1);
-    const auto& bash = std::get<ai::BashExecutionMessage>(
-        snapshot.agent_state.messages[0]);
-    CHECK(bash.cancelled);
-    CHECK_FALSE(bash.exit_code.has_value());
-    CHECK(bash.output == "partial output");
+    REQUIRE(snapshot.agent_state.messages.size() == 2);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    const auto* bash = std::get_if<ai::BashExecutionMessage>(&snapshot.agent_state.messages[1]);
+    REQUIRE(bash != nullptr);
+    CHECK(bash->cancelled);
+    CHECK_FALSE(bash->exit_code.has_value());
+    CHECK(bash->output == "partial output");
 }
 
 TEST_CASE("User Bash output spill failure preserves the bounded truncated result and a safe diagnostic",
@@ -983,9 +993,10 @@ TEST_CASE("User Bash overlaps an active Agent run through the Native TUI", "[cod
     drain_ready(io);
     // The run settled: committed exactly once after the run's messages.
     auto snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 3);
-    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[0]));
-    CHECK(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages[1]));
+    REQUIRE(snapshot.agent_state.messages.size() == 4);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[1]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages[2]));
     CHECK(has_bash_command(snapshot.agent_state.messages, "during run"));
     CHECK(visible_screen(terminal).find("overlap output") != std::string::npos);
 
@@ -1004,7 +1015,8 @@ TEST_CASE("User Bash overlaps an active Agent run through the Native TUI", "[cod
     client_pointer->release();
     drain_ready(io);
     snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 6);
+    REQUIRE(snapshot.agent_state.messages.size() == 7);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
     CHECK(has_bash_command(snapshot.agent_state.messages, "later bash"));
     CHECK(visible_screen(terminal).find("later output") != std::string::npos);
 
@@ -1103,9 +1115,22 @@ TEST_CASE("Native TUI interrupt cancels an active Agent run before an overlappin
     drain_ready(io);
     CHECK(shell_pointer->cancellation_request_count == 1);
     auto snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 3);
-    const auto* bash = std::get_if<ai::BashExecutionMessage>(
-        &snapshot.agent_state.messages[2]);
+    REQUIRE(snapshot.agent_state.messages.size() >= 4);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[1]));
+    CHECK(std::count_if(snapshot.agent_state.messages.begin(),
+                  snapshot.agent_state.messages.end(),
+                  [](const auto& message) { return std::holds_alternative<ai::BashExecutionMessage>(message); }) == 1);
+    const auto bash_position = std::find_if(
+            snapshot.agent_state.messages.begin(), snapshot.agent_state.messages.end(), [](const auto& message) {
+                const auto* bash_message = std::get_if<ai::BashExecutionMessage>(&message);
+                return bash_message != nullptr && bash_message->command == "echo overlap";
+            });
+    REQUIRE(bash_position != snapshot.agent_state.messages.end());
+    CHECK(std::any_of(snapshot.agent_state.messages.begin() + 2, bash_position, [](const auto& message) {
+        return std::holds_alternative<ai::AssistantMessage>(message);
+    }));
+    const auto* bash = std::get_if<ai::BashExecutionMessage>(&*bash_position);
     REQUIRE(bash != nullptr);
     CHECK(bash->cancelled);
     CHECK_FALSE(bash->exit_code.has_value());
@@ -1119,9 +1144,17 @@ TEST_CASE("Native TUI interrupt cancels an active Agent run before an overlappin
     REQUIRE(terminal.inject_input("!echo two\r"));
     drain_ready(io);
     snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 4);
-    const auto* second = std::get_if<ai::BashExecutionMessage>(
-        &snapshot.agent_state.messages[3]);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    CHECK(std::count_if(snapshot.agent_state.messages.begin(),
+                  snapshot.agent_state.messages.end(),
+                  [](const auto& message) { return std::holds_alternative<ai::BashExecutionMessage>(message); }) == 2);
+    const auto second_position = std::find_if(
+            snapshot.agent_state.messages.begin(), snapshot.agent_state.messages.end(), [](const auto& message) {
+                const auto* bash_message = std::get_if<ai::BashExecutionMessage>(&message);
+                return bash_message != nullptr && bash_message->command == "echo two";
+            });
+    REQUIRE(second_position != snapshot.agent_state.messages.end());
+    const auto* second = std::get_if<ai::BashExecutionMessage>(&*second_position);
     REQUIRE(second != nullptr);
     CHECK(second->exit_code == 0);
 
@@ -1187,7 +1220,7 @@ TEST_CASE("idle Bash-mode interrupt clears the editor without creating a command
     drain_ready(io);
     CHECK(visible_screen(terminal).find("draft") == std::string::npos);
     CHECK(shell_pointer->commands.empty());
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     // Text entered after the key-time decision survives while the sampled
     // excluded Bash input is cleared.
@@ -1201,7 +1234,7 @@ TEST_CASE("idle Bash-mode interrupt clears the editor without creating a command
     CHECK(screen.find("local only") == std::string::npos);
     CHECK(screen.find("x") != std::string::npos);
     CHECK(shell_pointer->commands.empty());
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
     REQUIRE(terminal.inject_input("\x03"));
     drain_ready(io);
 
@@ -1215,7 +1248,7 @@ TEST_CASE("idle Bash-mode interrupt clears the editor without creating a command
     REQUIRE(terminal.flush_input());
     drain_ready(io);
     CHECK(shell_pointer->commands.empty());
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     // Ordinary unsubmitted text keeps the existing idle behavior: untouched.
     REQUIRE(terminal.inject_input("plain draft"));
@@ -1231,7 +1264,7 @@ TEST_CASE("idle Bash-mode interrupt clears the editor without creating a command
     drain_ready(io);
     REQUIRE(shell_pointer->commands.size() == 1);
     CHECK(shell_pointer->commands[0] == "echo works");
-    CHECK(created->session->message_count() == 1);
+    CHECK(created->session->message_count() == 2);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -1298,9 +1331,9 @@ TEST_CASE("repeated User Bash interrupts coalesce and recovery still works", "[c
     // Both interrupts coalesce into one Shell cancellation and one message.
     CHECK(shell_pointer->cancellation_request_count == 1);
     auto snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 1);
-    const auto* bash = std::get_if<ai::BashExecutionMessage>(
-        &snapshot.agent_state.messages[0]);
+    REQUIRE(snapshot.agent_state.messages.size() == 2);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    const auto* bash = std::get_if<ai::BashExecutionMessage>(&snapshot.agent_state.messages[1]);
     REQUIRE(bash != nullptr);
     CHECK(bash->cancelled);
     CHECK(bash->output == "held output");
@@ -1312,7 +1345,7 @@ TEST_CASE("repeated User Bash interrupts coalesce and recovery still works", "[c
     REQUIRE(terminal.inject_input("!echo next\r"));
     drain_ready(io);
     CHECK(shell_pointer->commands.size() == 2);
-    CHECK(created->session->message_count() == 2);
+    CHECK(created->session->message_count() == 3);
 
     REQUIRE(terminal.inject_input("ordinary\r"));
     drain_ready(io);
@@ -1753,7 +1786,9 @@ TEST_CASE("live User Bash blocks stream through one status block with a loader a
     CHECK(screen.find(support::kRedactionMarker) == std::string::npos);
     CHECK(screen.find("Running...") != std::string::npos);
     CHECK(screen.find("(escape to cancel)") != std::string::npos);
-    CHECK(created->session->snapshot().agent_state.messages.empty());
+    const auto live_messages = created->session->snapshot().agent_state.messages;
+    REQUIRE(live_messages.size() == 1);
+    CHECK(std::holds_alternative<ai::SystemMessage>(live_messages.front()));
 
     // Commitment reconciles the pending block into one transcript entry
     // without duplicating history; the committed block keeps the raw output.
@@ -1765,7 +1800,10 @@ TEST_CASE("live User Bash blocks stream through one status block with a loader a
     CHECK(screen.find(support::kRedactionMarker) == std::string::npos);
     CHECK(screen.find("Running...") == std::string::npos);
     CHECK(screen.find("(exit") == std::string::npos);
-    CHECK(created->session->snapshot().agent_state.messages.size() == 1);
+    const auto committed_messages = created->session->snapshot().agent_state.messages;
+    REQUIRE(committed_messages.size() == 2);
+    CHECK(std::holds_alternative<ai::SystemMessage>(committed_messages[0]));
+    CHECK(std::holds_alternative<ai::BashExecutionMessage>(committed_messages[1]));
 
     // Excluded execution uses the same block form.
     REQUIRE(terminal.inject_input("!!quiet\r"));
@@ -2155,9 +2193,9 @@ TEST_CASE("focused User Bash dispatch trims, parses prefixes, and falls through 
     REQUIRE(shell_pointer->commands.size() == 3);
     CHECK(shell_pointer->commands[2] == "!foo");
     auto snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 3);
-    const auto* third = std::get_if<ai::BashExecutionMessage>(
-        &snapshot.agent_state.messages[2]);
+    REQUIRE(snapshot.agent_state.messages.size() == 4);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    const auto* third = std::get_if<ai::BashExecutionMessage>(&snapshot.agent_state.messages[3]);
     REQUIRE(third != nullptr);
     CHECK(third->command == "!foo");
     CHECK(third->exclude_from_context);

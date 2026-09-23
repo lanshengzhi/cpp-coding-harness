@@ -154,8 +154,13 @@ TEST_CASE("User Bash progress and committed messages preserve the raw command",
     CHECK(progress_commands[1] == command);
     CHECK(result->message.command == command);
     const auto& committed = session.snapshot().agent_state.messages;
-    REQUIRE(committed.size() == 1);
-    CHECK(std::get<ai::BashExecutionMessage>(committed.front()).command == command);
+    REQUIRE(committed.size() == 2);
+    const auto* system = std::get_if<ai::SystemMessage>(&committed.front());
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
+    const auto* bash = std::get_if<ai::BashExecutionMessage>(&committed.back());
+    REQUIRE(bash != nullptr);
+    CHECK(bash->command == command);
 }
 
 TEST_CASE("User Bash committed messages preserve the raw full output path", "[coding_agent][runtime][issue96][spec]") {
@@ -187,9 +192,13 @@ TEST_CASE("User Bash committed messages preserve the raw full output path", "[co
     const std::filesystem::path full_output_path{*result->message.full_output_path};
     CHECK(full_output_path.parent_path() == spill_directory);
     const auto& committed = session.snapshot().agent_state.messages;
-    REQUIRE(committed.size() == 1);
-    const auto& committed_bash = std::get<ai::BashExecutionMessage>(committed.front());
-    CHECK(committed_bash.full_output_path == result->message.full_output_path);
+    REQUIRE(committed.size() == 2);
+    const auto* system = std::get_if<ai::SystemMessage>(&committed.front());
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
+    const auto* committed_bash = std::get_if<ai::BashExecutionMessage>(&committed.back());
+    REQUIRE(committed_bash != nullptr);
+    CHECK(committed_bash->full_output_path == result->message.full_output_path);
 }
 
 TEST_CASE("User Bash shell error diagnostics pass through raw", "[coding_agent][runtime][issue96][spec]") {
@@ -222,7 +231,11 @@ TEST_CASE("User Bash shell error diagnostics pass through raw", "[coding_agent][
     CHECK(result.error().detail == detail);
     REQUIRE(result.error().context.has_value());
     CHECK(*result.error().context == context);
-    CHECK(session.snapshot().agent_state.messages.empty());
+    const auto messages = session.snapshot().agent_state.messages;
+    REQUIRE(messages.size() == 1);
+    const auto* system = std::get_if<ai::SystemMessage>(&messages.front());
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
 }
 
 TEST_CASE("idle User Bash cancellation retains partial output and commits one cancelled message",
@@ -487,9 +500,14 @@ TEST_CASE("User Bash cancelled during an active run defers commitment without du
     CHECK(bash_result->value().message.output == "mid run partial");
     // Exactly one Bash message landed after the run settled, in order.
     const auto& messages = session.snapshot().agent_state.messages;
-    REQUIRE(messages.size() == 3);
+    REQUIRE(messages.size() == 4);
+    const auto* system = std::get_if<ai::SystemMessage>(&messages[0]);
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
+    CHECK(std::holds_alternative<ai::UserMessage>(messages[1]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(messages[2]));
     CHECK(bash_message_count(messages) == 1);
-    CHECK(std::holds_alternative<ai::BashExecutionMessage>(messages[2]));
+    CHECK(std::holds_alternative<ai::BashExecutionMessage>(messages[3]));
 }
 
 TEST_CASE("Session Close rejects new work, cancels User Bash, and finalizes after quiescence",

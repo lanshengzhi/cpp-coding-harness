@@ -163,7 +163,10 @@ TEST_CASE("SDK fresh persisted snapshot is passive session and Agent state", "[s
     REQUIRE(created.has_value());
 
     auto snapshot = created->session->snapshot();
-    CHECK(snapshot.agent_state.messages.empty());
+    REQUIRE(snapshot.agent_state.messages.size() == 1);
+    const auto* system = std::get_if<ai::SystemMessage>(&snapshot.agent_state.messages.front());
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
     CHECK_FALSE(snapshot.agent_state.is_running);
     CHECK(snapshot.agent_state.model.id == "fake-model");
     CHECK(snapshot.agent_state.thinking_level == "off");
@@ -180,7 +183,10 @@ TEST_CASE("SDK fresh persisted snapshot is passive session and Agent state", "[s
     snapshot.session_path.reset();
 
     const auto unchanged = created->session->snapshot();
-    CHECK(unchanged.agent_state.messages.empty());
+    REQUIRE(unchanged.agent_state.messages.size() == 1);
+    const auto* unchanged_system = std::get_if<ai::SystemMessage>(&unchanged.agent_state.messages.front());
+    REQUIRE(unchanged_system != nullptr);
+    CHECK(unchanged_system->content.empty());
     CHECK(unchanged.agent_state.active_tool_names.size() == 4);
     CHECK(unchanged.metadata.session_id == created->resolved_identity.session_id);
     CHECK(unchanged.session_path.has_value());
@@ -206,7 +212,10 @@ TEST_CASE(
     CHECK(snapshot.metadata.workspace == paths.workspace.path());
     CHECK_FALSE(snapshot.session_path.has_value());
     CHECK(snapshot.topology == harness::session::SessionTopology::Linear);
-    CHECK(snapshot.agent_state.messages.empty());
+    REQUIRE(snapshot.agent_state.messages.size() == 1);
+    const auto* system = std::get_if<ai::SystemMessage>(&snapshot.agent_state.messages.front());
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
     created->session->close();
 }
 
@@ -241,8 +250,11 @@ TEST_CASE("SDK active snapshot copies running and streaming state on the prompt 
 
     const auto active = created->session->snapshot();
     CHECK(active.agent_state.is_running);
-    REQUIRE(active.agent_state.messages.size() == 1);
-    CHECK(std::holds_alternative<ai::UserMessage>(active.agent_state.messages[0]));
+    REQUIRE(active.agent_state.messages.size() == 2);
+    const auto* system = std::get_if<ai::SystemMessage>(&active.agent_state.messages[0]);
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
+    CHECK(std::holds_alternative<ai::UserMessage>(active.agent_state.messages[1]));
     REQUIRE(active.agent_state.streaming_message.has_value());
     CHECK(active.agent_state.streaming_message->model == "fake-model");
     CHECK(active.agent_state.model.id == "fake-model");
@@ -282,7 +294,10 @@ TEST_CASE("SDK snapshot retains live messages and diagnostics after subscriber f
     REQUIRE(run_awaitable(runtime, created->session->prompt("subscriber failure")).has_value());
 
     const auto snapshot = created->session->snapshot();
-    CHECK(snapshot.agent_state.messages.size() == 2);
+    REQUIRE(snapshot.agent_state.messages.size() == 3);
+    const auto* system = std::get_if<ai::SystemMessage>(&snapshot.agent_state.messages[0]);
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
     REQUIRE(snapshot.agent_state.diagnostics.size() == 1);
     CHECK(snapshot.agent_state.diagnostics[0].message == "agent event observer failed");
     CHECK(snapshot.agent_state.diagnostics[0].detail.find("snapshot subscriber failed") !=
@@ -311,13 +326,18 @@ TEST_CASE("SDK snapshot retains Live Session State after persistence failure",
     REQUIRE_FALSE(prompted.has_value());
 
     const auto snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 2);
-    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[0]));
-    CHECK(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages[1]));
+    REQUIRE(snapshot.agent_state.messages.size() == 3);
+    const auto* system = std::get_if<ai::SystemMessage>(&snapshot.agent_state.messages[0]);
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
+    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[1]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages[2]));
 
     auto durable = harness::session::SessionStore::load(paths.session_file);
     REQUIRE(durable.has_value());
-    CHECK(durable->messages.size() == 1);
+    REQUIRE(durable->messages.size() == 2);
+    CHECK(std::holds_alternative<ai::SystemMessage>(durable->messages[0]));
+    CHECK(std::holds_alternative<ai::UserMessage>(durable->messages[1]));
     created->session->close();
 }
 

@@ -836,7 +836,12 @@ TEST_CASE("Projection publishes 100 message-update chunks inside the issue cost 
     for (int turn = 0; turn < 50; ++turn) {
         REQUIRE(tests::run_awaitable(runtime, session.prompt("seed turn")).has_value());
     }
-    REQUIRE(session.message_count() == 100);
+    REQUIRE(session.message_count() == 101);
+    const auto history = session.snapshot().agent_state.messages;
+    REQUIRE_FALSE(history.empty());
+    const auto* system = std::get_if<ai::SystemMessage>(&history.front());
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
 
     auto records = make_recorder();
     auto subscription = session.attach_projection([records](const ProjectionStreamMessageVariant& message) {

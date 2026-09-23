@@ -339,13 +339,14 @@ TEST_CASE("request-time no-key branch surfaces pi's verbatim guidance through th
     auto prompted = session->prompt_blocking("hello");
     REQUIRE(prompted.has_value());
     const auto& messages = session->snapshot().agent_state.messages;
-    REQUIRE(messages.size() == 2);
-    const auto& terminal = std::get<ai::AssistantMessage>(messages.back());
-    CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(terminal.error_message.has_value());
-    CHECK(*terminal.error_message ==
-          read_golden_text("re-auth-guidance-request-no-key.txt"));
-    CHECK(*terminal.error_message == default_no_key_guidance("sdk-host"));
+    REQUIRE(messages.size() == 3);
+    CHECK(std::holds_alternative<ai::SystemMessage>(messages[0]));
+    const auto* terminal = std::get_if<ai::AssistantMessage>(&messages.back());
+    REQUIRE(terminal != nullptr);
+    CHECK(terminal->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(terminal->error_message.has_value());
+    CHECK(*terminal->error_message == read_golden_text("re-auth-guidance-request-no-key.txt"));
+    CHECK(*terminal->error_message == default_no_key_guidance("sdk-host"));
     session->close();
 }
 
@@ -369,13 +370,14 @@ TEST_CASE("request-time OAuth branch surfaces pi's verbatim re-auth guidance for
     auto prompted = session->prompt_blocking("hello");
     REQUIRE(prompted.has_value());
     const auto& messages = session->snapshot().agent_state.messages;
-    REQUIRE(messages.size() == 2);
-    const auto& terminal = std::get<ai::AssistantMessage>(messages.back());
-    CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(terminal.error_message.has_value());
-    CHECK(*terminal.error_message ==
-          read_golden_text("re-auth-guidance-request-oauth.txt"));
-    CHECK(*terminal.error_message == default_oauth_guidance("sdk-host"));
+    REQUIRE(messages.size() == 3);
+    CHECK(std::holds_alternative<ai::SystemMessage>(messages[0]));
+    const auto* terminal = std::get_if<ai::AssistantMessage>(&messages.back());
+    REQUIRE(terminal != nullptr);
+    CHECK(terminal->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(terminal->error_message.has_value());
+    CHECK(*terminal->error_message == read_golden_text("re-auth-guidance-request-oauth.txt"));
+    CHECK(*terminal->error_message == default_oauth_guidance("sdk-host"));
     session->close();
 }
 

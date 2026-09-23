@@ -621,7 +621,7 @@ TEST_CASE(
         REQUIRE(session->prompt_blocking("Test").has_value());
         CHECK(client->request_count == 1);
         CHECK(events.reduced().empty());
-        CHECK(session->message_count() == 2);
+        CHECK(session->message_count() == 3);
         session->close();
     }
 }
@@ -684,11 +684,13 @@ TEST_CASE(
     // (pi pops it before `_runAutoCompaction`); a session too small to
     // summarize skips compaction silently and the run completes with the
     // error only in session history.
-    CHECK(session->message_count() == 1);
+    CHECK(session->message_count() == 2);
     const auto snapshot = session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 1);
-    CHECK(std::holds_alternative<ai::UserMessage>(
-        snapshot.agent_state.messages[0]));
+    REQUIRE(snapshot.agent_state.messages.size() == 2);
+    const auto* system = std::get_if<ai::SystemMessage>(&snapshot.agent_state.messages[0]);
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
+    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[1]));
 
     // The overflow error is retained in session history.
     auto loaded = harness::session::SessionStore::load(paths.session_file);
@@ -854,9 +856,11 @@ TEST_CASE(
     // it before the backoff and does not restore it on cancellation); it is
     // retained in session history.
     const auto snapshot = session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 1);
-    CHECK(std::holds_alternative<ai::UserMessage>(
-        snapshot.agent_state.messages[0]));
+    REQUIRE(snapshot.agent_state.messages.size() == 2);
+    const auto* system = std::get_if<ai::SystemMessage>(&snapshot.agent_state.messages[0]);
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
+    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[1]));
     auto loaded = harness::session::SessionStore::load(paths.session_file);
     REQUIRE(loaded.has_value());
     bool found_error = false;
