@@ -226,7 +226,12 @@ TEST_CASE("a persistence failure keeps live state and rejects later prompts with
 
     // No rollback theatre: the observed live state stays.
     CHECK(session.is_open());
-    CHECK(session.message_count() == 2);
+    CHECK(session.message_count() == 3);
+    const auto live_messages = session.snapshot().agent_state.messages;
+    REQUIRE(live_messages.size() == 3);
+    const auto* system = std::get_if<ai::SystemMessage>(&live_messages.front());
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
 
     // Later prompts are rejected with the typed session failure.
     auto rejected = session.prompt_blocking("rejected prompt");
@@ -235,7 +240,7 @@ TEST_CASE("a persistence failure keeps live state and rejects later prompts with
     CHECK(
         rejected.error().message ==
         "session persistence failed; rejecting new prompt");
-    CHECK(session.message_count() == 2);
+    CHECK(session.message_count() == 3);
 
     session.close();
     CHECK(fixture.persisted_texts() == std::vector<std::string>{"keep live state"});

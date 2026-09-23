@@ -365,7 +365,7 @@ TEST_CASE("manual compaction aborts an in-flight run before compacting", "[codin
     REQUIRE(client_ptr->requests.size() >= 3);
     CHECK(client_ptr->requests[2].options.stop_token.stop_requested());
     CHECK_FALSE(session->is_busy());
-    CHECK(session->message_count() == 5);
+    CHECK(session->message_count() == 6);
 
     // The aborted run's assistant message was committed, and compaction
     // persisted over it (six entries before compaction → entry after).
@@ -643,8 +643,8 @@ TEST_CASE("overflow terminal compacts and retries the turn exactly once; success
     const auto& retry_request = client->requests[5];
     // The retry sees compactionSummary + retained tail; the overflow error
     // terminal is not re-sent (it stays in session history only).
-    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(
-        retry_request.context.messages[0]));
+    CHECK(std::holds_alternative<ai::SystemMessage>(retry_request.context.messages[0]));
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(retry_request.context.messages[1]));
     const auto* last_user =
         std::get_if<ai::UserMessage>(&retry_request.context.messages.back());
     REQUIRE(last_user != nullptr);
@@ -664,8 +664,8 @@ TEST_CASE("overflow terminal compacts and retries the turn exactly once; success
     // streams over the compacted context.
     REQUIRE(run_awaitable(runtime, session->prompt(big + " u5")).has_value());
     REQUIRE(client->request_count == 7);
-    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(
-        client->requests[6].context.messages[0]));
+    CHECK(std::holds_alternative<ai::SystemMessage>(client->requests[6].context.messages[0]));
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(client->requests[6].context.messages[1]));
 
     session->close();
 }
@@ -705,7 +705,7 @@ TEST_CASE("a second overflow after the compact-and-retry fails with pi's verbati
     REQUIRE(client->request_count == 6);
     // The second overflow error message stays in live state (pi keeps it; the
     // failure is reported instead of retrying again).
-    CHECK(session->message_count() == 7);
+    CHECK(session->message_count() == 8);
     const auto value = find_compaction_entry(paths);
     REQUIRE(value.has_value());
 
@@ -768,7 +768,7 @@ TEST_CASE("disabled compaction settings suppress both automatic triggers",
     // no retry (pi's settings.enabled gate returns before any decision).
     REQUIRE(run_awaitable(runtime, session->prompt("u1")).has_value());
     REQUIRE(client->request_count == 1);
-    CHECK(session->message_count() == 2);
+    CHECK(session->message_count() == 3);
     CHECK_FALSE(find_compaction_entry(paths).has_value());
     session->close();
 }
@@ -811,8 +811,8 @@ TEST_CASE("pre-prompt compaction check catches an aborted response over the thre
     REQUIRE(client->request_count == 6);
     REQUIRE(find_compaction_entry(paths).has_value());
     // The u5 request runs on the compacted context.
-    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(
-        client->requests[5].context.messages[0]));
+    CHECK(std::holds_alternative<ai::SystemMessage>(client->requests[5].context.messages[0]));
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(client->requests[5].context.messages[1]));
 
     session->close();
 }
@@ -860,8 +860,9 @@ TEST_CASE("between-turn threshold compaction replaces the run context before the
     REQUIRE(client->request_count == 4);
     // The tool turn still ran on the pre-compaction context (the check fires
     // after its tool result, not before).
-    REQUIRE(client->requests[1].context.messages.size() == 3);
-    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(client->requests[3].context.messages[0]));
+    REQUIRE(client->requests[1].context.messages.size() == 4);
+    CHECK(std::holds_alternative<ai::SystemMessage>(client->requests[1].context.messages[0]));
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(client->requests[3].context.messages[1]));
     // The replacement context carries the session System Prompt forward.
     REQUIRE(client->requests[3].context.system_prompt.has_value());
     CHECK(*client->requests[3].context.system_prompt == *client->requests[1].context.system_prompt);
@@ -898,12 +899,12 @@ TEST_CASE("between-turn threshold compaction replaces the run context before the
 
     // Live history is the rebuilt context plus the final answer.
     const auto snapshot = session->snapshot();
-    REQUIRE_FALSE(snapshot.agent_state.messages.empty());
-    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(snapshot.agent_state.messages[0]));
-    REQUIRE(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages.back()));
-    CHECK(ai::text_from_assistant_content(
-                  std::get<ai::AssistantMessage>(snapshot.agent_state.messages.back()).content) ==
-            "post-compaction answer");
+    REQUIRE(snapshot.agent_state.messages.size() >= 3);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(snapshot.agent_state.messages[1]));
+    const auto* final_answer = std::get_if<ai::AssistantMessage>(&snapshot.agent_state.messages.back());
+    REQUIRE(final_answer != nullptr);
+    CHECK(ai::text_from_assistant_content(final_answer->content) == "post-compaction answer");
 
     session->close();
 }
@@ -999,11 +1000,12 @@ TEST_CASE("the final turn skips the between-turn trigger; window-exceeding usage
     // Live history is the rebuilt context; the final answer stays in the
     // retained tail (no retry dropped or re-sent it).
     const auto snapshot = session->snapshot();
-    REQUIRE_FALSE(snapshot.agent_state.messages.empty());
-    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(snapshot.agent_state.messages[0]));
-    REQUIRE(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages.back()));
-    CHECK(ai::text_from_assistant_content(
-                  std::get<ai::AssistantMessage>(snapshot.agent_state.messages.back()).content) == "final answer");
+    REQUIRE(snapshot.agent_state.messages.size() >= 2);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(snapshot.agent_state.messages[1]));
+    const auto* final_answer = std::get_if<ai::AssistantMessage>(&snapshot.agent_state.messages.back());
+    REQUIRE(final_answer != nullptr);
+    CHECK(ai::text_from_assistant_content(final_answer->content) == "final answer");
 
     session->close();
     events->unsubscribe();

@@ -219,12 +219,15 @@ TEST_CASE("User Bash completed during an Agent run commits once after the whole 
     CHECK(bash_result->value().message.timestamp <= now_ms());
 
     const auto& messages = session.snapshot().agent_state.messages;
-    REQUIRE(messages.size() == 5);
-    CHECK(std::holds_alternative<ai::UserMessage>(messages[0]));
-    CHECK(std::holds_alternative<ai::AssistantMessage>(messages[1]));
-    CHECK(std::holds_alternative<ai::UserMessage>(messages[2]));
-    CHECK(std::holds_alternative<ai::AssistantMessage>(messages[3]));
-    const auto* bash = std::get_if<ai::BashExecutionMessage>(&messages[4]);
+    REQUIRE(messages.size() == 6);
+    const auto* system = std::get_if<ai::SystemMessage>(&messages[0]);
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
+    CHECK(std::holds_alternative<ai::UserMessage>(messages[1]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(messages[2]));
+    CHECK(std::holds_alternative<ai::UserMessage>(messages[3]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(messages[4]));
+    const auto* bash = std::get_if<ai::BashExecutionMessage>(&messages[5]);
     REQUIRE(bash != nullptr);
     CHECK(bash->command == "during run");
 }
@@ -283,10 +286,13 @@ TEST_CASE("an ordinary Prompt is admitted during active User Bash and orders det
     CHECK(bash_result->value().message.exit_code == 3);
 
     const auto& messages = session.snapshot().agent_state.messages;
-    REQUIRE(messages.size() == 3);
-    CHECK(std::holds_alternative<ai::UserMessage>(messages[0]));
-    CHECK(std::holds_alternative<ai::AssistantMessage>(messages[1]));
-    const auto* bash = std::get_if<ai::BashExecutionMessage>(&messages[2]);
+    REQUIRE(messages.size() == 4);
+    const auto* system = std::get_if<ai::SystemMessage>(&messages[0]);
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
+    CHECK(std::holds_alternative<ai::UserMessage>(messages[1]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(messages[2]));
+    const auto* bash = std::get_if<ai::BashExecutionMessage>(&messages[3]);
     REQUIRE(bash != nullptr);
     CHECK(bash->command == "first bash");
 }
@@ -488,10 +494,9 @@ TEST_CASE("pending User Bash never splits a tool-call/tool-result sequence", "[c
         co_await wait_until([&] { return first_prompt.has_value(); });
         co_await wait_until([&] { return bash_result.has_value(); });
 
-        co_await wait_until([&] { return session.snapshot().agent_state.messages.size() == 5; });
-        // The five-message settled state is pinned before the follow-up
-        // prompt appends to it (the post-scenario assertion reads this
-        // snapshot, not the then-current live state).
+        co_await wait_until([&] { return session.snapshot().agent_state.messages.size() == 6; });
+        // The settled state is pinned before the follow-up prompt appends to
+        // it (the post-scenario assertion reads this snapshot, not the then-current live state).
         settled_messages = session.snapshot().agent_state.messages;
         tests::spawn_to_slot(executor, session.prompt("after overlap"), second_prompt);
         co_await wait_until([&] { return second_prompt.has_value(); });
@@ -507,13 +512,16 @@ TEST_CASE("pending User Bash never splits a tool-call/tool-result sequence", "[c
     REQUIRE(*bash_result);
 
     const auto& messages = settled_messages;
-    REQUIRE(messages.size() == 5);
-    CHECK(std::holds_alternative<ai::UserMessage>(messages[0]));
-    const auto* tool_call_turn = std::get_if<ai::AssistantMessage>(&messages[1]);
+    REQUIRE(messages.size() == 6);
+    const auto* system = std::get_if<ai::SystemMessage>(&messages[0]);
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
+    CHECK(std::holds_alternative<ai::UserMessage>(messages[1]));
+    const auto* tool_call_turn = std::get_if<ai::AssistantMessage>(&messages[2]);
     REQUIRE(tool_call_turn != nullptr);
-    CHECK(std::holds_alternative<ai::ToolResultMessage>(messages[2]));
-    CHECK(std::holds_alternative<ai::AssistantMessage>(messages[3]));
-    const auto* bash = std::get_if<ai::BashExecutionMessage>(&messages[4]);
+    CHECK(std::holds_alternative<ai::ToolResultMessage>(messages[3]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(messages[4]));
+    const auto* bash = std::get_if<ai::BashExecutionMessage>(&messages[5]);
     REQUIRE(bash != nullptr);
     CHECK(bash->command == "mid-run bash");
 
@@ -523,13 +531,14 @@ TEST_CASE("pending User Bash never splits a tool-call/tool-result sequence", "[c
     // The idle Prompt's context carries the flushed Bash after the completed
     // tool-call/tool-result pair and before the new user message.
     const auto& context = client_pointer->requests[2].context.messages;
-    REQUIRE(context.size() == 6);
-    CHECK(std::holds_alternative<ai::UserMessage>(context[0]));
-    CHECK(std::holds_alternative<ai::AssistantMessage>(context[1]));
-    CHECK(std::holds_alternative<ai::ToolResultMessage>(context[2]));
-    CHECK(std::holds_alternative<ai::AssistantMessage>(context[3]));
-    CHECK(std::holds_alternative<ai::BashExecutionMessage>(context[4]));
-    CHECK(std::holds_alternative<ai::UserMessage>(context[5]));
+    REQUIRE(context.size() == 7);
+    CHECK(std::holds_alternative<ai::SystemMessage>(context[0]));
+    CHECK(std::holds_alternative<ai::UserMessage>(context[1]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(context[2]));
+    CHECK(std::holds_alternative<ai::ToolResultMessage>(context[3]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(context[4]));
+    CHECK(std::holds_alternative<ai::BashExecutionMessage>(context[5]));
+    CHECK(std::holds_alternative<ai::UserMessage>(context[6]));
 }
 
 TEST_CASE("deferred User Bash persistence failure is reported without rolling back Live Session State",

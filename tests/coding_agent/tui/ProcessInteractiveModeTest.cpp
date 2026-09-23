@@ -240,12 +240,14 @@ TEST_CASE("Process Terminal runs the private Native TUI composition and restores
     // session snapshot or Ctrl+D targets the screen (#530).
     REQUIRE(drain_pty_until_all(pty->master.get(), output, {"fake: pty prompt", "[Image: [image/png]", "fake-model"}));
     const auto snapshot = created->session->snapshot();
-    REQUIRE_FALSE(snapshot.agent_state.messages.empty());
-    const auto* user = std::get_if<cch::ai::UserMessage>(&snapshot.agent_state.messages.front());
+    REQUIRE(snapshot.agent_state.messages.size() == 3);
+    CHECK(std::holds_alternative<cch::ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    const auto* user = std::get_if<cch::ai::UserMessage>(&snapshot.agent_state.messages[1]);
     REQUIRE(user != nullptr);
-    REQUIRE(std::get<std::vector<cch::ai::Content>>(user->content).size() == 2);
-    CHECK(std::holds_alternative<cch::ai::ImageContent>(
-        std::get<std::vector<cch::ai::Content>>(user->content)[1]));
+    const auto* content = std::get_if<std::vector<cch::ai::Content>>(&user->content);
+    REQUIRE(content != nullptr);
+    REQUIRE(content->size() == 2);
+    CHECK(std::holds_alternative<cch::ai::ImageContent>((*content)[1]));
 
     constexpr char kExit = '\x04';
     REQUIRE(::write(pty->master.get(), &kExit, 1) == 1);

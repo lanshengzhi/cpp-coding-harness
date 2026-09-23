@@ -481,11 +481,15 @@ TEST_CASE("CLI model resolution: nothing configured keeps kDefaultModel and fail
     auto prompted = result->session->prompt_blocking("hello");
     REQUIRE(prompted.has_value());
     const auto& messages = result->session->snapshot().agent_state.messages;
-    REQUIRE(messages.size() == 2);
-    const auto& terminal = std::get<ai::AssistantMessage>(messages.back());
-    CHECK(terminal.stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(terminal.error_message);
-    CHECK(terminal.error_message->find("Unknown provider: unknown") != std::string::npos);
+    REQUIRE(messages.size() == 3);
+    const auto* system = std::get_if<ai::SystemMessage>(&messages.front());
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
+    const auto* terminal = std::get_if<ai::AssistantMessage>(&messages.back());
+    REQUIRE(terminal != nullptr);
+    CHECK(terminal->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(terminal->error_message);
+    CHECK(terminal->error_message->find("Unknown provider: unknown") != std::string::npos);
     result->session->close();
 }
 
