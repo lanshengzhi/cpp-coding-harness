@@ -132,9 +132,11 @@ struct SettingsFixture {
     tests::TempWorkspace home;
     std::filesystem::path agent_dir;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard xdg_config_guard{"XDG_CONFIG_HOME"};
 
     explicit SettingsFixture(std::string_view json) {
         home_guard.set(home.path().string());
+        xdg_config_guard.set("");
         agent_dir = tests::agent_root_under_home(home.path());
         std::filesystem::create_directories(agent_dir);
         std::ofstream out(agent_dir / "settings.json", std::ios::binary);
@@ -670,6 +672,7 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
     REQUIRE(session->prompt_blocking("hi").has_value());
+    CHECK(session->snapshot().agent_state.thinking_level == "off");
     auto switched = session->set_model_blocking(reasoning_model("faux-2", "Two"));
     REQUIRE(switched.has_value());
     REQUIRE(session->prompt_blocking("after switch").has_value());
@@ -693,7 +696,7 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
                     support::JsonValue{support::JsonValue::object_t{
                             {"model", "faux-2"},
                             {"provider", "fake"},
-                            {"thinkingLevel", "medium"},
+                            {"thinkingLevel", "off"},
                     }}},
     };
 

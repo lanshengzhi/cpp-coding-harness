@@ -188,7 +188,7 @@ struct SessionUnderTest {
     REQUIRE(run_awaitable(runtime, session->prompt(big + " u1")).has_value());
     REQUIRE(run_awaitable(runtime, session->prompt(big + " u2")).has_value());
     REQUIRE(run_awaitable(runtime, session->prompt(big + " u3")).has_value());
-    CHECK(session->message_count() == 6);
+    CHECK(session->message_count() == 7);
     return SessionUnderTest{
         std::move(created->session),
         client_ptr,
@@ -240,17 +240,16 @@ TEST_CASE("manual compaction on an idle session persists a CompactionEntry and r
     REQUIRE(value->usage.has_value());
     CHECK_FALSE(value->from_hook.value_or(false));
 
-    // Live context rebuilt as compactionSummary + retained tail.
+    // Live context retains the leading system message before the summary and tail.
     const auto snapshot = session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 5);
-    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(
-        snapshot.agent_state.messages[0]));
-    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[1]));
-    CHECK(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages[2]));
-    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[3]));
-    CHECK(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages[4]));
-    const auto* summary_message =
-        std::get_if<ai::CompactionSummaryMessage>(&snapshot.agent_state.messages[0]);
+    REQUIRE(snapshot.agent_state.messages.size() == 6);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(snapshot.agent_state.messages[1]));
+    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[2]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages[3]));
+    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[4]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(snapshot.agent_state.messages[5]));
+    const auto* summary_message = std::get_if<ai::CompactionSummaryMessage>(&snapshot.agent_state.messages[1]);
     REQUIRE(summary_message != nullptr);
     CHECK(summary_message->summary == result->summary);
     CHECK(summary_message->tokens_before == static_cast<std::int64_t>(result->tokens_before));
@@ -269,15 +268,12 @@ TEST_CASE("manual compaction on an idle session persists a CompactionEntry and r
     REQUIRE(run_awaitable(runtime, session->prompt("after compaction")).has_value());
     REQUIRE(client->requests.size() == 5);
     const auto& next_request = client->requests[4];
-    REQUIRE(next_request.context.messages.size() == 6);
-    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(
-        next_request.context.messages[0]));
-    CHECK(std::holds_alternative<ai::AssistantMessage>(
-        next_request.context.messages[4]));
-    CHECK(std::holds_alternative<ai::UserMessage>(
-        next_request.context.messages[5]));
-    const auto* seen_summary =
-        std::get_if<ai::CompactionSummaryMessage>(&next_request.context.messages[0]);
+    REQUIRE(next_request.context.messages.size() == 7);
+    CHECK(std::holds_alternative<ai::SystemMessage>(next_request.context.messages[0]));
+    CHECK(std::holds_alternative<ai::CompactionSummaryMessage>(next_request.context.messages[1]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(next_request.context.messages[5]));
+    CHECK(std::holds_alternative<ai::UserMessage>(next_request.context.messages[6]));
+    const auto* seen_summary = std::get_if<ai::CompactionSummaryMessage>(&next_request.context.messages[1]);
     REQUIRE(seen_summary != nullptr);
     CHECK(seen_summary->summary == result->summary);
 
@@ -636,7 +632,7 @@ TEST_CASE("overflow terminal compacts and retries the turn exactly once; success
     REQUIRE(run_awaitable(runtime, session->prompt(big + " u1")).has_value());
     REQUIRE(run_awaitable(runtime, session->prompt(big + " u2")).has_value());
     REQUIRE(run_awaitable(runtime, session->prompt(big + " u3")).has_value());
-    CHECK(session->message_count() == 6);
+    CHECK(session->message_count() == 7);
 
     // The overflowing prompt succeeds after one compact-and-retry.
     REQUIRE(run_awaitable(runtime, session->prompt(big + " u4")).has_value());

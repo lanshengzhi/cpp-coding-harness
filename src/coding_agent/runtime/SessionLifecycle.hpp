@@ -18,6 +18,7 @@ struct OpenSession {
     std::filesystem::path workspace;
     harness::session::SessionMetadata metadata;
     std::vector<ai::MessageVariant> history;
+    bool resumed{false};
     /// The closed Session Store facade (ADR 0040). Shared ownership: the
     /// Session Event Commitment channel keeps the store alive while admitted
     /// off-loop persistence work is still in flight.

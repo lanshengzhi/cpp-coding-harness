@@ -537,6 +537,7 @@ support::Expected<std::string> AgentSession::Impl::set_thinking_level(
             return std::unexpected(std::move(saved.error()));
         }
     }
+    session_.context_thinking_level = *effective;
 
     // The `thinking_level_change` entry rides only a real change (pi
     // `isChanging`).
@@ -593,8 +594,11 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::set_model(
         const std::optional<std::string>& explicit_level) const {
     if (explicit_level) return *explicit_level;
     if (services_.settings_manager) {
-        const auto& merged = services_.settings_manager->settings();
-        if (merged.default_thinking_level) return *merged.default_thinking_level;
+        const auto& global = services_.settings_manager->global_settings();
+        if (global.default_thinking_level) return *global.default_thinking_level;
+    }
+    if (session_.context_thinking_level && !session_.context_thinking_level->empty()) {
+        return *session_.context_thinking_level;
     }
     return agent_ && !agent_->state().thinking_level.empty() ? agent_->state().thinking_level : "medium";
 }

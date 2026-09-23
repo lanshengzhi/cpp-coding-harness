@@ -24,6 +24,7 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -175,16 +176,20 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
                 .text = section.text,
         });
     }
-    if (session_.history.empty()) {
+    const bool has_system_message = std::ranges::any_of(
+            session_.history, [](const auto& message) { return std::holds_alternative<ai::SystemMessage>(message); });
+    if (!has_system_message && !session_.resumed) {
         for (const auto& name : prompt_selected_tools_) {
             if (const auto* tool = services_.tools.find(name)) {
                 system_message.tools_added.push_back(tool->definition);
             }
         }
-        if (session_.store) {
-            (void)session_.store->append(ai::MessageVariant{system_message});
-        }
-        session_.history.emplace_back(system_message);
+        initial_system_message_to_persist_ = system_message;
+        session_.history.insert(session_.history.begin(), ai::MessageVariant{std::move(system_message)});
+    }
+    if (session_.topology == harness::session::SessionTopology::Branched && !session_.resumed) {
+        const auto branch_start = has_system_message ? session_.history.begin() : session_.history.begin() + 1;
+        branch_history_to_persist_.assign(branch_start, session_.history.end());
     }
     options.system_prompt = rebuild_system_prompt();
     // pi `_installAgentNextTurnRefresh`: the between-turn trigger compacts
@@ -237,21 +242,35 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     }
 }
 
-std::string AgentSession::Impl::rebuild_system_prompt() const {
-    // Resume replays the transcript's ordered system-message section diffs.
-    std::vector<prompt::SystemPromptSection> replayed;
-    for (const auto& message : session_.history) {
-        const auto* system = std::get_if<ai::SystemMessage>(&message);
-        if (system == nullptr) {
-            continue;
+support::ExpectedVoid AgentSession::Impl::persist_initial_system_message() {
+    if (!session_.store) {
+        return {};
+    }
+    if (initial_system_message_to_persist_) {
+        auto appended = session_.store->append(ai::MessageVariant{*initial_system_message_to_persist_});
+        if (!appended) {
+            return std::unexpected(appended.error());
         }
-        for (const auto& section : system->sections) {
-            std::erase_if(replayed, [&](const auto& current) { return current.name == section.name; });
-            if (section.text) {
-                replayed.push_back(prompt::SystemPromptSection{.name = section.name, .text = *section.text});
-            }
+        initial_system_message_to_persist_.reset();
+    }
+    for (const auto& message : branch_history_to_persist_) {
+        if (auto branch_appended = session_.store->append(message); !branch_appended) {
+            return std::unexpected(branch_appended.error());
         }
     }
+    branch_history_to_persist_.clear();
+    return {};
+}
+
+std::string AgentSession::Impl::rebuild_system_prompt() const {
+    const auto history = agent_ ? agent_->state().messages : session_.history;
+    std::vector<ai::SystemMessage> system_messages;
+    for (const auto& message : history) {
+        if (const auto* system = std::get_if<ai::SystemMessage>(&message)) {
+            system_messages.push_back(*system);
+        }
+    }
+    auto replayed = prompt::replaySystemPromptSections(system_messages);
     if (!replayed.empty()) {
         return prompt::renderSystemPromptSections(replayed);
     }

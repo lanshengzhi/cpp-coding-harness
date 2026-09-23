@@ -982,13 +982,15 @@ void extract_file_ops_from_message(
     preparation.settings = settings;
 
     for (std::size_t i = boundary_start; i < history_end; ++i) {
-        if (auto message = message_from_entry_for_compaction(path[i])) {
+        if (auto message = message_from_entry_for_compaction(path[i]);
+                message && !std::holds_alternative<ai::SystemMessage>(*message)) {
             preparation.messages_to_summarize.push_back(std::move(*message));
         }
     }
     if (cut_point.turn_start_index.has_value()) {
         for (std::size_t i = *cut_point.turn_start_index; i < cut_point.first_kept_entry_index; ++i) {
-            if (auto message = message_from_entry_for_compaction(path[i])) {
+            if (auto message = message_from_entry_for_compaction(path[i]);
+                    message && !std::holds_alternative<ai::SystemMessage>(*message)) {
                 preparation.turn_prefix_messages.push_back(std::move(*message));
             }
         }
@@ -1000,7 +1002,8 @@ void extract_file_ops_from_message(
     }
 
     for (std::size_t i = cut_point.first_kept_entry_index; i < boundary_end; ++i) {
-        if (auto message = message_from_entry_for_compaction(path[i])) {
+        if (auto message = message_from_entry_for_compaction(path[i]);
+                message && !std::holds_alternative<ai::SystemMessage>(*message)) {
             preparation.retained_tail.push_back(std::move(*message));
         }
     }

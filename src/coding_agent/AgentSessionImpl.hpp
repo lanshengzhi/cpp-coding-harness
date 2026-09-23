@@ -68,6 +68,7 @@ struct RetrySettings {
 /// public handle moves or is destroyed keeps the implementation alive.
 struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Impl> {
     explicit Impl(runtime::AgentSessionAssembly assembly);
+    [[nodiscard]] support::ExpectedVoid persist_initial_system_message();
     Impl(const Impl&) = delete;
     Impl& operator=(const Impl&) = delete;
     Impl(Impl&&) = delete;
@@ -530,6 +531,8 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// `session_.store`, it is retained through Session Close so the
     /// handle's session_path()/snapshot() introspection keeps answering.
     std::optional<std::filesystem::path> session_path_;
+    std::optional<ai::SystemMessage> initial_system_message_to_persist_;
+    std::vector<ai::MessageVariant> branch_history_to_persist_;
     Lifecycle lifecycle_{Lifecycle::Open};
     bool prompt_active_{false};
     bool user_bash_active_{false};

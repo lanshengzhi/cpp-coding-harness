@@ -225,6 +225,26 @@ std::vector<SystemPromptSection> buildSystemPromptSections(const BuildSystemProm
     return sections;
 }
 
+std::vector<SystemPromptSection> replaySystemPromptSections(const std::vector<ai::SystemMessage>& messages) {
+    std::vector<SystemPromptSection> replayed;
+    for (const auto& message : messages) {
+        for (const auto& delta : message.sections) {
+            const auto current = std::find_if(
+                    replayed.begin(), replayed.end(), [&](const auto& section) { return section.name == delta.name; });
+            if (!delta.text) {
+                if (current != replayed.end()) {
+                    replayed.erase(current);
+                }
+            } else if (current == replayed.end()) {
+                replayed.push_back(SystemPromptSection{.name = delta.name, .text = *delta.text});
+            } else {
+                current->text = *delta.text;
+            }
+        }
+    }
+    return replayed;
+}
+
 std::string renderSystemPromptSections(const std::vector<SystemPromptSection>& sections) {
     std::string rendered;
     for (const auto& section : sections) {
