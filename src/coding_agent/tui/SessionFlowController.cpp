@@ -670,7 +670,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_tree_navigation(
     auto* session = current_session(); // borrowed; retained through wait.
     if (session == nullptr) co_return;
     const auto captured_generation = action_generation();
-    if (session->is_busy()) {
+    if (session->is_streaming()) {
         // pi stops the active response first (restore queued input, abort,
         // wait for settle) before navigating.
         if (hooks_.dequeue_pending_input != nullptr) {
@@ -681,6 +681,14 @@ boost::asio::awaitable<void> SessionFlowController::handle_tree_navigation(
         if (closed_ || captured_generation != action_generation()) co_return;
         session = current_session();
         if (session == nullptr) co_return;
+    }
+    // pi rechecks after the streaming abort, before replacing another
+    // operation's UI: a compaction still in flight refuses with the verbatim
+    // error and leaves the active operation's status UI untouched.
+    if (session->is_compacting()) {
+        presenter_->show_error(
+                "Wait for the current compaction or tree navigation to finish before navigating the session tree.");
+        co_return;
     }
     if (closed_ || captured_generation != action_generation()) co_return;
     auto result = session->navigate_tree(entry_id);
