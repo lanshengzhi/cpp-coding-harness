@@ -159,10 +159,8 @@ void check_message_golden(
 
     // Pinned baseline citation (same meta contract as the session suites).
     const auto& meta = required_object(*root, "meta");
-    CHECK(required_string(meta, "baseline") ==
-          "f07218c4d4bbc12bef056a7058c3dd49dfe41abe");
-    CHECK(required_string(meta, "artifact") ==
-          "@earendil-works/pi-coding-agent@0.87.1");
+    CHECK(required_string(meta, "baseline") == "f07218c4d4bbc12bef056a7058c3dd49dfe41abe");
+    CHECK(required_string(meta, "artifact") == "@earendil-works/pi-coding-agent@0.87.1");
     CHECK(required_string(meta, "family") ==
           "system-prompt-message-" + std::string{scenario});
 

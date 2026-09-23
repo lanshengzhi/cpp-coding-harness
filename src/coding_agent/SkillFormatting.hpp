@@ -18,8 +18,7 @@ namespace cch::coding_agent {
 ///
 /// Returns an empty string when no visible skills remain.
 [[nodiscard]] std::string formatSkillsForPrompt(
-    const std::vector<Skill>& skills,
-    std::string_view file_read_tool = "read");
+        const std::vector<Skill>& skills, std::string_view file_read_tool = "read");
 
 /// Format a single skill invocation as a <skill> XML block for
 /// /skill:name command expansion (pi `agent-session.ts` `_expandSkillCommand`).

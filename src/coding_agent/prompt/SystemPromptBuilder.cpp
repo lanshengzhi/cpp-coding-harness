@@ -16,9 +16,9 @@ const std::vector<std::string> kDefaultToolNames{"read", "bash", "edit", "write"
 
 /// pi's default preamble (`system-prompt.ts` `buildSystemPromptSections`).
 constexpr std::string_view kDefaultPreamble =
-    "You are an expert coding assistant operating inside pike, a coding agent "
-    "harness. You help users by reading files, executing commands, editing "
-    "code, and writing new files.";
+        "You are an expert coding assistant operating inside pike, a coding agent "
+        "harness. You help users by reading files, executing commands, editing "
+        "code, and writing new files.";
 
 /// pi `cwd.replace(/\\/g, "/")`.
 [[nodiscard]] std::string posix_normalize_cwd(std::string cwd) {
@@ -48,8 +48,7 @@ constexpr std::string_view kDefaultPreamble =
 /// pi `renderProjectContext`: the fixed prose line plus one
 /// `<project_instructions path="...">` block per file, joined with a blank
 /// line.
-[[nodiscard]] std::string render_project_context(
-    const std::vector<ProjectContextFile>& context_files) {
+[[nodiscard]] std::string render_project_context(const std::vector<ProjectContextFile>& context_files) {
     std::string text = "Project-specific instructions and guidelines:";
     for (const auto& file : context_files) {
         text += "\n\n<project_instructions path=\"";
@@ -65,8 +64,7 @@ constexpr std::string_view kDefaultPreamble =
 /// caller's guideline bullets, then the always-lines; trimmed, deduped in
 /// first-occurrence order, and rendered as `- ` bullets.
 [[nodiscard]] std::string build_rules(
-    const std::vector<std::string>& tools,
-    const std::vector<std::string>& prompt_guidelines) {
+        const std::vector<std::string>& tools, const std::vector<std::string>& prompt_guidelines) {
     std::vector<std::string> rules;
     const auto add_rule = [&rules](std::string_view rule) {
         const std::string normalized = trim(rule);
@@ -111,40 +109,37 @@ constexpr std::string_view kDefaultPreamble =
 /// C++ binary's own ("pike") identity and docs paths — the only delta from
 /// pi's verbatim block (pinned by the differential golden; ADR 0036 G4).
 [[nodiscard]] std::string build_docs(const BuildSystemPromptOptions& options) {
-    std::string text =
-        "pike documentation (read only when the user asks about pike itself, "
-        "its SDK, extensions, themes, skills, or TUI):\n"
-        "- Main documentation: ";
+    std::string text = "pike documentation (read only when the user asks about pike itself, "
+                       "its SDK, extensions, themes, skills, or TUI):\n"
+                       "- Main documentation: ";
     text += options.readmePath;
     text += "\n- Additional docs: ";
     text += options.docsPath;
     text += "\n- Examples: ";
     text += options.examplesPath;
-    text +=
-        " (extensions, custom tools, SDK)\n"
-        "- When reading pike docs or examples, resolve docs/... under "
-        "Additional docs and examples/... under Examples, not the current "
-        "working directory\n"
-        "- When asked about: extensions (docs/extensions.md, "
-        "examples/extensions/), themes (docs/themes.md), skills "
-        "(docs/skills.md), prompt templates (docs/prompt-templates.md), TUI "
-        "components (docs/tui.md), keybindings (docs/keybindings.md), SDK "
-        "integrations (docs/sdk.md), custom providers "
-        "(docs/custom-provider.md), adding models (docs/models.md), pike "
-        "packages (docs/packages.md), environment variables "
-        "(docs/environment-variables.md)\n"
-        "- When working on pike topics, read the docs and examples, and "
-        "follow .md cross-references before implementing\n"
-        "- Always read pike .md files completely and follow links to related "
-        "docs (e.g., tui.md for TUI API details)";
+    text += " (extensions, custom tools, SDK)\n"
+            "- When reading pike docs or examples, resolve docs/... under "
+            "Additional docs and examples/... under Examples, not the current "
+            "working directory\n"
+            "- When asked about: extensions (docs/extensions.md, "
+            "examples/extensions/), themes (docs/themes.md), skills "
+            "(docs/skills.md), prompt templates (docs/prompt-templates.md), TUI "
+            "components (docs/tui.md), keybindings (docs/keybindings.md), SDK "
+            "integrations (docs/sdk.md), custom providers "
+            "(docs/custom-provider.md), adding models (docs/models.md), pike "
+            "packages (docs/packages.md), environment variables "
+            "(docs/environment-variables.md)\n"
+            "- When working on pike topics, read the docs and examples, and "
+            "follow .md cross-references before implementing\n"
+            "- Always read pike .md files completely and follow links to related "
+            "docs (e.g., tui.md for TUI API details)";
     return text;
 }
 
 /// pi's tools section body: one `- name: snippet` line per visible tool,
 /// `(none)` when none carry a snippet.
 [[nodiscard]] std::string build_tools_list(
-    const std::vector<std::string>& tools,
-    const std::map<std::string, std::string>& tool_snippets) {
+        const std::vector<std::string>& tools, const std::map<std::string, std::string>& tool_snippets) {
     std::string list;
     bool first = true;
     for (const auto& name : tools) {
@@ -162,8 +157,7 @@ constexpr std::string_view kDefaultPreamble =
 
 /// pi `formatSkillsForPrompt`'s read-capable tool choice: `read` first, then
 /// `bash`.
-[[nodiscard]] std::optional<std::string> skill_file_read_tool(
-    const std::vector<std::string>& tools) {
+[[nodiscard]] std::optional<std::string> skill_file_read_tool(const std::vector<std::string>& tools) {
     if (contains(tools, "read")) return std::string{"read"};
     if (contains(tools, "bash")) return std::string{"bash"};
     return std::nullopt;
@@ -186,53 +180,42 @@ constexpr std::string_view kDefaultPreamble =
 
 } // namespace
 
-std::vector<SystemPromptSection> buildSystemPromptSections(
-    const BuildSystemPromptOptions& options) {
+std::vector<SystemPromptSection> buildSystemPromptSections(const BuildSystemPromptOptions& options) {
     std::vector<SystemPromptSection> sections;
 
     // pi `selectedTools ?? ["read", "bash", "edit", "write"]`; an explicitly
     // empty list keeps no tools.
-    const std::vector<std::string>& tools =
-        options.selectedTools ? *options.selectedTools : kDefaultToolNames;
+    const std::vector<std::string>& tools = options.selectedTools ? *options.selectedTools : kDefaultToolNames;
 
     // pi `if (customPrompt)`: the JS-truthy check — an absent or empty custom
     // prompt takes the default branch.
-    const bool has_custom_prompt =
-        options.customPrompt && !options.customPrompt->empty();
+    const bool has_custom_prompt = options.customPrompt && !options.customPrompt->empty();
     if (has_custom_prompt) {
-        sections.push_back(SystemPromptSection{
-            .name = "preamble", .text = *options.customPrompt});
+        sections.push_back(SystemPromptSection{.name = "preamble", .text = *options.customPrompt});
     } else {
-        sections.push_back(SystemPromptSection{
-            .name = "preamble", .text = std::string{kDefaultPreamble}});
-        sections.push_back(wrap_section(
-            "tools",
-            build_tools_list(tools, options.toolSnippets) +
-                "\n\nIn addition to the tools above, you may have access to "
-                "other custom tools depending on the project."));
-        sections.push_back(wrap_section(
-            "rules", build_rules(tools, options.promptGuidelines)));
+        sections.push_back(SystemPromptSection{.name = "preamble", .text = std::string{kDefaultPreamble}});
+        sections.push_back(wrap_section("tools",
+                build_tools_list(tools, options.toolSnippets) +
+                        "\n\nIn addition to the tools above, you may have access to "
+                        "other custom tools depending on the project."));
+        sections.push_back(wrap_section("rules", build_rules(tools, options.promptGuidelines)));
         sections.push_back(wrap_section("docs", build_docs(options)));
     }
 
     // pi `appendSystemPrompt ? { addendum } : ...` — an absent or empty
     // append adds no section.
     if (options.appendSystemPrompt && !options.appendSystemPrompt->empty()) {
-        sections.push_back(
-            wrap_section("addendum", *options.appendSystemPrompt));
+        sections.push_back(wrap_section("addendum", *options.appendSystemPrompt));
     }
 
     if (!options.contextFiles.empty()) {
-        sections.push_back(wrap_section(
-            "project_context", render_project_context(options.contextFiles)));
+        sections.push_back(wrap_section("project_context", render_project_context(options.contextFiles)));
     }
 
     // pi: the skills section appears only when a read-capable tool is active
     // and the formatted block is non-empty after trimming.
-    if (const auto read_tool = skill_file_read_tool(tools);
-        read_tool && !options.skills.empty()) {
-        const std::string block =
-            trim(formatSkillsForPrompt(options.skills, *read_tool));
+    if (const auto read_tool = skill_file_read_tool(tools); read_tool && !options.skills.empty()) {
+        const std::string block = trim(formatSkillsForPrompt(options.skills, *read_tool));
         if (!block.empty()) {
             sections.push_back(wrap_section("skills", block));
         }
@@ -242,8 +225,7 @@ std::vector<SystemPromptSection> buildSystemPromptSections(
     return sections;
 }
 
-std::string renderSystemPromptSections(
-    const std::vector<SystemPromptSection>& sections) {
+std::string renderSystemPromptSections(const std::vector<SystemPromptSection>& sections) {
     std::string rendered;
     for (const auto& section : sections) {
         if (section.text.empty()) continue;

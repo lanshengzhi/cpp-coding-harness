@@ -68,19 +68,16 @@ struct BuildSystemPromptOptions {
 /// `<tools>`/`<rules>`/`<docs>` on the default branch, `<addendum>`,
 /// `<project_context>`, `<skills>` (gated on a read-capable tool), and
 /// `<cwd>`. These are the sections a session's system message records.
-[[nodiscard]] std::vector<SystemPromptSection> buildSystemPromptSections(
-    const BuildSystemPromptOptions& options);
+[[nodiscard]] std::vector<SystemPromptSection> buildSystemPromptSections(const BuildSystemPromptOptions& options);
 
 /// Render built sections exactly as the transcript's system message replays
 /// them (pi `getSystemMessageText`): the non-empty section texts joined with a
 /// blank line, `preamble` first.
-[[nodiscard]] std::string renderSystemPromptSections(
-    const std::vector<SystemPromptSection>& sections);
+[[nodiscard]] std::string renderSystemPromptSections(const std::vector<SystemPromptSection>& sections);
 
 /// Build the System Prompt text (`buildSystemPrompt` at the same baseline):
 /// the rendered sections, with the identity delta confined to the identity
 /// line and the `<docs>` block (pinned by the differential golden).
-[[nodiscard]] std::string buildSystemPrompt(
-    const BuildSystemPromptOptions& options);
+[[nodiscard]] std::string buildSystemPrompt(const BuildSystemPromptOptions& options);
 
 } // namespace cch::coding_agent::prompt

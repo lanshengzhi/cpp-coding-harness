@@ -9,15 +9,20 @@ sidecar, and a capability-to-source checklist. Every committed snapshot below is
 byte-for-byte by tests in this repository against the C++ surface, so the gate's evidence is one
 checklist away. No fixture value is a live credential or derived from one.
 
+The bundle was **re-pinned to pi `v0.87.1`** by spec [#771] (the supported app-layer alignment):
+same bundle shape, same sanitization rules, new frozen baseline. ADR 0036 remains the historical
+record of the original `83114817` (`v0.83.0`) phase; the checklist rows keep their original
+phase citations until the [#771] audit refreshes the rows whose sources changed.
+
 ## Pinned baseline and artifact
 
-- **Frozen pi commit:** `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (the parity map [#2] baseline;
-  ADR 0024). The local pi checkout is `../pi`; `pi:` references resolve from that root. The
-  app-layer baseline was re-verified against this commit by ADR 0036 (the `864b35c` pins advance
-  to it; no pinned value contract drifted).
-- **Published artifact:** `@earendil-works/pi-coding-agent@0.83.0`, the commit-correlated artifact
-  reference at pi tag `v0.83.0`. **Verified in the frozen checkout:** `packages/coding-agent/package.json`
-  at `83114817` declares name `@earendil-works/pi-coding-agent`, version `0.83.0` — the capture
+- **Frozen pi commit:** `f07218c4d4bbc12bef056a7058c3dd49dfe41abe` (tag `v0.87.1`; the [#771]
+  re-pin of the ADR 0036 baseline `83114817` / `v0.83.0`). The local pi checkout is `../pi`;
+  `pi:` references resolve from that root. Regeneration needs a frozen checkout at this commit —
+  a frozen worktree plus `PI_CHECKOUT` is the typical setup (see the capture sidecar below).
+- **Published artifact:** `@earendil-works/pi-coding-agent@0.87.1`, the commit-correlated artifact
+  reference at pi tag `v0.87.1`. **Verified in the frozen checkout:** `packages/coding-agent/package.json`
+  at `f07218c4` declares name `@earendil-works/pi-coding-agent`, version `0.87.1` — the capture
   sidecar asserts both before it runs. As with the pi-ai gate, the published version is only the
   commit-correlated artifact reference, not an authority: the frozen commit is the parity
   authority.
@@ -87,15 +92,17 @@ and usage are engine-specific estimates and are projected out.
 
 - `session-lifecycle.json` — a new persisted session through two scripted turns: the session
   messages, the LLM context projection, and the persisted entries (initial `model_change` +
-  `thinking_level_change` per pi sdk `createAgentSession`, then user/assistant messages).
+  `thinking_level_change` per pi sdk `createAgentSession`, then the leading system message
+  carrying the built prompt's sections, then user/assistant messages).
 - `session-resume.json` — the same session reopened: the restored message-level history, the
   context, and the restored model/thinking chain (no new entries until a turn).
 - `session-compaction.json` — three turns then a manual compact (scripted split-turn summary):
   the post-compaction messages (`compactionSummary` + retained tail), the rebuilt context, the
   `compaction` entry, and the merged summary value.
 - `session-model-switch.json` — `setModel` to a second reasoning faux model: the `model_change`
-  entries, the thinking re-clamp (`off` → `medium`), the post-switch message identity, and the
-  live model/thinking values.
+  entries, the kept thinking level (pi v0.87.1 records a `thinking_level_change` entry only when
+  the effective level changes, so no re-clamp entry appears here), the post-switch message
+  identity, and the live model/thinking values.
 - `session-family.json` — the session-manager value outputs: `findMostRecentSession` selection
   over a deterministic session directory (the `--continue` flow) plus the selected session's
   JSONL entries.
@@ -104,17 +111,20 @@ Regenerate deterministically with the capture sidecar below (capture + byte-veri
 
 ### System Prompt message goldens (`prompts/`)
 
-Committed differential goldens of the System Prompt ([#422]), driven by the capture sidecar
-against the **frozen** pi `buildSystemPrompt` (`core/system-prompt.ts` at `83114817`, docs paths
-scrubbed to `/pi/*` via `PI_PACKAGE_DIR=/pi`) and byte-compared by
+Committed differential goldens of the System Prompt ([#422], re-pinned by [#771]), driven by the
+capture sidecar against the **frozen** pi `buildSystemPrompt` (`core/system-prompt.ts` at
+`f07218c4`, docs paths scrubbed to `/pi/*` via `PI_PACKAGE_DIR=/pi`) and byte-compared by
 `tests/coding_agent/SystemPromptGoldenTest.cpp` through the C++ `SystemPromptBuilder` with
 identical inputs. Each snapshot pins pi's prompt at **message level** (a `system` message with
 one text content block, the same message/content-block projection as the session suites) and
-carries the pinned baseline citation in `meta`. The `identityDelta` pins the only delta from
-pi: the identity line and the documentation block, in both forms (pi vs the C++ binary's own
-"pike"); the C++ test swaps the regions into pi's message and byte-compares, so the golden pins
-"structure byte-identical, identity lines swapped" (ADR 0036 G4 / [#392]). The custom branch
-carries no identity regions and is pinned byte-identical.
+carries the pinned baseline citation in `meta`. The prompt is pi's sectioned document: an
+untagged `preamble`, then `<tools>`, `<rules>`, and `<docs>` on the default branch, plus
+`<addendum>`, `<project_context>`, `<skills>`, and `<cwd>` as they apply, joined with a blank
+line; the skills section picks read-tool or bash wording by the active read-capable tool. The
+`identityDelta` pins the only delta from pi: the identity line and the documentation block, in
+both forms (pi vs the C++ binary's own "pike"); the C++ test swaps the regions into pi's message
+and byte-compares, so the golden pins "structure byte-identical, identity lines swapped" (ADR
+0036 G4 / [#392]). The custom branch carries no identity regions and is pinned byte-identical.
 
 - `system-prompt-default-message.json` — the default branch (four fixed tools, the always-
   lines, a skill) with the identity delta.
@@ -152,7 +162,7 @@ Existing value goldens already live in the test tree and are referenced from the
 
 `capture/capture-gate-snapshots.mts` regenerates the committed snapshots from the frozen pi
 checkout (mirroring `fixtures/pi-ai/capture/` and `fixtures/pi-tui/capture/`): it refuses to run
-unless the checkout sits at `83114817` **and** declares `@earendil-works/pi-coding-agent@0.83.0`
+unless the checkout sits at `f07218c4` (tag `v0.87.1`) **and** declares `@earendil-works/pi-coding-agent@0.87.1`
 (the artifact pin, verified in the frozen checkout), pins the deterministic environment, and
 regenerates the committed E2E and rendering screens deterministically — once in capture mode,
 once in byte-compare mode, so a nondeterministic capture fails loudly. The screens are
@@ -416,9 +426,9 @@ the G6 record.
 3. **No live-terminal or network validation in the automated gate** — all deterministic evidence
    follows the repo validation policy; the four manual items above are the bounded, recorded
    human pass at [#424].
-4. **The capture sidecar requires the frozen checkout at `83114817`** and refuses otherwise; the
-   local `../pi` checkout often sits at a later commit, so regenerate against a frozen worktree
-   (or `PI_CHECKOUT=...` pointing at one).
+4. **The capture sidecar requires the frozen checkout at `f07218c4` (tag `v0.87.1`) with the
+   `0.87.1` artifact and refuses otherwise**; the local `../pi` checkout often sits at a later
+   commit, so regenerate against a frozen worktree (or `PI_CHECKOUT=...` pointing at one).
 5. **The session/value-suite differential goldens landed with [#421]** and plug into this
    bundle (`sessions/session-*.json`, byte-compared by `SessionSuiteGoldenTest`); the System
    Prompt message-level golden (`prompts/*-message.json`, byte-compared by

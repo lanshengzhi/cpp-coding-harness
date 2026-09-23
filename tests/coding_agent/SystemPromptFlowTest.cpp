@@ -106,13 +106,12 @@ TEST_CASE("system prompt is built at session construction and flows through Agen
                       "coding agent harness.") != std::string::npos);
 
     // The four fixed tools with pi's verbatim snippets.
-    CHECK(prompt.find(
-              "<tools>\n"
-              "- read: Read file contents\n"
-              "- bash: Execute bash commands (ls, grep, find, etc.)\n"
-              "- edit: Make precise file edits with exact text replacement, "
-              "including multiple disjoint edits in one call\n"
-              "- write: Create or overwrite files\n") != std::string::npos);
+    CHECK(prompt.find("<tools>\n"
+                      "- read: Read file contents\n"
+                      "- bash: Execute bash commands (ls, grep, find, etc.)\n"
+                      "- edit: Make precise file edits with exact text replacement, "
+                      "including multiple disjoint edits in one call\n"
+                      "- write: Create or overwrite files\n") != std::string::npos);
 
     // The auto bash-exploration rule and the always-lines.
     CHECK(prompt.find("- Use bash for file operations like ls, rg, find\n") != std::string::npos);
@@ -126,8 +125,7 @@ TEST_CASE("system prompt is built at session construction and flows through Agen
     CHECK(prompt.find("- Examples: " + std::string{CCH_SOURCE_DIR} + "/examples (extensions, custom tools, SDK)\n") != std::string::npos);
 
     // The trailing posix-normalized cwd section.
-    CHECK(prompt.find(
-              "<cwd>\n" + workspace.path().string() + "\n</cwd>") != std::string::npos);
+    CHECK(prompt.find("<cwd>\n" + workspace.path().string() + "\n</cwd>") != std::string::npos);
 
     // The built prompt is the Agent's live state value (pi `state.systemPrompt`).
     CHECK(created->session->snapshot().agent_state.system_prompt == prompt);
@@ -194,23 +192,21 @@ TEST_CASE("system prompt default branch renders project context files in pi's or
     // The default branch still renders the tools; the context section lands
     // between the append area and the trailing cwd line, root-most first.
     CHECK(prompt.find("<tools>") != std::string::npos);
-    const std::string expected_section =
-        "<project_context>\n"
-        "Project-specific instructions and guidelines:\n\n"
-        "<project_instructions path=\"" +
-        (workspace.path() / "parent" / "AGENTS.md").string() +
-        "\">\n"
-        "parent instructions\n\n"
-        "</project_instructions>\n\n"
-        "<project_instructions path=\"" +
-        (child / "CLAUDE.md").string() +
-        "\">\n"
-        "child instructions\n\n"
-        "</project_instructions>\n"
-        "</project_context>";
+    const std::string expected_section = "<project_context>\n"
+                                         "Project-specific instructions and guidelines:\n\n"
+                                         "<project_instructions path=\"" +
+                                         (workspace.path() / "parent" / "AGENTS.md").string() +
+                                         "\">\n"
+                                         "parent instructions\n\n"
+                                         "</project_instructions>\n\n"
+                                         "<project_instructions path=\"" +
+                                         (child / "CLAUDE.md").string() +
+                                         "\">\n"
+                                         "child instructions\n\n"
+                                         "</project_instructions>\n"
+                                         "</project_context>";
     CHECK(prompt.find(expected_section) != std::string::npos);
-    CHECK(prompt.find("<cwd>\n" + child.string() + "\n</cwd>") !=
-          std::string::npos);
+    CHECK(prompt.find("<cwd>\n" + child.string() + "\n</cwd>") != std::string::npos);
 
     created->session->close();
 }
@@ -252,7 +248,7 @@ TEST_CASE("system prompt custom branch renders the custom prompt, joined appends
     // The resolved file content carries its trailing newline; the section
     // wrapper adds the surrounding blank line and closing tag.
     CHECK(prompt.find("custom file prompt\n\n\n<addendum>\nfirst append\n\nsecond append\n</addendum>") !=
-          std::string::npos);
+            std::string::npos);
     // Context files still render, root-most first.
     CHECK(prompt.find(
               "<project_instructions path=\"" +
@@ -261,8 +257,7 @@ TEST_CASE("system prompt custom branch renders the custom prompt, joined appends
     CHECK(prompt.find(
               "<project_instructions path=\"" + (child / "AGENTS.md").string() +
               "\">") != std::string::npos);
-    CHECK(prompt.find("<cwd>\n" + child.string() + "\n</cwd>") !=
-          std::string::npos);
+    CHECK(prompt.find("<cwd>\n" + child.string() + "\n</cwd>") != std::string::npos);
 
     created->session->close();
 }
@@ -296,11 +291,11 @@ TEST_CASE("system prompt flows the discovered SYSTEM.md and APPEND_SYSTEM.md thr
     CHECK(prompt.starts_with("custom system prompt from SYSTEM.md\n"));
     // The SYSTEM.md content carries its trailing newline before the
     // `<addendum>` section wrapper.
-    CHECK(prompt.find("custom system prompt from SYSTEM.md\n\n\n<addendum>\nappend from APPEND_SYSTEM.md\n\n</addendum>") !=
-          std::string::npos);
+    CHECK(prompt.find(
+                  "custom system prompt from SYSTEM.md\n\n\n<addendum>\nappend from APPEND_SYSTEM.md\n\n</addendum>") !=
+            std::string::npos);
     CHECK(prompt.find("<tools>") == std::string::npos);
-    CHECK(prompt.find("<cwd>\n" + workspace.path().string() + "\n</cwd>") !=
-          std::string::npos);
+    CHECK(prompt.find("<cwd>\n" + workspace.path().string() + "\n</cwd>") != std::string::npos);
 
     created->session->close();
 }

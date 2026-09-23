@@ -213,13 +213,12 @@ TEST_CASE(
     options.contextFiles = {file};
 
     const auto default_prompt = coding_agent::prompt::buildSystemPrompt(options);
-    CHECK(default_prompt.find(
-              "<project_context>\n"
-              "Project-specific instructions and guidelines:\n\n"
-              "<project_instructions path=\"AGENTS.md\">\n"
-              "Be careful.\n\nNo trailing newline\n"
-              "</project_instructions>\n"
-              "</project_context>") != std::string::npos);
+    CHECK(default_prompt.find("<project_context>\n"
+                              "Project-specific instructions and guidelines:\n\n"
+                              "<project_instructions path=\"AGENTS.md\">\n"
+                              "Be careful.\n\nNo trailing newline\n"
+                              "</project_instructions>\n"
+                              "</project_context>") != std::string::npos);
 
     options.customPrompt = "custom";
     const auto custom_prompt = coding_agent::prompt::buildSystemPrompt(options);
@@ -230,7 +229,8 @@ TEST_CASE(
     CHECK(custom_prompt.find("custom\n\n<project_context>") != std::string::npos);
 }
 
-TEST_CASE("system prompt gates the skills section on a read-capable tool", "[coding_agent][prompt][system-prompt][spec]") {
+TEST_CASE("system prompt gates the skills section on a read-capable tool",
+        "[coding_agent][prompt][system-prompt][spec]") {
     const auto skill = dummy_skill();
 
     // Default branch: skills render when read is selected.
@@ -314,11 +314,10 @@ TEST_CASE("system prompt renders the skills section in pi's shape", "[coding_age
     options.skills = {dummy_skill()};
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
 
-    CHECK(prompt.find(
-              "<skills>\nThe following skills provide specialized instructions for "
-              "specific tasks.\n"
-              "Use the read tool to load a skill's file when the task matches "
-              "its description.\n") != std::string::npos);
+    CHECK(prompt.find("<skills>\nThe following skills provide specialized instructions for "
+                      "specific tasks.\n"
+                      "Use the read tool to load a skill's file when the task matches "
+                      "its description.\n") != std::string::npos);
     CHECK(prompt.find(
               "  <skill>\n"
               "    <name>my-skill</name>\n"
