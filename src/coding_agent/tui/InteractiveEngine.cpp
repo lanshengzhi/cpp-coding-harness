@@ -229,10 +229,20 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         }
         co_return std::unexpected(failure);
     }
-    // pi `reportDiagnostics`: retain creation diagnostics until the chat view binds.
-    startup_diagnostics_.session.insert(startup_diagnostics_.session.end(),
-            std::make_move_iterator(created->diagnostics.begin()),
-            std::make_move_iterator(created->diagnostics.end()));
+    // pi `reportDiagnostics`: keep the action-seam notification and retain a
+    // copy for the chat view; the action marks that the TUI owns presentation
+    // so the host does not corrupt its terminal by writing to stderr.
+    if (!created->diagnostics.empty()) {
+        auto diagnostics_for_view = created->diagnostics;
+        (void)deliver_action(action_generation_,
+                TuiActionVariant{ReportBootDiagnosticsAction{
+                        .diagnostics = std::move(created->diagnostics),
+                        .rendered_in_tui = true,
+                }});
+        startup_diagnostics_.session.insert(startup_diagnostics_.session.end(),
+                std::make_move_iterator(diagnostics_for_view.begin()),
+                std::make_move_iterator(diagnostics_for_view.end()));
+    }
     model_fallback_message_ = std::move(created->model_fallback_message);
     // pi interactive-mode ctor `setRegisteredThemes(...)` + init
     // `applyFromSettings()`: register the boot session's discovered
