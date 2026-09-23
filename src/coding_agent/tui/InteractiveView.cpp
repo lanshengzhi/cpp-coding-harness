@@ -45,9 +45,8 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
                       // render time. The editor is a member of this view, so
                       // the stored hook's `this` referent outlives every
                       // operation.
-                      .top_border_override =
-                              [this](std::size_t width, std::size_t hidden_line_count)
-                                      -> support::Expected<std::optional<std::string>> {
+                      .top_border_override = [this](std::size_t width, std::size_t hidden_line_count)
+                              -> support::Expected<std::optional<std::string>> {
                           return render_embedded_status_border(width, hidden_line_count);
                       },
               },
@@ -130,14 +129,13 @@ void InteractiveView::show_status_working(std::string message) {
     // its spinner and message with the editor's border color (the live
     // thinking-level border hook; pi's colorFn closure reads the border at
     // render time).
-    replace_status_indicator(
-        StatusIndicator::Kind::Working,
-        working_status_message(std::move(message)),
-        cch::tui::TextStyleHook{[this](std::string text) -> std::string {
-            // The editor is a member of this view; the hook fires during
-            // render and its referent outlives the loader.
-            return status_border_style()(std::move(text));
-        }});
+    replace_status_indicator(StatusIndicator::Kind::Working,
+            working_status_message(std::move(message)),
+            cch::tui::TextStyleHook{[this](std::string text) -> std::string {
+                // The editor is a member of this view; the hook fires during
+                // render and its referent outlives the loader.
+                return status_border_style()(std::move(text));
+            }});
 }
 
 void InteractiveView::show_status_compaction(std::string_view reason) {
@@ -166,27 +164,24 @@ void InteractiveView::set_loaded_resources_data(LoadedResources::Data data) { re
 void InteractiveView::clear_status_indicator() { status_indicator_.reset(); }
 
 void InteractiveView::replace_status_indicator(
-        StatusIndicator::Kind kind,
-        std::string message,
-        cch::tui::TextStyleHook working_color) {
+        StatusIndicator::Kind kind, std::string message, cch::tui::TextStyleHook working_color) {
     status_indicator_ = std::make_unique<StatusIndicator>(
-        kind,
-        *theme_,
-        [this]() -> support::ExpectedVoid {
-            // The status indicator's loader render requests flow through the
-            // view's separate coalescible invalidate sink (not the action
-            // seam); a failing render request is a callback diagnostic.
-            if (!on_invalidate_) return {};
-            on_invalidate_();
-            return {};
-        },
-        std::move(message),
-        std::move(working_color));
+            kind,
+            *theme_,
+            [this]() -> support::ExpectedVoid {
+                // The status indicator's loader render requests flow through the
+                // view's separate coalescible invalidate sink (not the action
+                // seam); a failing render request is a callback diagnostic.
+                if (!on_invalidate_) return {};
+                on_invalidate_();
+                return {};
+            },
+            std::move(message),
+            std::move(working_color));
 }
 
 support::Expected<std::optional<std::string>> InteractiveView::render_embedded_status_border(
-    std::size_t width,
-    std::size_t hidden_line_count) {
+        std::size_t width, std::size_t hidden_line_count) {
     // pi showStatusIndicator: the default editor embeds every indicator; an
     // editor-slot replacement (pi's non-opted custom editors) keeps the
     // standalone status container. The default border fallback (pi
@@ -201,8 +196,8 @@ cch::tui::TextStyleHook InteractiveView::status_border_style() {
     // otherwise the thinking-level border token (the same hook the editor
     // border renders with).
     return theme_->foreground_hook(unsubmitted_bash_mode()
-            ? ThemeToken::BashMode
-            : thinking_border_token_for(current_footer_data_.thinking_level));
+                                           ? ThemeToken::BashMode
+                                           : thinking_border_token_for(current_footer_data_.thinking_level));
 }
 
 void InteractiveView::set_editor_replacement(std::shared_ptr<cch::tui::Component> component) {

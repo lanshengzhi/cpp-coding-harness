@@ -29,12 +29,11 @@ public:
     /// (pi's embedded `WorkingStatusIndicator` colorFn) recolors both the
     /// spinner and the message with the thinking-level border color when the
     /// indicator embeds into the editor border.
-    StatusIndicator(
-        Kind kind,
-        const LiveTheme& theme,
-        cch::tui::RenderRequestSink request_render,
-        std::string message,
-        cch::tui::TextStyleHook working_color = {});
+    StatusIndicator(Kind kind,
+            const LiveTheme& theme,
+            cch::tui::RenderRequestSink request_render,
+            std::string message,
+            cch::tui::TextStyleHook working_color = {});
 
     [[nodiscard]] Kind kind() const { return kind_; }
 
@@ -94,10 +93,9 @@ public:
 /// fits, spinner-only when the status cannot fit the width. `border_style`
 /// styles the border runs (pi `this.borderColor`); nullopt falls back to the
 /// default border line the editor computes (pi `super.renderTopBorder`).
-[[nodiscard]] support::Expected<std::optional<std::string>> embedded_status_top_border(
-    StatusIndicator& indicator,
-    cch::tui::TextStyleHook& border_style,
-    std::size_t width,
-    std::size_t hidden_line_count);
+[[nodiscard]] support::Expected<std::optional<std::string>> embedded_status_top_border(StatusIndicator& indicator,
+        cch::tui::TextStyleHook& border_style,
+        std::size_t width,
+        std::size_t hidden_line_count);
 
 } // namespace cch::coding_agent::tui

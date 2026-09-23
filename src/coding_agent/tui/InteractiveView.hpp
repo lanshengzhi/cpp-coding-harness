@@ -305,16 +305,13 @@ private:
     /// through the view's invalidate sink. `working_color` carries pi's
     /// embedded Working colorFn (the thinking-level border hook).
     void replace_status_indicator(
-        StatusIndicator::Kind kind,
-        std::string message,
-        cch::tui::TextStyleHook working_color = {});
+            StatusIndicator::Kind kind, std::string message, cch::tui::TextStyleHook working_color = {});
 
     /// pi `CustomEditor.renderTopBorder` seam: the editor-border row carrying
     /// the active indicator; nullopt keeps the default border. The editor
     /// invokes the sink synchronously during its render.
     [[nodiscard]] support::Expected<std::optional<std::string>> render_embedded_status_border(
-        std::size_t width,
-        std::size_t hidden_line_count);
+            std::size_t width, std::size_t hidden_line_count);
     void invoke_follow_up();
     void restore_editor_text(const std::vector<std::string>& messages);
     [[nodiscard]] bool unsubmitted_bash_mode() const;

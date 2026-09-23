@@ -40,7 +40,7 @@ using EditorSubmitSink = std::move_only_function<support::ExpectedVoid(std::stri
 /// result replaces the default top border line verbatim (already styled);
 /// nullopt keeps the default pi border (rule or scroll indicator).
 using EditorTopBorderSink =
-    std::move_only_function<support::Expected<std::optional<std::string>>(std::size_t, std::size_t)>;
+        std::move_only_function<support::Expected<std::optional<std::string>>(std::size_t, std::size_t)>;
 
 /// Notification that the editor's presentation changed asynchronously (an
 /// autocomplete result arrived). Must return promptly and must not re-enter

@@ -279,7 +279,12 @@ TEST_CASE("Native TUI shows the Working indicator while a prompt streams and cle
     REQUIRE(tests::pump_until(io, [&] { return visible_screen(terminal).find("Working") != std::string::npos; }));
     // pi v0.87.1 WorkingStatusIndicator: "Working" with the thinking-level border spinner.
     auto screen = visible_screen(terminal);
-    CHECK(screen.find("Working") != std::string::npos);
+    const auto working_position = screen.find("Working");
+    REQUIRE(working_position != std::string::npos);
+    const auto row_start = screen.rfind('\n', working_position);
+    const auto status_row = screen.substr(row_start == std::string::npos ? 0 : row_start + 1,
+            screen.find('\n', working_position) - (row_start == std::string::npos ? 0 : row_start + 1));
+    CHECK(status_row.find("── ") == 0);
 
     gated.control->release();
     // agent_end's indicator clear crosses the same worker hops: a drain can

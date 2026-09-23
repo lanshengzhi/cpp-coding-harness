@@ -308,6 +308,7 @@ TEST_CASE("The app layer adopts the full 42-action AppKeybindings table with pi-
     CHECK(find("app.tree.filter.cycleBackward")->description == "Tree filter: cycle backward");
     CHECK(find("app.models.toggleProvider")->description == "Toggle all models for provider");
     CHECK(find("app.message.followUp")->description == "Queue follow-up message");
+    CHECK(find("app.message.copy")->description == "Copy selection or last assistant message");
     CHECK(find("app.message.followUp")->default_keys == std::vector<std::string>{"alt+enter"});
     CHECK(find("app.clipboard.pasteImage")->description == "Paste image from clipboard (text fallback)");
     CHECK(find("app.session.new")->default_keys.empty());
@@ -381,7 +382,8 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     // actions render with pi's default keys.
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"app.exit":"f6"})");
-    constexpr std::array<std::string_view, 3> kAssembled{"app.exit", "app.message.followUp", "app.message.dequeue"};
+    constexpr std::array<std::string_view, 4> kAssembled{
+            "app.exit", "app.message.copy", "app.message.followUp", "app.message.dequeue"};
     auto definitions = coding_agent::tui::app_keybinding_definitions(kAssembled);
     REQUIRE(definitions);
     coding_agent::tui::KeybindingsManagerRequest remapped;
@@ -391,6 +393,7 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     REQUIRE(remapped_manager);
     const auto remapped_text = coding_agent::tui::format_hotkeys_text(*remapped_manager->registry);
     CHECK(remapped_text.find("f6  Exit (when editor is empty)") != std::string::npos);
+    CHECK(remapped_text.find("ctrl+x  Copy selection or last assistant message") != std::string::npos);
     CHECK(remapped_text.find("alt+enter  Queue follow-up message") != std::string::npos);
     CHECK(remapped_text.find("alt+up  Restore queued messages") != std::string::npos);
 }
