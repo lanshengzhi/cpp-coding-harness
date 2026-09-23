@@ -577,20 +577,23 @@ TEST_CASE("boot registers discovered themes and the settings Theme submenu commi
     CHECK(*run.run_result);
 }
 
-TEST_CASE("boot trust-store diagnostics render as chat warnings after session binding",
-        "[coding_agent][tui][boot-trust][issue787][spec]") {
+TEST_CASE("duplicate boot diagnostics render once in the chat", "[coding_agent][tui][boot-trust][issue787][spec]") {
     TrustIsolatedWorkspace fixture;
-    fixture.write(".pi/skills/README.md", "project skill marker");
-    fixture.write(".config/pike/agent/trust.json", "not-json");
+    auto request = boot_request(fixture);
+    request.project_trust_override = true;
+    request.session_facts.skill_paths = {"missing-skill.md", "missing-skill.md"};
 
     BootTrustRun run;
-    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
+    run.start(fixture, std::move(request), tests::make_scripted_fake_models());
     run.wait_booted();
 
     const auto screen = visible_screen(run.terminal);
-    const auto warning = screen.find("failed to parse trust store");
+    const auto warning = screen.find("Warning: skill path does not exist (missing-skill.md)");
     REQUIRE(warning != std::string::npos);
-    CHECK(screen.find("failed to parse trust store", warning + 1) == std::string::npos);
+    CHECK(screen.find("Warning: skill path does not exist (missing-skill.md)", warning + 1) == std::string::npos);
+    const auto error = screen.find("Error: Skill path does not exist (missing-skill.md)");
+    REQUIRE(error != std::string::npos);
+    CHECK(screen.find("Error: Skill path does not exist (missing-skill.md)", error + 1) == std::string::npos);
     run.exit();
 }
 
