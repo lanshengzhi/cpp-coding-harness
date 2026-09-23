@@ -261,7 +261,9 @@ struct Agent::Impl {
     [[nodiscard]] static boost::asio::awaitable<support::ExpectedVoid> run_loop(std::shared_ptr<Impl> impl,
             std::optional<ai::UserMessage> user_message,
             AgentEventCommitter commitment,
-            std::stop_source stop_source);
+            std::stop_source stop_source,
+            std::vector<ai::MessageVariant> initial_messages,
+            bool skip_initial_steering_poll);
 
     /// The Agent Turn state machine (pi `agent-loop.ts` `runLoop`; lifecycle
     /// order per ADR 0014). Reads live state at each turn boundary through
@@ -272,6 +274,8 @@ struct Agent::Impl {
     [[nodiscard]] static boost::asio::awaitable<support::ExpectedVoid> run_turns(std::shared_ptr<Impl> impl,
             std::shared_ptr<CommitmentState> commitment_state,
             std::optional<ai::UserMessage> user_message,
+            std::vector<ai::MessageVariant> initial_messages,
+            bool skip_initial_steering_poll,
             std::stop_token stop_token);
 
     RunPolicy run_policy;

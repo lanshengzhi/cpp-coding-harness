@@ -320,7 +320,7 @@ struct AgentRun {
     agent::AgentState state;
 };
 
-AgentRun run_agent(agent::Agent& subject, std::string prompt, agent::AgentEventCommitter commitment = {}) {
+AgentRun run_agent(agent::Agent& subject, support::AsyncResult<void> operation) {
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> result;
     std::vector<agent::AgentLifecycleEvent> events;
@@ -334,8 +334,7 @@ AgentRun run_agent(agent::Agent& subject, std::string prompt, agent::AgentEventC
     boost::asio::co_spawn(
             io,
             [&]() -> boost::asio::awaitable<void> {
-                result = co_await support::detail::await_async_result(
-                        subject.prompt(std::move(prompt), std::move(commitment)));
+                result = co_await support::detail::await_async_result(std::move(operation));
                 co_return;
             },
             boost::asio::detached);
@@ -347,6 +346,10 @@ AgentRun run_agent(agent::Agent& subject, std::string prompt, agent::AgentEventC
             .events = std::move(events),
             .state = subject.state(),
     };
+}
+
+AgentRun run_agent(agent::Agent& subject, std::string prompt, agent::AgentEventCommitter commitment = {}) {
+    return run_agent(subject, subject.prompt(std::move(prompt), std::move(commitment)));
 }
 
 [[nodiscard]] ai::AssistantStopReason final_stop_reason(const std::vector<agent::AgentLifecycleEvent>& events) {
@@ -430,6 +433,141 @@ TEST_CASE("async agent loop emits deterministic lifecycle events for text", "[ag
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
     CHECK(count_events<agent::TurnEndEvent>(run.events) == 1);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE("Agent continuation continues retained history without adding a prompt", "[agent][async][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("continued"));
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState initial_state;
+    initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
+
+    auto run = run_agent(subject, subject.continue_run());
+
+    REQUIRE(run.result);
+    REQUIRE(client->requests.size() == 1);
+    REQUIRE(client->requests.front().context.messages.size() == 1);
+    CHECK(std::holds_alternative<ai::UserMessage>(client->requests.front().context.messages.front()));
+    REQUIRE(run.state.messages.size() == 2);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 1);
+}
+
+TEST_CASE("Agent continuation from an assistant tail prioritizes steering before follow-up",
+        "[agent][async][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("steering response"));
+    client->responses.push_back(ai::assistant_text_message("follow-up response"));
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState initial_state;
+    initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
+    REQUIRE(subject.steer(ai::user_text_message("steering input")));
+    REQUIRE(subject.follow_up(ai::user_text_message("follow-up input")));
+
+    auto run = run_agent(subject, subject.continue_run());
+
+    REQUIRE(run.result);
+    REQUIRE(client->requests.size() == 2);
+    const auto& first_messages = client->requests[0].context.messages;
+    REQUIRE(first_messages.size() == 3);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(first_messages.back())) == "steering input");
+    const auto& second_messages = client->requests[1].context.messages;
+    REQUIRE(second_messages.size() == 5);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(second_messages.back())) == "follow-up input");
+}
+
+TEST_CASE("Agent continuation from an assistant tail falls back to queued follow-up messages",
+        "[agent][async][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("continued from follow-up"));
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState initial_state;
+    initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
+    REQUIRE(subject.follow_up(ai::user_text_message("follow-up continuation input")));
+
+    auto run = run_agent(subject, subject.continue_run());
+
+    REQUIRE(run.result);
+    REQUIRE(client->requests.size() == 1);
+    const auto& messages = client->requests.front().context.messages;
+    REQUIRE(messages.size() == 3);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(messages.back())) == "follow-up continuation input");
+}
+
+TEST_CASE("Agent continuation from an assistant tail drains all configured steering messages",
+        "[agent][async][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("response"));
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("gpt-test");
+    options.steering_mode = agent::InputQueueMode::All;
+    agent::AgentInitialState initial_state;
+    initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
+    REQUIRE(subject.steer(ai::user_text_message("first steering input")));
+    REQUIRE(subject.steer(ai::user_text_message("second steering input")));
+
+    auto run = run_agent(subject, subject.continue_run());
+
+    REQUIRE(run.result);
+    REQUIRE(client->requests.size() == 1);
+    const auto& messages = client->requests.front().context.messages;
+    REQUIRE(messages.size() == 4);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(messages[2])) == "first steering input");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(messages[3])) == "second steering input");
+}
+
+TEST_CASE("Agent continuation rejects empty, system-only, and assistant-tail histories without fallback input",
+        "[agent][async][compat-pi][spec]") {
+    auto empty_client = std::make_shared<FakeStreamingClient>();
+    agent::ToolRegistry empty_registry;
+    agent::AsyncAgentOptions empty_options;
+    empty_options.model = tests::make_model("gpt-test");
+    agent::Agent empty_subject(empty_client->factory(), std::move(empty_registry), std::move(empty_options));
+    auto empty_run = run_agent(empty_subject, empty_subject.continue_run());
+    CHECK_FALSE(empty_run.result);
+    CHECK(empty_client->requests.empty());
+
+    auto system_client = std::make_shared<FakeStreamingClient>();
+    agent::ToolRegistry system_registry;
+    agent::AsyncAgentOptions system_options;
+    system_options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState system_state;
+    system_state.messages.emplace_back(ai::SystemMessage{.content = "system prompt"});
+    agent::Agent system_subject(
+            system_client->factory(), std::move(system_registry), std::move(system_options), std::move(system_state));
+    REQUIRE(system_subject.follow_up(ai::user_text_message("must remain queued")));
+    auto system_run = run_agent(system_subject, system_subject.continue_run());
+    CHECK_FALSE(system_run.result);
+    CHECK(system_client->requests.empty());
+    CHECK(system_subject.input_queue_counts().follow_up == 1);
+
+    auto assistant_client = std::make_shared<FakeStreamingClient>();
+    agent::ToolRegistry assistant_registry;
+    agent::AsyncAgentOptions assistant_options;
+    assistant_options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState assistant_state;
+    assistant_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    assistant_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
+    agent::Agent assistant_subject(assistant_client->factory(),
+            std::move(assistant_registry),
+            std::move(assistant_options),
+            std::move(assistant_state));
+    auto assistant_run = run_agent(assistant_subject, assistant_subject.continue_run());
+    CHECK_FALSE(assistant_run.result);
+    CHECK(assistant_client->requests.empty());
 }
 
 TEST_CASE("async agent loop seeds the session system prompt into every request context",

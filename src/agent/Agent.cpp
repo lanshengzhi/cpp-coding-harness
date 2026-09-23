@@ -4,6 +4,7 @@
 #include "agent/AgentMessageAccess.hpp"
 #include "support/AsyncResultBridge.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -203,8 +204,16 @@ support::AsyncResult<void> Agent::prompt(
                 co_return co_await Impl::run_loop(impl,
                         std::optional<ai::UserMessage>{std::move(user_message)},
                         std::move(commitment),
-                        std::move(stop_source));
+                        std::move(stop_source),
+                        {},
+                        false);
             });
+}
+
+support::AsyncResult<void> Agent::continue_run() { return continue_run_with_queue_fallback({}, std::stop_source{}); }
+
+support::AsyncResult<void> Agent::continue_run(AgentEventCommitter commitment) {
+    return continue_run_with_queue_fallback(std::move(commitment), std::stop_source{});
 }
 
 support::AsyncResult<void> Agent::continue_run(AgentEventCommitter commitment, std::stop_source stop_source) {
@@ -219,7 +228,56 @@ support::AsyncResult<void> Agent::continue_run(AgentEventCommitter commitment, s
                     co_return std::unexpected(support::make_error(
                             support::ErrorCode::Validation, "agent is busy (prompt already in flight)"));
                 }
-                co_return co_await Impl::run_loop(impl, std::nullopt, std::move(commitment), std::move(stop_source));
+                co_return co_await Impl::run_loop(
+                        impl, std::nullopt, std::move(commitment), std::move(stop_source), {}, false);
+            });
+}
+
+support::AsyncResult<void> Agent::continue_run_with_queue_fallback(
+        AgentEventCommitter commitment, std::stop_source stop_source) {
+    return support::detail::make_async_result(
+            [impl = impl_,
+                    commitment = std::move(commitment),
+                    stop_source = std::move(stop_source)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                if (!impl) {
+                    co_return std::unexpected(agent_not_initialized());
+                }
+                if (impl->active_run) {
+                    co_return std::unexpected(support::make_error(
+                            support::ErrorCode::Validation, "agent is busy (prompt already in flight)"));
+                }
+
+                const auto snapshot = impl->snapshot();
+                const bool has_non_system_message = std::any_of(
+                        snapshot.messages.begin(), snapshot.messages.end(), [](const ai::MessageVariant& message) {
+                            return !std::holds_alternative<ai::SystemMessage>(message);
+                        });
+                if (!has_non_system_message) {
+                    co_return std::unexpected(support::make_error(
+                            support::ErrorCode::Validation, "Cannot continue: no messages in context"));
+                }
+
+                std::vector<ai::MessageVariant> initial_messages;
+                bool skip_initial_steering_poll = false;
+                if (std::holds_alternative<ai::AssistantMessage>(snapshot.messages.back())) {
+                    initial_messages = impl->drain(InputQueueKind::Steering);
+                    if (!initial_messages.empty()) {
+                        skip_initial_steering_poll = true;
+                    } else {
+                        initial_messages = impl->drain(InputQueueKind::FollowUp);
+                    }
+                    if (initial_messages.empty()) {
+                        co_return std::unexpected(support::make_error(
+                                support::ErrorCode::Validation, "Cannot continue from message role: assistant"));
+                    }
+                }
+
+                co_return co_await Impl::run_loop(impl,
+                        std::nullopt,
+                        std::move(commitment),
+                        std::move(stop_source),
+                        std::move(initial_messages),
+                        skip_initial_steering_poll);
             });
 }
 

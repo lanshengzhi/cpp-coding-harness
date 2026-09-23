@@ -4,6 +4,7 @@
 #include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <type_traits>
 #include <optional>
@@ -109,7 +110,9 @@ void Agent::Impl::reduce_state(const AgentLifecycleEvent& event) {
 [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_loop(std::shared_ptr<Impl> impl,
         std::optional<ai::UserMessage> user_message,
         AgentEventCommitter commitment,
-        std::stop_source stop_source) {
+        std::stop_source stop_source,
+        std::vector<ai::MessageVariant> initial_messages,
+        bool skip_initial_steering_poll) {
     impl->active_run = true;
     impl->active_stop_source.emplace(std::move(stop_source));
     impl->state.is_running = true;
@@ -127,8 +130,12 @@ void Agent::Impl::reduce_state(const AgentLifecycleEvent& event) {
     };
 
     auto commitment_state = std::make_shared<CommitmentState>(CommitmentState{.commitment = std::move(commitment)});
-    auto result =
-            co_await run_turns(impl, commitment_state, std::move(user_message), impl->active_stop_source->get_token());
+    auto result = co_await run_turns(impl,
+            commitment_state,
+            std::move(user_message),
+            std::move(initial_messages),
+            skip_initial_steering_poll,
+            impl->active_stop_source->get_token());
     finish_run();
 
     if (commitment_state->failure) {
@@ -143,14 +150,21 @@ void Agent::Impl::reduce_state(const AgentLifecycleEvent& event) {
 boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared_ptr<Impl> impl,
         std::shared_ptr<CommitmentState> commitment_state,
         std::optional<ai::UserMessage> user_message,
+        std::vector<ai::MessageVariant> initial_messages,
+        bool skip_initial_steering_poll,
         std::stop_token stop_token) {
     RunPolicy& policy = impl->run_policy;
     auto initial_snapshot = impl->snapshot();
-    if (!user_message && initial_snapshot.messages.empty()) {
+    const bool has_initial_prompt = user_message.has_value() || !initial_messages.empty();
+    const bool has_context_message = std::any_of(initial_snapshot.messages.begin(),
+            initial_snapshot.messages.end(),
+            [](const ai::MessageVariant& message) { return !std::holds_alternative<ai::SystemMessage>(message); });
+    if (!has_initial_prompt && !has_context_message) {
         co_return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "Cannot continue: no messages in context"));
     }
-    if (!user_message && std::holds_alternative<ai::AssistantMessage>(initial_snapshot.messages.back())) {
+    if (!has_initial_prompt && !initial_snapshot.messages.empty() &&
+            std::holds_alternative<ai::AssistantMessage>(initial_snapshot.messages.back())) {
         co_return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "Cannot continue from message role: assistant"));
     }
@@ -196,7 +210,13 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
         }
 
         if (turn == 1) {
-            pending_messages = impl->drain(InputQueueKind::Steering);
+            pending_messages = std::move(initial_messages);
+            if (!skip_initial_steering_poll) {
+                auto steering_messages = impl->drain(InputQueueKind::Steering);
+                for (auto& message : steering_messages) {
+                    pending_messages.push_back(std::move(message));
+                }
+            }
         }
 
         if (!pending_messages.empty()) {
