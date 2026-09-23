@@ -650,6 +650,14 @@ support::ExpectedVoid Tui::render() {
         // transcript end, so no buffer line repaints them): clear that gap
         // in place like the differential clear-on-shrink below (#597).
         if (viewport_height_changed) {
+            // Rewriting the full buffer overwrites image cells in the terminal,
+            // even when the image's logical content and region are unchanged.
+            // Retire placements first so image reconciliation at frame end
+            // re-places them after the row writes (status/editor dock changes
+            // can repartition the viewport without changing transcript content).
+            if (auto result = remove_active_images(); !result) {
+                return std::unexpected(result.error());
+            }
             if (auto result = write_full_buffer(frame_write_start); !result) {
                 return std::unexpected(result.error());
             }
