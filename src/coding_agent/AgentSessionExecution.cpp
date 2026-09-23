@@ -166,6 +166,26 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
                     prompt_tool_guidelines_.end(), metadata->guidelines.begin(), metadata->guidelines.end());
         }
     }
+    auto sections = build_system_prompt_sections();
+    ai::SystemMessage system_message;
+    system_message.sections.reserve(sections.size());
+    for (const auto& section : sections) {
+        system_message.sections.push_back(ai::SystemMessageSection{
+                .name = section.name,
+                .text = section.text,
+        });
+    }
+    if (session_.history.empty()) {
+        for (const auto& name : prompt_selected_tools_) {
+            if (const auto* tool = services_.tools.find(name)) {
+                system_message.tools_added.push_back(tool->definition);
+            }
+        }
+        if (session_.store) {
+            (void)session_.store->append(ai::MessageVariant{system_message});
+        }
+        session_.history.emplace_back(system_message);
+    }
     options.system_prompt = rebuild_system_prompt();
     // pi `_installAgentNextTurnRefresh`: the between-turn trigger compacts
     // before the next assistant response of the same run, so a long tool loop
@@ -218,6 +238,27 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
 }
 
 std::string AgentSession::Impl::rebuild_system_prompt() const {
+    // Resume replays the transcript's ordered system-message section diffs.
+    std::vector<prompt::SystemPromptSection> replayed;
+    for (const auto& message : session_.history) {
+        const auto* system = std::get_if<ai::SystemMessage>(&message);
+        if (system == nullptr) {
+            continue;
+        }
+        for (const auto& section : system->sections) {
+            std::erase_if(replayed, [&](const auto& current) { return current.name == section.name; });
+            if (section.text) {
+                replayed.push_back(prompt::SystemPromptSection{.name = section.name, .text = *section.text});
+            }
+        }
+    }
+    if (!replayed.empty()) {
+        return prompt::renderSystemPromptSections(replayed);
+    }
+    return prompt::renderSystemPromptSections(build_system_prompt_sections());
+}
+
+std::vector<prompt::SystemPromptSection> AgentSession::Impl::build_system_prompt_sections() const {
     // pi `_rebuildSystemPrompt` (`core/agent-session.ts`) + `buildSystemPrompt`
     // (`core/system-prompt.ts`): the default/custom branches, tool snippets +
     // guidelines, `<project_context>`, the skills section, and the cwd line,
@@ -257,7 +298,7 @@ std::string AgentSession::Impl::rebuild_system_prompt() const {
     prompt_options.readmePath = std::string{kSourceDir} + "/README.md";
     prompt_options.docsPath = std::string{kSourceDir} + "/docs";
     prompt_options.examplesPath = std::string{kSourceDir} + "/examples";
-    return buildSystemPrompt(prompt_options);
+    return buildSystemPromptSections(prompt_options);
 }
 
 support::ExpectedVoid AgentSession::Impl::reject_if_closed() const {

@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/prompt/SystemPromptBuilder.hpp"
 
 #include <cch/agent/Agent.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
@@ -410,6 +411,7 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// (the identity delta confined to the documentation paths). Called at
     /// construction and on `/reload`.
     [[nodiscard]] std::string rebuild_system_prompt() const;
+    [[nodiscard]] std::vector<prompt::SystemPromptSection> build_system_prompt_sections() const;
     /// Shared preflight outcome rejecting a second concurrent User Bash.
     [[nodiscard]] support::ExpectedVoid reject_if_user_bash_busy() const;
 

@@ -498,6 +498,16 @@ SessionContext buildSessionContext(const std::vector<const SessionEntry*>& path)
     const bool has_retained_tail = std::get_if<CompactionEntryValue>(&compaction->value) != nullptr &&
         std::get<CompactionEntryValue>(compaction->value).retained_tail.has_value();
 
+    // The leading system message is session prompt state, not compactable
+    // conversation history. Replay it before the compaction projection.
+    for (std::size_t index = 0; index < compaction_index; ++index) {
+        const auto* entry = path[index];
+        if (entry->message && std::holds_alternative<ai::SystemMessage>(*entry->message)) {
+            ctx.messages.push_back(*entry->message);
+            break;
+        }
+    }
+
     // Emit the compaction entry: compactionSummary + retainedTail (pi
     // `sessionEntryToContextMessages` compaction branch).
     emitCompactionMessages(ctx, compaction);

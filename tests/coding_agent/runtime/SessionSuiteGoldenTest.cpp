@@ -246,7 +246,33 @@ canonical_message(const ai::MessageVariant &message) {
     REQUIRE(serialized);
     auto parsed = support::read_json(*serialized);
     REQUIRE(parsed);
-    return canonical_message(*parsed);
+    auto canonical = canonical_message(*parsed);
+    if (const auto* system = std::get_if<ai::SystemMessage>(&message)) {
+        auto* object = canonical.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        support::JsonValue::array_t sections;
+        for (const auto& section : system->sections) {
+            sections.emplace_back(support::JsonValue::object_t{
+                    {"name", section.name},
+                    {"removal", !section.text.has_value()},
+            });
+        }
+        object->emplace("sections", support::JsonValue{std::move(sections)});
+        const auto tool_names = [](const auto& tools) {
+            support::JsonValue::array_t names;
+            for (const auto& tool : tools) {
+                names.emplace_back(tool.name);
+            }
+            return support::JsonValue{std::move(names)};
+        };
+        if (!system->tools_added.empty()) {
+            object->emplace("toolsAdded", tool_names(system->tools_added));
+        }
+        if (!system->tools_removed.empty()) {
+            object->emplace("toolsRemoved", tool_names(system->tools_removed));
+        }
+    }
+    return canonical;
 }
 
 [[nodiscard]] support::JsonValue
@@ -322,7 +348,11 @@ project_entries(const harness::session::LoadedSession &loaded) {
     if (type == "message") {
       const auto it = object->find("message");
       REQUIRE(it != object->end());
-      projected.emplace("message", canonical_message(it->second));
+      if (entry.message) {
+          projected.emplace("message", canonical_message(*entry.message));
+      } else {
+          projected.emplace("message", canonical_message(it->second));
+      }
     } else if (type == "model_change") {
       for (const char *key : {"provider", "modelId"}) {
         const auto it = object->find(key);
