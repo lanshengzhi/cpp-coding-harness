@@ -107,36 +107,31 @@ constexpr std::array<SlashCommandDefinition, 19> kCommandDefinitions{{
      .immediate = false},
 }};
 
-struct SlashCommandAlias {
-    std::string_view spelling;
-    SlashCommandId command;
-};
-
-constexpr std::array<SlashCommandAlias, 24> kCommandAliases{{
-    {.spelling = "clear", .command = SlashCommandId::Clear},
-    {.spelling = "new", .command = SlashCommandId::Clear},
-    {.spelling = "quit", .command = SlashCommandId::Quit},
-    {.spelling = "exit", .command = SlashCommandId::Quit},
-    {.spelling = "q", .command = SlashCommandId::Quit},
-    {.spelling = "copy", .command = SlashCommandId::Copy},
-    {.spelling = "session", .command = SlashCommandId::Session},
-    {.spelling = "hotkeys", .command = SlashCommandId::Hotkeys},
-    {.spelling = "settings", .command = SlashCommandId::Settings},
-    {.spelling = "help", .command = SlashCommandId::Help},
-    {.spelling = "commands", .command = SlashCommandId::Help},
-    {.spelling = "model", .command = SlashCommandId::Model},
-    {.spelling = "models", .command = SlashCommandId::Models},
-    {.spelling = "scoped-models", .command = SlashCommandId::Models},
-    {.spelling = "thinking", .command = SlashCommandId::Thinking},
-    {.spelling = "login", .command = SlashCommandId::Login},
-    {.spelling = "logout", .command = SlashCommandId::Logout},
-    {.spelling = "resume", .command = SlashCommandId::Resume},
-    {.spelling = "fork", .command = SlashCommandId::Fork},
-    {.spelling = "tree", .command = SlashCommandId::Tree},
-    {.spelling = "reload", .command = SlashCommandId::Reload},
-    {.spelling = "compact", .command = SlashCommandId::Compact},
-    {.spelling = "name", .command = SlashCommandId::Name},
-    {.spelling = "trust", .command = SlashCommandId::Trust},
+constexpr std::array<SlashCommandSpelling, 24> kCommandSpellings{{
+        {.spelling = "clear", .command = SlashCommandId::Clear},
+        {.spelling = "new", .command = SlashCommandId::Clear},
+        {.spelling = "quit", .command = SlashCommandId::Quit},
+        {.spelling = "exit", .command = SlashCommandId::Quit},
+        {.spelling = "q", .command = SlashCommandId::Quit},
+        {.spelling = "copy", .command = SlashCommandId::Copy},
+        {.spelling = "session", .command = SlashCommandId::Session},
+        {.spelling = "hotkeys", .command = SlashCommandId::Hotkeys},
+        {.spelling = "settings", .command = SlashCommandId::Settings},
+        {.spelling = "help", .command = SlashCommandId::Help},
+        {.spelling = "commands", .command = SlashCommandId::Help},
+        {.spelling = "model", .command = SlashCommandId::Model},
+        {.spelling = "models", .command = SlashCommandId::Models},
+        {.spelling = "scoped-models", .command = SlashCommandId::Models},
+        {.spelling = "thinking", .command = SlashCommandId::Thinking},
+        {.spelling = "login", .command = SlashCommandId::Login},
+        {.spelling = "logout", .command = SlashCommandId::Logout},
+        {.spelling = "resume", .command = SlashCommandId::Resume},
+        {.spelling = "fork", .command = SlashCommandId::Fork},
+        {.spelling = "tree", .command = SlashCommandId::Tree},
+        {.spelling = "reload", .command = SlashCommandId::Reload},
+        {.spelling = "compact", .command = SlashCommandId::Compact},
+        {.spelling = "name", .command = SlashCommandId::Name},
+        {.spelling = "trust", .command = SlashCommandId::Trust},
 }};
 
 [[nodiscard]] bool is_ascii_space(char value) noexcept {
@@ -153,14 +148,11 @@ constexpr std::array<SlashCommandAlias, 24> kCommandAliases{{
     return text;
 }
 
-[[nodiscard]] const SlashCommandAlias* find_alias(std::string_view spelling) noexcept {
-    const auto match = std::find_if(
-        kCommandAliases.begin(),
-        kCommandAliases.end(),
-        [spelling](const SlashCommandAlias& alias) {
-            return alias.spelling == spelling;
-        });
-    return match == kCommandAliases.end() ? nullptr : &*match;
+[[nodiscard]] const SlashCommandSpelling* find_alias(std::string_view spelling) noexcept {
+    const auto match = std::find_if(kCommandSpellings.begin(),
+            kCommandSpellings.end(),
+            [spelling](const SlashCommandSpelling& alias) { return alias.spelling == spelling; });
+    return match == kCommandSpellings.end() ? nullptr : &*match;
 }
 
 [[nodiscard]] const SlashCommandDefinition* find_definition(
@@ -245,6 +237,8 @@ std::string_view slash_command_name(SlashCommandId command) noexcept {
     }
     return "unknown";
 }
+
+std::span<const SlashCommandSpelling> slash_command_spellings() noexcept { return kCommandSpellings; }
 
 bool is_immediate_slash_command(SlashCommandId command) noexcept {
     const auto* definition = find_definition(command);

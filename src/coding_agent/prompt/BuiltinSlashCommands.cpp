@@ -5,7 +5,7 @@ namespace cch::coding_agent::prompt {
 const std::vector<BuiltinSlashCommand>& builtin_slash_commands() {
     // Compatibility baseline: pi 83114817,
     // packages/coding-agent/src/core/slash-commands.ts (ADR 0036 G4: the
-    // 17 Supported entries of the 22-command catalog, pi-verbatim strings;
+    // 18 Supported entries of the 22-command catalog, pi-verbatim strings;
     // "/export" "/import" "/share" "/changelog" "/clone", "/debug", and the
     // easter eggs are Deferred with no surface).
     static const std::vector<BuiltinSlashCommand> kCommands{
@@ -18,6 +18,7 @@ const std::vector<BuiltinSlashCommand>& builtin_slash_commands() {
             {"hotkeys", "Show all keyboard shortcuts", {}},
             {"fork", "Create a new fork from a previous user message", {}},
             {"tree", "Navigate session tree (switch branches)", {}},
+            {"thinking", "Set thinking level", "<level>"},
             {"trust", "Save project trust decision for future sessions", {}},
             {"login", "Configure provider authentication", "<provider>"},
             {"logout", "Remove provider authentication", {}},

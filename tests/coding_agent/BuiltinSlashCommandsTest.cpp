@@ -7,15 +7,33 @@
 
 using namespace cch;
 
-TEST_CASE("builtin slash autocomplete carries pi's 17 verbatim entries",
-        "[coding_agent][slash-commands][issue419][spec]") {
+TEST_CASE(
+        "builtin slash autocomplete carries pi's verbatim entries", "[coding_agent][slash-commands][issue419][spec]") {
     const auto& commands = coding_agent::prompt::builtin_slash_commands();
 
-    // Exactly the 17 autocomplete entries of pi's 22-command catalog.
+    // The 18 autocomplete entries of pi's 22-command catalog; `thinking` is
+    // pi's own entry (issue #791). Router-only spellings (`/clear`, `/help`,
+    // `/commands`, `/exit`, `/q`, `/models`) come from the router's spelling
+    // table instead of this catalog.
     const std::vector<std::string_view> expected_names{
-        "settings", "model",       "scoped-models", "copy",  "name", "session",
-        "hotkeys",  "fork",        "tree",          "trust", "login", "logout",
-        "new",      "compact",     "resume",        "reload", "quit",
+            "settings",
+            "model",
+            "scoped-models",
+            "copy",
+            "name",
+            "session",
+            "hotkeys",
+            "fork",
+            "tree",
+            "thinking",
+            "trust",
+            "login",
+            "logout",
+            "new",
+            "compact",
+            "resume",
+            "reload",
+            "quit",
     };
     REQUIRE(commands.size() == expected_names.size());
     for (std::size_t index = 0; index < expected_names.size(); ++index) {

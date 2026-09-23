@@ -3514,11 +3514,14 @@ TEST_CASE("Native TUI command autocomplete includes effective commands and proje
 
     REQUIRE(terminal.inject_input("/"));
     drain_ready(io);
-    for (std::size_t index = 0; index < 15; ++index) {
+    // The suggestion list is label-sorted and grows with every accepted
+    // spelling, so walk to the row instead of counting arrows (issue #791).
+    auto screen = visible_screen(terminal);
+    for (std::size_t index = 0; index < 40 && screen.find("> /settings") == std::string::npos; ++index) {
         REQUIRE(terminal.inject_input("\x1b[B"));
         drain_ready(io);
+        screen = visible_screen(terminal);
     }
-    auto screen = visible_screen(terminal);
     CHECK(screen.find("> /settings") != std::string::npos);
     REQUIRE(terminal.inject_input("\t"));
     drain_ready(io);
@@ -3595,11 +3598,12 @@ TEST_CASE("Native TUI skill commands autocomplete follows the enableSkillCommand
     // autocomplete list while prompt templates and slashes still appear.
     REQUIRE(terminal.inject_input("/"));
     drain_ready(io);
-    for (std::size_t index = 0; index < 13; ++index) {
+    auto screen = visible_screen(terminal);
+    for (std::size_t index = 0; index < 40 && screen.find("/scoped-models") == std::string::npos; ++index) {
         REQUIRE(terminal.inject_input("\x1b[B"));
         drain_ready(io);
+        screen = visible_screen(terminal);
     }
-    auto screen = visible_screen(terminal);
     CHECK(screen.find("skill:project-skill") == std::string::npos);
     CHECK(screen.find("/scoped-models") != std::string::npos);
 
@@ -3616,11 +3620,12 @@ TEST_CASE("Native TUI skill commands autocomplete follows the enableSkillCommand
     drain_ready(io);
     REQUIRE(terminal.inject_input("\x03/"));
     drain_ready(io);
-    for (std::size_t index = 0; index < 16; ++index) {
+    screen = visible_screen(terminal);
+    for (std::size_t index = 0; index < 40 && screen.find("skill:project-skill") == std::string::npos; ++index) {
         REQUIRE(terminal.inject_input("\x1b[B"));
         drain_ready(io);
+        screen = visible_screen(terminal);
     }
-    screen = visible_screen(terminal);
     CHECK(screen.find("skill:project-skill") != std::string::npos);
     // The toggle persisted to the global settings file.
     CHECK(read_binary_file(config.path() / "settings.json").find(
@@ -4301,9 +4306,64 @@ TEST_CASE("Native TUI autocomplete prefixes discovered templates and skills with
     REQUIRE(terminal.inject_input("\x03/export"));
     drain_ready(io);
     CHECK(count_text(visible_screen(terminal), "> /") == 0);
+    // `/help` is a supported router spelling, so the palette offers it (the
+    // Deferred `/export` above stays without a suggestion; issue #791).
     REQUIRE(terminal.inject_input("\x03/help"));
     drain_ready(io);
-    CHECK(count_text(visible_screen(terminal), "> /") == 0);
+    CHECK(visible_screen(terminal).find("> /help") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x03\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE("Native TUI command autocomplete offers every accepted slash spelling",
+        "[coding_agent][tui][autocomplete][issue791][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    // A skill whose name fuzzy-matches `/clear` as a subsequence, the shape
+    // that hijacked the submission before the palette offered the spelling.
+    workspace.write(".pi/skills/cindy-skill-creator/SKILL.md",
+            "---\n"
+            "name: cindy-skill-creator\n"
+            "description: Create or update a Cindy Skill.\n"
+            "---\n"
+            "Cindy skill body.\n");
+    auto options = session_options(workspace, tests::make_scripted_fake_provider());
+    options.project_trust_override = true;
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
+    REQUIRE(created);
+
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+
+    // The exact spelling wins over the skill's fuzzy subsequence match.
+    REQUIRE(terminal.inject_input("/clear"));
+    drain_ready(io);
+    const auto clear_screen = visible_screen(terminal);
+    CHECK(clear_screen.find("/clear") != std::string::npos);
+
+    // The submission clears the session instead of running the skill.
+    REQUIRE(terminal.inject_input("\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 0);
+
+    // pi's catalog carries `thinking`; the palette offers it (issue #791).
+    REQUIRE(terminal.inject_input("/thin"));
+    drain_ready(io);
+    CHECK(visible_screen(terminal).find("thinking") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x03\x04"));
     drain_ready(io);

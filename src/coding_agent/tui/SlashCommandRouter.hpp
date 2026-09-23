@@ -111,6 +111,17 @@ struct SlashCommandExecutionContext {
 /// Return the canonical pi-shaped spelling for a command identity.
 [[nodiscard]] std::string_view slash_command_name(SlashCommandId command) noexcept;
 
+/// One accepted built-in slash spelling and the identity it resolves to.
+struct SlashCommandSpelling {
+    std::string_view spelling;
+    SlashCommandId command;
+};
+
+/// Every accepted built-in slash spelling, canonical names and aliases alike.
+/// The command palette offers all of them so an exact spelling cannot lose to
+/// an unrelated fuzzy match (issue #791).
+[[nodiscard]] std::span<const SlashCommandSpelling> slash_command_spellings() noexcept;
+
 /// Whether a command is executed immediately by the host context rather than
 /// returned as a modal request.
 [[nodiscard]] bool is_immediate_slash_command(SlashCommandId command) noexcept;
