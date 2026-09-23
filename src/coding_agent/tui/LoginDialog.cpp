@@ -375,7 +375,11 @@ cch::tui::InputAdmissionOutcome LoginDialogComponent::handle_input(const cch::tu
             pending_escape_ = false;
             escape = true;
         }
-        if (pending_submit_ && pending_slot_) {
+        // An empty (or whitespace-only) submission never resolves the prompt:
+        // product divergence from pi, which resolves unconditionally, so an
+        // API key or code can never be "Saved" as "".
+        const bool blank_submit = pending_submit_ && pending_submit_->find_first_not_of(" \t\r\n") == std::string::npos;
+        if (pending_submit_ && pending_slot_ && !blank_submit) {
             submitted = std::move(*pending_submit_);
             slot = std::move(pending_slot_);
             pending_slot_.reset();

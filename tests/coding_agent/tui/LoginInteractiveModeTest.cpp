@@ -849,3 +849,37 @@ TEST_CASE("direct Kimi API-key prompt stores a bracketed-paste key", "[coding_ag
 
     run.exit();
 }
+
+TEST_CASE("direct Kimi API-key prompt never saves an empty submission", "[coding_agent][tui][login][issue768][spec]") {
+    LoginFixture fixture;
+    auto runtime = fixture.create_runtime();
+    REQUIRE(runtime != nullptr);
+    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
+    REQUIRE(session);
+
+    InteractiveRun run(fixture.runtime);
+    run.start(*session->session, fixture.agent_dir);
+
+    run.type("/login kimi-coding\r");
+    run.wait_for_screen("Enter API key");
+    run.type("\r");
+    // The prompt must survive an empty submit: no success status may appear
+    // within the same budget wait_for_screen uses (product divergence from
+    // pi, which resolves unconditionally).
+    const bool saved_on_empty = tests::pump_until(
+            run.io, [&] { return visible_screen(run.terminal).find("Saved API key") != std::string::npos; });
+    CHECK_FALSE(saved_on_empty);
+    // The prompt still owns the input: a real key typed afterwards shows
+    // bullets and stores normally.
+    run.type("recovery-key-03");
+    auto screen = visible_screen(run.terminal);
+    CHECK(screen.find("•") != std::string::npos);
+    CHECK(screen.find("recovery-key-03") == std::string::npos);
+    run.type("\r");
+    run.wait_for_screen("Saved API key for Kimi For Coding.");
+    const auto auth_text = read_text(fixture.auth_path());
+    INFO(auth_text);
+    CHECK(auth_text.find("recovery-key-03") != std::string::npos);
+
+    run.exit();
+}
