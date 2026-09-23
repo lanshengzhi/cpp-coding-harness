@@ -465,14 +465,14 @@ records `cacheWrite1h` on every `message_start`, defaulting to 0 when the provid
    this gate: the session-dir env var is now pi's `PI_CODING_AGENT_SESSION_DIR`
    (`CCH_CODING_AGENT_SESSION_DIR` removed, matching ADR 0031), and the README no longer lists OAuth
    as deferred nor pins the parity baseline at the pre-advance `864b35c`.
-6. **Codex client-identity acceptance is currently UNVERIFIED (unverifiable offline).** Whether
-   the ChatGPT backend accepts this harness's own identity on the Codex path — `originator: pike`
-   and `User-Agent: pike` instead of pi's `originator: pi` and `getPiUserAgent()` value, and the
-   authorize URL's `originator=pike` instead of pi's `originator=pi` — needs live ChatGPT
-   credentials and is not covered by the scripted-transport suite. If the Codex path regresses
-   with live credentials, each header reverts to the old value with one line in
-   `src/ai/api/CodexShared.cpp` (`codex_headers`), and the authorize URL originator reverts with
-   one line in `src/ai/auth/OpenAICodexOAuthWire.cpp` (`build_authorize_url`).
+6. **Codex client-identity acceptance is partly verified live (2026-09-23).** The Codex path
+   completed end-to-end with this harness's own request headers (`originator: pike`,
+   `User-Agent: pike` instead of pi's `originator: pi` and `getPiUserAgent()` value). The
+   authorize URL's `originator=pike` (browser login entry) was added afterwards and remains
+   unexercised live. If either regresses with live credentials, each header reverts to the old
+   value with one line in `src/ai/api/CodexShared.cpp` (`codex_headers`), and the authorize URL
+   originator reverts with one line in `src/ai/auth/OpenAICodexOAuthWire.cpp`
+   (`build_authorize_url`).
 7. **Kimi completions parity was live-verified on 2026-09-23 (single-turn, non-streaming,
    `kimi-for-coding` at `api.kimi.com/coding/v1`).** The endpoint rejects the OpenAI `developer`
    instruction role (HTTP 400 "role 'developer' is not allowed"), so every Kimi catalog entry
