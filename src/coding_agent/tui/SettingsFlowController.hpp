@@ -99,6 +99,18 @@ public:
     /// Executor-confined.
     void toggle_thinking_block_visibility();
 
+    /// pi `selectThinkingLevel`: apply one level through the session's
+    /// mutation options — session-only by default (`Thinking level: <level>`),
+    /// persisted under `persist` (`Default thinking level: <level>`) (#774).
+    /// Executor-confined.
+    void apply_thinking_level(const std::string& level, bool persist);
+
+    /// pi `showThinkingSelector` (`/thinking` with no argument): the
+    /// thinking-level selector over the available levels, with Enter selecting
+    /// session-only and Ctrl+S (`app.thinking.save`) saving the default.
+    /// Executor-confined.
+    void show_thinking_selector();
+
     /// pi `cycleThinkingLevel` presentation: `Current model does not support
     /// thinking` when the model has no reasoning, else
     /// `Thinking level: <level>`. Executor-confined.

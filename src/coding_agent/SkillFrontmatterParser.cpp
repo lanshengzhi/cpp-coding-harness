@@ -161,8 +161,9 @@ support::Expected<SkillFrontmatter> parseFrontmatter(std::string_view content) {
             normalized.pop_back();
         }
         return SkillFrontmatter{
-            .fields = {},
-            .body = std::move(normalized),
+                .fields = {},
+                .non_string_fields = {},
+                .body = std::move(normalized),
         };
     }
 
@@ -193,8 +194,9 @@ support::Expected<SkillFrontmatter> parseFrontmatter(std::string_view content) {
             normalized.pop_back();
         }
         return SkillFrontmatter{
-            .fields = {},
-            .body = std::move(normalized),
+                .fields = {},
+                .non_string_fields = {},
+                .body = std::move(normalized),
         };
     }
 
