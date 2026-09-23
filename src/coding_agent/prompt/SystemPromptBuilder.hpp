@@ -80,6 +80,11 @@ struct BuildSystemPromptOptions {
 [[nodiscard]] std::vector<SystemPromptSection> replaySystemPromptSections(
         const std::vector<ai::SystemMessage>& messages);
 
+/// Diff replayed sections against the desired ordered sections, returning
+/// replacements in current order followed by explicit removals in previous order.
+[[nodiscard]] std::vector<ai::SystemMessageSection> diffSystemPromptSections(
+        const std::vector<SystemPromptSection>& previous, const std::vector<SystemPromptSection>& current);
+
 /// Build the System Prompt text (`buildSystemPrompt` at the same baseline):
 /// the rendered sections, with the identity delta confined to the identity
 /// line and the `<docs>` block (pinned by the differential golden).
