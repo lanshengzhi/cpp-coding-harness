@@ -1,6 +1,7 @@
 #include "coding_agent/tui/SettingsSelector.hpp"
 
 #include "coding_agent/tui/Theme.hpp"
+#include "coding_agent/tui/ThinkingLevelDescription.hpp"
 
 #include <cch/tui/Container.hpp>
 #include <cch/tui/SelectList.hpp>
@@ -17,18 +18,6 @@
 
 namespace cch::coding_agent::tui {
 namespace {
-
-// pi `settings-selector.ts` `THINKING_DESCRIPTIONS`, verbatim.
-[[nodiscard]] std::string_view thinking_level_description(std::string_view level) {
-    if (level == "off") return "No reasoning";
-    if (level == "minimal") return "Very brief reasoning (~1k tokens)";
-    if (level == "low") return "Light reasoning (~2k tokens)";
-    if (level == "medium") return "Moderate reasoning (~8k tokens)";
-    if (level == "high") return "Deep reasoning (~16k tokens)";
-    if (level == "xhigh") return "Extra-high reasoning (~32k tokens)";
-    if (level == "max") return "Maximum reasoning";
-    return {};
-}
 
 // pi `settings-selector.ts` `DEFAULT_PROJECT_TRUST_LABELS`, verbatim.
 [[nodiscard]] std::string_view default_project_trust_label(DefaultProjectTrust trust) {

@@ -261,29 +261,8 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
             }
         }
         const auto previous_sections = prompt::replaySystemPromptSections(previous_system_messages);
-        ai::SystemMessage section_diff;
-        for (const auto& section : current_sections) {
-            const auto previous = std::find_if(previous_sections.begin(),
-                    previous_sections.end(),
-                    [&section](const auto& candidate) { return candidate.name == section.name; });
-            if (previous == previous_sections.end() || previous->text != section.text) {
-                section_diff.sections.push_back(ai::SystemMessageSection{
-                        .name = section.name,
-                        .text = section.text,
-                });
-            }
-        }
-        for (const auto& previous : previous_sections) {
-            const auto current = std::find_if(current_sections.begin(),
-                    current_sections.end(),
-                    [&previous](const auto& candidate) { return candidate.name == previous.name; });
-            if (current == current_sections.end()) {
-                section_diff.sections.push_back(ai::SystemMessageSection{
-                        .name = previous.name,
-                        .text = std::nullopt,
-                });
-            }
-        }
+        ai::SystemMessage section_diff{
+                .sections = prompt::diffSystemPromptSections(previous_sections, current_sections)};
         if (!section_diff.sections.empty()) {
             ai::MessageVariant message{section_diff};
             if (session_.store) {

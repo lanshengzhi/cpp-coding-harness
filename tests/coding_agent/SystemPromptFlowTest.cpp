@@ -210,6 +210,44 @@ TEST_CASE("system prompt replay applies changed sections and explicit removals",
             "identity\n\n<tools>new</tools>\n\n<docs>docs</docs>");
 }
 
+TEST_CASE("system prompt section diff orders replacements before removals without sorting",
+        "[coding_agent][system-prompt][issue771]") {
+    const std::vector<coding_agent::prompt::SystemPromptSection> previous{
+            {.name = "zeta", .text = "old zeta"},
+            {.name = "remove-z", .text = "removed z"},
+            {.name = "alpha", .text = "unchanged alpha"},
+            {.name = "remove-a", .text = "removed a"},
+    };
+    const std::vector<coding_agent::prompt::SystemPromptSection> current{
+            {.name = "alpha", .text = "unchanged alpha"},
+            {.name = "zeta", .text = "new zeta"},
+    };
+
+    const auto diff = coding_agent::prompt::diffSystemPromptSections(previous, current);
+    REQUIRE(diff.size() == 3);
+    CHECK(diff[0].name == "zeta");
+    CHECK(diff[0].text == "new zeta");
+    CHECK(diff[1].name == "remove-z");
+    CHECK_FALSE(diff[1].text.has_value());
+    CHECK(diff[2].name == "remove-a");
+    CHECK_FALSE(diff[2].text.has_value());
+
+    CHECK(coding_agent::prompt::diffSystemPromptSections(previous, previous).empty());
+    const std::vector<coding_agent::prompt::SystemPromptSection> changed{
+            {.name = "alpha", .text = "changed alpha"},
+    };
+    const auto changed_diff = coding_agent::prompt::diffSystemPromptSections(previous, changed);
+    REQUIRE(changed_diff.size() == 4);
+    CHECK(changed_diff[0].name == "alpha");
+    CHECK(changed_diff[0].text == "changed alpha");
+    CHECK(changed_diff[1].name == "zeta");
+    CHECK_FALSE(changed_diff[1].text.has_value());
+    CHECK(changed_diff[2].name == "remove-z");
+    CHECK_FALSE(changed_diff[2].text.has_value());
+    CHECK(changed_diff[3].name == "remove-a");
+    CHECK_FALSE(changed_diff[3].text.has_value());
+}
+
 TEST_CASE("system prompt default branch renders project context files in pi's order",
         "[coding_agent][system-prompt][context-files][issue416][spec]") {
     tests::TempWorkspace workspace;

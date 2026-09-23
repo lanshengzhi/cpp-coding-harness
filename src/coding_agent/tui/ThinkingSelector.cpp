@@ -3,30 +3,13 @@
 #include "DynamicBorder.hpp"
 #include "KeybindingHints.hpp"
 #include "Theme.hpp"
+#include "coding_agent/tui/ThinkingLevelDescription.hpp"
 
 #include <cch/tui/Text.hpp>
 
 #include <cch/support/Error.hpp>
 
-#include <string_view>
-
 namespace cch::coding_agent::tui {
-namespace {
-
-// pi `thinking-selector.ts` `LEVEL_DESCRIPTIONS`, verbatim (identical values
-// to settings-selector's `THINKING_DESCRIPTIONS`; pi keeps two tables).
-[[nodiscard]] std::string_view thinking_level_description(std::string_view level) {
-    if (level == "off") return "No reasoning";
-    if (level == "minimal") return "Very brief reasoning (~1k tokens)";
-    if (level == "low") return "Light reasoning (~2k tokens)";
-    if (level == "medium") return "Moderate reasoning (~8k tokens)";
-    if (level == "high") return "Deep reasoning (~16k tokens)";
-    if (level == "xhigh") return "Extra-high reasoning (~32k tokens)";
-    if (level == "max") return "Maximum reasoning";
-    return {};
-}
-
-} // namespace
 
 ThinkingSelectorComponent::ThinkingSelectorComponent(const LiveTheme& theme,
         std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,

@@ -245,6 +245,28 @@ std::vector<SystemPromptSection> replaySystemPromptSections(const std::vector<ai
     return replayed;
 }
 
+std::vector<ai::SystemMessageSection> diffSystemPromptSections(
+        const std::vector<SystemPromptSection>& previous, const std::vector<SystemPromptSection>& current) {
+    std::vector<ai::SystemMessageSection> diff;
+    for (const auto& section : current) {
+        const auto prior = std::find_if(previous.begin(), previous.end(), [&section](const auto& candidate) {
+            return candidate.name == section.name;
+        });
+        if (prior == previous.end() || prior->text != section.text) {
+            diff.push_back(ai::SystemMessageSection{.name = section.name, .text = section.text});
+        }
+    }
+    for (const auto& section : previous) {
+        const auto next = std::find_if(current.begin(), current.end(), [&section](const auto& candidate) {
+            return candidate.name == section.name;
+        });
+        if (next == current.end()) {
+            diff.push_back(ai::SystemMessageSection{.name = section.name, .text = std::nullopt});
+        }
+    }
+    return diff;
+}
+
 std::string renderSystemPromptSections(const std::vector<SystemPromptSection>& sections) {
     std::string rendered;
     for (const auto& section : sections) {
