@@ -3,8 +3,8 @@
   "specs": {
     "kimi-coding": {
       "path": "models/vendors/kimi-coding.json",
-      "sha256": "e4f79e0957788410af95ff0490b248af1848c8aa2584dd876218ad71a432856d",
-      "bytes": 2683,
+      "sha256": "d4c8d357d97309205edb3cd64569208be7e67018cf908807adfc726f54576f7f",
+      "bytes": 2947,
       "authority": {
         "documentation": "https://www.kimi.com/code/docs/",
         "decision_record": "docs/adr/0059-align-the-cch-ai-capability-subset-with-pi-ai-and-diverge-on-kimi-code.md"

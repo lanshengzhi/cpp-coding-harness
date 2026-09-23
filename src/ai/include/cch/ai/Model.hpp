@@ -79,13 +79,6 @@ struct AnthropicMessagesCompat {
 
 using ModelCompatVariant = std::variant<AnthropicMessagesCompat, OpenAICompletionsCompat, OpenAIResponsesCompat>;
 
-/// A missing thinking format means the ordinary OpenAI format, matching
-/// pi's scoped upstream resolution rather than inventing a provider default.
-[[nodiscard]] inline OpenAICompletionsThinkingFormat resolve_openai_completions_thinking_format(
-        const OpenAICompletionsCompat& compat) noexcept {
-    return compat.thinking_format.value_or(OpenAICompletionsThinkingFormat::OpenAI);
-}
-
 /// Complete passive, credential-free identity and capability value for one
 /// model (ADR 0019). Provider and API identities are independent: provider
 /// selects runtime/auth ownership while API selects protocol execution.

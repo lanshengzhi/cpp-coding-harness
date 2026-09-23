@@ -81,8 +81,12 @@ namespace cch::ai::api {
         set_header(headers, "Authorization", "Bearer " + *options.auth.api_key);
     }
     set_header(headers, "chatgpt-account-id", std::string{account_id});
-    set_header(headers, "originator", "pi");
-    set_header(headers, "User-Agent", "pi (cpp-harness)");
+    // Client identity is single-sourced (issue #757): no request names another
+    // tool. pi sets these to its own identity (`originator: pi`,
+    // `User-Agent: getPiUserAgent()`); this harness sends its own name instead.
+    // Reversible per header with one line if the ChatGPT backend rejects it.
+    set_header(headers, "originator", "pike");
+    set_header(headers, "User-Agent", "pike");
     if (websocket) {
         erase_header(headers, "accept");
         erase_header(headers, "content-type");

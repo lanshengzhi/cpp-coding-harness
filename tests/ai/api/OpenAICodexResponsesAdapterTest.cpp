@@ -287,7 +287,8 @@ TEST_CASE("Codex streams the frozen WS request and event sequence through Models
     CHECK(connect.idle_timeout == std::chrono::milliseconds{4321});
     CHECK(connect.headers.at("Authorization") == "Bearer " + std::string{kCodexToken});
     CHECK(connect.headers.at("chatgpt-account-id") == kCodexAccountId);
-    CHECK(connect.headers.at("originator") == "pi");
+    CHECK(connect.headers.at("originator") == "pike");
+    CHECK(connect.headers.at("User-Agent") == "pike");
     CHECK(connect.headers.at("session-id") == "session-1");
     CHECK(connect.headers.at("x-client-request-id") == "session-1");
     // pi's connectWebSocket strips the OpenAI-Beta header before the handshake.
@@ -471,7 +472,8 @@ TEST_CASE("Codex falls back to SSE with a diagnostic when WebSocket connect fail
     CHECK(request.timeout == std::chrono::milliseconds{4321});
     CHECK(request.headers.at("Authorization") == "Bearer " + std::string{kCodexToken});
     CHECK(request.headers.at("chatgpt-account-id") == kCodexAccountId);
-    CHECK(request.headers.at("originator") == "pi");
+    CHECK(request.headers.at("originator") == "pike");
+    CHECK(request.headers.at("User-Agent") == "pike");
     CHECK(request.headers.at("OpenAI-Beta") == "responses=experimental");
     CHECK(request.headers.at("accept") == "text/event-stream");
     CHECK(request.headers.at("content-type") == "application/json");

@@ -76,6 +76,22 @@ The vendor oracle is bound separately by
 `e4f79e0957788410af95ff0490b248af1848c8aa2584dd876218ad71a432856d`) and its authority is the
 [Kimi Code documentation](https://www.kimi.com/code/docs/), not the upstream Kimi artifact.
 
+The vendor oracle's `thinkingLevelMap` values are deliberate, not stale: the three effort-capable
+models map only the vendor's three real effort levels (`low`, `high`, `max`) and set every other
+key to `null` (explicitly unsupported). The vendor additionally accepts and normalizes the
+documented aliases (`ultra`/`max`/`xhigh` → `max`, `high`/`medium` → `high`,
+`low`/`minimum`/`light` → `low`), so aliases are not rejection cases — but the fixture maps each
+level to its canonical documented value rather than an alias spelling, and marks alias-only
+levels (`xhigh`, `medium`, `minimal`) unsupported so they are never sent as raw effort values.
+Because reasoning-effort resolution (`mapped_effort` in `src/ai/api/CompletionsPayload.cpp`)
+consults the map only when the requested level's key is present — a missing key falls through to
+the level's own name, which the service would only alias-normalize — every one of the seven keys
+must be pinned explicitly. Clamping (`clamp_thinking_level` in `src/ai/SimpleOptions.cpp`)
+resolves the unsupported alias levels to the nearest supported real level, so a Medium request
+yields `high` and an XHigh request yields `max`, reproducing the vendor's alias table while the
+wire carries only documented values (`OpenAICompletionsAdapterTest` `"Kimi Coding maps every
+vendor thinking level without undocumented effort values"` pins this).
+
 ## Historical pinned baseline and shard artifact (not the current acceptance target)
 
 - **Historical pi commit:** `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (the parity map [#2]
@@ -179,8 +195,9 @@ shared by the scoped adapters:
   `-ws-ts-events.json` (#342): the frozen Codex `openai-codex-responses` request body (sorted-key
   canonicalized), SSE sequence, TS event snapshots, and the WebSocket frame sequence
   (`response.create` + server events). Documented divergences from the frozen TS bytes: the C++
-  adapter omits zstd SSE compression (pi's plain-JSON branch) and sends its own
-  `User-Agent: pi (cpp-harness)`.
+  adapter omits zstd SSE compression (pi's plain-JSON branch) and single-sources its own client
+  identity, sending `originator: pike` and `User-Agent: pike` where the frozen TS bytes carry
+  pi's `originator: pi` and `getPiUserAgent()` value (see Residual notes 6).
 - `wire/openai-responses-deepseek-no-terminal.sse` + `-ts-events.json` (#375): a terminal-outcome
   snapshot for a Responses stream ending without a terminal response event.
 - `wire/openai-responses-deepseek-string-content-ts-request.json` +
@@ -448,6 +465,30 @@ records `cacheWrite1h` on every `message_start`, defaulting to 0 when the provid
    this gate: the session-dir env var is now pi's `PI_CODING_AGENT_SESSION_DIR`
    (`CCH_CODING_AGENT_SESSION_DIR` removed, matching ADR 0031), and the README no longer lists OAuth
    as deferred nor pins the parity baseline at the pre-advance `864b35c`.
+6. **Codex client-identity acceptance is partly verified live (2026-09-23).** The Codex path
+   completed end-to-end with this harness's own request headers (`originator: pike`,
+   `User-Agent: pike` instead of pi's `originator: pi` and `getPiUserAgent()` value). The
+   authorize URL's `originator=pike` (browser login entry) was added afterwards and remains
+   unexercised live. If either regresses with live credentials, each header reverts to the old
+   value with one line in `src/ai/api/CodexShared.cpp` (`codex_headers`), and the authorize URL
+   originator reverts with one line in `src/ai/auth/OpenAICodexOAuthWire.cpp`
+   (`build_authorize_url`).
+7. **Kimi completions parity was live-verified on 2026-09-23 (single-turn, non-streaming,
+   `kimi-for-coding` at `api.kimi.com/coding/v1`).** The endpoint rejects the OpenAI `developer`
+   instruction role (HTTP 400 "role 'developer' is not allowed"), so every Kimi catalog entry
+   pins `compat.supportsDeveloperRole: false` in the hand-authored vendor oracle; the completions
+   payload resolves to the `system` instruction role (regression case in
+   `OpenAICompletionsAdapterTest`). Accepted live: `system` role, `reasoning_effort: "high"`,
+   `max_completion_tokens`, `store: false`. Still verified only by scripted-transport tests:
+   multi-turn assistant replay (reasoning-content replay semantics), streaming shape, and any
+   vendor behavior that changes after this date.
+8. **The login prompt rejects empty submissions (deliberate divergence from pi).** A blank or
+   whitespace-only `Enter` never resolves a login prompt (API key or authorization code), so an
+   empty credential can never be "Saved"; pi's `login-dialog.ts` resolves the input value
+   unconditionally, including `""`. The guard lives in `src/coding_agent/tui/LoginDialog.cpp`
+   (`handle_input`). Paste forwarding itself stays parity-correct: `PasteEvent` now reaches the
+   prompt input, the session-selector rename input, and the tree-selector search query, matching
+   pi's `Input` bracketed-paste insertion.
 
 ### Handoff surface to pi-agent-core (#330 decision 4, #331 scope unchanged)
 
