@@ -304,6 +304,41 @@ TEST_CASE("Kimi Coding uses the vendor Completions catalog and omits effort for 
     CHECK_FALSE(body->at("tools").get_array().front().at("function").get_object().contains("strict"));
 }
 
+TEST_CASE(
+        "Kimi completions sends the system instruction role, not developer", "[ai][api][completions][kimi][issue757]") {
+    // Live-verified Kimi vendor rule (2026-09-23, HTTP 400 "role 'developer' is
+    // not allowed"): the completions endpoint only accepts system/user/assistant.
+    const auto model = kimi_model("kimi-for-coding");
+    REQUIRE_FALSE(model.id.empty());
+    REQUIRE(model.reasoning);
+
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks =
+                    {
+                            "data: {\"id\":\"kimi-2\",\"model\":\"kimi-for-coding\","
+                            "\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},"
+                            "\"finish_reason\":\"stop\"}]}\n\n"
+                            "data: [DONE]\n\n",
+                    },
+    });
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy-kimi-key";
+    options.max_tokens = 512;
+    const auto run = tests::run_models(*models, model, request_context(), std::move(options));
+
+    REQUIRE(run.result);
+    REQUIRE(transport->requests.size() == 1);
+    const auto body = support::read_json(transport->requests.front().body);
+    REQUIRE(body);
+    const auto& messages = body->at("messages").get_array();
+    REQUIRE(messages.size() >= 2);
+    CHECK(messages.front().at("role").get_string() == "system");
+}
+
 TEST_CASE("Kimi Coding maps every vendor thinking level without undocumented effort values",
         "[ai][api][completions][kimi][issue763][spec]") {
     constexpr std::array model_ids{

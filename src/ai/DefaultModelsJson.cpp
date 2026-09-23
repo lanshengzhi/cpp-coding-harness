@@ -99,6 +99,9 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
         {
           "api": "openai-completions",
           "baseUrl": "https://api.kimi.com/coding/v1",
+          "compat": {
+            "supportsDeveloperRole": false
+          },
           "contextWindow": 1048576,
           "cost": {
             "cacheRead": 0.3,
@@ -128,6 +131,9 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
         {
           "api": "openai-completions",
           "baseUrl": "https://api.kimi.com/coding/v1",
+          "compat": {
+            "supportsDeveloperRole": false
+          },
           "contextWindow": 262144,
           "cost": {
             "cacheRead": 0,
@@ -157,6 +163,9 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
         {
           "api": "openai-completions",
           "baseUrl": "https://api.kimi.com/coding/v1",
+          "compat": {
+            "supportsDeveloperRole": false
+          },
           "contextWindow": 1048576,
           "cost": {
             "cacheRead": 0.19,
@@ -186,6 +195,9 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
         {
           "api": "openai-completions",
           "baseUrl": "https://api.kimi.com/coding/v1",
+          "compat": {
+            "supportsDeveloperRole": false
+          },
           "contextWindow": 262144,
           "cost": {
             "cacheRead": 0.38,
@@ -2259,7 +2271,8 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
             "thinkingFormat": "deepseek"
           },
           "contextWindow": 1000000,
-          "cost": {
+)cch_catalog";
+constexpr char kCatalogPart1[] = R"cch_catalog(          "cost": {
             "cacheRead": 0.003,
             "cacheWrite": 0,
             "input": 0.15,
@@ -2272,8 +2285,7 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
           ],
           "inputLimits": {
             "images": {
-)cch_catalog";
-constexpr char kCatalogPart1[] = R"cch_catalog(              "resize": {
+              "resize": {
                 "jpegQuality": 80,
                 "maxBytes": 4718592,
                 "maxHeight": 2000,
@@ -4470,7 +4482,8 @@ constexpr char kCatalogPart1[] = R"cch_catalog(              "resize": {
             "input": 1.5,
             "output": 7.5
           },
-          "id": "anthropic/claude-sonnet-4.6:batch",
+)cch_catalog";
+constexpr char kCatalogPart2[] = R"cch_catalog(          "id": "anthropic/claude-sonnet-4.6:batch",
           "input": [
             "text",
             "image"
@@ -4483,8 +4496,7 @@ constexpr char kCatalogPart1[] = R"cch_catalog(              "resize": {
                 "maxHeight": 2000,
                 "maxWidth": 2000
               }
-)cch_catalog";
-constexpr char kCatalogPart2[] = R"cch_catalog(            }
+            }
           },
           "maxTokens": 128000,
           "name": "Anthropic: Claude Sonnet 4.6 (batch)",
@@ -6603,7 +6615,8 @@ constexpr char kCatalogPart2[] = R"cch_catalog(            }
           "inputLimits": {
             "images": {
               "resize": {
-                "jpegQuality": 80,
+)cch_catalog";
+constexpr char kCatalogPart3[] = R"cch_catalog(                "jpegQuality": 80,
                 "maxBytes": 4718592,
                 "maxHeight": 2000,
                 "maxWidth": 2000
@@ -6615,8 +6628,7 @@ constexpr char kCatalogPart2[] = R"cch_catalog(            }
           "provider": "openrouter",
           "reasoning": true,
           "thinkingLevelMap": {
-)cch_catalog";
-constexpr char kCatalogPart3[] = R"cch_catalog(            "high": "high",
+            "high": "high",
             "low": "low",
             "max": null,
             "medium": "medium",
@@ -8735,7 +8747,8 @@ constexpr char kCatalogPart3[] = R"cch_catalog(            "high": "high",
           ],
           "maxTokens": 98304,
           "name": "MoonshotAI: Kimi K2 Thinking",
-          "provider": "openrouter",
+)cch_catalog";
+constexpr char kCatalogPart4[] = R"cch_catalog(          "provider": "openrouter",
           "reasoning": true,
           "thinkingLevelMap": {
             "off": null
@@ -8747,8 +8760,7 @@ constexpr char kCatalogPart3[] = R"cch_catalog(            "high": "high",
           "compat": {
             "sendSessionAffinityHeaders": true,
             "supportsDeveloperRole": false,
-)cch_catalog";
-constexpr char kCatalogPart4[] = R"cch_catalog(            "supportsStrictMode": true,
+            "supportsStrictMode": true,
             "thinkingFormat": "openrouter"
           },
           "contextWindow": 262144,
@@ -10931,7 +10943,8 @@ constexpr char kCatalogPart4[] = R"cch_catalog(            "supportsStrictMode":
           "compat": {
             "sendSessionAffinityHeaders": true,
             "supportsStrictMode": true,
-            "thinkingFormat": "openrouter"
+)cch_catalog";
+constexpr char kCatalogPart5[] = R"cch_catalog(            "thinkingFormat": "openrouter"
           },
           "contextWindow": 400000,
           "cost": {
@@ -10946,8 +10959,7 @@ constexpr char kCatalogPart4[] = R"cch_catalog(            "supportsStrictMode":
             "image"
           ],
           "inputLimits": {
-)cch_catalog";
-constexpr char kCatalogPart5[] = R"cch_catalog(            "images": {
+            "images": {
               "resize": {
                 "jpegQuality": 80,
                 "maxBytes": 4718592,
@@ -13120,7 +13132,8 @@ constexpr char kCatalogPart5[] = R"cch_catalog(            "images": {
         },
         {
           "api": "openai-completions",
-          "baseUrl": "https://openrouter.ai/api/v1",
+)cch_catalog";
+constexpr char kCatalogPart6[] = R"cch_catalog(          "baseUrl": "https://openrouter.ai/api/v1",
           "compat": {
             "sendSessionAffinityHeaders": true,
             "supportsDeveloperRole": false,
@@ -13131,8 +13144,7 @@ constexpr char kCatalogPart5[] = R"cch_catalog(            "images": {
           "cost": {
             "cacheRead": 0,
             "cacheWrite": 0,
-)cch_catalog";
-constexpr char kCatalogPart6[] = R"cch_catalog(            "input": 0.2,
+            "input": 0.2,
             "output": 2.4
           },
           "id": "qwen/qwen3-30b-a3b-thinking-2507",
@@ -15282,7 +15294,8 @@ constexpr char kCatalogPart6[] = R"cch_catalog(            "input": 0.2,
               }
             }
           },
-          "maxTokens": 900000,
+)cch_catalog";
+constexpr char kCatalogPart7[] = R"cch_catalog(          "maxTokens": 900000,
           "name": "SpaceXAI: Grok 4.3 (batch)",
           "provider": "openrouter",
           "reasoning": true,
@@ -15295,8 +15308,7 @@ constexpr char kCatalogPart6[] = R"cch_catalog(            "input": 0.2,
             "off": "none",
             "xhigh": null
           }
-)cch_catalog";
-constexpr char kCatalogPart7[] = R"cch_catalog(        },
+        },
         {
           "api": "openai-completions",
           "baseUrl": "https://openrouter.ai/api/v1",
@@ -17006,8 +17018,8 @@ void append_catalog_part(
     }
 }
 
-const std::array<char, 478011> kCatalogData = [] {
-    std::array<char, 478011> result{};
+const std::array<char, 478323> kCatalogData = [] {
+    std::array<char, 478323> result{};
     std::size_t offset = 0;
     append_catalog_part(result, offset, kCatalogPart0);
     append_catalog_part(result, offset, kCatalogPart1);
