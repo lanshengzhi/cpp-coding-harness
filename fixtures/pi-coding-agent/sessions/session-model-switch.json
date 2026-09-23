@@ -1,10 +1,19 @@
 {
   "meta": {
-    "baseline": "83114817c68f5413e4d7ba6d7003ddc511cd31d2",
-    "artifact": "@earendil-works/pi-coding-agent@0.83.0",
+    "baseline": "f07218c4d4bbc12bef056a7058c3dd49dfe41abe",
+    "artifact": "@earendil-works/pi-coding-agent@0.87.1",
     "family": "session-model-switch"
   },
   "messages": [
+    {
+      "role": "system",
+      "content": [
+        {
+          "type": "text",
+          "text": ""
+        }
+      ]
+    },
     {
       "role": "user",
       "content": [
@@ -51,6 +60,15 @@
     }
   ],
   "context": [
+    {
+      "role": "system",
+      "content": [
+        {
+          "type": "text",
+          "text": ""
+        }
+      ]
+    },
     {
       "role": "user",
       "content": [
@@ -112,6 +130,19 @@
       "type": "message",
       "id": "entry-2",
       "message": {
+        "role": "system",
+        "content": [
+          {
+            "type": "text",
+            "text": ""
+          }
+        ]
+      }
+    },
+    {
+      "type": "message",
+      "id": "entry-3",
+      "message": {
         "role": "user",
         "content": [
           {
@@ -123,7 +154,7 @@
     },
     {
       "type": "message",
-      "id": "entry-3",
+      "id": "entry-4",
       "message": {
         "role": "assistant",
         "content": [
@@ -140,14 +171,9 @@
     },
     {
       "type": "model_change",
-      "id": "entry-4",
+      "id": "entry-5",
       "provider": "fake",
       "modelId": "faux-2"
-    },
-    {
-      "type": "thinking_level_change",
-      "id": "entry-5",
-      "thinkingLevel": "medium"
     },
     {
       "type": "message",
@@ -183,6 +209,6 @@
   "values": {
     "model": "faux-2",
     "provider": "fake",
-    "thinkingLevel": "medium"
+    "thinkingLevel": "off"
   }
 }

@@ -86,7 +86,9 @@ struct SkillInvocation {
 
 } // namespace
 
-std::string formatSkillsForPrompt(const std::vector<Skill>& skills) {
+std::string formatSkillsForPrompt(
+    const std::vector<Skill>& skills,
+    std::string_view file_read_tool) {
     // Filter out disabled skills
     std::vector<const Skill*> visible;
     for (const auto& s : skills) {
@@ -104,7 +106,9 @@ std::string formatSkillsForPrompt(const std::vector<Skill>& skills) {
 
     // Prose intro — matches pi's formatSkillsForPrompt exactly
     result += "\n\nThe following skills provide specialized instructions for specific tasks.\n";
-    result += "Use the read tool to load a skill's file when the task matches its description.\n";
+    result += file_read_tool == "read"
+        ? "Use the read tool to load a skill's file when the task matches its description.\n"
+        : "Use bash to load a skill's file when the task matches its description.\n";
     result += "When a skill file references a relative path, resolve it against the skill";
     result += " directory (parent of SKILL.md / dirname of the path) and use that absolute";
     result += " path in tool commands.\n";

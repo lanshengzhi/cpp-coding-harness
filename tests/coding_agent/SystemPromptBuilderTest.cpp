@@ -141,7 +141,7 @@ TEST_CASE(
     options.toolSnippets.clear();
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
 
-    CHECK(prompt.find("Available tools:\n(none)\n") != std::string::npos);
+    CHECK(prompt.find("<tools>\n(none)\n\nIn addition to the tools above") != std::string::npos);
     // The default tool names still apply, so the bash exploration rule holds.
     CHECK(prompt.find("- Use bash for file operations like ls, rg, find\n") != std::string::npos);
 }
@@ -152,7 +152,7 @@ TEST_CASE("system prompt renders the tools list only for tools with snippets",
     options.toolSnippets = {{"read", "Read file contents"}};
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
 
-    CHECK(prompt.find("Available tools:\n- read: Read file contents\n\n") != std::string::npos);
+    CHECK(prompt.find("<tools>\n- read: Read file contents\n\nIn addition") != std::string::npos);
     CHECK(prompt.find("- bash:") == std::string::npos);
     // bash is still selected, so the exploration rule is present.
     CHECK(prompt.find("- Use bash for file operations like ls, rg, find\n") != std::string::npos);
@@ -169,7 +169,7 @@ TEST_CASE("system prompt dedupes and trims guideline bullets", "[coding_agent][p
     };
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
 
-    const auto guidelines_at = prompt.find("Guidelines:\n");
+    const auto guidelines_at = prompt.find("<rules>\n");
     REQUIRE(guidelines_at != std::string::npos);
     const auto section = prompt.substr(guidelines_at);
     // One bullet each, deduped; the always-lines land exactly once.
@@ -200,7 +200,9 @@ TEST_CASE("system prompt appends the append section after the documentation bloc
 
     const auto docs_at = prompt.find("TUI API details)");
     REQUIRE(docs_at != std::string::npos);
-    CHECK(prompt.find("\n\nAPPENDED", docs_at) == docs_at + 16);
+    const auto docs_end = prompt.find("</docs>");
+    REQUIRE(docs_end != std::string::npos);
+    CHECK(prompt.find("<addendum>\nAPPENDED\n</addendum>") == docs_end + 9);
 }
 
 TEST_CASE(
@@ -212,12 +214,12 @@ TEST_CASE(
 
     const auto default_prompt = coding_agent::prompt::buildSystemPrompt(options);
     CHECK(default_prompt.find(
-              "<project_context>\n\n"
+              "<project_context>\n"
               "Project-specific instructions and guidelines:\n\n"
               "<project_instructions path=\"AGENTS.md\">\n"
               "Be careful.\n\nNo trailing newline\n"
-              "</project_instructions>\n\n"
-              "</project_context>\n") != std::string::npos);
+              "</project_instructions>\n"
+              "</project_context>") != std::string::npos);
 
     options.customPrompt = "custom";
     const auto custom_prompt = coding_agent::prompt::buildSystemPrompt(options);
@@ -228,33 +230,42 @@ TEST_CASE(
     CHECK(custom_prompt.find("custom\n\n<project_context>") != std::string::npos);
 }
 
-TEST_CASE("system prompt gates the skills section on the read tool", "[coding_agent][prompt][system-prompt][spec]") {
+TEST_CASE("system prompt gates the skills section on a read-capable tool", "[coding_agent][prompt][system-prompt][spec]") {
     const auto skill = dummy_skill();
 
-    // Default branch: skills render only when read is selected.
+    // Default branch: skills render when read is selected.
     auto default_with_read = session_shape_options();
     default_with_read.skills = {skill};
     CHECK(coding_agent::prompt::buildSystemPrompt(default_with_read)
               .find("<available_skills>") != std::string::npos);
 
+    // pi v0.87.1: bash is the fallback read-capable tool, with its own wording.
+    auto default_with_bash_only = session_shape_options();
+    default_with_bash_only.selectedTools = std::vector<std::string>{"bash"};
+    default_with_bash_only.toolSnippets = {{"bash", "Execute bash commands"}};
+    default_with_bash_only.skills = {skill};
+    const auto bash_prompt = coding_agent::prompt::buildSystemPrompt(default_with_bash_only);
+    CHECK(bash_prompt.find("<available_skills>") != std::string::npos);
+    CHECK(bash_prompt.find("Use bash to load a skill's file") != std::string::npos);
+
+    // No read-capable tool: the skills section is omitted.
     auto default_without_read = session_shape_options();
-    default_without_read.selectedTools = std::vector<std::string>{"bash"};
-    default_without_read.toolSnippets = {{"bash", "Execute bash commands"}};
+    default_without_read.selectedTools = std::vector<std::string>{"edit"};
+    default_without_read.toolSnippets = {{"edit", "Make precise file edits"}};
     default_without_read.skills = {skill};
     CHECK(coding_agent::prompt::buildSystemPrompt(default_without_read)
               .find("<available_skills>") == std::string::npos);
 
-    // Custom branch: pi `!selectedTools || selectedTools.includes("read")`.
     auto custom_without_read = session_shape_options();
-    custom_without_read.selectedTools = std::vector<std::string>{"bash"};
-    custom_without_read.toolSnippets = {{"bash", "Execute bash commands"}};
+    custom_without_read.selectedTools = std::vector<std::string>{"edit"};
+    custom_without_read.toolSnippets = {{"edit", "Make precise file edits"}};
     custom_without_read.customPrompt = "custom";
     custom_without_read.skills = {skill};
     CHECK(coding_agent::prompt::buildSystemPrompt(custom_without_read)
               .find("<available_skills>") == std::string::npos);
 
     auto custom_no_tools = session_shape_options();
-    // pi `!selectedTools`: absent means read is assumed available.
+    // pi `selectedTools ?? defaults`: absent means read is assumed available.
     custom_no_tools.selectedTools = std::nullopt;
     custom_no_tools.customPrompt = "custom";
     custom_no_tools.skills = {skill};
@@ -273,7 +284,7 @@ TEST_CASE("system prompt distinguishes absent from explicitly empty tool selecti
     empty_selection.selectedTools = std::vector<std::string>{};
     empty_selection.skills = {skill};
     const auto empty_prompt = coding_agent::prompt::buildSystemPrompt(empty_selection);
-    CHECK(empty_prompt.find("Available tools:\n(none)\n") != std::string::npos);
+    CHECK(empty_prompt.find("<tools>\n(none)\n") != std::string::npos);
     CHECK(empty_prompt.find("Use bash for file operations like ls, rg, find") == std::string::npos);
     CHECK(empty_prompt.find("<available_skills>") == std::string::npos);
 
@@ -294,7 +305,7 @@ TEST_CASE("system prompt treats an empty custom prompt as absent like pi's truth
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
 
     // pi `if (customPrompt)`: the empty string is falsy → default branch.
-    CHECK(prompt.find("Available tools:") != std::string::npos);
+    CHECK(prompt.find("<tools>") != std::string::npos);
     CHECK(prompt.find("pike documentation") != std::string::npos);
 }
 
@@ -304,7 +315,7 @@ TEST_CASE("system prompt renders the skills section in pi's shape", "[coding_age
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
 
     CHECK(prompt.find(
-              "\n\nThe following skills provide specialized instructions for "
+              "<skills>\nThe following skills provide specialized instructions for "
               "specific tasks.\n"
               "Use the read tool to load a skill's file when the task matches "
               "its description.\n") != std::string::npos);
@@ -323,7 +334,7 @@ TEST_CASE("system prompt posix-normalizes the cwd and keeps the trailing line",
     auto options = session_shape_options("C:\\workspace\\path");
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
 
-    CHECK(prompt.find("\nCurrent working directory: C:/workspace/path") != std::string::npos);
+    CHECK(prompt.find("<cwd>\nC:/workspace/path\n</cwd>") != std::string::npos);
     CHECK(prompt.find("C:\\workspace") == std::string::npos);
 }
 
@@ -332,8 +343,8 @@ TEST_CASE("system prompt custom branch omits the default sections", "[coding_age
     options.customPrompt = "Only this.";
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
 
-    CHECK(prompt == "Only this.\nCurrent working directory: /tmp/workspace");
-    CHECK(prompt.find("Available tools:") == std::string::npos);
-    CHECK(prompt.find("Guidelines:") == std::string::npos);
+    CHECK(prompt == "Only this.\n\n<cwd>\n/tmp/workspace\n</cwd>");
+    CHECK(prompt.find("<tools>") == std::string::npos);
+    CHECK(prompt.find("<rules>") == std::string::npos);
     CHECK(prompt.find("pike documentation") == std::string::npos);
 }

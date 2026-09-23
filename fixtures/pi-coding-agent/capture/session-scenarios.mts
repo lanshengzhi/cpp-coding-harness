@@ -33,8 +33,8 @@ import { registerFauxProvider, fauxAssistantMessage } from "@earendil-works/pi-a
 
 const fixtureDir = process.env.CCH_SESSION_FIXTURE_DIR!;
 const piCheckout = process.env.PI_CHECKOUT!;
-const BASELINE = "83114817c68f5413e4d7ba6d7003ddc511cd31d2";
-const ARTIFACT = "@earendil-works/pi-coding-agent@0.83.0";
+const BASELINE = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe";
+const ARTIFACT = "@earendil-works/pi-coding-agent@0.87.1";
 
 const codingAgentSrc = (rel: string) =>
 	pathToFileURL(join(piCheckout, "packages/coding-agent/src", rel)).href;

@@ -4,7 +4,7 @@
  * the System Prompt golden of the pi-coding-agent gate, ADR 0036).
  *
  * The committed snapshots under `fixtures/pi-coding-agent/prompts/` pin the
- * FROZEN pi `buildSystemPrompt` output (baseline 83114817) at MESSAGE level —
+ * FROZEN pi `buildSystemPrompt` output (baseline f07218c4, tag `v0.87.1`) at MESSAGE level —
  * a `system` message with one text content block, the same message/content-
  * block projection the session/value suites use — for the three scripted
  * scenarios the C++ `SystemPromptBuilderTest` already pins as raw text
@@ -65,9 +65,9 @@ const fixtureDir = path.resolve(scriptDir, "..");
 const promptsDir = path.join(fixtureDir, "prompts");
 const repoRoot = path.resolve(fixtureDir, "../..");
 const piCheckout = process.env.PI_CHECKOUT ?? path.resolve(repoRoot, "../pi");
-const FROZEN_COMMIT = "83114817c68f5413e4d7ba6d7003ddc511cd31d2";
+const FROZEN_COMMIT = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe";
 const PINNED_PACKAGE = "@earendil-works/pi-coding-agent";
-const PINNED_VERSION = "0.83.0";
+const PINNED_VERSION = "0.87.1";
 
 // ── Frozen-checkout guard (same as the parent/session sidecars) ─────────────
 
@@ -108,6 +108,57 @@ if (!existsSync(frozenNodeModules)) {
 	}
 	linkSync(siblingNodeModules, frozenNodeModules, "dir");
 	console.log(`linked ${frozenNodeModules} -> ${siblingNodeModules}`);
+}
+
+// ── Capture tsconfig and self re-exec ───────────────────────────────────────
+// `system-prompt.ts` imports `@earendil-works/pi-ai` at runtime; resolving it
+// through a linked `node_modules` would reach the sibling checkout's built
+// packages instead of the frozen sources. Run the capture under a generated
+// tsconfig that maps every workspace package to this checkout (the same trick
+// `session-snapshots.mts` uses), re-executing this script under it once.
+const frozenTsconfigPath = path.join(piCheckout, "tsconfig.json");
+if (!existsSync(frozenTsconfigPath)) {
+	throw new Error(`frozen checkout has no tsconfig.json (${frozenTsconfigPath})`);
+}
+const frozenPaths = (
+	JSON.parse(readFileSync(frozenTsconfigPath, "utf8")) as {
+		compilerOptions?: { paths?: Record<string, string[]> };
+	}
+).compilerOptions?.paths;
+if (!frozenPaths || Object.keys(frozenPaths).length === 0) {
+	throw new Error(
+		`frozen checkout tsconfig.json declares no compilerOptions.paths (${frozenTsconfigPath})`,
+	);
+}
+const captureTsconfigPath = path.join(piCheckout, "tsconfig.capture.json");
+writeFileSync(
+	captureTsconfigPath,
+	JSON.stringify(
+		{
+			compilerOptions: {
+				target: "ES2022",
+				module: "NodeNext",
+				moduleResolution: "NodeNext",
+				allowImportingTsExtensions: true,
+				rewriteRelativeImportExtensions: true,
+				esModuleInterop: true,
+				skipLibCheck: true,
+				types: ["node"],
+				baseUrl: ".",
+				paths: frozenPaths,
+			},
+		},
+		null,
+		2,
+	) + "\n",
+);
+if (process.env.CCH_CAPTURE_TSX !== "1") {
+	execFileSync(
+		path.join(piCheckout, "node_modules/.bin/tsx"),
+		["--tsconfig", captureTsconfigPath, fileURLToPath(import.meta.url)],
+		{ stdio: "inherit", env: { ...process.env, CCH_CAPTURE_TSX: "1" } },
+	);
+	process.exit(0);
 }
 
 // ── Pinned scenario inputs (must match the C++ SystemPromptBuilderTest / ────
