@@ -1,6 +1,7 @@
 #include "InitialPrompt.hpp"
 
 #include "coding_agent/ImageInput.hpp"
+#include "coding_agent/TextBom.hpp"
 
 #include <cstdlib>
 #include <fstream>
@@ -60,8 +61,11 @@ namespace {
 [[nodiscard]] std::string text_file_reference(
     const std::filesystem::path& path,
     std::span<const std::uint8_t> bytes) {
+    // pi `file-processor.ts`: the text file content strips a leading UTF-8
+    // BOM (`utils/text.ts` `stripBom`) before it becomes the reference body.
+    const std::string_view content{reinterpret_cast<const char*>(bytes.data()), bytes.size()};
     std::string reference = "<file name=\"" + path.string() + "\">\n";
-    reference.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    reference.append(coding_agent::strip_bom(content));
     reference += "\n</file>\n";
     return reference;
 }

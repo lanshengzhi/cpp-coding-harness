@@ -202,7 +202,27 @@ TEST_CASE("loadSkillFromFile warns on leading hyphen in name", "[coding_agent][s
     REQUIRE(result.diagnostics.size() >= 1);
     bool hasDiag = false;
     for (const auto& d : result.diagnostics) {
-        if (d.message.find("must not start with a hyphen") != std::string::npos) hasDiag = true;
+        if (d.message.find("must not start or end with a hyphen") != std::string::npos) hasDiag = true;
+    }
+    CHECK(hasDiag);
+}
+
+TEST_CASE("loadSkillFromFile warns on trailing hyphen in name", "[coding_agent][skill][u3][spec]") {
+    SkillTestFixture fix;
+    fix.writeSkill("bad-name-/SKILL.md",
+            "---\n"
+            "name: bad-name-\n"
+            "description: Trailing hyphen.\n"
+            "---\n"
+            "Body.\n");
+
+    auto result = fix.load("bad-name-/SKILL.md");
+
+    // pi `validateName` emits one shared message for either end.
+    REQUIRE(result.skills.size() == 1);
+    bool hasDiag = false;
+    for (const auto& d : result.diagnostics) {
+        if (d.message.find("must not start or end with a hyphen") != std::string::npos) hasDiag = true;
     }
     CHECK(hasDiag);
 }
@@ -979,4 +999,156 @@ TEST_CASE("loadSkills diagnoses a spec-level symlink the capability cannot resol
     REQUIRE(result.diagnostics.size() == 1);
     CHECK(result.diagnostics[0].code == coding_agent::SkillDiagnosticCode::file_info_failed);
     CHECK(result.diagnostics[0].path == "dangling");
+}
+
+// ── pi v0.87.1: declared vs non-declared skill files ─────────────────────
+
+TEST_CASE("loadSkillFromFile silently skips a non-declared skill file without a description",
+        "[coding_agent][skill][spec]") {
+    SkillTestFixture fix;
+    fix.writeSkill("notes.md",
+            "---\n"
+            "name: notes\n"
+            "---\n"
+            "Body without a description.\n");
+
+    auto result = fix.load("notes.md");
+
+    // pi: a non-declared skill file requires a description; without one it
+    // is skipped silently — no "description is required" diagnostic.
+    CHECK(result.skills.empty());
+    CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("loadSkillFromFile loads a non-declared skill file that has a description", "[coding_agent][skill][spec]") {
+    SkillTestFixture fix;
+    fix.writeSkill("skills-root/notes.md",
+            "---\n"
+            "description: A root .md skill file.\n"
+            "---\n"
+            "Body.\n");
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {{.path = fix.skillPath("skills-root"), .include_root_files = true}};
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    REQUIRE(result.skills.size() == 1);
+    // Name falls back to the parent directory name (pi `parentDirName`).
+    CHECK(result.skills[0].name == "skills-root");
+    CHECK(result.skills[0].description == "A root .md skill file.");
+    CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("loadSkills silently skips root .md files without a description in root-file discovery",
+        "[coding_agent][skill][spec]") {
+    SkillTestFixture fix;
+    fix.writeSkill("no-description.md",
+            "---\n"
+            "name: no-description\n"
+            "---\n"
+            "Body.\n");
+    fix.writeSkill("with-description.md",
+            "---\n"
+            "name: with-description\n"
+            "description: A root .md skill file.\n"
+            "---\n"
+            "Body.\n");
+
+    std::vector<coding_agent::SkillDirSpec> dirs = {{.path = ".", .include_root_files = true}};
+    auto result = coding_agent::loadSkills(fix.fs, dirs);
+
+    // The declared-style "description is required" diagnostic is not emitted
+    // for non-declared root files; only the described file loads.
+    REQUIRE(result.skills.size() == 1);
+    CHECK(result.skills[0].name == "with-description");
+    CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("loadSkillFromFile skips a non-declared skill file whose frontmatter fails to parse silently",
+        "[coding_agent][skill][spec]") {
+    SkillTestFixture fix;
+    fix.writeSkill("broken.md",
+            "---\n"
+            "this line has no colon\n"
+            "---\n"
+            "Body.\n");
+
+    auto result = fix.load("broken.md");
+
+    // pi surfaces the parse diagnostic only for a declared SKILL.md.
+    CHECK(result.skills.empty());
+    CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("loadSkillFromFile still diagnoses a declared SKILL.md whose frontmatter fails to parse",
+        "[coding_agent][skill][spec]") {
+    SkillTestFixture fix;
+    fix.writeSkill("broken/SKILL.md",
+            "---\n"
+            "this line has no colon\n"
+            "---\n"
+            "Body.\n");
+
+    auto result = fix.load("broken/SKILL.md");
+
+    CHECK(result.skills.empty());
+    REQUIRE(result.diagnostics.size() == 1);
+    CHECK(result.diagnostics[0].type == "warning");
+    CHECK(result.diagnostics[0].code == coding_agent::SkillDiagnosticCode::parse_failed);
+    CHECK_FALSE(result.diagnostics[0].message.empty());
+    CHECK(result.diagnostics[0].path.find("broken/SKILL.md") != std::string::npos);
+}
+
+TEST_CASE("loadSkillFromFile treats a non-string description as missing", "[coding_agent][skill][spec]") {
+    SkillTestFixture fix;
+    fix.writeSkill("numeric-desc/SKILL.md",
+            "---\n"
+            "name: numeric-desc\n"
+            "description: 42\n"
+            "---\n"
+            "Body.\n");
+
+    auto result = fix.load("numeric-desc/SKILL.md");
+
+    // pi `typeof description === "string"`: a number is not a description.
+    CHECK(result.skills.empty());
+    REQUIRE(result.diagnostics.size() == 1);
+    CHECK(result.diagnostics[0].message == "description is required");
+}
+
+TEST_CASE("loadSkillFromFile falls back to the parent dir name for a non-string frontmatter name",
+        "[coding_agent][skill][spec]") {
+    SkillTestFixture fix;
+    fix.writeSkill("fallback-name/SKILL.md",
+            "---\n"
+            "name: 42\n"
+            "description: Numeric name value.\n"
+            "---\n"
+            "Body.\n");
+
+    auto result = fix.load("fallback-name/SKILL.md");
+
+    // pi `typeof frontmatter.name === "string"`: a number falls back.
+    REQUIRE(result.skills.size() == 1);
+    CHECK(result.skills[0].name == "fallback-name");
+    CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("loadSkillFromFile strips a UTF-8 BOM from a skill file", "[coding_agent][skill][spec]") {
+    SkillTestFixture fix;
+    fix.writeSkill("bom-skill/SKILL.md",
+            "\xEF\xBB\xBF"
+            "---\n"
+            "name: bom-skill\n"
+            "description: BOM-prefixed skill.\n"
+            "---\n"
+            "Body after BOM.\n");
+
+    auto result = fix.load("bom-skill/SKILL.md");
+
+    // Without the strip the BOM bytes would defeat the `---` prefix and the
+    // skill would be rejected as description-less.
+    REQUIRE(result.skills.size() == 1);
+    CHECK(result.skills[0].name == "bom-skill");
+    CHECK(result.skills[0].description == "BOM-prefixed skill.");
+    CHECK(result.diagnostics.empty());
 }

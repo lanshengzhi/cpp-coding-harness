@@ -1467,3 +1467,95 @@ TEST_CASE("project resource loader no SYSTEM.md or APPEND_SYSTEM.md loads nothin
     CHECK(result.resources.append_system_prompt_sources.empty());
     CHECK(result.diagnostics.empty());
 }
+
+// ── pi v0.87.1: UTF-8 BOM stripping on resource reads ────────────────────────
+
+TEST_CASE("project resource loader strips a UTF-8 BOM from a --system-prompt file",
+        "[coding_agent][project-resource-loader][spec]") {
+    LoaderFixture fix;
+    fix.write("prompt/system.md",
+            "\xEF\xBB\xBF"
+            "Custom prompt after BOM.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.system_prompt = "prompt/system.md";
+
+    auto result = fix.load(std::move(request));
+
+    // pi `resolvePromptInput` strips the BOM from the file content; without
+    // the strip the prompt text would start with the BOM bytes.
+    REQUIRE(result.resources.system_prompt.has_value());
+    CHECK(*result.resources.system_prompt == "Custom prompt after BOM.\n");
+    CHECK(result.resources.system_prompt_source.has_value());
+}
+
+TEST_CASE("project resource loader strips a UTF-8 BOM from an --append-system-prompt file",
+        "[coding_agent][project-resource-loader][spec]") {
+    LoaderFixture fix;
+    fix.write("prompt/append.md",
+            "\xEF\xBB\xBF"
+            "Append prompt after BOM.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.append_system_prompt = {"prompt/append.md"};
+
+    auto result = fix.load(std::move(request));
+
+    REQUIRE(result.resources.append_system_prompt.size() == 1);
+    CHECK(result.resources.append_system_prompt[0] == "Append prompt after BOM.\n");
+}
+
+TEST_CASE("project resource loader strips a UTF-8 BOM from project context files",
+        "[coding_agent][project-resource-loader][spec]") {
+    LoaderFixture fix;
+    fix.write("AGENTS.md",
+            "\xEF\xBB\xBF"
+            "workspace instructions after BOM\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Never;
+
+    auto result = fix.load(std::move(request));
+
+    // pi `loadContextFileFromDir` strips the BOM from the content.
+    REQUIRE(result.resources.agents_files.size() == 1);
+    CHECK(result.resources.agents_files[0].path == (fix.workspace.path() / "AGENTS.md").string());
+    CHECK(result.resources.agents_files[0].content == "workspace instructions after BOM\n");
+}
+
+TEST_CASE("project resource loader strips a UTF-8 BOM from discovered theme documents",
+        "[coding_agent][project-resource-loader][theme][spec]") {
+    LoaderFixture fix;
+    fix.write(".pi/themes/project.json", "\xEF\xBB\xBF" + valid_theme_json());
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+
+    auto result = fix.load(std::move(request));
+
+    // pi `theme.ts` `parseThemeJsonContent` parses `stripBom(content)`; the
+    // loader carries the document, so the BOM is gone at the read.
+    REQUIRE(result.resources.themes.size() == 1);
+    CHECK(result.resources.themes[0].json == valid_theme_json());
+    CHECK(result.diagnostics.empty());
+}
+
+TEST_CASE("project resource loader silently skips project root .md skills without a description",
+        "[coding_agent][project-resource-loader][spec]") {
+    LoaderFixture fix;
+    fix.write(".pi/skills/no-description.md",
+            "---\n"
+            "name: no-description\n"
+            "---\n"
+            "Body.\n");
+
+    coding_agent::ProjectResourceLoadingRequest request;
+    request.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+
+    auto result = fix.load(std::move(request));
+
+    // pi v0.87.1: a non-declared skill file requires a description; the
+    // declared-style "description is required" diagnostic is not emitted.
+    CHECK(result.resources.skills.empty());
+    CHECK(result.skill_diagnostics.empty());
+}

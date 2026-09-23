@@ -3,6 +3,7 @@
 #include <cch/support/Error.hpp>
 
 #include <map>
+#include <set>
 #include <string>
 #include <string_view>
 
@@ -14,6 +15,11 @@ struct SkillFrontmatter {
     /// Values are stored as strings; boolean fields ("true"/"false") are
     /// left as strings for the caller to interpret.
     std::map<std::string, std::string> fields;
+    /// Keys whose YAML value is not a string scalar (pi
+    /// `typeof frontmatter[key] === "string"`): null/empty values, booleans,
+    /// numbers, and flow/block collections. Quoted values are always
+    /// strings.
+    std::set<std::string> non_string_fields;
     /// Body content after the closing --- delimiter, with leading/trailing
     /// whitespace trimmed.
     std::string body;
