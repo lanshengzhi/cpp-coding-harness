@@ -34,6 +34,14 @@ struct EditorCursor {
 using EditorChangeSink = std::move_only_function<support::ExpectedVoid(std::string)>;
 using EditorSubmitSink = std::move_only_function<support::ExpectedVoid(std::string)>;
 
+/// App-layer top border replacement (pi `CustomEditor.renderTopBorder`, the
+/// embedWorkingStatus seam): invoked with the render width and the hidden
+/// scroll line count whenever the editor renders a top border. A string
+/// result replaces the default top border line verbatim (already styled);
+/// nullopt keeps the default pi border (rule or scroll indicator).
+using EditorTopBorderSink =
+    std::move_only_function<support::Expected<std::optional<std::string>>(std::size_t, std::size_t)>;
+
 /// Notification that the editor's presentation changed asynchronously (an
 /// autocomplete result arrived). Must return promptly and must not re-enter
 /// the editor; may be invoked from any thread. A reported failure is a
@@ -55,6 +63,10 @@ struct EditorOptions {
     /// is borrowed and must outlive every Editor operation.
     Terminal* terminal{nullptr};
     std::size_t dock_offset{0};
+    /// App-layer top border replacement (pi `CustomEditor.renderTopBorder`).
+    /// The stored hook is invoked synchronously during render; it must not
+    /// outlive the editor.
+    EditorTopBorderSink top_border_override{};
 };
 
 struct EditorTheme {

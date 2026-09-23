@@ -290,6 +290,20 @@ support::Expected<RenderResult> Loader::render(std::size_t width) {
     return RenderResult{.lines = {"", std::move(*bounded)}};
 }
 
+support::Expected<std::string> Loader::rendered_indicator() const {
+    auto impl = impl_;
+    std::string frame;
+    bool verbatim = false;
+    {
+        std::lock_guard lock(impl->state_mutex);
+        if (impl->error) return std::unexpected(*impl->error);
+        frame = impl->frames.empty() ? std::string{} : impl->frames[impl->current_frame % impl->frames.size()];
+        verbatim = impl->indicator_verbatim;
+    }
+    if (verbatim || frame.empty()) return frame;
+    return detail::apply_text_style(impl->spinner_style, std::move(frame), "Loader spinner");
+}
+
 void Loader::invalidate() {}
 
 } // namespace cch::tui
