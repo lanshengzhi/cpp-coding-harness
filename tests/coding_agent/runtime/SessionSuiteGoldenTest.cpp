@@ -1,6 +1,6 @@
 // P25 (#421): session- and value-suite differential goldens. The committed
 // snapshots under `fixtures/pi-coding-agent/sessions/` are captured from the
-// frozen pi baseline (`83114817`) by the capture sidecar, which drives the
+// frozen pi baseline (`f07218c4`, tag `v0.87.1`) by the capture sidecar, which drives the
 // frozen pi `AgentSession`/`SessionManager` sources through the same scripted
 // scenarios this file drives through the C++ session runtime. Both sides
 // apply the same canonical projection (message/content-block level: identity
@@ -446,8 +446,8 @@ TEST_CASE("session lifecycle golden: scripted turns persist pi-shaped messages",
     support::JsonValue::object_t golden{
             {"meta",
                     support::JsonValue{support::JsonValue::object_t{
-                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"baseline", "f07218c4d4bbc12bef056a7058c3dd49dfe41abe"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.87.1"},
                             {"family", "session-lifecycle"},
                     }}},
             {"messages", canonical_messages(messages)},
@@ -521,8 +521,8 @@ TEST_CASE("session resume golden: persisted history restores at message level",
     support::JsonValue::object_t golden{
             {"meta",
                     support::JsonValue{support::JsonValue::object_t{
-                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"baseline", "f07218c4d4bbc12bef056a7058c3dd49dfe41abe"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.87.1"},
                             {"family", "session-resume"},
                     }}},
             {"messages", canonical_messages(messages)},
@@ -590,8 +590,8 @@ TEST_CASE("session compaction golden: manual compaction pins summary and "
     support::JsonValue::object_t golden{
             {"meta",
                     support::JsonValue{support::JsonValue::object_t{
-                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"baseline", "f07218c4d4bbc12bef056a7058c3dd49dfe41abe"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.87.1"},
                             {"family", "session-compaction"},
                     }}},
             {"messages", canonical_messages(messages)},
@@ -652,8 +652,8 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
     support::JsonValue::object_t golden{
             {"meta",
                     support::JsonValue{support::JsonValue::object_t{
-                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"baseline", "f07218c4d4bbc12bef056a7058c3dd49dfe41abe"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.87.1"},
                             {"family", "session-model-switch"},
                     }}},
             {"messages", canonical_messages(messages)},
@@ -713,8 +713,8 @@ TEST_CASE("session-family golden: most-recent selection and header values",
     support::JsonValue::object_t golden{
             {"meta",
                     support::JsonValue{support::JsonValue::object_t{
-                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"baseline", "f07218c4d4bbc12bef056a7058c3dd49dfe41abe"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.87.1"},
                             {"family", "session-family"},
                     }}},
             {"mostRecent", support::JsonValue{most_recent->path.stem().string()}},
