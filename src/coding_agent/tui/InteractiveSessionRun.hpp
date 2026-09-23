@@ -111,7 +111,7 @@ public:
     void suspend_process() const;
     [[nodiscard]] AsyncSessionReplacementSink make_async_session_replacement_sink() const;
     void report_boot_diagnostics(
-        const std::vector<coding_agent::SessionDiagnostic>& diagnostics) const;
+            const std::vector<coding_agent::SessionDiagnostic>& diagnostics, bool rendered_in_tui) const;
     void report_boot_creation_failure(const support::Error& error) const;
 
     [[nodiscard]] support::Expected<TuiActionResultVariant> dispatch_action(

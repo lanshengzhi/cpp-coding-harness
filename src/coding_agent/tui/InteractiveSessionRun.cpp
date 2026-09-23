@@ -146,8 +146,8 @@ AsyncSessionReplacementSink InteractiveSessionRun::make_async_session_replacemen
 }
 
 void InteractiveSessionRun::report_boot_diagnostics(
-    const std::vector<coding_agent::SessionDiagnostic>& diagnostics) const {
-    if (!state_ || !state_->error_stream) return;
+        const std::vector<coding_agent::SessionDiagnostic>& diagnostics, bool rendered_in_tui) const {
+    if (rendered_in_tui || !state_ || !state_->error_stream) return;
     for (const auto& diag : diagnostics) {
         const char* severity = "info";
         switch (diag.severity) {
@@ -208,7 +208,7 @@ support::Expected<TuiActionResultVariant> InteractiveSessionRun::dispatch_action
                 suspend_process();
                 return TuiActionResultVariant{std::monostate{}};
             } else if constexpr (std::is_same_v<T, ReportBootDiagnosticsAction>) {
-                report_boot_diagnostics(payload.diagnostics);
+                report_boot_diagnostics(payload.diagnostics, payload.rendered_in_tui);
                 return TuiActionResultVariant{std::monostate{}};
             } else if constexpr (std::is_same_v<T, ReportBootCreationFailureAction>) {
                 report_boot_creation_failure(payload.error);
