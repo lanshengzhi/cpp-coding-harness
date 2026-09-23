@@ -25,9 +25,9 @@ TEST_CASE("Built-in provider definitions preserve the frozen catalogs and auth m
     REQUIRE(codex_it != definitions.end());
     const auto& codex = *codex_it;
     CHECK(codex.name == "OpenAI Codex");
-    REQUIRE(codex.models.size() == 6);
+    REQUIRE(codex.models.size() == 8);
     CHECK(codex.models.front().id == "gpt-5.3-codex-spark");
-    CHECK(codex.models.back().id == "gpt-6-astra");
+    CHECK(codex.models.back().id == "gpt-6-sol");
     REQUIRE(codex.auth.oauth);
     CHECK(codex.auth.oauth->name == "OpenAI (ChatGPT Plus/Pro)");
     CHECK(static_cast<bool>(codex.auth.oauth->login));
@@ -121,9 +121,9 @@ TEST_CASE("the generated catalog pins provider counts API families and limits", 
     const std::vector<PinnedProvider> pinned{
             {"deepseek", 2, {"openai-completions"}},
             {"kimi-coding", 4, {"openai-completions"}},
-            {"openai", 39, {"openai-responses"}},
-            {"openai-codex", 6, {"openai-codex-responses"}},
-            {"openrouter", 378, {"anthropic-messages", "openai-completions"}},
+            {"openai", 41, {"openai-responses"}},
+            {"openai-codex", 8, {"openai-codex-responses"}},
+            {"openrouter", 388, {"anthropic-messages", "openai-completions"}},
             {"opencode-go", 30, {"anthropic-messages", "openai-completions", "openai-responses"}},
     };
 
