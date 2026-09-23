@@ -17,25 +17,33 @@
 #include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
+#include "support/ScriptedRuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include "agent/harness/RuntimeRoot.hpp"
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
+#include <cch/ai/Content.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <cch/support/Error.hpp>
 #include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <vector>
 #include "support/AgentRootFixture.hpp"
 
@@ -209,6 +217,131 @@ void double_escape(Running& running) {
     drain_ready(running.io);
     REQUIRE(running.terminal.inject_input(""));
     drain_ready(running.io);
+}
+
+} // namespace
+
+namespace {
+
+/// The compaction summarization response (pi `summarization_response`), same
+/// shape as FooterStatusInteractiveTest's.
+[[nodiscard]] ai::AssistantMessage summarization_response() {
+    auto summary = ai::assistant_text_message("## Goal\nCompacted history summary");
+    summary.provider = "fake";
+    summary.api = "fake";
+    summary.model = "fake-model";
+    summary.timestamp =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count();
+    summary.usage = ai::Usage{};
+    summary.usage.input = 3000;
+    summary.usage.output = 100;
+    return summary;
+}
+
+/// The screen text with line breaks and padding runs collapsed to single
+/// spaces, so a wrapped chat line (the long refusal sentence) can be matched
+/// whole.
+[[nodiscard]] std::string collapse_whitespace(std::string_view text) {
+    std::string collapsed;
+    bool previous_was_whitespace = false;
+    for (const char character : text) {
+        const bool is_whitespace = std::isspace(static_cast<unsigned char>(character)) != 0;
+        if (is_whitespace) {
+            if (!previous_was_whitespace) collapsed.push_back(' ');
+        } else {
+            collapsed.push_back(character);
+        }
+        previous_was_whitespace = is_whitespace;
+    }
+    return collapsed;
+}
+
+[[nodiscard]] std::string flatten_screen(const tui::VirtualTerminal& terminal) {
+    std::string text;
+    for (const auto& line : terminal.screen()) {
+        for (const char c : line) {
+            if (c == ' ' && !text.empty() && text.back() == ' ') continue;
+            text.push_back(c);
+        }
+        text.push_back(' ');
+    }
+    return text;
+}
+
+/// A persisted session with one user/assistant pair, resumable through the
+/// interactive boot with an injected scripted runtime — the streaming /
+/// compaction counterpart of the plain Fixture above (same shape as
+/// FooterStatusInteractiveTest's ResumedSessionFixture). The tiny
+/// keepRecentTokens budget makes the small session summarizable (pi's
+/// findCutPoint keeps the recent budget), so a compaction actually runs.
+struct StreamingFixture {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    tests::EnvVarGuard home_guard{"HOME", config.path().string()};
+    std::filesystem::path session_file;
+    tests::ScriptedRuntimeFixture scripted;
+    std::shared_ptr<coding_agent::ModelRuntime> runtime{scripted.runtime};
+    tests::RuntimeFixture runtime_fixture;
+    std::unique_ptr<coding_agent::AgentSession> session;
+
+    StreamingFixture() {
+        config.write(".config/pike/agent/settings.json",
+                R"({"compaction": {"enabled": true, "keepRecentTokens": 1, "reserveTokens": 1}})");
+    }
+
+    void create() {
+        session_file = workspace.path() / "tree-stream-session.jsonl";
+        auto store = harness::session::SessionStore::create_new(session_file,
+                {
+                        .session_id = "tree-stream-session",
+                        .created_at = "2026-08-12T00:00:00Z",
+                        .workspace = workspace.path(),
+                        .provider = "fake",
+                        .model = "fake-model",
+                });
+        REQUIRE(store);
+        REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("resume request", 1'700'000'000'000)}));
+        ai::AssistantMessage assistant;
+        assistant.provider = "fake";
+        assistant.api = "fake";
+        assistant.model = "fake-model";
+        assistant.stop_reason = ai::AssistantStopReason::Stop;
+        assistant.timestamp = 1'700'000'000'001;
+        assistant.content.emplace_back(ai::text_content("resumed reply text"));
+        REQUIRE(store->append(ai::MessageVariant{assistant}));
+
+        coding_agent::runtime::AgentSessionCreationRequest request;
+        request.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
+        request.execution_runtime_target = runtime_fixture.make_target();
+        request.workspace = workspace.path();
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
+        request.model_runtime = runtime;
+        auto created =
+                runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
+        REQUIRE(created);
+        session = std::move(created->session);
+    }
+};
+
+/// Boot the interactive mode over the fixture's resumed scripted-runtime
+/// session (the streaming counterpart of `boot` above).
+void boot_scripted(StreamingFixture& fixture,
+        tui::VirtualTerminal& terminal,
+        boost::asio::io_context& io,
+        std::optional<support::ExpectedVoid>& run_result) {
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal,
+                    coding_agent::tui::InteractiveSessionRunBuilder{}
+                            .with_session(*fixture.session)
+                            .with_agent_config_directory(fixture.config.path())
+                            .build()),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
 }
 
 } // namespace
@@ -508,4 +641,126 @@ TEST_CASE("tree copy reports pi statuses through the clipboard writer",
     drain_ready(running.io);
     REQUIRE(running.run_result);
     CHECK(*running.run_result);
+}
+
+TEST_CASE("tree navigation while only streaming aborts the run and then navigates",
+        "[coding_agent][tui][tree-selector][e2e][issue788][spec]") {
+    // pi interactive-mode.ts:5461-5472: the navigation commit stops the
+    // active response first (restore queued input, abort, settle) and only
+    // refuses afterwards when a compaction is still in flight. With no
+    // compaction running, the navigation proceeds as before this ticket.
+    StreamingFixture fixture;
+    fixture.create();
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
+    // Gate the first model call so the prompt is streaming when the tree
+    // navigation commits.
+    fixture.scripted.control->gate_at = 0;
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boot_scripted(fixture, terminal, io, run_result);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    REQUIRE(terminal.inject_input("hello\r"));
+    REQUIRE(tests::pump_until(io, [&] { return fixture.session->is_streaming(); }));
+    CHECK_FALSE(fixture.session->is_compacting());
+
+    // /tree opens the selector over the active response; the abort-vs-refuse
+    // decision happens at the navigation commit.
+    REQUIRE(terminal.inject_input("/tree\r"));
+    drain_ready(io);
+    CHECK(flatten_screen(terminal).find("Session Tree") != std::string::npos);
+    // Move the selection off the leaf (the in-flight turn has not committed
+    // its trailing entries, so the last visible row is the leaf) to an
+    // earlier message, then commit.
+    REQUIRE(terminal.inject_input("\x1b[A"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x1b[A"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\r"));
+    REQUIRE(tests::pump_until(
+            io, [&] { return flatten_screen(terminal).find("Navigated to selected point") != std::string::npos; }));
+    // The streaming run was aborted first; the navigation proceeded (the
+    // compaction refusal is absent).
+    CHECK_FALSE(fixture.session->is_streaming());
+    CHECK(flatten_screen(terminal).find(
+                  "Wait for the current compaction or tree navigation to finish before navigating the session tree.") ==
+            std::string::npos);
+
+    // The editor carries pre-filled/restored text: clear it (ctrl+c) before
+    // the empty-editor exit (ctrl+d).
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
+    CHECK(*run_result);
+}
+
+TEST_CASE("tree navigation while compacting refuses with pi's verbatim error and keeps the compaction UI",
+        "[coding_agent][tui][tree-selector][compaction][e2e][issue788][spec]") {
+    // pi interactive-mode.ts:5461-5472: a compaction in flight refuses with
+    // the verbatim error while preserving the active operation's status UI.
+    StreamingFixture fixture;
+    fixture.create();
+    tests::RuntimeLoopDriver runtime_driver(fixture.runtime_fixture);
+    // Gate the summarization call so compaction remains active while the
+    // selector commits.
+    fixture.scripted.control->gate_at = 0;
+    fixture.scripted.control->responses.push_back(summarization_response());
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    std::optional<support::Expected<coding_agent::CompactionResult>> compact_result;
+    boot_scripted(fixture, terminal, io, run_result);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    // Open the selector before starting compaction; its navigation commit can
+    // exercise the refusal while the active operation remains gated.
+    REQUIRE(terminal.inject_input("/tree\r"));
+    REQUIRE(tests::pump_until(io, [&] { return flatten_screen(terminal).find("Session Tree") != std::string::npos; }));
+    boost::asio::co_spawn(
+            io,
+            [&]() -> boost::asio::awaitable<void> {
+                compact_result = co_await fixture.session->compact();
+                co_return;
+            },
+            boost::asio::detached);
+    REQUIRE(tests::pump_until(io, [&] {
+        return fixture.session->is_compacting() && !fixture.session->is_streaming() &&
+               flatten_screen(terminal).find("Compacting context... (escape to cancel)") != std::string::npos;
+    }));
+    CHECK_FALSE(fixture.session->is_streaming());
+
+    // Navigate the already-open session tree during the compaction: refused
+    // verbatim. Move the selection to the first visible row (repeated
+    // arrow-ups clamp at the top — never the hidden thinking leaf), then commit.
+    for (int up = 0; up < 8; ++up) {
+        REQUIRE(terminal.inject_input("\x1b[A"));
+        drain_ready(io);
+    }
+    REQUIRE(terminal.inject_input("\r"));
+    REQUIRE(tests::pump_until(io, [&] {
+        const auto screen = collapse_whitespace(flatten_screen(terminal));
+        return screen.find("Wait for the current compaction or tree navigation to finish before navigating the session "
+                           "tree.") != std::string::npos;
+    }));
+    drain_ready(io);
+    auto screen = flatten_screen(terminal);
+    // The navigation never ran.
+    CHECK(screen.find("Navigated to selected point") == std::string::npos);
+    // The compaction status UI is preserved.
+    CHECK(screen.find("Compacting context... (escape to cancel)") != std::string::npos);
+
+    fixture.scripted.control->release();
+    REQUIRE(tests::pump_until(io, [&] { return compact_result.has_value(); }));
+    REQUIRE(compact_result->has_value());
+    // The editor may carry pre-filled/restored text: clear it (ctrl+c)
+    // before the empty-editor exit (ctrl+d).
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
+    CHECK(*run_result);
 }
