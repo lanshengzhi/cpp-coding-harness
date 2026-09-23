@@ -15,7 +15,6 @@ namespace {
     case SessionEntryKind::Message:
     case SessionEntryKind::ModelChange:
     case SessionEntryKind::ThinkingLevelChange:
-    case SessionEntryKind::ActiveToolsChange:
     case SessionEntryKind::Custom:
     case SessionEntryKind::CustomMessage:
     case SessionEntryKind::Compaction:

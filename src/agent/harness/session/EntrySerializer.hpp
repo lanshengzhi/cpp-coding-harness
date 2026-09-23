@@ -51,10 +51,6 @@ public:
         std::optional<std::string> parent_id,
         std::string thinking_level) const;
 
-    [[nodiscard]] support::Expected<SerializationResult> serialize_active_tools_change(
-        std::optional<std::string> parent_id,
-        std::vector<std::string> tools) const;
-
     [[nodiscard]] support::Expected<SerializationResult> serialize_custom_entry(
         std::optional<std::string> parent_id,
         std::string custom_type,

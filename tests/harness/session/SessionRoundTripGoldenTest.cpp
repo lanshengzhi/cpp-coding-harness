@@ -195,7 +195,7 @@ support::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
 
 } // namespace
 
-TEST_CASE("pi v3 11-entry-type session golden round-trips byte-identically",
+TEST_CASE("pi v3 session golden round-trips known entries and preserves retired tools as unknown",
         "[harness][session][issue356][golden][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto lines = fixture_lines("session-roundtrip.jsonl");
@@ -210,29 +210,33 @@ TEST_CASE("pi v3 11-entry-type session golden round-trips byte-identically",
     CHECK(loaded->metadata.workspace == "/workspace");
     REQUIRE(loaded->entries.size() == lines.size());
     CHECK(loaded->entries[0].kind == harness::session::SessionEntryKind::Header);
-    CHECK(loaded->unknown_lines.empty());
+    REQUIRE(loaded->unknown_lines.size() == 1);
 
-    // All eleven entry types are present.
+    // Retired `active_tools_change` is intentionally unknown; the remaining old-fixture entries round-trip.
     std::set<harness::session::SessionEntryKind> kinds;
     for (std::size_t i = 1; i < loaded->entries.size(); ++i) {
         kinds.insert(loaded->entries[i].kind);
         const auto& entry = loaded->entries[i];
+        if (entry.kind == harness::session::SessionEntryKind::Unknown) {
+            CHECK(entry.raw_line.find("active_tools_change") != std::string::npos);
+            continue;
+        }
         auto round_trip = serializer.serialize_entry(entry);
         REQUIRE(round_trip);
         REQUIRE(*round_trip == entry.raw_line + '\n');
     }
     const std::set<harness::session::SessionEntryKind> expected_kinds{
-        harness::session::SessionEntryKind::Message,
-        harness::session::SessionEntryKind::ModelChange,
-        harness::session::SessionEntryKind::ThinkingLevelChange,
-        harness::session::SessionEntryKind::ActiveToolsChange,
-        harness::session::SessionEntryKind::Compaction,
-        harness::session::SessionEntryKind::BranchSummary,
-        harness::session::SessionEntryKind::Custom,
-        harness::session::SessionEntryKind::CustomMessage,
-        harness::session::SessionEntryKind::Label,
-        harness::session::SessionEntryKind::SessionInfo,
-        harness::session::SessionEntryKind::Leaf,
+            harness::session::SessionEntryKind::Message,
+            harness::session::SessionEntryKind::ModelChange,
+            harness::session::SessionEntryKind::ThinkingLevelChange,
+            harness::session::SessionEntryKind::Unknown,
+            harness::session::SessionEntryKind::Compaction,
+            harness::session::SessionEntryKind::BranchSummary,
+            harness::session::SessionEntryKind::Custom,
+            harness::session::SessionEntryKind::CustomMessage,
+            harness::session::SessionEntryKind::Label,
+            harness::session::SessionEntryKind::SessionInfo,
+            harness::session::SessionEntryKind::Leaf,
     };
     CHECK(kinds == expected_kinds);
 }
@@ -247,8 +251,6 @@ TEST_CASE("pi v3 golden parses field/null/active-path semantics", "[harness][ses
     CHECK_FALSE(loaded->entries[1].parent_id.has_value());
     CHECK(loaded->entries[1].raw_line.find(R"("parentId":null)") != std::string::npos);
 
-    // active_tools_change uses pi's activeToolNames wire field.
-    const harness::session::SessionEntry* tools_entry = nullptr;
     // compaction variants: full (retainedTail + usage + fromHook) and minimal
     // (firstKeptEntryId absent).
     const harness::session::SessionEntry* compaction_full = nullptr;
@@ -257,9 +259,6 @@ TEST_CASE("pi v3 golden parses field/null/active-path semantics", "[harness][ses
     const harness::session::SessionEntry* root_leaf = nullptr;
     for (const auto& entry : loaded->entries) {
         switch (entry.kind) {
-        case harness::session::SessionEntryKind::ActiveToolsChange:
-            tools_entry = &entry;
-            break;
         case harness::session::SessionEntryKind::Compaction:
             if (std::get<harness::session::CompactionEntryValue>(entry.value).retained_tail.has_value()) {
                 compaction_full = &entry;
@@ -278,12 +277,6 @@ TEST_CASE("pi v3 golden parses field/null/active-path semantics", "[harness][ses
             break;
         }
     }
-
-    REQUIRE(tools_entry != nullptr);
-    const auto& tools = std::get<harness::session::ActiveToolsChangeValue>(tools_entry->value);
-    const std::vector<std::string> expected_tools{"read", "bash", "edit", "write"};
-    CHECK(tools.active_tool_names == expected_tools);
-    CHECK(tools_entry->raw_line.find(R"("activeToolNames":["read","bash","edit","write"])") != std::string::npos);
 
     REQUIRE(compaction_full != nullptr);
     const auto& full = std::get<harness::session::CompactionEntryValue>(compaction_full->value);
@@ -537,42 +530,10 @@ TEST_CASE("pi branch projection drives rebuilt context into the Agent",
     CHECK(llm_json == expected_llm_json);
 }
 
-// ── T08 (#357): derived session state — thinkingLevel / model / activeToolNames ──
-
+// The retired `active_tools_change` assertions are intentionally removed: loadout
+// state now comes from system messages and the construction-fixed Agent registry.
 namespace {
 
-/// Serialize the pi-derived session state (`thinkingLevel`, `model
-/// {provider, modelId} | null`, `activeToolNames | null`) into the stable JSON
-/// object the committed golden pins.
-[[nodiscard]] support::JsonValue derived_state_to_json(
-    const harness::session::SessionContext& context) {
-    support::JsonValue::object_t out;
-    out.emplace("thinkingLevel", support::JsonValue{context.thinking_level});
-    if (context.provider.has_value() && context.model.has_value()) {
-        support::JsonValue::object_t model;
-        model.emplace("provider", support::JsonValue{*context.provider});
-        model.emplace("modelId", support::JsonValue{*context.model});
-        out.emplace("model", support::JsonValue{std::move(model)});
-    } else {
-        out.emplace("model", support::JsonValue{nullptr});
-    }
-    if (context.active_tool_names.has_value()) {
-        support::JsonValue::array_t tools;
-        for (const auto& name : *context.active_tool_names) {
-            tools.push_back(support::JsonValue{name});
-        }
-        out.emplace("activeToolNames", support::JsonValue{std::move(tools)});
-    } else {
-        out.emplace("activeToolNames", support::JsonValue{nullptr});
-    }
-    return support::JsonValue{std::move(out)};
-}
-
-/// One linear branch with a user root, a `model_change` (openai/gpt-4.1), a
-/// later assistant message (anthropic/claude-sonnet-4-5, pi's
-/// `createAssistantMessage` defaults), a `thinking_level_change` (high), and
-/// an `active_tools_change` — the pi harness "tracks model and thinking level
-/// changes in built context" scenario plus active tools.
 [[nodiscard]] harness::session::SessionContext derived_state_full_branch() {
     harness::session::LoadedSession loaded;
     loaded.metadata = harness::session::SessionMetadata{
@@ -617,63 +578,20 @@ namespace {
     thinking.value = harness::session::ThinkingLevelChangeValue{.thinking_level = "high"};
     loaded.entries.push_back(std::move(thinking));
 
-    harness::session::SessionEntry tools;
-    tools.kind = harness::session::SessionEntryKind::ActiveToolsChange;
-    tools.entry_id = "tools001";
-    tools.parent_id = "think001";
-    tools.value = harness::session::ActiveToolsChangeValue{
-        .active_tool_names = {"read", "bash", "edit", "write"}};
-    loaded.entries.push_back(std::move(tools));
-
     harness::session::SessionTree tree(std::move(loaded));
     return tree.buildSessionContext();
 }
 
 } // namespace
 
-TEST_CASE("derived session state golden pins thinkingLevel/model/activeToolNames",
-        "[harness][session][issue357][golden][compat-pi]") {
-    const auto full_branch = derived_state_full_branch();
-    // The assistant message lands after the model_change, so its provider/model
-    // wins (pi harness test "tracks model and thinking level changes in built
-    // context": loaded.model === the assistant's anthropic/claude-sonnet-4-5).
-    CHECK(full_branch.thinking_level == "high");
-    REQUIRE(full_branch.provider.has_value());
-    CHECK(*full_branch.provider == "anthropic");
-    REQUIRE(full_branch.model.has_value());
-    CHECK(*full_branch.model == "claude-sonnet-4-5");
-    REQUIRE(full_branch.active_tool_names.has_value());
-
-    // The empty-branch defaults come from a header-only tree.
-    harness::session::LoadedSession empty;
-    empty.metadata = harness::session::SessionMetadata{
-        .session_id = "derived-state-empty",
-        .created_at = "2026-08-05T00:00:00Z",
-        .workspace = "/workspace",
-        .provider = "fake",
-        .model = "fake-model",
-    };
-    harness::session::SessionTree empty_tree(std::move(empty));
-    const auto empty_context = empty_tree.buildSessionContext();
-    CHECK(empty_context.thinking_level == "off");
-    CHECK_FALSE(empty_context.provider.has_value());
-    CHECK_FALSE(empty_context.model.has_value());
-    CHECK_FALSE(empty_context.active_tool_names.has_value());
-
-    support::JsonValue golden{support::JsonValue::object_t{}};
-    golden.get_object().emplace("fullBranch", derived_state_to_json(full_branch));
-    golden.get_object().emplace("defaults", derived_state_to_json(empty_context));
-
-    auto serialized = support::write_json(golden);
-    REQUIRE(serialized);
-    const auto expected = read_fixture_text("derived-session-state.json");
-    if (*serialized != expected) {
-        std::cerr << "\n[SessionRoundTripGoldenTest] fixture mismatch: derived-session-state.json"
-                  << "\n--- expected ---\n"
-                  << expected << "\n--- actual ---\n"
-                  << *serialized << "\n--- end ---\n";
-    }
-    CHECK(*serialized == expected);
+TEST_CASE("derived session state tracks thinking level and model, not retired tool entries",
+        "[harness][session][issue357]") {
+    const auto context = derived_state_full_branch();
+    CHECK(context.thinking_level == "high");
+    REQUIRE(context.provider.has_value());
+    CHECK(*context.provider == "anthropic");
+    REQUIRE(context.model.has_value());
+    CHECK(*context.model == "claude-sonnet-4-5");
 }
 
 TEST_CASE("derived thinking level and model flow into the Agent's turn options at the fake-ModelRuntime seam",

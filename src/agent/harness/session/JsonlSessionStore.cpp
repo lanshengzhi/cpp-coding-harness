@@ -174,14 +174,6 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_thinking_
         std::move(parent_id), std::move(thinking_level)));
 }
 
-support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_active_tools_change(
-    std::optional<std::string> parent_id,
-    std::vector<std::string> tools) {
-    EntrySerializer serializer;
-    return append_mirrored_line(impl_->journal, serializer.serialize_active_tools_change(
-        std::move(parent_id), std::move(tools)));
-}
-
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_custom_entry(
     std::optional<std::string> parent_id,
     std::string custom_type,
