@@ -577,6 +577,23 @@ TEST_CASE("boot registers discovered themes and the settings Theme submenu commi
     CHECK(*run.run_result);
 }
 
+TEST_CASE("boot trust-store diagnostics render as chat warnings after session binding",
+        "[coding_agent][tui][boot-trust][issue787][spec]") {
+    TrustIsolatedWorkspace fixture;
+    fixture.write(".pi/skills/README.md", "project skill marker");
+    fixture.write(".config/pike/agent/trust.json", "not-json");
+
+    BootTrustRun run;
+    run.start(fixture, boot_request(fixture), tests::make_scripted_fake_models());
+    run.wait_booted();
+
+    const auto screen = visible_screen(run.terminal);
+    const auto warning = screen.find("failed to parse trust store");
+    REQUIRE(warning != std::string::npos);
+    CHECK(screen.find("failed to parse trust store", warning + 1) == std::string::npos);
+    run.exit();
+}
+
 TEST_CASE("boot with a failing theme keeps the main screen and the dark fallback message",
         "[coding_agent][tui][boot-trust][issue425][spec]") {
     TrustIsolatedWorkspace fixture;

@@ -11,6 +11,7 @@
 // an Owner Interface, not installed, never exported.
 
 #include "coding_agent/tui/KeybindingsManager.hpp"
+#include "coding_agent/AgentSession.hpp"
 
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Settings.hpp>
@@ -30,6 +31,7 @@ class ThemeController;
 /// Startup diagnostics surfaced in the chat after the view binds (pi
 /// `renderInitialMessages` diagnostic lines).
 struct InteractiveStartupDiagnostics {
+    std::vector<SessionDiagnostic> session;
     std::vector<KeybindingDiagnostic> keybindings;
     /// Theme parse/collision diagnostics from the boot session's theme
     /// discovery (pi `resource-loader.ts` `getThemes` diagnostics).

@@ -314,14 +314,11 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
     hooks.request_exit = [weak] {
         if (const auto self = weak.lock()) self->post_exit();
     };
-    hooks.report_boot_diagnostics = [weak](
-        std::size_t generation,
-        std::vector<SessionDiagnostic> diagnostics) {
+    hooks.report_boot_diagnostics = [weak](std::size_t /* generation */, std::vector<SessionDiagnostic> diagnostics) {
         if (const auto self = weak.lock()) {
-            (void)self->deliver_action(
-                generation,
-                TuiActionVariant{ReportBootDiagnosticsAction{
-                    std::move(diagnostics)}});
+            self->startup_diagnostics_.session.insert(self->startup_diagnostics_.session.end(),
+                    std::make_move_iterator(diagnostics.begin()),
+                    std::make_move_iterator(diagnostics.end()));
         }
     };
     return std::make_shared<SessionFlowController>(
