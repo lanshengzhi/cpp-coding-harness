@@ -460,12 +460,8 @@ void AssistantMessageComponent::update_suffix() {
 
     if (stop_reason_ == ai::AssistantStopReason::Length) {
         (void)suffix_content_.add_child(std::make_unique<cch::tui::Spacer>(1));
-        (void)suffix_content_.add_child(
-                std::make_unique<cch::tui::Text>(theme_.foreground(ThemeToken::Error,
-                                                         "Error: Model stopped because it reached the maximum output "
-                                                         "token limit. The response may be incomplete."),
-                        output_pad_,
-                        0));
+        (void)suffix_content_.add_child(std::make_unique<cch::tui::Text>(
+                theme_.foreground(ThemeToken::Error, "Response was truncated before completion."), output_pad_, 0));
     } else if (!has_tool_calls_) {
         std::optional<std::string> notice;
         if (stop_reason_ == ai::AssistantStopReason::Aborted) {

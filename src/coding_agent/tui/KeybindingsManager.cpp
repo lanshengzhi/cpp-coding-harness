@@ -50,108 +50,77 @@ struct ApplicationTemplate {
 /// SlashCommandEffects renders pi's hardcoded sections instead).
 [[nodiscard]] const std::vector<ApplicationTemplate>& application_templates() {
     static const std::vector<ApplicationTemplate> kTemplates{
-        make_application_template("app.interrupt", {"escape"}, "Cancel or abort", "Application"),
-        make_application_template("app.clear", {"ctrl+c"}, "Clear editor", "Application"),
-        make_application_template("app.exit", {"ctrl+d"}, "Exit when editor is empty", "Application"),
-        make_application_template("app.suspend", {"ctrl+z"}, "Suspend to background", "Application"),
-        make_application_template("app.thinking.cycle", {"shift+tab"}, "Cycle thinking level", "Models and thinking"),
-        make_application_template("app.model.cycleForward", {"ctrl+p"}, "Cycle to next model", "Models and thinking"),
-        make_application_template(
-            "app.model.cycleBackward",
-            {"shift+ctrl+p"},
-            "Cycle to previous model",
-            "Models and thinking"),
-        make_application_template("app.model.select", {"ctrl+l"}, "Open model selector", "Models and thinking"),
-        make_application_template("app.tools.expand", {"ctrl+o"}, "Toggle tool output", "Display and queue"),
-        make_application_template("app.thinking.toggle", {"ctrl+t"}, "Toggle thinking blocks", "Display and queue"),
-        make_application_template(
-            "app.session.toggleNamedFilter",
-            {"ctrl+n"},
-            "Toggle named session filter",
-            "Sessions"),
-        make_application_template("app.editor.external", {"ctrl+g"}, "Open external editor", "Application"),
-        make_application_template("app.message.copy", {"ctrl+x"}, "Copy message to clipboard", "Display and queue"),
-        make_application_template(
-            "app.message.followUp",
-            {"alt+enter"},
-            "Queue follow-up message",
-            "Display and queue"),
-        make_application_template("app.message.dequeue", {"alt+up"}, "Restore queued messages", "Display and queue"),
-        make_application_template("app.clipboard.pasteImage", {"ctrl+v"}, "Paste image from clipboard (text fallback)", "Application"),
-        make_application_template("app.session.new", {}, "Start a new session", "Sessions"),
-        make_application_template("app.session.tree", {}, "Open session tree", "Sessions"),
-        make_application_template("app.session.fork", {}, "Fork current session", "Sessions"),
-        make_application_template("app.session.resume", {}, "Resume a session", "Sessions"),
-        make_application_template(
-            "app.tree.foldOrUp",
-            {"ctrl+left", "alt+left"},
-            "Fold tree branch or move up",
-            "Tree navigation"),
-        make_application_template(
-            "app.tree.unfoldOrDown",
-            {"ctrl+right", "alt+right"},
-            "Unfold tree branch or move down",
-            "Tree navigation"),
-        make_application_template("app.tree.editLabel", {"shift+l"}, "Edit tree label", "Tree navigation"),
-        make_application_template(
-            "app.tree.toggleLabelTimestamp",
-            {"shift+t"},
-            "Toggle tree label timestamps",
-            "Tree navigation"),
-        make_application_template("app.session.togglePath", {"ctrl+p"}, "Toggle session path display", "Sessions"),
-        make_application_template("app.session.toggleSort", {"ctrl+s"}, "Toggle session sort mode", "Sessions"),
-        make_application_template("app.session.rename", {"ctrl+r"}, "Rename session", "Sessions"),
-        make_application_template("app.session.delete", {"ctrl+d"}, "Delete session", "Sessions"),
-        make_application_template(
-            "app.session.deleteNoninvasive",
-            {"ctrl+backspace"},
-            "Delete session when query is empty",
-            "Sessions"),
-        make_application_template("app.models.save", {"ctrl+s"}, "Save model selection", "Scoped models"),
-        make_application_template("app.models.enableAll", {"ctrl+a"}, "Enable all models", "Scoped models"),
-        make_application_template("app.models.clearAll", {"ctrl+x"}, "Clear all models", "Scoped models"),
-        make_application_template(
-            "app.models.toggleProvider",
-            {"ctrl+p"},
-            "Toggle all models for provider",
-            "Scoped models"),
-        make_application_template("app.models.reorderUp", {"alt+up"}, "Move model up in order", "Scoped models"),
-        make_application_template("app.models.reorderDown", {"alt+down"}, "Move model down in order", "Scoped models"),
-        make_application_template(
-            "app.tree.filter.default",
-            {"ctrl+d"},
-            "Tree filter: default view",
-            "Tree navigation"),
-        make_application_template(
-            "app.tree.filter.noTools",
-            {"ctrl+t"},
-            "Tree filter: hide tool results",
-            "Tree navigation"),
-        make_application_template(
-            "app.tree.filter.userOnly",
-            {"ctrl+u"},
-            "Tree filter: user messages only",
-            "Tree navigation"),
-        make_application_template(
-            "app.tree.filter.labeledOnly",
-            {"ctrl+l"},
-            "Tree filter: labeled entries only",
-            "Tree navigation"),
-        make_application_template(
-            "app.tree.filter.all",
-            {"ctrl+a"},
-            "Tree filter: show all entries",
-            "Tree navigation"),
-        make_application_template(
-            "app.tree.filter.cycleForward",
-            {"ctrl+o"},
-            "Tree filter: cycle forward",
-            "Tree navigation"),
-        make_application_template(
-            "app.tree.filter.cycleBackward",
-            {"shift+ctrl+o"},
-            "Tree filter: cycle backward",
-            "Tree navigation"),
+            make_application_template("app.interrupt", {"escape"}, "Cancel or abort", "Application"),
+            make_application_template("app.clear", {"ctrl+c"}, "Clear editor", "Application"),
+            make_application_template("app.exit", {"ctrl+d"}, "Exit when editor is empty", "Application"),
+            make_application_template("app.suspend", {"ctrl+z"}, "Suspend to background", "Application"),
+            make_application_template(
+                    "app.thinking.cycle", {"shift+tab"}, "Cycle thinking level", "Models and thinking"),
+            make_application_template(
+                    "app.model.cycleForward", {"ctrl+p"}, "Cycle to next model", "Models and thinking"),
+            make_application_template(
+                    "app.model.cycleBackward", {"shift+ctrl+p"}, "Cycle to previous model", "Models and thinking"),
+            make_application_template("app.model.select", {"ctrl+l"}, "Open model selector", "Models and thinking"),
+            make_application_template("app.tools.expand", {"ctrl+o"}, "Toggle tool output", "Display and queue"),
+            make_application_template("app.thinking.toggle", {"ctrl+t"}, "Toggle thinking blocks", "Display and queue"),
+            make_application_template(
+                    "app.session.toggleNamedFilter", {"ctrl+n"}, "Toggle named session filter", "Sessions"),
+            make_application_template("app.editor.external", {"ctrl+g"}, "Open external editor", "Application"),
+            make_application_template(
+                    "app.message.copy", {"ctrl+x"}, "Copy selection or last assistant message", "Display and queue"),
+            make_application_template(
+                    "app.message.followUp", {"alt+enter"}, "Queue follow-up message", "Display and queue"),
+            make_application_template(
+                    "app.message.dequeue", {"alt+up"}, "Restore queued messages", "Display and queue"),
+            make_application_template("app.clipboard.pasteImage",
+                    {"ctrl+v"},
+                    "Paste image from clipboard (text fallback)",
+                    "Application"),
+            make_application_template("app.session.new", {}, "Start a new session", "Sessions"),
+            make_application_template("app.session.tree", {}, "Open session tree", "Sessions"),
+            make_application_template("app.session.fork", {}, "Fork current session", "Sessions"),
+            make_application_template("app.session.resume", {}, "Resume a session", "Sessions"),
+            make_application_template(
+                    "app.tree.foldOrUp", {"ctrl+left", "alt+left"}, "Fold tree branch or move up", "Tree navigation"),
+            make_application_template("app.tree.unfoldOrDown",
+                    {"ctrl+right", "alt+right"},
+                    "Unfold tree branch or move down",
+                    "Tree navigation"),
+            make_application_template("app.tree.editLabel", {"shift+l"}, "Edit tree label", "Tree navigation"),
+            make_application_template(
+                    "app.tree.toggleLabelTimestamp", {"shift+t"}, "Toggle tree label timestamps", "Tree navigation"),
+            make_application_template("app.session.togglePath", {"ctrl+p"}, "Toggle session path display", "Sessions"),
+            make_application_template("app.session.toggleSort", {"ctrl+s"}, "Toggle session sort mode", "Sessions"),
+            make_application_template("app.session.rename", {"ctrl+r"}, "Rename session", "Sessions"),
+            make_application_template("app.session.delete", {"ctrl+d"}, "Delete session", "Sessions"),
+            make_application_template("app.session.deleteNoninvasive",
+                    {"ctrl+backspace"},
+                    "Delete session when query is empty",
+                    "Sessions"),
+            make_application_template("app.models.save", {"ctrl+s"}, "Save model selection", "Scoped models"),
+            make_application_template("app.models.enableAll", {"ctrl+a"}, "Enable all models", "Scoped models"),
+            make_application_template("app.models.clearAll", {"ctrl+x"}, "Clear all models", "Scoped models"),
+            make_application_template(
+                    "app.models.toggleProvider", {"ctrl+p"}, "Toggle all models for provider", "Scoped models"),
+            make_application_template("app.models.reorderUp", {"alt+up"}, "Move model up in order", "Scoped models"),
+            make_application_template(
+                    "app.models.reorderDown", {"alt+down"}, "Move model down in order", "Scoped models"),
+            make_application_template(
+                    "app.tree.filter.default", {"ctrl+d"}, "Tree filter: default view", "Tree navigation"),
+            make_application_template(
+                    "app.tree.filter.noTools", {"ctrl+t"}, "Tree filter: hide tool results", "Tree navigation"),
+            make_application_template(
+                    "app.tree.filter.userOnly", {"ctrl+u"}, "Tree filter: user messages only", "Tree navigation"),
+            make_application_template(
+                    "app.tree.filter.labeledOnly", {"ctrl+l"}, "Tree filter: labeled entries only", "Tree navigation"),
+            make_application_template(
+                    "app.tree.filter.all", {"ctrl+a"}, "Tree filter: show all entries", "Tree navigation"),
+            make_application_template(
+                    "app.tree.filter.cycleForward", {"ctrl+o"}, "Tree filter: cycle forward", "Tree navigation"),
+            make_application_template("app.tree.filter.cycleBackward",
+                    {"shift+ctrl+o"},
+                    "Tree filter: cycle backward",
+                    "Tree navigation"),
     };
     return kTemplates;
 }

@@ -276,10 +276,10 @@ TEST_CASE("Native TUI shows the Working indicator while a prompt streams and cle
     // hops, so wait on the observable indicator instead of asserting after
     // one drain (#739). The gated response holds the turn open: once the
     // indicator shows, it stays until the release below.
-    REQUIRE(tests::pump_until(io, [&] { return visible_screen(terminal).find("Working...") != std::string::npos; }));
-    // pi WorkingStatusIndicator: "Working..." with the accent spinner.
+    REQUIRE(tests::pump_until(io, [&] { return visible_screen(terminal).find("Working") != std::string::npos; }));
+    // pi v0.87.1 WorkingStatusIndicator: "Working" with the thinking-level border spinner.
     auto screen = visible_screen(terminal);
-    CHECK(screen.find("Working...") != std::string::npos);
+    CHECK(screen.find("Working") != std::string::npos);
 
     gated.control->release();
     // agent_end's indicator clear crosses the same worker hops: a drain can
@@ -287,11 +287,11 @@ TEST_CASE("Native TUI shows the Working indicator while a prompt streams and cle
     // but the indicator is still up (the Clang-lane flake, #739).
     REQUIRE(tests::pump_until(io, [&] {
         const auto text = visible_screen(terminal);
-        return text.find("gated answer") != std::string::npos && text.find("Working...") == std::string::npos;
+        return text.find("gated answer") != std::string::npos && text.find("Working") == std::string::npos;
     }));
     screen = visible_screen(terminal);
     // agent_end clears the indicator back to the two-row idle status.
-    CHECK(screen.find("Working...") == std::string::npos);
+    CHECK(screen.find("Working") == std::string::npos);
     CHECK(screen.find("gated answer") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
