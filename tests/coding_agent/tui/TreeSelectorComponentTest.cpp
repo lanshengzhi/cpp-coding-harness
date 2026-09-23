@@ -272,6 +272,13 @@ TEST_CASE("tree selector filter modes and search narrow the visible rows",
     static_cast<void>(component.handle_input(tui::KeyEvent{.key = "escape"}));
     text = render_text(component);
     CHECK(text.find("first question") != std::string::npos);
+
+    // Pasted text feeds the same type-to-search query (issue #757: the
+    // component used to drop PasteEvent before the search append).
+    static_cast<void>(component.handle_input(tui::PasteEvent{.text = "second"}));
+    text = render_text(component);
+    CHECK(text.find("second question") != std::string::npos);
+    CHECK(text.find("first question") == std::string::npos);
 }
 
 TEST_CASE("tree selector folds and unfolds branches with the branch actions",

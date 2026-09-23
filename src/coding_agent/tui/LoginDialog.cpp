@@ -346,6 +346,15 @@ void LoginDialogComponent::invalidate() {
 
 cch::tui::InputAdmissionOutcome LoginDialogComponent::handle_input(const cch::tui::InputEventVariant& input) {
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
+    if (key == nullptr) {
+        // Pasted text edits the prompt input (pi showPrompt's Input accepts
+        // paste insertion); the press-behavior guard below only filters key
+        // releases and must not swallow PasteEvent.
+        std::lock_guard lock(mutex_);
+        if (!input_visible_) return cch::tui::InputAdmissionOutcome::Unhandled;
+        static_cast<void>(input_.handle_input(input));
+        return cch::tui::InputAdmissionOutcome::Consumed;
+    }
     if (!cch::tui::carries_press_behavior(key)) return cch::tui::InputAdmissionOutcome::Unhandled;
     if (keybindings_->matches(*key, "tui.select.cancel")) {
         cancel();
@@ -366,7 +375,11 @@ cch::tui::InputAdmissionOutcome LoginDialogComponent::handle_input(const cch::tu
             pending_escape_ = false;
             escape = true;
         }
-        if (pending_submit_ && pending_slot_) {
+        // An empty (or whitespace-only) submission never resolves the prompt:
+        // product divergence from pi, which resolves unconditionally, so an
+        // API key or code can never be "Saved" as "".
+        const bool blank_submit = pending_submit_ && pending_submit_->find_first_not_of(" \t\r\n") == std::string::npos;
+        if (pending_submit_ && pending_slot_ && !blank_submit) {
             submitted = std::move(*pending_submit_);
             slot = std::move(pending_slot_);
             pending_slot_.reset();

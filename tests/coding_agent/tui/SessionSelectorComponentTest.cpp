@@ -260,6 +260,13 @@ TEST_CASE("session selector rename mode confirms through the inline input",
     CHECK(renamed_value == "new");
     // The list refreshed with the name.
     CHECK(render_text(component).find("new") != std::string::npos);
+
+    // A second rename accepts pasted text (issue #757: the component used to
+    // consume PasteEvent without forwarding it to the inline rename input).
+    static_cast<void>(component.handle_input(tui::KeyEvent{.key = "r", .ctrl = true}));
+    static_cast<void>(component.handle_input(tui::PasteEvent{.text = "pasted-name"}));
+    static_cast<void>(component.rename_input().handle_input(tui::KeyEvent{.key = "enter"}));
+    CHECK(renamed_value.find("pasted-name") != std::string::npos);
 }
 
 TEST_CASE("session selector search delegates the query and filtered rows to the SelectList",
