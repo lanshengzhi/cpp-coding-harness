@@ -7,7 +7,7 @@ This is an experimental C++23 coding-agent Runtime that preserves selected pi se
 1. Inspect `git status --short`. Treat every pre-existing modified or untracked file as user-owned; preserve unrelated work.
 2. Fetch any named GitHub issue or PRD, then read only the task-specific context linked below.
 3. Stop exploring once you can name the behavior, authoritative seam, constraints, and validation path.
-4. Settle a technical direction only after the smallest probe measures its cost; the rejected TOML direction exposed a 584-line `src/support/Toml.cpp` despite Glaze's `glz::read_toml`/`glz::write_toml`.
+4. Settle a technical direction only after the smallest probe measures its cost.
 
 ## Validation entry points
 
@@ -21,9 +21,11 @@ Do not run Fresh Validation for ordinary code edits.
 
 ## Task-specific context
 
-- **Implementation or review:** read [CODING_STANDARDS.md](CODING_STANDARDS.md) and [validation](docs/agents/validation.md).
-- **Architecture, Owner packages, module structure, capability seams, or security boundaries:** read [architecture](docs/agents/architecture.md) and the relevant accepted ADRs.
-- **pi parity:** read [pi parity](docs/agents/pi-parity.md), then inspect the relevant current pi source or documentation.
+- **Implementation:** read [validation](docs/agents/validation.md); consult [CODING_STANDARDS.md](CODING_STANDARDS.md) §2 (mechanical style) and §11 (tests) as the change requires.
+- **Review:** read [CODING_STANDARDS.md](CODING_STANDARDS.md) and [validation](docs/agents/validation.md).
+- **Architecture, Owner packages, module structure, capability seams, or security boundaries:** read [architecture](docs/agents/architecture.md), [pi parity](docs/agents/pi-parity.md), and the relevant accepted ADRs.
+- **pi-ai catalog or upstream baseline sync:** read `fixtures/pi-ai/README.md` and the module's accepted ADR.
+- **Running or E2E-testing the product:** read [usage](docs/usage.md); the TUI seams and their fixed-width conventions live in `tests/coding_agent/tui/`.
 - **Domain language:** read [domain docs](docs/agents/domain.md), `CONTEXT.md`, and relevant accepted ADRs.
 
 ## Agent skills

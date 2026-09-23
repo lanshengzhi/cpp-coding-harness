@@ -9,6 +9,7 @@
 #include <cctype>
 #include <format>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -115,17 +116,32 @@ cch::tui::InputAdmissionOutcome UserMessageSelectorComponent::handle_input(const
 support::Expected<cch::tui::RenderResult> UserMessageSelectorComponent::render(
     std::size_t width) {
     std::vector<std::string> lines;
+    // Every text row is bounded: the render width guard aborts the whole app on
+    // an over-wide line (issue #790).
+    const auto push_text = [&](ThemeToken token, std::string text) -> support::ExpectedVoid {
+        auto bounded = cch::tui::truncate_text(theme_.foreground(token, text), width, "");
+        if (!bounded) return std::unexpected(bounded.error());
+        lines.push_back(std::move(*bounded));
+        return {};
+    };
+
     lines.push_back("");
-    lines.push_back(theme_.foreground(ThemeToken::Accent, "Fork from Message"));
-    lines.push_back(theme_.foreground(
-        ThemeToken::Muted,
-        "Select a user message to copy the active path up to that point into a new session"));
+    if (auto pushed = push_text(ThemeToken::Accent, "Fork from Message"); !pushed) {
+        return std::unexpected(pushed.error());
+    }
+    if (auto pushed = push_text(
+                ThemeToken::Muted, "Select a user message to copy the active path up to that point into a new session");
+            !pushed) {
+        return std::unexpected(pushed.error());
+    }
     lines.push_back("");
     lines.push_back(theme_.foreground(ThemeToken::Border, border_rule(width)));
     lines.push_back("");
 
     if (messages_.empty()) {
-        lines.push_back(theme_.foreground(ThemeToken::Muted, "  No user messages found"));
+        if (auto pushed = push_text(ThemeToken::Muted, "  No user messages found"); !pushed) {
+            return std::unexpected(pushed.error());
+        }
         lines.push_back("");
         lines.push_back(theme_.foreground(ThemeToken::Border, border_rule(width)));
         return cch::tui::RenderResult{.lines = std::move(lines)};
@@ -158,7 +174,9 @@ support::Expected<cch::tui::RenderResult> UserMessageSelectorComponent::render(
 
         const auto metadata = std::format(
             "  Message {} of {}", index + 1, messages_.size());
-        lines.push_back(theme_.foreground(ThemeToken::Muted, metadata));
+        if (auto pushed = push_text(ThemeToken::Muted, metadata); !pushed) {
+            return std::unexpected(pushed.error());
+        }
         lines.push_back("");
     }
 

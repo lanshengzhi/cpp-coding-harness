@@ -23,7 +23,8 @@ Gateway, and Radius), so the source revision alone does not reproduce the bytes.
 committed artifacts below bind this particular live snapshot by SHA-256. The complete
 machine-readable record, including every final model ID and API grouping, is
 [`models/provenance.json`](models/provenance.json); the artifacts are copied from
-`packages/ai/src/providers/data/` after that run.
+`packages/ai/src/providers/data/` after that run. Each artifact is single-line JSON:
+query it with `python3` or `jq` rather than `grep`/`head`, which print the whole file.
 
 | Provider artifact | Models | API families | SHA-256 |
 | --- | ---: | --- | --- |

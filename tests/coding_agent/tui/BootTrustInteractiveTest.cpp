@@ -201,7 +201,7 @@ TEST_CASE("boot trust prompt shows getProjectTrustOptions choices as a main-TUI 
     const auto screen = visible_screen(run.terminal);
     // pi's prompt title and getProjectTrustOptions choices.
     CHECK(screen.find("Trust project folder?") != std::string::npos);
-    CHECK(screen.find("This allows cch to load .pi settings and resources.") != std::string::npos);
+    CHECK(screen.find("This allows pike to load .pi settings and resources.") != std::string::npos);
     CHECK(screen.find("Trust") != std::string::npos);
     CHECK(screen.find("Trust (this session only)") != std::string::npos);
     CHECK(screen.find("Do not trust") != std::string::npos);

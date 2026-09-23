@@ -10,6 +10,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "support/OverlayWidthBound.hpp"
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -350,4 +352,31 @@ TEST_CASE("OAuthSelector reports the search cursor on the real search row of its
     // but the reported row must match.
     CHECK(cursor->row == 4);
     CHECK(cursor->column == 2);
+}
+
+TEST_CASE("OAuthSelector bounds every row at narrow widths", "[coding_agent][tui][oauth-selector][issue790][spec]") {
+    auto theme = test_theme();
+    using coding_agent::tui::AuthSelectorProvider;
+    using coding_agent::tui::AuthSelectorStatus;
+    using coding_agent::tui::AuthSelectorType;
+    std::vector<AuthSelectorProvider> providers;
+    providers.push_back(provider("openai-codex", "OpenAI Codex", AuthSelectorType::OAuth));
+    providers.push_back(provider("kimi-coding",
+            "Kimi For Coding",
+            AuthSelectorType::ApiKey,
+            AuthSelectorStatus{.type = AuthSelectorType::ApiKey, .source = "KIMI_API_KEY"}));
+
+    coding_agent::tui::OAuthSelectorComponent selector(
+            theme,
+            test_keybindings(),
+            coding_agent::tui::AuthSelectorMode::Login,
+            std::move(providers),
+            [](std::string, coding_agent::tui::AuthSelectorType) -> support::ExpectedVoid { return {}; },
+            [] {});
+
+    for (const auto width : tests::kNarrowOverlayWidths) {
+        const auto rendered = selector.render(width);
+        REQUIRE(rendered);
+        tests::check_all_lines_bounded(*rendered, width);
+    }
 }

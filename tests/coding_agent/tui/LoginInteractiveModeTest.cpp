@@ -680,7 +680,7 @@ TEST_CASE("login api-key ambient method shows the configured-outside info dialog
     CHECK(screen.find("Select authentication method for Kimi For Coding:") == std::string::npos);
     screen = visible_screen(run.terminal);
     CHECK(screen.find("Kimi For Coding setup") != std::string::npos);
-    CHECK(screen.find("Kimi API key is configured outside cch.") != std::string::npos);
+    CHECK(screen.find("Kimi API key is configured outside pike.") != std::string::npos);
     CHECK(screen.find("to close") != std::string::npos);
     CHECK(run.opened_urls.empty());
 
