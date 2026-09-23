@@ -597,8 +597,8 @@ TEST_CASE("default creation resume re-resolves a non-default stored model identi
 // Thinking-level persistence
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("set_thinking_level persists a thinking_level_change entry and the settings default",
-        "[coding_agent][thinking-persistence][issue353])[spec]") {
+TEST_CASE("set_thinking_level persists a thinking_level_change entry session-only by default",
+        "[coding_agent][thinking-persistence][issue353][issue774][spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
@@ -620,7 +620,19 @@ TEST_CASE("set_thinking_level persists a thinking_level_change entry and the set
     const auto* entry = find_thinking_entry(*loaded);
     REQUIRE(entry != nullptr);
 
-    // The global settings file carries the defaultThinkingLevel write.
+    // Session-only by default (pi ModelMutationOptions): no settings default
+    // write.
+    CHECK(fixture.read_settings().empty());
+
+    // pi setThinkingLevel: an explicit persist records the requested level in
+    // the global settings default, and a reloaded manager sees it merged.
+    auto result_two = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
+    REQUIRE(result_two.has_value());
+    auto persisted =
+            result_two->session->set_thinking_level("high", coding_agent::ModelMutationOptions{.persist = true});
+    REQUIRE(persisted.has_value());
+    result_two->session->close();
+
     const auto settings_text = fixture.read_settings();
     const auto settings = support::read_json(settings_text);
     REQUIRE(settings.has_value());
@@ -630,7 +642,6 @@ TEST_CASE("set_thinking_level persists a thinking_level_change entry and the set
     CHECK(found->second.get_if<std::string>() != nullptr);
     CHECK(*found->second.get_if<std::string>() == "high");
 
-    // A reloaded settings manager sees the merged default too.
     auto reloaded = coding_agent::SettingsManager::create(
             fixture.workspace.path(), fixture.agent_dir, /* project_trusted */ false);
     CHECK(reloaded.settings().default_thinking_level == "high");
@@ -707,8 +718,8 @@ TEST_CASE("fresh session requests the settings default thinking level",
     result->session->close();
 }
 
-TEST_CASE("set_thinking_level to off persists on a reasoning model (pi supportsThinking gate)",
-        "[coding_agent][thinking-persistence][issue353])[spec]") {
+TEST_CASE("set_thinking_level to off records the entry session-only and persists only on request",
+        "[coding_agent][thinking-persistence][issue353][issue774][spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
@@ -716,12 +727,18 @@ TEST_CASE("set_thinking_level to off persists on a reasoning model (pi supportsT
     REQUIRE(result.has_value());
     CHECK(result->session->snapshot().agent_state.thinking_level == "medium");
 
-    // A real change to "off" on a reasoning model persists both the entry and
-    // the settings default (pi: `supportsThinking() || effectiveLevel !== "off"`).
+    // A real change to "off" appends the entry; session-only by default, so
+    // no settings default lands.
     auto changed = result->session->set_thinking_level("off");
     REQUIRE(changed.has_value());
     CHECK(*changed == "off");
     CHECK(result->session->snapshot().agent_state.thinking_level == "off");
+    CHECK(fixture.read_settings().empty());
+
+    // The persist mutation writes the requested "off" (pi v0.87.1 dropped
+    // the supportsThinking gate: an explicit persist records the request).
+    auto persisted = result->session->set_thinking_level("off", coding_agent::ModelMutationOptions{.persist = true});
+    REQUIRE(persisted.has_value());
     result->session->close();
 
     auto loaded = harness::session::SessionStore::load(fixture.session_file);
@@ -933,13 +950,16 @@ TEST_CASE("resume binds the settings manager to the session header cwd",
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST_CASE("thinking-persistence golden pins the entry shape and the settings default write",
-        "[coding_agent][fixture][issue353])[compat-pi]") {
+        "[coding_agent][fixture][issue353][issue774])[compat-pi]") {
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
     auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
-    auto changed = result->session->set_thinking_level("high");
+    // The pinned settings default write is the persist mutation's (pi
+    // `setThinkingLevel(level, { persist: true })` → `setDefaultThinkingLevel`);
+    // the session-only default records the entry without it.
+    auto changed = result->session->set_thinking_level("high", coding_agent::ModelMutationOptions{.persist = true});
     REQUIRE(changed.has_value());
     CHECK(*changed == "high");
     result->session->close();

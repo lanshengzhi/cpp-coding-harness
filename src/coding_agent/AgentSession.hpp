@@ -189,6 +189,17 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
+// ── ModelMutationOptions ─────────────────────────────────────────────────────
+
+/// pi `ModelMutationOptions` (agent-session.ts): options for the model and
+/// thinking set/cycle mutations. `persist` defaults to false — the change
+/// applies to the session only; an explicit persist also writes the global
+/// Settings Scope default (and, for a model, promotes it into the
+/// scoped/enabled-model set when one exists).
+struct ModelMutationOptions {
+    bool persist{false};
+};
+
 // ── ModelCycleResult ─────────────────────────────────────────────────────────
 
 /// pi `ModelCycleResult` (agent-session.ts): the model a cycle landed on,
@@ -314,45 +325,54 @@ public:
     /// Set the thinking level for subsequent turns (pi `AgentSession`
     /// `setThinkingLevel`). The level is validated and clamped to the active
     /// model's supported set; on a real change the session persists a
-    /// `thinking_level_change` entry and the global settings default, so
-    /// resume restores the level exactly like pi (T04). Returns the effective
+    /// `thinking_level_change` entry so resume restores the level exactly
+    /// like pi (T04). Session-only by default (pi `ModelMutationOptions`):
+    /// with `options.persist` the requested level is also written to the
+    /// global settings default — even when the clamped level equals the
+    /// current one, pi persists before its change gate. Returns the effective
     /// (clamped) level, or an error for an invalid request or a persistence
     /// failure.
     [[nodiscard]] support::Expected<std::string> set_thinking_level(
-        std::string_view level);
+            std::string_view level, ModelMutationOptions options = {});
 
     /// Runtime model switch (pi `AgentSession.setModel`): validates that the
     /// target model's provider resolves auth (`No API key for
     /// <provider>/<model>` otherwise), swaps the live Agent model, persists
-    /// the `model_change` session entry and the global settings default, and
-    /// re-clamps the thinking level against the new model. Same impl_ copying
+    /// the `model_change` session entry, and re-clamps the thinking level
+    /// against the new model. Session-only by default (pi
+    /// `ModelMutationOptions`): with `options.persist` the global settings
+    /// default provider/model is written and the model is promoted into the
+    /// scoped/enabled-model set when one exists. Same impl_ copying
     /// contract as prompt(): the returned lazy awaitable survives moving or
     /// destroying the public handle before its first co_await.
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> set_model(
-        ai::Model model);
+            ai::Model model, ModelMutationOptions options = {});
     /// Blocking facade for tests and one-shot hosts; drives the async path on
     /// a temporary executor (same contract as prompt_blocking).
-    [[nodiscard]] support::ExpectedVoid set_model_blocking(ai::Model model);
+    [[nodiscard]] support::ExpectedVoid set_model_blocking(ai::Model model, ModelMutationOptions options = {});
 
     /// Runtime model cycle (pi `AgentSession.cycleModel`): when the session
     /// carries scoped models, cycle within the auth-filtered scoped set
     /// (models whose provider resolves no auth are dropped; a scoped model's
     /// explicit thinking level overrides the current preference); otherwise
     /// cycle within the available models. A set with zero or one eligible
-    /// model yields `std::nullopt`. Same impl_ copying contract as prompt().
-    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>>
-    cycle_model(std::string direction);
+    /// model yields `std::nullopt`. Session-only by default (pi
+    /// `ModelMutationOptions`); `options.persist` also writes the global
+    /// settings default like `set_model`. Same impl_ copying contract as
+    /// prompt().
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> cycle_model(
+            std::string direction, ModelMutationOptions options = {});
     /// Blocking facade for tests and one-shot hosts; drives the async path on
     /// a temporary executor (same contract as prompt_blocking).
     [[nodiscard]] support::Expected<std::optional<ModelCycleResult>> cycle_model_blocking(
-        std::string direction);
+            std::string direction, ModelMutationOptions options = {});
 
     /// Cycle the thinking level through the active model's supported set (pi
     /// `AgentSession.cycleThinkingLevel`): the next level after the current
     /// one, wrapping. `std::nullopt` when the active model supports no
-    /// thinking. Applies `set_thinking_level` (entry + settings default on a
-    /// real change).
-    [[nodiscard]] support::Expected<std::optional<std::string>> cycle_thinking_level();
+    /// thinking. Applies `set_thinking_level` (entry on a real change; the
+    /// settings default under `options.persist`).
+    [[nodiscard]] support::Expected<std::optional<std::string>> cycle_thinking_level(ModelMutationOptions options = {});
 
     /// Replace the session's scoped-model set (pi `AgentSession.setScopedModels`;
     /// session-only, never persisted). An empty set restores un-scoped cycling

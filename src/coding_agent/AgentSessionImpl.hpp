@@ -127,26 +127,31 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// Set the thinking level for subsequent turns (pi `AgentSession`
     /// `setThinkingLevel`). The level is clamped to the active model's
     /// supported set; on a real change the session appends a
-    /// `thinking_level_change` entry and writes the global settings default
-    /// (pi: `supportsThinking() || effectiveLevel !== "off"`), so resume
-    /// restores the level exactly like pi (T04). Returns the effective
-    /// (clamped) level, or an error for an invalid request or a persistence
-    /// failure. Live Agent state advances first; a persistence failure is
-    /// reported without rolling the change back (Session Event Commitment
-    /// philosophy).
-    [[nodiscard]] support::Expected<std::string> set_thinking_level(std::string_view level);
+    /// `thinking_level_change` entry. Session-only by default (pi
+    /// `ModelMutationOptions`); with `options.persist` the requested level is
+    /// also written to the global settings default — pi persists before its
+    /// change gate, so a persist with an unchanged level still writes.
+    /// Returns the effective (clamped) level, or an error for an invalid
+    /// request or a persistence failure. Live Agent state advances first; a
+    /// persistence failure is reported without rolling the change back
+    /// (Session Event Commitment philosophy).
+    [[nodiscard]] support::Expected<std::string> set_thinking_level(
+            std::string_view level, ModelMutationOptions options);
 
-    /// Runtime model switch (pi `AgentSession.setModel`, G3 decision 5):
-    /// validates that the target model's provider resolves auth (`No API key
+    /// Runtime model switch (pi `AgentSession.setModel`): validates that the
+    /// target model's provider resolves auth (`No API key
     /// for <provider>/<model>` otherwise), swaps the live Agent model,
     /// appends the `model_change` session entry (skipped for in-memory
-    /// sessions, like the creation-time entry), writes the global settings
-    /// default provider/model, and re-clamps the thinking level against the
-    /// new model's supported set (pi's `setModel` → `setThinkingLevel`
-    /// sequence). Live Agent state advances first; a persistence failure is
-    /// reported without rolling the change back (Session Event Commitment
-    /// philosophy).
-    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> set_model(ai::Model model);
+    /// sessions, like the creation-time entry), and re-clamps the thinking
+    /// level against the new model's supported set (pi's `setModel` →
+    /// `setThinkingLevel` sequence). Session-only by default; with
+    /// `options.persist` the global settings default provider/model is
+    /// written and the model is promoted into the scoped/enabled-model set
+    /// when one exists. Live Agent state advances first; a persistence
+    /// failure is reported without rolling the change back (Session Event
+    /// Commitment philosophy).
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> set_model(
+            ai::Model model, ModelMutationOptions options);
 
     /// Runtime model cycle (pi `AgentSession.cycleModel`, G3 decision 5):
     /// when the session carries scoped models, cycle within the auth-filtered
@@ -155,17 +160,17 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// the current preference); otherwise cycle within the available models
     /// (pi `_cycleAvailableModel`). A set with zero or one eligible model
     /// yields `std::nullopt`. Each cycle applies the model, appends the
-    /// `model_change` entry, writes the global settings default, and re-clamps
-    /// the thinking level, exactly like `set_model`.
+    /// `model_change` entry, and re-clamps the thinking level. Session-only
+    /// by default; with `options.persist` the global settings default and
+    /// scope promotion ride along, exactly like `set_model`.
     [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> cycle_model(
-            std::string_view direction);
+            std::string_view direction, ModelMutationOptions options);
 
     /// Cycle the thinking level through the active model's supported set (pi
     /// `AgentSession.cycleThinkingLevel`): the next level after the current
     /// one, wrapping. `std::nullopt` when the active model supports no
-    /// thinking. Applies `set_thinking_level` (entry + settings default on a
-    /// real change).
-    [[nodiscard]] support::Expected<std::optional<std::string>> cycle_thinking_level();
+    /// thinking. Applies `set_thinking_level` with the mutation options.
+    [[nodiscard]] support::Expected<std::optional<std::string>> cycle_thinking_level(ModelMutationOptions options);
 
     /// Replace the session's scoped-model set (pi `setScopedModels`;
     /// session-only, never persisted). An empty set restores un-scoped
@@ -393,16 +398,28 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// `ctx.thinkingLevel` at execution time). Called after the Agent is
     /// constructed and after every model/thinking change.
     void refresh_bash_session_environment();
-    /// pi `_getThinkingLevelForModelSwitch`: an explicit scoped-model level
-    /// wins; otherwise a current model without thinking support falls back to
-    /// the merged settings default (then pi's DEFAULT_THINKING_LEVEL);
-    /// otherwise the current level is kept (re-clamped by the caller).
+    /// pi `_getThinkingLevelForModelSwitch` (v0.87.1): an explicit
+    /// scoped-model level wins; otherwise the per-model thinking-level
+    /// override (pi `modelThinkingLevels`, a Deferred setting) is treated as
+    /// absent; otherwise the merged settings default wins; otherwise the
+    /// current live level is kept (re-clamped by the caller against the new
+    /// model). pi's trailing `?? DEFAULT_THINKING_LEVEL` fallback stays
+    /// "medium" for the stateless callers.
     [[nodiscard]] std::string resolve_thinking_level_for_switch(const std::optional<std::string>& explicit_level) const;
+    /// pi `_addPersistedDefaultToNonEmptyScope` (v0.87.1 setModel persist
+    /// tail): with a non-empty session scope, append the model (without a
+    /// thinking level) when it is not already scoped, then append the
+    /// `provider/id` reference to the global `enabledModels` when one exists
+    /// (case-insensitive dedupe). A no-op for an empty scope.
+    void add_persisted_default_to_non_empty_scope(const ai::Model& model);
     /// Shared model-switch tail (pi `setModel`/`cycleModel` after the auth
     /// decision): swap the live Agent model, append the `model_change` entry,
-    /// write the global settings default, and re-clamp the thinking level.
+    /// and re-clamp the thinking level (session-only — pi
+    /// `setThinkingLevel(thinkingLevel)` carries no persist). Under
+    /// `options.persist` the global settings default and scope promotion ride
+    /// along.
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> apply_model_switch(
-            ai::Model model, std::string thinking_level);
+            ai::Model model, std::string thinking_level, ModelMutationOptions options);
     /// Shared preflight outcome for entry points that reject a concurrent prompt.
     [[nodiscard]] support::ExpectedVoid reject_if_busy() const;
     /// pi `_rebuildSystemPrompt`: build the System Prompt in pi's exact shape
@@ -628,11 +645,11 @@ void record_session_observer_diagnostic(std::vector<support::Error>& diagnostics
 
 /// Runtime model switch entry (defined in AgentSessionInteraction.cpp).
 [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> session_set_model(
-        std::shared_ptr<AgentSession::Impl> impl, ai::Model model);
+        std::shared_ptr<AgentSession::Impl> impl, ai::Model model, ModelMutationOptions options);
 
 /// Runtime model cycle entry (defined in AgentSessionInteraction.cpp).
 [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> session_cycle_model(
-        std::shared_ptr<AgentSession::Impl> impl, std::string direction);
+        std::shared_ptr<AgentSession::Impl> impl, std::string direction, ModelMutationOptions options);
 
 /// Resource reload entry (defined in AgentSessionInteraction.cpp).
 [[nodiscard]] boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> session_reload(

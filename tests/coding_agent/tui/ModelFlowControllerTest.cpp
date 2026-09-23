@@ -34,6 +34,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -206,6 +207,7 @@ struct ModelFlowFixture {
             return session_pointer;
         };
         hooks.live_theme = [this]() -> const coding_agent::tui::LiveTheme& { return theme; };
+        hooks.show_warning = [this](std::string text) { warnings.push_back(std::move(text)); };
         flows = std::make_shared<coding_agent::tui::ModelFlowController>(
             io.get_executor(),
             presenter,
@@ -217,6 +219,8 @@ struct ModelFlowFixture {
     }
 
     void drain() { drain_ready(io); }
+
+    std::vector<std::string> warnings;
 };
 
 } // namespace
@@ -403,4 +407,72 @@ TEST_CASE("ModelFlowController builds the /model completion snapshot from the sc
     completion = fixture.flows->model_completion();
     REQUIRE(completion->size() == 1);
     CHECK(completion->front().id == "alpha-1");
+}
+
+TEST_CASE("The /model lookup matches the cached snapshot first and only refreshes on a miss outside the scope",
+        "[coding_agent][tui][model-flows][issue774][spec]") {
+    ModelFlowFixture fixture;
+    fixture.write_models(kReasoningAndPlainKeyed);
+    fixture.boot();
+
+    // pi `findExactModelMatch` cached branch: a snapshot hit switches without a
+    // catalog refresh and reports only the session-only `Model: <id>` status.
+    fixture.flows->open_model_selector("beta/beta-1");
+    fixture.drain();
+    CHECK(fixture.session->snapshot().agent_state.model.id == "beta-1");
+    REQUIRE_FALSE(fixture.presenter.statuses.empty());
+    CHECK(fixture.presenter.statuses.back() == "Model: beta-1");
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 0);
+    CHECK(fixture.warnings.empty());
+    // Session-only: the switch writes no settings default (pi
+    // `setModel(model, { persist: false })`).
+    CHECK(fixture.read_settings().empty());
+
+    // pi's miss path: one `Refreshing model catalogs…` status, then the
+    // cached-search fallback opens the selector pre-filtered.
+    fixture.presenter.statuses.clear();
+    fixture.flows->open_model_selector("zzz");
+    fixture.drain();
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 1);
+    CHECK(fixture.presenter.slot != nullptr);
+    CHECK(fixture.presenter.errors.empty());
+    // A clean refresh warns about nothing.
+    CHECK(fixture.warnings.empty());
+    CHECK(fixture.session->snapshot().agent_state.model.id == "beta-1");
+}
+
+TEST_CASE("A /model miss inside the session scope opens the selector without refreshing",
+        "[coding_agent][tui][model-flows][issue774][spec]") {
+    ModelFlowFixture fixture;
+    fixture.write_models(kReasoningAndPlainKeyed);
+    fixture.boot();
+    const auto scoped = fixture.session->model_runtime()->model("alpha", "alpha-1");
+    REQUIRE(scoped.has_value());
+    fixture.session->set_scoped_models({coding_agent::ScopedModel{.model = *scoped}});
+    REQUIRE(fixture.session->scoped_models().size() == 1);
+
+    // A scoped hit is matched against the scope without a refresh.
+    fixture.flows->open_model_selector("alpha/alpha-1");
+    fixture.drain();
+    REQUIRE_FALSE(fixture.presenter.statuses.empty());
+    CHECK(fixture.presenter.statuses.back() == "Model: alpha-1");
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 0);
+
+    // pi `findExactModelMatch`: a miss inside the scoped set returns without a
+    // refresh, and `handleModelCommand` opens the selector pre-filtered.
+    fixture.presenter.statuses.clear();
+    fixture.flows->open_model_selector("beta/beta-1");
+    fixture.drain();
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 0);
+    CHECK(fixture.presenter.slot != nullptr);
+    CHECK(fixture.presenter.errors.empty());
+    CHECK(fixture.session->snapshot().agent_state.model.id == "alpha-1");
 }

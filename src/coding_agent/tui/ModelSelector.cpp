@@ -37,9 +37,11 @@ ModelSelectorComponent::ModelSelectorComponent(const LiveTheme& theme,
         ModelSelectorSelectSink on_select,
         ModelSelectorCancelSink on_cancel,
         ModelSelectorInvalidateSink on_invalidate,
-        std::optional<std::string> initial_search_input)
+        std::optional<std::string> initial_search_input,
+        ModelSelectorSelectAsDefaultSink on_select_as_default)
     : theme_(theme), keybindings_(std::move(keybindings)), runtime_(std::move(runtime)), executor_(std::move(executor)),
-      on_select_(std::move(on_select)), on_cancel_(std::move(on_cancel)), on_invalidate_(std::move(on_invalidate)),
+      on_select_(std::move(on_select)), on_select_as_default_(std::move(on_select_as_default)),
+      on_cancel_(std::move(on_cancel)), on_invalidate_(std::move(on_invalidate)),
       // The list/search presentation lives in the shared SelectList; sinks
       // only re-enter this component (the SelectList outlives neither).
       select_list_(std::vector<cch::tui::SelectItem>{},
@@ -233,6 +235,25 @@ void ModelSelectorComponent::confirm_selection(const cch::tui::SelectItem& item)
     if (found && on_select_) on_select_(std::move(model));
 }
 
+/// pi `handleInput`'s `app.models.save` branch: `dispose()` then
+/// `onSelectAsDefaultCallback(selectedModel)`.
+void ModelSelectorComponent::confirm_selection_as_default(const cch::tui::SelectItem& item) {
+    ai::Model model;
+    bool found = false;
+    {
+        std::lock_guard lock(mutex_);
+        close();
+        for (const auto& candidate : active_models_) {
+            if (candidate.provider + "/" + candidate.id == item.value) {
+                model = candidate.model;
+                found = true;
+                break;
+            }
+        }
+    }
+    if (found && on_select_as_default_) on_select_as_default_(std::move(model));
+}
+
 void ModelSelectorComponent::cancel_selection() {
     {
         std::lock_guard lock(mutex_);
@@ -376,6 +397,17 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
                 !pushed)
             return std::unexpected(pushed.error());
     }
+    // pi's constructor-gated hint line: the save-as-default affordance
+    // renders only when the sink exists (`  Enter to select · Ctrl+S to set
+    // as default · Escape/Ctrl+C to cancel` through pi's `keyDisplayText`).
+    if (on_select_as_default_) {
+        if (auto pushed = emit(theme_.foreground(ThemeToken::Muted,
+                    "  " + format_key_text(keybindings_->key_text("tui.select.confirm"), true) + " to select · " +
+                            format_key_text(keybindings_->key_text("app.models.save"), true) + " to set as default · " +
+                            format_key_text(keybindings_->key_text("tui.select.cancel"), true) + " to cancel"));
+                !pushed)
+            return std::unexpected(pushed.error());
+    }
     {
         cch::tui::Text spacer("", 1, 0);
         if (auto appended = append(spacer); !appended) return std::unexpected(appended.error());
@@ -398,6 +430,16 @@ cch::tui::InputAdmissionOutcome ModelSelectorComponent::handle_input(const cch::
         std::lock_guard lock(mutex_);
         if (!scoped_model_items_.empty()) {
             set_scope(!scope_scoped_);
+        }
+        return cch::tui::InputAdmissionOutcome::Consumed;
+    }
+
+    // pi `handleInput`'s `app.models.save` branch: select and save as
+    // default; it pre-empts SelectList so the key never falls through to the
+    // search input.
+    if (key != nullptr && on_select_as_default_ && keybindings_->matches(*key, "app.models.save")) {
+        if (const auto selection = select_list_.selected_item()) {
+            confirm_selection_as_default(*selection);
         }
         return cch::tui::InputAdmissionOutcome::Consumed;
     }

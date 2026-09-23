@@ -15,7 +15,15 @@
 #include <cch/support/Error.hpp>
 #include "support/AsyncResultBridge.hpp"
 
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
+
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <set>
@@ -59,6 +67,54 @@ namespace {
 /// (unbound or retired host).
 [[nodiscard]] coding_agent::AgentSession* current_session(ModelFlowHostHooks& hooks) {
     return hooks.current_session != nullptr ? hooks.current_session() : nullptr;
+}
+
+/// One bounded catalog refresh (pi `findExactModelMatch`'s miss path): pi's
+/// `refreshModelCatalogs` races an abort signal that a 15 s timer fires, so
+/// the C++ refresh races pi's timeout on the flow executor and the loser of
+/// the race never resolves the shared outcome. The C++ runtime exposes no
+/// per-refresh cancellation, so a refresh that settles after the timeout
+/// still updates the runtime's availability snapshot for the fallback
+/// search (pi aborts it instead).
+struct CatalogRefreshOutcome {
+    bool timed_out{false};
+    bool refreshed{false};
+};
+
+[[nodiscard]] boost::asio::awaitable<CatalogRefreshOutcome> refresh_catalogs_with_timeout(
+        std::shared_ptr<cch::coding_agent::ModelRuntime> runtime, std::chrono::steady_clock::duration timeout) {
+    struct RaceState {
+        bool settled{false};
+        bool refreshed{false};
+    };
+    const auto state = std::make_shared<RaceState>();
+    const auto executor = co_await boost::asio::this_coro::executor;
+    const auto timer = std::make_shared<boost::asio::steady_timer>(executor, timeout);
+    // Detached spawn (the ModelSelector start-refresh shape): the refresh
+    // rides the spawned frame, the runtime rides it too, and the completion
+    // resolves the race through the shared state.
+    boost::asio::co_spawn(
+            executor,
+            [runtime = std::move(runtime), state, timer]() mutable -> boost::asio::awaitable<void> {
+                // `refresh()` recomposes the provider catalogs from the Agent
+                // Config Directory (a bounded local pass); `get_available()`
+                // then refreshes the auth-filtered snapshot the search
+                // matches against, pi's `refreshModelCatalogs` result.
+                static_cast<void>(runtime->refresh());
+                auto refreshed = co_await support::detail::await_async_result(runtime->get_available());
+                if (state->settled) co_return;
+                state->settled = true;
+                state->refreshed = refreshed.has_value();
+                timer->cancel();
+            },
+            boost::asio::detached);
+    boost::system::error_code wait_error;
+    co_await timer->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+    if (!state->settled) {
+        state->settled = true;
+        co_return CatalogRefreshOutcome{.timed_out = true, .refreshed = false};
+    }
+    co_return CatalogRefreshOutcome{.timed_out = false, .refreshed = state->refreshed};
 }
 
 } // namespace
@@ -164,8 +220,9 @@ std::shared_ptr<const ModelCompletionSnapshot> ModelFlowController::model_comple
 
 /// pi `showModelSelector`: the model selector renders in the editor slot
 /// (pi's `showSelector` editorContainer swap). Selecting a model runs
-/// `session.setModel` on the executor and reports `Model: <id>`; the
-/// settings default write rides the session path.
+/// `session.setModel` session-only on the executor and reports `Model:
+/// <id>`; Ctrl+S (`app.models.save`) runs the persisted switch and reports
+/// `Default model: provider/id` (#774).
 void ModelFlowController::show_model_selector(std::optional<std::string> initial_search_input) {
     if (hooks_.is_live == nullptr || !hooks_.is_live()) return;
     if (hooks_.live_theme == nullptr) return;
@@ -173,40 +230,49 @@ void ModelFlowController::show_model_selector(std::optional<std::string> initial
     if (session == nullptr || !session->is_open()) return;
     const auto current_model = session->snapshot().agent_state.model;
     const auto weak = weak_from_this();
-    auto selector = std::make_shared<ModelSelectorComponent>(
-        hooks_.live_theme(),
-        keybindings_->get(),
-        &current_model,
-        session->model_runtime(),
-        executor_,
-        session->scoped_models(),
-        [weak](cch::ai::Model model) {
+    auto switch_model = [weak](bool persist) {
+        return [weak, persist](cch::ai::Model model) {
             // Input-thread sink: post the session switch to the executor.
             if (const auto self = weak.lock()) {
-                self->hooks_.post_on_executor([self, model = std::move(model)]() mutable {
+                self->hooks_.post_on_executor([self, model = std::move(model), persist]() mutable {
                     self->spawn(
-                        [self, model = std::move(model)]() mutable -> boost::asio::awaitable<void> {
-                            co_await self->run_model_switch(std::move(model));
-                        },
-                        "Native TUI model selection failed");
+                            [self, model = std::move(model), persist]() mutable -> boost::asio::awaitable<void> {
+                                co_await self->run_model_switch(std::move(model), persist);
+                            },
+                            persist ? "Native TUI model default failed" : "Native TUI model selection failed");
                 });
             }
-        },
-        [weak] {
-            if (const auto self = weak.lock()) {
-                self->hooks_.post_on_executor([self] { self->presenter_->restore_prompt_slot(); });
-            }
-        },
-        [weak] {
-            if (const auto self = weak.lock()) self->presenter_->request_render();
-        },
-        std::move(initial_search_input));
+        };
+    };
+    auto selector = std::make_shared<ModelSelectorComponent>(
+            hooks_.live_theme(),
+            keybindings_->get(),
+            &current_model,
+            session->model_runtime(),
+            executor_,
+            session->scoped_models(),
+            switch_model(false),
+            [weak] {
+                if (const auto self = weak.lock()) {
+                    self->hooks_.post_on_executor([self] { self->presenter_->restore_prompt_slot(); });
+                }
+            },
+            [weak] {
+                if (const auto self = weak.lock()) self->presenter_->request_render();
+            },
+            std::move(initial_search_input),
+            switch_model(true));
     presenter_->replace_prompt_slot(std::move(selector));
 }
 
-/// pi `handleModelCommand`: no search term opens the selector; an exact
-/// provider/model reference switches immediately (`Model: <id>`); anything
-/// else opens the selector pre-filtered with the term.
+/// pi `handleModelCommand` (v0.87.1): no search term opens the selector; an
+/// exact provider/model reference switches immediately (`Model: <id>`);
+/// anything else opens the selector pre-filtered with the term. The match
+/// runs against the cached models first (pi `findExactModelMatch`: the
+/// scoped set when one exists, else the availability snapshot) and only a
+/// miss outside the scoped set refreshes — with the `Refreshing model
+/// catalogs…` status, pi's 15 s timeout, and the timeout/failure warnings —
+/// before the cached-search fallback.
 boost::asio::awaitable<void> ModelFlowController::handle_model_command(std::string search_term) {
     const auto term = interactive_view_detail::trim_editor_submission(std::move(search_term));
     if (term.empty()) {
@@ -216,48 +282,56 @@ boost::asio::awaitable<void> ModelFlowController::handle_model_command(std::stri
     auto* session = current_session(hooks_);
     if (session == nullptr) co_return;
 
-    // pi `getModelCandidates`: the scoped set when present, else a live
-    // availability refresh.
-    std::vector<cch::ai::Model> candidates;
+    // pi `findExactModelMatch` cached branch: the scoped set when present,
+    // else the snapshot — matched without any refresh.
     const auto scoped = session->scoped_models();
+    std::vector<cch::ai::Model> candidates;
     if (!scoped.empty()) {
         candidates.reserve(scoped.size());
         for (const auto& entry : scoped) candidates.push_back(entry.model);
-    } else {
-        auto runtime = session->model_runtime();
-        if (!runtime) co_return;
-        (void)runtime->refresh();
-        auto available = co_await support::detail::await_async_result(runtime->get_available());
-        if (!available) {
-            presenter_->show_error(combined_error_text(available.error()));
-            co_return;
-        }
-        candidates = std::move(*available);
+    } else if (auto runtime = session->model_runtime()) {
+        candidates = runtime->get_available_snapshot();
+    }
+    if (auto matched = find_exact_model_reference_match(term, candidates)) {
+        co_return co_await switch_model_session_only(std::move(*matched));
+    }
+    if (!scoped.empty()) {
+        // pi `findExactModelMatch`: a miss inside the scoped set returns
+        // without a refresh, and `handleModelCommand` then opens the
+        // selector pre-filtered with the term.
+        show_model_selector(term);
+        co_return;
     }
 
-    if (const auto matched = find_exact_model_reference_match(term, candidates)) {
-        const auto model = *matched;
-        // Re-resolve the session after the availability suspension: a
-        // session replacement may have swapped the active session while the
-        // refresh was in flight (the pre-extraction member re-read shape).
-        auto* target = current_session(hooks_);
-        if (target == nullptr) co_return;
-        auto switched = co_await target->set_model(model);
-        if (!switched) {
-            presenter_->show_error(combined_error_text(switched.error()));
-            co_return;
-        }
-        update_model_completion();
-        presenter_->show_status("Model: " + model.id);
-        co_return;
+    auto runtime = session->model_runtime();
+    if (!runtime) co_return;
+
+    // pi miss path: one status line, then the bounded refresh.
+    presenter_->show_status("Refreshing model catalogs…");
+    const auto refresh = co_await refresh_catalogs_with_timeout(runtime, std::chrono::seconds{15});
+    if (refresh.timed_out) {
+        if (hooks_.show_warning != nullptr) hooks_.show_warning("Model refresh timed out; searching cached models.");
+    } else if (!refresh.refreshed) {
+        // The C++ runtime exposes a single availability/composition error
+        // channel rather than pi's per-provider error counts (the
+        // ModelSelector refresh path makes the same collapse).
+        if (hooks_.show_warning != nullptr)
+            hooks_.show_warning("Could not refresh model catalogs; searching cached models.");
+    }
+
+    // pi's post-refresh search runs against the refreshed snapshot; a
+    // session replacement during the refresh is resolved by the switch
+    // itself (`switch_model_session_only` re-reads the current session).
+    if (auto matched = find_exact_model_reference_match(term, runtime->get_available_snapshot())) {
+        co_return co_await switch_model_session_only(std::move(*matched));
     }
     show_model_selector(term);
 }
 
-/// The selector's select flow (pi `handleSelect`): `session.setModel` on the
-/// executor, then the `Model: <id>` status from the session that is current
-/// when the switch settles.
-boost::asio::awaitable<void> ModelFlowController::run_model_switch(cch::ai::Model model) {
+/// pi `handleSelect`: `session.setModel` session-only on the executor, then
+/// the `Model: <id>` status from the session that is current when the switch
+/// settles.
+boost::asio::awaitable<void> ModelFlowController::switch_model_session_only(cch::ai::Model model) {
     auto* session = current_session(hooks_);
     if (session == nullptr) co_return;
     auto switched = co_await session->set_model(std::move(model));
@@ -266,9 +340,29 @@ boost::asio::awaitable<void> ModelFlowController::run_model_switch(cch::ai::Mode
         co_return;
     }
     update_model_completion();
-    presenter_->restore_prompt_slot();
     if (auto* current = current_session(hooks_); current != nullptr) {
         presenter_->show_status("Model: " + current->snapshot().agent_state.model.id);
+    }
+}
+
+/// The selector's select flow (pi `handleSelect`) and the save-as-default
+/// flow (pi `selectModel`): `session.setModel` on the executor — session-only
+/// with the `Model: <id>` status, or persisted through the mutation options
+/// with the `Default model: provider/id` status (#774).
+boost::asio::awaitable<void> ModelFlowController::run_model_switch(cch::ai::Model model, bool persist) {
+    auto* session = current_session(hooks_);
+    if (session == nullptr) co_return;
+    auto switched = co_await session->set_model(std::move(model), ModelMutationOptions{.persist = persist});
+    if (!switched) {
+        presenter_->show_error(combined_error_text(switched.error()));
+        co_return;
+    }
+    update_model_completion();
+    presenter_->restore_prompt_slot();
+    if (auto* current = current_session(hooks_); current != nullptr) {
+        const auto& switched_model = current->snapshot().agent_state.model;
+        presenter_->show_status(persist ? "Default model: " + switched_model.provider + "/" + switched_model.id
+                                        : "Model: " + switched_model.id);
     }
 }
 

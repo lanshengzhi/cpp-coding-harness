@@ -18,6 +18,7 @@
 #include "coding_agent/tui/SlashCommandEffects.hpp"
 #include "support/AsyncResultBridge.hpp"
 
+#include <cctype>
 #include <csignal>
 #include <format>
 #include <memory>
@@ -50,6 +51,19 @@ namespace {
     }
     result.push_back('"');
     return result;
+}
+
+/// pi `searchTerm.trim().toLowerCase()` equality against a candidate level
+/// name (pi `handleThinkingCommand`).
+[[nodiscard]] bool equals_lower_case(std::string_view left, std::string_view right) {
+    if (left.size() != right.size()) return false;
+    for (std::size_t index = 0; index < left.size(); ++index) {
+        if (std::tolower(static_cast<unsigned char>(left[index])) !=
+                std::tolower(static_cast<unsigned char>(right[index]))) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace
@@ -349,13 +363,32 @@ void InteractiveEngine::dispatch_modal_slash_command(SlashCommandInvocation invo
                 show_error("No active session for /thinking");
                 return;
             }
-            if (auto applied = session_->set_thinking_level(invocation.argument);
-                !applied) {
-                show_error(combined_error_text(applied.error()));
+            // pi `handleThinkingCommand(searchTerm)`: the trimmed argument
+            // (the router already trims it) matches the model's available
+            // levels case-insensitively; a level outside the active model's
+            // set errors with pi's wording instead of clamping (pi's
+            // setThinkingLevel clamp stays session-level API behavior, not a
+            // command behavior).
+            const auto& term = invocation.argument;
+            const auto snapshot = session_->snapshot();
+            const auto supported = ai::get_supported_thinking_levels(snapshot.agent_state.model);
+            std::optional<std::string> matched;
+            std::string available_names;
+            for (const auto level : supported) {
+                const auto name = ai::model_thinking_level_name(level);
+                if (!name) continue;
+                if (!available_names.empty()) available_names += ", ";
+                available_names += *name;
+                if (!matched && equals_lower_case(*name, term)) matched = std::string{*name};
+            }
+            if (!matched) {
+                show_error(std::format("Unknown thinking level \"{}\". Available levels: {}.", term, available_names));
                 return;
             }
+            settings_flows_->apply_thinking_level(*matched, /* persist */ false);
+            return;
         }
-        settings_flows_->show_settings_selector();
+        settings_flows_->show_thinking_selector();
         return;
     case SlashCommandId::Login:
         auth_flows_->open_login(std::move(invocation.argument));

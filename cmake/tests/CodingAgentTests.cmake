@@ -147,6 +147,8 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/SettingsSelectorTest.cpp
         tests/coding_agent/tui/ThemeControllerTest.cpp
         tests/coding_agent/tui/ThemeTest.cpp
+        tests/coding_agent/tui/ThinkingSelectorInteractiveTest.cpp
+        tests/coding_agent/tui/ThinkingSelectorTest.cpp
         tests/coding_agent/tui/TreeSelectorComponentTest.cpp
         tests/coding_agent/tui/TreeSelectorInteractiveTest.cpp
         tests/coding_agent/tui/TuiActionSeamTest.cpp
