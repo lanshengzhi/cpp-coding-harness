@@ -678,7 +678,11 @@ cch::tui::InputAdmissionOutcome SessionSelectorComponent::handle_input(const cch
     }
 
     if (mode_rename_) {
-        if (key == nullptr) return cch::tui::InputAdmissionOutcome::Consumed;
+        if (key == nullptr) {
+            // Pasted text edits the rename input like typed keys do.
+            static_cast<void>(rename_input_.handle_input(input));
+            return cch::tui::InputAdmissionOutcome::Consumed;
+        }
         if (keybindings_->matches(*key, "tui.select.cancel")) {
             exit_rename_mode();
             return cch::tui::InputAdmissionOutcome::Consumed;

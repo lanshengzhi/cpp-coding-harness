@@ -346,6 +346,15 @@ void LoginDialogComponent::invalidate() {
 
 cch::tui::InputAdmissionOutcome LoginDialogComponent::handle_input(const cch::tui::InputEventVariant& input) {
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
+    if (key == nullptr) {
+        // Pasted text edits the prompt input (pi showPrompt's Input accepts
+        // paste insertion); the press-behavior guard below only filters key
+        // releases and must not swallow PasteEvent.
+        std::lock_guard lock(mutex_);
+        if (!input_visible_) return cch::tui::InputAdmissionOutcome::Unhandled;
+        static_cast<void>(input_.handle_input(input));
+        return cch::tui::InputAdmissionOutcome::Consumed;
+    }
     if (!cch::tui::carries_press_behavior(key)) return cch::tui::InputAdmissionOutcome::Unhandled;
     if (keybindings_->matches(*key, "tui.select.cancel")) {
         cancel();

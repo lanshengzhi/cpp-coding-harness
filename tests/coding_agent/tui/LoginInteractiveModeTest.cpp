@@ -796,3 +796,56 @@ TEST_CASE("request-time re-auth guidance renders through the chat surface",
 
     run.exit();
 }
+
+TEST_CASE("direct Kimi API-key prompt stores the typed key", "[coding_agent][tui][login][issue768][spec]") {
+    LoginFixture fixture;
+    auto runtime = fixture.create_runtime();
+    REQUIRE(runtime != nullptr);
+    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
+    REQUIRE(session);
+
+    InteractiveRun run(fixture.runtime);
+    run.start(*session->session, fixture.agent_dir);
+
+    run.type("/login kimi-coding\r");
+    run.wait_for_screen("Enter API key");
+    run.type("typed-kimi-key-01");
+    auto screen = visible_screen(run.terminal);
+    CHECK(screen.find("•") != std::string::npos);
+    CHECK(screen.find("typed-kimi-key-01") == std::string::npos);
+    run.type("\r");
+    run.wait_for_screen("Saved API key for Kimi For Coding.");
+    const auto auth_text = read_text(fixture.auth_path());
+    INFO(auth_text);
+    CHECK(auth_text.find("typed-kimi-key-01") != std::string::npos);
+
+    run.exit();
+}
+
+TEST_CASE("direct Kimi API-key prompt stores a bracketed-paste key", "[coding_agent][tui][login][issue768][spec]") {
+    LoginFixture fixture;
+    auto runtime = fixture.create_runtime();
+    REQUIRE(runtime != nullptr);
+    auto session = fixture.runtime.run(fixture.create_session_async(std::move(runtime)));
+    REQUIRE(session);
+
+    InteractiveRun run(fixture.runtime);
+    run.start(*session->session, fixture.agent_dir);
+
+    run.type("/login kimi-coding\r");
+    run.wait_for_screen("Enter API key");
+    // Exactly what a real terminal delivers on paste (?2004h is enabled):
+    // ESC [ 200 ~ text ESC [ 201 ~. The dialog used to drop the PasteEvent
+    // before Input saw it, so Enter then "Saved" an empty key (#757).
+    run.type("\x1b[200~pasted-kimi-key-02\x1b[201~");
+    auto screen = visible_screen(run.terminal);
+    CHECK(screen.find("•") != std::string::npos);
+    CHECK(screen.find("pasted-kimi-key-02") == std::string::npos);
+    run.type("\r");
+    run.wait_for_screen("Saved API key for Kimi For Coding.");
+    const auto auth_text = read_text(fixture.auth_path());
+    INFO(auth_text);
+    CHECK(auth_text.find("pasted-kimi-key-02") != std::string::npos);
+
+    run.exit();
+}

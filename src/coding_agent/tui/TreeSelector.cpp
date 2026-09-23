@@ -1230,6 +1230,17 @@ cch::tui::InputAdmissionOutcome TreeSelectorComponent::handle_input(const cch::t
     }
 
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
+    if (key == nullptr) {
+        // Pasted text feeds the type-to-search query the way printable keys
+        // do (pi search-while-typing), then filters.
+        const auto* paste = std::get_if<cch::tui::PasteEvent>(&input);
+        if (paste == nullptr) return cch::tui::InputAdmissionOutcome::Unhandled;
+        search_query_ += paste->text;
+        folded_nodes_.clear();
+        apply_filter();
+        if (on_invalidate_) on_invalidate_();
+        return cch::tui::InputAdmissionOutcome::Consumed;
+    }
     if (!cch::tui::carries_press_behavior(key)) {
         return cch::tui::InputAdmissionOutcome::Unhandled;
     }
