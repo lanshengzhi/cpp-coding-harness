@@ -205,19 +205,21 @@ TEST_CASE("Ctrl+P and Shift+Ctrl+P cycle models with pi statuses; Shift+Tab cycl
     REQUIRE(running.terminal.inject_input("\x1b[112;5u"));
     drain_ready(running.io);
     screen = visible_screen(running.terminal);
-    CHECK(screen.find("Switched to Alpha Reasoning (thinking: medium)") != std::string::npos);
+    CHECK(screen.find("Switched to Alpha Reasoning") != std::string::npos);
+    CHECK(screen.find("Switched to Alpha Reasoning (thinking:") == std::string::npos);
     CHECK(session->snapshot().agent_state.model.id == "alpha-1");
+    CHECK(session->snapshot().agent_state.thinking_level == "off");
 
-    // Shift+Tab cycles the thinking level (pi `app.thinking.cycle`):
-    // medium → high → off (wrap over the supported set).
+    // Cycling back from the non-reasoning model preserves its clamped `off`
+    // level; Shift+Tab advances from off through minimal, then low.
     REQUIRE(running.terminal.inject_input("\x1b[Z"));
     drain_ready(running.io);
     screen = visible_screen(running.terminal);
-    CHECK(screen.find("Thinking level: high") != std::string::npos);
-    CHECK(session->snapshot().agent_state.thinking_level == "high");
+    CHECK(screen.find("Thinking level: minimal") != std::string::npos);
+    CHECK(session->snapshot().agent_state.thinking_level == "minimal");
     REQUIRE(running.terminal.inject_input("\x1b[Z"));
     drain_ready(running.io);
-    CHECK(session->snapshot().agent_state.thinking_level == "off");
+    CHECK(session->snapshot().agent_state.thinking_level == "low");
 
     // Shift+Tab on the non-reasoning beta model reports no support.
     REQUIRE(running.terminal.inject_input("\x10"));

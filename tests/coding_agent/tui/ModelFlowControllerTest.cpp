@@ -247,7 +247,8 @@ TEST_CASE("ModelFlowController cycles forward and backward with pi statuses thro
     fixture.flows->cycle_model("backward");
     fixture.drain();
     CHECK(fixture.session->snapshot().agent_state.model.id == "alpha-1");
-    CHECK(fixture.presenter.statuses.back() == "Switched to Alpha Reasoning (thinking: medium)");
+    CHECK(fixture.presenter.statuses.back() == "Switched to Alpha Reasoning");
+    CHECK(fixture.session->snapshot().agent_state.thinking_level == "off");
     CHECK(fixture.presenter.errors.empty());
     // The cycle never touches the prompt slot.
     CHECK(fixture.presenter.slot_replacements == 0);
