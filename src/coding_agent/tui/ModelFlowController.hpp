@@ -16,6 +16,7 @@ struct Model;
 
 namespace cch::coding_agent {
 class AgentSession;
+class ModelRuntime;
 class SettingsManager;
 } // namespace cch::coding_agent
 
@@ -24,6 +25,13 @@ namespace cch::coding_agent::tui {
 class LiveTheme;
 class ModalPresenter;
 class SharedKeybindings;
+
+/// Outcome of refreshing the cached model catalogs. The runtime currently
+/// exposes one error message rather than per-provider errors.
+struct ModelCatalogRefreshResult {
+    bool timed_out{false};
+    std::optional<std::string> error_message{std::nullopt};
+};
 
 /// One immutable model-completion candidate. The `/model` argument
 /// completion reads a shared immutable snapshot so the autocomplete request
@@ -67,6 +75,11 @@ struct ModelFlowHostHooks {
     /// drops the line — the refresh warnings in the `/model` miss flow are
     /// the only producer.
     std::move_only_function<void(std::string)> show_warning{nullptr};
+    /// Replace the bounded catalog refresh for deterministic timeout/error
+    /// flow tests; production leaves this unset and uses ModelRuntime.
+    std::move_only_function<boost::asio::awaitable<ModelCatalogRefreshResult>(
+            std::shared_ptr<cch::coding_agent::ModelRuntime>)>
+            refresh_model_catalogs{nullptr};
 };
 
 /// The Native TUI model flows (pi interactive-mode.ts `handleModelCommand`,
