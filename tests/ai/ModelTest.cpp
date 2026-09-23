@@ -125,8 +125,7 @@ TEST_CASE("Model compatibility alternatives validate against their API identity"
     const auto* completions = std::get_if<ai::OpenAICompletionsCompat>(&*model.compat);
     REQUIRE(completions != nullptr);
     CHECK(completions->supports_store == false);
-    CHECK(ai::resolve_openai_completions_thinking_format(*completions) ==
-            ai::OpenAICompletionsThinkingFormat::DeepSeek);
+    CHECK(completions->thinking_format == ai::OpenAICompletionsThinkingFormat::DeepSeek);
 }
 
 TEST_CASE("Model compatibility preserves absent fields and explicit false overrides", "[ai][model][issue759][spec]") {
@@ -149,7 +148,7 @@ TEST_CASE("Model compatibility preserves absent fields and explicit false overri
     REQUIRE(completions != nullptr);
     CHECK_FALSE(completions->thinking_format.has_value());
     CHECK_FALSE(completions->supports_strict_mode.has_value());
-    CHECK(ai::resolve_openai_completions_thinking_format(*completions) == ai::OpenAICompletionsThinkingFormat::OpenAI);
+    CHECK(completions->thinking_format == std::nullopt);
 
     model.compat = ai::ModelCompatVariant{ai::OpenAICompletionsCompat{
             .supports_strict_mode = false,
