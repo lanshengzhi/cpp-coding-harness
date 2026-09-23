@@ -460,12 +460,6 @@ SessionContext buildSessionContext(const std::vector<const SessionEntry*>& path)
                 }
             }
             break;
-        case SessionEntryKind::ActiveToolsChange:
-            if (const auto* tools =
-                    std::get_if<ActiveToolsChangeValue>(&entry->value)) {
-                ctx.active_tool_names = tools->active_tool_names;
-            }
-            break;
         default:
             break;
         }

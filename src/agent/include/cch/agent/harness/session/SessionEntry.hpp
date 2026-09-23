@@ -28,7 +28,6 @@ enum class SessionEntryKind {
     Message,
     ModelChange,
     ThinkingLevelChange,
-    ActiveToolsChange,
     Custom,
     CustomMessage,
     Label,
@@ -46,10 +45,6 @@ struct ModelChangeValue {
 
 struct ThinkingLevelChangeValue {
     std::string thinking_level;
-};
-
-struct ActiveToolsChangeValue {
-    std::vector<std::string> active_tool_names;
 };
 
 struct CustomEntryValue {
@@ -106,18 +101,16 @@ struct LeafEntryValue {
     std::optional<std::string> target_id;
 };
 
-using SessionEntryValue = std::variant<
-    std::monostate,
-    ModelChangeValue,
-    ThinkingLevelChangeValue,
-    ActiveToolsChangeValue,
-    CustomEntryValue,
-    CustomMessageEntryValue,
-    LabelEntryValue,
-    CompactionEntryValue,
-    BranchSummaryEntryValue,
-    SessionInfoEntryValue,
-    LeafEntryValue>;
+using SessionEntryValue = std::variant<std::monostate,
+        ModelChangeValue,
+        ThinkingLevelChangeValue,
+        CustomEntryValue,
+        CustomMessageEntryValue,
+        LabelEntryValue,
+        CompactionEntryValue,
+        BranchSummaryEntryValue,
+        SessionInfoEntryValue,
+        LeafEntryValue>;
 
 struct SessionEntry {
     SessionEntryKind kind{SessionEntryKind::Unknown};

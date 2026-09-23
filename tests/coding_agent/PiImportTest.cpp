@@ -27,17 +27,18 @@ std::string read_file(const std::filesystem::path& path) {
 
 } // namespace
 
-TEST_CASE("pi import copies config and session history without changing the source",
-        "[coding_agent][compat-pi][issue626]") {
+TEST_CASE("pi import preserves v0.87.1 system sections and tool loadout changes",
+        "[coding_agent][compat-pi][issue779][spec]") {
     cch::tests::TempWorkspace temp;
     const auto source = temp.path() / "pi-agent";
     const auto destination = temp.path() / "pike-agent";
     const auto session = source / "sessions" / "--workspace--" / "session.jsonl";
     write_file(source / "settings.json", "{\"theme\":\"dark\"}\n");
     write_file(source / "models.json", "{\"models\":[]}\n");
-    write_file(session,
-            "{\"type\":\"session\",\"version\":3,\"id\":\"session-1\"}\n"
-            "{\"type\":\"message\",\"id\":\"entry-1\"}\n");
+    const std::string session_text = R"({"type":"session","version":3,"id":"session-1"}
+{"type":"message","id":"entry-1","message":{"role":"system","content":"","sections":[{"name":"rules","text":"new rules"}],"toolsAdded":[{"name":"pi-extension-tool","description":"extension tool","parameters":{}}],"toolsRemoved":[{"name":"read"}]}}
+)";
+    write_file(session, session_text);
 
     const auto imported = cch::coding_agent::compat::pi::import_state({
             .source_directory = source,
@@ -48,7 +49,7 @@ TEST_CASE("pi import copies config and session history without changing the sour
     CHECK(imported->directories_copied == 2);
     CHECK(read_file(destination / "settings.json") == "{\"theme\":\"dark\"}\n");
     CHECK(read_file(destination / "models.json") == "{\"models\":[]}\n");
-    CHECK(read_file(destination / "sessions" / "--workspace--" / "session.jsonl") == read_file(session));
+    CHECK(read_file(destination / "sessions" / "--workspace--" / "session.jsonl") == session_text);
     CHECK(std::filesystem::exists(source / "settings.json"));
     CHECK(std::filesystem::exists(session));
 }
@@ -78,6 +79,23 @@ TEST_CASE("pi import rejects an unknown session entry shape before creating the 
     write_file(source / "sessions" / "broken.jsonl",
             "{\"type\":\"session\",\"version\":3}\n"
             "{\"type\":\"future_entry\"}\n");
+
+    const auto imported = cch::coding_agent::compat::pi::import_state({
+            .source_directory = source,
+            .destination_directory = destination,
+    });
+    REQUIRE_FALSE(imported);
+    CHECK(imported.error().message.find("unknown entry shape") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(destination));
+}
+
+TEST_CASE("pi import rejects the retired active_tools_change entry format", "[coding_agent][compat-pi][issue779]") {
+    cch::tests::TempWorkspace temp;
+    const auto source = temp.path() / "pi-agent";
+    const auto destination = temp.path() / "pike-agent";
+    write_file(source / "sessions" / "legacy.jsonl",
+            "{\"type\":\"session\",\"version\":3}\n"
+            "{\"type\":\"active_tools_change\",\"activeToolNames\":[\"read\"]}\n");
 
     const auto imported = cch::coding_agent::compat::pi::import_state({
             .source_directory = source,

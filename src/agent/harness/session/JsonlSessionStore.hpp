@@ -58,11 +58,7 @@ public:
         std::string provider,
         std::string model_id);
     [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_thinking_level_change(
-        std::optional<std::string> parent_id,
-        std::string thinking_level);
-    [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_active_tools_change(
-        std::optional<std::string> parent_id,
-        std::vector<std::string> tools);
+            std::optional<std::string> parent_id, std::string thinking_level);
     [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_custom_entry(
         std::optional<std::string> parent_id,
         std::string custom_type,

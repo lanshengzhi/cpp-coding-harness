@@ -46,11 +46,10 @@ struct ImportEntry {
 }
 
 [[nodiscard]] support::ExpectedVoid validate_pi_session_file(const std::filesystem::path& path) {
-    static constexpr std::array<std::string_view, 11> kEntryTypes{
+    static constexpr std::array<std::string_view, 10> kEntryTypes{
             "message",
             "model_change",
             "thinking_level_change",
-            "active_tools_change",
             "custom",
             "custom_message",
             "label",

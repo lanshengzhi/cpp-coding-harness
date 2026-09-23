@@ -7,6 +7,7 @@
 #include <cch/ai/Message.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "agent/harness/session/SessionJournalTestHooks.hpp"
@@ -21,6 +22,7 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <memory>
@@ -29,6 +31,7 @@
 #include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
 using namespace cch;
 using tests::run_awaitable;
@@ -191,6 +194,40 @@ TEST_CASE("SDK fresh persisted snapshot is passive session and Agent state", "[s
     CHECK(unchanged.metadata.session_id == created->resolved_identity.session_id);
     CHECK(unchanged.session_path.has_value());
     created->session->close();
+}
+
+TEST_CASE("resume ignores imported unavailable tools and exposes only the fixed executable registry",
+        "[coding_agent][snapshot][resume][tool-loadout][issue779][spec]") {
+    TestPaths paths;
+    tests::RuntimeFixture runtime;
+    auto options = new_session_options(paths, coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file});
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
+    REQUIRE(created.has_value());
+    created->session->close();
+
+    auto store = harness::session::SessionStore::open_existing(paths.session_file);
+    REQUIRE(store.has_value());
+    ai::SystemMessage imported_loadout;
+    imported_loadout.tools_added.push_back(ai::Tool{
+            .name = "pi-extension-tool",
+            .description = "Declared by the imported transcript but not registered by pike.",
+            .parameters = support::JsonValue{support::JsonValue::object_t{}},
+    });
+    imported_loadout.tools_removed.push_back(ai::ToolReference{.name = "pi-extension-removed-tool"});
+    REQUIRE(store->append(ai::MessageVariant{std::move(imported_loadout)}).has_value());
+
+    auto resumed = resume_for_frontend(paths, runtime);
+    REQUIRE(resumed.has_value());
+    const auto snapshot = resumed->session->snapshot();
+    const std::vector<std::string> expected_tools{"bash", "edit", "read", "write"};
+    CHECK(snapshot.agent_state.active_tool_names == expected_tools);
+    CHECK(std::ranges::find(snapshot.agent_state.active_tool_names, "pi-extension-tool") ==
+            snapshot.agent_state.active_tool_names.end());
+    resumed->session->close();
 }
 
 TEST_CASE(
