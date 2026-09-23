@@ -111,8 +111,7 @@ void Agent::Impl::reduce_state(const AgentLifecycleEvent& event) {
         std::optional<ai::UserMessage> user_message,
         AgentEventCommitter commitment,
         std::stop_source stop_source,
-        std::vector<ai::MessageVariant> initial_messages,
-        bool skip_initial_steering_poll) {
+        InitialInput initial_input) {
     impl->active_run = true;
     impl->active_stop_source.emplace(std::move(stop_source));
     impl->state.is_running = true;
@@ -133,8 +132,7 @@ void Agent::Impl::reduce_state(const AgentLifecycleEvent& event) {
     auto result = co_await run_turns(impl,
             commitment_state,
             std::move(user_message),
-            std::move(initial_messages),
-            skip_initial_steering_poll,
+            std::move(initial_input),
             impl->active_stop_source->get_token());
     finish_run();
 
@@ -150,23 +148,17 @@ void Agent::Impl::reduce_state(const AgentLifecycleEvent& event) {
 boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared_ptr<Impl> impl,
         std::shared_ptr<CommitmentState> commitment_state,
         std::optional<ai::UserMessage> user_message,
-        std::vector<ai::MessageVariant> initial_messages,
-        bool skip_initial_steering_poll,
+        InitialInput initial_input,
         std::stop_token stop_token) {
     RunPolicy& policy = impl->run_policy;
     auto initial_snapshot = impl->snapshot();
-    const bool has_initial_prompt = user_message.has_value() || !initial_messages.empty();
-    const bool has_context_message = std::any_of(initial_snapshot.messages.begin(),
-            initial_snapshot.messages.end(),
-            [](const ai::MessageVariant& message) { return !std::holds_alternative<ai::SystemMessage>(message); });
-    if (!has_initial_prompt && !has_context_message) {
-        co_return std::unexpected(
-                support::make_error(support::ErrorCode::Validation, "Cannot continue: no messages in context"));
+    const bool has_initial_prompt = user_message.has_value() || !initial_input.messages.empty();
+    if (!has_initial_prompt && initial_snapshot.messages.empty()) {
+        co_return std::unexpected(continuation_no_messages_error());
     }
     if (!has_initial_prompt && !initial_snapshot.messages.empty() &&
             std::holds_alternative<ai::AssistantMessage>(initial_snapshot.messages.back())) {
-        co_return std::unexpected(
-                support::make_error(support::ErrorCode::Validation, "Cannot continue from message role: assistant"));
+        co_return std::unexpected(continuation_from_assistant_error());
     }
 
     ai::Model model;
@@ -210,8 +202,8 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
         }
 
         if (turn == 1) {
-            pending_messages = std::move(initial_messages);
-            if (!skip_initial_steering_poll) {
+            pending_messages = std::move(initial_input.messages);
+            if (!initial_input.steering_already_drained) {
                 auto steering_messages = impl->drain(InputQueueKind::Steering);
                 for (auto& message : steering_messages) {
                     pending_messages.push_back(std::move(message));
@@ -520,9 +512,7 @@ boost::asio::awaitable<support::ExpectedVoid> Agent::Impl::run_turns(std::shared
     // uncapped default never exhausts the loop (ADR 0015). Exhaustion of the
     // host's own configured budget is a validation-classified outcome, never
     // a provider error.
-    auto error = support::make_error(support::ErrorCode::Validation,
-            "max turns exceeded",
-            "agent reached the configured max_turns before a final assistant response");
+    auto error = max_turns_exceeded_error();
     CCH_TRY_VOID(emit_agent_end());
     co_return std::unexpected(error);
 }

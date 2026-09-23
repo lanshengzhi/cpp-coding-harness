@@ -205,8 +205,7 @@ support::AsyncResult<void> Agent::prompt(
                         std::optional<ai::UserMessage>{std::move(user_message)},
                         std::move(commitment),
                         std::move(stop_source),
-                        {},
-                        false);
+                        InitialInput{});
             });
 }
 
@@ -229,7 +228,7 @@ support::AsyncResult<void> Agent::continue_run(AgentEventCommitter commitment, s
                             support::ErrorCode::Validation, "agent is busy (prompt already in flight)"));
                 }
                 co_return co_await Impl::run_loop(
-                        impl, std::nullopt, std::move(commitment), std::move(stop_source), {}, false);
+                        impl, std::nullopt, std::move(commitment), std::move(stop_source), InitialInput{});
             });
 }
 
@@ -248,36 +247,35 @@ support::AsyncResult<void> Agent::continue_run_with_queue_fallback(
                 }
 
                 const auto snapshot = impl->snapshot();
-                const bool has_non_system_message = std::any_of(
-                        snapshot.messages.begin(), snapshot.messages.end(), [](const ai::MessageVariant& message) {
+                const bool has_non_system_message =
+                        std::ranges::any_of(snapshot.messages, [](const ai::MessageVariant& message) {
                             return !std::holds_alternative<ai::SystemMessage>(message);
                         });
                 if (!has_non_system_message) {
-                    co_return std::unexpected(support::make_error(
-                            support::ErrorCode::Validation, "Cannot continue: no messages in context"));
+                    co_return std::unexpected(continuation_no_messages_error());
+                }
+                // A configured turn cap that cannot admit turn 1 exhausts the
+                // loop before any provider request; reject it before queued
+                // input is drained, with the post-loop exhaustion error.
+                if (impl->run_policy.max_turns && *impl->run_policy.max_turns <= 0) {
+                    co_return std::unexpected(max_turns_exceeded_error());
                 }
 
-                std::vector<ai::MessageVariant> initial_messages;
-                bool skip_initial_steering_poll = false;
+                InitialInput initial_input;
                 if (std::holds_alternative<ai::AssistantMessage>(snapshot.messages.back())) {
-                    initial_messages = impl->drain(InputQueueKind::Steering);
-                    if (!initial_messages.empty()) {
-                        skip_initial_steering_poll = true;
+                    initial_input.messages = impl->drain(InputQueueKind::Steering);
+                    if (!initial_input.messages.empty()) {
+                        initial_input.steering_already_drained = true;
                     } else {
-                        initial_messages = impl->drain(InputQueueKind::FollowUp);
+                        initial_input.messages = impl->drain(InputQueueKind::FollowUp);
                     }
-                    if (initial_messages.empty()) {
-                        co_return std::unexpected(support::make_error(
-                                support::ErrorCode::Validation, "Cannot continue from message role: assistant"));
+                    if (initial_input.messages.empty()) {
+                        co_return std::unexpected(continuation_from_assistant_error());
                     }
                 }
 
-                co_return co_await Impl::run_loop(impl,
-                        std::nullopt,
-                        std::move(commitment),
-                        std::move(stop_source),
-                        std::move(initial_messages),
-                        skip_initial_steering_poll);
+                co_return co_await Impl::run_loop(
+                        impl, std::nullopt, std::move(commitment), std::move(stop_source), std::move(initial_input));
             });
 }
 

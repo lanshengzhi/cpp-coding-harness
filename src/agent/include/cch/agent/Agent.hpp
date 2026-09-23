@@ -89,6 +89,7 @@ public:
     /// Empty or system-only history is rejected. If the last message is an
     /// assistant message, a queued steering message takes precedence over a
     /// queued follow-up message as the continuation input.
+    /// [compat-pi] pi v0.87.1 `agent.continue()` / `runAgentLoopContinue`.
     [[nodiscard]] support::AsyncResult<void> continue_run();
 
     /// Continue with the same transcript and queued-input semantics, while

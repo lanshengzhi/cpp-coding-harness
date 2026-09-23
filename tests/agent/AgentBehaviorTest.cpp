@@ -7,6 +7,7 @@
 #include "support/FakeTool.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/ReleaseGate.hpp"
 #include "support/ToolArgumentContracts.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -265,16 +266,14 @@ public:
         // the token, and a live alias keeps it usable while options moved.
         const std::stop_token live_token = requests.back().options.stop_token;
         if (requests.size() == 1) {
-            auto executor = co_await boost::asio::this_coro::executor;
-            gate.emplace(executor);
-            gate->expires_at(std::chrono::steady_clock::time_point::max());
-            std::stop_callback cancellation{live_token, [this] {
-                                                if (gate) {
-                                                    (void)gate->cancel();
-                                                }
-                                            }};
-            boost::system::error_code error;
-            co_await gate->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+            // Hold the gated call; interrupt also wakes on the run's stop
+            // token. The stop check must precede wait(): an interrupt
+            // delivered before the gate is armed does not linger
+            // (ReleaseGate contract).
+            std::stop_callback release_on_stop{live_token, [this] { gate_.interrupt(); }};
+            if (!live_token.stop_requested()) {
+                co_await gate_.wait();
+            }
         }
         if (live_token.stop_requested()) {
             auto terminal = ai::assistant_text_message("");
@@ -295,17 +294,13 @@ public:
         co_return response;
     }
 
-    /// Release the gated request. Idempotent.
-    void release() {
-        if (gate) {
-            (void)gate->cancel();
-        }
-    }
+    /// Release the gated request.
+    void release() { gate_.release(); }
 
     std::deque<ai::AssistantMessage> responses;
     std::vector<tests::RecordedStreamSimpleCall> requests;
     bool started{false};
-    std::optional<boost::asio::steady_timer> gate;
+    tests::ReleaseGate gate_;
 };
 
 struct FakeToolState {
@@ -518,8 +513,16 @@ TEST_CASE("Agent continuation continues retained history without adding a prompt
     REQUIRE(client->requests.size() == 1);
     REQUIRE(client->requests.front().context.messages.size() == 1);
     CHECK(std::holds_alternative<ai::UserMessage>(client->requests.front().context.messages.front()));
+    // The ModelStream request carried the Agent's current model.
+    CHECK(client->requests.front().model.id == subject.state().model.id);
     REQUIRE(run.state.messages.size() == 2);
     CHECK(count_events<agent::MessageStartEvent>(run.events) == 1);
+    // The AgentEnd payload reports only the messages produced by this
+    // invocation, not the retained history.
+    const auto* agent_end = std::get_if<agent::AgentEndEvent>(&run.events.back());
+    REQUIRE(agent_end);
+    REQUIRE(agent_end->messages.size() == 1);
+    CHECK(std::holds_alternative<ai::AssistantMessage>(agent_end->messages.front()));
 }
 
 TEST_CASE("Agent continuation from an assistant tail prioritizes steering before follow-up",
@@ -720,7 +723,7 @@ TEST_CASE("Agent continuation during an active run is rejected before consuming 
     bool first_done = false;
     boost::asio::co_spawn(
             io,
-            [&]() -> boost::asio::awaitable<void> {
+            [&subject, &first_result, &first_done]() -> boost::asio::awaitable<void> {
                 first_result = co_await support::detail::await_async_result(subject.continue_run());
                 first_done = true;
                 co_return;
@@ -803,7 +806,7 @@ TEST_CASE("Agent continuation with committer reduces state and delivers observer
     std::optional<support::ExpectedVoid> result;
     boost::asio::co_spawn(
             io,
-            [&]() -> boost::asio::awaitable<void> {
+            [&subject, &commitment, &result]() -> boost::asio::awaitable<void> {
                 result = co_await support::detail::await_async_result(subject.continue_run(std::move(commitment)));
                 co_return;
             },
@@ -863,7 +866,7 @@ TEST_CASE("aborting an active continuation completes through the ordinary aborte
     bool continuation_done = false;
     boost::asio::co_spawn(
             io,
-            [&]() -> boost::asio::awaitable<void> {
+            [&subject, &result, &continuation_done]() -> boost::asio::awaitable<void> {
                 result = co_await support::detail::await_async_result(subject.continue_run());
                 continuation_done = true;
                 co_return;
