@@ -229,13 +229,10 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         }
         co_return std::unexpected(failure);
     }
-    // pi `reportDiagnostics`: the host prints the creation diagnostics.
-    if (!created->diagnostics.empty()) {
-        (void)deliver_action(
-            action_generation_,
-            TuiActionVariant{ReportBootDiagnosticsAction{
-                std::move(created->diagnostics)}});
-    }
+    // pi `reportDiagnostics`: retain creation diagnostics until the chat view binds.
+    startup_diagnostics_.session.insert(startup_diagnostics_.session.end(),
+            std::make_move_iterator(created->diagnostics.begin()),
+            std::make_move_iterator(created->diagnostics.end()));
     model_fallback_message_ = std::move(created->model_fallback_message);
     // pi interactive-mode ctor `setRegisteredThemes(...)` + init
     // `applyFromSettings()`: register the boot session's discovered
@@ -519,11 +516,32 @@ void InteractiveEngine::initialize_view(const InteractiveStartupDiagnostics& dia
         view_->append_warning(*model_fallback_message_);
     }
     session_ui_->append_snapshot_diagnostics(snapshot.agent_state.diagnostics);
+    std::vector<std::string> rendered_diagnostics;
+    const auto append_once = [&rendered_diagnostics](std::string text, auto&& append) {
+        if (std::ranges::find(rendered_diagnostics, text) != rendered_diagnostics.end()) return;
+        rendered_diagnostics.push_back(text);
+        append(std::move(text));
+    };
+    for (const auto& diagnostic : diagnostics.session) {
+        auto text = diagnostic.message;
+        if (diagnostic.path) text += " (" + *diagnostic.path + ')';
+        switch (diagnostic.severity) {
+        case SessionDiagnostic::Severity::Info:
+            append_once(std::move(text), [this](std::string value) { view_->append_status_message(std::move(value)); });
+            break;
+        case SessionDiagnostic::Severity::Warning:
+            append_once(std::move(text), [this](std::string value) { view_->append_warning(std::move(value)); });
+            break;
+        case SessionDiagnostic::Severity::Error:
+            append_once(std::move(text), [this](std::string value) { view_->append_diagnostic(std::move(value)); });
+            break;
+        }
+    }
     for (const auto& diagnostic : diagnostics.keybindings) {
-        view_->append_diagnostic(diagnostic.message);
+        append_once(diagnostic.message, [this](std::string value) { view_->append_warning(std::move(value)); });
     }
     for (const auto& diagnostic : diagnostics.themes) {
-        view_->append_diagnostic(diagnostic.message);
+        append_once(diagnostic.message, [this](std::string value) { view_->append_warning(std::move(value)); });
     }
 }
 

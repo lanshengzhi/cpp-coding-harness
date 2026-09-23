@@ -201,8 +201,8 @@ TEST_CASE("InteractiveSessionRun dispatches host effects for ReportBootCreationF
     CHECK(text.find("Permission denied") != std::string::npos);
 }
 
-TEST_CASE("InteractiveSessionRun dispatches host effects for ReportBootDiagnosticsAction",
-        "[coding_agent][tui][session_run][issue517][spec]") {
+TEST_CASE("non-interactive InteractiveSessionRun reports boot diagnostics through stderr",
+        "[coding_agent][tui][session_run][issue517][issue787][spec]") {
     std::ostringstream error_stream;
 
     auto run = InteractiveSessionRunBuilder{}

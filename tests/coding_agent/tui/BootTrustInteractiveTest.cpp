@@ -577,6 +577,26 @@ TEST_CASE("boot registers discovered themes and the settings Theme submenu commi
     CHECK(*run.run_result);
 }
 
+TEST_CASE("duplicate boot diagnostics render once in the chat", "[coding_agent][tui][boot-trust][issue787][spec]") {
+    TrustIsolatedWorkspace fixture;
+    auto request = boot_request(fixture);
+    request.project_trust_override = true;
+    request.session_facts.skill_paths = {"missing-skill.md", "missing-skill.md"};
+
+    BootTrustRun run;
+    run.start(fixture, std::move(request), tests::make_scripted_fake_models());
+    run.wait_booted();
+
+    const auto screen = visible_screen(run.terminal);
+    const auto warning = screen.find("Warning: skill path does not exist (missing-skill.md)");
+    REQUIRE(warning != std::string::npos);
+    CHECK(screen.find("Warning: skill path does not exist (missing-skill.md)", warning + 1) == std::string::npos);
+    const auto error = screen.find("Error: Skill path does not exist (missing-skill.md)");
+    REQUIRE(error != std::string::npos);
+    CHECK(screen.find("Error: Skill path does not exist (missing-skill.md)", error + 1) == std::string::npos);
+    run.exit();
+}
+
 TEST_CASE("boot with a failing theme keeps the main screen and the dark fallback message",
         "[coding_agent][tui][boot-trust][issue425][spec]") {
     TrustIsolatedWorkspace fixture;
