@@ -423,6 +423,88 @@ TEST_CASE("Completions rejects DONE and clean EOF without finish_reason", "[ai][
     }
 }
 
+TEST_CASE("Completions cancellation after partial text retains the text with one aborted terminal",
+        "[ai][api][completions][issue757][cancellation]") {
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks =
+                    {
+                            "data: {\"id\":\"chatcmpl-partial\",\"choices\":[{\"index\":0,"
+                            "\"delta\":{\"content\":\"partial answer\"},\"finish_reason\":null}]}\n\n",
+                    },
+    });
+    const auto model = deepseek_model();
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    std::stop_source stop;
+    transport->on_request = [&stop] { stop.request_stop(); };
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy-key";
+    options.stop_token = stop.get_token();
+    const auto run = tests::run_models(*models, model, {}, std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
+    CHECK(run.result->error_message == "Request was aborted");
+    REQUIRE(run.result->content.size() == 1);
+    CHECK(std::get<ai::TextContent>(run.result->content.front()).text == "partial answer");
+    const auto terminals = std::ranges::count_if(run.events, [](const ai::AssistantStreamEvent& event) {
+        return std::holds_alternative<ai::AssistantErrorEvent>(event) ||
+               std::holds_alternative<ai::AssistantDoneEvent>(event);
+    });
+    CHECK(terminals == 1);
+    const auto* terminal = std::get_if<ai::AssistantErrorEvent>(&run.events.back());
+    REQUIRE(terminal);
+    CHECK(terminal->reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(transport->requests.size() == 1);
+    CHECK(transport->requests.front().stop_token.stop_requested());
+}
+
+TEST_CASE("Completions cancellation after partial tool arguments retains the arguments with one aborted terminal",
+        "[ai][api][completions][issue757][cancellation]") {
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks =
+                    {
+                            "data: {\"id\":\"chatcmpl-partial-tools\",\"choices\":[{\"index\":0,"
+                            "\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\","
+                            "\"type\":\"function\",\"function\":{\"name\":\"lookup\","
+                            "\"arguments\":\"{\\\"q\\\": \\\"lo\"}}]},\"finish_reason\":null}]}\n\n",
+                    },
+    });
+    const auto model = deepseek_model();
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    std::stop_source stop;
+    transport->on_request = [&stop] { stop.request_stop(); };
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy-key";
+    options.stop_token = stop.get_token();
+    const auto run = tests::run_models(*models, model, {}, std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Aborted);
+    CHECK(run.result->error_message == "Request was aborted");
+    REQUIRE(run.result->content.size() == 1);
+    const auto& call = std::get<ai::ToolCallContent>(run.result->content.front());
+    CHECK(call.id == "call_1");
+    CHECK(call.name == "lookup");
+    REQUIRE(call.arguments);
+    CHECK(call.arguments->at("q").get_string() == "lo");
+    const auto terminals = std::ranges::count_if(run.events, [](const ai::AssistantStreamEvent& event) {
+        return std::holds_alternative<ai::AssistantErrorEvent>(event) ||
+               std::holds_alternative<ai::AssistantDoneEvent>(event);
+    });
+    CHECK(terminals == 1);
+    const auto* terminal = std::get_if<ai::AssistantErrorEvent>(&run.events.back());
+    REQUIRE(terminal);
+    CHECK(terminal->reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(transport->requests.size() == 1);
+    CHECK(transport->requests.front().stop_token.stop_requested());
+}
+
 TEST_CASE("Completions cancellation yields one aborted terminal", "[ai][api][completions][issue761][cancellation]") {
     auto transport = std::make_shared<tests::ScriptedTransport>();
     transport->attempts.push_back(tests::TransportAttempt{
