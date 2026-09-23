@@ -136,7 +136,8 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
 
-    REQUIRE(store->append(ai::MessageVariant{ai::SystemMessage{"system token=abc123", 1}}).status);
+    REQUIRE(store->append(ai::MessageVariant{ai::SystemMessage{.content = "system token=abc123", .timestamp = 1}})
+                    .status);
     REQUIRE(store->append(user_message("user api_key=sk-secret12345 KIMI_API_KEY=kimi-user-secret")).status);
 
     auto arguments = support::read_json(
