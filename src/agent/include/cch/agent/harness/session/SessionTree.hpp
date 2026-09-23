@@ -187,6 +187,7 @@ public:
     struct BranchSummaryData {
         std::string summary;
         std::optional<support::JsonValue> details;
+        std::optional<ai::Usage> usage;
     };
 
     /// Hook for generating branch summaries.

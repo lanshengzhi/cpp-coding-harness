@@ -147,15 +147,19 @@ support::ExpectedVoid SessionStore::append_compaction(
             [&](auto& active) { return active.append_compaction(std::move(parent_id), std::move(value)); });
 }
 
-support::ExpectedVoid SessionStore::append_branch_summary(
-    std::optional<std::string> parent_id,
-    std::string from_id,
-    std::string summary,
-    std::optional<support::JsonValue> details,
-    std::optional<bool> from_hook) {
+support::ExpectedVoid SessionStore::append_branch_summary(std::optional<std::string> parent_id,
+        std::string from_id,
+        std::string summary,
+        std::optional<support::JsonValue> details,
+        std::optional<bool> from_hook,
+        std::optional<ai::Usage> usage) {
     return impl_->append_via([&](auto& active) {
-        return active.append_branch_summary(
-                std::move(parent_id), std::move(from_id), std::move(summary), std::move(details), from_hook);
+        return active.append_branch_summary(std::move(parent_id),
+                std::move(from_id),
+                std::move(summary),
+                std::move(details),
+                from_hook,
+                std::move(usage));
     });
 }
 

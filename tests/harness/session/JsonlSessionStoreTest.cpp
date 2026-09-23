@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <fstream>
 #include <optional>
 #include <sstream>
@@ -638,6 +639,14 @@ TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session]
     CHECK(raw.find(R"("targetId":"leaf-target")") != std::string::npos);
     // pi always writes the base fields with explicit null for a root parent.
     CHECK(raw.find(R"("parentId":null)") != std::string::npos);
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    const auto summary_entry = std::find_if(loaded->entries.begin(), loaded->entries.end(), [](const auto& entry) {
+        return entry.kind == harness::session::SessionEntryKind::BranchSummary;
+    });
+    REQUIRE(summary_entry != loaded->entries.end());
+    CHECK_FALSE(std::get<harness::session::BranchSummaryEntryValue>(summary_entry->value).usage.has_value());
 }
 
 TEST_CASE("entry IDs are 8-char random hex", "[harness][session][u9][compat-pi]") {

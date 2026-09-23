@@ -216,18 +216,20 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_compactio
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_branch_summary(
-    std::optional<std::string> parent_id,
-    std::string from_id,
-    std::string summary,
-    std::optional<support::JsonValue> details,
-    std::optional<bool> from_hook) {
+        std::optional<std::string> parent_id,
+        std::string from_id,
+        std::string summary,
+        std::optional<support::JsonValue> details,
+        std::optional<bool> from_hook,
+        std::optional<ai::Usage> usage) {
     EntrySerializer serializer;
-    return append_mirrored_line(impl_->journal, serializer.serialize_branch_summary(
-        std::move(parent_id),
-        std::move(from_id),
-        std::move(summary),
-        std::move(details),
-        from_hook));
+    return append_mirrored_line(impl_->journal,
+            serializer.serialize_branch_summary(std::move(parent_id),
+                    std::move(from_id),
+                    std::move(summary),
+                    std::move(details),
+                    from_hook,
+                    std::move(usage)));
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_session_info(

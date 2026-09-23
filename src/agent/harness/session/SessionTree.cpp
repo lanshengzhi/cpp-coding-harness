@@ -647,11 +647,11 @@ support::ExpectedVoid SessionTree::branchWithSummary(
         summary_entry.kind = SessionEntryKind::BranchSummary;
         summary_entry.parent_id = std::string{entry_id};
         summary_entry.value = BranchSummaryEntryValue{
-            .from_id = std::string{ctx.from_leaf_id},
-            .summary = data.summary,
-            .details = data.details,
-            .usage = std::nullopt,
-            .from_hook = std::nullopt,
+                .from_id = std::string{ctx.from_leaf_id},
+                .summary = data.summary,
+                .details = data.details,
+                .usage = data.usage,
+                .from_hook = std::nullopt,
         };
 
         auto write_result = append_writer(summary_entry);
