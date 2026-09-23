@@ -190,7 +190,8 @@ TEST_CASE("reload re-reads skills, templates, context files, and SYSTEM/APPEND a
     auto* session = fixture.session;
 
     // The creation-time system prompt reflects the initial resources.
-    const auto initial_prompt = session->snapshot().agent_state.system_prompt;
+    const auto initial_snapshot = session->snapshot();
+    const auto initial_prompt = initial_snapshot.agent_state.system_prompt;
     CHECK(initial_prompt.find("initial skill description.") != std::string::npos);
     CHECK(initial_prompt.find("initial system prompt from SYSTEM.md") != std::string::npos);
     CHECK(initial_prompt.find("initial append from APPEND_SYSTEM.md") != std::string::npos);
@@ -198,6 +199,8 @@ TEST_CASE("reload re-reads skills, templates, context files, and SYSTEM/APPEND a
     CHECK(session->system_prompt_source().has_value());
     CHECK(session->append_system_prompt_sources().size() == 1);
     CHECK(session->context_files().size() == 1);
+    const auto initial_system_message_count = std::ranges::count_if(initial_snapshot.agent_state.messages,
+            [](const auto& message) { return std::holds_alternative<ai::SystemMessage>(message); });
 
     // Edit every resource between create and reload.
     fixture.workspace.write(
@@ -234,7 +237,11 @@ TEST_CASE("reload re-reads skills, templates, context files, and SYSTEM/APPEND a
 
     // The System Prompt rebuilt from the fresh inputs and the live Agent
     // state advanced (pi `_rebuildSystemPrompt` → `agent.state.systemPrompt`).
-    const auto reloaded_prompt = session->snapshot().agent_state.system_prompt;
+    const auto reloaded_snapshot = session->snapshot();
+    const auto reloaded_prompt = reloaded_snapshot.agent_state.system_prompt;
+    const auto reloaded_system_messages = std::ranges::count_if(reloaded_snapshot.agent_state.messages,
+            [](const auto& message) { return std::holds_alternative<ai::SystemMessage>(message); });
+    CHECK(reloaded_system_messages == initial_system_message_count + 1);
     CHECK(reloaded_prompt.find("reloaded skill description.") != std::string::npos);
     CHECK(reloaded_prompt.find("initial skill description.") == std::string::npos);
     CHECK(reloaded_prompt.find("reloaded system prompt from SYSTEM.md") != std::string::npos);
@@ -258,6 +265,12 @@ TEST_CASE("reload re-reads skills, templates, context files, and SYSTEM/APPEND a
     REQUIRE(run_prompt(fixture.runtime, *session, "hello").has_value());
     REQUIRE_FALSE(fixture.client->requests.empty());
     CHECK(fixture.client->requests.back().system_prompt == reloaded_prompt);
+
+    REQUIRE(run_reload(fixture.runtime, *session).has_value());
+    const auto unchanged_snapshot = session->snapshot();
+    CHECK(std::ranges::count_if(unchanged_snapshot.agent_state.messages, [](const auto& message) {
+        return std::holds_alternative<ai::SystemMessage>(message);
+    }) == reloaded_system_messages);
 }
 
 TEST_CASE(

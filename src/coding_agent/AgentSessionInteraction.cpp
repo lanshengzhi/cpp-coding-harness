@@ -252,6 +252,53 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
         config_.prompt_diagnostics = std::move(loading->prompt_diagnostics);
         config_.theme_diagnostics = std::move(loading->theme_diagnostics);
 
+        const auto current_sections = build_system_prompt_sections();
+        const auto state = agent_->state();
+        std::vector<ai::SystemMessage> previous_system_messages;
+        for (const auto& message : state.messages) {
+            if (const auto* system = std::get_if<ai::SystemMessage>(&message)) {
+                previous_system_messages.push_back(*system);
+            }
+        }
+        const auto previous_sections = prompt::replaySystemPromptSections(previous_system_messages);
+        ai::SystemMessage section_diff;
+        for (const auto& section : current_sections) {
+            const auto previous = std::find_if(previous_sections.begin(),
+                    previous_sections.end(),
+                    [&section](const auto& candidate) { return candidate.name == section.name; });
+            if (previous == previous_sections.end() || previous->text != section.text) {
+                section_diff.sections.push_back(ai::SystemMessageSection{
+                        .name = section.name,
+                        .text = section.text,
+                });
+            }
+        }
+        for (const auto& previous : previous_sections) {
+            const auto current = std::find_if(current_sections.begin(),
+                    current_sections.end(),
+                    [&previous](const auto& candidate) { return candidate.name == previous.name; });
+            if (current == current_sections.end()) {
+                section_diff.sections.push_back(ai::SystemMessageSection{
+                        .name = previous.name,
+                        .text = std::nullopt,
+                });
+            }
+        }
+        if (!section_diff.sections.empty()) {
+            ai::MessageVariant message{section_diff};
+            if (session_.store) {
+                if (auto committed = session_.store->append(message); !committed) {
+                    co_return co_await finish_reload(std::unexpected(std::move(committed.error())));
+                }
+            }
+            auto updated_messages = state.messages;
+            updated_messages.push_back(std::move(message));
+            if (auto replaced =
+                            agent::detail::AgentMessageAccess::replace_messages(*agent_, std::move(updated_messages));
+                    !replaced) {
+                co_return co_await finish_reload(std::unexpected(std::move(replaced.error())));
+            }
+        }
         agent_->set_system_prompt(rebuild_system_prompt());
         update_projection();
         AgentSessionReloadResult result;
