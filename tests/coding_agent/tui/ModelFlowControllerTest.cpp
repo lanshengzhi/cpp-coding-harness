@@ -147,6 +147,7 @@ struct ModelFlowFixture {
     std::unique_ptr<coding_agent::AgentSession> session;
     std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
     std::optional<coding_agent::SettingsManager> settings{std::nullopt};
+    std::optional<coding_agent::tui::ModelCatalogRefreshResult> refresh_result_for_test;
     std::shared_ptr<coding_agent::tui::ModelFlowController> flows;
 
     ModelFlowFixture() {
@@ -208,6 +209,11 @@ struct ModelFlowFixture {
         };
         hooks.live_theme = [this]() -> const coding_agent::tui::LiveTheme& { return theme; };
         hooks.show_warning = [this](std::string text) { warnings.push_back(std::move(text)); };
+        if (refresh_result_for_test) {
+            const auto result = *refresh_result_for_test;
+            hooks.refresh_model_catalogs = [result](std::shared_ptr<coding_agent::ModelRuntime>)
+                    -> boost::asio::awaitable<coding_agent::tui::ModelCatalogRefreshResult> { co_return result; };
+        }
         flows = std::make_shared<coding_agent::tui::ModelFlowController>(
             io.get_executor(),
             presenter,
@@ -443,6 +449,61 @@ TEST_CASE("The /model lookup matches the cached snapshot first and only refreshe
     // A clean refresh warns about nothing.
     CHECK(fixture.warnings.empty());
     CHECK(fixture.session->snapshot().agent_state.model.id == "beta-1");
+}
+
+TEST_CASE("A /model refresh timeout warns and searches the cached model catalog",
+        "[coding_agent][tui][model-flows][issue774][spec]") {
+    ModelFlowFixture fixture;
+    fixture.write_models(kReasoningAndPlainKeyed);
+    fixture.refresh_result_for_test = coding_agent::tui::ModelCatalogRefreshResult{.timed_out = true};
+    fixture.boot();
+
+    fixture.flows->open_model_selector("beta");
+    fixture.drain();
+
+    REQUIRE(fixture.warnings.size() == 1);
+    CHECK(fixture.warnings.front() == "Model refresh timed out; searching cached models.");
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 1);
+    const auto selector = std::dynamic_pointer_cast<coding_agent::tui::ModelSelectorComponent>(fixture.presenter.slot);
+    REQUIRE(selector != nullptr);
+    const auto rendered = selector->render(100);
+    REQUIRE(rendered.has_value());
+    std::string text;
+    for (const auto& line : rendered->lines)
+        text += line;
+    CHECK(text.find("Beta Plain") != std::string::npos);
+    CHECK(fixture.presenter.errors.empty());
+}
+
+TEST_CASE("A /model refresh failure warns with the runtime message and searches the cached model catalog",
+        "[coding_agent][tui][model-flows][issue774][spec]") {
+    ModelFlowFixture fixture;
+    fixture.write_models(kReasoningAndPlainKeyed);
+    fixture.refresh_result_for_test = coding_agent::tui::ModelCatalogRefreshResult{
+            .timed_out = false,
+            .error_message = "credential store unavailable",
+    };
+    fixture.boot();
+
+    fixture.flows->open_model_selector("beta");
+    fixture.drain();
+
+    REQUIRE(fixture.warnings.size() == 1);
+    CHECK(fixture.warnings.front() == "Could not refresh model catalogs: credential store unavailable");
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 1);
+    const auto selector = std::dynamic_pointer_cast<coding_agent::tui::ModelSelectorComponent>(fixture.presenter.slot);
+    REQUIRE(selector != nullptr);
+    const auto rendered = selector->render(100);
+    REQUIRE(rendered.has_value());
+    std::string text;
+    for (const auto& line : rendered->lines)
+        text += line;
+    CHECK(text.find("Beta Plain") != std::string::npos);
+    CHECK(fixture.presenter.errors.empty());
 }
 
 TEST_CASE("A /model miss inside the session scope opens the selector without refreshing",

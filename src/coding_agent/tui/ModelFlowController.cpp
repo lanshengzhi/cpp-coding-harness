@@ -76,16 +76,11 @@ namespace {
 /// per-refresh cancellation, so a refresh that settles after the timeout
 /// still updates the runtime's availability snapshot for the fallback
 /// search (pi aborts it instead).
-struct CatalogRefreshOutcome {
-    bool timed_out{false};
-    bool refreshed{false};
-};
-
-[[nodiscard]] boost::asio::awaitable<CatalogRefreshOutcome> refresh_catalogs_with_timeout(
+[[nodiscard]] boost::asio::awaitable<ModelCatalogRefreshResult> refresh_catalogs_with_timeout(
         std::shared_ptr<cch::coding_agent::ModelRuntime> runtime, std::chrono::steady_clock::duration timeout) {
     struct RaceState {
         bool settled{false};
-        bool refreshed{false};
+        std::optional<std::string> error_message{std::nullopt};
     };
     const auto state = std::make_shared<RaceState>();
     const auto executor = co_await boost::asio::this_coro::executor;
@@ -104,7 +99,7 @@ struct CatalogRefreshOutcome {
                 auto refreshed = co_await support::detail::await_async_result(runtime->get_available());
                 if (state->settled) co_return;
                 state->settled = true;
-                state->refreshed = refreshed.has_value();
+                if (!refreshed) state->error_message = refreshed.error().message;
                 timer->cancel();
             },
             boost::asio::detached);
@@ -112,9 +107,9 @@ struct CatalogRefreshOutcome {
     co_await timer->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
     if (!state->settled) {
         state->settled = true;
-        co_return CatalogRefreshOutcome{.timed_out = true, .refreshed = false};
+        co_return ModelCatalogRefreshResult{.timed_out = true};
     }
-    co_return CatalogRefreshOutcome{.timed_out = false, .refreshed = state->refreshed};
+    co_return ModelCatalogRefreshResult{.timed_out = false, .error_message = state->error_message};
 }
 
 } // namespace
@@ -308,15 +303,17 @@ boost::asio::awaitable<void> ModelFlowController::handle_model_command(std::stri
 
     // pi miss path: one status line, then the bounded refresh.
     presenter_->show_status("Refreshing model catalogs…");
-    const auto refresh = co_await refresh_catalogs_with_timeout(runtime, std::chrono::seconds{15});
+    const auto refresh = hooks_.refresh_model_catalogs != nullptr
+                                 ? co_await hooks_.refresh_model_catalogs(runtime)
+                                 : co_await refresh_catalogs_with_timeout(runtime, std::chrono::seconds{15});
     if (refresh.timed_out) {
         if (hooks_.show_warning != nullptr) hooks_.show_warning("Model refresh timed out; searching cached models.");
-    } else if (!refresh.refreshed) {
-        // The C++ runtime exposes a single availability/composition error
-        // channel rather than pi's per-provider error counts (the
-        // ModelSelector refresh path makes the same collapse).
-        if (hooks_.show_warning != nullptr)
-            hooks_.show_warning("Could not refresh model catalogs; searching cached models.");
+    } else if (refresh.error_message) {
+        // The C++ runtime exposes one failure message rather than pi's map of
+        // provider errors, so match pi's thrown-error wording here.
+        if (hooks_.show_warning != nullptr) {
+            hooks_.show_warning("Could not refresh model catalogs: " + *refresh.error_message);
+        }
     }
 
     // pi's post-refresh search runs against the refreshed snapshot; a
