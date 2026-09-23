@@ -110,6 +110,24 @@ void redact_diagnostic_entry(ai::DiagnosticEntry& entry) {
                 using T = std::decay_t<decltype(concrete)>;
                 if constexpr (std::is_same_v<T, ai::SystemMessage>) {
                     concrete.content = support::redact_text(std::move(concrete.content));
+                    // The v0.87.1 prompt-shape fields carry the same class of
+                    // free text as `content` (prompt sections, tool
+                    // descriptions, tool schemas), so the mandatory redaction
+                    // of ADR 0026:23 applies to them too (#775).
+                    for (auto& section : concrete.sections) {
+                        section.name = support::redact_text(std::move(section.name));
+                        if (section.text) {
+                            *section.text = support::redact_text(std::move(*section.text));
+                        }
+                    }
+                    for (auto& tool : concrete.tools_added) {
+                        tool.name = support::redact_text(std::move(tool.name));
+                        tool.description = support::redact_text(std::move(tool.description));
+                        tool.parameters = redact_json_value(tool.parameters);
+                    }
+                    for (auto& reference : concrete.tools_removed) {
+                        reference.name = support::redact_text(std::move(reference.name));
+                    }
                 } else if constexpr (std::is_same_v<T, ai::AssistantMessage>) {
                     for (auto& block : concrete.content) {
                         redact_assistant_content(block);

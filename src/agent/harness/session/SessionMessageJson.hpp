@@ -83,9 +83,30 @@ struct ContentDto {
 /// plain string or a block array; every other role carries a block array.
 using MessageContentDto = std::variant<std::string, std::vector<ContentDto>>;
 
+/// pi `Tool` (`packages/ai/src/types.ts` at f07218c4, tag `v0.87.1`): a complete
+/// tool declaration. `parameters` is the tool's JSON-schema object, carried as
+/// generic JSON like the other schema-shaped session fields. pi's
+/// `constrainedSampling` is a Deferred capability pike does not model.
+struct ToolDto {
+    std::string name;
+    std::string description;
+    glz::generic parameters;
+};
+
+/// pi `ToolReference`: the name of a tool a system message stops declaring.
+struct ToolReferenceDto {
+    std::string name;
+};
+
 struct MessageDto {
     std::string role;
     std::optional<MessageContentDto> content{std::nullopt};
+    /// pi `SystemMessage.sections` — an ordered JSON object whose values are
+    /// strings or explicit `null` removals. Carried as generic JSON because the
+    /// section order is significant and `glz::generic`'s object preserves it.
+    std::optional<glz::generic> sections{std::nullopt};
+    std::optional<std::vector<ToolDto>> toolsAdded{std::nullopt};
+    std::optional<std::vector<ToolReferenceDto>> toolsRemoved{std::nullopt};
     std::optional<std::string> api{std::nullopt};
     std::optional<std::string> provider{std::nullopt};
     std::optional<std::string> model{std::nullopt};
@@ -591,8 +612,81 @@ template <typename Block, typename Convert>
     return diagnostic_entries_from_dto(*dtos, context);
 }
 
+/// Build the ordered `sections` JSON object (pi `SystemMessage.sections`).
+/// `glz::generic`'s object preserves insertion order, which the section order
+/// requires; a `std::map`-backed value would reorder integer-like names.
+[[nodiscard]] inline glz::generic sections_to_generic(const std::vector<ai::SystemMessageSection>& sections) {
+    glz::generic::object_t members;
+    for (const auto& section : sections) {
+        glz::generic value;
+        if (section.text) {
+            value = *section.text;
+        } else {
+            value = nullptr;
+        }
+        members.insert(std::make_pair(section.name, std::move(value)));
+    }
+    glz::generic result;
+    result = std::move(members);
+    return result;
+}
+
+/// Parse the ordered `sections` object back into the value sequence. A string
+/// is a replacement, an explicit `null` is a removal; any other value violates
+/// the pi `string | null` contract.
+[[nodiscard]] inline support::Expected<std::vector<ai::SystemMessageSection>> sections_from_generic(
+        const glz::generic& sections, std::string_view context) {
+    const auto* members = sections.get_if<glz::generic::object_t>();
+    if (members == nullptr) {
+        return std::unexpected(json_contract_error("invalid system message sections",
+                "field 'sections' for system message must be a JSON object",
+                context));
+    }
+    std::vector<ai::SystemMessageSection> parsed;
+    parsed.reserve(members->size());
+    for (const auto& [name, value] : *members) {
+        ai::SystemMessageSection section;
+        section.name = name;
+        if (const auto* text = value.get_if<std::string>()) {
+            section.text = *text;
+        } else if (value.is_null()) {
+            section.text = std::nullopt;
+        } else {
+            return std::unexpected(json_contract_error("invalid system message section",
+                    std::string{"section '"} + name + "' must be a string or null",
+                    context));
+        }
+        parsed.push_back(std::move(section));
+    }
+    return parsed;
+}
+
+[[nodiscard]] inline ToolDto to_dto(const ai::Tool& tool) {
+    return ToolDto{
+            .name = tool.name,
+            .description = tool.description,
+            .parameters = support::json_to_glaze(tool.parameters),
+    };
+}
+
+[[nodiscard]] inline ai::Tool tool_from_dto(const ToolDto& dto) {
+    return ai::Tool{
+            .name = dto.name,
+            .description = dto.description,
+            .parameters = support::json_from_glaze(dto.parameters),
+    };
+}
+
+[[nodiscard]] inline ToolReferenceDto to_dto(const ai::ToolReference& reference) {
+    return ToolReferenceDto{.name = reference.name};
+}
+
+[[nodiscard]] inline ai::ToolReference tool_reference_from_dto(const ToolReferenceDto& dto) {
+    return ai::ToolReference{.name = dto.name};
+}
+
 [[nodiscard]] inline MessageDto to_message_dto(const ai::SystemMessage& message) {
-    return MessageDto{
+    MessageDto dto{
             .role = "system",
             .content = std::vector<ContentDto>{to_dto(ai::TextContent{
                     .text = message.content,
@@ -600,6 +694,26 @@ template <typename Block, typename Convert>
             })},
             .timestamp = message.timestamp,
     };
+    if (!message.sections.empty()) {
+        dto.sections = sections_to_generic(message.sections);
+    }
+    if (!message.tools_added.empty()) {
+        std::vector<ToolDto> tools;
+        tools.reserve(message.tools_added.size());
+        for (const auto& tool : message.tools_added) {
+            tools.push_back(to_dto(tool));
+        }
+        dto.toolsAdded = std::move(tools);
+    }
+    if (!message.tools_removed.empty()) {
+        std::vector<ToolReferenceDto> removed;
+        removed.reserve(message.tools_removed.size());
+        for (const auto& reference : message.tools_removed) {
+            removed.push_back(to_dto(reference));
+        }
+        dto.toolsRemoved = std::move(removed);
+    }
+    return dto;
 }
 
 [[nodiscard]] inline std::optional<MessageContentDto> to_dto_content(const ai::UserMessage& message) {
@@ -721,10 +835,30 @@ template <typename Block, typename Convert>
                 text += text_block->text;
             }
         }
-        return ai::MessageVariant{ai::SystemMessage{
+        ai::SystemMessage message{
                 .content = std::move(text),
                 .timestamp = dto.timestamp,
-        }};
+        };
+        if (dto.sections) {
+            auto sections = sections_from_generic(*dto.sections, context);
+            if (!sections) {
+                return std::unexpected(sections.error());
+            }
+            message.sections = std::move(*sections);
+        }
+        if (dto.toolsAdded) {
+            message.tools_added.reserve(dto.toolsAdded->size());
+            for (const auto& tool : *dto.toolsAdded) {
+                message.tools_added.push_back(tool_from_dto(tool));
+            }
+        }
+        if (dto.toolsRemoved) {
+            message.tools_removed.reserve(dto.toolsRemoved->size());
+            for (const auto& reference : *dto.toolsRemoved) {
+                message.tools_removed.push_back(tool_reference_from_dto(reference));
+            }
+        }
+        return ai::MessageVariant{std::move(message)};
     }
 
     if (dto.role == "user") {

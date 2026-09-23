@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Content.hpp"
+#include "Tool.hpp"
 #include "Usage.hpp"
 #include <cch/support/JsonValue.hpp>
 
@@ -28,8 +29,25 @@ struct DiagnosticEntry {
     std::optional<cch::support::JsonValue> details{};
 };
 
+/// One entry of a system message's ordered prompt-section set (pi
+/// `SystemMessage.sections`): `text` engaged replaces the named section,
+/// `std::nullopt` is an explicit removal (pi `null`). Order is the render
+/// order pi replays, so this is a sequence, not a keyed map.
+struct SystemMessageSection {
+    std::string name{};
+    std::optional<std::string> text{};
+};
+
 struct SystemMessage {
     std::string content{};
+    /// pi `SystemMessage.sections`: ordered named section replacements. An
+    /// empty vector omits the field on the wire, matching pi's optional field.
+    std::vector<SystemMessageSection> sections{};
+    /// pi `SystemMessage.toolsAdded`: complete definitions of the tools that
+    /// become available at this point.
+    std::vector<Tool> tools_added{};
+    /// pi `SystemMessage.toolsRemoved`: the tools that stop being available.
+    std::vector<ToolReference> tools_removed{};
     TimestampMs timestamp{};
 };
 
