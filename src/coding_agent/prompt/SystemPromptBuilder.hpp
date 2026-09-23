@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/ai/Message.hpp>
 #include <cch/coding_agent/Skill.hpp>
 
 #include <map>
@@ -74,6 +75,10 @@ struct BuildSystemPromptOptions {
 /// them (pi `getSystemMessageText`): the non-empty section texts joined with a
 /// blank line, `preamble` first.
 [[nodiscard]] std::string renderSystemPromptSections(const std::vector<SystemPromptSection>& sections);
+
+/// Replay the ordered section diffs carried by transcript system messages.
+[[nodiscard]] std::vector<SystemPromptSection> replaySystemPromptSections(
+        const std::vector<ai::SystemMessage>& messages);
 
 /// Build the System Prompt text (`buildSystemPrompt` at the same baseline):
 /// the rendered sections, with the identity delta confined to the identity

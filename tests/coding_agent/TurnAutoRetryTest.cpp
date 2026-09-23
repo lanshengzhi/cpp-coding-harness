@@ -730,14 +730,13 @@ TEST_CASE(
 
     REQUIRE(session->prompt_blocking("Test").has_value());
 
-    // Live state: [user, assistant(recovered)] — the failed error message is
-    // gone so the continuation's last message is the user prompt.
+    // Live state: [system, user, assistant(recovered)] — the failed error
+    // message is gone so the continuation's last message is the user prompt.
     const auto snapshot = session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 2);
-    CHECK(std::holds_alternative<ai::UserMessage>(
-        snapshot.agent_state.messages[0]));
-    const auto* last = std::get_if<ai::AssistantMessage>(
-        &snapshot.agent_state.messages[1]);
+    REQUIRE(snapshot.agent_state.messages.size() == 3);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    CHECK(std::holds_alternative<ai::UserMessage>(snapshot.agent_state.messages[1]));
+    const auto* last = std::get_if<ai::AssistantMessage>(&snapshot.agent_state.messages[2]);
     REQUIRE(last != nullptr);
     CHECK(ai::text_from_assistant_content(last->content) == "recovered");
 
@@ -753,7 +752,9 @@ TEST_CASE(
             CHECK(assistant->stop_reason != ai::AssistantStopReason::Error);
         }
     }
-    CHECK(std::holds_alternative<ai::UserMessage>(retry_context.front()));
+    REQUIRE(retry_context.size() >= 2);
+    CHECK(std::holds_alternative<ai::SystemMessage>(retry_context.front()));
+    CHECK(std::holds_alternative<ai::UserMessage>(retry_context[1]));
 
     // Session history: user + error + recovered — the failed message was
     // persisted before the retry (pi `_prepareRetry` keeps it in session).
@@ -776,7 +777,7 @@ TEST_CASE(
             ++error_entries;
         }
     }
-    CHECK(message_entries == 3);
+    CHECK(message_entries == 4);
     CHECK(error_entries == 1);
 
     session->close();

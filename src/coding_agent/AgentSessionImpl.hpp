@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/prompt/SystemPromptBuilder.hpp"
 
 #include <cch/agent/Agent.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
@@ -67,6 +68,7 @@ struct RetrySettings {
 /// public handle moves or is destroyed keeps the implementation alive.
 struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Impl> {
     explicit Impl(runtime::AgentSessionAssembly assembly);
+    [[nodiscard]] support::ExpectedVoid persist_initial_system_message();
     Impl(const Impl&) = delete;
     Impl& operator=(const Impl&) = delete;
     Impl(Impl&&) = delete;
@@ -427,6 +429,7 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// (the identity delta confined to the documentation paths). Called at
     /// construction and on `/reload`.
     [[nodiscard]] std::string rebuild_system_prompt() const;
+    [[nodiscard]] std::vector<prompt::SystemPromptSection> build_system_prompt_sections() const;
     /// Shared preflight outcome rejecting a second concurrent User Bash.
     [[nodiscard]] support::ExpectedVoid reject_if_user_bash_busy() const;
 
@@ -528,6 +531,8 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// `session_.store`, it is retained through Session Close so the
     /// handle's session_path()/snapshot() introspection keeps answering.
     std::optional<std::filesystem::path> session_path_;
+    std::optional<ai::SystemMessage> initial_system_message_to_persist_;
+    std::vector<ai::MessageVariant> branch_history_to_persist_;
     Lifecycle lifecycle_{Lifecycle::Open};
     bool prompt_active_{false};
     bool user_bash_active_{false};

@@ -1551,14 +1551,11 @@ struct PreparedAssemblyTarget final {
     // so the appended entry and the Agent's live state never diverge. The
     // Agent clamps the request at construction (ADR 0034 / #352), so the
     // persisted initial entries below carry the same clamped value.
-    const std::string effective_thinking_level = ai::clamp_thinking_level_string(
-        request_model,
-        is_resume && prepared_resume.resume.has_thinking_level_entry
-            ? prepared_resume.resume.thinking_level
-            : plan.in_memory_branch_seed &&
-                    plan.in_memory_branch_seed->context.has_thinking_level_entry
-                ? plan.in_memory_branch_seed->context.thinking_level
-                : settings.default_thinking_level.value_or("medium"));
+    const std::string effective_thinking_level = ai::clamp_thinking_level_string(request_model,
+            is_resume && prepared_resume.resume.has_thinking_level_entry ? prepared_resume.resume.thinking_level
+            : plan.in_memory_branch_seed && plan.in_memory_branch_seed->context.has_thinking_level_entry
+                    ? plan.in_memory_branch_seed->context.thinking_level
+                    : scoped_thinking_level.value_or(settings.default_thinking_level.value_or("medium")));
 
     // 9. Publish the session and its initial entries through one reserved
     // Runtime worker admission. SessionStore construction, JSONL parsing,
@@ -1637,11 +1634,6 @@ struct PreparedAssemblyTarget final {
                                         ? std::nullopt
                                         : std::optional<std::string>{seed.context.thinking_level};
                         open.topology = harness::session::SessionTopology::Branched;
-                        for (const auto& message : open.history) {
-                            if (auto appended = open.store->append(message); !appended) {
-                                return fail(appended.error());
-                            }
-                        }
                     }
                     const bool placeholder_model = provider == agent::detail::kDefaultModel.provider &&
                                                    model == agent::detail::kDefaultModel.id;
@@ -1666,6 +1658,7 @@ struct PreparedAssemblyTarget final {
                         return fail(appended.error());
                     }
                 }
+                open.context_thinking_level = effective_thinking_level;
                 return support::Expected<OpenSession>{std::move(open)};
             }));
     if (!session_publication) {
@@ -1791,13 +1784,17 @@ ProjectResourceFileSystems SessionFactory::make_project_resource_filesystems(
             home_directory);
 }
 
-coding_agent::CreateAgentSessionResult SessionFactory::publish(AgentSessionAssembly assembly,
+support::Expected<coding_agent::CreateAgentSessionResult> SessionFactory::publish(AgentSessionAssembly assembly,
         std::vector<coding_agent::SessionDiagnostic> diagnostics,
         std::optional<std::string> model_fallback_message,
         std::vector<coding_agent::LoadedThemeResource> theme_resources,
         coding_agent::ResolvedSessionIdentity identity) {
+    auto session = coding_agent::AgentSession::bind_assembly(std::move(assembly));
+    if (!session) {
+        return std::unexpected(session.error());
+    }
     return coding_agent::CreateAgentSessionResult{
-            .session = coding_agent::AgentSession::bind_assembly(std::move(assembly)),
+            .session = std::move(*session),
             .diagnostics = std::move(diagnostics),
             .model_fallback_message = std::move(model_fallback_message),
             .theme_resources = std::move(theme_resources),

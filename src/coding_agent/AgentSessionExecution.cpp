@@ -24,6 +24,7 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -166,6 +167,30 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
                     prompt_tool_guidelines_.end(), metadata->guidelines.begin(), metadata->guidelines.end());
         }
     }
+    auto sections = build_system_prompt_sections();
+    ai::SystemMessage system_message;
+    system_message.sections.reserve(sections.size());
+    for (const auto& section : sections) {
+        system_message.sections.push_back(ai::SystemMessageSection{
+                .name = section.name,
+                .text = section.text,
+        });
+    }
+    const bool has_system_message = std::ranges::any_of(
+            session_.history, [](const auto& message) { return std::holds_alternative<ai::SystemMessage>(message); });
+    if (!has_system_message && !session_.resumed) {
+        for (const auto& name : prompt_selected_tools_) {
+            if (const auto* tool = services_.tools.find(name)) {
+                system_message.tools_added.push_back(tool->definition);
+            }
+        }
+        initial_system_message_to_persist_ = system_message;
+        session_.history.insert(session_.history.begin(), ai::MessageVariant{std::move(system_message)});
+    }
+    if (session_.topology == harness::session::SessionTopology::Branched && !session_.resumed) {
+        const auto branch_start = has_system_message ? session_.history.begin() : session_.history.begin() + 1;
+        branch_history_to_persist_.assign(branch_start, session_.history.end());
+    }
     options.system_prompt = rebuild_system_prompt();
     // pi `_installAgentNextTurnRefresh`: the between-turn trigger compacts
     // before the next assistant response of the same run, so a long tool loop
@@ -217,7 +242,42 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     }
 }
 
+support::ExpectedVoid AgentSession::Impl::persist_initial_system_message() {
+    if (!session_.store) {
+        return {};
+    }
+    if (initial_system_message_to_persist_) {
+        auto appended = session_.store->append(ai::MessageVariant{*initial_system_message_to_persist_});
+        if (!appended) {
+            return std::unexpected(appended.error());
+        }
+        initial_system_message_to_persist_.reset();
+    }
+    for (const auto& message : branch_history_to_persist_) {
+        if (auto branch_appended = session_.store->append(message); !branch_appended) {
+            return std::unexpected(branch_appended.error());
+        }
+    }
+    branch_history_to_persist_.clear();
+    return {};
+}
+
 std::string AgentSession::Impl::rebuild_system_prompt() const {
+    const auto history = agent_ ? agent_->state().messages : session_.history;
+    std::vector<ai::SystemMessage> system_messages;
+    for (const auto& message : history) {
+        if (const auto* system = std::get_if<ai::SystemMessage>(&message)) {
+            system_messages.push_back(*system);
+        }
+    }
+    auto replayed = prompt::replaySystemPromptSections(system_messages);
+    if (!replayed.empty()) {
+        return prompt::renderSystemPromptSections(replayed);
+    }
+    return prompt::renderSystemPromptSections(build_system_prompt_sections());
+}
+
+std::vector<prompt::SystemPromptSection> AgentSession::Impl::build_system_prompt_sections() const {
     // pi `_rebuildSystemPrompt` (`core/agent-session.ts`) + `buildSystemPrompt`
     // (`core/system-prompt.ts`): the default/custom branches, tool snippets +
     // guidelines, `<project_context>`, the skills section, and the cwd line,
@@ -257,7 +317,7 @@ std::string AgentSession::Impl::rebuild_system_prompt() const {
     prompt_options.readmePath = std::string{kSourceDir} + "/README.md";
     prompt_options.docsPath = std::string{kSourceDir} + "/docs";
     prompt_options.examplesPath = std::string{kSourceDir} + "/examples";
-    return buildSystemPrompt(prompt_options);
+    return buildSystemPromptSections(prompt_options);
 }
 
 support::ExpectedVoid AgentSession::Impl::reject_if_closed() const {

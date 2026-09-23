@@ -13,6 +13,7 @@
 #include <cch/coding_agent/AuthGuidance.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "coding_agent/prompt/SystemPromptBuilder.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
@@ -128,7 +129,17 @@ TEST_CASE("system prompt is built at session construction and flows through Agen
     CHECK(prompt.find("<cwd>\n" + workspace.path().string() + "\n</cwd>") != std::string::npos);
 
     // The built prompt is the Agent's live state value (pi `state.systemPrompt`).
-    CHECK(created->session->snapshot().agent_state.system_prompt == prompt);
+    const auto snapshot = created->session->snapshot();
+    CHECK(snapshot.agent_state.system_prompt == prompt);
+    std::vector<ai::SystemMessage> transcript_system_messages;
+    for (const auto& message : snapshot.agent_state.messages) {
+        if (const auto* system = std::get_if<ai::SystemMessage>(&message)) {
+            transcript_system_messages.push_back(*system);
+        }
+    }
+    REQUIRE_FALSE(transcript_system_messages.empty());
+    CHECK(coding_agent::prompt::renderSystemPromptSections(
+                  coding_agent::prompt::replaySystemPromptSections(transcript_system_messages)) == prompt);
 
     // Every subsequent run carries the same built prompt.
     auto second = run_awaitable(runtime, created->session->prompt("again"));
@@ -138,6 +149,16 @@ TEST_CASE("system prompt is built at session construction and flows through Agen
     CHECK(*client->requests[1].system_prompt == prompt);
 
     created->session->close();
+    auto resumed_client = std::make_shared<RecordingProvider>();
+    auto resumed = create_scripted_session(resumed_client, session_file, workspace.path(), runtime);
+    REQUIRE(resumed.has_value());
+    auto resumed_prompt = run_awaitable(runtime, resumed->session->prompt("after resume"));
+    REQUIRE(resumed_prompt.has_value());
+    REQUIRE(resumed_client->requests.size() == 1);
+    REQUIRE(resumed_client->requests[0].system_prompt.has_value());
+    CHECK(*resumed_client->requests[0].system_prompt == prompt);
+    CHECK(resumed->session->snapshot().agent_state.system_prompt == prompt);
+    resumed->session->close();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -162,6 +183,32 @@ namespace {
 }
 
 } // namespace
+
+TEST_CASE("system prompt replay applies changed sections and explicit removals",
+        "[coding_agent][system-prompt][issue778]") {
+    const std::vector<ai::SystemMessage> transcript{
+            ai::SystemMessage{.sections =
+                                      {
+                                              {.name = "preamble", .text = "identity"},
+                                              {.name = "tools", .text = "<tools>old</tools>"},
+                                              {.name = "docs", .text = "<docs>docs</docs>"},
+                                              {.name = "skills", .text = "<skills>skill</skills>"},
+                                      }},
+            ai::SystemMessage{.sections =
+                                      {
+                                              {.name = "tools", .text = "<tools>new</tools>"},
+                                              {.name = "skills", .text = std::nullopt},
+                                      }},
+    };
+    const auto replayed = coding_agent::prompt::replaySystemPromptSections(transcript);
+    REQUIRE(replayed.size() == 3);
+    CHECK(replayed[0].name == "preamble");
+    CHECK(replayed[1].name == "tools");
+    CHECK(replayed[1].text == "<tools>new</tools>");
+    CHECK(replayed[2].name == "docs");
+    CHECK(coding_agent::prompt::renderSystemPromptSections(replayed) ==
+            "identity\n\n<tools>new</tools>\n\n<docs>docs</docs>");
+}
 
 TEST_CASE("system prompt default branch renders project context files in pi's order",
         "[coding_agent][system-prompt][context-files][issue416][spec]") {

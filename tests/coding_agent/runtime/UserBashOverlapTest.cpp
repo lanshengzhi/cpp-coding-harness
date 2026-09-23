@@ -355,9 +355,9 @@ TEST_CASE("a second User Bash is rejected before runtime mutation and the Sessio
     REQUIRE_FALSE(*second_result);
     CHECK(second_result->error().message.find("User Bash") != std::string::npos);
     // Rejected before mutation: the shell never saw the second command and
-    // Live Session State is untouched.
+    // Live Session State gained no message beyond its leading system record.
     CHECK(commands_before_release == 1);
-    CHECK(messages_before_release == 0);
+    CHECK(messages_before_release == 1);
 
     REQUIRE(first_result.has_value());
     REQUIRE(*first_result);
@@ -426,10 +426,11 @@ TEST_CASE("deferred User Bash commits exactly once through JSONL and resumes in 
     auto resumed = harness::session::resume_session(session_path);
     REQUIRE(resumed);
     const auto& history = resumed->history;
-    REQUIRE(history.size() == 3);
-    CHECK(std::holds_alternative<ai::UserMessage>(history[0]));
-    CHECK(std::holds_alternative<ai::AssistantMessage>(history[1]));
-    const auto* bash = std::get_if<ai::BashExecutionMessage>(&history[2]);
+    REQUIRE(history.size() == 4);
+    CHECK(std::holds_alternative<ai::SystemMessage>(history[0]));
+    CHECK(std::holds_alternative<ai::UserMessage>(history[1]));
+    CHECK(std::holds_alternative<ai::AssistantMessage>(history[2]));
+    const auto* bash = std::get_if<ai::BashExecutionMessage>(&history[3]);
     REQUIRE(bash != nullptr);
     CHECK(bash->command == "deferred bash");
     CHECK(bash->output == "persisted overlap");
