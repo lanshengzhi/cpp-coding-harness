@@ -498,7 +498,15 @@ boost::asio::awaitable<void> AuthFlowController::complete_provider_authenticatio
                 selection_error =
                     login_selection_error_default_unavailable(action_label, *default_id);
             } else {
-                auto set = co_await session->set_model(*found);
+                // pi `completeProviderAuthentication`: the post-login default
+                // model selection persists (`setModel(selectedModel,
+                // { persist: true })`), so it writes the global default and
+                // promotes into the scoped/enabled set when one exists
+                // (#774). pi's deferred selection while the provider catalog
+                // refreshes asynchronously is a dynamic-catalog capability
+                // the C++ runtime does not claim; the selection resolves
+                // against the composed snapshot here.
+                auto set = co_await session->set_model(*found, ModelMutationOptions{.persist = true});
                 if (closed_ || captured_generation != action_generation()) co_return;
                 if (set) {
                     selected_model = *found;

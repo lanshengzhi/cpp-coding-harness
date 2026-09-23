@@ -97,6 +97,11 @@ std::shared_ptr<ModelFlowController> InteractiveEngine::make_model_flow_controll
         const auto self = weak.lock();
         return self != nullptr ? self->session_ : nullptr;
     };
+    hooks.show_warning = [weak](std::string text) {
+        if (const auto self = weak.lock(); self && self->view_ != nullptr) {
+            self->view_->append_warning(std::move(text));
+        }
+    };
     // The controller is created after `theme_controller_` is emplaced and
     // the optional is never reset, so the pointer stays valid for the
     // state's lifetime (flows reach it only under the gates above).

@@ -326,10 +326,9 @@ support::ExpectedVoid AgentSession::clear_input_queues() {
     return impl_->clear_input_queues();
 }
 
-support::Expected<std::string> AgentSession::set_thinking_level(
-    std::string_view level) {
+support::Expected<std::string> AgentSession::set_thinking_level(std::string_view level, ModelMutationOptions options) {
     if (!impl_) return std::unexpected(detail::session_not_initialized_error());
-    return impl_->set_thinking_level(level);
+    return impl_->set_thinking_level(level, options);
 }
 
 boost::asio::awaitable<support::Expected<CompactionResult>> AgentSession::compact(
@@ -339,12 +338,11 @@ boost::asio::awaitable<support::Expected<CompactionResult>> AgentSession::compac
     return detail::session_compact(impl_, std::move(custom_instructions));
 }
 
-boost::asio::awaitable<support::ExpectedVoid> AgentSession::set_model(
-    ai::Model model) {
-    return detail::session_set_model(impl_, std::move(model));
+boost::asio::awaitable<support::ExpectedVoid> AgentSession::set_model(ai::Model model, ModelMutationOptions options) {
+    return detail::session_set_model(impl_, std::move(model), options);
 }
 
-support::ExpectedVoid AgentSession::set_model_blocking(ai::Model model) {
+support::ExpectedVoid AgentSession::set_model_blocking(ai::Model model, ModelMutationOptions options) {
     const auto impl = impl_;
     if (!impl) return std::unexpected(detail::session_not_initialized_error());
     boost::asio::io_context io;
@@ -353,8 +351,8 @@ support::ExpectedVoid AgentSession::set_model_blocking(ai::Model model) {
     // executor drives the lazy coroutine and the bridge owns the Asio
     // `co_spawn` completion (ADR 0042).
     auto bridged = support::detail::make_async_result_on(io.get_executor(),
-            [impl, model = std::move(model)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
-                co_return co_await detail::session_set_model(impl, std::move(model));
+            [impl, model = std::move(model), options]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_return co_await detail::session_set_model(impl, std::move(model), options);
             });
     std::move(bridged).start([&result](support::ExpectedVoid completion) noexcept {
         result.emplace(std::move(completion));
@@ -369,13 +367,13 @@ support::ExpectedVoid AgentSession::set_model_blocking(ai::Model model) {
     return std::move(*result);
 }
 
-boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>>
-AgentSession::cycle_model(std::string direction) {
-    return detail::session_cycle_model(impl_, std::move(direction));
+boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> AgentSession::cycle_model(
+        std::string direction, ModelMutationOptions options) {
+    return detail::session_cycle_model(impl_, std::move(direction), options);
 }
 
 support::Expected<std::optional<ModelCycleResult>> AgentSession::cycle_model_blocking(
-    std::string direction) {
+        std::string direction, ModelMutationOptions options) {
     const auto impl = impl_;
     if (!impl) return std::unexpected(detail::session_not_initialized_error());
     boost::asio::io_context io;
@@ -384,9 +382,10 @@ support::Expected<std::optional<ModelCycleResult>> AgentSession::cycle_model_blo
     // executor drives the lazy coroutine and the bridge owns the Asio
     // `co_spawn` completion (ADR 0042).
     auto bridged = support::detail::make_async_result_on(io.get_executor(),
-            [impl, direction = std::move(direction)]() mutable
-                    -> boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> {
-                co_return co_await detail::session_cycle_model(impl, std::move(direction));
+            [impl,
+                    direction = std::move(direction),
+                    options]() mutable -> boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> {
+                co_return co_await detail::session_cycle_model(impl, std::move(direction), options);
             });
     std::move(bridged).start(
         [&result](support::Expected<std::optional<ModelCycleResult>> completion) noexcept {
@@ -402,9 +401,9 @@ support::Expected<std::optional<ModelCycleResult>> AgentSession::cycle_model_blo
     return std::move(*result);
 }
 
-support::Expected<std::optional<std::string>> AgentSession::cycle_thinking_level() {
+support::Expected<std::optional<std::string>> AgentSession::cycle_thinking_level(ModelMutationOptions options) {
     if (!impl_) return std::unexpected(detail::session_not_initialized_error());
-    return impl_->cycle_thinking_level();
+    return impl_->cycle_thinking_level(options);
 }
 
 void AgentSession::set_scoped_models(std::vector<ScopedModel> models) {

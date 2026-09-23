@@ -5,6 +5,7 @@
 #include "coding_agent/tui/SettingsSelector.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
+#include "coding_agent/tui/ThinkingSelector.hpp"
 
 #include <cch/ai/Model.hpp>
 #include <cch/coding_agent/Settings.hpp>
@@ -216,6 +217,73 @@ void SettingsFlowController::toggle_thinking_block_visibility() {
         presenter_->show_status(
             "Thinking blocks: " + std::string{hidden ? "hidden" : "visible"});
     }
+}
+
+void SettingsFlowController::apply_thinking_level(const std::string& level, bool persist) {
+    auto* session = current_session();
+    if (session == nullptr || presenter_ == nullptr) return;
+    auto applied = session->set_thinking_level(level, ModelMutationOptions{.persist = persist});
+    if (!applied) {
+        show_error(combined_error_text(applied.error()));
+        return;
+    }
+    presenter_->show_status(persist ? "Default thinking level: " + level : "Thinking level: " + level);
+}
+
+void SettingsFlowController::show_thinking_selector() {
+    auto* session = current_session();
+    if (session == nullptr || !session->is_open() || presenter_ == nullptr || keybindings_ == nullptr ||
+            theme_controller_ == nullptr) {
+        return;
+    }
+    if (hooks_.overlay_active && hooks_.overlay_active()) return;
+
+    // pi showThinkingSelector: the available levels of the current model, the
+    // current level marker, and the settings default for the ` · default`
+    // marker (`getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL`).
+    const auto snapshot = session->snapshot();
+    std::vector<std::string> levels;
+    const auto supported = ai::get_supported_thinking_levels(snapshot.agent_state.model);
+    levels.reserve(supported.size());
+    for (const auto level : supported) {
+        if (const auto name = ai::model_thinking_level_name(level)) {
+            levels.emplace_back(*name);
+        }
+    }
+    const auto default_level =
+            settings_manager_ != nullptr && settings_manager_->settings().default_thinking_level
+                    ? std::optional<std::string>{*settings_manager_->settings().default_thinking_level}
+                    : std::nullopt;
+
+    const auto weak = weak_from_this();
+    auto selector = std::make_shared<ThinkingSelectorComponent>(
+            theme_controller_->live_theme(),
+            keybindings_->get(),
+            snapshot.agent_state.thinking_level,
+            std::move(levels),
+            [weak](std::string level) {
+                if (const auto self = weak.lock()) {
+                    self->post([self, level = std::move(level)]() mutable {
+                        self->apply_thinking_level(level, false);
+                        self->presenter_->restore_prompt_slot();
+                    });
+                }
+            },
+            [weak] {
+                if (const auto self = weak.lock()) {
+                    self->post([self] { self->presenter_->restore_prompt_slot(); });
+                }
+            },
+            [weak](std::string level) {
+                if (const auto self = weak.lock()) {
+                    self->post([self, level = std::move(level)]() mutable {
+                        self->apply_thinking_level(level, true);
+                        self->presenter_->restore_prompt_slot();
+                    });
+                }
+            },
+            default_level);
+    presenter_->replace_prompt_slot(std::move(selector));
 }
 
 void SettingsFlowController::cycle_thinking_level() {
