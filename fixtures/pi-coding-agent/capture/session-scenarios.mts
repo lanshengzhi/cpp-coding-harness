@@ -89,6 +89,25 @@ function canonicalMessage(message: any): any {
 		if (message.toolName !== undefined) out.toolName = message.toolName;
 		if (message.isError !== undefined) out.isError = message.isError;
 	}
+	// System messages carry the v0.87.1 prompt contract: ordered named sections
+	// (a value replaces/declares, an explicit removal is a null) and the tool
+	// loadout. Section TEXT is machine- and identity-dependent (docs paths, cwd,
+	// the pi/pike identity line), so the differential golden pins the ordered
+	// section NAMES and removal markers plus the tool NAMES; the prompt text
+	// itself is pinned by the prompt goldens (`prompts/*-message.json`).
+	if (message.role === "system") {
+		if (message.sections !== undefined) {
+			out.sections = Object.entries(message.sections as Record<string, string | null>).map(
+				([name, text]) => ({ name, removal: text === null }),
+			);
+		}
+		if (Array.isArray(message.toolsAdded)) {
+			out.toolsAdded = message.toolsAdded.map((tool: any) => tool.name ?? tool);
+		}
+		if (Array.isArray(message.toolsRemoved)) {
+			out.toolsRemoved = message.toolsRemoved.map((tool: any) => tool.name ?? tool);
+		}
+	}
 	if (message.role === "compactionSummary" && message.summary !== undefined) {
 		out.summary = message.summary;
 	}

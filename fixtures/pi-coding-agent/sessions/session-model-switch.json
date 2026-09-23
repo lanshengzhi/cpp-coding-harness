@@ -12,6 +12,34 @@
           "type": "text",
           "text": ""
         }
+      ],
+      "sections": [
+        {
+          "name": "preamble",
+          "removal": false
+        },
+        {
+          "name": "tools",
+          "removal": false
+        },
+        {
+          "name": "rules",
+          "removal": false
+        },
+        {
+          "name": "docs",
+          "removal": false
+        },
+        {
+          "name": "cwd",
+          "removal": false
+        }
+      ],
+      "toolsAdded": [
+        "read",
+        "bash",
+        "edit",
+        "write"
       ]
     },
     {
@@ -67,6 +95,34 @@
           "type": "text",
           "text": ""
         }
+      ],
+      "sections": [
+        {
+          "name": "preamble",
+          "removal": false
+        },
+        {
+          "name": "tools",
+          "removal": false
+        },
+        {
+          "name": "rules",
+          "removal": false
+        },
+        {
+          "name": "docs",
+          "removal": false
+        },
+        {
+          "name": "cwd",
+          "removal": false
+        }
+      ],
+      "toolsAdded": [
+        "read",
+        "bash",
+        "edit",
+        "write"
       ]
     },
     {
@@ -136,6 +192,34 @@
             "type": "text",
             "text": ""
           }
+        ],
+        "sections": [
+          {
+            "name": "preamble",
+            "removal": false
+          },
+          {
+            "name": "tools",
+            "removal": false
+          },
+          {
+            "name": "rules",
+            "removal": false
+          },
+          {
+            "name": "docs",
+            "removal": false
+          },
+          {
+            "name": "cwd",
+            "removal": false
+          }
+        ],
+        "toolsAdded": [
+          "read",
+          "bash",
+          "edit",
+          "write"
         ]
       }
     },
