@@ -92,14 +92,14 @@ public:
     [[nodiscard]] support::ExpectedVoid append_compaction(
         std::optional<std::string> parent_id,
         CompactionEntryValue value);
-    /// pi `appendBranchSummary`: record the summary of an abandoned branch
-    /// (`from_id` is the abandoned leaf).
-    [[nodiscard]] support::ExpectedVoid append_branch_summary(
-        std::optional<std::string> parent_id,
-        std::string from_id,
-        std::string summary,
-        std::optional<support::JsonValue> details,
-        std::optional<bool> from_hook);
+    /// pi `appendBranchSummary`: record the summary and summarizer usage of
+    /// an abandoned branch (`from_id` is the abandoned leaf).
+    [[nodiscard]] support::ExpectedVoid append_branch_summary(std::optional<std::string> parent_id,
+            std::string from_id,
+            std::string summary,
+            std::optional<support::JsonValue> details,
+            std::optional<bool> from_hook,
+            std::optional<ai::Usage> usage = std::nullopt);
     [[nodiscard]] support::ExpectedVoid append_session_info(
         std::optional<std::string> parent_id,
         std::string name);

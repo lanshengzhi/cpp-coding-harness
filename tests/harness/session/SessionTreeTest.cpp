@@ -6,6 +6,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <variant>
@@ -861,10 +862,30 @@ TEST_CASE("branchWithSummary generates summary and switches leaf", "[harness][se
         -> support::Expected<std::optional<harness::session::SessionTree::BranchSummaryData>> {
         harness::session::SessionTree::BranchSummaryData data;
         data.summary = "summarized " + std::to_string(ctx.branch_entries.size()) + " entries";
+        data.usage = ai::Usage{
+                .input = 11,
+                .output = 5,
+                .cache_read = 3,
+                .cache_write = 2,
+                .cache_write_1h = std::nullopt,
+                .reasoning = std::nullopt,
+                .total_tokens = 21,
+                .cost = ai::UsageCost{.total = 0.42},
+        };
         return data;
     };
 
     auto append_writer = [&](const harness::session::SessionEntry& entry) -> support::ExpectedVoid {
+        const auto& summary = std::get<harness::session::BranchSummaryEntryValue>(entry.value);
+        if (auto saved = store->append_branch_summary(entry.parent_id,
+                    summary.from_id,
+                    summary.summary,
+                    summary.details,
+                    summary.from_hook,
+                    summary.usage);
+                !saved) {
+            return std::unexpected(saved.error());
+        }
         appended_entries.push_back(entry);
         return {};
     };
@@ -883,6 +904,24 @@ TEST_CASE("branchWithSummary generates summary and switches leaf", "[harness][se
     const auto& value = std::get<harness::session::BranchSummaryEntryValue>(appended_entries[0].value);
     CHECK(value.from_id == leaf_before);
     CHECK(value.summary == "summarized 2 entries");
+    REQUIRE(value.usage.has_value());
+    CHECK(value.usage->input == 11);
+    CHECK(value.usage->output == 5);
+    CHECK(value.usage->cache_read == 3);
+    CHECK(value.usage->cache_write == 2);
+    CHECK(value.usage->cost.total == 0.42);
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    const auto persisted_summary = std::find_if(loaded->entries.begin(), loaded->entries.end(), [](const auto& entry) {
+        return entry.kind == harness::session::SessionEntryKind::BranchSummary;
+    });
+    REQUIRE(persisted_summary != loaded->entries.end());
+    const auto& persisted_value = std::get<harness::session::BranchSummaryEntryValue>(persisted_summary->value);
+    REQUIRE(persisted_value.usage.has_value());
+    CHECK(persisted_value.usage->input == 11);
+    CHECK(persisted_value.usage->output == 5);
+    CHECK(persisted_value.usage->cost.total == 0.42);
 }
 
 TEST_CASE("branchWithSummary nullopt skips summary", "[harness][session][tree][spec]") {
