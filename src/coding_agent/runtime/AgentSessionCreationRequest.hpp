@@ -63,6 +63,9 @@ struct InteractiveSessionFacts {
     std::vector<std::string> append_system_prompt;
     std::optional<std::string> provider;
     std::optional<std::string> model;
+    /// Explicit pi `--thinking`; overrides a valid `:thinking` suffix on the
+    /// selected model pattern.
+    std::optional<std::string> thinking;
     std::vector<std::string> models;
     std::optional<std::string> api_key;
 };

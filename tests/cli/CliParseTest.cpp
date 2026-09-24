@@ -82,6 +82,36 @@ TEST_CASE("parse_args records the pi CLI model selection surface", "[cli][parse]
     CHECK(parsed->session_facts.models[1] == "deepseek-r1:high");
 }
 
+TEST_CASE("parse_args accepts provider-qualified model thinking suffixes and explicit thinking",
+        "[cli][parse][issue798][spec]") {
+    std::vector<std::string> args{
+            "pike",
+            "--model",
+            "kimi-coding/k3-256k:low",
+            "--thinking",
+            "high",
+    };
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+
+    REQUIRE(parsed);
+    REQUIRE(parsed->session_facts.model.has_value());
+    CHECK(*parsed->session_facts.model == "kimi-coding/k3-256k:low");
+    REQUIRE(parsed->session_facts.thinking.has_value());
+    CHECK(*parsed->session_facts.thinking == "high");
+}
+
+TEST_CASE("parse_args rejects an invalid explicit thinking level with a bounded diagnostic",
+        "[cli][parse][issue798][spec]") {
+    std::vector<std::string> args{"pike", "--model", "alpha/model:low", "--thinking", "turbo"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+
+    REQUIRE_FALSE(parsed);
+    CHECK(parsed.error().message == "Invalid thinking level \"turbo\" in --thinking turbo");
+    CHECK(parsed.error().detail == parsed.error().message);
+}
+
 TEST_CASE("parse_args trims --models patterns and tolerates empty entries", "[cli][parse][spec]") {
     std::vector<std::string> args{
         "cpp-harness", "--models", " sonnet ,, haiku ", "hello"};
@@ -637,8 +667,8 @@ TEST_CASE("parse_args records the pi prompt/theme/skill flags", "[cli][parse][sp
     REQUIRE(parsed->session_facts.append_system_prompt.size() == 2);
     CHECK(parsed->session_facts.append_system_prompt[0] == "first append");
     CHECK(parsed->session_facts.append_system_prompt[1] == "second append");
-    REQUIRE(parsed->thinking.has_value());
-    CHECK(*parsed->thinking == "high");
+    REQUIRE(parsed->session_facts.thinking.has_value());
+    CHECK(*parsed->session_facts.thinking == "high");
     REQUIRE(parsed->session_facts.skill_paths.size() == 2);
     CHECK(parsed->session_facts.skill_paths[0] == "user-skill");
     CHECK(parsed->session_facts.skill_paths[1] == "project-skill");
