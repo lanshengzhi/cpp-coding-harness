@@ -146,6 +146,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/ModelFlowControllerTest.cpp
         tests/coding_agent/tui/ModelSelectorInteractiveTest.cpp
         tests/coding_agent/tui/ModelSelectorTest.cpp
+        tests/coding_agent/tui/NativeTuiDifferentialTest.cpp
         tests/coding_agent/tui/OAuthSelectorTest.cpp
         tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
         tests/coding_agent/tui/ScopedModelsSelectorTest.cpp
@@ -190,3 +191,16 @@ include_guard(GLOBAL)
         TEST_SPEC "E2E: *"
         PROPERTIES RESOURCE_LOCK "cch-interactive-boot-e2e-workspace")
     add_dependencies(cch_tests_coding_agent_interactive ${CCH_PARITY_BUILD_GATE_TARGET})
+
+    # Issue #800: the dual-runtime Native TUI evidence harness. The adapter
+    # skips when the optional frozen pi checkout is unavailable; it never
+    # contacts a provider or treats a missing checkout as a pass.
+    add_test(
+        NAME cch_native_tui_dual_runtime_differential
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/coding_agent/NativeTuiDifferentialTest.py
+    )
+    set_tests_properties(cch_native_tui_dual_runtime_differential PROPERTIES
+        LABELS "coding_agent;tui;differential;issue800;spec"
+        SKIP_RETURN_CODE 77
+        TIMEOUT 900
+    )
