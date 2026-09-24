@@ -4,10 +4,13 @@ namespace cch::coding_agent::prompt {
 
 const std::vector<BuiltinSlashCommand>& builtin_slash_commands() {
     // Compatibility baseline: pi 83114817,
-    // packages/coding-agent/src/core/slash-commands.ts (ADR 0036 G4: the
-    // 18 Supported entries of the 22-command catalog, pi-verbatim strings;
-    // "/export" "/import" "/share" "/changelog" "/clone", "/debug", and the
-    // easter eggs are Deferred with no surface).
+    // packages/coding-agent/src/core/slash-commands.ts (ADR 0036 G4:
+    // pi-verbatim strings; 17 of that catalog's 22 entries were ported, and
+    // upstream has since added "thinking" — ported in #791 — and "bug" —
+    // not-applicable, #793 — so f07218c4 carries 24 entries and this catalog
+    // 18). The names with no surface: "/export" "/import" "/share"
+    // "/changelog" "/clone" (Deferred), the hidden "/debug" developer entry,
+    // "/bug", and the easter eggs.
     static const std::vector<BuiltinSlashCommand> kCommands{
             {"settings", "Open settings menu", {}},
             {"model", "Select model (opens selector UI)", "<provider/model>"},

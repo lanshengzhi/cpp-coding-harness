@@ -17,8 +17,9 @@ status: accepted
 > passes through, so the host no longer decides which ones may. Prompt
 > Templates, `/skill:<name>` resources, and compatible absolute-path
 > submissions are unaffected in outcome. Consequence recorded with the change:
-> the pi commands this product defers (`/export` `/import` `/share`
-> `/changelog` `/clone` `/debug`, the easter eggs) no longer produce an error
+> the pi commands this product does not port (`/export` `/import` `/share`
+> `/changelog` `/clone`, the hidden `/debug` entry, `/bug`, and the easter
+> eggs) no longer produce an error
 > and instead fall through as prompt text; they remain unimplemented.
 > `docs/usage.md` and the ADR 0036 G4 sentence that matched the old clause are
 > updated with it. Implements [#792](https://github.com/lanshengzhi/cpp-coding-harness/issues/792).

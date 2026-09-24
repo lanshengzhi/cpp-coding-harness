@@ -77,7 +77,7 @@ TEST_CASE(
     CHECK(quit->description == "Quit pike");
 }
 
-TEST_CASE("deferred and router-only commands are absent from the autocomplete catalog",
+TEST_CASE("unported and router-only commands are absent from the autocomplete catalog",
         "[coding_agent][slash-commands][issue419][spec]") {
     const auto& commands = coding_agent::prompt::builtin_slash_commands();
     for (const auto& command : commands) {
@@ -85,6 +85,9 @@ TEST_CASE("deferred and router-only commands are absent from the autocomplete ca
         CHECK(name != "export");
         CHECK(name != "import");
         CHECK(name != "share");
+        // pi added `bug` to its catalog after the 83114817 baseline; it is
+        // not-applicable rather than Deferred (it reports to Pi's tracker).
+        CHECK(name != "bug");
         CHECK(name != "changelog");
         CHECK(name != "clone");
         CHECK(name != "debug");
