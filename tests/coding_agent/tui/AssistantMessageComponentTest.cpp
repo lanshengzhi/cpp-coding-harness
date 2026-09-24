@@ -53,6 +53,19 @@ TEST_CASE("AssistantMessageComponent renders interleaved thinking and text in ex
     CHECK(second_thought < gamma);
 }
 
+TEST_CASE("AssistantMessageComponent uses pi's length-stop suffix wording", "[coding_agent][tui][issue786]") {
+    auto theme = test_theme();
+    coding_agent::tui::AssistantMessageComponent component(theme);
+    ai::AssistantMessage message;
+    message.content.push_back(ai::TextContent{.text = "partial answer"});
+    message.stop_reason = ai::AssistantStopReason::Length;
+
+    component.update_content(message);
+    const auto screen = tests::rendered_screen(component);
+    CHECK(screen.find("Response was truncated before completion.") != std::string::npos);
+    CHECK(screen.find("Model stopped because it reached the maximum output token limit") == std::string::npos);
+}
+
 TEST_CASE("AssistantMessageComponent preserves content order when interleaved blocks stream in deltas",
         "[coding_agent][tui][issue603][spec]") {
     auto theme = test_theme();

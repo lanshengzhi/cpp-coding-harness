@@ -51,6 +51,7 @@ include_guard(GLOBAL)
         tests/support/ScriptedProvider.cpp
         tests/support/ModelRuntimeTestSupport.cpp
         tests/coding_agent/tui/AssistantMessageComponentTest.cpp
+        tests/coding_agent/tui/ExternalEditorTest.cpp
         tests/coding_agent/tui/ChatContainerTest.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
         tests/coding_agent/PiImportTest.cpp
@@ -156,6 +157,8 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/SettingsSelectorTest.cpp
         tests/coding_agent/tui/ThemeControllerTest.cpp
         tests/coding_agent/tui/ThemeTest.cpp
+        tests/coding_agent/tui/ThinkingSelectorInteractiveTest.cpp
+        tests/coding_agent/tui/ThinkingSelectorTest.cpp
         tests/coding_agent/tui/TreeSelectorComponentTest.cpp
         tests/coding_agent/tui/TreeSelectorInteractiveTest.cpp
         tests/coding_agent/tui/TuiActionSeamTest.cpp

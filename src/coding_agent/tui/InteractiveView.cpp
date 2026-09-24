@@ -39,6 +39,16 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
                           if (upstream) return upstream();
                           return {};
                       },
+                      // pi CustomEditor: the default editor opts into the
+                      // embedded working status (embedWorkingStatus: true);
+                      // the border hook resolves the active indicator at
+                      // render time. The editor is a member of this view, so
+                      // the stored hook's `this` referent outlives every
+                      // operation.
+                      .top_border_override = [this](std::size_t width, std::size_t hidden_line_count)
+                              -> support::Expected<std::optional<std::string>> {
+                          return render_embedded_status_border(width, hidden_line_count);
+                      },
               },
               [this](std::string text) -> support::ExpectedVoid {
                   // Direct dock echo owns local editor presentation when a
@@ -115,9 +125,17 @@ void InteractiveView::show_status_working(std::string message) {
         status_indicator_->kind() == StatusIndicator::Kind::Working) {
         return;
     }
-    replace_status_indicator(
-        StatusIndicator::Kind::Working,
-        working_status_message(std::move(message)));
+    // pi showWorkingStatusIndicator: the embedded Working indicator colors
+    // its spinner and message with the editor's border color (the live
+    // thinking-level border hook; pi's colorFn closure reads the border at
+    // render time).
+    replace_status_indicator(StatusIndicator::Kind::Working,
+            working_status_message(std::move(message)),
+            cch::tui::TextStyleHook{[this](std::string text) -> std::string {
+                // The editor is a member of this view; the hook fires during
+                // render and its referent outlives the loader.
+                return status_border_style()(std::move(text));
+            }});
 }
 
 void InteractiveView::show_status_compaction(std::string_view reason) {
@@ -145,19 +163,41 @@ void InteractiveView::set_loaded_resources_data(LoadedResources::Data data) { re
 
 void InteractiveView::clear_status_indicator() { status_indicator_.reset(); }
 
-void InteractiveView::replace_status_indicator(StatusIndicator::Kind kind, std::string message) {
+void InteractiveView::replace_status_indicator(
+        StatusIndicator::Kind kind, std::string message, cch::tui::TextStyleHook working_color) {
     status_indicator_ = std::make_unique<StatusIndicator>(
-        kind,
-        *theme_,
-        [this]() -> support::ExpectedVoid {
-            // The status indicator's loader render requests flow through the
-            // view's separate coalescible invalidate sink (not the action
-            // seam); a failing render request is a callback diagnostic.
-            if (!on_invalidate_) return {};
-            on_invalidate_();
-            return {};
-        },
-        std::move(message));
+            kind,
+            *theme_,
+            [this]() -> support::ExpectedVoid {
+                // The status indicator's loader render requests flow through the
+                // view's separate coalescible invalidate sink (not the action
+                // seam); a failing render request is a callback diagnostic.
+                if (!on_invalidate_) return {};
+                on_invalidate_();
+                return {};
+            },
+            std::move(message),
+            std::move(working_color));
+}
+
+support::Expected<std::optional<std::string>> InteractiveView::render_embedded_status_border(
+        std::size_t width, std::size_t hidden_line_count) {
+    // pi showStatusIndicator: the default editor embeds every indicator; an
+    // editor-slot replacement (pi's non-opted custom editors) keeps the
+    // standalone status container. The default border fallback (pi
+    // super.renderTopBorder) stays inside the border composition (nullopt).
+    if (status_indicator_ == nullptr || editor_replacement_ != nullptr) return std::nullopt;
+    auto border_style = status_border_style();
+    return embedded_status_top_border(*status_indicator_, border_style, width, hidden_line_count);
+}
+
+cch::tui::TextStyleHook InteractiveView::status_border_style() {
+    // pi updateEditorBorderColor: bash mode keeps the bashMode token,
+    // otherwise the thinking-level border token (the same hook the editor
+    // border renders with).
+    return theme_->foreground_hook(unsubmitted_bash_mode()
+                                           ? ThemeToken::BashMode
+                                           : thinking_border_token_for(current_footer_data_.thinking_level));
 }
 
 void InteractiveView::set_editor_replacement(std::shared_ptr<cch::tui::Component> component) {
@@ -265,17 +305,24 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
     } else {
         resources_lines = std::move(resources->lines);
     }
-    // Status and footer containers are part of the composition: the
-    // status container holds the active Working/Compaction/Retry
-    // indicator (two rows: one spacer + the loader line, pi's Loader) or
-    // the two-row IdleStatus; the footer renders pi's two-line layout
-    // from the live footer data source.
+    // Status and footer containers are part of the composition: the status
+    // container holds the active Working/Compaction/Retry indicator (two
+    // rows: one spacer + the loader line, pi's Loader) or the two-row
+    // IdleStatus; the footer renders pi's two-line layout from the live
+    // footer data source. While the default editor renders, the active
+    // indicator embeds into the editor's top border instead (pi v0.87.1
+    // embedWorkingStatus) and the container contributes zero rows; an
+    // editor-slot replacement keeps the standalone indicator rows (pi's
+    // non-opted custom editors).
     std::vector<std::string> status_lines;
     std::vector<std::string> footer_lines;
     if (footer_data_source_) {
         current_footer_data_ = footer_data_source_();
     }
-    if (status_indicator_) {
+    if (status_indicator_ != nullptr && editor_replacement_ == nullptr) {
+        // Embedded: the spinner renders in the editor border (the sink at
+        // editor render); the standalone block stays empty.
+    } else if (status_indicator_ != nullptr) {
         if (auto rendered = status_indicator_->render(width); !rendered) {
             return std::unexpected(rendered.error());
         } else {

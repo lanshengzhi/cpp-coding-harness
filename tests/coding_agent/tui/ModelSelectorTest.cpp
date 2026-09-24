@@ -53,6 +53,15 @@ constexpr std::string_view kThreeKeyedProviders = R"({
 [[nodiscard]] std::shared_ptr<const tui::KeybindingRegistry> test_keybindings() {
     tui::KeybindingResolutionRequest request;
     request.definitions = tui::builtin_tui_keybinding_definitions();
+    // The model selector's save-as-default action is an application-level
+    // definition (the host registers it through the keybindings manager);
+    // mirror the production binding set.
+    request.definitions.push_back({
+            .id = "app.models.save",
+            .default_keys = {"ctrl+s"},
+            .description = {},
+            .category = {},
+    });
     auto resolved = tui::resolve_keybindings(std::move(request));
     REQUIRE(resolved);
     return resolved->registry;
@@ -449,4 +458,82 @@ TEST_CASE("ModelSelector delegates search editing to the SelectList and reports 
     REQUIRE(after.has_value());
     CHECK(after->row == cursor->row);
     CHECK(after->column == 3);
+}
+
+TEST_CASE("ModelSelector selects session-only on Enter and saves the default through the save action",
+        "[coding_agent][tui][model-selector][issue774][spec]") {
+    RuntimeFixture fixture;
+    boost::asio::io_context io;
+    fixture.prime(io);
+
+    auto theme = test_theme();
+    const auto current = fixture.runtime->model("alpha", "alpha-1");
+    REQUIRE(current.has_value());
+    std::optional<ai::Model> selected;
+    std::optional<ai::Model> saved;
+
+    // pi's constructor-gated hint line: without the save-as-default sink the
+    // affordance is absent and the key is not advertised.
+    {
+        auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+                theme,
+                test_keybindings(),
+                &*current,
+                fixture.runtime,
+                io.get_executor(),
+                std::vector<cch::coding_agent::ScopedModel>{},
+                [&selected](ai::Model model) { selected = std::move(model); },
+                [] {},
+                [&io] { (void)io; });
+        const auto rendered = selector->render(90);
+        REQUIRE(rendered);
+        CHECK(join_lines(rendered->lines).find("to set as default") == std::string::npos);
+    }
+
+    auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+            theme,
+            test_keybindings(),
+            &*current,
+            fixture.runtime,
+            io.get_executor(),
+            std::vector<cch::coding_agent::ScopedModel>{},
+            [&selected](ai::Model model) { selected = std::move(model); },
+            [] {},
+            [&io] { (void)io; },
+            std::nullopt,
+            [&saved](ai::Model model) { saved = std::move(model); });
+
+    // The hint renders through pi's `keyDisplayText` (capitalized key names).
+    const auto rendered = selector->render(90);
+    REQUIRE(rendered);
+    const auto screen = join_lines(rendered->lines);
+    CHECK(screen.find("Enter to select · Ctrl+S to set as default · Escape/Ctrl+C to cancel") != std::string::npos);
+
+    // Ctrl+S (`app.models.save`) fires the save-as-default sink with the
+    // highlighted model and never the session-only select sink (pi
+    // `onSelectAsDefault`).
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "s", .ctrl = true}));
+    REQUIRE(saved.has_value());
+    CHECK(saved->provider == "alpha");
+    CHECK(saved->id == "alpha-1");
+    CHECK_FALSE(selected.has_value());
+
+    // Enter keeps selecting through the session-only sink (pi `handleSelect`).
+    auto plain = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+            theme,
+            test_keybindings(),
+            &*current,
+            fixture.runtime,
+            io.get_executor(),
+            std::vector<cch::coding_agent::ScopedModel>{},
+            [&selected](ai::Model model) { selected = std::move(model); },
+            [] {},
+            [&io] { (void)io; },
+            std::nullopt,
+            [&saved](ai::Model model) { saved = std::move(model); });
+    saved.reset();
+    static_cast<void>(plain->handle_input(tui::KeyEvent{.key = "enter"}));
+    REQUIRE(selected.has_value());
+    CHECK(selected->id == "alpha-1");
+    CHECK_FALSE(saved.has_value());
 }

@@ -1,11 +1,12 @@
-// Runtime model cycling (pi `agent-session.ts` `cycleModel`, G3 decision 5):
-// scoped models cycle within the auth-filtered scoped set (`_cycleScopedModel`),
+// Runtime model cycling (pi `agent-session.ts` `cycleModel`): scoped models
+// cycle within the auth-filtered scoped set (`_cycleScopedModel`),
 // otherwise within the available models (`_cycleAvailableModel`); each cycle
-// applies the model, persists the `model_change` entry, writes the global
-// settings default, and re-clamps the thinking level. `cycleThinkingLevel`
-// walks the active model's supported levels with a wrap. All sessions run
-// against a default-created ModelRuntime over a temp Agent Config Directory
-// with dummy-only values — no live credentials, no network validation.
+// applies the model and persists the `model_change` entry, session-only by
+// default (pi `ModelMutationOptions`) with the global default under an
+// explicit persist. `cycleThinkingLevel` walks the active model's supported
+// levels with a wrap. All sessions run against a default-created
+// ModelRuntime over a temp Agent Config Directory with dummy-only values —
+// no live credentials, no network validation.
 
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
@@ -218,8 +219,31 @@ TEST_CASE("cycle_model cycles forward and backward through the available models"
     CHECK(value.provider == "beta");
     CHECK(value.model_id == "beta-1");
 
-    // The global settings default follows the last cycle (pi
-    // setDefaultModelAndProvider).
+    // Session-only by default (pi ModelMutationOptions): the cycle never
+    // writes the global settings default.
+    CHECK(fixture.read_settings().empty());
+}
+
+TEST_CASE("cycle_model writes the global default only under an explicit persist",
+        "[coding_agent][model-cycle][issue774][spec]") {
+    Fixture fixture;
+    fixture.write_models(kThreeKeyedProviders);
+
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
+    REQUIRE(result.has_value());
+    REQUIRE(result->resolved_identity.model == "alpha-1");
+
+    // A persisted cycle writes the global default provider/model (pi
+    // `setDefaultModelAndProvider`); the empty session scope skips the
+    // scope-promotion tail (pi `_addPersistedDefaultToNonEmptyScope`), so no
+    // enabledModels field lands either.
+    auto persisted =
+            result->session->cycle_model_blocking("forward", coding_agent::ModelMutationOptions{.persist = true});
+    REQUIRE(persisted.has_value());
+    REQUIRE(persisted->has_value());
+    CHECK(persisted->value().model.id == "beta-1");
+    result->session->close();
+
     const auto settings = support::read_json(fixture.read_settings());
     REQUIRE(settings.has_value());
     const auto& object = settings->get_object();
@@ -229,6 +253,7 @@ TEST_CASE("cycle_model cycles forward and backward through the available models"
     const auto model = object.find("defaultModel");
     REQUIRE(model != object.end());
     CHECK(*model->second.get_if<std::string>() == "beta-1");
+    CHECK(object.find("enabledModels") == object.end());
 }
 
 TEST_CASE("cycle_model returns nullopt with a single available model", "[coding_agent][model-cycle][issue407][spec]") {
@@ -360,6 +385,41 @@ TEST_CASE("cycle_thinking_level walks the model's supported levels and wraps",
     REQUIRE(minimal->has_value());
     CHECK(**minimal == "minimal");
     result->session->close();
+}
+
+TEST_CASE("cycle_thinking_level persists the global default only under an explicit persist",
+        "[coding_agent][model-cycle][issue774][spec]") {
+    Fixture fixture;
+    fixture.write_models(kReasoningProvider);
+
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
+    REQUIRE(result.has_value());
+    REQUIRE(result->session->snapshot().agent_state.thinking_level == "medium");
+
+    // Session-only by default (pi ModelMutationOptions): the cycle appends
+    // the entry but writes no settings default.
+    auto session_only = result->session->cycle_thinking_level();
+    REQUIRE(session_only.has_value());
+    REQUIRE(session_only->has_value());
+    CHECK(**session_only == "high");
+    CHECK(fixture.read_settings().empty());
+
+    // pi setThinkingLevel: under `options.persist` the requested level lands
+    // in the global settings default even when the level is unchanged.
+    auto back_to_medium = result->session->set_thinking_level("medium");
+    REQUIRE(back_to_medium.has_value());
+    auto persisted = result->session->cycle_thinking_level(coding_agent::ModelMutationOptions{.persist = true});
+    REQUIRE(persisted.has_value());
+    REQUIRE(persisted->has_value());
+    CHECK(**persisted == "high");
+    result->session->close();
+
+    const auto settings = support::read_json(fixture.read_settings());
+    REQUIRE(settings.has_value());
+    const auto& object = settings->get_object();
+    const auto level = object.find("defaultThinkingLevel");
+    REQUIRE(level != object.end());
+    CHECK(*level->second.get_if<std::string>() == "high");
 }
 
 TEST_CASE("cycle_thinking_level returns nullopt when the model supports no thinking",

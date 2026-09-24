@@ -303,7 +303,7 @@ TEST_CASE("E2E: a focused-editor submission streams a scripted-runtime turn in t
     REQUIRE(pump_until(io, [&] {
         const auto current_screen = visible_screen(terminal);
         return current_screen.find("Done: the notes file now says beta.") != std::string::npos &&
-               current_screen.find("Working...") == std::string::npos;
+               current_screen.find("Working") == std::string::npos;
     }));
     const auto screen = visible_screen(terminal);
     capture_golden("turn.txt", screen);

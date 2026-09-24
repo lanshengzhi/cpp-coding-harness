@@ -6,6 +6,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <variant>
@@ -336,7 +337,6 @@ TEST_CASE("buildSessionContext linear tree returns all messages", "[harness][ses
     // null, and no thinking entry means no resumed-entry gate.
     CHECK(ctx.thinking_level == "off");
     CHECK_FALSE(ctx.has_thinking_level_entry);
-    CHECK_FALSE(ctx.active_tool_names.has_value());
 }
 
 TEST_CASE("buildSessionContext extracts model and thinking level", "[harness][session][tree][spec]") {
@@ -361,7 +361,7 @@ TEST_CASE("buildSessionContext extracts model and thinking level", "[harness][se
     CHECK(first_user_text(ctx.messages) == "hello");
 }
 
-TEST_CASE("buildSessionContext derives thinkingLevel/model/activeToolNames over every entry type",
+TEST_CASE("buildSessionContext derives thinkingLevel/model over every entry type",
         "[harness][session][tree][issue357][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "ctx-derived-full.jsonl";
@@ -388,9 +388,6 @@ TEST_CASE("buildSessionContext derives thinkingLevel/model/activeToolNames over 
     REQUIRE(store->append_session_info(std::nullopt, "review name"));
     REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4.1"));
     REQUIRE(store->append_thinking_level_change(std::nullopt, "high"));
-    REQUIRE(store->append_active_tools_change(
-        std::nullopt, {"read", "bash", "edit", "write"}));
-
     ai::AssistantMessage assistant = ai::assistant_text_message("hi");
     assistant.api = "anthropic-messages";
     assistant.provider = "anthropic";
@@ -398,8 +395,7 @@ TEST_CASE("buildSessionContext derives thinkingLevel/model/activeToolNames over 
     assistant.timestamp = 1784678402000;
     REQUIRE(store->append(ai::MessageVariant{std::move(assistant)}).status);
 
-    // Point the leaf at the last message so the branch covers the whole chain
-    // (all eleven entry kinds participate in topology).
+    // Point the leaf at the last message so the branch covers the whole chain.
     auto pre = harness::session::JsonlSessionStore::load(path);
     REQUIRE(pre);
     REQUIRE(pre->entries.size() >= 11);
@@ -413,18 +409,13 @@ TEST_CASE("buildSessionContext derives thinkingLevel/model/activeToolNames over 
     harness::session::SessionTree tree(std::move(*loaded));
     auto ctx = tree.buildSessionContext();
 
-    // pi derived state: the last `thinking_level_change` wins and gates resume
-    // restoration; the last assistant message's provider/model overrides the
-    // earlier `model_change`; the last `active_tools_change` is copied.
+    // pi-derived model and thinking state follow the active branch.
     CHECK(ctx.thinking_level == "high");
     CHECK(ctx.has_thinking_level_entry);
     REQUIRE(ctx.provider.has_value());
     CHECK(*ctx.provider == "anthropic");
     REQUIRE(ctx.model.has_value());
     CHECK(*ctx.model == "claude-sonnet-4-5");
-    REQUIRE(ctx.active_tool_names.has_value());
-    const std::vector<std::string> expected_tools{"read", "bash", "edit", "write"};
-    CHECK(*ctx.active_tool_names == expected_tools);
 }
 
 TEST_CASE("buildSessionContext last model_change wins over an earlier assistant message",
@@ -443,11 +434,9 @@ TEST_CASE("buildSessionContext last model_change wins over an earlier assistant 
     REQUIRE(store->append(ai::MessageVariant{std::move(assistant)}).status);
 
     // The `model_change` closest to the leaf wins over the earlier assistant
-    // message; an explicit "off" thinking entry and an empty tools entry stay
-    // engaged (pi: entries update the derived state, they never clear it).
+    // message; the explicit "off" thinking entry stays engaged.
     REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4.1"));
     REQUIRE(store->append_thinking_level_change(std::nullopt, "off"));
-    REQUIRE(store->append_active_tools_change(std::nullopt, {}));
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -460,8 +449,6 @@ TEST_CASE("buildSessionContext last model_change wins over an earlier assistant 
     CHECK(*ctx.model == "gpt-4.1");
     CHECK(ctx.thinking_level == "off");
     CHECK(ctx.has_thinking_level_entry);
-    REQUIRE(ctx.active_tool_names.has_value());
-    CHECK(ctx.active_tool_names->empty());
 }
 
 TEST_CASE("buildSessionContext compaction skips pre-kept messages", "[harness][session][tree][spec]") {
@@ -506,6 +493,44 @@ TEST_CASE("buildSessionContext compaction skips pre-kept messages", "[harness][s
     // Remaining should be msg3 and msg4
     CHECK(first_user_text({ctx.messages[1]}) == "msg3");
     CHECK(first_user_text({ctx.messages[2]}) == "msg4");
+}
+
+TEST_CASE("buildSessionContext replays all retained system updates before the compaction summary",
+        "[harness][session][tree][session-resume][spec]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "ctx-compact-system-updates.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(ai::SystemMessage{.content = "initial prompt section", .timestamp = 1}).status);
+    REQUIRE(store->append(user_msg("summarized message")).status);
+
+    auto retained_tail = std::vector<ai::MessageVariant>{
+            ai::SystemMessage{.content = "initial prompt section", .timestamp = 1},
+            ai::SystemMessage{.content = "reloaded prompt section", .timestamp = 2},
+            user_msg("kept message"),
+    };
+    REQUIRE(store->append_compaction(std::nullopt,
+            harness::session::CompactionEntryValue{
+                    .summary = "summary of earlier conversation",
+                    .first_kept_entry_id = std::nullopt,
+                    .tokens_before = 1000,
+                    .retained_tail = std::move(retained_tail),
+                    .details = std::nullopt,
+            }));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+    const auto ctx = tree.buildSessionContext();
+
+    REQUIRE(ctx.messages.size() == 4);
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(ctx.messages[0]));
+    CHECK(std::get<ai::SystemMessage>(ctx.messages[0]).content == "initial prompt section");
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(ctx.messages[1]));
+    CHECK(std::get<ai::SystemMessage>(ctx.messages[1]).content == "reloaded prompt section");
+    REQUIRE(std::holds_alternative<ai::CompactionSummaryMessage>(ctx.messages[2]));
+    CHECK(std::get<ai::CompactionSummaryMessage>(ctx.messages[2]).summary == "summary of earlier conversation");
+    CHECK(first_user_text({ctx.messages[3]}) == "kept message");
 }
 
 TEST_CASE("buildSessionContext branch summary converted to message", "[harness][session][tree][spec]") {
@@ -720,7 +745,6 @@ TEST_CASE("buildSessionContext empty tree returns empty context", "[harness][ses
     CHECK_FALSE(ctx.model.has_value());
     CHECK(ctx.thinking_level == "off");
     CHECK_FALSE(ctx.has_thinking_level_entry);
-    CHECK_FALSE(ctx.active_tool_names.has_value());
 }
 
 TEST_CASE("buildSessionContext respects branch navigation", "[harness][session][tree][spec]") {
@@ -876,10 +900,30 @@ TEST_CASE("branchWithSummary generates summary and switches leaf", "[harness][se
         -> support::Expected<std::optional<harness::session::SessionTree::BranchSummaryData>> {
         harness::session::SessionTree::BranchSummaryData data;
         data.summary = "summarized " + std::to_string(ctx.branch_entries.size()) + " entries";
+        data.usage = ai::Usage{
+                .input = 11,
+                .output = 5,
+                .cache_read = 3,
+                .cache_write = 2,
+                .cache_write_1h = std::nullopt,
+                .reasoning = std::nullopt,
+                .total_tokens = 21,
+                .cost = ai::UsageCost{.total = 0.42},
+        };
         return data;
     };
 
     auto append_writer = [&](const harness::session::SessionEntry& entry) -> support::ExpectedVoid {
+        const auto& summary = std::get<harness::session::BranchSummaryEntryValue>(entry.value);
+        if (auto saved = store->append_branch_summary(entry.parent_id,
+                    summary.from_id,
+                    summary.summary,
+                    summary.details,
+                    summary.from_hook,
+                    summary.usage);
+                !saved) {
+            return std::unexpected(saved.error());
+        }
         appended_entries.push_back(entry);
         return {};
     };
@@ -898,6 +942,24 @@ TEST_CASE("branchWithSummary generates summary and switches leaf", "[harness][se
     const auto& value = std::get<harness::session::BranchSummaryEntryValue>(appended_entries[0].value);
     CHECK(value.from_id == leaf_before);
     CHECK(value.summary == "summarized 2 entries");
+    REQUIRE(value.usage.has_value());
+    CHECK(value.usage->input == 11);
+    CHECK(value.usage->output == 5);
+    CHECK(value.usage->cache_read == 3);
+    CHECK(value.usage->cache_write == 2);
+    CHECK(value.usage->cost.total == 0.42);
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    const auto persisted_summary = std::find_if(loaded->entries.begin(), loaded->entries.end(), [](const auto& entry) {
+        return entry.kind == harness::session::SessionEntryKind::BranchSummary;
+    });
+    REQUIRE(persisted_summary != loaded->entries.end());
+    const auto& persisted_value = std::get<harness::session::BranchSummaryEntryValue>(persisted_summary->value);
+    REQUIRE(persisted_value.usage.has_value());
+    CHECK(persisted_value.usage->input == 11);
+    CHECK(persisted_value.usage->output == 5);
+    CHECK(persisted_value.usage->cost.total == 0.42);
 }
 
 TEST_CASE("branchWithSummary nullopt skips summary", "[harness][session][tree][spec]") {

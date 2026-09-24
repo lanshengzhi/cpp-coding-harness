@@ -33,8 +33,8 @@ import { registerFauxProvider, fauxAssistantMessage } from "@earendil-works/pi-a
 
 const fixtureDir = process.env.CCH_SESSION_FIXTURE_DIR!;
 const piCheckout = process.env.PI_CHECKOUT!;
-const BASELINE = "83114817c68f5413e4d7ba6d7003ddc511cd31d2";
-const ARTIFACT = "@earendil-works/pi-coding-agent@0.83.0";
+const BASELINE = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe";
+const ARTIFACT = "@earendil-works/pi-coding-agent@0.87.1";
 
 const codingAgentSrc = (rel: string) =>
 	pathToFileURL(join(piCheckout, "packages/coding-agent/src", rel)).href;
@@ -88,6 +88,25 @@ function canonicalMessage(message: any): any {
 		if (message.toolCallId !== undefined) out.toolCallId = message.toolCallId;
 		if (message.toolName !== undefined) out.toolName = message.toolName;
 		if (message.isError !== undefined) out.isError = message.isError;
+	}
+	// System messages carry the v0.87.1 prompt contract: ordered named sections
+	// (a value replaces/declares, an explicit removal is a null) and the tool
+	// loadout. Section TEXT is machine- and identity-dependent (docs paths, cwd,
+	// the pi/pike identity line), so the differential golden pins the ordered
+	// section NAMES and removal markers plus the tool NAMES; the prompt text
+	// itself is pinned by the prompt goldens (`prompts/*-message.json`).
+	if (message.role === "system") {
+		if (message.sections !== undefined) {
+			out.sections = Object.entries(message.sections as Record<string, string | null>).map(
+				([name, text]) => ({ name, removal: text === null }),
+			);
+		}
+		if (Array.isArray(message.toolsAdded)) {
+			out.toolsAdded = message.toolsAdded.map((tool: any) => tool.name ?? tool);
+		}
+		if (Array.isArray(message.toolsRemoved)) {
+			out.toolsRemoved = message.toolsRemoved.map((tool: any) => tool.name ?? tool);
+		}
 	}
 	if (message.role === "compactionSummary" && message.summary !== undefined) {
 		out.summary = message.summary;

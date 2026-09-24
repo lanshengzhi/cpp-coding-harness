@@ -62,9 +62,9 @@ const fixtureDir = path.resolve(scriptDir, "..");
 const sessionsDir = path.join(fixtureDir, "sessions");
 const repoRoot = path.resolve(fixtureDir, "../..");
 const piCheckout = process.env.PI_CHECKOUT ?? path.resolve(repoRoot, "../pi");
-const FROZEN_COMMIT = "83114817c68f5413e4d7ba6d7003ddc511cd31d2";
+const FROZEN_COMMIT = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe";
 const PINNED_PACKAGE = "@earendil-works/pi-coding-agent";
-const PINNED_VERSION = "0.83.0";
+const PINNED_VERSION = "0.87.1";
 
 // ── Frozen-checkout guard (same as the parent sidecar) ─────────────────────
 
@@ -138,6 +138,25 @@ if (!existsSync(basetenJson)) {
 
 // ── Capture tsconfig: map the workspace packages to the frozen sources ──────
 
+// The frozen checkout's own `tsconfig.json` carries the authoritative
+// workspace `paths` map for this baseline, including subpath exports such as
+// `@earendil-works/chord/context`; reuse it rather than maintaining a package
+// list here that can drift from the checkout.
+const frozenTsconfigPath = path.join(piCheckout, "tsconfig.json");
+if (!existsSync(frozenTsconfigPath)) {
+	throw new Error(`frozen checkout has no tsconfig.json (${frozenTsconfigPath})`);
+}
+const frozenPaths = (
+	JSON.parse(readFileSync(frozenTsconfigPath, "utf8")) as {
+		compilerOptions?: { paths?: Record<string, string[]> };
+	}
+).compilerOptions?.paths;
+if (!frozenPaths || Object.keys(frozenPaths).length === 0) {
+	throw new Error(
+		`frozen checkout tsconfig.json declares no compilerOptions.paths (${frozenTsconfigPath})`,
+	);
+}
+
 const tsconfigPath = path.join(piCheckout, "tsconfig.capture.json");
 writeFileSync(
 	tsconfigPath,
@@ -153,14 +172,7 @@ writeFileSync(
 				skipLibCheck: true,
 				types: ["node"],
 				baseUrl: ".",
-				paths: {
-					"@earendil-works/pi-ai": ["./packages/ai/src/index.ts"],
-					"@earendil-works/pi-ai/*": ["./packages/ai/src/*.ts"],
-					"@earendil-works/pi-agent-core": ["./packages/agent/src/index.ts"],
-					"@earendil-works/pi-tui": ["./packages/tui/src/index.ts"],
-					"@earendil-works/pi-client": ["./packages/client/src/index.ts"],
-					"@earendil-works/pi-protocol": ["./packages/protocol/src/index.ts"],
-				},
+				paths: frozenPaths,
 			},
 		},
 		null,

@@ -10,6 +10,7 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/Json.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
@@ -204,19 +205,21 @@ TEST_CASE("Ctrl+P and Shift+Ctrl+P cycle models with pi statuses; Shift+Tab cycl
     REQUIRE(running.terminal.inject_input("\x1b[112;5u"));
     drain_ready(running.io);
     screen = visible_screen(running.terminal);
-    CHECK(screen.find("Switched to Alpha Reasoning (thinking: medium)") != std::string::npos);
+    CHECK(screen.find("Switched to Alpha Reasoning") != std::string::npos);
+    CHECK(screen.find("Switched to Alpha Reasoning (thinking:") == std::string::npos);
     CHECK(session->snapshot().agent_state.model.id == "alpha-1");
+    CHECK(session->snapshot().agent_state.thinking_level == "off");
 
-    // Shift+Tab cycles the thinking level (pi `app.thinking.cycle`):
-    // medium → high → off (wrap over the supported set).
+    // Cycling back from the non-reasoning model preserves its clamped `off`
+    // level; Shift+Tab advances from off through minimal, then low.
     REQUIRE(running.terminal.inject_input("\x1b[Z"));
     drain_ready(running.io);
     screen = visible_screen(running.terminal);
-    CHECK(screen.find("Thinking level: high") != std::string::npos);
-    CHECK(session->snapshot().agent_state.thinking_level == "high");
+    CHECK(screen.find("Thinking level: minimal") != std::string::npos);
+    CHECK(session->snapshot().agent_state.thinking_level == "minimal");
     REQUIRE(running.terminal.inject_input("\x1b[Z"));
     drain_ready(running.io);
-    CHECK(session->snapshot().agent_state.thinking_level == "off");
+    CHECK(session->snapshot().agent_state.thinking_level == "low");
 
     // Shift+Tab on the non-reasoning beta model reports no support.
     REQUIRE(running.terminal.inject_input("\x10"));
@@ -300,6 +303,61 @@ TEST_CASE("/model argument completion lists the candidate models through model-s
     REQUIRE(running.terminal.inject_input("\r"));
     drain_ready(running.io);
     CHECK(session->snapshot().agent_state.model.id == "beta-1");
+
+    REQUIRE(running.terminal.inject_input("\x04"));
+    drain_ready(running.io);
+    REQUIRE(running.run_result);
+    CHECK(*running.run_result);
+}
+
+TEST_CASE("Ctrl+S in the model selector saves the highlighted model as the default",
+        "[coding_agent][tui][model-selector][e2e][issue774][spec]") {
+    Fixture fixture;
+    fixture.write_models(kReasoningAndPlainKeyed);
+    Running running;
+    auto session = boot(fixture, running);
+    REQUIRE(session->model() == "alpha-1");
+
+    // Ctrl+L opens the selector with pi's save-as-default affordance.
+    REQUIRE(running.terminal.inject_input("\x0c"));
+    drain_ready(running.io);
+    auto screen = visible_screen(running.terminal);
+    CHECK(screen.find("Ctrl+S to set as default") != std::string::npos);
+
+    // Down + Ctrl+S persists beta-1 as the global default with pi's
+    // `Default model: provider/id` status (pi `selectModel(model, true)`).
+    REQUIRE(running.terminal.inject_input("\x1b[B"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input("\x13"));
+    drain_ready(running.io);
+    screen = visible_screen(running.terminal);
+    CHECK(screen.find("Default model: beta/beta-1") != std::string::npos);
+    CHECK(session->snapshot().agent_state.model.id == "beta-1");
+    const auto saved_settings = fixture.read_settings();
+    {
+        const auto parsed = support::read_json(saved_settings);
+        REQUIRE(parsed.has_value());
+        const auto& object = parsed->get_object();
+        const auto provider = object.find("defaultProvider");
+        REQUIRE(provider != object.end());
+        CHECK(*provider->second.get_if<std::string>() == "beta");
+        const auto model = object.find("defaultModel");
+        REQUIRE(model != object.end());
+        CHECK(*model->second.get_if<std::string>() == "beta-1");
+    }
+
+    // A normal Enter selection stays session-only (pi `handleSelect`): the
+    // `Model: <id>` status lands and the settings default is untouched.
+    REQUIRE(running.terminal.inject_input("\x0c"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input("\x1b[B"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input("\r"));
+    drain_ready(running.io);
+    screen = visible_screen(running.terminal);
+    CHECK(screen.find("Model: alpha-1") != std::string::npos);
+    CHECK(session->snapshot().agent_state.model.id == "alpha-1");
+    CHECK(fixture.read_settings() == saved_settings);
 
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);

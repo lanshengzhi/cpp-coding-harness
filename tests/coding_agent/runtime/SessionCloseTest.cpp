@@ -354,13 +354,10 @@ TEST_CASE("Session Close requested from an event subscriber finalizes after the 
     // lifecycle, not a second error channel).
     auto loaded = harness::session::SessionStore::load(fixture.session_path);
     REQUIRE(loaded.has_value());
-    REQUIRE(loaded->messages.size() == 2);
-    CHECK(
-        ai::text_from_user_message(
-            std::get<ai::UserMessage>(loaded->messages[0])) ==
-        "close from subscriber");
-    const auto& terminal =
-        std::get<ai::AssistantMessage>(loaded->messages[1]);
+    REQUIRE(loaded->messages.size() == 3);
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(loaded->messages[0]));
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(loaded->messages[1])) == "close from subscriber");
+    const auto& terminal = std::get<ai::AssistantMessage>(loaded->messages[2]);
     CHECK(terminal.stop_reason == ai::AssistantStopReason::Aborted);
 }
 
@@ -393,7 +390,7 @@ TEST_CASE("Session Close waits for an admitted compaction before releasing Sessi
     REQUIRE(session.prompt_blocking(big + " u1").has_value());
     REQUIRE(session.prompt_blocking(big + " u2").has_value());
     REQUIRE(session.prompt_blocking(big + " u3").has_value());
-    REQUIRE(session.message_count() == 6);
+    REQUIRE(session.message_count() == 7);
 
     boost::asio::io_context io;
     CompactResult compact_result;

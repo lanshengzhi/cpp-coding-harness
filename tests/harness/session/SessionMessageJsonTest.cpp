@@ -5,6 +5,7 @@
 // `tests/ai/MessageContractTest.cpp` when the session module took ownership of
 // the wire shape; the session goldens remain its byte-identity guard.
 
+#include "agent/harness/session/EntrySerializer.hpp"
 #include "agent/harness/session/SessionMessageJson.hpp"
 #include "support/Json.hpp"
 #include "support/JsonGlaze.hpp"
@@ -20,6 +21,7 @@
 #include <string>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 using namespace cch;
 
@@ -67,6 +69,79 @@ namespace {
     assistant.stop_reason = ai::AssistantStopReason::Stop;
     assistant.timestamp = 1718000000000;
     return assistant;
+}
+
+/// A system message exercising every v0.87.1 prompt-shape field: an ordered
+/// section set whose order differs from its lexicographic order (so a
+/// keyed map cannot fake the round trip), one explicit removal, a complete
+/// added tool definition, and a removed tool reference.
+[[nodiscard]] ai::SystemMessage sectioned_system_message() {
+    auto parameters =
+            support::read_json(R"({"type":"object","properties":{"path":{"type":"string"}},"required":["path"]})");
+    REQUIRE(parameters);
+
+    ai::SystemMessage message;
+    message.content = "additional instructions";
+    message.sections = {
+            ai::SystemMessageSection{.name = "tools", .text = "<tools>\n- read\n</tools>"},
+            ai::SystemMessageSection{.name = "preamble", .text = "base prompt"},
+            ai::SystemMessageSection{.name = "addendum", .text = std::nullopt},
+    };
+    message.tools_added = {
+            ai::Tool{
+                    .name = "read",
+                    .description = "Read a file",
+                    .parameters = *parameters,
+            },
+    };
+    message.tools_removed = {ai::ToolReference{.name = "bash"}};
+    message.timestamp = 1718000000123;
+    return message;
+}
+
+/// Deep comparison of the ordered section sequence: names, texts, and the
+/// removal (`nullopt`) are all significant, and so is the order.
+[[nodiscard]] bool sections_equal(
+        const std::vector<ai::SystemMessageSection>& left, const std::vector<ai::SystemMessageSection>& right) {
+    if (left.size() != right.size()) {
+        return false;
+    }
+    for (std::size_t index = 0; index < left.size(); ++index) {
+        if (left[index].name != right[index].name || left[index].text != right[index].text) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Deep comparison of complete tool definitions, including the JSON schema.
+[[nodiscard]] bool tools_equal(const std::vector<ai::Tool>& left, const std::vector<ai::Tool>& right) {
+    if (left.size() != right.size()) {
+        return false;
+    }
+    for (std::size_t index = 0; index < left.size(); ++index) {
+        if (left[index].name != right[index].name || left[index].description != right[index].description) {
+            return false;
+        }
+        const auto left_parameters = support::write_json(left[index].parameters);
+        const auto right_parameters = support::write_json(right[index].parameters);
+        if (!left_parameters || !right_parameters || *left_parameters != *right_parameters) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Every v0.87.1 prompt-shape field of `message`, compared deeply.
+void check_system_message_round_trip(const ai::SystemMessage& round_tripped, const ai::SystemMessage& original) {
+    CHECK(round_tripped.content == original.content);
+    CHECK(round_tripped.timestamp == original.timestamp);
+    CHECK(sections_equal(round_tripped.sections, original.sections));
+    CHECK(tools_equal(round_tripped.tools_added, original.tools_added));
+    REQUIRE(round_tripped.tools_removed.size() == original.tools_removed.size());
+    for (std::size_t index = 0; index < original.tools_removed.size(); ++index) {
+        CHECK(round_tripped.tools_removed[index].name == original.tools_removed[index].name);
+    }
 }
 
 } // namespace
@@ -752,4 +827,67 @@ TEST_CASE("CustomMessage with display false round-trips", "[harness][session][ex
     REQUIRE(parsed);
     REQUIRE(std::holds_alternative<ai::CustomMessage>(*parsed));
     CHECK(std::get<ai::CustomMessage>(*parsed).display == false);
+}
+
+TEST_CASE("system message round-trips ordered sections and tool loadouts", "[harness][session][u2][glaze][compat-pi]") {
+    const ai::SystemMessage original = sectioned_system_message();
+
+    auto json = write_message_json(ai::MessageVariant{original});
+    REQUIRE(json);
+    // The sections are a JSON object in section order, not a keyed map: a
+    // `std::map`-backed value would sort `addendum` first and reorder
+    // integer-like names, which pi warns against. The removal is an explicit
+    // `null`, and the tool loadout is pi's `toolsAdded`/`toolsRemoved` shape.
+    CHECK(json->find(R"("sections":{"tools":)") != std::string::npos);
+    CHECK(json->find(R"("addendum":null)") != std::string::npos);
+    CHECK(json->find(R"("toolsAdded":[{"name":"read","description":"Read a file","parameters":)") != std::string::npos);
+    CHECK(json->find(R"("toolsRemoved":[{"name":"bash"}])") != std::string::npos);
+
+    auto parsed = read_message_json(*json);
+    REQUIRE(parsed);
+    const auto* round_tripped = std::get_if<ai::SystemMessage>(&*parsed);
+    REQUIRE(round_tripped != nullptr);
+    check_system_message_round_trip(*round_tripped, original);
+}
+
+TEST_CASE("pi-shaped sectioned system message JSON loads ordered sections and tool loadouts",
+        "[harness][session][u2][compat-pi]") {
+    // Read-side counterexample: a mapping that writes these fields but ignores
+    // them when reading would pass a write-only check; this case fails it.
+    const std::string json =
+            R"({"role":"system","content":[{"type":"text","text":""}],"sections":{"preamble":"base","skills":null,"cwd":"/workspace"},"toolsAdded":[{"name":"read","description":"Read a file","parameters":{"type":"object"}}],"toolsRemoved":[{"name":"bash"}],"timestamp":1718000000123})";
+    auto parsed = read_message_json(json);
+    REQUIRE(parsed);
+    const auto* system = std::get_if<ai::SystemMessage>(&*parsed);
+    REQUIRE(system != nullptr);
+
+    REQUIRE(system->sections.size() == 3);
+    CHECK(system->sections[0].name == "preamble");
+    CHECK(system->sections[0].text == std::optional<std::string>{"base"});
+    CHECK(system->sections[1].name == "skills");
+    CHECK_FALSE(system->sections[1].text.has_value());
+    CHECK(system->sections[2].name == "cwd");
+    CHECK(system->sections[2].text == std::optional<std::string>{"/workspace"});
+    REQUIRE(system->tools_added.size() == 1);
+    CHECK(system->tools_added[0].name == "read");
+    CHECK(system->tools_added[0].description == "Read a file");
+    CHECK(system->tools_added[0].parameters.holds<support::JsonValue::object_t>());
+    REQUIRE(system->tools_removed.size() == 1);
+    CHECK(system->tools_removed[0].name == "bash");
+    CHECK(system->timestamp == 1718000000123);
+}
+
+TEST_CASE("session entry round-trips a sectioned system message losslessly", "[harness][session][u2][compat-pi]") {
+    harness::session::EntrySerializer serializer;
+    const ai::SystemMessage original = sectioned_system_message();
+
+    auto appended = serializer.serialize_message_entry(ai::MessageVariant{original}, std::nullopt);
+    REQUIRE(appended);
+    auto parsed = serializer.parse_entry(appended->line, 1);
+    REQUIRE(parsed);
+    REQUIRE(parsed->kind == harness::session::SessionEntryKind::Message);
+    REQUIRE(parsed->message.has_value());
+    const auto* round_tripped = std::get_if<ai::SystemMessage>(&*parsed->message);
+    REQUIRE(round_tripped != nullptr);
+    check_system_message_round_trip(*round_tripped, original);
 }

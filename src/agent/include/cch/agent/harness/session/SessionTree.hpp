@@ -54,9 +54,6 @@ struct SessionContext {
     /// `hasThinkingEntry` gates resumed-level restoration: an entry wins over
     /// the settings `defaultThinkingLevel`).
     bool has_thinking_level_entry{false};
-    /// pi `activeToolNames: string[] | null`: a copy of the last
-    /// `active_tools_change` on the path; nullopt when the branch carries none.
-    std::optional<std::vector<std::string>> active_tool_names;
 };
 
 /// In-memory session tree index and navigation capability.
@@ -190,6 +187,7 @@ public:
     struct BranchSummaryData {
         std::string summary;
         std::optional<support::JsonValue> details;
+        std::optional<ai::Usage> usage;
     };
 
     /// Hook for generating branch summaries.

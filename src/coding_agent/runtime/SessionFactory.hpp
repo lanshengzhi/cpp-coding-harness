@@ -9,6 +9,8 @@
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
+#include <boost/asio/awaitable.hpp>
+
 #include <cstddef>
 #include <filesystem>
 #include <memory>
@@ -81,7 +83,8 @@ public:
     /// and carry the bundle together. The class itself is the private
     /// implementation of the `create_agent_session_async` boundary, so this
     /// member is Owner-internal by construction.
-    [[nodiscard]] static coding_agent::CreateAgentSessionResult publish(AgentSessionAssembly assembly,
+    [[nodiscard]] static boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>> publish(
+            AgentSessionAssembly assembly,
             std::vector<coding_agent::SessionDiagnostic> diagnostics,
             std::optional<std::string> model_fallback_message,
             std::vector<coding_agent::LoadedThemeResource> theme_resources,

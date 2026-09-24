@@ -24,13 +24,17 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
 #include <exception>
 #include <optional>
+#include <span>
 #include <stop_token>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace cch::coding_agent {
 namespace {
@@ -46,6 +50,38 @@ namespace {
         }
     }
     return std::nullopt;
+}
+
+[[nodiscard]] std::vector<std::string> replay_active_tool_names(
+        const std::vector<ai::MessageVariant>& history, std::span<const std::string> available_names) {
+    std::vector<std::string> active_names;
+    bool has_system_message = false;
+    for (const auto& message : history) {
+        const auto* system = std::get_if<ai::SystemMessage>(&message);
+        if (system == nullptr) {
+            continue;
+        }
+        has_system_message = true;
+        for (const auto& tool : system->tools_added) {
+            if (std::ranges::find(available_names, tool.name) != available_names.end() &&
+                    std::ranges::find(active_names, tool.name) == active_names.end()) {
+                active_names.push_back(tool.name);
+            }
+        }
+        for (const auto& tool : system->tools_removed) {
+            std::erase(active_names, tool.name);
+        }
+    }
+    if (!has_system_message) {
+        return {available_names.begin(), available_names.end()};
+    }
+    std::vector<std::string> ordered_names;
+    for (const auto& name : available_names) {
+        if (std::ranges::find(active_names, name) != active_names.end()) {
+            ordered_names.push_back(name);
+        }
+    }
+    return ordered_names;
 }
 
 /// pi's verbatim overflow-recovery failure message (`agent-session.ts`
@@ -166,7 +202,39 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
                     prompt_tool_guidelines_.end(), metadata->guidelines.begin(), metadata->guidelines.end());
         }
     }
+    auto sections = build_system_prompt_sections();
+    ai::SystemMessage system_message;
+    system_message.sections.reserve(sections.size());
+    for (const auto& section : sections) {
+        system_message.sections.push_back(ai::SystemMessageSection{
+                .name = section.name,
+                .text = section.text,
+        });
+    }
+    const bool has_system_message = std::ranges::any_of(
+            session_.history, [](const auto& message) { return std::holds_alternative<ai::SystemMessage>(message); });
+    if (!has_system_message && !session_.resumed) {
+        for (const auto& name : prompt_selected_tools_) {
+            if (const auto* tool = services_.tools.find(name)) {
+                system_message.tools_added.push_back(tool->definition);
+            }
+        }
+        initial_system_message_to_persist_ = system_message;
+        session_.history.insert(session_.history.begin(), ai::MessageVariant{std::move(system_message)});
+    }
+    if (session_.topology == harness::session::SessionTopology::Branched && !session_.resumed) {
+        const auto branch_start = has_system_message ? session_.history.begin() : session_.history.begin() + 1;
+        branch_history_to_persist_.assign(branch_start, session_.history.end());
+    }
     options.system_prompt = rebuild_system_prompt();
+    if (session_.resumed) {
+        std::vector<std::string> available_names;
+        for (const auto& tool : services_.tools.definitions()) {
+            available_names.push_back(tool.name);
+        }
+        const auto active_names = replay_active_tool_names(session_.history, available_names);
+        services_.tools.retain_tools(active_names);
+    }
     // pi `_installAgentNextTurnRefresh`: the between-turn trigger compacts
     // before the next assistant response of the same run, so a long tool loop
     // cannot grow past the context window (pi 0.84.4, #6879). The hook is
@@ -217,7 +285,63 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     }
 }
 
+boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::persist_initial_system_message() {
+    if (!session_.store) {
+        co_return support::ExpectedVoid{};
+    }
+
+    const auto append = [this](ai::MessageVariant message) -> boost::asio::awaitable<support::ExpectedVoid> {
+        if (!persistence_) {
+            // In-memory SessionStore appends are not filesystem work and have
+            // no persistence worker to admit them to.
+            co_return session_.store->append(std::move(message));
+        }
+        if (auto admitted = persistence_->submit_message_append(std::move(message)); !admitted) {
+            co_await persistence_->drain();
+            if (auto failure = persistence_->failure()) {
+                co_return std::unexpected(*failure);
+            }
+            co_return std::unexpected(admitted.error());
+        }
+        co_await persistence_->drain();
+        if (auto failure = persistence_->failure()) {
+            co_return std::unexpected(*failure);
+        }
+        co_return support::ExpectedVoid{};
+    };
+
+    if (initial_system_message_to_persist_) {
+        auto appended = co_await append(ai::MessageVariant{*initial_system_message_to_persist_});
+        if (!appended) {
+            co_return std::unexpected(appended.error());
+        }
+        initial_system_message_to_persist_.reset();
+    }
+    for (const auto& message : branch_history_to_persist_) {
+        if (auto branch_appended = co_await append(message); !branch_appended) {
+            co_return std::unexpected(branch_appended.error());
+        }
+    }
+    branch_history_to_persist_.clear();
+    co_return support::ExpectedVoid{};
+}
+
 std::string AgentSession::Impl::rebuild_system_prompt() const {
+    const auto history = agent_ ? agent_->state().messages : session_.history;
+    std::vector<ai::SystemMessage> system_messages;
+    for (const auto& message : history) {
+        if (const auto* system = std::get_if<ai::SystemMessage>(&message)) {
+            system_messages.push_back(*system);
+        }
+    }
+    auto replayed = prompt::replaySystemPromptSections(system_messages);
+    if (!replayed.empty()) {
+        return prompt::renderSystemPromptSections(replayed);
+    }
+    return prompt::renderSystemPromptSections(build_system_prompt_sections());
+}
+
+std::vector<prompt::SystemPromptSection> AgentSession::Impl::build_system_prompt_sections() const {
     // pi `_rebuildSystemPrompt` (`core/agent-session.ts`) + `buildSystemPrompt`
     // (`core/system-prompt.ts`): the default/custom branches, tool snippets +
     // guidelines, `<project_context>`, the skills section, and the cwd line,
@@ -257,7 +381,7 @@ std::string AgentSession::Impl::rebuild_system_prompt() const {
     prompt_options.readmePath = std::string{kSourceDir} + "/README.md";
     prompt_options.docsPath = std::string{kSourceDir} + "/docs";
     prompt_options.examplesPath = std::string{kSourceDir} + "/examples";
-    return buildSystemPrompt(prompt_options);
+    return buildSystemPromptSections(prompt_options);
 }
 
 support::ExpectedVoid AgentSession::Impl::reject_if_closed() const {

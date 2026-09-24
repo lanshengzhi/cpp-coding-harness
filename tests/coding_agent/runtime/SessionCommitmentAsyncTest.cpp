@@ -163,10 +163,8 @@ TEST_CASE("an admitted event advances live Session state before weak observers a
     REQUIRE(session->prompt_blocking("observe order").has_value());
 
     // The weak observer of each message end already saw the message in live
-    // Session state (user first, assistant second).
-    CHECK(
-        counts_at_message_end ==
-        std::vector<std::size_t>{1, 2});
+    // Session state (system first, then user and assistant events).
+    CHECK(counts_at_message_end == std::vector<std::size_t>{2, 3});
     session->close();
 }
 
@@ -228,7 +226,12 @@ TEST_CASE("a persistence failure keeps live state and rejects later prompts with
 
     // No rollback theatre: the observed live state stays.
     CHECK(session.is_open());
-    CHECK(session.message_count() == 2);
+    CHECK(session.message_count() == 3);
+    const auto live_messages = session.snapshot().agent_state.messages;
+    REQUIRE(live_messages.size() == 3);
+    const auto* system = std::get_if<ai::SystemMessage>(&live_messages.front());
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
 
     // Later prompts are rejected with the typed session failure.
     auto rejected = session.prompt_blocking("rejected prompt");
@@ -237,7 +240,7 @@ TEST_CASE("a persistence failure keeps live state and rejects later prompts with
     CHECK(
         rejected.error().message ==
         "session persistence failed; rejecting new prompt");
-    CHECK(session.message_count() == 2);
+    CHECK(session.message_count() == 3);
 
     session.close();
     CHECK(fixture.persisted_texts() == std::vector<std::string>{"keep live state"});
@@ -272,9 +275,9 @@ TEST_CASE("an aborted prompt settles the commitment channel with a consistent se
     CHECK(prompt_result->has_value());
 
     const auto snapshot = session.snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 2);
-    const auto& aborted =
-        std::get<ai::AssistantMessage>(snapshot.agent_state.messages[1]);
+    REQUIRE(snapshot.agent_state.messages.size() == 3);
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    const auto& aborted = std::get<ai::AssistantMessage>(snapshot.agent_state.messages[2]);
     CHECK(aborted.stop_reason == ai::AssistantStopReason::Aborted);
 
     // Every admitted event persisted in order before the prompt settled.

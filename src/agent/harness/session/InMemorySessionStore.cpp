@@ -84,18 +84,19 @@ support::Expected<std::vector<SessionEntry>> InMemorySessionStore::append_compac
 }
 
 support::Expected<std::vector<SessionEntry>> InMemorySessionStore::append_branch_summary(
-    std::optional<std::string> parent_id,
-    std::string from_id,
-    std::string summary,
-    std::optional<support::JsonValue> details,
-    std::optional<bool> from_hook) {
+        std::optional<std::string> parent_id,
+        std::string from_id,
+        std::string summary,
+        std::optional<support::JsonValue> details,
+        std::optional<bool> from_hook,
+        std::optional<ai::Usage> usage) {
     auto entry = make_entry(SessionEntryKind::BranchSummary, std::move(parent_id));
     entry.value = BranchSummaryEntryValue{
-        .from_id = std::move(from_id),
-        .summary = std::move(summary),
-        .details = std::move(details),
-        .usage = std::nullopt,
-        .from_hook = from_hook,
+            .from_id = std::move(from_id),
+            .summary = std::move(summary),
+            .details = std::move(details),
+            .usage = std::move(usage),
+            .from_hook = from_hook,
     };
     return single(std::move(entry));
 }

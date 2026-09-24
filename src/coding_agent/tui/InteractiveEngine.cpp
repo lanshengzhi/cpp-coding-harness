@@ -229,12 +229,19 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         }
         co_return std::unexpected(failure);
     }
-    // pi `reportDiagnostics`: the host prints the creation diagnostics.
+    // pi `reportDiagnostics`: keep the action-seam notification and retain a
+    // copy for the chat view; the action marks that the TUI owns presentation
+    // so the host does not corrupt its terminal by writing to stderr.
     if (!created->diagnostics.empty()) {
-        (void)deliver_action(
-            action_generation_,
-            TuiActionVariant{ReportBootDiagnosticsAction{
-                std::move(created->diagnostics)}});
+        auto diagnostics_for_view = created->diagnostics;
+        (void)deliver_action(action_generation_,
+                TuiActionVariant{ReportBootDiagnosticsAction{
+                        .diagnostics = std::move(created->diagnostics),
+                        .rendered_in_tui = true,
+                }});
+        startup_diagnostics_.session.insert(startup_diagnostics_.session.end(),
+                std::make_move_iterator(diagnostics_for_view.begin()),
+                std::make_move_iterator(diagnostics_for_view.end()));
     }
     model_fallback_message_ = std::move(created->model_fallback_message);
     // pi interactive-mode ctor `setRegisteredThemes(...)` + init
@@ -519,11 +526,32 @@ void InteractiveEngine::initialize_view(const InteractiveStartupDiagnostics& dia
         view_->append_warning(*model_fallback_message_);
     }
     session_ui_->append_snapshot_diagnostics(snapshot.agent_state.diagnostics);
+    std::vector<std::string> rendered_diagnostics;
+    const auto append_once = [&rendered_diagnostics](std::string text, auto&& append) {
+        if (std::ranges::find(rendered_diagnostics, text) != rendered_diagnostics.end()) return;
+        rendered_diagnostics.push_back(text);
+        append(std::move(text));
+    };
+    for (const auto& diagnostic : diagnostics.session) {
+        auto text = diagnostic.message;
+        if (diagnostic.path) text += " (" + *diagnostic.path + ')';
+        switch (diagnostic.severity) {
+        case SessionDiagnostic::Severity::Info:
+            append_once(std::move(text), [this](std::string value) { view_->append_status_message(std::move(value)); });
+            break;
+        case SessionDiagnostic::Severity::Warning:
+            append_once(std::move(text), [this](std::string value) { view_->append_warning(std::move(value)); });
+            break;
+        case SessionDiagnostic::Severity::Error:
+            append_once(std::move(text), [this](std::string value) { view_->append_diagnostic(std::move(value)); });
+            break;
+        }
+    }
     for (const auto& diagnostic : diagnostics.keybindings) {
-        view_->append_diagnostic(diagnostic.message);
+        append_once(diagnostic.message, [this](std::string value) { view_->append_warning(std::move(value)); });
     }
     for (const auto& diagnostic : diagnostics.themes) {
-        view_->append_diagnostic(diagnostic.message);
+        append_once(diagnostic.message, [this](std::string value) { view_->append_warning(std::move(value)); });
     }
 }
 

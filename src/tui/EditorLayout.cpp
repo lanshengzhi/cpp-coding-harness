@@ -238,9 +238,24 @@ support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions 
     if (options.theme && options.theme->border) {
         auto top_border =
                 scroll_offset > 0 ? scroll_border("↑", scroll_offset, options.width) : horizontal_rule(options.width);
-        auto styled_border = apply_text_style(options.theme->border, std::move(top_border), "Editor border");
-        if (!styled_border) return std::unexpected(styled_border.error());
-        result.push_back(std::move(*styled_border));
+        if (options.top_border_override != nullptr) {
+            auto overridden = (*options.top_border_override)(options.width, scroll_offset);
+            if (!overridden) return std::unexpected(overridden.error());
+            if (overridden->has_value()) {
+                // The replacement arrives fully styled (pi CustomEditor
+                // renderTopBorder composes from borderColor segments); no
+                // further border styling applies.
+                result.push_back(std::move(**overridden));
+            } else {
+                auto styled_border = apply_text_style(options.theme->border, std::move(top_border), "Editor border");
+                if (!styled_border) return std::unexpected(styled_border.error());
+                result.push_back(std::move(*styled_border));
+            }
+        } else {
+            auto styled_border = apply_text_style(options.theme->border, std::move(top_border), "Editor border");
+            if (!styled_border) return std::unexpected(styled_border.error());
+            result.push_back(std::move(*styled_border));
+        }
     }
 
     const auto end = std::min(visual.size(), scroll_offset + visible_count);

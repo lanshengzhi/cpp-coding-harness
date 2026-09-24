@@ -345,6 +345,7 @@ support::Expected<OpenSession> publish_resume_session(
     session.workspace = target.workspace;
     session.metadata = target.resume.metadata;
     session.history = target.resume.history;
+    session.resumed = true;
     session.context_model = target.resume.model;
     // A resumed `thinking_level_change` entry wins over the settings default
     // and DEFAULT_THINKING_LEVEL (pi sdk.ts `hasThinkingEntry`); without an

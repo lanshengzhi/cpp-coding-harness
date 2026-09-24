@@ -13,6 +13,7 @@
 #include <cch/coding_agent/AuthGuidance.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "coding_agent/prompt/SystemPromptBuilder.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
@@ -106,13 +107,12 @@ TEST_CASE("system prompt is built at session construction and flows through Agen
                       "coding agent harness.") != std::string::npos);
 
     // The four fixed tools with pi's verbatim snippets.
-    CHECK(prompt.find(
-              "Available tools:\n"
-              "- read: Read file contents\n"
-              "- bash: Execute bash commands (ls, grep, find, etc.)\n"
-              "- edit: Make precise file edits with exact text replacement, "
-              "including multiple disjoint edits in one call\n"
-              "- write: Create or overwrite files\n") != std::string::npos);
+    CHECK(prompt.find("<tools>\n"
+                      "- read: Read file contents\n"
+                      "- bash: Execute bash commands (ls, grep, find, etc.)\n"
+                      "- edit: Make precise file edits with exact text replacement, "
+                      "including multiple disjoint edits in one call\n"
+                      "- write: Create or overwrite files\n") != std::string::npos);
 
     // The auto bash-exploration rule and the always-lines.
     CHECK(prompt.find("- Use bash for file operations like ls, rg, find\n") != std::string::npos);
@@ -125,12 +125,21 @@ TEST_CASE("system prompt is built at session construction and flows through Agen
     CHECK(prompt.find("- Additional docs: " + std::string{CCH_SOURCE_DIR} + "/docs\n") != std::string::npos);
     CHECK(prompt.find("- Examples: " + std::string{CCH_SOURCE_DIR} + "/examples (extensions, custom tools, SDK)\n") != std::string::npos);
 
-    // The trailing posix-normalized cwd line.
-    CHECK(prompt.find(
-              "\nCurrent working directory: " + workspace.path().string()) != std::string::npos);
+    // The trailing posix-normalized cwd section.
+    CHECK(prompt.find("<cwd>\n" + workspace.path().string() + "\n</cwd>") != std::string::npos);
 
     // The built prompt is the Agent's live state value (pi `state.systemPrompt`).
-    CHECK(created->session->snapshot().agent_state.system_prompt == prompt);
+    const auto snapshot = created->session->snapshot();
+    CHECK(snapshot.agent_state.system_prompt == prompt);
+    std::vector<ai::SystemMessage> transcript_system_messages;
+    for (const auto& message : snapshot.agent_state.messages) {
+        if (const auto* system = std::get_if<ai::SystemMessage>(&message)) {
+            transcript_system_messages.push_back(*system);
+        }
+    }
+    REQUIRE_FALSE(transcript_system_messages.empty());
+    CHECK(coding_agent::prompt::renderSystemPromptSections(
+                  coding_agent::prompt::replaySystemPromptSections(transcript_system_messages)) == prompt);
 
     // Every subsequent run carries the same built prompt.
     auto second = run_awaitable(runtime, created->session->prompt("again"));
@@ -140,6 +149,16 @@ TEST_CASE("system prompt is built at session construction and flows through Agen
     CHECK(*client->requests[1].system_prompt == prompt);
 
     created->session->close();
+    auto resumed_client = std::make_shared<RecordingProvider>();
+    auto resumed = create_scripted_session(resumed_client, session_file, workspace.path(), runtime);
+    REQUIRE(resumed.has_value());
+    auto resumed_prompt = run_awaitable(runtime, resumed->session->prompt("after resume"));
+    REQUIRE(resumed_prompt.has_value());
+    REQUIRE(resumed_client->requests.size() == 1);
+    REQUIRE(resumed_client->requests[0].system_prompt.has_value());
+    CHECK(*resumed_client->requests[0].system_prompt == prompt);
+    CHECK(resumed->session->snapshot().agent_state.system_prompt == prompt);
+    resumed->session->close();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,6 +183,70 @@ namespace {
 }
 
 } // namespace
+
+TEST_CASE("system prompt replay applies changed sections and explicit removals",
+        "[coding_agent][system-prompt][issue778]") {
+    const std::vector<ai::SystemMessage> transcript{
+            ai::SystemMessage{.sections =
+                                      {
+                                              {.name = "preamble", .text = "identity"},
+                                              {.name = "tools", .text = "<tools>old</tools>"},
+                                              {.name = "docs", .text = "<docs>docs</docs>"},
+                                              {.name = "skills", .text = "<skills>skill</skills>"},
+                                      }},
+            ai::SystemMessage{.sections =
+                                      {
+                                              {.name = "tools", .text = "<tools>new</tools>"},
+                                              {.name = "skills", .text = std::nullopt},
+                                      }},
+    };
+    const auto replayed = coding_agent::prompt::replaySystemPromptSections(transcript);
+    REQUIRE(replayed.size() == 3);
+    CHECK(replayed[0].name == "preamble");
+    CHECK(replayed[1].name == "tools");
+    CHECK(replayed[1].text == "<tools>new</tools>");
+    CHECK(replayed[2].name == "docs");
+    CHECK(coding_agent::prompt::renderSystemPromptSections(replayed) ==
+            "identity\n\n<tools>new</tools>\n\n<docs>docs</docs>");
+}
+
+TEST_CASE("system prompt section diff orders replacements before removals without sorting",
+        "[coding_agent][system-prompt][issue771]") {
+    const std::vector<coding_agent::prompt::SystemPromptSection> previous{
+            {.name = "zeta", .text = "old zeta"},
+            {.name = "remove-z", .text = "removed z"},
+            {.name = "alpha", .text = "unchanged alpha"},
+            {.name = "remove-a", .text = "removed a"},
+    };
+    const std::vector<coding_agent::prompt::SystemPromptSection> current{
+            {.name = "alpha", .text = "unchanged alpha"},
+            {.name = "zeta", .text = "new zeta"},
+    };
+
+    const auto diff = coding_agent::prompt::diffSystemPromptSections(previous, current);
+    REQUIRE(diff.size() == 3);
+    CHECK(diff[0].name == "zeta");
+    CHECK(diff[0].text == "new zeta");
+    CHECK(diff[1].name == "remove-z");
+    CHECK_FALSE(diff[1].text.has_value());
+    CHECK(diff[2].name == "remove-a");
+    CHECK_FALSE(diff[2].text.has_value());
+
+    CHECK(coding_agent::prompt::diffSystemPromptSections(previous, previous).empty());
+    const std::vector<coding_agent::prompt::SystemPromptSection> changed{
+            {.name = "alpha", .text = "changed alpha"},
+    };
+    const auto changed_diff = coding_agent::prompt::diffSystemPromptSections(previous, changed);
+    REQUIRE(changed_diff.size() == 4);
+    CHECK(changed_diff[0].name == "alpha");
+    CHECK(changed_diff[0].text == "changed alpha");
+    CHECK(changed_diff[1].name == "zeta");
+    CHECK_FALSE(changed_diff[1].text.has_value());
+    CHECK(changed_diff[2].name == "remove-z");
+    CHECK_FALSE(changed_diff[2].text.has_value());
+    CHECK(changed_diff[3].name == "remove-a");
+    CHECK_FALSE(changed_diff[3].text.has_value());
+}
 
 TEST_CASE("system prompt default branch renders project context files in pi's order",
         "[coding_agent][system-prompt][context-files][issue416][spec]") {
@@ -193,24 +276,22 @@ TEST_CASE("system prompt default branch renders project context files in pi's or
 
     // The default branch still renders the tools; the context section lands
     // between the append area and the trailing cwd line, root-most first.
-    CHECK(prompt.find("Available tools:") != std::string::npos);
-    const std::string expected_section =
-        "\n\n<project_context>\n\n"
-        "Project-specific instructions and guidelines:\n\n"
-        "<project_instructions path=\"" +
-        (workspace.path() / "parent" / "AGENTS.md").string() +
-        "\">\n"
-        "parent instructions\n\n"
-        "</project_instructions>\n\n"
-        "<project_instructions path=\"" +
-        (child / "CLAUDE.md").string() +
-        "\">\n"
-        "child instructions\n\n"
-        "</project_instructions>\n\n"
-        "</project_context>\n";
+    CHECK(prompt.find("<tools>") != std::string::npos);
+    const std::string expected_section = "<project_context>\n"
+                                         "Project-specific instructions and guidelines:\n\n"
+                                         "<project_instructions path=\"" +
+                                         (workspace.path() / "parent" / "AGENTS.md").string() +
+                                         "\">\n"
+                                         "parent instructions\n\n"
+                                         "</project_instructions>\n\n"
+                                         "<project_instructions path=\"" +
+                                         (child / "CLAUDE.md").string() +
+                                         "\">\n"
+                                         "child instructions\n\n"
+                                         "</project_instructions>\n"
+                                         "</project_context>";
     CHECK(prompt.find(expected_section) != std::string::npos);
-    CHECK(prompt.find("\nCurrent working directory: " + child.string()) !=
-          std::string::npos);
+    CHECK(prompt.find("<cwd>\n" + child.string() + "\n</cwd>") != std::string::npos);
 
     created->session->close();
 }
@@ -247,13 +328,12 @@ TEST_CASE("system prompt custom branch renders the custom prompt, joined appends
     // Custom branch: no default tools section; the prompt opens with the
     // resolved file content.
     CHECK(prompt.starts_with("custom file prompt\n"));
-    CHECK(prompt.find("Available tools:") == std::string::npos);
-    // Append strings joined with "\n\n" right after the custom prompt.
-    // The resolved file content carries its trailing newline; pi appends the
-    // section with another "\n\n" prefix, and the two append strings join
-    // with "\n\n".
-    CHECK(prompt.find("custom file prompt\n\n\nfirst append\n\nsecond append") !=
-          std::string::npos);
+    CHECK(prompt.find("<tools>") == std::string::npos);
+    // Append strings joined with "\n\n" inside the `<addendum>` section.
+    // The resolved file content carries its trailing newline; the section
+    // wrapper adds the surrounding blank line and closing tag.
+    CHECK(prompt.find("custom file prompt\n\n\n<addendum>\nfirst append\n\nsecond append\n</addendum>") !=
+            std::string::npos);
     // Context files still render, root-most first.
     CHECK(prompt.find(
               "<project_instructions path=\"" +
@@ -262,8 +342,7 @@ TEST_CASE("system prompt custom branch renders the custom prompt, joined appends
     CHECK(prompt.find(
               "<project_instructions path=\"" + (child / "AGENTS.md").string() +
               "\">") != std::string::npos);
-    CHECK(prompt.find("\nCurrent working directory: " + child.string()) !=
-          std::string::npos);
+    CHECK(prompt.find("<cwd>\n" + child.string() + "\n</cwd>") != std::string::npos);
 
     created->session->close();
 }
@@ -295,13 +374,13 @@ TEST_CASE("system prompt flows the discovered SYSTEM.md and APPEND_SYSTEM.md thr
     const std::string prompt = *client->requests[0].system_prompt;
 
     CHECK(prompt.starts_with("custom system prompt from SYSTEM.md\n"));
-    // The SYSTEM.md content carries its trailing newline before pi's "\n\n"
-    // append-section prefix.
-    CHECK(prompt.find("custom system prompt from SYSTEM.md\n\n\nappend from APPEND_SYSTEM.md\n") !=
-          std::string::npos);
-    CHECK(prompt.find("Available tools:") == std::string::npos);
-    CHECK(prompt.find("\nCurrent working directory: " + workspace.path().string()) !=
-          std::string::npos);
+    // The SYSTEM.md content carries its trailing newline before the
+    // `<addendum>` section wrapper.
+    CHECK(prompt.find(
+                  "custom system prompt from SYSTEM.md\n\n\n<addendum>\nappend from APPEND_SYSTEM.md\n\n</addendum>") !=
+            std::string::npos);
+    CHECK(prompt.find("<tools>") == std::string::npos);
+    CHECK(prompt.find("<cwd>\n" + workspace.path().string() + "\n</cwd>") != std::string::npos);
 
     created->session->close();
 }

@@ -806,9 +806,10 @@ TEST_CASE("Projection attach after Session Close delivers the terminal snapshot 
     REQUIRE(subscription.drain() == 1);
     REQUIRE(records->size() == 1);
     const auto& base = std::get<ProjectionStreamBase>(records->front().value);
-    REQUIRE(base.snapshot.agent_state.messages.size() == 2);
-    REQUIRE(std::holds_alternative<ai::AssistantMessage>(base.snapshot.agent_state.messages[1]));
-    const auto& content = std::get<ai::AssistantMessage>(base.snapshot.agent_state.messages[1]).content;
+    REQUIRE(base.snapshot.agent_state.messages.size() == 3);
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(base.snapshot.agent_state.messages[0]));
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(base.snapshot.agent_state.messages[2]));
+    const auto& content = std::get<ai::AssistantMessage>(base.snapshot.agent_state.messages[2]).content;
     REQUIRE(content.size() == 1);
     REQUIRE(std::holds_alternative<ai::TextContent>(content[0]));
     CHECK(std::get<ai::TextContent>(content[0]).text == "chunk ");
@@ -835,7 +836,12 @@ TEST_CASE("Projection publishes 100 message-update chunks inside the issue cost 
     for (int turn = 0; turn < 50; ++turn) {
         REQUIRE(tests::run_awaitable(runtime, session.prompt("seed turn")).has_value());
     }
-    REQUIRE(session.message_count() == 100);
+    REQUIRE(session.message_count() == 101);
+    const auto history = session.snapshot().agent_state.messages;
+    REQUIRE_FALSE(history.empty());
+    const auto* system = std::get_if<ai::SystemMessage>(&history.front());
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
 
     auto records = make_recorder();
     auto subscription = session.attach_projection([records](const ProjectionStreamMessageVariant& message) {

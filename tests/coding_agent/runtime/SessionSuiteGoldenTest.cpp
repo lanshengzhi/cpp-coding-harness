@@ -1,6 +1,6 @@
 // P25 (#421): session- and value-suite differential goldens. The committed
 // snapshots under `fixtures/pi-coding-agent/sessions/` are captured from the
-// frozen pi baseline (`83114817`) by the capture sidecar, which drives the
+// frozen pi baseline (`f07218c4`, tag `v0.87.1`) by the capture sidecar, which drives the
 // frozen pi `AgentSession`/`SessionManager` sources through the same scripted
 // scenarios this file drives through the C++ session runtime. Both sides
 // apply the same canonical projection (message/content-block level: identity
@@ -132,9 +132,11 @@ struct SettingsFixture {
     tests::TempWorkspace home;
     std::filesystem::path agent_dir;
     tests::EnvVarGuard home_guard{"HOME"};
+    tests::EnvVarGuard xdg_config_guard{"XDG_CONFIG_HOME"};
 
     explicit SettingsFixture(std::string_view json) {
         home_guard.set(home.path().string());
+        xdg_config_guard.set("");
         agent_dir = tests::agent_root_under_home(home.path());
         std::filesystem::create_directories(agent_dir);
         std::ofstream out(agent_dir / "settings.json", std::ios::binary);
@@ -246,7 +248,33 @@ canonical_message(const ai::MessageVariant &message) {
     REQUIRE(serialized);
     auto parsed = support::read_json(*serialized);
     REQUIRE(parsed);
-    return canonical_message(*parsed);
+    auto canonical = canonical_message(*parsed);
+    if (const auto* system = std::get_if<ai::SystemMessage>(&message)) {
+        auto* object = canonical.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        support::JsonValue::array_t sections;
+        for (const auto& section : system->sections) {
+            sections.emplace_back(support::JsonValue::object_t{
+                    {"name", section.name},
+                    {"removal", !section.text.has_value()},
+            });
+        }
+        object->emplace("sections", support::JsonValue{std::move(sections)});
+        const auto tool_names = [](const auto& tools) {
+            support::JsonValue::array_t names;
+            for (const auto& tool : tools) {
+                names.emplace_back(tool.name);
+            }
+            return support::JsonValue{std::move(names)};
+        };
+        if (!system->tools_added.empty()) {
+            object->emplace("toolsAdded", tool_names(system->tools_added));
+        }
+        if (!system->tools_removed.empty()) {
+            object->emplace("toolsRemoved", tool_names(system->tools_removed));
+        }
+    }
+    return canonical;
 }
 
 [[nodiscard]] support::JsonValue
@@ -322,7 +350,11 @@ project_entries(const harness::session::LoadedSession &loaded) {
     if (type == "message") {
       const auto it = object->find("message");
       REQUIRE(it != object->end());
-      projected.emplace("message", canonical_message(it->second));
+      if (entry.message) {
+          projected.emplace("message", canonical_message(*entry.message));
+      } else {
+          projected.emplace("message", canonical_message(it->second));
+      }
     } else if (type == "model_change") {
       for (const char *key : {"provider", "modelId"}) {
         const auto it = object->find(key);
@@ -446,8 +478,8 @@ TEST_CASE("session lifecycle golden: scripted turns persist pi-shaped messages",
     support::JsonValue::object_t golden{
             {"meta",
                     support::JsonValue{support::JsonValue::object_t{
-                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"baseline", "f07218c4d4bbc12bef056a7058c3dd49dfe41abe"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.87.1"},
                             {"family", "session-lifecycle"},
                     }}},
             {"messages", canonical_messages(messages)},
@@ -521,8 +553,8 @@ TEST_CASE("session resume golden: persisted history restores at message level",
     support::JsonValue::object_t golden{
             {"meta",
                     support::JsonValue{support::JsonValue::object_t{
-                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"baseline", "f07218c4d4bbc12bef056a7058c3dd49dfe41abe"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.87.1"},
                             {"family", "session-resume"},
                     }}},
             {"messages", canonical_messages(messages)},
@@ -590,8 +622,8 @@ TEST_CASE("session compaction golden: manual compaction pins summary and "
     support::JsonValue::object_t golden{
             {"meta",
                     support::JsonValue{support::JsonValue::object_t{
-                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"baseline", "f07218c4d4bbc12bef056a7058c3dd49dfe41abe"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.87.1"},
                             {"family", "session-compaction"},
                     }}},
             {"messages", canonical_messages(messages)},
@@ -640,6 +672,7 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
     REQUIRE(session->prompt_blocking("hi").has_value());
+    CHECK(session->snapshot().agent_state.thinking_level == "off");
     auto switched = session->set_model_blocking(reasoning_model("faux-2", "Two"));
     REQUIRE(switched.has_value());
     REQUIRE(session->prompt_blocking("after switch").has_value());
@@ -652,8 +685,8 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
     support::JsonValue::object_t golden{
             {"meta",
                     support::JsonValue{support::JsonValue::object_t{
-                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"baseline", "f07218c4d4bbc12bef056a7058c3dd49dfe41abe"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.87.1"},
                             {"family", "session-model-switch"},
                     }}},
             {"messages", canonical_messages(messages)},
@@ -663,7 +696,7 @@ TEST_CASE("session model-switch golden: setModel pins entries, thinking "
                     support::JsonValue{support::JsonValue::object_t{
                             {"model", "faux-2"},
                             {"provider", "fake"},
-                            {"thinkingLevel", "medium"},
+                            {"thinkingLevel", "off"},
                     }}},
     };
 
@@ -713,8 +746,8 @@ TEST_CASE("session-family golden: most-recent selection and header values",
     support::JsonValue::object_t golden{
             {"meta",
                     support::JsonValue{support::JsonValue::object_t{
-                            {"baseline", "83114817c68f5413e4d7ba6d7003ddc511cd31d2"},
-                            {"artifact", "@earendil-works/pi-coding-agent@0.83.0"},
+                            {"baseline", "f07218c4d4bbc12bef056a7058c3dd49dfe41abe"},
+                            {"artifact", "@earendil-works/pi-coding-agent@0.87.1"},
                             {"family", "session-family"},
                     }}},
             {"mostRecent", support::JsonValue{most_recent->path.stem().string()}},

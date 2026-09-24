@@ -396,11 +396,20 @@ void emitEntryMessage(SessionContext& ctx, const SessionEntry* entry) {
 }
 
 /// Emit the messages of one entry after compaction context transforms:
-/// compaction entries project compactionSummary + retainedTail.
+/// compaction entries project retained system updates + compactionSummary +
+/// the non-system retained tail.
 void emitCompactionMessages(SessionContext& ctx, const SessionEntry* entry) {
     const auto* value = std::get_if<CompactionEntryValue>(&entry->value);
     const std::string summary_text = value != nullptr ? value->summary : std::string{};
     const std::size_t tokens_before = value != nullptr ? value->tokens_before : 0;
+
+    if (value != nullptr && value->retained_tail.has_value()) {
+        for (const auto& message : *value->retained_tail) {
+            if (std::holds_alternative<ai::SystemMessage>(message)) {
+                ctx.messages.push_back(message);
+            }
+        }
+    }
 
     ai::CompactionSummaryMessage csm;
     csm.summary = summary_text;
@@ -410,7 +419,9 @@ void emitCompactionMessages(SessionContext& ctx, const SessionEntry* entry) {
 
     if (value != nullptr && value->retained_tail.has_value()) {
         for (const auto& message : *value->retained_tail) {
-            ctx.messages.push_back(message);
+            if (!std::holds_alternative<ai::SystemMessage>(message)) {
+                ctx.messages.push_back(message);
+            }
         }
     }
 }
@@ -460,12 +471,6 @@ SessionContext buildSessionContext(const std::vector<const SessionEntry*>& path)
                 }
             }
             break;
-        case SessionEntryKind::ActiveToolsChange:
-            if (const auto* tools =
-                    std::get_if<ActiveToolsChangeValue>(&entry->value)) {
-                ctx.active_tool_names = tools->active_tool_names;
-            }
-            break;
         default:
             break;
         }
@@ -498,8 +503,30 @@ SessionContext buildSessionContext(const std::vector<const SessionEntry*>& path)
     const bool has_retained_tail = std::get_if<CompactionEntryValue>(&compaction->value) != nullptr &&
         std::get<CompactionEntryValue>(compaction->value).retained_tail.has_value();
 
-    // Emit the compaction entry: compactionSummary + retainedTail (pi
-    // `sessionEntryToContextMessages` compaction branch).
+    const auto* compaction_value = std::get_if<CompactionEntryValue>(&compaction->value);
+    const bool retained_tail_has_system_messages =
+            compaction_value != nullptr && compaction_value->retained_tail.has_value() &&
+            std::any_of(compaction_value->retained_tail->begin(),
+                    compaction_value->retained_tail->end(),
+                    [](const ai::MessageVariant& message) {
+                        return std::holds_alternative<ai::SystemMessage>(message);
+                    });
+
+    // System messages are prompt state, not compactable conversation history.
+    // New compactions carry every projected prompt update in retainedTail;
+    // older/pi-created tails may not, so replay all pre-compaction updates
+    // only when retainedTail does not already contain them.
+    if (!retained_tail_has_system_messages) {
+        for (std::size_t index = 0; index < compaction_index; ++index) {
+            const auto* entry = path[index];
+            if (entry->message && std::holds_alternative<ai::SystemMessage>(*entry->message)) {
+                ctx.messages.push_back(*entry->message);
+            }
+        }
+    }
+
+    // Emit the compaction entry: retained system updates, compactionSummary,
+    // then the retained chat tail.
     emitCompactionMessages(ctx, compaction);
 
     if (has_retained_tail) {
@@ -643,11 +670,11 @@ support::ExpectedVoid SessionTree::branchWithSummary(
         summary_entry.kind = SessionEntryKind::BranchSummary;
         summary_entry.parent_id = std::string{entry_id};
         summary_entry.value = BranchSummaryEntryValue{
-            .from_id = std::string{ctx.from_leaf_id},
-            .summary = data.summary,
-            .details = data.details,
-            .usage = std::nullopt,
-            .from_hook = std::nullopt,
+                .from_id = std::string{ctx.from_leaf_id},
+                .summary = data.summary,
+                .details = data.details,
+                .usage = data.usage,
+                .from_hook = std::nullopt,
         };
 
         auto write_result = append_writer(summary_entry);

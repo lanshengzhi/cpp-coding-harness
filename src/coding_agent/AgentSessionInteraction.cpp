@@ -24,6 +24,7 @@
 #include <boost/asio/use_awaitable.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <exception>
 #include <format>
@@ -251,6 +252,32 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
         config_.prompt_diagnostics = std::move(loading->prompt_diagnostics);
         config_.theme_diagnostics = std::move(loading->theme_diagnostics);
 
+        const auto current_sections = build_system_prompt_sections();
+        const auto state = agent_->state();
+        std::vector<ai::SystemMessage> previous_system_messages;
+        for (const auto& message : state.messages) {
+            if (const auto* system = std::get_if<ai::SystemMessage>(&message)) {
+                previous_system_messages.push_back(*system);
+            }
+        }
+        const auto previous_sections = prompt::replaySystemPromptSections(previous_system_messages);
+        ai::SystemMessage section_diff{
+                .sections = prompt::diffSystemPromptSections(previous_sections, current_sections)};
+        if (!section_diff.sections.empty()) {
+            ai::MessageVariant message{section_diff};
+            if (session_.store) {
+                if (auto committed = session_.store->append(message); !committed) {
+                    co_return co_await finish_reload(std::unexpected(std::move(committed.error())));
+                }
+            }
+            auto updated_messages = state.messages;
+            updated_messages.push_back(std::move(message));
+            if (auto replaced =
+                            agent::detail::AgentMessageAccess::replace_messages(*agent_, std::move(updated_messages));
+                    !replaced) {
+                co_return co_await finish_reload(std::unexpected(std::move(replaced.error())));
+            }
+        }
         agent_->set_system_prompt(rebuild_system_prompt());
         update_projection();
         AgentSessionReloadResult result;
@@ -511,7 +538,8 @@ support::ExpectedVoid AgentSession::Impl::clear_input_queues() {
     return apply_input_queue_mutation(InputQueueMutation::ClearInputQueues);
 }
 
-support::Expected<std::string> AgentSession::Impl::set_thinking_level(std::string_view level) {
+support::Expected<std::string> AgentSession::Impl::set_thinking_level(
+        std::string_view level, ModelMutationOptions options) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return std::unexpected(rejected.error());
     }
@@ -524,6 +552,21 @@ support::Expected<std::string> AgentSession::Impl::set_thinking_level(std::strin
     if (!effective) {
         return effective;
     }
+
+    // pi setThinkingLevel: the requested level is persisted to the global
+    // settings default when `options.persist` is set — before the change
+    // gate, so a persist with an unchanged (possibly re-clamped) level still
+    // writes (pi `setDefaultThinkingLevel(level)` records the request, not
+    // the clamped state).
+    if (options.persist && services_.settings_manager) {
+        if (auto saved = services_.settings_manager->set_default_thinking_level(SettingsScope::Global, level); !saved) {
+            return std::unexpected(std::move(saved.error()));
+        }
+    }
+    session_.context_thinking_level = *effective;
+
+    // The `thinking_level_change` entry rides only a real change (pi
+    // `isChanging`).
     if (*effective == previous) {
         return effective;
     }
@@ -537,22 +580,12 @@ support::Expected<std::string> AgentSession::Impl::set_thinking_level(std::strin
     if (auto appended = session_.store->append_thinking_level_change(std::nullopt, *effective); !appended) {
         return std::unexpected(std::move(appended.error()));
     }
-
-    // Persist the settings default unless the active model supports no
-    // thinking and the level is "off" (pi agent-session.ts setThinkingLevel:
-    // `if (this.supportsThinking() || effectiveLevel !== "off")`).
-    const auto& active_model = agent_->state().model;
-    if (services_.settings_manager && (active_model.reasoning || *effective != "off")) {
-        if (auto saved = services_.settings_manager->set_default_thinking_level(SettingsScope::Global, *effective);
-                !saved) {
-            return std::unexpected(std::move(saved.error()));
-        }
-    }
     update_projection();
     return effective;
 }
 
-boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::set_model(ai::Model model) {
+boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::set_model(
+        ai::Model model, ModelMutationOptions options) {
     if (auto rejected = reject_if_closed(); !rejected) {
         co_return std::unexpected(rejected.error());
     }
@@ -570,35 +603,75 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::set_model(ai::
                 support::make_error(support::ErrorCode::Auth, "No API key for " + model.provider + "/" + model.id));
     }
 
-    // pi `_getThinkingLevelForModelSwitch`: a current model without thinking
-    // support falls back to the merged settings default (then pi's
-    // DEFAULT_THINKING_LEVEL); otherwise the current level is kept and
-    // re-clamped against the new model below.
+    // pi `_getThinkingLevelForModelSwitch`: the fallback level for the new
+    // model resolves through the shared chain (settings default, then the
+    // live level) and re-clamps against the new model below.
     const auto thinking_level = resolve_thinking_level_for_switch(std::nullopt);
-    co_return co_await apply_model_switch(std::move(model), thinking_level);
+    co_return co_await apply_model_switch(std::move(model), thinking_level, options);
 }
 
-/// pi `_getThinkingLevelForModelSwitch`: an explicit scoped-model level wins;
-/// otherwise a current model without thinking support falls back to the
-/// merged settings default (then pi's DEFAULT_THINKING_LEVEL); otherwise the
-/// current level is kept and re-clamped against the new model below.
+/// pi `_getThinkingLevelForModelSwitch` (v0.87.1): an explicit scoped-model
+/// level wins; the per-model thinking-level override (pi
+/// `modelThinkingLevels`) is a Deferred setting and is treated as absent;
+/// otherwise the merged settings default wins; otherwise the current live
+/// level is kept and re-clamped against the new model by the caller (pi
+/// `?? this.thinkingLevel ?? DEFAULT_THINKING_LEVEL`).
 [[nodiscard]] std::string AgentSession::Impl::resolve_thinking_level_for_switch(
         const std::optional<std::string>& explicit_level) const {
     if (explicit_level) return *explicit_level;
-    if (!agent_ || !agent_->state().model.reasoning) {
-        return services_.settings_manager && services_.settings_manager->settings().default_thinking_level
-                       ? *services_.settings_manager->settings().default_thinking_level
-                       : "medium";
+    if (services_.settings_manager) {
+        const auto& global = services_.settings_manager->global_settings();
+        if (global.default_thinking_level) return *global.default_thinking_level;
     }
-    return agent_->state().thinking_level;
+    if (session_.context_thinking_level && !session_.context_thinking_level->empty()) {
+        return *session_.context_thinking_level;
+    }
+    return agent_ && !agent_->state().thinking_level.empty() ? agent_->state().thinking_level : "medium";
+}
+
+/// pi `_addPersistedDefaultToNonEmptyScope` (the persist tail of
+/// `setModel`/`cycleModel`): with a non-empty session scope, append the
+/// model — without a thinking level — when it is not already scoped, then
+/// append the `provider/id` reference to the global `enabledModels` when one
+/// exists (pi compares case-insensitively). A no-op for an empty scope.
+support::ExpectedVoid AgentSession::Impl::add_persisted_default_to_non_empty_scope(const ai::Model& model) {
+    if (scoped_models_.empty()) return {};
+    for (const auto& scoped : scoped_models_) {
+        if (scoped.model.provider == model.provider && scoped.model.id == model.id) return {};
+    }
+    scoped_models_.push_back(ScopedModel{.model = model, .thinking_level = std::nullopt});
+
+    if (!services_.settings_manager) return {};
+    const auto& enabled = services_.settings_manager->settings().enabled_models;
+    if (!enabled || enabled->empty()) return {};
+    const std::string reference = model.provider + "/" + model.id;
+    const auto matches = [&reference](const std::string& pattern) {
+        if (pattern.size() != reference.size()) return false;
+        for (std::size_t index = 0; index < pattern.size(); ++index) {
+            if (std::tolower(static_cast<unsigned char>(pattern[index])) !=
+                    std::tolower(static_cast<unsigned char>(reference[index]))) {
+                return false;
+            }
+        }
+        return true;
+    };
+    for (const auto& pattern : *enabled) {
+        if (matches(pattern)) return {};
+    }
+    auto updated = *enabled;
+    updated.push_back(reference);
+    return services_.settings_manager->set_enabled_models(updated);
 }
 
 /// pi `_cycleScopedModel`/`_cycleAvailableModel` shared tail: apply the model
-/// (pi `agent.state.model = model`), append the `model_change` entry, write
-/// the global settings default, and re-clamp the thinking level — the same
-/// persistence sequence as `set_model`.
+/// (pi `agent.state.model = model`), append the `model_change` entry, and
+/// re-clamp the thinking level — the thinking level stays session-only (pi
+/// `setThinkingLevel(thinkingLevel)` carries no persist, so a persisted
+/// model switch never rewrites the global thinking default). Under
+/// `options.persist` the global settings default and scope promotion ride
+/// along, the same persistence sequence as `set_model`.
 [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::apply_model_switch(
-        ai::Model model, std::string thinking_level) {
+        ai::Model model, std::string thinking_level, ModelMutationOptions options) {
     if (auto swapped = agent_->set_model(std::move(model)); !swapped) {
         co_return std::unexpected(std::move(swapped.error()));
     }
@@ -613,19 +686,26 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::set_model(ai::
         co_return std::unexpected(std::move(appended.error()));
     }
 
-    // pi `settingsManager.setDefaultModelAndProvider` (global scope).
-    if (services_.settings_manager) {
-        if (auto saved = services_.settings_manager->set_default_model_and_provider(
-                    active_model.provider, active_model.id);
-                !saved) {
-            co_return std::unexpected(std::move(saved.error()));
+    // pi `options.persist` gate: `setDefaultModelAndProvider` (global scope)
+    // plus `_addPersistedDefaultToNonEmptyScope`.
+    if (options.persist) {
+        if (services_.settings_manager) {
+            if (auto saved = services_.settings_manager->set_default_model_and_provider(
+                        active_model.provider, active_model.id);
+                    !saved) {
+                co_return std::unexpected(std::move(saved.error()));
+            }
+        }
+        if (auto promoted = add_persisted_default_to_non_empty_scope(active_model); !promoted) {
+            co_return std::unexpected(std::move(promoted.error()));
         }
     }
 
     // Re-clamp the thinking level for the new model's capabilities (pi
-    // `setThinkingLevel` after the model assignment; entry + settings writes
-    // ride the existing thinking-level path).
-    if (auto clamped = set_thinking_level(std::move(thinking_level)); !clamped) {
+    // `setThinkingLevel` after the model assignment). pi passes no persist
+    // here: model persistence does not implicitly rewrite the global thinking
+    // default; the session entry rides a real level change only.
+    if (auto clamped = set_thinking_level(std::move(thinking_level), ModelMutationOptions{}); !clamped) {
         co_return std::unexpected(std::move(clamped.error()));
     }
     // The model Bash Tool reads the live model at execution time.
@@ -639,7 +719,7 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::set_model(ai::
 }
 
 boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> AgentSession::Impl::cycle_model(
-        std::string_view direction) {
+        std::string_view direction, ModelMutationOptions options) {
     if (auto rejected = reject_if_closed(); !rejected) {
         co_return std::unexpected(rejected.error());
     }
@@ -676,7 +756,7 @@ boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> Agent
                                         : (current_index + eligible.size() - 1) % eligible.size();
         const auto& next = eligible[next_index];
         const auto thinking_level = resolve_thinking_level_for_switch(next.thinking_level);
-        if (auto applied = co_await apply_model_switch(next.model, thinking_level); !applied) {
+        if (auto applied = co_await apply_model_switch(next.model, thinking_level, options); !applied) {
             co_return std::unexpected(std::move(applied.error()));
         }
         co_return ModelCycleResult{
@@ -708,7 +788,7 @@ boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> Agent
                                     : (current_index + available->size() - 1) % available->size();
     const auto& next_model = (*available)[next_index];
     const auto thinking_level = resolve_thinking_level_for_switch(std::nullopt);
-    if (auto applied = co_await apply_model_switch(next_model, thinking_level); !applied) {
+    if (auto applied = co_await apply_model_switch(next_model, thinking_level, options); !applied) {
         co_return std::unexpected(std::move(applied.error()));
     }
     co_return ModelCycleResult{
@@ -718,7 +798,7 @@ boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> Agent
     };
 }
 
-support::Expected<std::optional<std::string>> AgentSession::Impl::cycle_thinking_level() {
+support::Expected<std::optional<std::string>> AgentSession::Impl::cycle_thinking_level(ModelMutationOptions options) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return std::unexpected(rejected.error());
     }
@@ -748,7 +828,7 @@ support::Expected<std::optional<std::string>> AgentSession::Impl::cycle_thinking
     if (!next_name) {
         return std::optional<std::string>{};
     }
-    auto applied = set_thinking_level(*next_name);
+    auto applied = set_thinking_level(*next_name, options);
     if (!applied) {
         return std::unexpected(std::move(applied.error()));
     }
@@ -1397,15 +1477,15 @@ const std::vector<PromptTemplate>& AgentSession::Impl::templates() const { retur
 // ── Lazy-coroutine session entries ──────────────────────────────────────────
 
 boost::asio::awaitable<support::ExpectedVoid> detail::session_set_model(
-        std::shared_ptr<AgentSession::Impl> impl, ai::Model model) {
+        std::shared_ptr<AgentSession::Impl> impl, ai::Model model, ModelMutationOptions options) {
     if (!impl) co_return std::unexpected(detail::session_not_initialized_error());
-    co_return co_await impl->set_model(std::move(model));
+    co_return co_await impl->set_model(std::move(model), options);
 }
 
 boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> detail::session_cycle_model(
-        std::shared_ptr<AgentSession::Impl> impl, std::string direction) {
+        std::shared_ptr<AgentSession::Impl> impl, std::string direction, ModelMutationOptions options) {
     if (!impl) co_return std::unexpected(detail::session_not_initialized_error());
-    co_return co_await impl->cycle_model(std::move(direction));
+    co_return co_await impl->cycle_model(std::move(direction), options);
 }
 
 boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> detail::session_reload(

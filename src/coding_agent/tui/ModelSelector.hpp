@@ -22,6 +22,7 @@ namespace cch::coding_agent::tui {
 class LiveTheme;
 
 using ModelSelectorSelectSink = std::move_only_function<void(ai::Model)>;
+using ModelSelectorSelectAsDefaultSink = std::move_only_function<void(ai::Model)>;
 using ModelSelectorCancelSink = std::move_only_function<void()>;
 using ModelSelectorInvalidateSink = std::move_only_function<void()>;
 
@@ -44,10 +45,12 @@ using ModelSelectorInvalidateSink = std::move_only_function<void()>;
 /// re-accent each render; everything else flows into SelectList (navigation,
 /// confirm/cancel, search editing).
 ///
-/// Selecting a model fires `on_select` (pi's `onSelect`); the settings
-/// default write pi performs in the selector (`setDefaultModelAndProvider`)
-/// rides the session `setModel` path in this subset, which persists the same
-/// global default.
+/// Selecting a model fires `on_select` (pi's `onSelect`); the save-as-default
+/// key (`app.models.save`, Ctrl+S) fires `on_select_as_default` (pi's
+/// `onSelectAsDefault`) and the dim save hint renders only when that sink is
+/// present (pi's constructor-gated hint line). The session-only vs persisted
+/// distinction and the pi statuses (`Model: <id>` vs `Default model:
+/// provider/id`) ride the flow controller's mutation options (#774).
 ///
 /// Threading: input handling and render run on the TUI thread; the background
 /// refresh runs on the injected executor. A mutex serializes the model lists
@@ -61,17 +64,17 @@ class ModelSelectorComponent final
       public cch::tui::Focusable,
       public std::enable_shared_from_this<ModelSelectorComponent> {
 public:
-    ModelSelectorComponent(
-        const LiveTheme& theme,
-        std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
-        const ai::Model* current_model,
-        std::shared_ptr<cch::coding_agent::ModelRuntime> runtime,
-        boost::asio::any_io_executor executor,
-        std::vector<cch::coding_agent::ScopedModel> scoped_models,
-        ModelSelectorSelectSink on_select,
-        ModelSelectorCancelSink on_cancel,
-        ModelSelectorInvalidateSink on_invalidate,
-        std::optional<std::string> initial_search_input = std::nullopt);
+    ModelSelectorComponent(const LiveTheme& theme,
+            std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+            const ai::Model* current_model,
+            std::shared_ptr<cch::coding_agent::ModelRuntime> runtime,
+            boost::asio::any_io_executor executor,
+            std::vector<cch::coding_agent::ScopedModel> scoped_models,
+            ModelSelectorSelectSink on_select,
+            ModelSelectorCancelSink on_cancel,
+            ModelSelectorInvalidateSink on_invalidate,
+            std::optional<std::string> initial_search_input = std::nullopt,
+            ModelSelectorSelectAsDefaultSink on_select_as_default = {});
     ModelSelectorComponent(ModelSelectorComponent&&) = delete;
     ModelSelectorComponent& operator=(ModelSelectorComponent&&) = delete;
     ~ModelSelectorComponent() override;
@@ -110,6 +113,7 @@ private:
     /// fuzzy filter it replaces. Callers hold the mutex (or run in the ctor).
     [[nodiscard]] std::vector<cch::tui::SelectItem> build_select_items() const;
     void confirm_selection(const cch::tui::SelectItem& item);
+    void confirm_selection_as_default(const cch::tui::SelectItem& item);
     void cancel_selection();
     [[nodiscard]] bool is_current(const ai::Model& model) const;
     [[nodiscard]] std::string scope_text() const;
@@ -120,6 +124,7 @@ private:
     std::shared_ptr<cch::coding_agent::ModelRuntime> runtime_;
     boost::asio::any_io_executor executor_;
     ModelSelectorSelectSink on_select_;
+    ModelSelectorSelectAsDefaultSink on_select_as_default_;
     ModelSelectorCancelSink on_cancel_;
     ModelSelectorInvalidateSink on_invalidate_;
     cch::tui::SelectList select_list_;

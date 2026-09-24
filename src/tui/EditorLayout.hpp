@@ -35,6 +35,10 @@ struct EditorLayoutOptions {
     EditorTheme* theme{nullptr};
     const EditorCompletionMenuPresentation* autocomplete_menu{nullptr};
     bool include_autocomplete{true};
+    /// App-layer top border replacement (pi `CustomEditor.renderTopBorder`):
+    /// borrowed from the owning Editor's options; must outlive the compute
+    /// call. nullopt results keep the default border line.
+    EditorTopBorderSink* top_border_override{nullptr};
 };
 
 struct EditorLayoutResult {

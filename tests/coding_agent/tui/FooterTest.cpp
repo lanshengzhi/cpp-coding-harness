@@ -311,6 +311,32 @@ TEST_CASE("Status indicator messages match pi's wording", "[coding_agent][tui][f
     (void)live;
 }
 
+TEST_CASE("embedded status border shows overflow label when it fits and only the spinner when narrow",
+        "[coding_agent][tui][status][issue786]") {
+    const auto live = coding_agent::tui::LiveTheme(
+            coding_agent::tui::builtin_dark_theme(), tui::TerminalColorCapability::Xterm256);
+    coding_agent::tui::StatusIndicator indicator(
+            coding_agent::tui::StatusIndicator::Kind::Working,
+            live,
+            []() -> support::ExpectedVoid { return {}; },
+            "Working");
+    cch::tui::TextStyleHook border_style = [](std::string text) { return text; };
+
+    auto wide = coding_agent::tui::embedded_status_top_border(indicator, border_style, 80, 3);
+    REQUIRE(wide);
+    REQUIRE(wide->has_value());
+    const auto wide_text = tui::strip_terminal_sequences(**wide);
+    CHECK(wide_text.find("Working") != std::string::npos);
+    CHECK(wide_text.find("↑ 3 more") != std::string::npos);
+
+    auto narrow = coding_agent::tui::embedded_status_top_border(indicator, border_style, 5, 0);
+    REQUIRE(narrow);
+    REQUIRE(narrow->has_value());
+    const auto narrow_text = tui::strip_terminal_sequences(**narrow);
+    CHECK(narrow_text.find("Working") == std::string::npos);
+    CHECK(tui::visible_width(narrow_text) <= 5);
+}
+
 TEST_CASE("StatusIndicator renders the loader row with the message", "[coding_agent][tui][footer][issue411][spec]") {
     const auto live = coding_agent::tui::LiveTheme(
         coding_agent::tui::builtin_dark_theme(), tui::TerminalColorCapability::Xterm256);

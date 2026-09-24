@@ -150,3 +150,19 @@ TEST_CASE("Initial message merge preserves trailing stdin newlines exactly", "[c
     REQUIRE(prepared);
     CHECK(prepared->initial_message == "line one\nline two\nSummarize");
 }
+
+TEST_CASE("Initial @file text references strip a UTF-8 BOM", "[cli][initial-prompt][spec]") {
+    tests::TempWorkspace workspace;
+    workspace.write("bom-note.txt",
+            "\xEF\xBB\xBF"
+            "text after BOM");
+
+    const auto prepared = cli::build_initial_message(input_with(workspace.path(), {}, {"bom-note.txt"}));
+
+    REQUIRE(prepared);
+    // pi `file-processor.ts` strips the BOM from the text file content; the
+    // reference body must not carry the BOM bytes.
+    const auto body = prepared->initial_message.find("\ntext after BOM\n</file>");
+    REQUIRE(body != std::string::npos);
+    CHECK(prepared->initial_message.find("\xEF\xBB\xBF") == std::string::npos);
+}

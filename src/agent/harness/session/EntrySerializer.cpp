@@ -84,16 +84,6 @@ struct ThinkingLevelChangeDto {
     std::string thinkingLevel;
 };
 
-struct ActiveToolsChangeDto {
-    std::string id;
-    NullableString parentId;
-    std::string timestamp;
-    std::string type{"active_tools_change"};
-    std::vector<std::string> activeToolNames;
-    // Legacy read tolerance: pre-pi C++ files carried `tools`.
-    std::optional<std::vector<std::string>> tools;
-};
-
 struct CustomDto {
     std::string id;
     NullableString parentId;
@@ -487,7 +477,6 @@ template <typename Dto>
     if (type == "message") return SessionEntryKind::Message;
     if (type == "model_change") return SessionEntryKind::ModelChange;
     if (type == "thinking_level_change") return SessionEntryKind::ThinkingLevelChange;
-    if (type == "active_tools_change") return SessionEntryKind::ActiveToolsChange;
     if (type == "custom") return SessionEntryKind::Custom;
     if (type == "custom_message") return SessionEntryKind::CustomMessage;
     if (type == "label") return SessionEntryKind::Label;
@@ -553,13 +542,6 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
     }
 
     return found->second;
-}
-
-[[nodiscard]] std::vector<std::string> active_tool_names_from_dto(const detail::ActiveToolsChangeDto& dto) {
-    if (dto.tools.has_value()) {
-        return *dto.tools;
-    }
-    return dto.activeToolNames;
 }
 
 [[nodiscard]] support::Expected<CustomMessageEntryContent> custom_message_content_from_dto(
@@ -872,15 +854,6 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
                     entry.value = ThinkingLevelChangeValue{.thinking_level = std::move(dto.thinkingLevel)};
                     return {};
                 });
-    case SessionEntryKind::ActiveToolsChange:
-        return parse_typed_entry<detail::ActiveToolsChangeDto>(line,
-                line_number,
-                kind,
-                std::move(payload),
-                [](detail::ActiveToolsChangeDto& dto, SessionEntry& entry) -> support::ExpectedVoid {
-                    entry.value = ActiveToolsChangeValue{.active_tool_names = active_tool_names_from_dto(dto)};
-                    return {};
-                });
     case SessionEntryKind::Custom:
         return parse_typed_entry<detail::CustomDto>(line,
                 line_number,
@@ -1052,19 +1025,6 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
             SessionEntryKind::ThinkingLevelChange,
             dto,
             ThinkingLevelChangeValue{.thinking_level = std::move(thinking_level)});
-}
-
-support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_active_tools_change(
-    std::optional<std::string> parent_id,
-    std::vector<std::string> tools) const {
-    auto base = fresh_entry_base(parent_id);
-    detail::ActiveToolsChangeDto dto;
-    attach_entry_header(base, dto);
-    dto.activeToolNames = tools;
-    return finish_fresh_entry(std::move(base),
-            SessionEntryKind::ActiveToolsChange,
-            dto,
-            ActiveToolsChangeValue{.active_tool_names = std::move(tools)});
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_custom_entry(
@@ -1274,13 +1234,6 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
         detail::ThinkingLevelChangeDto dto;
         attach_entry_header(base, dto);
         dto.thinkingLevel = value.thinking_level;
-        return serialize_tree_entry(dto);
-    }
-    case SessionEntryKind::ActiveToolsChange: {
-        const auto& value = std::get<ActiveToolsChangeValue>(entry.value);
-        detail::ActiveToolsChangeDto dto;
-        attach_entry_header(base, dto);
-        dto.activeToolNames = value.active_tool_names;
         return serialize_tree_entry(dto);
     }
     case SessionEntryKind::Custom: {

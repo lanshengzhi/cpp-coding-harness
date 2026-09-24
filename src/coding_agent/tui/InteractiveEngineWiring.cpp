@@ -97,6 +97,11 @@ std::shared_ptr<ModelFlowController> InteractiveEngine::make_model_flow_controll
         const auto self = weak.lock();
         return self != nullptr ? self->session_ : nullptr;
     };
+    hooks.show_warning = [weak](std::string text) {
+        if (const auto self = weak.lock(); self && self->view_ != nullptr) {
+            self->view_->append_warning(std::move(text));
+        }
+    };
     // The controller is created after `theme_controller_` is emplaced and
     // the optional is never reset, so the pointer stays valid for the
     // state's lifetime (flows reach it only under the gates above).
@@ -314,14 +319,17 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
     hooks.request_exit = [weak] {
         if (const auto self = weak.lock()) self->post_exit();
     };
-    hooks.report_boot_diagnostics = [weak](
-        std::size_t generation,
-        std::vector<SessionDiagnostic> diagnostics) {
+    hooks.report_boot_diagnostics = [weak](std::size_t generation, std::vector<SessionDiagnostic> diagnostics) {
         if (const auto self = weak.lock()) {
-            (void)self->deliver_action(
-                generation,
-                TuiActionVariant{ReportBootDiagnosticsAction{
-                    std::move(diagnostics)}});
+            auto diagnostics_for_view = diagnostics;
+            (void)self->deliver_action(generation,
+                    TuiActionVariant{ReportBootDiagnosticsAction{
+                            .diagnostics = std::move(diagnostics),
+                            .rendered_in_tui = true,
+                    }});
+            self->startup_diagnostics_.session.insert(self->startup_diagnostics_.session.end(),
+                    std::make_move_iterator(diagnostics_for_view.begin()),
+                    std::make_move_iterator(diagnostics_for_view.end()));
         }
     };
     return std::make_shared<SessionFlowController>(

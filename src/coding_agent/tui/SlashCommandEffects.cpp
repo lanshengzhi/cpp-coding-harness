@@ -110,7 +110,7 @@ std::string format_hotkeys_text(const cch::tui::KeybindingRegistry& registry) {
     text += std::format("{}  Toggle tool output expansion\n", display_keys(registry, "app.tools.expand"));
     text += std::format("{}  Toggle thinking block visibility\n", display_keys(registry, "app.thinking.toggle"));
     text += std::format("{}  Edit message in external editor\n", display_keys(registry, "app.editor.external"));
-    text += std::format("{}  Copy last assistant message\n", display_keys(registry, "app.message.copy"));
+    text += std::format("{}  Copy selection or last assistant message\n", display_keys(registry, "app.message.copy"));
     text += std::format("{}  Queue follow-up message\n", display_keys(registry, "app.message.followUp"));
     text += std::format("{}  Restore queued messages\n", display_keys(registry, "app.message.dequeue"));
     text += std::format("{}  Paste image or text from clipboard\n", display_keys(registry, "app.clipboard.pasteImage"));

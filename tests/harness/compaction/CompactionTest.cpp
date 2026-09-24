@@ -528,6 +528,42 @@ TEST_CASE("the compaction door keeps the recent-token budget and never cuts befo
     }
 }
 
+TEST_CASE("the compaction door retains every system-message update before the recent tail",
+        "[harness][compaction][session-resume][spec]") {
+    const auto model = tests::make_model("gpt-test");
+    auto store = harness::session::SessionStore::in_memory();
+
+    REQUIRE(store.append(ai::SystemMessage{.content = "initial prompt section", .timestamp = 1}).has_value());
+    for (int i = 0; i < 10; ++i) {
+        append_user(store, "User " + std::to_string(i) + std::string(94, 'u'));
+        append_assistant(store, "Assistant " + std::to_string(i) + std::string(89, 'a'), mock_usage(0, 100));
+        if (i == 1) {
+            REQUIRE(store.append(ai::SystemMessage{.content = "reloaded prompt section", .timestamp = 2}).has_value());
+        }
+    }
+
+    auto runtime = std::make_shared<tests::FakeModelStream>();
+    runtime->responses.push_back(ai::assistant_text_message("## Summary"));
+    harness::session::CompactionRunOptions options;
+    options.settings = harness::session::CompactionSettings{
+            .enabled = true,
+            .reserve_tokens = 2000,
+            .keep_recent_tokens = 1,
+    };
+    options.summarization_stream = scripted_stream(runtime, model);
+
+    auto outcome = run_door(store, model, std::move(options));
+    REQUIRE(outcome.has_value());
+    const auto* result = std::get_if<harness::session::CompactionResult>(&*outcome);
+    REQUIRE(result != nullptr);
+
+    REQUIRE(result->retained_tail.size() >= 2);
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(result->retained_tail[0]));
+    CHECK(std::get<ai::SystemMessage>(result->retained_tail[0]).content == "initial prompt section");
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(result->retained_tail[1]));
+    CHECK(std::get<ai::SystemMessage>(result->retained_tail[1]).content == "reloaded prompt section");
+}
+
 TEST_CASE("the compaction door never splits a turn when the cut lands on a user message",
         "[harness][compaction][issue358][issue541][spec]") {
     auto store = harness::session::SessionStore::in_memory();

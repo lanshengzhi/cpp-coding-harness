@@ -244,58 +244,61 @@ TEST_CASE("Keybindings manager bounds diagnostics and redacts invalid key text",
     }
 }
 
-TEST_CASE("The app layer adopts the full 42-action AppKeybindings table with pi-verbatim descriptions",
-        "[coding_agent][keybindings][issue419][spec]") {
-    // The full 42-action catalog (pi core/keybindings.ts at 83114817, ADR
-    // 0036 G2): every action resolves with its pi-verbatim description.
-    constexpr std::array<std::string_view, 42> kAllActions{
-        "app.interrupt",
-        "app.clear",
-        "app.exit",
-        "app.suspend",
-        "app.thinking.cycle",
-        "app.model.cycleForward",
-        "app.model.cycleBackward",
-        "app.model.select",
-        "app.tools.expand",
-        "app.thinking.toggle",
-        "app.session.toggleNamedFilter",
-        "app.editor.external",
-        "app.message.copy",
-        "app.message.followUp",
-        "app.message.dequeue",
-        "app.clipboard.pasteImage",
-        "app.session.new",
-        "app.session.tree",
-        "app.session.fork",
-        "app.session.resume",
-        "app.tree.foldOrUp",
-        "app.tree.unfoldOrDown",
-        "app.tree.editLabel",
-        "app.tree.toggleLabelTimestamp",
-        "app.session.togglePath",
-        "app.session.toggleSort",
-        "app.session.rename",
-        "app.session.delete",
-        "app.session.deleteNoninvasive",
-        "app.models.save",
-        "app.models.enableAll",
-        "app.models.clearAll",
-        "app.models.toggleProvider",
-        "app.models.reorderUp",
-        "app.models.reorderDown",
-        "app.tree.filter.default",
-        "app.tree.filter.noTools",
-        "app.tree.filter.userOnly",
-        "app.tree.filter.labeledOnly",
-        "app.tree.filter.all",
-        "app.tree.filter.cycleForward",
-        "app.tree.filter.cycleBackward",
+TEST_CASE("The app layer adopts the full 43-action AppKeybindings table with pi-verbatim descriptions",
+        "[coding_agent][keybindings][issue419][issue774][spec]") {
+    // The full 43-action catalog (pi core/keybindings.ts; the #36 baseline at
+    // 83114817 plus v0.87.1's `app.thinking.save` for the thinking selector's
+    // save-as-default action): every action resolves with its pi-verbatim
+    // description.
+    constexpr std::array<std::string_view, 43> kAllActions{
+            "app.interrupt",
+            "app.clear",
+            "app.exit",
+            "app.suspend",
+            "app.thinking.cycle",
+            "app.thinking.save",
+            "app.model.cycleForward",
+            "app.model.cycleBackward",
+            "app.model.select",
+            "app.tools.expand",
+            "app.thinking.toggle",
+            "app.session.toggleNamedFilter",
+            "app.editor.external",
+            "app.message.copy",
+            "app.message.followUp",
+            "app.message.dequeue",
+            "app.clipboard.pasteImage",
+            "app.session.new",
+            "app.session.tree",
+            "app.session.fork",
+            "app.session.resume",
+            "app.tree.foldOrUp",
+            "app.tree.unfoldOrDown",
+            "app.tree.editLabel",
+            "app.tree.toggleLabelTimestamp",
+            "app.session.togglePath",
+            "app.session.toggleSort",
+            "app.session.rename",
+            "app.session.delete",
+            "app.session.deleteNoninvasive",
+            "app.models.save",
+            "app.models.enableAll",
+            "app.models.clearAll",
+            "app.models.toggleProvider",
+            "app.models.reorderUp",
+            "app.models.reorderDown",
+            "app.tree.filter.default",
+            "app.tree.filter.noTools",
+            "app.tree.filter.userOnly",
+            "app.tree.filter.labeledOnly",
+            "app.tree.filter.all",
+            "app.tree.filter.cycleForward",
+            "app.tree.filter.cycleBackward",
     };
     const auto definitions = coding_agent::tui::app_keybinding_definitions(
         kAllActions);
     REQUIRE(definitions);
-    REQUIRE(definitions->size() == 42);
+    REQUIRE(definitions->size() == 43);
 
     const auto find = [&definitions](std::string_view id) -> const cch::tui::KeybindingDefinition* {
         for (const auto& definition : *definitions) {
@@ -307,7 +310,10 @@ TEST_CASE("The app layer adopts the full 42-action AppKeybindings table with pi-
     CHECK(find("app.tree.filter.default")->description == "Tree filter: default view");
     CHECK(find("app.tree.filter.cycleBackward")->description == "Tree filter: cycle backward");
     CHECK(find("app.models.toggleProvider")->description == "Toggle all models for provider");
+    CHECK(find("app.thinking.save")->description == "Save thinking level");
+    CHECK(find("app.thinking.save")->default_keys == std::vector<std::string>{"ctrl+s"});
     CHECK(find("app.message.followUp")->description == "Queue follow-up message");
+    CHECK(find("app.message.copy")->description == "Copy selection or last assistant message");
     CHECK(find("app.message.followUp")->default_keys == std::vector<std::string>{"alt+enter"});
     CHECK(find("app.clipboard.pasteImage")->description == "Paste image from clipboard (text fallback)");
     CHECK(find("app.session.new")->default_keys.empty());
@@ -381,7 +387,8 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     // actions render with pi's default keys.
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({"app.exit":"f6"})");
-    constexpr std::array<std::string_view, 3> kAssembled{"app.exit", "app.message.followUp", "app.message.dequeue"};
+    constexpr std::array<std::string_view, 4> kAssembled{
+            "app.exit", "app.message.copy", "app.message.followUp", "app.message.dequeue"};
     auto definitions = coding_agent::tui::app_keybinding_definitions(kAssembled);
     REQUIRE(definitions);
     coding_agent::tui::KeybindingsManagerRequest remapped;
@@ -391,6 +398,7 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     REQUIRE(remapped_manager);
     const auto remapped_text = coding_agent::tui::format_hotkeys_text(*remapped_manager->registry);
     CHECK(remapped_text.find("f6  Exit (when editor is empty)") != std::string::npos);
+    CHECK(remapped_text.find("ctrl+x  Copy selection or last assistant message") != std::string::npos);
     CHECK(remapped_text.find("alt+enter  Queue follow-up message") != std::string::npos);
     CHECK(remapped_text.find("alt+up  Restore queued messages") != std::string::npos);
 }

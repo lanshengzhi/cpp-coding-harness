@@ -201,8 +201,8 @@ TEST_CASE("InteractiveSessionRun dispatches host effects for ReportBootCreationF
     CHECK(text.find("Permission denied") != std::string::npos);
 }
 
-TEST_CASE("InteractiveSessionRun dispatches host effects for ReportBootDiagnosticsAction",
-        "[coding_agent][tui][session_run][issue517][spec]") {
+TEST_CASE("non-interactive InteractiveSessionRun reports boot diagnostics through stderr",
+        "[coding_agent][tui][session_run][issue517][issue787][spec]") {
     std::ostringstream error_stream;
 
     auto run = InteractiveSessionRunBuilder{}
@@ -238,6 +238,23 @@ TEST_CASE("InteractiveSessionRun dispatches host effects for ReportBootDiagnosti
     CHECK(text.find("[trust:info] loaded: Loaded trust configuration") != std::string::npos);
     CHECK(text.find("[theme:warn] missing: Theme color not found (theme.json)") != std::string::npos);
     CHECK(text.find("[skills:error] syntax: Invalid skill definition (SKILL.md)") != std::string::npos);
+
+    const std::string text_before_tui_action = error_stream.str();
+    std::vector<coding_agent::SessionDiagnostic> tui_diagnostics{
+            coding_agent::SessionDiagnostic{
+                    .severity = coding_agent::SessionDiagnostic::Severity::Warning,
+                    .code = "settings:invalid",
+                    .message = "Invalid settings",
+                    .path = std::nullopt,
+            },
+    };
+    result = run.dispatch_action(0,
+            TuiActionVariant{ReportBootDiagnosticsAction{
+                    .diagnostics = std::move(tui_diagnostics),
+                    .rendered_in_tui = true,
+            }});
+    REQUIRE(result.has_value());
+    CHECK(error_stream.str() == text_before_tui_action);
 }
 
 TEST_CASE("InteractiveSessionRun supports custom action sink override",

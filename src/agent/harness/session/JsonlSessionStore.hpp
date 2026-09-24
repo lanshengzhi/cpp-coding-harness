@@ -58,11 +58,7 @@ public:
         std::string provider,
         std::string model_id);
     [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_thinking_level_change(
-        std::optional<std::string> parent_id,
-        std::string thinking_level);
-    [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_active_tools_change(
-        std::optional<std::string> parent_id,
-        std::vector<std::string> tools);
+            std::optional<std::string> parent_id, std::string thinking_level);
     [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_custom_entry(
         std::optional<std::string> parent_id,
         std::string custom_type,
@@ -81,11 +77,12 @@ public:
         std::optional<std::string> parent_id,
         CompactionEntryValue value);
     [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_branch_summary(
-        std::optional<std::string> parent_id,
-        std::string from_id,
-        std::string summary,
-        std::optional<support::JsonValue> details,
-        std::optional<bool> from_hook);
+            std::optional<std::string> parent_id,
+            std::string from_id,
+            std::string summary,
+            std::optional<support::JsonValue> details,
+            std::optional<bool> from_hook,
+            std::optional<ai::Usage> usage = std::nullopt);
     [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_session_info(
         std::optional<std::string> parent_id,
         std::string name);

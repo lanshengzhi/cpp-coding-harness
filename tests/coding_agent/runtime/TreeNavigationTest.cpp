@@ -561,7 +561,7 @@ TEST_CASE("an in-memory fork seed mirrors into the new session's live tree",
         fork_messages[1].entry_id, runtime::ForkPosition::Before);
     REQUIRE(prepared.has_value());
     REQUIRE(prepared->in_memory_seed.has_value());
-    REQUIRE(prepared->in_memory_seed->context.messages.size() == 2);
+    REQUIRE(prepared->in_memory_seed->context.messages.size() == 3);
 
     // The replacement in-memory session commits the seed to its store, so
     // the tree surface and navigation work on the seeded entries directly.
@@ -583,16 +583,30 @@ TEST_CASE("an in-memory fork seed mirrors into the new session's live tree",
     auto topology = forked_session.session_tree();
     REQUIRE(topology.has_value());
     REQUIRE(topology->roots.size() == 1);
-    // The seed's first message is the tree root (the store's real entry id).
-    const auto& root = topology->roots.front();
-    REQUIRE(root.entry.kind == harness::session::SessionEntryKind::Message);
-    REQUIRE(root.entry.message.has_value());
-    CHECK(ai::text_from_user_message(
-              std::get<ai::UserMessage>(*root.entry.message)) == "first");
+    // Model/thinking and system-message entries precede the seeded user.
+    std::vector<const harness::session::SessionTreeNode*> pending_nodes;
+    for (const auto& root : topology->roots) {
+        pending_nodes.push_back(&root);
+    }
+    const harness::session::SessionTreeNode* seeded_user = nullptr;
+    while (!pending_nodes.empty()) {
+        const auto* candidate = pending_nodes.back();
+        pending_nodes.pop_back();
+        if (candidate->entry.kind == harness::session::SessionEntryKind::Message && candidate->entry.message &&
+                std::holds_alternative<ai::UserMessage>(*candidate->entry.message)) {
+            seeded_user = candidate;
+            break;
+        }
+        for (const auto& child : candidate->children) {
+            pending_nodes.push_back(&child);
+        }
+    }
+    REQUIRE(seeded_user != nullptr);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(*seeded_user->entry.message)) == "first");
 
-    // Navigation on the seeded tree: the root user message moves the leaf to
-    // the root position and returns its text.
-    auto navigated = forked_session.navigate_tree(root.entry.entry_id);
+    // Navigation on the seeded tree: the user message moves the leaf to its
+    // position and returns its text.
+    auto navigated = forked_session.navigate_tree(seeded_user->entry.entry_id);
     REQUIRE(navigated.has_value());
     REQUIRE(navigated->editor_text.has_value());
     CHECK(*navigated->editor_text == "first");
@@ -640,16 +654,21 @@ TEST_CASE("a branch seed's thinking level wins over the settings default in the 
     REQUIRE(topology.has_value());
     REQUIRE(topology->roots.size() == 1);
     const harness::session::SessionTreeNode* node = &topology->roots.front();
-    while (node != nullptr && node->entry.entry_id != topology->leaf_id) {
+    bool found_seeded_thinking_level = false;
+    bool found_leaf = false;
+    while (node != nullptr) {
+        if (node->entry.kind == harness::session::SessionEntryKind::ThinkingLevelChange) {
+            found_seeded_thinking_level =
+                    std::get<harness::session::ThinkingLevelChangeValue>(node->entry.value).thinking_level == "off";
+        }
+        if (node->entry.entry_id == topology->leaf_id) {
+            found_leaf = true;
+            break;
+        }
         node = node->children.empty() ? nullptr : &node->children.front();
     }
-    REQUIRE(node != nullptr);
-    REQUIRE(
-        node->entry.kind ==
-        harness::session::SessionEntryKind::ThinkingLevelChange);
-    CHECK(
-        std::get<harness::session::ThinkingLevelChangeValue>(node->entry.value)
-            .thinking_level == "off");
+    CHECK(found_leaf);
+    CHECK(found_seeded_thinking_level);
 }
 
 TEST_CASE("persisted navigation then prompt appends to the navigated leaf",

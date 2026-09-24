@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <fstream>
 #include <optional>
 #include <sstream>
@@ -136,7 +137,8 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
 
-    REQUIRE(store->append(ai::MessageVariant{ai::SystemMessage{"system token=abc123", 1}}).status);
+    REQUIRE(store->append(ai::MessageVariant{ai::SystemMessage{.content = "system token=abc123", .timestamp = 1}})
+                    .status);
     REQUIRE(store->append(user_message("user api_key=sk-secret12345 KIMI_API_KEY=kimi-user-secret")).status);
 
     auto arguments = support::read_json(
@@ -610,7 +612,6 @@ TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session]
     REQUIRE(store);
     REQUIRE(store->append_model_change(std::nullopt, "openai", "gpt-4o"));
     REQUIRE(store->append_thinking_level_change(std::nullopt, "high"));
-    REQUIRE(store->append_active_tools_change(std::nullopt, {"read"}));
     REQUIRE(store->append_custom_entry(std::nullopt, "my-ext", support::JsonValue{nullptr}));
     REQUIRE(store->append_custom_message_entry(std::nullopt, "my-ext", "context", true, std::nullopt));
     REQUIRE(store->append_label_change(std::nullopt, "target-entry", std::string{"checkpoint"}));
@@ -629,7 +630,6 @@ TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session]
     const auto raw = read_all(path);
     CHECK(raw.find(R"("modelId":"gpt-4o")") != std::string::npos);
     CHECK(raw.find(R"("thinkingLevel":"high")") != std::string::npos);
-    CHECK(raw.find(R"("activeToolNames":["read"])") != std::string::npos);
     CHECK(raw.find(R"("customType":"my-ext")") != std::string::npos);
     CHECK(raw.find(R"("targetId":"target-entry")") != std::string::npos);
     CHECK(raw.find(R"("firstKeptEntryId":"first-kept")") != std::string::npos);
@@ -639,6 +639,14 @@ TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session]
     CHECK(raw.find(R"("targetId":"leaf-target")") != std::string::npos);
     // pi always writes the base fields with explicit null for a root parent.
     CHECK(raw.find(R"("parentId":null)") != std::string::npos);
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    const auto summary_entry = std::find_if(loaded->entries.begin(), loaded->entries.end(), [](const auto& entry) {
+        return entry.kind == harness::session::SessionEntryKind::BranchSummary;
+    });
+    REQUIRE(summary_entry != loaded->entries.end());
+    CHECK_FALSE(std::get<harness::session::BranchSummaryEntryValue>(summary_entry->value).usage.has_value());
 }
 
 TEST_CASE("entry IDs are 8-char random hex", "[harness][session][u9][compat-pi]") {
@@ -690,27 +698,10 @@ TEST_CASE("thinking_level_change entry round-trips", "[harness][session][u9][com
     CHECK(value.thinking_level == "high");
 }
 
-TEST_CASE("active_tools_change entry round-trips", "[harness][session][u9][compat-pi]") {
+TEST_CASE("legacy active_tools_change is not read by the native session format", "[harness][session][wire]") {
+    // This old entry kind is retired; tool-loadout state is now carried by system messages.
     tests::TempWorkspace workspace;
-    auto path = workspace.path() / "tools-change.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
-    REQUIRE(store);
-    REQUIRE(store->append_active_tools_change(std::nullopt, {"read", "write", "bash"}));
-
-    auto loaded = harness::session::JsonlSessionStore::load(path);
-    REQUIRE(loaded);
-    REQUIRE(loaded->entries.size() == 2);
-    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ActiveToolsChange);
-    const auto& value = require_entry_value<harness::session::ActiveToolsChangeValue>(loaded->entries[1]);
-    REQUIRE(value.active_tool_names.size() == 3);
-    CHECK(value.active_tool_names[0] == "read");
-    CHECK(value.active_tool_names[1] == "write");
-    CHECK(value.active_tool_names[2] == "bash");
-}
-
-TEST_CASE("wire parser accepts activeToolNames compatibility field", "[harness][session][wire][compat-pi]") {
-    tests::TempWorkspace workspace;
-    auto path = workspace.path() / "tools-change-compat.jsonl";
+    auto path = workspace.path() / "retired-tools-change.jsonl";
     {
         std::ofstream output(path);
         output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\",\"timestamp\":\"2026-06-16T00:00:00.000Z\",\"cwd\":\""
@@ -723,11 +714,9 @@ TEST_CASE("wire parser accepts activeToolNames compatibility field", "[harness][
 
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() == 2);
-    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ActiveToolsChange);
-    const auto& value = require_entry_value<harness::session::ActiveToolsChangeValue>(loaded->entries[1]);
-    REQUIRE(value.active_tool_names.size() == 2);
-    CHECK(value.active_tool_names[0] == "read");
-    CHECK(value.active_tool_names[1] == "bash");
+    CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Unknown);
+    CHECK(std::holds_alternative<std::monostate>(loaded->entries[1].value));
+    REQUIRE(loaded->unknown_lines.size() == 1);
 }
 
 TEST_CASE("custom entry round-trips", "[harness][session][u9][compat-pi]") {

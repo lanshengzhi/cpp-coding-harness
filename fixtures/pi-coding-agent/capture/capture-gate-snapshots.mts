@@ -4,7 +4,7 @@
  * gate evidence bundle for the pi-coding-agent phase, ADR 0036).
  *
  * The bundle mirrors the pi-ai/pi-tui strategy: the README pins the frozen
- * baseline commit and the `@earendil-works/pi-coding-agent@0.83.0` artifact,
+ * baseline commit and the `@earendil-works/pi-coding-agent@0.87.1` artifact,
  * and this sidecar regenerates every committed snapshot from the frozen pi
  * checkout deterministically under the sanitization rules.
  *
@@ -68,9 +68,9 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const fixtureDir = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(fixtureDir, "../..");
 const piCheckout = process.env.PI_CHECKOUT ?? path.resolve(repoRoot, "../pi");
-const FROZEN_COMMIT = "83114817c68f5413e4d7ba6d7003ddc511cd31d2";
+const FROZEN_COMMIT = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe";
 const PINNED_PACKAGE = "@earendil-works/pi-coding-agent";
-const PINNED_VERSION = "0.83.0";
+const PINNED_VERSION = "0.87.1";
 
 // ── Frozen-checkout guard ─────────────────────────────────────────────────
 

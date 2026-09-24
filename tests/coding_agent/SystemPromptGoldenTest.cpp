@@ -1,16 +1,16 @@
 // P26 (#422): the System Prompt message-level differential golden. The
 // committed snapshots under `fixtures/pi-coding-agent/prompts/` pin the
-// FROZEN pi `buildSystemPrompt` output (baseline 83114817, message-level:
-// a `system` message with one text content block) for the three scripted
-// scenarios this file drives through the C++ `SystemPromptBuilder` with
-// identical inputs. Each snapshot carries the `identityDelta`: the identity
-// line and the documentation block in both forms (pi vs the C++ binary's own
-// "pike"). This test swaps the delta regions into pi's message and byte-
-// compares against the C++-built prompt, so the golden pins "structure byte-
-// identical, identity lines swapped" (ADR 0036 G4 / #392) as a differential
-// check — the only transformations between pi's message and the C++ prompt
-// are exactly the two identity regions. The custom branch carries no identity
-// regions and is pinned byte-identical with an empty delta.
+// FROZEN pi `buildSystemPrompt` output (baseline f07218c4, tag `v0.87.1`,
+// message-level: a `system` message with one text content block) for the three
+// scripted scenarios this file drives through the C++ `SystemPromptBuilder`
+// with identical inputs. Each snapshot carries the `identityDelta`: the
+// identity line and the documentation block in both forms (pi vs the C++
+// binary's own "pike"). This test swaps the delta regions into pi's message
+// and byte-compares against the C++-built prompt, so the golden pins
+// "structure byte-identical, identity lines swapped" (ADR 0036 G4 / #392) as a
+// differential check — the only transformations between pi's message and the
+// C++ prompt are exactly the two identity regions. The custom branch carries
+// no identity regions and is pinned byte-identical with an empty delta.
 
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 
@@ -159,10 +159,8 @@ void check_message_golden(
 
     // Pinned baseline citation (same meta contract as the session suites).
     const auto& meta = required_object(*root, "meta");
-    CHECK(required_string(meta, "baseline") ==
-          "83114817c68f5413e4d7ba6d7003ddc511cd31d2");
-    CHECK(required_string(meta, "artifact") ==
-          "@earendil-works/pi-coding-agent@0.83.0");
+    CHECK(required_string(meta, "baseline") == "f07218c4d4bbc12bef056a7058c3dd49dfe41abe");
+    CHECK(required_string(meta, "artifact") == "@earendil-works/pi-coding-agent@0.87.1");
     CHECK(required_string(meta, "family") ==
           "system-prompt-message-" + std::string{scenario});
 

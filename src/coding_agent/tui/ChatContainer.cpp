@@ -39,17 +39,25 @@ namespace {
     message.stop_reason = ai::AssistantStopReason::Pending;
     return message;
 }
-[[nodiscard]] support::Expected<cch::tui::RenderResult> render_plain(
-        const LiveTheme& theme, std::string text, std::size_t width, ThemeToken token, bool redact = true) {
+[[nodiscard]] support::Expected<cch::tui::RenderResult> render_plain(const LiveTheme& theme,
+        std::string text,
+        std::size_t width,
+        ThemeToken token,
+        std::size_t padding_x,
+        bool redact = true) {
     if (redact) text = safe_text(std::move(text));
-    cch::tui::Text component(theme.foreground(token, std::move(text)), 0, 0);
+    cch::tui::Text component(theme.foreground(token, std::move(text)), padding_x, 0);
     auto rendered = component.render(width);
     if (!rendered) return std::unexpected(rendered.error());
     return rendered;
 }
-[[nodiscard]] support::Expected<cch::tui::RenderResult> render_spaced_plain(
-        const LiveTheme& theme, std::string text, std::size_t width, ThemeToken token, bool add_spacer) {
-    auto rendered = render_plain(theme, std::move(text), width, token);
+[[nodiscard]] support::Expected<cch::tui::RenderResult> render_spaced_plain(const LiveTheme& theme,
+        std::string text,
+        std::size_t width,
+        ThemeToken token,
+        bool add_spacer,
+        std::size_t padding_x = 0) {
+    auto rendered = render_plain(theme, std::move(text), width, token, padding_x);
     if (!rendered) return std::unexpected(rendered.error());
     if (add_spacer) rendered->lines.insert(rendered->lines.begin(), std::string{});
     return rendered;
@@ -791,19 +799,24 @@ struct ChatContainer::Impl {
             return result;
         }
         if (const auto* frontend = std::get_if<FrontendItem>(&item)) {
-            return render_plain(theme, frontend->text, width, ThemeToken::Text);
+            return render_plain(theme, frontend->text, width, ThemeToken::Text, 0);
         }
         if (const auto* trust_warning = std::get_if<TrustWarningItem>(&item)) {
-            return render_spaced_plain(theme, trust_warning->text, width, ThemeToken::Warning, item_index > 0);
+            // pi renderProjectTrustWarningIfNeeded: Text(..., 1, 0).
+            return render_spaced_plain(theme, trust_warning->text, width, ThemeToken::Warning, item_index > 0, 1);
         }
         if (const auto* status = std::get_if<StatusItem>(&item)) {
-            return render_spaced_plain(theme, status->text, width, ThemeToken::Dim, true);
+            // pi showStatus: Text(dim, 1, 0).
+            return render_spaced_plain(theme, status->text, width, ThemeToken::Dim, true, 1);
         }
         const auto& diagnostic = std::get<DiagnosticItem>(item);
         if (diagnostic.warning) {
-            return render_plain(theme, "Warning: " + diagnostic.text, width, ThemeToken::Warning, !diagnostic.raw);
+            // pi showWarning: Text(warning, 1, 0).
+            return render_plain(theme, "Warning: " + diagnostic.text, width, ThemeToken::Warning, 1, !diagnostic.raw);
         }
-        return render_plain(theme, "Error: " + diagnostic.text, width, ThemeToken::Error, !diagnostic.raw);
+        // pi showError: Text(error, outputPad, 0) — the chat error lines
+        // honor the output pad.
+        return render_plain(theme, "Error: " + diagnostic.text, width, ThemeToken::Error, output_pad, !diagnostic.raw);
     }
 
     const LiveTheme& theme; // must outlive this presentation reducer.

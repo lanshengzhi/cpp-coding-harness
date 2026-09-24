@@ -158,3 +158,22 @@ TEST_CASE("prompt expansion passes through unknown or unreadable skill invocatio
     std::filesystem::remove(workspace.path() / "skills/missing-file/SKILL.md");
     CHECK(expand("/skill:missing-file", {std::move(skill)}) == "/skill:missing-file");
 }
+
+TEST_CASE("prompt expansion strips a UTF-8 BOM from the skill file body", "[coding_agent][prompt][expansion][spec]") {
+    tests::TempWorkspace workspace;
+    auto skill = make_skill_on_disk(workspace, "bom", "placeholder body");
+
+    // pi `_expandSkillCommand` expands `stripFrontmatter(content)`, whose
+    // parse strips the leading UTF-8 BOM (`utils/frontmatter.ts`).
+    workspace.write("skills/bom/SKILL.md",
+            "\xEF\xBB\xBF"
+            "---\n"
+            "name: bom\n"
+            "description: test skill\n"
+            "---\n"
+            "body after BOM\n");
+
+    const auto expanded = expand("/skill:bom", {std::move(skill)});
+    CHECK(expanded.find("body after BOM") != std::string::npos);
+    CHECK(expanded.find("\xEF\xBB\xBF") == std::string::npos);
+}

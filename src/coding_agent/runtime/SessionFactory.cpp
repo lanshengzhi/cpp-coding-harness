@@ -241,16 +241,16 @@ struct AssemblyPlan {
 /// the project is trusted. Scope load errors surface as warning diagnostics.
 struct SettingsSnapshot {
     coding_agent::SettingsManager manager;
+    std::vector<coding_agent::SettingsError> errors;
 };
 
 [[nodiscard]] SettingsSnapshot load_settings_snapshot(
     const std::filesystem::path& workspace) {
-    return SettingsSnapshot{
-        coding_agent::SettingsManager::create(
-            workspace,
+    auto manager = coding_agent::SettingsManager::create(workspace,
             coding_agent::agent_config_dir(),
-            /* project_trusted */ false),
-    };
+            /* project_trusted */ false);
+    auto errors = manager.errors();
+    return SettingsSnapshot{std::move(manager), std::move(errors)};
 }
 
 /// Failed creation keeps the primary error and carries any settings load
@@ -258,7 +258,7 @@ struct SettingsSnapshot {
 [[nodiscard]] support::Error with_settings_fallback_context(
     support::Error error,
     const SettingsSnapshot& snapshot) {
-    for (const auto& settings_error : snapshot.manager.errors()) {
+    for (const auto& settings_error : snapshot.errors) {
         std::string warning = std::string{"could not load "} +
             (settings_error.scope == SettingsScope::Global
                  ? "global settings"
@@ -1154,13 +1154,14 @@ struct PreparedAssemblyTarget final {
             co_return std::unexpected(std::move(moved_settings.error()));
         }
         snapshot.manager = std::move(*moved_settings);
+        snapshot.errors = snapshot.manager.errors();
     }
 
     // 2. Settings load errors stay observable as warning diagnostics. Global
     // errors are known at bootstrap; project-scope errors surface after the
     // project trust decision below reloads the project scope.
     const auto add_settings_diagnostics = [&]() {
-        for (const auto& settings_error : snapshot.manager.errors()) {
+        for (const auto& settings_error : snapshot.errors) {
             diagnostics.push_back(make_diag(
                 SessionDiagnostic::Severity::Warning,
                 "settings:" +
@@ -1303,6 +1304,7 @@ struct PreparedAssemblyTarget final {
         co_return std::unexpected(std::move(trusted_manager.error()));
     }
     snapshot.manager = std::move(*trusted_manager);
+    snapshot.errors = snapshot.manager.errors();
     // A project-scope load error recorded during the trust flip must surface on
     // the success path too, not only through the failure-path context.
     add_settings_diagnostics();
@@ -1551,14 +1553,11 @@ struct PreparedAssemblyTarget final {
     // so the appended entry and the Agent's live state never diverge. The
     // Agent clamps the request at construction (ADR 0034 / #352), so the
     // persisted initial entries below carry the same clamped value.
-    const std::string effective_thinking_level = ai::clamp_thinking_level_string(
-        request_model,
-        is_resume && prepared_resume.resume.has_thinking_level_entry
-            ? prepared_resume.resume.thinking_level
-            : plan.in_memory_branch_seed &&
-                    plan.in_memory_branch_seed->context.has_thinking_level_entry
-                ? plan.in_memory_branch_seed->context.thinking_level
-                : settings.default_thinking_level.value_or("medium"));
+    const std::string effective_thinking_level = ai::clamp_thinking_level_string(request_model,
+            is_resume && prepared_resume.resume.has_thinking_level_entry ? prepared_resume.resume.thinking_level
+            : plan.in_memory_branch_seed && plan.in_memory_branch_seed->context.has_thinking_level_entry
+                    ? plan.in_memory_branch_seed->context.thinking_level
+                    : scoped_thinking_level.value_or(settings.default_thinking_level.value_or("medium")));
 
     // 9. Publish the session and its initial entries through one reserved
     // Runtime worker admission. SessionStore construction, JSONL parsing,
@@ -1637,11 +1636,6 @@ struct PreparedAssemblyTarget final {
                                         ? std::nullopt
                                         : std::optional<std::string>{seed.context.thinking_level};
                         open.topology = harness::session::SessionTopology::Branched;
-                        for (const auto& message : open.history) {
-                            if (auto appended = open.store->append(message); !appended) {
-                                return fail(appended.error());
-                            }
-                        }
                     }
                     const bool placeholder_model = provider == agent::detail::kDefaultModel.provider &&
                                                    model == agent::detail::kDefaultModel.id;
@@ -1666,6 +1660,7 @@ struct PreparedAssemblyTarget final {
                         return fail(appended.error());
                     }
                 }
+                open.context_thinking_level = effective_thinking_level;
                 return support::Expected<OpenSession>{std::move(open)};
             }));
     if (!session_publication) {
@@ -1756,11 +1751,17 @@ struct PreparedAssemblyTarget final {
         .workspace = workspace,
         .metadata = metadata,
     };
-    co_return SessionFactory::publish(std::move(assembly),
+    auto published = co_await SessionFactory::publish(std::move(assembly),
             std::move(diagnostics),
             std::move(model_fallback_message),
             std::move(theme_documents),
             std::move(identity));
+    if (!published) {
+        cleanup_on_failure();
+        co_await discard_unpublished_session();
+        co_return std::unexpected(std::move(published.error()));
+    }
+    co_return std::move(*published);
 }
 
 [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>> finish_creation_async(
@@ -1791,13 +1792,18 @@ ProjectResourceFileSystems SessionFactory::make_project_resource_filesystems(
             home_directory);
 }
 
-coding_agent::CreateAgentSessionResult SessionFactory::publish(AgentSessionAssembly assembly,
+boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>> SessionFactory::publish(
+        AgentSessionAssembly assembly,
         std::vector<coding_agent::SessionDiagnostic> diagnostics,
         std::optional<std::string> model_fallback_message,
         std::vector<coding_agent::LoadedThemeResource> theme_resources,
         coding_agent::ResolvedSessionIdentity identity) {
-    return coding_agent::CreateAgentSessionResult{
-            .session = coding_agent::AgentSession::bind_assembly(std::move(assembly)),
+    auto session = co_await coding_agent::AgentSession::bind_assembly(std::move(assembly));
+    if (!session) {
+        co_return std::unexpected(session.error());
+    }
+    co_return coding_agent::CreateAgentSessionResult{
+            .session = std::move(*session),
             .diagnostics = std::move(diagnostics),
             .model_fallback_message = std::move(model_fallback_message),
             .theme_resources = std::move(theme_resources),

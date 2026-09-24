@@ -1557,7 +1557,10 @@ TEST_CASE("Native TUI clipboard images become distinct supported temporary paths
 
     const auto snapshot = created->session->snapshot();
     REQUIRE(snapshot.agent_state.messages.size() >= 2);
-    const auto* user = std::get_if<ai::UserMessage>(&snapshot.agent_state.messages[0]);
+    const auto* system = std::get_if<ai::SystemMessage>(&snapshot.agent_state.messages[0]);
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
+    const auto* user = std::get_if<ai::UserMessage>(&snapshot.agent_state.messages[1]);
     REQUIRE(user != nullptr);
     std::istringstream paths{ai::text_from_user_message(*user)};
     std::vector<std::filesystem::path> inserted_paths;
@@ -1630,8 +1633,11 @@ TEST_CASE("Native TUI clipboard falls back to text at the cursor and ignores rea
     drain_ready(io);
 
     const auto snapshot = created->session->snapshot();
-    const auto& user = std::get<ai::UserMessage>(snapshot.agent_state.messages[0]);
-    const auto pasted_text = ai::text_from_user_message(user);
+    REQUIRE(snapshot.agent_state.messages.size() == 3);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    const auto* user = std::get_if<ai::UserMessage>(&snapshot.agent_state.messages[1]);
+    REQUIRE(user != nullptr);
+    const auto pasted_text = ai::text_from_user_message(*user);
     // Typed uppercase letters keep their case (pi's "shift+letter produces
     // uppercase" contract; the decoder canonicalizes identifiers to
     // lowercase but inserted text preserves the typed case).
@@ -1670,9 +1676,11 @@ TEST_CASE("Native TUI clipboard falls back to text at the cursor and ignores rea
     REQUIRE(failed_terminal.inject_input("\r"));
     drain_ready(failed_io);
     const auto failed_snapshot = failed_session->session->snapshot();
-    CHECK(ai::text_from_user_message(
-        std::get<ai::UserMessage>(failed_snapshot.agent_state.messages[0])) ==
-        "unchanged");
+    REQUIRE(failed_snapshot.agent_state.messages.size() == 3);
+    CHECK(std::holds_alternative<ai::SystemMessage>(failed_snapshot.agent_state.messages[0]));
+    const auto* failed_user = std::get_if<ai::UserMessage>(&failed_snapshot.agent_state.messages[1]);
+    REQUIRE(failed_user != nullptr);
+    CHECK(ai::text_from_user_message(*failed_user) == "unchanged");
     CHECK(visible_screen(failed_terminal).find("clipboard image unavailable") == std::string::npos);
     REQUIRE(failed_terminal.inject_input("\x04"));
     drain_ready(failed_io);
@@ -2065,7 +2073,7 @@ TEST_CASE("Native TUI interrupt cancels autocomplete before aborting active work
     REQUIRE(terminal.flush_input());
     drain_ready(io);
     CHECK(visible_screen(terminal).find("draft") != std::string::npos);
-    CHECK(created->session->message_count() == 4);
+    CHECK(created->session->message_count() == 5);
 
     REQUIRE(terminal.inject_input("\x03\x04"));
     drain_ready(io);
@@ -2185,7 +2193,7 @@ TEST_CASE("Native TUI waits for cancelled tool quiescence before accepting the n
 
     REQUIRE(terminal.inject_input("\x03recover after tool abort\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 2);
+    CHECK(created->session->message_count() == 3);
     CHECK(visible_screen(terminal).find("A prompt is already in flight") !=
         std::string::npos);
 
@@ -2201,7 +2209,7 @@ TEST_CASE("Native TUI waits for cancelled tool quiescence before accepting the n
 
     REQUIRE(terminal.inject_input("\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 6);
+    CHECK(created->session->message_count() == 7);
     CHECK(visible_screen(terminal).find("recovered after tool abort") !=
         std::string::npos);
 
@@ -2266,7 +2274,7 @@ TEST_CASE("Native TUI distinguishes subscriber diagnostics and remains usable",
     REQUIRE(rollover_subscription);
     REQUIRE(terminal.inject_input("recover subscriber\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 4);
+    CHECK(created->session->message_count() == 5);
     CHECK(visible_screen(terminal).find("late subscriber rollover") !=
         std::string::npos);
     CHECK(visible_screen(terminal).find("fake: recover subscriber") !=
@@ -2319,7 +2327,7 @@ TEST_CASE("Native TUI distinguishes persistence failures and remains usable",
     // recovering. Live state keeps the failed prompt's two messages.
     REQUIRE(terminal.inject_input("\x03recover persistence\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 2);
+    CHECK(created->session->message_count() == 3);
     CHECK(visible_screen(terminal).find(
               "session persistence failed; rejecting new prompt") !=
         std::string::npos);
@@ -2390,7 +2398,7 @@ TEST_CASE("Native TUI renders accepted provider outcomes once and remains usable
 
     REQUIRE(terminal.inject_input("recover\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 10);
+    CHECK(created->session->message_count() == 11);
     CHECK(visible_screen(terminal).find("recovered after accepted outcomes") !=
         std::string::npos);
 
@@ -2579,7 +2587,7 @@ TEST_CASE("Native TUI submits two fresh prompts and replaces streamed assistant 
 
     REQUIRE(terminal.inject_input("first prompt\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 2);
+    CHECK(created->session->message_count() == 3);
     auto screen = visible_screen(terminal);
     // The user box and the assistant reply both carry the prompt text.
     CHECK(count_text(screen, "first prompt") == 2);
@@ -2587,7 +2595,7 @@ TEST_CASE("Native TUI submits two fresh prompts and replaces streamed assistant 
 
     REQUIRE(terminal.inject_input("second prompt\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 4);
+    CHECK(created->session->message_count() == 5);
     screen = visible_screen(terminal);
     CHECK(count_text(screen, "fake: first prompt") == 1);
     CHECK(count_text(screen, "fake: second prompt") == 1);
@@ -3245,7 +3253,7 @@ TEST_CASE("Native TUI queues batched submissions across deferred prompt dispatch
     REQUIRE(terminal.inject_input("first batched\rsecond batched\r"));
     drain_ready(io);
     REQUIRE(client_pointer->started);
-    CHECK(created->session->message_count() == 1);
+    CHECK(created->session->message_count() == 2);
     auto screen = visible_screen(terminal);
     CHECK(screen.find("first batched") != std::string::npos);
     CHECK(screen.find("Steering: second batched") != std::string::npos);
@@ -3253,11 +3261,11 @@ TEST_CASE("Native TUI queues batched submissions across deferred prompt dispatch
 
     client_pointer->release();
     drain_ready(io);
-    CHECK(created->session->message_count() == 3);
+    CHECK(created->session->message_count() == 4);
     CHECK(created->session->snapshot().agent_state.input_queues.steering.messages.empty());
     client_pointer->release();
     drain_ready(io);
-    CHECK(created->session->message_count() == 4);
+    CHECK(created->session->message_count() == 5);
     screen = visible_screen(terminal);
     CHECK(screen.find("first batched") != std::string::npos);
     CHECK(screen.find("second batched") != std::string::npos);
@@ -3319,7 +3327,7 @@ TEST_CASE("Native TUI replaces one visible assistant entry during incremental st
     // is visible and the old streaming text is gone.
     CHECK(screen.find("new line 1") != std::string::npos);
     CHECK(screen.find("old line 1") == std::string::npos);
-    CHECK(created->session->message_count() == 2);
+    CHECK(created->session->message_count() == 3);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -3402,6 +3410,11 @@ TEST_CASE("Native TUI routes slash commands without submitting builtins as Agent
             run_result.emplace(std::move(result));
         });
     drain_ready(io);
+    const auto initial_messages = created->session->snapshot().agent_state.messages;
+    REQUIRE(initial_messages.size() == 1);
+    const auto* system = std::get_if<ai::SystemMessage>(&initial_messages.front());
+    REQUIRE(system != nullptr);
+    CHECK(system->content.empty());
 
     // `/session` binds to the session-info presentation without touching
     // Agent Session history (pi `handleSessionCommand`).
@@ -3412,7 +3425,7 @@ TEST_CASE("Native TUI routes slash commands without submitting builtins as Agent
     CHECK(screen.find("ID: " + created->session->session_id()) != std::string::npos);
     CHECK(screen.find("File: In-memory") != std::string::npos);
     CHECK(screen.find("Messages") != std::string::npos);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     // `/name` binds to the session-name flow (bare command shows the usage
     // warning; pi `handleNameCommand`).
@@ -3420,13 +3433,13 @@ TEST_CASE("Native TUI routes slash commands without submitting builtins as Agent
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(screen.find("Usage: /name <name>") != std::string::npos);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     REQUIRE(terminal.inject_input("/name hello\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(screen.find("Session name set: hello") != std::string::npos);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     // `/hotkeys` renders the pi-shaped chat block inline without history change.
     REQUIRE(terminal.inject_input("/hotkeys\r"));
@@ -3434,7 +3447,7 @@ TEST_CASE("Native TUI routes slash commands without submitting builtins as Agent
     screen = visible_screen(terminal);
     CHECK(screen.find("/  Slash commands") != std::string::npos);
     CHECK(screen.find("Run bash command (excluded from context)") != std::string::npos);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     // Builtins execute in place: help renders its command summary, malformed
     // arguments are rejected, clear invokes the session action seam, and an
@@ -3442,7 +3455,7 @@ TEST_CASE("Native TUI routes slash commands without submitting builtins as Agent
     // fall-through, issue #792).
     REQUIRE(terminal.inject_input("/help\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
     screen = visible_screen(terminal);
     CHECK(screen.find("Available commands:") != std::string::npos);
     CHECK(screen.find("/name") != std::string::npos);
@@ -3450,14 +3463,14 @@ TEST_CASE("Native TUI routes slash commands without submitting builtins as Agent
 
     REQUIRE(terminal.inject_input("/commands session\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
     CHECK(visible_screen(terminal).find("does not accept arguments") != std::string::npos);
 
     (void)terminal.check_clear_screen_called();
     REQUIRE(terminal.inject_input("/clear\r"));
     drain_ready(io);
     CHECK_FALSE(terminal.check_clear_screen_called());
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     REQUIRE(terminal.inject_input("/missing\r"));
     REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fake: /missing") != std::string::npos; }));
@@ -3852,7 +3865,7 @@ TEST_CASE("Native TUI settings opens only supported overlays and hotkeys renders
     CHECK(screen.find("Thinking level") != std::string::npos);
     CHECK(screen.find("Default project trust") != std::string::npos);
     CHECK(screen.find("Theme") != std::string::npos);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     // The Theme item opens the single-mode theme submenu with the `(current)`
     // marker on the active theme (index 5).
@@ -3887,7 +3900,7 @@ TEST_CASE("Native TUI settings opens only supported overlays and hotkeys renders
     CHECK(screen.find("Edit message in external editor") != std::string::npos);
     // The unassembled clipboard action renders Unbound on its pi row.
     CHECK(screen.find("Unbound  Paste image or text from clipboard") != std::string::npos);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     REQUIRE(terminal.inject_input("\x1b[17~"));
     drain_ready(io);
@@ -3925,11 +3938,11 @@ TEST_CASE("Native TUI retains bounded terminal provider failures and allows retr
     CHECK(screen.find("sk-abcdefghijklmnopqrstuvwxyz123456") == std::string::npos);
     CHECK(screen.find("Error: provider failed") != std::string::npos);
     CHECK(screen.size() < 12000);
-    CHECK(created->session->message_count() == 2);
+    CHECK(created->session->message_count() == 3);
 
     REQUIRE(terminal.inject_input("retry\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 4);
+    CHECK(created->session->message_count() == 5);
     CHECK(visible_screen(terminal).find("recovered") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
@@ -4158,11 +4171,11 @@ TEST_CASE("Native TUI /compact and /trust bind to their runtime flows without ch
     // ignored (pi `handleCompactCommand`) and history is untouched.
     REQUIRE(terminal.inject_input("/compact\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     REQUIRE(terminal.inject_input("/compact summarize everything\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     // `/trust` opens the trust selector over getProjectTrustOptions; the
     // prompt renders the workspace and the pi status persists on selection.
@@ -4170,14 +4183,14 @@ TEST_CASE("Native TUI /compact and /trust bind to their runtime flows without ch
     drain_ready(io);
     auto screen = visible_screen(terminal);
     CHECK(screen.find("Trust project folder?") != std::string::npos);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     // Choose "Do not trust" (the last option) and confirm.
     REQUIRE(terminal.inject_input("\x1b[B\x1b[B\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(screen.find("Saved trust decision: untrusted. Restart pike for this to take effect.") != std::string::npos);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -4234,7 +4247,7 @@ TEST_CASE("Native TUI exit during an admitted manual compaction waits for the co
     REQUIRE(terminal.inject_input("hello\r"));
     drain_ready(io);
     REQUIRE(terminal.inject_input("again\r"));
-    REQUIRE(tests::pump_until(io, [&] { return gated->request_count == 2 && created->session->message_count() == 4; }));
+    REQUIRE(tests::pump_until(io, [&] { return gated->request_count == 2 && created->session->message_count() == 5; }));
 
     // The /compact summarization request is admitted and gated.
     REQUIRE(terminal.inject_input("/compact\r"));
@@ -4355,10 +4368,11 @@ TEST_CASE("Native TUI command autocomplete offers every accepted slash spelling"
     const auto clear_screen = visible_screen(terminal);
     CHECK(clear_screen.find("/clear") != std::string::npos);
 
-    // The submission clears the session instead of running the skill.
+    // The submission clears the session instead of running the skill. The
+    // leading SystemMessage remains part of the rebuilt prompt contract.
     REQUIRE(terminal.inject_input("\r"));
     drain_ready(io);
-    CHECK(created->session->message_count() == 0);
+    CHECK(created->session->message_count() == 1);
 
     // pi's catalog carries `thinking`; the palette offers it (issue #791).
     REQUIRE(terminal.inject_input("/thin"));

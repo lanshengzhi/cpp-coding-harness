@@ -13,10 +13,12 @@ namespace cch::coding_agent {
 ///
 /// Follows the Agent Skills standard format used by pi:
 /// prose intro paragraph, wrapped XML, one <skill> per entry with
-/// <name>, <description>, <location> children.
+/// <name>, <description>, <location> children. `file_read_tool` selects pi's
+/// load-instruction wording ("Use the read tool ..." vs "Use bash ...").
 ///
 /// Returns an empty string when no visible skills remain.
-[[nodiscard]] std::string formatSkillsForPrompt(const std::vector<Skill>& skills);
+[[nodiscard]] std::string formatSkillsForPrompt(
+        const std::vector<Skill>& skills, std::string_view file_read_tool = "read");
 
 /// Format a single skill invocation as a <skill> XML block for
 /// /skill:name command expansion (pi `agent-session.ts` `_expandSkillCommand`).

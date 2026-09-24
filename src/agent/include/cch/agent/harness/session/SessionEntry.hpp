@@ -28,7 +28,6 @@ enum class SessionEntryKind {
     Message,
     ModelChange,
     ThinkingLevelChange,
-    ActiveToolsChange,
     Custom,
     CustomMessage,
     Label,
@@ -46,10 +45,6 @@ struct ModelChangeValue {
 
 struct ThinkingLevelChangeValue {
     std::string thinking_level;
-};
-
-struct ActiveToolsChangeValue {
-    std::vector<std::string> active_tool_names;
 };
 
 struct CustomEntryValue {
@@ -82,7 +77,8 @@ struct CompactionEntryValue {
     std::optional<std::string> first_kept_entry_id;
     std::size_t tokens_before{0};
     /// pi `retainedTail?: AgentMessage[]` — recent messages kept on the entry
-    /// itself; context rebuild projects compactionSummary + retained tail.
+    /// itself; context rebuild projects retained system updates, the summary,
+    /// then the remaining tail.
     std::optional<std::vector<ai::MessageVariant>> retained_tail{};
     std::optional<support::JsonValue> details{};
     std::optional<ai::Usage> usage{};
@@ -106,18 +102,16 @@ struct LeafEntryValue {
     std::optional<std::string> target_id;
 };
 
-using SessionEntryValue = std::variant<
-    std::monostate,
-    ModelChangeValue,
-    ThinkingLevelChangeValue,
-    ActiveToolsChangeValue,
-    CustomEntryValue,
-    CustomMessageEntryValue,
-    LabelEntryValue,
-    CompactionEntryValue,
-    BranchSummaryEntryValue,
-    SessionInfoEntryValue,
-    LeafEntryValue>;
+using SessionEntryValue = std::variant<std::monostate,
+        ModelChangeValue,
+        ThinkingLevelChangeValue,
+        CustomEntryValue,
+        CustomMessageEntryValue,
+        LabelEntryValue,
+        CompactionEntryValue,
+        BranchSummaryEntryValue,
+        SessionInfoEntryValue,
+        LeafEntryValue>;
 
 struct SessionEntry {
     SessionEntryKind kind{SessionEntryKind::Unknown};

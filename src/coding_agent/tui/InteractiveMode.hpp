@@ -57,9 +57,11 @@ struct WriteClipboardAction {
 struct SuspendProcessAction {};
 
 /// Report session-creation diagnostics on the boot path (pi
-/// `reportDiagnostics`); the host wires this to stderr.
+/// `reportDiagnostics`). The action always crosses the host seam; diagnostics
+/// routed to the interactive chat set `rendered_in_tui` to suppress stderr.
 struct ReportBootDiagnosticsAction {
     std::vector<SessionDiagnostic> diagnostics;
+    bool rendered_in_tui{false};
 };
 
 /// Report boot-session creation failure (pi `print_creation_failure`); the

@@ -34,6 +34,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -146,6 +147,7 @@ struct ModelFlowFixture {
     std::unique_ptr<coding_agent::AgentSession> session;
     std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
     std::optional<coding_agent::SettingsManager> settings{std::nullopt};
+    std::optional<coding_agent::tui::ModelCatalogRefreshResult> refresh_result_for_test;
     std::shared_ptr<coding_agent::tui::ModelFlowController> flows;
 
     ModelFlowFixture() {
@@ -206,6 +208,12 @@ struct ModelFlowFixture {
             return session_pointer;
         };
         hooks.live_theme = [this]() -> const coding_agent::tui::LiveTheme& { return theme; };
+        hooks.show_warning = [this](std::string text) { warnings.push_back(std::move(text)); };
+        if (refresh_result_for_test) {
+            const auto result = *refresh_result_for_test;
+            hooks.refresh_model_catalogs = [result](std::shared_ptr<coding_agent::ModelRuntime>)
+                    -> boost::asio::awaitable<coding_agent::tui::ModelCatalogRefreshResult> { co_return result; };
+        }
         flows = std::make_shared<coding_agent::tui::ModelFlowController>(
             io.get_executor(),
             presenter,
@@ -217,6 +225,8 @@ struct ModelFlowFixture {
     }
 
     void drain() { drain_ready(io); }
+
+    std::vector<std::string> warnings;
 };
 
 } // namespace
@@ -237,7 +247,8 @@ TEST_CASE("ModelFlowController cycles forward and backward with pi statuses thro
     fixture.flows->cycle_model("backward");
     fixture.drain();
     CHECK(fixture.session->snapshot().agent_state.model.id == "alpha-1");
-    CHECK(fixture.presenter.statuses.back() == "Switched to Alpha Reasoning (thinking: medium)");
+    CHECK(fixture.presenter.statuses.back() == "Switched to Alpha Reasoning");
+    CHECK(fixture.session->snapshot().agent_state.thinking_level == "off");
     CHECK(fixture.presenter.errors.empty());
     // The cycle never touches the prompt slot.
     CHECK(fixture.presenter.slot_replacements == 0);
@@ -289,6 +300,30 @@ TEST_CASE("ModelFlowController switches on an exact /model reference and opens t
         fixture.presenter.slot);
     CHECK(selector != nullptr);
     CHECK(fixture.presenter.errors.empty());
+}
+
+TEST_CASE("ModelFlowController surfaces a runtime catalog diagnostic after a /model refresh",
+        "[coding_agent][tui][model-flows][model-refresh-diagnostic][spec]") {
+    ModelFlowFixture fixture;
+    fixture.write_models(kReasoningAndPlainKeyed);
+    fixture.kimi_guard.set("dummy-kimi-key");
+    fixture.boot();
+
+    // This malformed built-in overlay falls back to the built-in provider
+    // while ModelRuntime keeps the provider-composition diagnostic.
+    fixture.write_models(R"({"providers":{"kimi-coding":{"name":"Broken Kimi"}}})");
+    // A cache miss follows pi's refresh path. `get_available()` succeeds with
+    // the cached models even though provider recomposition kept a diagnostic.
+    fixture.flows->open_model_selector("no-such-model");
+    fixture.drain();
+
+    REQUIRE(fixture.warnings.size() == 1);
+    CHECK(fixture.warnings.front().find("must specify") != std::string::npos);
+    CHECK(fixture.presenter.errors.empty());
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 1);
+    CHECK(std::dynamic_pointer_cast<coding_agent::tui::ModelSelectorComponent>(fixture.presenter.slot) != nullptr);
 }
 
 TEST_CASE("ModelFlowController opens the scoped-models selector through the presenter",
@@ -403,4 +438,127 @@ TEST_CASE("ModelFlowController builds the /model completion snapshot from the sc
     completion = fixture.flows->model_completion();
     REQUIRE(completion->size() == 1);
     CHECK(completion->front().id == "alpha-1");
+}
+
+TEST_CASE("The /model lookup matches the cached snapshot first and only refreshes on a miss outside the scope",
+        "[coding_agent][tui][model-flows][issue774][spec]") {
+    ModelFlowFixture fixture;
+    fixture.write_models(kReasoningAndPlainKeyed);
+    fixture.boot();
+
+    // pi `findExactModelMatch` cached branch: a snapshot hit switches without a
+    // catalog refresh and reports only the session-only `Model: <id>` status.
+    fixture.flows->open_model_selector("beta/beta-1");
+    fixture.drain();
+    CHECK(fixture.session->snapshot().agent_state.model.id == "beta-1");
+    REQUIRE_FALSE(fixture.presenter.statuses.empty());
+    CHECK(fixture.presenter.statuses.back() == "Model: beta-1");
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 0);
+    CHECK(fixture.warnings.empty());
+    // Session-only: the switch writes no settings default (pi
+    // `setModel(model, { persist: false })`).
+    CHECK(fixture.read_settings().empty());
+
+    // pi's miss path: one `Refreshing model catalogs…` status, then the
+    // cached-search fallback opens the selector pre-filtered.
+    fixture.presenter.statuses.clear();
+    fixture.flows->open_model_selector("zzz");
+    fixture.drain();
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 1);
+    CHECK(fixture.presenter.slot != nullptr);
+    CHECK(fixture.presenter.errors.empty());
+    // A clean refresh warns about nothing.
+    CHECK(fixture.warnings.empty());
+    CHECK(fixture.session->snapshot().agent_state.model.id == "beta-1");
+}
+
+TEST_CASE("A /model refresh timeout warns and searches the cached model catalog",
+        "[coding_agent][tui][model-flows][issue774][spec]") {
+    ModelFlowFixture fixture;
+    fixture.write_models(kReasoningAndPlainKeyed);
+    fixture.refresh_result_for_test = coding_agent::tui::ModelCatalogRefreshResult{.timed_out = true};
+    fixture.boot();
+
+    fixture.flows->open_model_selector("beta");
+    fixture.drain();
+
+    REQUIRE(fixture.warnings.size() == 1);
+    CHECK(fixture.warnings.front() == "Model refresh timed out; searching cached models.");
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 1);
+    const auto selector = std::dynamic_pointer_cast<coding_agent::tui::ModelSelectorComponent>(fixture.presenter.slot);
+    REQUIRE(selector != nullptr);
+    const auto rendered = selector->render(100);
+    REQUIRE(rendered.has_value());
+    std::string text;
+    for (const auto& line : rendered->lines)
+        text += line;
+    CHECK(text.find("Beta Plain") != std::string::npos);
+    CHECK(fixture.presenter.errors.empty());
+}
+
+TEST_CASE("A /model refresh failure warns with the runtime message and searches the cached model catalog",
+        "[coding_agent][tui][model-flows][issue774][spec]") {
+    ModelFlowFixture fixture;
+    fixture.write_models(kReasoningAndPlainKeyed);
+    fixture.refresh_result_for_test = coding_agent::tui::ModelCatalogRefreshResult{
+            .timed_out = false,
+            .error_message = "credential store unavailable",
+    };
+    fixture.boot();
+
+    fixture.flows->open_model_selector("beta");
+    fixture.drain();
+
+    REQUIRE(fixture.warnings.size() == 1);
+    CHECK(fixture.warnings.front() == "Could not refresh model catalogs: credential store unavailable");
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 1);
+    const auto selector = std::dynamic_pointer_cast<coding_agent::tui::ModelSelectorComponent>(fixture.presenter.slot);
+    REQUIRE(selector != nullptr);
+    const auto rendered = selector->render(100);
+    REQUIRE(rendered.has_value());
+    std::string text;
+    for (const auto& line : rendered->lines)
+        text += line;
+    CHECK(text.find("Beta Plain") != std::string::npos);
+    CHECK(fixture.presenter.errors.empty());
+}
+
+TEST_CASE("A /model miss inside the session scope opens the selector without refreshing",
+        "[coding_agent][tui][model-flows][issue774][spec]") {
+    ModelFlowFixture fixture;
+    fixture.write_models(kReasoningAndPlainKeyed);
+    fixture.boot();
+    const auto scoped = fixture.session->model_runtime()->model("alpha", "alpha-1");
+    REQUIRE(scoped.has_value());
+    fixture.session->set_scoped_models({coding_agent::ScopedModel{.model = *scoped}});
+    REQUIRE(fixture.session->scoped_models().size() == 1);
+
+    // A scoped hit is matched against the scope without a refresh.
+    fixture.flows->open_model_selector("alpha/alpha-1");
+    fixture.drain();
+    REQUIRE_FALSE(fixture.presenter.statuses.empty());
+    CHECK(fixture.presenter.statuses.back() == "Model: alpha-1");
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 0);
+
+    // pi `findExactModelMatch`: a miss inside the scoped set returns without a
+    // refresh, and `handleModelCommand` opens the selector pre-filtered.
+    fixture.presenter.statuses.clear();
+    fixture.flows->open_model_selector("beta/beta-1");
+    fixture.drain();
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 0);
+    CHECK(fixture.presenter.slot != nullptr);
+    CHECK(fixture.presenter.errors.empty());
+    CHECK(fixture.session->snapshot().agent_state.model.id == "alpha-1");
 }

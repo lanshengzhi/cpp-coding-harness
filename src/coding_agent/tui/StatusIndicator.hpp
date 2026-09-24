@@ -5,10 +5,12 @@
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Loader.hpp>
+#include <cch/tui/Style.hpp>
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace cch::coding_agent::tui {
@@ -23,18 +25,30 @@ public:
     enum class Kind { Working, Retry, Compaction };
 
     /// Constructs the indicator; `request_render` fires on every animation
-    /// frame and countdown tick (pi's Loader `requestRender`).
-    StatusIndicator(
-        Kind kind,
-        const LiveTheme& theme,
-        cch::tui::RenderRequestSink request_render,
-        std::string message);
+    /// frame and countdown tick (pi's Loader `requestRender`). `working_color`
+    /// (pi's embedded `WorkingStatusIndicator` colorFn) recolors both the
+    /// spinner and the message with the thinking-level border color when the
+    /// indicator embeds into the editor border.
+    StatusIndicator(Kind kind,
+            const LiveTheme& theme,
+            cch::tui::RenderRequestSink request_render,
+            std::string message,
+            cch::tui::TextStyleHook working_color = {});
 
     [[nodiscard]] Kind kind() const { return kind_; }
 
     /// pi `StatusIndicator.setMessage` (the retry countdown rewrites the
     /// message on every tick).
     void set_message(std::string message);
+
+    /// pi `StatusIndicator.renderInBorder`: the loader's message row without
+    /// the leading pad, trailing spaces trimmed, truncated to `width` with no
+    /// ellipsis (pi `truncateToWidth(_, width, "")).
+    [[nodiscard]] support::Expected<std::string> render_in_border(std::size_t width);
+
+    /// pi `StatusIndicator.renderSpinnerInBorder`: the styled spinner frame
+    /// alone, truncated to `width` with no ellipsis.
+    [[nodiscard]] support::Expected<std::string> render_spinner_in_border(std::size_t width);
 
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override;
@@ -72,5 +86,16 @@ public:
 [[nodiscard]] std::string compaction_status_message(
     const cch::tui::KeybindingRegistry& keybindings,
     std::string_view reason);
+
+/// pi `CustomEditor.renderTopBorder` (embedWorkingStatus): the editor's top
+/// border line carrying the embedded status indicator — `── ` plus the status
+/// row, the `↑ N more` overflow label centered in the trailing rule when it
+/// fits, spinner-only when the status cannot fit the width. `border_style`
+/// styles the border runs (pi `this.borderColor`); nullopt falls back to the
+/// default border line the editor computes (pi `super.renderTopBorder`).
+[[nodiscard]] support::Expected<std::optional<std::string>> embedded_status_top_border(StatusIndicator& indicator,
+        cch::tui::TextStyleHook& border_style,
+        std::size_t width,
+        std::size_t hidden_line_count);
 
 } // namespace cch::coding_agent::tui
