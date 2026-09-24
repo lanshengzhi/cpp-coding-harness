@@ -1,6 +1,7 @@
 #include <cch/ai/Models.hpp>
 
 #include "DefaultModelsJson.hpp"
+#include "ai/JsonAccess.hpp"
 #include "support/Json.hpp"
 #include "ai/auth/OpenAICodexOAuth.hpp"
 #include "ai/auth/OpenRouterOAuth.hpp"
@@ -15,16 +16,6 @@
 
 namespace cch::ai {
 namespace {
-
-[[nodiscard]] std::optional<double> number_from_catalog(
-        const support::JsonValue::object_t& object, std::string_view key) {
-    const auto it = object.find(std::string{key});
-    if (it == object.end()) {
-        return std::nullopt;
-    }
-    const auto* value = it->second.get_if<double>();
-    return value == nullptr ? std::nullopt : std::optional<double>{*value};
-}
 
 [[nodiscard]] std::vector<ModelCostTier> cost_tiers_from_catalog(const support::JsonValue::object_t& cost_obj) {
     std::vector<ModelCostTier> tiers;
@@ -42,11 +33,11 @@ namespace {
         if (tier_obj == nullptr) {
             continue;
         }
-        const auto input = number_from_catalog(*tier_obj, "input");
-        const auto output = number_from_catalog(*tier_obj, "output");
-        const auto cache_read = number_from_catalog(*tier_obj, "cacheRead");
-        const auto cache_write = number_from_catalog(*tier_obj, "cacheWrite");
-        const auto input_tokens_above = number_from_catalog(*tier_obj, "inputTokensAbove");
+        const auto input = json_number_member(*tier_obj, "input");
+        const auto output = json_number_member(*tier_obj, "output");
+        const auto cache_read = json_number_member(*tier_obj, "cacheRead");
+        const auto cache_write = json_number_member(*tier_obj, "cacheWrite");
+        const auto input_tokens_above = json_number_member(*tier_obj, "inputTokensAbove");
         if (!input || !output || !cache_read || !cache_write || !input_tokens_above) {
             continue;
         }
@@ -59,29 +50,6 @@ namespace {
         tiers.push_back(std::move(tier));
     }
     return tiers;
-}
-
-[[nodiscard]] std::optional<bool> bool_member(const support::JsonValue::object_t& object, std::string_view key) {
-    const auto found = object.find(std::string{key});
-    if (found == object.end()) {
-        return std::nullopt;
-    }
-    if (const auto* value = found->second.get_if<bool>()) {
-        return *value;
-    }
-    return std::nullopt;
-}
-
-[[nodiscard]] std::optional<std::string_view> string_member(
-        const support::JsonValue::object_t& object, std::string_view key) {
-    const auto found = object.find(std::string{key});
-    if (found == object.end()) {
-        return std::nullopt;
-    }
-    if (const auto* value = found->second.get_if<std::string>()) {
-        return *value;
-    }
-    return std::nullopt;
 }
 
 [[nodiscard]] std::optional<ModelCompatVariant> model_compat_from_catalog(
@@ -98,15 +66,15 @@ namespace {
     if (api == "anthropic-messages") {
         AnthropicMessagesCompat compat;
         bool populated = false;
-        if (const auto value = bool_member(*compat_obj, "forceAdaptiveThinking"); value.has_value()) {
+        if (const auto value = json_bool_member(*compat_obj, "forceAdaptiveThinking"); value.has_value()) {
             compat.force_adaptive_thinking = *value;
             populated = true;
         }
-        if (const auto value = bool_member(*compat_obj, "allowEmptySignature"); value.has_value()) {
+        if (const auto value = json_bool_member(*compat_obj, "allowEmptySignature"); value.has_value()) {
             compat.allow_empty_signature = *value;
             populated = true;
         }
-        if (const auto value = bool_member(*compat_obj, "supportsTemperature"); value.has_value()) {
+        if (const auto value = json_bool_member(*compat_obj, "supportsTemperature"); value.has_value()) {
             compat.supports_temperature = *value;
             populated = true;
         }
@@ -119,19 +87,19 @@ namespace {
     if (api == "openai-completions") {
         OpenAICompletionsCompat compat;
         bool populated = false;
-        if (const auto value = bool_member(*compat_obj, "supportsStore"); value.has_value()) {
+        if (const auto value = json_bool_member(*compat_obj, "supportsStore"); value.has_value()) {
             compat.supports_store = *value;
             populated = true;
         }
-        if (const auto value = bool_member(*compat_obj, "supportsDeveloperRole"); value.has_value()) {
+        if (const auto value = json_bool_member(*compat_obj, "supportsDeveloperRole"); value.has_value()) {
             compat.supports_developer_role = *value;
             populated = true;
         }
-        if (const auto value = bool_member(*compat_obj, "supportsStrictMode"); value.has_value()) {
+        if (const auto value = json_bool_member(*compat_obj, "supportsStrictMode"); value.has_value()) {
             compat.supports_strict_mode = *value;
             populated = true;
         }
-        if (const auto value = string_member(*compat_obj, "maxTokensField"); value.has_value()) {
+        if (const auto value = json_string_member(*compat_obj, "maxTokensField"); value.has_value()) {
             if (*value == "max_tokens") {
                 compat.max_tokens_field = OpenAICompletionsMaxTokensField::MaxTokens;
                 populated = true;
@@ -140,12 +108,12 @@ namespace {
                 populated = true;
             }
         }
-        if (const auto value = bool_member(*compat_obj, "requiresReasoningContentOnAssistantMessages");
+        if (const auto value = json_bool_member(*compat_obj, "requiresReasoningContentOnAssistantMessages");
                 value.has_value()) {
             compat.requires_reasoning_content_on_assistant_messages = *value;
             populated = true;
         }
-        if (const auto value = string_member(*compat_obj, "thinkingFormat"); value.has_value()) {
+        if (const auto value = json_string_member(*compat_obj, "thinkingFormat"); value.has_value()) {
             if (*value == "openai") {
                 compat.thinking_format = OpenAICompletionsThinkingFormat::OpenAI;
                 populated = true;
@@ -160,16 +128,16 @@ namespace {
                 populated = true;
             }
         }
-        if (const auto value = string_member(*compat_obj, "cacheControlFormat");
+        if (const auto value = json_string_member(*compat_obj, "cacheControlFormat");
                 value.has_value() && *value == "anthropic") {
             compat.cache_control_format = OpenAICompletionsCacheControlFormat::Anthropic;
             populated = true;
         }
-        if (const auto value = bool_member(*compat_obj, "supportsLongCacheRetention"); value.has_value()) {
+        if (const auto value = json_bool_member(*compat_obj, "supportsLongCacheRetention"); value.has_value()) {
             compat.supports_long_cache_retention = *value;
             populated = true;
         }
-        if (const auto value = bool_member(*compat_obj, "supportsReasoningEffort"); value.has_value()) {
+        if (const auto value = json_bool_member(*compat_obj, "supportsReasoningEffort"); value.has_value()) {
             compat.supports_reasoning_effort = *value;
             populated = true;
         }
@@ -182,7 +150,7 @@ namespace {
     if (api == "openai-responses") {
         OpenAIResponsesCompat compat;
         bool populated = false;
-        if (const auto value = string_member(*compat_obj, "sessionAffinityFormat"); value.has_value()) {
+        if (const auto value = json_string_member(*compat_obj, "sessionAffinityFormat"); value.has_value()) {
             if (*value == "openai") {
                 compat.session_affinity_format = OpenAIResponsesSessionAffinityFormat::OpenAI;
                 populated = true;
@@ -194,11 +162,11 @@ namespace {
                 populated = true;
             }
         }
-        if (const auto value = bool_member(*compat_obj, "supportsStrictMode"); value.has_value()) {
+        if (const auto value = json_bool_member(*compat_obj, "supportsStrictMode"); value.has_value()) {
             compat.supports_strict_mode = *value;
             populated = true;
         }
-        if (const auto value = bool_member(*compat_obj, "supportsExplicitPromptCacheMode"); value.has_value()) {
+        if (const auto value = json_bool_member(*compat_obj, "supportsExplicitPromptCacheMode"); value.has_value()) {
             compat.supports_explicit_prompt_cache_mode = *value;
             populated = true;
         }
@@ -264,16 +232,16 @@ namespace {
     if (const auto it = model_obj.find("cost"); it != model_obj.end()) {
         if (const auto* cost_obj = it->second.get_if<support::JsonValue::object_t>()) {
             ModelCost cost;
-            if (const auto value = number_from_catalog(*cost_obj, "input")) {
+            if (const auto value = json_number_member(*cost_obj, "input")) {
                 cost.input = *value;
             }
-            if (const auto value = number_from_catalog(*cost_obj, "output")) {
+            if (const auto value = json_number_member(*cost_obj, "output")) {
                 cost.output = *value;
             }
-            if (const auto value = number_from_catalog(*cost_obj, "cacheRead")) {
+            if (const auto value = json_number_member(*cost_obj, "cacheRead")) {
                 cost.cache_read = *value;
             }
-            if (const auto value = number_from_catalog(*cost_obj, "cacheWrite")) {
+            if (const auto value = json_number_member(*cost_obj, "cacheWrite")) {
                 cost.cache_write = *value;
             }
             auto tiers = cost_tiers_from_catalog(*cost_obj);

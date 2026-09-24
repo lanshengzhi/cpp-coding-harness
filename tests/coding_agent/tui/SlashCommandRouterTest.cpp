@@ -165,15 +165,13 @@ TEST_CASE("Slash command routing returns structured modal requests with argument
     }
 }
 
-TEST_CASE("Slash command routing preserves host-recognized resources and paths",
-        "[coding_agent][tui][commands][issue502][spec]") {
+TEST_CASE("Slash command routing passes unrecognized submissions through as prompts",
+        "[coding_agent][tui][commands][issue502][issue792][spec]") {
     tui::SlashCommandExecutionContext context;
-    context.allow_unrecognized = [](std::string_view command) {
-        return command == "project-prompt" || command == "skill:review" ||
-            command == "tmp/clipboard.png";
-    };
     tui::SlashCommandRouter router;
 
+    // Prompt templates, skills, absolute paths, and unknown text are all
+    // ordinary Agent Prompts, matching pi's fall-through (issue #792).
     auto prompt = router.route("  /project-prompt details  ", context);
     CHECK(std::holds_alternative<tui::SlashCommandPassThrough>(prompt));
 
@@ -184,9 +182,7 @@ TEST_CASE("Slash command routing preserves host-recognized resources and paths",
     CHECK(std::holds_alternative<tui::SlashCommandPassThrough>(clipboard_path));
 
     auto unknown = router.route("/missing", context);
-    const auto* error = route_error(unknown);
-    REQUIRE(error != nullptr);
-    CHECK(error->kind == SlashCommandRouteErrorKind::UnknownCommand);
+    CHECK(std::holds_alternative<tui::SlashCommandPassThrough>(unknown));
 }
 
 TEST_CASE("Slash command routing reports immediate execution failures as user-visible errors",

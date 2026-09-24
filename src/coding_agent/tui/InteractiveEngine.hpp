@@ -262,12 +262,6 @@ private:
 
     // ── Slash routing (router orchestration) ─────────────────────────────
 
-    /// Dynamic prompt-template and skill invocations remain ordinary Agent
-    /// Prompt submissions after built-in routing. Built-in names win over
-    /// resources with the same spelling, matching the autocomplete collision
-    /// rule.
-    [[nodiscard]] bool is_dynamic_slash_command(std::string_view command) const;
-
     /// Route built-in slash commands through the deep SlashCommandRouter. The
     /// router executes in-place commands through one small context seam and
     /// returns modal requests as passive values; this method only binds those

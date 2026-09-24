@@ -1001,6 +1001,14 @@ void extract_file_ops_from_message(
         return std::nullopt;
     }
 
+    // System messages carry prompt state rather than conversation history.
+    // Keep every currently projected update out of the summary and ahead of
+    // the retained chat tail so resume reconstructs the same prompt state.
+    for (const auto& message : context.messages) {
+        if (std::holds_alternative<ai::SystemMessage>(message)) {
+            preparation.retained_tail.push_back(message);
+        }
+    }
     for (std::size_t i = cut_point.first_kept_entry_index; i < boundary_end; ++i) {
         if (auto message = message_from_entry_for_compaction(path[i]);
                 message && !std::holds_alternative<ai::SystemMessage>(*message)) {

@@ -99,6 +99,9 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
         {
           "api": "openai-completions",
           "baseUrl": "https://api.kimi.com/coding/v1",
+          "compat": {
+            "supportsDeveloperRole": false
+          },
           "contextWindow": 1048576,
           "cost": {
             "cacheRead": 0.3,
@@ -128,6 +131,9 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
         {
           "api": "openai-completions",
           "baseUrl": "https://api.kimi.com/coding/v1",
+          "compat": {
+            "supportsDeveloperRole": false
+          },
           "contextWindow": 262144,
           "cost": {
             "cacheRead": 0,
@@ -157,6 +163,9 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
         {
           "api": "openai-completions",
           "baseUrl": "https://api.kimi.com/coding/v1",
+          "compat": {
+            "supportsDeveloperRole": false
+          },
           "contextWindow": 1048576,
           "cost": {
             "cacheRead": 0.19,
@@ -186,6 +195,9 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
         {
           "api": "openai-completions",
           "baseUrl": "https://api.kimi.com/coding/v1",
+          "compat": {
+            "supportsDeveloperRole": false
+          },
           "contextWindow": 262144,
           "cost": {
             "cacheRead": 0.38,
@@ -1636,6 +1648,122 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
           "api": "openai-responses",
           "baseUrl": "https://api.openai.com/v1",
           "compat": {
+            "supportsAdditionalTools": true,
+            "supportsExplicitPromptCacheMode": true,
+            "supportsMidConvoSystemMessages": true,
+            "supportsOpenAIGrammarTools": true,
+            "supportsStrictMode": true,
+            "supportsToolSearch": true
+          },
+          "contextWindow": 272000,
+          "cost": {
+            "cacheRead": 0.01,
+            "cacheWrite": 0.125,
+            "input": 0.1,
+            "output": 0.5,
+            "tiers": [
+              {
+                "cacheRead": 0.02,
+                "cacheWrite": 0.25,
+                "input": 0.2,
+                "inputTokensAbove": 272000,
+                "output": 0.75
+              }
+            ]
+          },
+          "id": "gpt-6-luna",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "maxPerRequest": 1500,
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            },
+            "maxRequestBytes": 536870912
+          },
+          "maxTokens": 128000,
+          "name": "GPT-6 Luna",
+          "provider": "openai",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": null,
+            "off": "none",
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-responses",
+          "baseUrl": "https://api.openai.com/v1",
+          "compat": {
+            "supportsAdditionalTools": true,
+            "supportsExplicitPromptCacheMode": true,
+            "supportsMidConvoSystemMessages": true,
+            "supportsOpenAIGrammarTools": true,
+            "supportsStrictMode": true,
+            "supportsToolSearch": true
+          },
+          "contextWindow": 272000,
+          "cost": {
+            "cacheRead": 0.2,
+            "cacheWrite": 2.5,
+            "input": 2,
+            "output": 10,
+            "tiers": [
+              {
+                "cacheRead": 0.4,
+                "cacheWrite": 5,
+                "input": 4,
+                "inputTokensAbove": 272000,
+                "output": 15
+              }
+            ]
+          },
+          "id": "gpt-6-sol",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "maxPerRequest": 1500,
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            },
+            "maxRequestBytes": 536870912
+          },
+          "maxTokens": 128000,
+          "name": "GPT-6 Sol",
+          "provider": "openai",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": null,
+            "off": "none",
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-responses",
+          "baseUrl": "https://api.openai.com/v1",
+          "compat": {
             "supportsStrictMode": true
           },
           "contextWindow": 128000,
@@ -2066,17 +2194,17 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
           },
           "contextWindow": 272000,
           "cost": {
-            "cacheRead": 0.5,
-            "cacheWrite": 6.25,
-            "input": 5,
-            "output": 30,
+            "cacheRead": 0.4,
+            "cacheWrite": 5,
+            "input": 4,
+            "output": 20,
             "tiers": [
               {
-                "cacheRead": 1,
-                "cacheWrite": 12.5,
-                "input": 10,
+                "cacheRead": 0.8,
+                "cacheWrite": 10,
+                "input": 8,
                 "inputTokensAbove": 272000,
-                "output": 45
+                "output": 30
               }
             ]
           },
@@ -2143,7 +2271,8 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
                 "maxHeight": 2000,
                 "maxWidth": 2000
               }
-            }
+)cch_catalog";
+constexpr char kCatalogPart1[] = R"cch_catalog(            }
           },
           "maxTokens": 128000,
           "name": "GPT-5.6 Terra",
@@ -2206,6 +2335,114 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
             "medium": "medium",
             "minimal": "low",
             "off": null,
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-codex-responses",
+          "baseUrl": "https://chatgpt.com/backend-api",
+          "compat": {
+            "supportsAdditionalTools": true,
+            "supportsMidConvoSystemMessages": true,
+            "supportsOpenAIGrammarTools": true,
+            "supportsToolSearch": true
+          },
+          "contextWindow": 272000,
+          "cost": {
+            "cacheRead": 0.01,
+            "cacheWrite": 0.125,
+            "input": 0.1,
+            "output": 0.5,
+            "tiers": [
+              {
+                "cacheRead": 0.02,
+                "cacheWrite": 0.25,
+                "input": 0.2,
+                "inputTokensAbove": 272000,
+                "output": 0.75
+              }
+            ]
+          },
+          "id": "gpt-6-luna",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 128000,
+          "name": "GPT-6 Luna",
+          "provider": "openai-codex",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": "low",
+            "off": "none",
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-codex-responses",
+          "baseUrl": "https://chatgpt.com/backend-api",
+          "compat": {
+            "supportsAdditionalTools": true,
+            "supportsMidConvoSystemMessages": true,
+            "supportsOpenAIGrammarTools": true,
+            "supportsToolSearch": true
+          },
+          "contextWindow": 272000,
+          "cost": {
+            "cacheRead": 0.2,
+            "cacheWrite": 2.5,
+            "input": 2,
+            "output": 10,
+            "tiers": [
+              {
+                "cacheRead": 0.4,
+                "cacheWrite": 5,
+                "input": 4,
+                "inputTokensAbove": 272000,
+                "output": 15
+              }
+            ]
+          },
+          "id": "gpt-6-sol",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 128000,
+          "name": "GPT-6 Sol",
+          "provider": "openai-codex",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": "low",
+            "off": "none",
             "xhigh": "xhigh"
           }
         }
@@ -2272,8 +2509,7 @@ constexpr char kCatalogPart0[] = R"cch_catalog(
           ],
           "inputLimits": {
             "images": {
-)cch_catalog";
-constexpr char kCatalogPart1[] = R"cch_catalog(              "resize": {
+              "resize": {
                 "jpegQuality": 80,
                 "maxBytes": 4718592,
                 "maxHeight": 2000,
@@ -4247,7 +4483,8 @@ constexpr char kCatalogPart1[] = R"cch_catalog(              "resize": {
             "text",
             "image"
           ],
-          "inputLimits": {
+)cch_catalog";
+constexpr char kCatalogPart2[] = R"cch_catalog(          "inputLimits": {
             "images": {
               "resize": {
                 "jpegQuality": 80,
@@ -4268,6 +4505,95 @@ constexpr char kCatalogPart1[] = R"cch_catalog(              "resize": {
             "medium": "medium",
             "minimal": null,
             "off": "none",
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "anthropic-messages",
+          "baseUrl": "https://openrouter.ai/api",
+          "compat": {
+            "forceAdaptiveThinking": true,
+            "supportsMidConvoEffort": true,
+            "supportsTemperature": false
+          },
+          "contextWindow": 1000000,
+          "cost": {
+            "cacheRead": 0.2,
+            "cacheWrite": 5,
+            "input": 4,
+            "output": 20
+          },
+          "id": "anthropic/claude-opus-5.5",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 128000,
+          "name": "Anthropic: Claude Opus 5.5",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": null,
+            "off": null,
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "cacheControlFormat": "anthropic",
+            "sendSessionAffinityHeaders": true,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
+          "contextWindow": 1000000,
+          "cost": {
+            "cacheRead": 0.1,
+            "cacheWrite": 2.5,
+            "input": 2,
+            "output": 10
+          },
+          "id": "anthropic/claude-opus-5.5:batch",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 128000,
+          "name": "Anthropic: Claude Opus 5.5 (batch)",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": null,
+            "off": null,
             "xhigh": "xhigh"
           }
         },
@@ -4483,8 +4809,7 @@ constexpr char kCatalogPart1[] = R"cch_catalog(              "resize": {
                 "maxHeight": 2000,
                 "maxWidth": 2000
               }
-)cch_catalog";
-constexpr char kCatalogPart2[] = R"cch_catalog(            }
+            }
           },
           "maxTokens": 128000,
           "name": "Anthropic: Claude Sonnet 4.6 (batch)",
@@ -4903,6 +5228,42 @@ constexpr char kCatalogPart2[] = R"cch_catalog(            }
             "supportsStrictMode": true,
             "thinkingFormat": "openrouter"
           },
+          "contextWindow": 192000,
+          "cost": {
+            "cacheRead": 0.15,
+            "cacheWrite": 0,
+            "input": 0.3,
+            "output": 1.5
+          },
+          "id": "cohere/command-a-plus",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 64000,
+          "name": "Cohere: Command A+",
+          "provider": "openrouter",
+          "reasoning": true
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "sendSessionAffinityHeaders": true,
+            "supportsDeveloperRole": false,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
           "contextWindow": 128000,
           "cost": {
             "cacheRead": 0,
@@ -5257,41 +5618,6 @@ constexpr char kCatalogPart2[] = R"cch_catalog(            }
           },
           "contextWindow": 1048576,
           "cost": {
-            "cacheRead": 0.0035,
-            "cacheWrite": 0,
-            "input": 0.11,
-            "output": 0.33
-          },
-          "id": "deepseek/deepseek-v4-flash-0731:batch",
-          "input": [
-            "text"
-          ],
-          "maxTokens": 943718,
-          "name": "DeepSeek: DeepSeek V4 Flash 0731 (batch)",
-          "provider": "openrouter",
-          "reasoning": true,
-          "thinkingLevelMap": {
-            "high": "high",
-            "low": "low",
-            "max": "max",
-            "medium": null,
-            "minimal": null,
-            "off": "none",
-            "xhigh": null
-          }
-        },
-        {
-          "api": "openai-completions",
-          "baseUrl": "https://openrouter.ai/api/v1",
-          "compat": {
-            "requiresReasoningContentOnAssistantMessages": true,
-            "sendSessionAffinityHeaders": true,
-            "supportsDeveloperRole": false,
-            "supportsStrictMode": true,
-            "thinkingFormat": "openrouter"
-          },
-          "contextWindow": 1048576,
-          "cost": {
             "cacheRead": 0.007,
             "cacheWrite": 0,
             "input": 0.22,
@@ -5314,52 +5640,6 @@ constexpr char kCatalogPart2[] = R"cch_catalog(            }
           },
           "maxTokens": 943718,
           "name": "DeepSeek: DeepSeek V4 Flash Vision Exp",
-          "provider": "openrouter",
-          "reasoning": true,
-          "thinkingLevelMap": {
-            "high": "high",
-            "low": "low",
-            "max": "max",
-            "medium": null,
-            "minimal": null,
-            "off": "none",
-            "xhigh": null
-          }
-        },
-        {
-          "api": "openai-completions",
-          "baseUrl": "https://openrouter.ai/api/v1",
-          "compat": {
-            "requiresReasoningContentOnAssistantMessages": true,
-            "sendSessionAffinityHeaders": true,
-            "supportsDeveloperRole": false,
-            "supportsStrictMode": true,
-            "thinkingFormat": "openrouter"
-          },
-          "contextWindow": 1048576,
-          "cost": {
-            "cacheRead": 0.0035,
-            "cacheWrite": 0,
-            "input": 0.11,
-            "output": 0.33
-          },
-          "id": "deepseek/deepseek-v4-flash-vision-exp:batch",
-          "input": [
-            "text",
-            "image"
-          ],
-          "inputLimits": {
-            "images": {
-              "resize": {
-                "jpegQuality": 80,
-                "maxBytes": 4718592,
-                "maxHeight": 2000,
-                "maxWidth": 2000
-              }
-            }
-          },
-          "maxTokens": 943718,
-          "name": "DeepSeek: DeepSeek V4 Flash Vision Exp (batch)",
           "provider": "openrouter",
           "reasoning": true,
           "thinkingLevelMap": {
@@ -5417,12 +5697,12 @@ constexpr char kCatalogPart2[] = R"cch_catalog(            }
             "supportsStrictMode": true,
             "thinkingFormat": "openrouter"
           },
-          "contextWindow": 1048576,
+          "contextWindow": 1024000,
           "cost": {
-            "cacheRead": 0.022,
+            "cacheRead": 0.016623,
             "cacheWrite": 0,
-            "input": 0.66,
-            "output": 1.98
+            "input": 0.498696,
+            "output": 1.496088
           },
           "id": "deepseek/deepseek-v4-pro-0813",
           "input": [
@@ -5430,41 +5710,6 @@ constexpr char kCatalogPart2[] = R"cch_catalog(            }
           ],
           "maxTokens": 384000,
           "name": "DeepSeek: DeepSeek V4 Pro 0813",
-          "provider": "openrouter",
-          "reasoning": true,
-          "thinkingLevelMap": {
-            "high": "high",
-            "low": "low",
-            "max": "max",
-            "medium": null,
-            "minimal": null,
-            "off": "none",
-            "xhigh": null
-          }
-        },
-        {
-          "api": "openai-completions",
-          "baseUrl": "https://openrouter.ai/api/v1",
-          "compat": {
-            "requiresReasoningContentOnAssistantMessages": true,
-            "sendSessionAffinityHeaders": true,
-            "supportsDeveloperRole": false,
-            "supportsStrictMode": true,
-            "thinkingFormat": "openrouter"
-          },
-          "contextWindow": 1048576,
-          "cost": {
-            "cacheRead": 0.022,
-            "cacheWrite": 0,
-            "input": 0.66,
-            "output": 1.98
-          },
-          "id": "deepseek/deepseek-v4-pro-0813:batch",
-          "input": [
-            "text"
-          ],
-          "maxTokens": 943718,
-          "name": "DeepSeek: DeepSeek V4 Pro 0813 (batch)",
           "provider": "openrouter",
           "reasoning": true,
           "thinkingLevelMap": {
@@ -5511,6 +5756,52 @@ constexpr char kCatalogPart2[] = R"cch_catalog(            }
           },
           "maxTokens": 384000,
           "name": "DeepSeek: DeepSeek V4.1 Flash",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": null,
+            "minimal": null,
+            "off": "none",
+            "xhigh": null
+          }
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "requiresReasoningContentOnAssistantMessages": true,
+            "sendSessionAffinityHeaders": true,
+            "supportsDeveloperRole": false,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
+          "contextWindow": 1048576,
+          "cost": {
+            "cacheRead": 0.00336,
+            "cacheWrite": 0,
+            "input": 0.112,
+            "output": 0.336
+          },
+          "id": "deepseek/deepseek-v4.1-flash:batch",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 131072,
+          "name": "DeepSeek: DeepSeek V4.1 Flash (batch)",
           "provider": "openrouter",
           "reasoning": true,
           "thinkingLevelMap": {
@@ -6335,7 +6626,8 @@ constexpr char kCatalogPart2[] = R"cch_catalog(            }
               "resize": {
                 "jpegQuality": 80,
                 "maxBytes": 4718592,
-                "maxHeight": 2000,
+)cch_catalog";
+constexpr char kCatalogPart3[] = R"cch_catalog(                "maxHeight": 2000,
                 "maxWidth": 2000
               }
             }
@@ -6615,8 +6907,7 @@ constexpr char kCatalogPart2[] = R"cch_catalog(            }
           "provider": "openrouter",
           "reasoning": true,
           "thinkingLevelMap": {
-)cch_catalog";
-constexpr char kCatalogPart3[] = R"cch_catalog(            "high": "high",
+            "high": "high",
             "low": "low",
             "max": null,
             "medium": "medium",
@@ -7171,31 +7462,6 @@ constexpr char kCatalogPart3[] = R"cch_catalog(            "high": "high",
           },
           "contextWindow": 262144,
           "cost": {
-            "cacheRead": 0.06,
-            "cacheWrite": 0,
-            "input": 0.3,
-            "output": 1.2
-          },
-          "id": "kwaipilot/kat-coder-pro-v2",
-          "input": [
-            "text"
-          ],
-          "maxTokens": 144000,
-          "name": "Kwaipilot: KAT-Coder-Pro V2",
-          "provider": "openrouter",
-          "reasoning": false
-        },
-        {
-          "api": "openai-completions",
-          "baseUrl": "https://openrouter.ai/api/v1",
-          "compat": {
-            "sendSessionAffinityHeaders": true,
-            "supportsDeveloperRole": false,
-            "supportsStrictMode": true,
-            "thinkingFormat": "openrouter"
-          },
-          "contextWindow": 262144,
-          "cost": {
             "cacheRead": 0.15,
             "cacheWrite": 0,
             "input": 0.74,
@@ -7443,51 +7709,6 @@ constexpr char kCatalogPart3[] = R"cch_catalog(            "high": "high",
           },
           "maxTokens": 16384,
           "name": "Meta: Muse Glimmer 30B",
-          "provider": "openrouter",
-          "reasoning": true,
-          "thinkingLevelMap": {
-            "high": "high",
-            "low": "low",
-            "max": null,
-            "medium": "medium",
-            "minimal": null,
-            "off": null,
-            "xhigh": "xhigh"
-          }
-        },
-        {
-          "api": "openai-completions",
-          "baseUrl": "https://openrouter.ai/api/v1",
-          "compat": {
-            "sendSessionAffinityHeaders": true,
-            "supportsDeveloperRole": false,
-            "supportsStrictMode": true,
-            "thinkingFormat": "openrouter"
-          },
-          "contextWindow": 131072,
-          "cost": {
-            "cacheRead": 0.02,
-            "cacheWrite": 0,
-            "input": 0.175,
-            "output": 0.75
-          },
-          "id": "meta/muse-glimmer-30b:batch",
-          "input": [
-            "text",
-            "image"
-          ],
-          "inputLimits": {
-            "images": {
-              "resize": {
-                "jpegQuality": 80,
-                "maxBytes": 4718592,
-                "maxHeight": 2000,
-                "maxWidth": 2000
-              }
-            }
-          },
-          "maxTokens": 117964,
-          "name": "Meta: Muse Glimmer 30B (batch)",
           "provider": "openrouter",
           "reasoning": true,
           "thinkingLevelMap": {
@@ -8546,7 +8767,8 @@ constexpr char kCatalogPart3[] = R"cch_catalog(            "high": "high",
           "baseUrl": "https://openrouter.ai/api/v1",
           "compat": {
             "sendSessionAffinityHeaders": true,
-            "supportsDeveloperRole": false,
+)cch_catalog";
+constexpr char kCatalogPart4[] = R"cch_catalog(            "supportsDeveloperRole": false,
             "supportsStrictMode": true,
             "thinkingFormat": "openrouter"
           },
@@ -8747,8 +8969,7 @@ constexpr char kCatalogPart3[] = R"cch_catalog(            "high": "high",
           "compat": {
             "sendSessionAffinityHeaders": true,
             "supportsDeveloperRole": false,
-)cch_catalog";
-constexpr char kCatalogPart4[] = R"cch_catalog(            "supportsStrictMode": true,
+            "supportsStrictMode": true,
             "thinkingFormat": "openrouter"
           },
           "contextWindow": 262144,
@@ -8829,7 +9050,7 @@ constexpr char kCatalogPart4[] = R"cch_catalog(            "supportsStrictMode":
             "cacheRead": 0.18,
             "cacheWrite": 0,
             "input": 0.7062,
-            "output": 3.21
+            "output": 3.3
           },
           "id": "moonshotai/kimi-k2.7-code",
           "input": [
@@ -8887,6 +9108,51 @@ constexpr char kCatalogPart4[] = R"cch_catalog(            "supportsStrictMode":
           },
           "maxTokens": 131072,
           "name": "MoonshotAI: Kimi K3",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": null,
+            "minimal": null,
+            "off": "none",
+            "xhigh": null
+          }
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "sendSessionAffinityHeaders": true,
+            "supportsDeveloperRole": false,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
+          "contextWindow": 1048576,
+          "cost": {
+            "cacheRead": 0.228,
+            "cacheWrite": 0,
+            "input": 2.28,
+            "output": 11.4
+          },
+          "id": "moonshotai/kimi-k3:batch",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 16384,
+          "name": "MoonshotAI: Kimi K3 (batch)",
           "provider": "openrouter",
           "reasoning": true,
           "thinkingLevelMap": {
@@ -9244,14 +9510,14 @@ constexpr char kCatalogPart4[] = R"cch_catalog(            "supportsStrictMode":
           "cost": {
             "cacheRead": 0.04,
             "cacheWrite": 0,
-            "input": 0.07,
+            "input": 0.08,
             "output": 0.2
           },
           "id": "nvidia/nemotron-3.5-lightning",
           "input": [
             "text"
           ],
-          "maxTokens": 235929,
+          "maxTokens": 131072,
           "name": "NVIDIA: Nemotron 3.5 Lightning",
           "provider": "openrouter",
           "reasoning": true
@@ -10687,7 +10953,8 @@ constexpr char kCatalogPart4[] = R"cch_catalog(            "supportsStrictMode":
                 "maxHeight": 2000,
                 "maxWidth": 2000
               }
-            }
+)cch_catalog";
+constexpr char kCatalogPart5[] = R"cch_catalog(            }
           },
           "maxTokens": 128000,
           "name": "OpenAI: GPT-5.2 Pro (batch)",
@@ -10946,8 +11213,7 @@ constexpr char kCatalogPart4[] = R"cch_catalog(            "supportsStrictMode":
             "image"
           ],
           "inputLimits": {
-)cch_catalog";
-constexpr char kCatalogPart5[] = R"cch_catalog(            "images": {
+            "images": {
               "resize": {
                 "jpegQuality": 80,
                 "maxBytes": 4718592,
@@ -12081,6 +12347,360 @@ constexpr char kCatalogPart5[] = R"cch_catalog(            "images": {
           "baseUrl": "https://openrouter.ai/api/v1",
           "compat": {
             "sendSessionAffinityHeaders": true,
+            "supportsMidConvoSystemMessages": true,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
+          "contextWindow": 1050000,
+          "cost": {
+            "cacheRead": 0.01,
+            "cacheWrite": 0.125,
+            "input": 0.1,
+            "output": 0.5
+          },
+          "id": "openai/gpt-6-luna",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 128000,
+          "name": "OpenAI: GPT-6 Luna",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": null,
+            "off": "none",
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "sendSessionAffinityHeaders": true,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
+          "contextWindow": 1050000,
+          "cost": {
+            "cacheRead": 0.01,
+            "cacheWrite": 0.125,
+            "input": 0.1,
+            "output": 0.5
+          },
+          "id": "openai/gpt-6-luna-pro",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 128000,
+          "name": "OpenAI: GPT-6 Luna Pro",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": null,
+            "off": "none",
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "sendSessionAffinityHeaders": true,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
+          "contextWindow": 1050000,
+          "cost": {
+            "cacheRead": 0.005,
+            "cacheWrite": 0.0625,
+            "input": 0.05,
+            "output": 0.25
+          },
+          "id": "openai/gpt-6-luna-pro:batch",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 128000,
+          "name": "OpenAI: GPT-6 Luna Pro (batch)",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": null,
+            "off": "none",
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "sendSessionAffinityHeaders": true,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
+          "contextWindow": 1050000,
+          "cost": {
+            "cacheRead": 0.005,
+            "cacheWrite": 0.0625,
+            "input": 0.05,
+            "output": 0.25
+          },
+          "id": "openai/gpt-6-luna:batch",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 128000,
+          "name": "OpenAI: GPT-6 Luna (batch)",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": null,
+            "off": "none",
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "sendSessionAffinityHeaders": true,
+            "supportsMidConvoSystemMessages": true,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
+          "contextWindow": 1050000,
+          "cost": {
+            "cacheRead": 0.2,
+            "cacheWrite": 2.5,
+            "input": 2,
+            "output": 10
+          },
+          "id": "openai/gpt-6-sol",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 128000,
+          "name": "OpenAI: GPT-6 Sol",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": null,
+            "off": "none",
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "sendSessionAffinityHeaders": true,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
+          "contextWindow": 1050000,
+          "cost": {
+            "cacheRead": 0.2,
+            "cacheWrite": 2.5,
+            "input": 2,
+            "output": 10
+          },
+          "id": "openai/gpt-6-sol-pro",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 128000,
+          "name": "OpenAI: GPT-6 Sol Pro",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": null,
+            "off": "none",
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "sendSessionAffinityHeaders": true,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
+          "contextWindow": 1050000,
+          "cost": {
+            "cacheRead": 0.1,
+            "cacheWrite": 1.25,
+            "input": 1,
+            "output": 5
+          },
+          "id": "openai/gpt-6-sol-pro:batch",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 128000,
+          "name": "OpenAI: GPT-6 Sol Pro (batch)",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": null,
+            "off": "none",
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "sendSessionAffinityHeaders": true,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
+          "contextWindow": 1050000,
+          "cost": {
+            "cacheRead": 0.1,
+            "cacheWrite": 1.25,
+            "input": 1,
+            "output": 5
+          },
+          "id": "openai/gpt-6-sol:batch",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 128000,
+          "name": "OpenAI: GPT-6 Sol (batch)",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": null,
+            "off": "none",
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "sendSessionAffinityHeaders": true,
             "supportsStrictMode": true,
             "thinkingFormat": "openrouter"
           },
@@ -12202,17 +12822,50 @@ constexpr char kCatalogPart5[] = R"cch_catalog(            "images": {
           },
           "contextWindow": 131072,
           "cost": {
-            "cacheRead": 0.03,
+            "cacheRead": 0,
             "cacheWrite": 0,
-            "input": 0.03,
-            "output": 0.13
+            "input": 0.018,
+            "output": 0.09
           },
           "id": "openai/gpt-oss-20b",
           "input": [
             "text"
           ],
-          "maxTokens": 117964,
+          "maxTokens": 32768,
           "name": "OpenAI: gpt-oss-20b",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": null,
+            "medium": "medium",
+            "minimal": null,
+            "off": null,
+            "xhigh": null
+          }
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "sendSessionAffinityHeaders": true,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
+          "contextWindow": 131072,
+          "cost": {
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "input": 0.024,
+            "output": 0.112
+          },
+          "id": "openai/gpt-oss-20b:batch",
+          "input": [
+            "text"
+          ],
+          "maxTokens": 117964,
+          "name": "OpenAI: gpt-oss-20b (batch)",
           "provider": "openrouter",
           "reasoning": true,
           "thinkingLevelMap": {
@@ -12510,7 +13163,8 @@ constexpr char kCatalogPart5[] = R"cch_catalog(            "images": {
         },
         {
           "api": "openai-completions",
-          "baseUrl": "https://openrouter.ai/api/v1",
+)cch_catalog";
+constexpr char kCatalogPart6[] = R"cch_catalog(          "baseUrl": "https://openrouter.ai/api/v1",
           "compat": {
             "sendSessionAffinityHeaders": true,
             "supportsStrictMode": true,
@@ -13131,8 +13785,7 @@ constexpr char kCatalogPart5[] = R"cch_catalog(            "images": {
           "cost": {
             "cacheRead": 0,
             "cacheWrite": 0,
-)cch_catalog";
-constexpr char kCatalogPart6[] = R"cch_catalog(            "input": 0.2,
+            "input": 0.2,
             "output": 2.4
           },
           "id": "qwen/qwen3-30b-a3b-thinking-2507",
@@ -13406,7 +14059,7 @@ constexpr char kCatalogPart6[] = R"cch_catalog(            "input": 0.2,
             "supportsStrictMode": true,
             "thinkingFormat": "openrouter"
           },
-          "contextWindow": 131072,
+          "contextWindow": 262144,
           "cost": {
             "cacheRead": 0,
             "cacheWrite": 0,
@@ -13417,7 +14070,7 @@ constexpr char kCatalogPart6[] = R"cch_catalog(            "input": 0.2,
           "input": [
             "text"
           ],
-          "maxTokens": 32768,
+          "maxTokens": 235929,
           "name": "Qwen: Qwen3 Next 80B A3B Thinking",
           "provider": "openrouter",
           "reasoning": true,
@@ -13985,10 +14638,10 @@ constexpr char kCatalogPart6[] = R"cch_catalog(            "input": 0.2,
           },
           "contextWindow": 262144,
           "cost": {
-            "cacheRead": 0.03,
+            "cacheRead": 0.15,
             "cacheWrite": 0,
-            "input": 0.3,
-            "output": 2
+            "input": 0.32,
+            "output": 2.7
           },
           "id": "qwen/qwen3.6-27b",
           "input": [
@@ -14005,7 +14658,7 @@ constexpr char kCatalogPart6[] = R"cch_catalog(            "input": 0.2,
               }
             }
           },
-          "maxTokens": 65536,
+          "maxTokens": 262140,
           "name": "Qwen: Qwen3.6 27B",
           "provider": "openrouter",
           "reasoning": true
@@ -14454,6 +15107,42 @@ constexpr char kCatalogPart6[] = R"cch_catalog(            "input": 0.2,
             "supportsStrictMode": true,
             "thinkingFormat": "openrouter"
           },
+          "contextWindow": 1000000,
+          "cost": {
+            "cacheRead": 0.016,
+            "cacheWrite": 0,
+            "input": 0.15,
+            "output": 0.47
+          },
+          "id": "qwen/qwen3.8-omni-flash",
+          "input": [
+            "text",
+            "image"
+          ],
+          "inputLimits": {
+            "images": {
+              "resize": {
+                "jpegQuality": 80,
+                "maxBytes": 4718592,
+                "maxHeight": 2000,
+                "maxWidth": 2000
+              }
+            }
+          },
+          "maxTokens": 131072,
+          "name": "Qwen: Qwen3.8 Omni Flash",
+          "provider": "openrouter",
+          "reasoning": true
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "sendSessionAffinityHeaders": true,
+            "supportsDeveloperRole": false,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
           "contextWindow": 16384,
           "cost": {
             "cacheRead": 0,
@@ -14621,7 +15310,8 @@ constexpr char kCatalogPart6[] = R"cch_catalog(            "input": 0.2,
             "images": {
               "resize": {
                 "jpegQuality": 80,
-                "maxBytes": 4718592,
+)cch_catalog";
+constexpr char kCatalogPart7[] = R"cch_catalog(                "maxBytes": 4718592,
                 "maxHeight": 2000,
                 "maxWidth": 2000
               }
@@ -15111,6 +15801,40 @@ constexpr char kCatalogPart6[] = R"cch_catalog(            "input": 0.2,
             "supportsStrictMode": true,
             "thinkingFormat": "openrouter"
           },
+          "contextWindow": 524288,
+          "cost": {
+            "cacheRead": 0.005,
+            "cacheWrite": 0,
+            "input": 0.05,
+            "output": 0.2
+          },
+          "id": "upstage/solar-mini4",
+          "input": [
+            "text"
+          ],
+          "maxTokens": 131072,
+          "name": "Upstage: Solar Mini 4",
+          "provider": "openrouter",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "high": "high",
+            "low": "low",
+            "max": "max",
+            "medium": "medium",
+            "minimal": "minimal",
+            "off": "none",
+            "xhigh": "xhigh"
+          }
+        },
+        {
+          "api": "openai-completions",
+          "baseUrl": "https://openrouter.ai/api/v1",
+          "compat": {
+            "sendSessionAffinityHeaders": true,
+            "supportsDeveloperRole": false,
+            "supportsStrictMode": true,
+            "thinkingFormat": "openrouter"
+          },
           "contextWindow": 131072,
           "cost": {
             "cacheRead": 0.015,
@@ -15295,8 +16019,7 @@ constexpr char kCatalogPart6[] = R"cch_catalog(            "input": 0.2,
             "off": "none",
             "xhigh": null
           }
-)cch_catalog";
-constexpr char kCatalogPart7[] = R"cch_catalog(        },
+        },
         {
           "api": "openai-completions",
           "baseUrl": "https://openrouter.ai/api/v1",
@@ -15957,40 +16680,6 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
           },
           "contextWindow": 1048576,
           "cost": {
-            "cacheRead": 0.07,
-            "cacheWrite": 0,
-            "input": 0.7,
-            "output": 2.2
-          },
-          "id": "z-ai/glm-5.2:batch",
-          "input": [
-            "text"
-          ],
-          "maxTokens": 943718,
-          "name": "Z.ai: GLM 5.2 (batch)",
-          "provider": "openrouter",
-          "reasoning": true,
-          "thinkingLevelMap": {
-            "high": "high",
-            "low": null,
-            "max": null,
-            "medium": null,
-            "minimal": null,
-            "off": "none",
-            "xhigh": "xhigh"
-          }
-        },
-        {
-          "api": "openai-completions",
-          "baseUrl": "https://openrouter.ai/api/v1",
-          "compat": {
-            "sendSessionAffinityHeaders": true,
-            "supportsDeveloperRole": false,
-            "supportsStrictMode": true,
-            "thinkingFormat": "openrouter"
-          },
-          "contextWindow": 1048576,
-          "cost": {
             "cacheRead": 0.156,
             "cacheWrite": 0,
             "input": 0.84,
@@ -16070,10 +16759,10 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
           },
           "contextWindow": 1048576,
           "cost": {
-            "cacheRead": 0.015,
+            "cacheRead": 0.012,
             "cacheWrite": 0,
-            "input": 0.075,
-            "output": 0.25
+            "input": 0.06,
+            "output": 0.2
           },
           "id": "z-ai/glm-5.3-flash:batch",
           "input": [
@@ -16090,7 +16779,7 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
               }
             }
           },
-          "maxTokens": 943718,
+          "maxTokens": 131072,
           "name": "Z.ai: GLM 5.3 Flash (batch)",
           "provider": "openrouter",
           "reasoning": true,
@@ -16160,16 +16849,16 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
           },
           "contextWindow": 1048576,
           "cost": {
-            "cacheRead": 0.13,
+            "cacheRead": 0.12,
             "cacheWrite": 0,
-            "input": 0.7,
-            "output": 2.2
+            "input": 0.72,
+            "output": 2.4
           },
           "id": "z-ai/glm-5.3:batch",
           "input": [
             "text"
           ],
-          "maxTokens": 943718,
+          "maxTokens": 131072,
           "name": "Z.ai: GLM 5.3 (batch)",
           "provider": "openrouter",
           "reasoning": true,
@@ -16314,10 +17003,10 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
           },
           "contextWindow": 1000000,
           "cost": {
-            "cacheRead": 0.5,
-            "cacheWrite": 6.25,
-            "input": 5,
-            "output": 25
+            "cacheRead": 0.2,
+            "cacheWrite": 5,
+            "input": 4,
+            "output": 20
           },
           "id": "~anthropic/claude-opus-latest",
           "input": [
@@ -16344,7 +17033,7 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
             "max": "max",
             "medium": "medium",
             "minimal": null,
-            "off": "none",
+            "off": null,
             "xhigh": "xhigh"
           }
         },
@@ -16405,10 +17094,10 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
           },
           "contextWindow": 1048576,
           "cost": {
-            "cacheRead": 0.0036,
+            "cacheRead": 0.01,
             "cacheWrite": 0,
-            "input": 0.12,
-            "output": 0.48
+            "input": 0.1,
+            "output": 0.5
           },
           "id": "~deepseek/deepseek-flash-latest",
           "input": [
@@ -16448,12 +17137,12 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
             "supportsStrictMode": true,
             "thinkingFormat": "openrouter"
           },
-          "contextWindow": 1024000,
+          "contextWindow": 1048576,
           "cost": {
-            "cacheRead": 0.021287,
+            "cacheRead": 0.033,
             "cacheWrite": 0,
-            "input": 0.638616,
-            "output": 1.915848
+            "input": 0.4,
+            "output": 4.3
           },
           "id": "~deepseek/deepseek-pro-latest",
           "input": [
@@ -16485,10 +17174,10 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
           },
           "contextWindow": 1048576,
           "cost": {
-            "cacheRead": 0.008,
+            "cacheRead": 0.0228,
             "cacheWrite": 0,
-            "input": 0.03,
-            "output": 0.8
+            "input": 0.038,
+            "output": 0.55
           },
           "id": "~deepseek/deepseek-v4-flash-latest",
           "input": [
@@ -16609,10 +17298,10 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
           },
           "contextWindow": 1048576,
           "cost": {
-            "cacheRead": 0.15,
+            "cacheRead": 0.3,
             "cacheWrite": 0,
-            "input": 1.5,
-            "output": 7.5
+            "input": 1.4989,
+            "output": 10.758
           },
           "id": "~moonshotai/kimi-latest",
           "input": [
@@ -16699,10 +17388,10 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
           },
           "contextWindow": 1050000,
           "cost": {
-            "cacheRead": 0.02,
-            "cacheWrite": 0.25,
-            "input": 0.2,
-            "output": 1.2
+            "cacheRead": 0.01,
+            "cacheWrite": 0.125,
+            "input": 0.1,
+            "output": 0.5
           },
           "id": "~openai/gpt-luna-latest",
           "input": [
@@ -16789,7 +17478,8 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
           },
           "contextWindow": 1050000,
           "cost": {
-            "cacheRead": 0.2,
+)cch_catalog";
+constexpr char kCatalogPart8[] = R"cch_catalog(            "cacheRead": 0.2,
             "cacheWrite": 2.5,
             "input": 2,
             "output": 10
@@ -16944,7 +17634,7 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
               }
             }
           },
-          "maxTokens": 943718,
+          "maxTokens": 131072,
           "name": "Z.ai: GLM Flash Latest",
           "provider": "openrouter",
           "reasoning": true,
@@ -16969,16 +17659,16 @@ constexpr char kCatalogPart7[] = R"cch_catalog(        },
           },
           "contextWindow": 1048576,
           "cost": {
-            "cacheRead": 0.107525,
+            "cacheRead": 0.125,
             "cacheWrite": 0,
-            "input": 0.6545,
-            "output": 2.057
+            "input": 0.5625,
+            "output": 2.5
           },
           "id": "~z-ai/glm-latest",
           "input": [
             "text"
           ],
-          "maxTokens": 943718,
+          "maxTokens": 131072,
           "name": "Z.ai: GLM Latest",
           "provider": "openrouter",
           "reasoning": true,
@@ -17006,8 +17696,8 @@ void append_catalog_part(
     }
 }
 
-const std::array<char, 478011> kCatalogData = [] {
-    std::array<char, 478011> result{};
+const std::array<char, 497033> kCatalogData = [] {
+    std::array<char, 497033> result{};
     std::size_t offset = 0;
     append_catalog_part(result, offset, kCatalogPart0);
     append_catalog_part(result, offset, kCatalogPart1);
@@ -17017,6 +17707,7 @@ const std::array<char, 478011> kCatalogData = [] {
     append_catalog_part(result, offset, kCatalogPart5);
     append_catalog_part(result, offset, kCatalogPart6);
     append_catalog_part(result, offset, kCatalogPart7);
+    append_catalog_part(result, offset, kCatalogPart8);
     return result;
 }();
 

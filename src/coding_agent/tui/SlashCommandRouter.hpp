@@ -48,9 +48,9 @@ struct SlashCommandInvocation {
     std::string argument;
 };
 
-/// A non-slash submission, or an unrecognized slash submission explicitly
-/// allowed through by the host for a dynamic resource or compatible
-/// absolute-path prompt.
+/// A non-slash submission, or an unrecognized slash submission: pi's Native
+/// TUI dispatches only its built-in names and hands every other submission to
+/// `session.prompt`, so unrecognized slash text is an ordinary Agent Prompt.
 struct SlashCommandPassThrough {};
 
 /// The reason a slash submission could not be routed.
@@ -63,9 +63,9 @@ enum class SlashCommandRouteErrorKind {
 /// converting the submission into an Agent Prompt.
 struct SlashCommandRouteError {
     std::string message;
-    /// UnknownCommand is set only when the command token itself was not a
-    /// built-in. Hosts may use it to preserve dynamic prompt/skill commands
-    /// while still rejecting malformed arguments for known built-ins.
+    /// UnknownCommand marks a command token that names no built-in. Parsing
+    /// reports it; routing passes the submission through as an Agent Prompt
+    /// (pi parity, issue #792).
     SlashCommandRouteErrorKind kind{SlashCommandRouteErrorKind::Invalid};
 };
 
@@ -98,33 +98,26 @@ using SlashCommandRouteVariant = std::variant<
 /// classification; the host owns effects such as updating the view or
 /// requesting session replacement.
 struct SlashCommandExecutionContext {
-    std::move_only_function<support::ExpectedVoid(const SlashCommandInvocation&)>
-        execute_immediate{nullptr};
-    /// Optional predicate for host-recognized dynamic slash resources
-    /// (prompt templates and enabled `/skill:` commands) or compatible
-    /// absolute-path prompt submissions. It receives the trimmed command
-    /// token without the leading slash. A false or empty predicate makes
-    /// unknown slash commands user-visible routing errors.
-    std::move_only_function<bool(std::string_view)> allow_unrecognized{nullptr};
+    std::move_only_function<support::ExpectedVoid(const SlashCommandInvocation&)> execute_immediate{nullptr};
 };
 
 /// Return the canonical pi-shaped spelling for a command identity.
 [[nodiscard]] std::string_view slash_command_name(SlashCommandId command) noexcept;
 
+/// One accepted built-in slash spelling and the identity it resolves to.
+struct SlashCommandSpelling {
+    std::string_view spelling;
+    SlashCommandId command;
+};
+
+/// Every accepted built-in slash spelling, canonical names and aliases alike.
+/// The command palette offers all of them so an exact spelling cannot lose to
+/// an unrelated fuzzy match (issue #791).
+[[nodiscard]] std::span<const SlashCommandSpelling> slash_command_spellings() noexcept;
+
 /// Whether a command is executed immediately by the host context rather than
 /// returned as a modal request.
 [[nodiscard]] bool is_immediate_slash_command(SlashCommandId command) noexcept;
-
-/// Whether one trimmed command token (without the leading slash) names a
-/// host-recognized dynamic slash resource: a loaded prompt template, or a
-/// `/skill:` command over an enabled skill (pi's dynamic command surface).
-/// Skill commands count only while the `enableSkillCommands` setting is
-/// enabled.
-[[nodiscard]] bool is_dynamic_slash_command(
-    std::string_view command,
-    std::span<const coding_agent::PromptTemplate> prompt_templates,
-    std::span<const coding_agent::Skill> skills,
-    bool skill_commands_enabled);
 
 /// Deep parser and router for Native TUI slash submissions. The module has no
 /// dependency on the InteractiveEngine, Terminal, or rendering: those concerns

@@ -663,13 +663,14 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
 // Session Assembly publication
 // ─────────────────────────────────────────────────────────────────────────────
 
-support::Expected<std::unique_ptr<AgentSession>> AgentSession::bind_assembly(runtime::AgentSessionAssembly assembly) {
+boost::asio::awaitable<support::Expected<std::unique_ptr<AgentSession>>> AgentSession::bind_assembly(
+        runtime::AgentSessionAssembly assembly) {
     auto session = std::make_unique<AgentSession>();
     session->impl_ = std::make_shared<AgentSession::Impl>(std::move(assembly));
-    if (auto persisted = session->impl_->persist_initial_system_message(); !persisted) {
-        return std::unexpected(persisted.error());
+    if (auto persisted = co_await session->impl_->persist_initial_system_message(); !persisted) {
+        co_return std::unexpected(persisted.error());
     }
-    return session;
+    co_return std::move(session);
 }
 
 support::AsyncResult<CreateAgentSessionResult> create_agent_session_async(runtime::AgentSessionCreationRequest request,

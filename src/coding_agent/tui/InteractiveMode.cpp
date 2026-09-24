@@ -208,29 +208,12 @@ boost::asio::awaitable<void> InteractiveEngine::handle_open_external_editor() {
     }
 }
 
-bool InteractiveEngine::is_dynamic_slash_command(std::string_view command) const {
-    if (session_ == nullptr) return false;
-    return tui::is_dynamic_slash_command(
-        command,
-        session_->templates(),
-        session_->skills(),
-        settings_manager_ && settings_manager_->get_enable_skill_commands());
-}
-
 bool InteractiveEngine::dispatch_command(std::string_view text) {
     if (!running_ || view_ == nullptr) return false;
 
     SlashCommandExecutionContext context;
     context.execute_immediate = [this](const SlashCommandInvocation& invocation) {
         return execute_immediate_slash_command(invocation);
-    };
-    context.allow_unrecognized = [this](std::string_view command) {
-        // The router removes only the command prefix. Absolute paths such
-        // as clipboard image paths inserted into the editor retain an
-        // internal slash in the token and are ordinary prompt text, not
-        // command tokens.
-        return command.find('/') != std::string_view::npos ||
-            is_dynamic_slash_command(command);
     };
 
     auto routed = slash_command_router_.route(text, context);

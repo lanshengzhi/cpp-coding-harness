@@ -2,6 +2,7 @@
 
 #include "coding_agent/prompt/BuiltinSlashCommands.hpp"
 #include "coding_agent/tui/ModelSearch.hpp"
+#include "coding_agent/tui/SlashCommandRouter.hpp"
 
 #include <cch/tui/Fuzzy.hpp>
 
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <format>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -44,6 +46,7 @@ command_autocomplete_commands(
     bool include_skill_commands) {
     std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>> items;
     std::set<std::string, std::less<>> names;
+    std::map<std::string, std::string, std::less<>> descriptions_by_name;
     for (const auto& command : prompt::builtin_slash_commands()) {
         std::string description = std::string{command.description};
         if (!command.argument_hint.empty()) {
@@ -51,6 +54,7 @@ command_autocomplete_commands(
                 ? std::string{command.argument_hint}
                 : std::format("{} — {}", command.argument_hint, description);
         }
+        descriptions_by_name.emplace(std::string{command.name}, description);
         if (command.name == "model") {
             // pi `createBaseAutocompleteProvider`: `/model` argument
             // completion over `getModelSearchText`, value `provider/id`,
@@ -98,6 +102,23 @@ command_autocomplete_commands(
             });
         }
         names.insert(std::string{command.name});
+    }
+    // The router accepts spellings the pi-ported catalog does not list
+    // (`/clear`, `/help`, `/commands`, `/exit`, `/q`, `/models`). Offering them
+    // keeps an exact spelling from losing to an unrelated fuzzy match — a
+    // skill name, for example — that Enter would then apply (issue #791).
+    for (const auto& spelling : slash_command_spellings()) {
+        if (!names.insert(std::string{spelling.spelling}).second) continue;
+        std::string description;
+        if (const auto found = descriptions_by_name.find(std::string{slash_command_name(spelling.command)});
+                found != descriptions_by_name.end()) {
+            description = found->second;
+        }
+        items.push_back(cch::tui::AutocompleteItem{
+                .value = std::string{spelling.spelling},
+                .label = std::string{spelling.spelling},
+                .description = std::move(description),
+        });
     }
     for (const auto& prompt_template : prompt_templates) {
         if (!names.insert(prompt_template.name).second) continue;

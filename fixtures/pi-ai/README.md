@@ -5,14 +5,14 @@ compared by tests in this repository against the C++ surface, so the gate's evid
 checklist away. No fixture value is a live credential or derived from one; all credential-like
 strings are distinguishable `dummy-*` tokens (see [Sanitization rules](#sanitization-rules)).
 
-## Issue #758 T0 provenance snapshot
+## Issue #784 T1 provenance snapshot (pi v0.87.1)
 
-The snapshot named below is the current #757/#766 catalog acceptance target. It is intentionally
+The snapshot named below is the current #784/#785 catalog acceptance target. It is intentionally
 revision- and hash-pinned; an unpinned "latest" catalog is not a provenance reference.
 
-The T0 catalog gate re-ran pi's generator at the exact upstream revision
-`1a584a7a56eb5e7b4ff8ccbd46430f1533282eed` (`1a584a7a5`). The run completed at
-`2026-09-22T05:24:23Z` from the pi checkout root with:
+The T1 catalog gate re-ran pi's generator at the exact upstream revision
+`f07218c4d4bbc12bef056a7058c3dd49dfe41abe` (`f07218c4`, tag `v0.87.1`). The run completed at
+`2026-09-23T12:05:52Z` from the pi checkout root with:
 
 ```text
 node packages/ai/scripts/generate-models.ts --strict
@@ -23,31 +23,48 @@ Gateway, and Radius), so the source revision alone does not reproduce the bytes.
 committed artifacts below bind this particular live snapshot by SHA-256. The complete
 machine-readable record, including every final model ID and API grouping, is
 [`models/provenance.json`](models/provenance.json); the artifacts are copied from
-`packages/ai/src/providers/data/` after that run.
+`packages/ai/src/providers/data/` after that run. Each artifact is single-line JSON:
+query it with `python3` or `jq` rather than `grep`/`head`, which print the whole file.
 
 | Provider artifact | Models | API families | SHA-256 |
 | --- | ---: | --- | --- |
 | `models/providers/deepseek.json` | 2 | `openai-completions` | `549a7ddbdcfd4c59272f1ea9c7d6d9a70bbbfccad3df3a75fb16d6918ac54d0d` |
 | `models/providers/kimi-coding.json` | 4 | `anthropic-messages` (upstream provenance only) | `9884f065fe5a0e68e3538590c28019476077712f0542198eef6fdb53b8edd2ee` |
-| `models/providers/openai.json` | 39 | `openai-responses` | `3df2916783a161926c0f597de68138499d0bdaef6aecc28d3a09d2f0dcf28e2e` |
-| `models/providers/openai-codex.json` | 6 | `openai-codex-responses` | `f4e2b200a94a878170686f8d36d3fbed7d16630b4e2f61f0bf187034eac76976` |
-| `models/providers/openrouter.json` | 378 | `anthropic-messages`, `openai-completions` | `83c2152eba09a067a3b796c401fbda79d5b366a056f70b62937be5130483c184` |
+| `models/providers/openai.json` | 41 | `openai-responses` | `3c52c8587e7e4a1829ed98ec6e0e3d7bbb2baf47e8618556ed1e95a9c0362835` |
+| `models/providers/openai-codex.json` | 8 | `openai-codex-responses` | `4bb30a26d1b40e1f67c9f24891fca0ce25b030bc4cbbb529be78608cd4466fdf` |
+| `models/providers/openrouter.json` | 388 | `anthropic-messages`, `openai-completions` | `64954826ffbf508c562e398c958030242280800cf644a1c5c0ccd5f0bfb64dac` |
 | `models/providers/opencode-go.json` | 30 | `openai-completions`, `openai-responses`, `anthropic-messages` | `d471bdb6a9f940fc732687d6749f92d2f3c7c9302ff39d2ce0af062f2472a4ad` |
 
-The generator resolves the Codex discrepancy in favor of six models:
-`gpt-5.3-codex-spark`, `gpt-5.5`, `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, and
-`gpt-6-astra`. The old seven-model count is retained only as the discrepancy input in
-`provenance.json`, not as an acceptance target.
+The generator resolves the Codex discrepancy in favor of eight models:
+`gpt-5.3-codex-spark`, `gpt-5.5`, `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`,
+`gpt-6-astra`, `gpt-6-luna`, and `gpt-6-sol`. The old seven-model count is retained only as the
+discrepancy input in `provenance.json`, not as an acceptance target.
 
 The exact final sets are the artifact object keys and are repeated as sorted `model_ids` in
-`provenance.json`: DeepSeek (2), upstream Kimi (4), OpenAI (39), Codex (6), OpenRouter (378),
-and OpenCode Go (30). This T0 bundle does not overwrite the legacy 83114817 fixtures below;
-those fixtures remain evidence for already-landed behavior until their dependent tickets
-replace them.
+`provenance.json`: DeepSeek (2), upstream Kimi (4), OpenAI (41), Codex (8), OpenRouter (388),
+and OpenCode Go (30).
+
+**Drift adjudication against the T0 snapshot (`1a584a7a5`).** DeepSeek, upstream Kimi, and
+OpenCode Go are byte-identical to T0. OpenAI and Codex change exactly as the `db91e0331`
+commit predicts: the GPT-6 Sol/Luna additions, the `gpt-5.6-sol` repricing, and GPT-6
+Sol/Luna thinking maps whose `off` key maps to `"none"`. OpenRouter moved with the live
+catalog and was adjudicated accepted: sixteen models added (`anthropic/claude-opus-5.5` and
+its `:batch` twin, the `openai/gpt-6-sol`/`gpt-6-luna` family including `-pro` and `:batch`
+variants, `cohere/command-a-plus`, `deepseek/deepseek-v4.1-flash:batch`,
+`moonshotai/kimi-k3:batch`, `openai/gpt-oss-20b:batch`, `qwen/qwen3.8-omni-flash`,
+`upstage/solar-mini4`), six removed (`deepseek/deepseek-v4-flash-0731:batch`,
+`deepseek/deepseek-v4-flash-vision-exp:batch`, `deepseek/deepseek-v4-pro-0813:batch`,
+`kwaipilot/kat-coder-pro-v2`, `meta/muse-glimmer-30b:batch`, `z-ai/glm-5.2:batch`), sixteen
+common models repriced or re-limited, and the `~anthropic/claude-opus-latest` alias's
+`thinkingLevelMap.off` flipped from `"none"` to `null`. Every added or changed value stays
+inside the four-adapter typed surface; nothing requires new compat or adapter machinery.
+
+This T1 bundle does not overwrite the T0 (`1a584a7a5`) or legacy `83114817` fixtures below;
+those remain historical evidence. The T1 artifacts above are the current acceptance target.
 
 ## Generated bundled catalog
 
-The offline C++ catalog is generated by one committed command from the six hash-pinned T0
+The offline C++ catalog is generated by one committed command from the six hash-pinned T1
 artifacts plus the independent Kimi vendor specification:
 
 ```text
@@ -76,10 +93,26 @@ The vendor oracle is bound separately by
 `e4f79e0957788410af95ff0490b248af1848c8aa2584dd876218ad71a432856d`) and its authority is the
 [Kimi Code documentation](https://www.kimi.com/code/docs/), not the upstream Kimi artifact.
 
+The vendor oracle's `thinkingLevelMap` values are deliberate, not stale: the three effort-capable
+models map only the vendor's three real effort levels (`low`, `high`, `max`) and set every other
+key to `null` (explicitly unsupported). The vendor additionally accepts and normalizes the
+documented aliases (`ultra`/`max`/`xhigh` → `max`, `high`/`medium` → `high`,
+`low`/`minimum`/`light` → `low`), so aliases are not rejection cases — but the fixture maps each
+level to its canonical documented value rather than an alias spelling, and marks alias-only
+levels (`xhigh`, `medium`, `minimal`) unsupported so they are never sent as raw effort values.
+Because reasoning-effort resolution (`mapped_effort` in `src/ai/api/CompletionsPayload.cpp`)
+consults the map only when the requested level's key is present — a missing key falls through to
+the level's own name, which the service would only alias-normalize — every one of the seven keys
+must be pinned explicitly. Clamping (`clamp_thinking_level` in `src/ai/SimpleOptions.cpp`)
+resolves the unsupported alias levels to the nearest supported real level, so a Medium request
+yields `high` and an XHigh request yields `max`, reproducing the vendor's alias table while the
+wire carries only documented values (`OpenAICompletionsAdapterTest` `"Kimi Coding maps every
+vendor thinking level without undocumented effort values"` pins this).
+
 ## Historical pinned baseline and shard artifact (not the current acceptance target)
 
 - **Historical pi commit:** `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (the parity map [#2]
-  baseline, not the current T0 baseline).
+  baseline, not the current T1 baseline).
   The local pi checkout is `../pi`; `pi:` references resolve from that root.
 - **Historical published artifact:** `@earendil-works/pi-ai@0.83.0`, published at pi tag `v0.83.0`
   (commit `845d6ff1f`, released 2026-07-30). The generated provider shards ship as
@@ -168,7 +201,7 @@ shared by the scoped adapters:
   (`#761`): the current-baseline pi-ai DeepSeek Chat Completions request bytes, raw SSE
   sequence, and full assistant event snapshot. Regenerate from the sibling pinned checkout
   with `../pi/node_modules/.bin/tsx fixtures/pi-ai/capture/capture-completions-ts-events.mts`;
-  the script refuses any checkout other than `1a584a7a5`.
+  the script refuses any checkout other than `f07218c4`.
 - `wire/openai-responses-deepseek-ts-request.json` + `.sse` + `-ts-events.json` (#340): the frozen
   DeepSeek `openai-responses` request bytes, raw SSE sequence, and TS assistant event snapshot. The
   final `response.completed` frame is SSE-terminated (a single trailing `\n\n`) so strict SSE
@@ -179,8 +212,9 @@ shared by the scoped adapters:
   `-ws-ts-events.json` (#342): the frozen Codex `openai-codex-responses` request body (sorted-key
   canonicalized), SSE sequence, TS event snapshots, and the WebSocket frame sequence
   (`response.create` + server events). Documented divergences from the frozen TS bytes: the C++
-  adapter omits zstd SSE compression (pi's plain-JSON branch) and sends its own
-  `User-Agent: pi (cpp-harness)`.
+  adapter omits zstd SSE compression (pi's plain-JSON branch) and single-sources its own client
+  identity, sending `originator: pike` and `User-Agent: pike` where the frozen TS bytes carry
+  pi's `originator: pi` and `getPiUserAgent()` value (see Residual notes 6).
 - `wire/openai-responses-deepseek-no-terminal.sse` + `-ts-events.json` (#375): a terminal-outcome
   snapshot for a Responses stream ending without a terminal response event.
 - `wire/openai-responses-deepseek-string-content-ts-request.json` +
@@ -327,7 +361,7 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 | 7 | Agent Config Directory = pi's own (`~/.pi/agent`, `PI_CODING_AGENT_DIR`, SDK `agentDir`); no `CCH_CODING_AGENT_DIR` | `core/config.ts` | `AgentConfigDir.hpp` | `AgentConfigDirTest`, `SessionPathPolicyTest` |
 | 8 | `models.json` composition: built-ins → provider overlay/custom-model upsert (same-ID replace) → model overrides; invalid config → empty user config + diagnostics; no global rollback | `core/model-config.ts` | `ModelConfig.hpp`, `ProviderComposer.hpp`, `ModelRuntime.cpp` | `ModelConfigTest`, `ProviderComposerTest`, `ModelRuntimeTest` |
 | 9 | Config-only provider composition (DeepSeek `deepseek-v4-flash` from `models.json` + private `openai-responses` adapter) | `models.json` shard + `api/openai-responses.ts` | `ProviderComposer.cpp` | `ModelRuntimeTest` `"ModelRuntime config-only provider streams the frozen deepseek wire path"` → `wire/openai-responses-deepseek-*`, `models/models.json` |
-| 10 | Frozen built-in catalogs: Codex 6 and vendor-authoritative Kimi 4 (`k3`, `k3-256k`, `kimi-for-coding`, `kimi-for-coding-highspeed`) with explicit context, limits, costs, and null-aware seven-level maps | upstream/provider artifacts plus `models/vendors/kimi-coding.json` | `DefaultModelsJson.cpp`, `BuiltinProviders.cpp` | `ProviderComposerTest` and `OpenAICompletionsAdapterTest` `[issue763]` |
+| 10 | Frozen built-in catalogs: Codex 8 and vendor-authoritative Kimi 4 (`k3`, `k3-256k`, `kimi-for-coding`, `kimi-for-coding-highspeed`) with explicit context, limits, costs, and null-aware seven-level maps | upstream/provider artifacts plus `models/vendors/kimi-coding.json` | `DefaultModelsJson.cpp`, `BuiltinProviders.cpp` | `ProviderComposerTest` and `OpenAICompletionsAdapterTest` `[issue763]` |
 | 11 | `openai-codex-responses` adapter: WebSocket-first with narrow SSE fallback, socket reuse (5m idle / 55m age), `previous_response_id` continuation, `store:false`, one retry each for `previous_response_not_found` / pre-start `websocket_connection_limit_reached`, per-session SSE-only marking, one-shot sockets for `cacheRetention:none`, `session-id`/`x-client-request-id`/`chatgpt-account-id` headers | `api/openai-codex-responses.ts` | `src/ai/api/OpenAICodexResponsesAdapter.*`, `BoostBeastWebSocketTransport` | `OpenAICodexResponsesAdapterTest` (19 cases) → `wire/openai-codex-responses-*` (full-payload `-ws-ts-events.json`/`-ts-events.json`) |
 | 12 | `openai-responses` adapter (DeepSeek stateless full-context replay, no `previous_response_id`, developer-role prompt, session-affinity headers silently ignored) | `api/openai-responses.ts` + `openai-responses-shared.ts` | `src/ai/api/OpenAIResponsesAdapter.*` | `OpenAIResponsesAdapterTest` (7 cases) + `ModelRuntimeTest` → `wire/openai-responses-deepseek-*` (full-payload `-ts-events.json`) |
 | 13 | Generic `anthropic-messages` adapter: system extraction, text/image blocks, cache and terminal handling | `api/anthropic-messages.ts` | `src/ai/api/AnthropicMessagesAdapter.*` | `AnthropicMessagesAdapterTest` inline generic stream |
@@ -448,6 +482,30 @@ records `cacheWrite1h` on every `message_start`, defaulting to 0 when the provid
    this gate: the session-dir env var is now pi's `PI_CODING_AGENT_SESSION_DIR`
    (`CCH_CODING_AGENT_SESSION_DIR` removed, matching ADR 0031), and the README no longer lists OAuth
    as deferred nor pins the parity baseline at the pre-advance `864b35c`.
+6. **Codex client-identity acceptance is partly verified live (2026-09-23).** The Codex path
+   completed end-to-end with this harness's own request headers (`originator: pike`,
+   `User-Agent: pike` instead of pi's `originator: pi` and `getPiUserAgent()` value). The
+   authorize URL's `originator=pike` (browser login entry) was added afterwards and remains
+   unexercised live. If either regresses with live credentials, each header reverts to the old
+   value with one line in `src/ai/api/CodexShared.cpp` (`codex_headers`), and the authorize URL
+   originator reverts with one line in `src/ai/auth/OpenAICodexOAuthWire.cpp`
+   (`build_authorize_url`).
+7. **Kimi completions parity was live-verified on 2026-09-23 (single-turn, non-streaming,
+   `kimi-for-coding` at `api.kimi.com/coding/v1`).** The endpoint rejects the OpenAI `developer`
+   instruction role (HTTP 400 "role 'developer' is not allowed"), so every Kimi catalog entry
+   pins `compat.supportsDeveloperRole: false` in the hand-authored vendor oracle; the completions
+   payload resolves to the `system` instruction role (regression case in
+   `OpenAICompletionsAdapterTest`). Accepted live: `system` role, `reasoning_effort: "high"`,
+   `max_completion_tokens`, `store: false`. Still verified only by scripted-transport tests:
+   multi-turn assistant replay (reasoning-content replay semantics), streaming shape, and any
+   vendor behavior that changes after this date.
+8. **The login prompt rejects empty submissions (deliberate divergence from pi).** A blank or
+   whitespace-only `Enter` never resolves a login prompt (API key or authorization code), so an
+   empty credential can never be "Saved"; pi's `login-dialog.ts` resolves the input value
+   unconditionally, including `""`. The guard lives in `src/coding_agent/tui/LoginDialog.cpp`
+   (`handle_input`). Paste forwarding itself stays parity-correct: `PasteEvent` now reaches the
+   prompt input, the session-selector rename input, and the tree-selector search query, matching
+   pi's `Input` bracketed-paste insertion.
 
 ### Handoff surface to pi-agent-core (#330 decision 4, #331 scope unchanged)
 

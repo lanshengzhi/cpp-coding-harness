@@ -242,24 +242,45 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     }
 }
 
-support::ExpectedVoid AgentSession::Impl::persist_initial_system_message() {
+boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::persist_initial_system_message() {
     if (!session_.store) {
-        return {};
+        co_return support::ExpectedVoid{};
     }
+
+    const auto append = [this](ai::MessageVariant message) -> boost::asio::awaitable<support::ExpectedVoid> {
+        if (!persistence_) {
+            // In-memory SessionStore appends are not filesystem work and have
+            // no persistence worker to admit them to.
+            co_return session_.store->append(std::move(message));
+        }
+        if (auto admitted = persistence_->submit_message_append(std::move(message)); !admitted) {
+            co_await persistence_->drain();
+            if (auto failure = persistence_->failure()) {
+                co_return std::unexpected(*failure);
+            }
+            co_return std::unexpected(admitted.error());
+        }
+        co_await persistence_->drain();
+        if (auto failure = persistence_->failure()) {
+            co_return std::unexpected(*failure);
+        }
+        co_return support::ExpectedVoid{};
+    };
+
     if (initial_system_message_to_persist_) {
-        auto appended = session_.store->append(ai::MessageVariant{*initial_system_message_to_persist_});
+        auto appended = co_await append(ai::MessageVariant{*initial_system_message_to_persist_});
         if (!appended) {
-            return std::unexpected(appended.error());
+            co_return std::unexpected(appended.error());
         }
         initial_system_message_to_persist_.reset();
     }
     for (const auto& message : branch_history_to_persist_) {
-        if (auto branch_appended = session_.store->append(message); !branch_appended) {
-            return std::unexpected(branch_appended.error());
+        if (auto branch_appended = co_await append(message); !branch_appended) {
+            co_return std::unexpected(branch_appended.error());
         }
     }
     branch_history_to_persist_.clear();
-    return {};
+    co_return support::ExpectedVoid{};
 }
 
 std::string AgentSession::Impl::rebuild_system_prompt() const {

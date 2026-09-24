@@ -192,7 +192,7 @@ template <typename T> [[nodiscard]] support::Expected<T> consume_async_result(su
 // ProviderComposer: built-in/config composition (pi provider-composer subset)
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("builtin definitions carry the Codex 6 and Kimi 4 catalogs",
+TEST_CASE("builtin definitions carry the Codex 8 and Kimi 4 catalogs",
         "[coding_agent][provider-composer][issue546][spec]") {
     const auto builtins = ai::builtin_provider_definitions();
     REQUIRE(builtins.size() == 6);
@@ -205,9 +205,9 @@ TEST_CASE("builtin definitions carry the Codex 6 and Kimi 4 catalogs",
     CHECK(codex.name == "OpenAI Codex");
     CHECK(codex.auth.oauth.has_value());
     CHECK_FALSE(codex.auth.api_key.has_value());
-    REQUIRE(codex.models.size() == 6);
+    REQUIRE(codex.models.size() == 8);
     CHECK(codex.models.front().id == "gpt-5.3-codex-spark");
-    CHECK(codex.models.back().id == "gpt-6-astra");
+    CHECK(codex.models.back().id == "gpt-6-sol");
     const auto gpt55 = std::find_if(
             codex.models.begin(), codex.models.end(), [](const ai::Model& m) { return m.id == "gpt-5.5"; });
     REQUIRE(gpt55 != codex.models.end());
@@ -352,7 +352,7 @@ TEST_CASE("built-in without models.json config is submitted unchanged",
     REQUIRE(change.definition.has_value());
     CHECK(change.definition->id == "openai-codex");
     CHECK(change.definition->name == "OpenAI Codex");
-    CHECK(change.definition->models.size() == 6);
+    CHECK(change.definition->models.size() == 8);
     CHECK(change.definition->auth.oauth.has_value());
 }
 

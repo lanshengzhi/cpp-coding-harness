@@ -1604,7 +1604,9 @@ support::Expected<cch::tui::RenderResult> TreeSelectorComponent::render(
 
     lines.push_back("");
     lines.push_back(border());
-    lines.push_back(std::format("\x1b[1m{}\x1b[22m", "  Session Tree"));
+    auto title_line = cch::tui::truncate_text(std::format("\x1b[1m{}\x1b[22m", "  Session Tree"), width, "");
+    if (!title_line) return std::unexpected(title_line.error());
+    lines.push_back(std::move(*title_line));
     auto help = render_tree_help(width, *keybindings_, theme_);
     if (!help) return std::unexpected(help.error());
     for (auto& line : *help) lines.push_back(std::move(line));
@@ -1615,7 +1617,9 @@ support::Expected<cch::tui::RenderResult> TreeSelectorComponent::render(
         return theme_.foreground(ThemeToken::Muted, "  Type to search: ") +
             theme_.foreground(ThemeToken::Accent, search_query_);
     }();
-    lines.push_back(search_line);
+    auto bounded_search = cch::tui::truncate_text(search_line, width, "");
+    if (!bounded_search) return std::unexpected(bounded_search.error());
+    lines.push_back(std::move(*bounded_search));
     lines.push_back(border());
     lines.push_back("");
 

@@ -6,6 +6,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "support/OverlayWidthBound.hpp"
+
 #include "coding_agent/tui/KeybindingsManager.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/tui/TreeSelector.hpp"
@@ -530,4 +532,28 @@ TEST_CASE("tree selector renders branch-summary and compaction entries from pi-c
     // count (pi: `Math.round(entry.tokensBefore / 1000)`).
     CHECK(text.find("[branch summary]: abandoned branch notes") != std::string::npos);
     CHECK(text.find("[compaction: 15k tokens]") != std::string::npos);
+}
+
+TEST_CASE("TreeSelector bounds every row at narrow widths", "[coding_agent][tui][tree-selector][issue790][spec]") {
+    auto theme = test_theme();
+    auto keybindings = test_keybindings();
+    std::optional<std::string> leaf_id;
+    auto tree = sample_tree(leaf_id);
+    coding_agent::tui::TreeSelectorComponent component(
+            theme,
+            keybindings,
+            std::move(tree),
+            *leaf_id,
+            /*terminal_height=*/20,
+            [](std::string) -> support::ExpectedVoid { return {}; },
+            [] {},
+            [](std::string, std::optional<std::string>) -> support::ExpectedVoid { return {}; },
+            [](std::optional<std::string>) -> support::ExpectedVoid { return {}; },
+            [] {});
+
+    for (const auto width : tests::kNarrowOverlayWidths) {
+        const auto rendered = component.render(width);
+        REQUIRE(rendered);
+        tests::check_all_lines_bounded(*rendered, width);
+    }
 }

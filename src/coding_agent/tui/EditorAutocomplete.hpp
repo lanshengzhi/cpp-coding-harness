@@ -40,8 +40,10 @@ namespace cch::coding_agent::tui {
 /// `model` command as a `SlashCommand` whose argument completion resolves
 /// pi's `model-search` text over the current candidate snapshot (scoped
 /// models when the session carries a scope, else the availability snapshot).
-/// The Deferred slashes (`/export` `/import` `/share` `/changelog`
-/// `/clone`), `/debug`, and the easter eggs are absent.
+/// The names with no surface — the Deferred slashes (`/export` `/import`
+/// `/share` `/changelog` `/clone`), the hidden pi-only `/debug` developer
+/// entry, `/bug` (pi's own bug-reporting endpoint), and the easter eggs —
+/// are absent (#793).
 [[nodiscard]] std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>>
 command_autocomplete_commands(
     std::span<const PromptTemplate> prompt_templates,

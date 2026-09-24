@@ -19,6 +19,9 @@
       },
       "contextWindow": 1048576,
       "maxTokens": 131072,
+      "compat": {
+        "supportsDeveloperRole": false
+      },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -48,6 +51,9 @@
       },
       "contextWindow": 262144,
       "maxTokens": 131072,
+      "compat": {
+        "supportsDeveloperRole": false
+      },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -77,6 +83,9 @@
       },
       "contextWindow": 1048576,
       "maxTokens": 32768,
+      "compat": {
+        "supportsDeveloperRole": false
+      },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,
@@ -106,6 +115,9 @@
       },
       "contextWindow": 262144,
       "maxTokens": 32768,
+      "compat": {
+        "supportsDeveloperRole": false
+      },
       "thinkingLevelMap": {
         "off": null,
         "minimal": null,

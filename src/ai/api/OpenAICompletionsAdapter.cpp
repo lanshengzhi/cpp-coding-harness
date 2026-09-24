@@ -2,6 +2,7 @@
 
 #include "CompletionsEvents.hpp"
 #include "MessageConversion.hpp"
+#include "ProviderDetection.hpp"
 #include "ai/Headers.hpp"
 #include "ai/Timestamps.hpp"
 #include "ai/providers/ProviderError.hpp"
@@ -28,10 +29,6 @@ namespace {
         result.pop_back();
     }
     return result + "/chat/completions";
-}
-
-[[nodiscard]] bool is_openrouter(const Model& model) {
-    return model.provider == "openrouter" || model.base_url.find("openrouter.ai") != std::string::npos;
 }
 
 [[nodiscard]] support::Expected<providers::StreamRequest> build_stream_request(

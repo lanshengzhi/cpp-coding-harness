@@ -6,6 +6,8 @@
 #include "support/FakeModelStream.hpp"
 #include "support/FakeTool.hpp"
 #include "support/ModelFixture.hpp"
+#include "support/PumpUntil.hpp"
+#include "support/ReleaseGate.hpp"
 #include "support/ToolArgumentContracts.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -241,6 +243,66 @@ public:
     std::vector<tests::RecordedStreamSimpleCall> requests;
 };
 
+/// A stream fake whose accepted request parks on a gate until the test calls
+/// release(), so the test can observe the Agent mid-run (busy rejection,
+/// abort) deterministically. Mirrors the GatedModelRuntime prior art.
+class GatedStreamingClient final : public std::enable_shared_from_this<GatedStreamingClient> {
+public:
+    [[nodiscard]] ai::ModelStreamFactory factory() {
+        auto self = shared_from_this();
+        return tests::adapt_stream_simple([self](ai::Model model,
+                                                  ai::AiContext context,
+                                                  ai::SimpleStreamOptions options,
+                                                  ai::AssistantEventSink sink) {
+            return self->stream_simple(std::move(model), std::move(context), std::move(options), std::move(sink));
+        });
+    }
+
+    boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_simple(
+            ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options, ai::AssistantEventSink sink) {
+        requests.push_back(tests::RecordedStreamSimpleCall{std::move(model), std::move(context), std::move(options)});
+        started = true;
+        // The stop state shared with the Agent's run: the recorded call holds
+        // the token, and a live alias keeps it usable while options moved.
+        const std::stop_token live_token = requests.back().options.stop_token;
+        if (requests.size() == 1) {
+            // Hold the gated call; interrupt also wakes on the run's stop
+            // token. The stop check must precede wait(): an interrupt
+            // delivered before the gate is armed does not linger
+            // (ReleaseGate contract).
+            std::stop_callback release_on_stop{live_token, [this] { gate_.interrupt(); }};
+            if (!live_token.stop_requested()) {
+                co_await gate_.wait();
+            }
+        }
+        if (live_token.stop_requested()) {
+            auto terminal = ai::assistant_text_message("");
+            terminal.stop_reason = ai::AssistantStopReason::Aborted;
+            terminal.error_message = "Request was aborted";
+            CCH_TRY_VOID(sink(ai::AssistantErrorEvent{
+                    .reason = ai::AssistantStopReason::Aborted,
+                    .error = terminal,
+            }));
+            co_return terminal;
+        }
+        if (responses.empty()) {
+            co_return ai::assistant_text_message("default fake response");
+        }
+        auto response = responses.front();
+        responses.pop_front();
+        CCH_TRY_VOID(sink(ai::AssistantStartEvent{response}));
+        co_return response;
+    }
+
+    /// Release the gated request.
+    void release() { gate_.release(); }
+
+    std::deque<ai::AssistantMessage> responses;
+    std::vector<tests::RecordedStreamSimpleCall> requests;
+    bool started{false};
+    tests::ReleaseGate gate_;
+};
+
 struct FakeToolState {
     std::vector<agent::ToolInvocation> invocations;
 };
@@ -320,7 +382,7 @@ struct AgentRun {
     agent::AgentState state;
 };
 
-AgentRun run_agent(agent::Agent& subject, std::string prompt, agent::AgentEventCommitter commitment = {}) {
+AgentRun run_agent(agent::Agent& subject, support::AsyncResult<void> operation) {
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> result;
     std::vector<agent::AgentLifecycleEvent> events;
@@ -334,8 +396,7 @@ AgentRun run_agent(agent::Agent& subject, std::string prompt, agent::AgentEventC
     boost::asio::co_spawn(
             io,
             [&]() -> boost::asio::awaitable<void> {
-                result = co_await support::detail::await_async_result(
-                        subject.prompt(std::move(prompt), std::move(commitment)));
+                result = co_await support::detail::await_async_result(std::move(operation));
                 co_return;
             },
             boost::asio::detached);
@@ -347,6 +408,10 @@ AgentRun run_agent(agent::Agent& subject, std::string prompt, agent::AgentEventC
             .events = std::move(events),
             .state = subject.state(),
     };
+}
+
+AgentRun run_agent(agent::Agent& subject, std::string prompt, agent::AgentEventCommitter commitment = {}) {
+    return run_agent(subject, subject.prompt(std::move(prompt), std::move(commitment)));
 }
 
 [[nodiscard]] ai::AssistantStopReason final_stop_reason(const std::vector<agent::AgentLifecycleEvent>& events) {
@@ -430,6 +495,412 @@ TEST_CASE("async agent loop emits deterministic lifecycle events for text", "[ag
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 2);
     CHECK(count_events<agent::TurnEndEvent>(run.events) == 1);
     CHECK(count_events<agent::AgentEndEvent>(run.events) == 1);
+}
+
+TEST_CASE("Agent continuation continues retained history without adding a prompt", "[agent][async][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("continued"));
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState initial_state;
+    initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
+
+    auto run = run_agent(subject, subject.continue_run());
+
+    REQUIRE(run.result);
+    REQUIRE(client->requests.size() == 1);
+    REQUIRE(client->requests.front().context.messages.size() == 1);
+    CHECK(std::holds_alternative<ai::UserMessage>(client->requests.front().context.messages.front()));
+    // The ModelStream request carried the Agent's current model.
+    CHECK(client->requests.front().model.id == subject.state().model.id);
+    REQUIRE(run.state.messages.size() == 2);
+    CHECK(count_events<agent::MessageStartEvent>(run.events) == 1);
+    // The AgentEnd payload reports only the messages produced by this
+    // invocation, not the retained history.
+    const auto* agent_end = std::get_if<agent::AgentEndEvent>(&run.events.back());
+    REQUIRE(agent_end);
+    REQUIRE(agent_end->messages.size() == 1);
+    CHECK(std::holds_alternative<ai::AssistantMessage>(agent_end->messages.front()));
+}
+
+TEST_CASE("Agent continuation from an assistant tail prioritizes steering before follow-up",
+        "[agent][async][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("steering response"));
+    client->responses.push_back(ai::assistant_text_message("follow-up response"));
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState initial_state;
+    initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
+    REQUIRE(subject.steer(ai::user_text_message("steering input")));
+    REQUIRE(subject.follow_up(ai::user_text_message("follow-up input")));
+
+    auto run = run_agent(subject, subject.continue_run());
+
+    REQUIRE(run.result);
+    REQUIRE(client->requests.size() == 2);
+    const auto& first_messages = client->requests[0].context.messages;
+    REQUIRE(first_messages.size() == 3);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(first_messages.back())) == "steering input");
+    const auto& second_messages = client->requests[1].context.messages;
+    REQUIRE(second_messages.size() == 5);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(second_messages.back())) == "follow-up input");
+}
+
+TEST_CASE("Agent continuation from an assistant tail falls back to queued follow-up messages",
+        "[agent][async][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("continued from follow-up"));
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState initial_state;
+    initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
+    REQUIRE(subject.follow_up(ai::user_text_message("follow-up continuation input")));
+
+    auto run = run_agent(subject, subject.continue_run());
+
+    REQUIRE(run.result);
+    REQUIRE(client->requests.size() == 1);
+    const auto& messages = client->requests.front().context.messages;
+    REQUIRE(messages.size() == 3);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(messages.back())) == "follow-up continuation input");
+}
+
+TEST_CASE("Agent continuation from an assistant tail drains all configured steering messages",
+        "[agent][async][compat-pi][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("response"));
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("gpt-test");
+    options.steering_mode = agent::InputQueueMode::All;
+    agent::AgentInitialState initial_state;
+    initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
+    REQUIRE(subject.steer(ai::user_text_message("first steering input")));
+    REQUIRE(subject.steer(ai::user_text_message("second steering input")));
+
+    auto run = run_agent(subject, subject.continue_run());
+
+    REQUIRE(run.result);
+    REQUIRE(client->requests.size() == 1);
+    const auto& messages = client->requests.front().context.messages;
+    REQUIRE(messages.size() == 4);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(messages[2])) == "first steering input");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(messages[3])) == "second steering input");
+}
+
+TEST_CASE("Agent continuation rejects empty, system-only, and assistant-tail histories without fallback input",
+        "[agent][async][compat-pi][spec]") {
+    auto empty_client = std::make_shared<FakeStreamingClient>();
+    agent::ToolRegistry empty_registry;
+    agent::AsyncAgentOptions empty_options;
+    empty_options.model = tests::make_model("gpt-test");
+    agent::Agent empty_subject(empty_client->factory(), std::move(empty_registry), std::move(empty_options));
+    auto empty_run = run_agent(empty_subject, empty_subject.continue_run());
+    CHECK_FALSE(empty_run.result);
+    CHECK(empty_client->requests.empty());
+
+    auto system_client = std::make_shared<FakeStreamingClient>();
+    agent::ToolRegistry system_registry;
+    agent::AsyncAgentOptions system_options;
+    system_options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState system_state;
+    system_state.messages.emplace_back(ai::SystemMessage{.content = "system prompt"});
+    agent::Agent system_subject(
+            system_client->factory(), std::move(system_registry), std::move(system_options), std::move(system_state));
+    REQUIRE(system_subject.follow_up(ai::user_text_message("must remain queued")));
+    auto system_run = run_agent(system_subject, system_subject.continue_run());
+    CHECK_FALSE(system_run.result);
+    CHECK(system_client->requests.empty());
+    CHECK(system_subject.input_queue_counts().follow_up == 1);
+
+    auto assistant_client = std::make_shared<FakeStreamingClient>();
+    agent::ToolRegistry assistant_registry;
+    agent::AsyncAgentOptions assistant_options;
+    assistant_options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState assistant_state;
+    assistant_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    assistant_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
+    agent::Agent assistant_subject(assistant_client->factory(),
+            std::move(assistant_registry),
+            std::move(assistant_options),
+            std::move(assistant_state));
+    auto assistant_run = run_agent(assistant_subject, assistant_subject.continue_run());
+    CHECK_FALSE(assistant_run.result);
+    CHECK(assistant_client->requests.empty());
+}
+
+TEST_CASE("Agent continuation honors OneAtATime steering drain without prematurely draining remaining input",
+        "[agent][async][continuation][issue782][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("first response"));
+    client->responses.push_back(ai::assistant_text_message("second response"));
+    client->responses.push_back(ai::assistant_text_message("third response"));
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState initial_state;
+    initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
+    REQUIRE(subject.steer(ai::user_text_message("first steer")));
+    REQUIRE(subject.steer(ai::user_text_message("second steer")));
+    REQUIRE(subject.steer(ai::user_text_message("third steer")));
+    REQUIRE(subject.input_queue_counts().steering == 3);
+
+    auto run = run_agent(subject, subject.continue_run());
+
+    REQUIRE(run.result);
+    CHECK(final_stop_reason(run.events) == ai::AssistantStopReason::Stop);
+
+    // Three queued steers at OneAtATime => three turns, one steer per turn,
+    // delivered in FIFO order. The first request carries only the first
+    // steer: remaining queued input is not prematurely drained.
+    REQUIRE(client->requests.size() == 3);
+    const auto& first_messages = client->requests[0].context.messages;
+    REQUIRE(first_messages.size() == 3);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(first_messages.back())) == "first steer");
+
+    // Remaining input is consumed by the normal turn loop, one per turn,
+    // in order.
+    const auto& second_messages = client->requests[1].context.messages;
+    REQUIRE(second_messages.size() == 5);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(second_messages.back())) == "second steer");
+    const auto& third_messages = client->requests[2].context.messages;
+    REQUIRE(third_messages.size() == 7);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(third_messages.back())) == "third steer");
+
+    // All queued steering is consumed exactly once.
+    CHECK(run.state.input_queues.steering.messages.empty());
+    CHECK(run.state.input_queues.follow_up.messages.empty());
+
+    // Each steer flows through the normal lifecycle as a user message.
+    REQUIRE(count_events<agent::MessageStartEvent>(run.events) == 6);
+    std::vector<std::string> user_texts;
+    for (const auto& event : run.events) {
+        if (const auto* start = std::get_if<agent::MessageStartEvent>(&event)) {
+            if (const auto* user = std::get_if<ai::UserMessage>(&start->message)) {
+                user_texts.push_back(ai::text_from_user_message(*user));
+            }
+        }
+    }
+    REQUIRE(user_texts.size() == 3);
+    CHECK(user_texts[0] == "first steer");
+    CHECK(user_texts[1] == "second steer");
+    CHECK(user_texts[2] == "third steer");
+}
+
+TEST_CASE("Agent continuation during an active run is rejected before consuming queued input",
+        "[agent][async][continuation][issue782][spec]") {
+    boost::asio::io_context io;
+    auto client = std::make_shared<GatedStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("gated response"));
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState initial_state;
+    initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
+    REQUIRE(subject.steer(ai::user_text_message("queued steer one")));
+    REQUIRE(subject.steer(ai::user_text_message("queued steer two")));
+    REQUIRE(subject.follow_up(ai::user_text_message("queued follow-up")));
+    const agent::AgentInputQueueCounts counts_before = subject.input_queue_counts();
+    REQUIRE(counts_before.steering == 2);
+    REQUIRE(counts_before.follow_up == 1);
+
+    std::optional<support::ExpectedVoid> first_result;
+    bool first_done = false;
+    boost::asio::co_spawn(
+            io,
+            [&subject, &first_result, &first_done]() -> boost::asio::awaitable<void> {
+                first_result = co_await support::detail::await_async_result(subject.continue_run());
+                first_done = true;
+                co_return;
+            },
+            boost::asio::detached);
+
+    // Advance until the continuation's provider request is in flight. The
+    // active run has already selected its own queued input (one steer at
+    // OneAtATime) by this point.
+    REQUIRE(io.run_one() == 1);
+    REQUIRE(client->started);
+    CHECK(subject.state().is_running);
+
+    // A second continuation attempt while the run is active is rejected.
+    auto second_run = run_agent(subject, subject.continue_run());
+    REQUIRE_FALSE(second_run.result);
+    CHECK(second_run.result.error().code == support::ErrorCode::Validation);
+    CHECK(second_run.result.error().message == "agent is busy (prompt already in flight)");
+
+    // The rejection consumed no queued input beyond the active run's own
+    // selection and emitted no lifecycle events.
+    const agent::AgentInputQueueCounts counts_after = subject.input_queue_counts();
+    CHECK(counts_after.steering == counts_before.steering - 1);
+    CHECK(counts_after.follow_up == counts_before.follow_up);
+    CHECK(second_run.events.empty());
+    CHECK(client->requests.size() == 1);
+
+    // Release the gate so the active run completes on its own executor.
+    client->release();
+    io.run();
+    REQUIRE(first_done);
+    REQUIRE(first_result.has_value());
+    REQUIRE(*first_result);
+    CHECK_FALSE(subject.state().is_running);
+    CHECK(subject.input_queue_counts().steering == 0);
+}
+
+TEST_CASE("Agent continuation with committer reduces state and delivers observers before commitment",
+        "[agent][async][continuation][issue782][spec]") {
+    auto client = std::make_shared<FakeStreamingClient>();
+    client->responses.push_back(ai::assistant_text_message("committed reply"));
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState initial_state;
+    initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
+
+    // Sequence stamps proving order: state reduction (observed via the
+    // subscription snapshot) precedes weak observer delivery, which precedes
+    // strong commitment for every committed event. One shared counter is
+    // stamped by the observer and then by the committer within each event.
+    int event_seq = 0;
+    std::vector<std::string> order;
+    std::vector<std::size_t> reduced_state_lengths;
+    auto subscription_handle = subject.subscribe([&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
+        // Snapshot the live reduced state as of this event's delivery.
+        const auto snapshot = subject.state();
+        reduced_state_lengths.push_back(snapshot.messages.size());
+        order.push_back("observer:" + std::to_string(event_seq));
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscription_handle);
+
+    int committed_events = 0;
+    agent::AgentEventCommitter commitment = [&](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
+        ++committed_events;
+        order.push_back("commit:" + std::to_string(event_seq));
+        ++event_seq;
+        if (std::holds_alternative<agent::AgentEndEvent>(event)) {
+            // Commitment failure on AgentEnd: the async result must report it
+            // while already-reduced Agent state stays intact.
+            return support::ExpectedVoid{std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "commitment failed at agent end"))};
+        }
+        return support::ExpectedVoid{};
+    };
+
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> result;
+    boost::asio::co_spawn(
+            io,
+            [&subject, &commitment, &result]() -> boost::asio::awaitable<void> {
+                result = co_await support::detail::await_async_result(subject.continue_run(std::move(commitment)));
+                co_return;
+            },
+            boost::asio::detached);
+    io.run();
+
+    // Every committed event was stamped in order: observer before commitment.
+    REQUIRE(order.size() > 0);
+    REQUIRE(order.size() % 2 == 0);
+    for (std::size_t i = 0; i < order.size(); i += 2) {
+        CHECK(order[i] == "observer:" + std::to_string(i / 2));
+        CHECK(order[i + 1] == "commit:" + std::to_string(i / 2));
+    }
+
+    // The commitment failure is reported through the async result...
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(*result);
+    CHECK((*result).error().message == "commitment failed at agent end");
+
+    // ...without rolling back the already-reduced Agent state: the user
+    // history message plus the assistant response remain in live history.
+    const auto final_state = subject.state();
+    REQUIRE(final_state.messages.size() == 2);
+    REQUIRE(std::holds_alternative<ai::UserMessage>(final_state.messages[0]));
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(final_state.messages[0])) == "previous prompt");
+    REQUIRE(std::holds_alternative<ai::AssistantMessage>(final_state.messages[1]));
+    CHECK(ai::text_from_assistant_content(std::get<ai::AssistantMessage>(final_state.messages[1]).content) ==
+            "committed reply");
+    // State was reduced before observer delivery: at the final observer
+    // delivery the live history already contained both messages.
+    REQUIRE(reduced_state_lengths.size() >= 2);
+    CHECK(reduced_state_lengths.back() == 2);
+}
+
+TEST_CASE("aborting an active continuation completes through the ordinary aborted lifecycle",
+        "[agent][async][continuation][abort][issue782][spec]") {
+    boost::asio::io_context io;
+    auto client = std::make_shared<GatedStreamingClient>();
+    agent::ToolRegistry registry;
+    agent::AsyncAgentOptions options;
+    options.model = tests::make_model("gpt-test");
+    agent::AgentInitialState initial_state;
+    initial_state.messages.emplace_back(ai::user_text_message("previous prompt"));
+    initial_state.messages.emplace_back(ai::assistant_text_message("previous answer"));
+    agent::Agent subject(client->factory(), std::move(registry), std::move(options), std::move(initial_state));
+    REQUIRE(subject.steer(ai::user_text_message("steering to be interrupted")));
+
+    std::vector<agent::AgentLifecycleEvent> events;
+    auto subscribed = subject.subscribe([&events](const agent::AgentLifecycleEvent& event) {
+        events.push_back(event);
+        return support::ExpectedVoid{};
+    });
+    REQUIRE(subscribed);
+    auto subscription = std::move(*subscribed);
+
+    std::optional<support::ExpectedVoid> result;
+    bool continuation_done = false;
+    boost::asio::co_spawn(
+            io,
+            [&subject, &result, &continuation_done]() -> boost::asio::awaitable<void> {
+                result = co_await support::detail::await_async_result(subject.continue_run());
+                continuation_done = true;
+                co_return;
+            },
+            boost::asio::detached);
+
+    // Advance until the continuation's provider request is in flight.
+    REQUIRE(io.run_one() == 1);
+    REQUIRE(client->started);
+    CHECK(subject.state().is_running);
+
+    // Abort the active continuation through the ordinary cancellation path.
+    subject.abort();
+
+    // Bounded drain: after the stop request the run must settle on its own;
+    // the backstop keeps a delivery failure from hanging the shard.
+    tests::drain_ready(io);
+    REQUIRE(continuation_done);
+    REQUIRE(result.has_value());
+
+    REQUIRE(*result);
+
+    // The provider saw the stop signal and completed through the ordinary
+    // aborted assistant lifecycle.
+    REQUIRE(client->requests.size() == 1);
+    CHECK(client->requests[0].options.stop_token.stop_requested());
+    CHECK(final_stop_reason(events) == ai::AssistantStopReason::Aborted);
+    CHECK(count_events<agent::AgentEndEvent>(events) == 1);
+    CHECK(count_events<agent::TurnEndEvent>(events) == 1);
+
+    // The Agent is idle after completion.
+    const auto final_state = subject.state();
+    CHECK_FALSE(final_state.is_running);
+    CHECK_FALSE(final_state.streaming_message.has_value());
 }
 
 TEST_CASE("async agent loop seeds the session system prompt into every request context",

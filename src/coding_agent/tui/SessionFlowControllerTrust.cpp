@@ -40,10 +40,9 @@ namespace {
 
 [[nodiscard]] std::string format_project_trust_prompt(
     const std::filesystem::path& cwd) {
-    return std::format(
-        "Trust project folder?\n{}\n\nThis allows cch to load .pi settings "
-        "and resources.",
-        cwd.string());
+    return std::format("Trust project folder?\n{}\n\nThis allows pike to load .pi settings "
+                       "and resources.",
+            cwd.string());
 }
 
 [[nodiscard]] std::vector<SessionDiagnostic> convert_trust_diagnostics(

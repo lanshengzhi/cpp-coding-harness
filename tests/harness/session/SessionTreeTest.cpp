@@ -495,6 +495,44 @@ TEST_CASE("buildSessionContext compaction skips pre-kept messages", "[harness][s
     CHECK(first_user_text({ctx.messages[2]}) == "msg4");
 }
 
+TEST_CASE("buildSessionContext replays all retained system updates before the compaction summary",
+        "[harness][session][tree][session-resume][spec]") {
+    tests::TempWorkspace workspace;
+    auto path = workspace.path() / "ctx-compact-system-updates.jsonl";
+    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
+    REQUIRE(store);
+    REQUIRE(store->append(ai::SystemMessage{.content = "initial prompt section", .timestamp = 1}).status);
+    REQUIRE(store->append(user_msg("summarized message")).status);
+
+    auto retained_tail = std::vector<ai::MessageVariant>{
+            ai::SystemMessage{.content = "initial prompt section", .timestamp = 1},
+            ai::SystemMessage{.content = "reloaded prompt section", .timestamp = 2},
+            user_msg("kept message"),
+    };
+    REQUIRE(store->append_compaction(std::nullopt,
+            harness::session::CompactionEntryValue{
+                    .summary = "summary of earlier conversation",
+                    .first_kept_entry_id = std::nullopt,
+                    .tokens_before = 1000,
+                    .retained_tail = std::move(retained_tail),
+                    .details = std::nullopt,
+            }));
+
+    auto loaded = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(loaded);
+    harness::session::SessionTree tree(std::move(*loaded));
+    const auto ctx = tree.buildSessionContext();
+
+    REQUIRE(ctx.messages.size() == 4);
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(ctx.messages[0]));
+    CHECK(std::get<ai::SystemMessage>(ctx.messages[0]).content == "initial prompt section");
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(ctx.messages[1]));
+    CHECK(std::get<ai::SystemMessage>(ctx.messages[1]).content == "reloaded prompt section");
+    REQUIRE(std::holds_alternative<ai::CompactionSummaryMessage>(ctx.messages[2]));
+    CHECK(std::get<ai::CompactionSummaryMessage>(ctx.messages[2]).summary == "summary of earlier conversation");
+    CHECK(first_user_text({ctx.messages[3]}) == "kept message");
+}
+
 TEST_CASE("buildSessionContext branch summary converted to message", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "ctx-branch.jsonl";

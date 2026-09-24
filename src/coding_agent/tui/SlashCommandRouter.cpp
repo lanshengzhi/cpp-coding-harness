@@ -107,36 +107,31 @@ constexpr std::array<SlashCommandDefinition, 19> kCommandDefinitions{{
      .immediate = false},
 }};
 
-struct SlashCommandAlias {
-    std::string_view spelling;
-    SlashCommandId command;
-};
-
-constexpr std::array<SlashCommandAlias, 24> kCommandAliases{{
-    {.spelling = "clear", .command = SlashCommandId::Clear},
-    {.spelling = "new", .command = SlashCommandId::Clear},
-    {.spelling = "quit", .command = SlashCommandId::Quit},
-    {.spelling = "exit", .command = SlashCommandId::Quit},
-    {.spelling = "q", .command = SlashCommandId::Quit},
-    {.spelling = "copy", .command = SlashCommandId::Copy},
-    {.spelling = "session", .command = SlashCommandId::Session},
-    {.spelling = "hotkeys", .command = SlashCommandId::Hotkeys},
-    {.spelling = "settings", .command = SlashCommandId::Settings},
-    {.spelling = "help", .command = SlashCommandId::Help},
-    {.spelling = "commands", .command = SlashCommandId::Help},
-    {.spelling = "model", .command = SlashCommandId::Model},
-    {.spelling = "models", .command = SlashCommandId::Models},
-    {.spelling = "scoped-models", .command = SlashCommandId::Models},
-    {.spelling = "thinking", .command = SlashCommandId::Thinking},
-    {.spelling = "login", .command = SlashCommandId::Login},
-    {.spelling = "logout", .command = SlashCommandId::Logout},
-    {.spelling = "resume", .command = SlashCommandId::Resume},
-    {.spelling = "fork", .command = SlashCommandId::Fork},
-    {.spelling = "tree", .command = SlashCommandId::Tree},
-    {.spelling = "reload", .command = SlashCommandId::Reload},
-    {.spelling = "compact", .command = SlashCommandId::Compact},
-    {.spelling = "name", .command = SlashCommandId::Name},
-    {.spelling = "trust", .command = SlashCommandId::Trust},
+constexpr std::array<SlashCommandSpelling, 24> kCommandSpellings{{
+        {.spelling = "clear", .command = SlashCommandId::Clear},
+        {.spelling = "new", .command = SlashCommandId::Clear},
+        {.spelling = "quit", .command = SlashCommandId::Quit},
+        {.spelling = "exit", .command = SlashCommandId::Quit},
+        {.spelling = "q", .command = SlashCommandId::Quit},
+        {.spelling = "copy", .command = SlashCommandId::Copy},
+        {.spelling = "session", .command = SlashCommandId::Session},
+        {.spelling = "hotkeys", .command = SlashCommandId::Hotkeys},
+        {.spelling = "settings", .command = SlashCommandId::Settings},
+        {.spelling = "help", .command = SlashCommandId::Help},
+        {.spelling = "commands", .command = SlashCommandId::Help},
+        {.spelling = "model", .command = SlashCommandId::Model},
+        {.spelling = "models", .command = SlashCommandId::Models},
+        {.spelling = "scoped-models", .command = SlashCommandId::Models},
+        {.spelling = "thinking", .command = SlashCommandId::Thinking},
+        {.spelling = "login", .command = SlashCommandId::Login},
+        {.spelling = "logout", .command = SlashCommandId::Logout},
+        {.spelling = "resume", .command = SlashCommandId::Resume},
+        {.spelling = "fork", .command = SlashCommandId::Fork},
+        {.spelling = "tree", .command = SlashCommandId::Tree},
+        {.spelling = "reload", .command = SlashCommandId::Reload},
+        {.spelling = "compact", .command = SlashCommandId::Compact},
+        {.spelling = "name", .command = SlashCommandId::Name},
+        {.spelling = "trust", .command = SlashCommandId::Trust},
 }};
 
 [[nodiscard]] bool is_ascii_space(char value) noexcept {
@@ -153,14 +148,11 @@ constexpr std::array<SlashCommandAlias, 24> kCommandAliases{{
     return text;
 }
 
-[[nodiscard]] const SlashCommandAlias* find_alias(std::string_view spelling) noexcept {
-    const auto match = std::find_if(
-        kCommandAliases.begin(),
-        kCommandAliases.end(),
-        [spelling](const SlashCommandAlias& alias) {
-            return alias.spelling == spelling;
-        });
-    return match == kCommandAliases.end() ? nullptr : &*match;
+[[nodiscard]] const SlashCommandSpelling* find_alias(std::string_view spelling) noexcept {
+    const auto match = std::find_if(kCommandSpellings.begin(),
+            kCommandSpellings.end(),
+            [spelling](const SlashCommandSpelling& alias) { return alias.spelling == spelling; });
+    return match == kCommandSpellings.end() ? nullptr : &*match;
 }
 
 [[nodiscard]] const SlashCommandDefinition* find_definition(
@@ -246,6 +238,8 @@ std::string_view slash_command_name(SlashCommandId command) noexcept {
     return "unknown";
 }
 
+std::span<const SlashCommandSpelling> slash_command_spellings() noexcept { return kCommandSpellings; }
+
 bool is_immediate_slash_command(SlashCommandId command) noexcept {
     const auto* definition = find_definition(command);
     return definition != nullptr && definition->immediate;
@@ -296,12 +290,12 @@ SlashCommandRouteVariant SlashCommandRouter::route(
     SlashCommandExecutionContext& context) const {
     auto parsed = parse(text);
     if (auto* error = std::get_if<SlashCommandRouteError>(&parsed)) {
-        if (error->kind == SlashCommandRouteErrorKind::UnknownCommand &&
-            context.allow_unrecognized) {
-            const auto parts = split_slash_command(text);
-            if (context.allow_unrecognized(parts.spelling)) {
-                return SlashCommandPassThrough{};
-            }
+        // pi's Native TUI dispatches only its built-in names and hands every
+        // other submission to `session.prompt`; an unrecognized slash token is
+        // an ordinary Agent Prompt here too (issue #792). Validation failures
+        // for a known command stay visible errors.
+        if (error->kind == SlashCommandRouteErrorKind::UnknownCommand) {
+            return SlashCommandPassThrough{};
         }
         return std::move(*error);
     }
@@ -327,25 +321,6 @@ SlashCommandRouteVariant SlashCommandRouter::route(
     return SlashCommandModalResult{
         .invocation = std::move(invocation),
     };
-}
-
-bool is_dynamic_slash_command(
-    std::string_view command,
-    std::span<const coding_agent::PromptTemplate> prompt_templates,
-    std::span<const coding_agent::Skill> skills,
-    bool skill_commands_enabled) {
-    for (const auto& prompt_template : prompt_templates) {
-        if (prompt_template.name == command) return true;
-    }
-    if (!skill_commands_enabled || !command.starts_with("skill:")) {
-        return false;
-    }
-    const auto skill_name = command.substr(std::string_view{"skill:"}.size());
-    if (skill_name.empty()) return false;
-    for (const auto& skill : skills) {
-        if (skill.name == skill_name) return true;
-    }
-    return false;
 }
 
 } // namespace cch::coding_agent::tui

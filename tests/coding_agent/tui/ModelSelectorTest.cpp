@@ -7,6 +7,7 @@
 #include "coding_agent/tui/ModelSelector.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/OverlayWidthBound.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/coding_agent/ModelRuntime.hpp>
@@ -376,18 +377,8 @@ TEST_CASE("ModelSelector toggles the all/scoped scope on Tab when scoped models 
     }
 }
 
-/// Every emitted line must fit the render width bound exactly: the TUI render
-/// path asserts each line's visible width <= the bound and aborts the whole
-/// app on a single over-wide line (issue #426). The model selectors used to
-/// emit raw, untruncated lines — this pins the width-boundary behavior.
-static void check_all_lines_bounded(const tui::RenderResult& rendered, std::size_t width) {
-    REQUIRE_FALSE(rendered.lines.empty());
-    for (const auto& line : rendered.lines) {
-        const auto visible = cch::tui::visible_width(strip_ansi(line));
-        CHECK(visible <= width);
-    }
-}
-
+/// The render width bound and its failure mode are shared with the other
+/// overlay sweeps: see `support/OverlayWidthBound.hpp` (issue #426, #790).
 TEST_CASE("ModelSelector never emits a line wider than the render width",
         "[coding_agent][tui][model-selector][issue426][spec]") {
     RuntimeFixture fixture;
@@ -411,7 +402,7 @@ TEST_CASE("ModelSelector never emits a line wider than the render width",
     for (const std::size_t width : {10ul, 20ul, 30ul}) {
         const auto rendered = selector->render(width);
         REQUIRE(rendered);
-        check_all_lines_bounded(*rendered, width);
+        tests::check_all_lines_bounded(*rendered, width);
     }
 
     // Also verify the longest raw line is bounded: probe at a width where the
@@ -419,7 +410,7 @@ TEST_CASE("ModelSelector never emits a line wider than the render width",
     {
         const auto rendered = selector->render(6);
         REQUIRE(rendered);
-        check_all_lines_bounded(*rendered, 6);
+        tests::check_all_lines_bounded(*rendered, 6);
     }
 }
 

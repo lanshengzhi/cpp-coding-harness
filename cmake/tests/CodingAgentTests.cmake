@@ -2,6 +2,15 @@ include_guard(GLOBAL)
 
 # Orchestration include: top-level CMakeLists.txt only (relies on CMAKE_CURRENT_SOURCE_DIR = repo root).
 
+    # ADR 0045: user-visible names are `pike`; internal names never reach a screen.
+    find_package(Python3 3.12 COMPONENTS Interpreter REQUIRED)
+    add_test(
+        NAME cch_user_visible_identity
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/coding_agent/UserVisibleIdentityTest.py
+    )
+    set_tests_properties(cch_user_visible_identity PROPERTIES
+        LABELS "coding_agent;tui;issue790;spec")
+
     # harness and tools
     add_executable(cch_tests_harness_tools
         tests/Catch2Main.cpp
@@ -154,6 +163,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/TreeSelectorInteractiveTest.cpp
         tests/coding_agent/tui/TuiActionSeamTest.cpp
         tests/coding_agent/tui/UserBashInteractiveModeTest.cpp
+        tests/coding_agent/tui/UserMessageSelectorTest.cpp
 )
     target_include_directories(cch_tests_coding_agent_interactive PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_coding_agent_interactive

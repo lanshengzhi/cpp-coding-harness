@@ -12,6 +12,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "support/OverlayWidthBound.hpp"
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -354,4 +356,24 @@ TEST_CASE("SettingsSelector always renders the Theme item with the single-mode s
     const auto submenu = render_screen(selector);
     CHECK(submenu.find("dark") != std::string::npos);
     CHECK(submenu.find("light") != std::string::npos);
+}
+
+TEST_CASE("SettingsSelector bounds every row at narrow widths",
+        "[coding_agent][tui][settings-selector][issue790][spec]") {
+    auto theme = test_theme();
+    coding_agent::tui::SettingsSelectorConfig config;
+    config.hide_thinking_block = true;
+    config.output_pad = 0;
+    config.thinking_level = "high";
+    config.available_thinking_levels = {"off", "low", "high"};
+    config.default_project_trust = coding_agent::DefaultProjectTrust::Always;
+    config.current_theme = "dark";
+    coding_agent::tui::SettingsSelectorCallbacks callbacks;
+
+    coding_agent::tui::SettingsSelectorComponent selector(theme, test_keybindings(), config, std::move(callbacks));
+    for (const auto width : tests::kNarrowOverlayWidths) {
+        const auto rendered = selector.render(width);
+        REQUIRE(rendered);
+        tests::check_all_lines_bounded(*rendered, width);
+    }
 }

@@ -1037,7 +1037,7 @@ struct ExpectedCatalog {
     if (!generated_at) {
         return std::unexpected(generated_at.error());
     }
-    if (**revision != "1a584a7a56eb5e7b4ff8ccbd46430f1533282eed") {
+    if (**revision != "f07218c4d4bbc12bef056a7058c3dd49dfe41abe") {
         return fail<void>("models/provenance.json.source.revision", "wrong pinned revision");
     }
     if (**command != "node packages/ai/scripts/generate-models.ts --strict") {
@@ -1660,11 +1660,11 @@ TEST_CASE("OpenRouter retains provider-routed dynamic cost sentinels and generat
         "[ai][catalog][issue765][compat-pi]") {
     auto expected = load_catalog("openrouter");
     REQUIRE(expected);
-    CHECK(expected->models.size() == 378);
+    CHECK(expected->models.size() == 388);
     const auto definitions = ai::builtin_provider_definitions();
     const auto* openrouter = find_provider(definitions, "openrouter");
     REQUIRE(openrouter != nullptr);
-    CHECK(openrouter->models.size() == 378);
+    CHECK(openrouter->models.size() == 388);
 
     for (const auto model_id : {"openrouter/auto", "openrouter/auto-beta"}) {
         const auto expected_model = expected->models.find(model_id);

@@ -41,13 +41,16 @@ namespace cch::ai::auth {
 }
 
 /// pi `createAuthorizationFlow`: the authorize URL with URLSearchParams
-/// encoding in pi's exact insertion order, `originator=pi` byte-identical.
+/// encoding in pi's exact insertion order. One deliberate divergence: the
+/// originator value is this harness's own name (single-sourced client
+/// identity, issue #757); pi sends `originator=pi` here. Reversible with one
+/// line if the ChatGPT backend rejects it.
 [[nodiscard]] std::string build_authorize_url(const std::string& challenge, const std::string& state) {
     return std::string{kAuthorizeUrl} + "?response_type=code" + "&client_id=" + url_query_encode(kClientId) +
            "&redirect_uri=" + url_query_encode(kRedirectUri) + "&scope=" + url_query_encode(kScope) +
            "&code_challenge=" + url_query_encode(challenge) + "&code_challenge_method=S256" +
            "&state=" + url_query_encode(state) + "&id_token_add_organizations=true" +
-           "&codex_cli_simplified_flow=true" + "&originator=pi";
+           "&codex_cli_simplified_flow=true" + "&originator=pike";
 }
 
 /// pi `parseAuthorizationInput` validation applied to manual code entry.

@@ -4,6 +4,25 @@ status: accepted
 
 # Align the cch_ai capability subset with pi-ai at a new baseline and diverge on Kimi Code
 
+> **#784/#785 amendment (T1 re-pin to pi v0.87.1).** The pinned upstream revision advances from
+> `1a584a7a5` (below) to `f07218c4d4bbc12bef056a7058c3dd49dfe41abe` (tag `v0.87.1`), recorded in
+> [`fixtures/pi-ai/README.md`](../../fixtures/pi-ai/README.md) and
+> [`fixtures/pi-ai/models/provenance.json`](../../fixtures/pi-ai/models/provenance.json). The
+> T1 snapshot is, like T0, a generator-plus-live-catalog artifact: `node
+> packages/ai/scripts/generate-models.ts --strict` at `f07218c4`, completed
+> `2026-09-23T12:05:52Z`; the source revision alone does not reproduce the bytes. Measured
+> consequences, all within the four-adapter typed surface and the existing Supported/Deferred
+> partition: the six mirrored providers gain GPT-6 Sol/Luna (`openai` 39→41, `openai-codex`
+> 6→8) whose thinking maps carry `off: "none"` — representable by `ThinkingLevelMap` and
+> already emitted by the Responses payload seam, recorded here as a verified fact; OpenRouter
+> moves 378→388 with live-catalog churn adjudicated in the fixture README (sixteen additions,
+> six removals, sixteen reprice/re-limit edits, one alias `thinkingLevelMap.off` flip);
+> DeepSeek, upstream Kimi, and OpenCode Go are byte-identical to T0. Upstream's stealth-mode
+> `claudeCodeVersion` bump (`3a624b82d`, `claude-cli/2.1.280`) has no cch_ai counterpart: the
+> adapter does not implement stealth mode, and the client-identity rule below already decides
+> the surface. The vendored T0 artifacts stay committed as historical evidence; the T1 bundle
+> is the current acceptance target for the catalog parity gate.
+
 The `cch_ai` capability subset is re-pinned from the historical baseline
 `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (the `@earendil-works/pi-ai@0.83.0`-correlated
 commit) to upstream revision `1a584a7a56eb5e7b4ff8ccbd46430f1533282eed` (`1a584a7a5`), the
