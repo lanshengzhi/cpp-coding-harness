@@ -290,12 +290,12 @@ SlashCommandRouteVariant SlashCommandRouter::route(
     SlashCommandExecutionContext& context) const {
     auto parsed = parse(text);
     if (auto* error = std::get_if<SlashCommandRouteError>(&parsed)) {
-        if (error->kind == SlashCommandRouteErrorKind::UnknownCommand &&
-            context.allow_unrecognized) {
-            const auto parts = split_slash_command(text);
-            if (context.allow_unrecognized(parts.spelling)) {
-                return SlashCommandPassThrough{};
-            }
+        // pi's Native TUI dispatches only its built-in names and hands every
+        // other submission to `session.prompt`; an unrecognized slash token is
+        // an ordinary Agent Prompt here too (issue #792). Validation failures
+        // for a known command stay visible errors.
+        if (error->kind == SlashCommandRouteErrorKind::UnknownCommand) {
+            return SlashCommandPassThrough{};
         }
         return std::move(*error);
     }
@@ -321,25 +321,6 @@ SlashCommandRouteVariant SlashCommandRouter::route(
     return SlashCommandModalResult{
         .invocation = std::move(invocation),
     };
-}
-
-bool is_dynamic_slash_command(
-    std::string_view command,
-    std::span<const coding_agent::PromptTemplate> prompt_templates,
-    std::span<const coding_agent::Skill> skills,
-    bool skill_commands_enabled) {
-    for (const auto& prompt_template : prompt_templates) {
-        if (prompt_template.name == command) return true;
-    }
-    if (!skill_commands_enabled || !command.starts_with("skill:")) {
-        return false;
-    }
-    const auto skill_name = command.substr(std::string_view{"skill:"}.size());
-    if (skill_name.empty()) return false;
-    for (const auto& skill : skills) {
-        if (skill.name == skill_name) return true;
-    }
-    return false;
 }
 
 } // namespace cch::coding_agent::tui

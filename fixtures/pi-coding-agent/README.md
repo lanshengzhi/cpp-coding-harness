@@ -287,9 +287,9 @@ One row per Deferred capability: the frozen pi source where the capability lives
 (the surface this phase deliberately does not port), the G record that deferred it, and the
 absence evidence. Every row is verified absent-with-no-placeholder by the fail-closed Parity
 Architecture Gate (ADR 0039): any reintroduced unclassified/unknown target, root, or source
-fails configure/build (spec user story 40), and by the header inventory; Deferred slash text
-produces an unknown-command routing error, while only host-recognized dynamic slash resources or
-compatible absolute paths remain pass-through, and Deferred settings values read as unset (see the G records and ADR
+fails configure/build (spec user story 40), and by the header inventory; Deferred slash text is
+submitted as an ordinary Agent Prompt (the router passes every unrecognized token through, pi's
+fall-through per issue #792), and Deferred settings values read as unset (see the G records and ADR
 0043).
 
 | # | Deferred capability | Frozen pi source (absent) | G-record | Evidence (absence) |
@@ -313,7 +313,7 @@ compatible absolute paths remain pass-through, and Deferred settings values read
 | D17 | Easter eggs (`armin`, `daxnuts`, `earendil-announcement`) | `pi:.../components/{armin,daxnuts,earendil-announcement}.ts` | G2 | the Gate (ADR 0039; user story 40) |
 | D18 | `index.ts` barrel + `ui.onDebug` | `pi:.../components/index.ts`, `ui.onDebug` | G2 | the Gate (ADR 0039; user story 40) |
 | D19 | Branch summarization generation | `pi:packages/coding-agent/src/core/compaction/branch-summarization.ts` | G2/G3 | the Gate (ADR 0039; user story 40); pi-authored `branch_summary` entries still render (session/rendering goldens) |
-| D20 | `/export` `/import` `/share` `/changelog` `/debug`, the easter eggs, `/clone` | `pi:packages/coding-agent/src/core/slash-commands.ts` | G4 ([#392]) | `BuiltinSlashCommandsTest` (absent from autocomplete); `SlashCommandRouterTest`/`InteractiveModeTest` (typed Deferred names report unknown-command errors) |
+| D20 | `/export` `/import` `/share` `/changelog` `/debug`, the easter eggs, `/clone` | `pi:packages/coding-agent/src/core/slash-commands.ts` | G4 ([#392]) | `BuiltinSlashCommandsTest` (absent from autocomplete); `SlashCommandRouterTest`/`InteractiveModeTest` (typed Deferred names fall through as Agent Prompts, issue #792) |
 | D21 | Extensions/package-manager loader halves (no Extensions presentation) | `pi:packages/coding-agent/src/core/extensions/`, `core/package-manager.ts` | G4 | `ProjectResourceLoaderTest`; `LoadedResourcesTest` (no Extensions section) |
 | D22 | OSC 11/DSR queries, the automatic `light/dark` pair, auto-sync, the theme file watcher, the Automatic submenu entry | `pi:packages/coding-agent/src/modes/interactive/theme/theme-controller.ts` | G5 ([#393]) | `ThemeControllerTest` (slash values read as unset); no watcher surface |
 | D23 | Phase scope exclusions: other provider families, images providers/legacy registries, the extension system, package manager, export-html, telemetry, remote catalog, `client/` remote sessions, the alt-screen/viewport TUI half | the corresponding pi modules (`packages/coding-agent/src/{core/extensions,core/export-html,core/telemetry,core/remote-catalog-provider,client,modes/interactive/theme}`, `packages/tui/`) | G1–G6 / ADR 0036, ADR 0035 | ADR 0035 scope closed; the Gate (ADR 0039; user story 40) |

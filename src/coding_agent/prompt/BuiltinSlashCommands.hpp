@@ -19,10 +19,10 @@ struct BuiltinSlashCommand {
 /// (`pi:packages/coding-agent/src/core/slash-commands.ts` at `f07218c4`, ADR
 /// 0036 G4) with pi's verbatim names/descriptions/argument hints. The
 /// Deferred slashes (`/export` `/import` `/share` `/changelog` `/clone`),
-/// `/debug`, and the easter eggs are absent from autocomplete. The Native TUI
-/// router reports typed Deferred names as unknown-command errors; only
-/// host-recognized dynamic resources or compatible absolute paths are
-/// preserved as Agent Prompt submissions. The `/reload` description drops "extensions" (no extensions
+/// `/debug`, and the easter eggs are absent from autocomplete, and a typed
+/// Deferred name is submitted as an ordinary Agent Prompt: the router passes
+/// every unrecognized token through, matching pi's fall-through (issue #792).
+/// The `/reload` description drops "extensions" (no extensions
 /// surface), and `/quit` uses Pike's identity for pi's
 /// `Quit ${APP_NAME}`. Router-only spellings (`/clear`, `/help`, `/commands`,
 /// `/exit`, `/q`, `/models`) are offered by the palette from the router's

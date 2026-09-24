@@ -3438,7 +3438,8 @@ TEST_CASE("Native TUI routes slash commands without submitting builtins as Agent
 
     // Builtins execute in place: help renders its command summary, malformed
     // arguments are rejected, clear invokes the session action seam, and an
-    // unknown slash command produces a user-visible routing error.
+    // unrecognized slash submission is an ordinary Agent Prompt (pi's
+    // fall-through, issue #792).
     REQUIRE(terminal.inject_input("/help\r"));
     drain_ready(io);
     CHECK(created->session->message_count() == 0);
@@ -3459,10 +3460,9 @@ TEST_CASE("Native TUI routes slash commands without submitting builtins as Agent
     CHECK(created->session->message_count() == 0);
 
     REQUIRE(terminal.inject_input("/missing\r"));
-    drain_ready(io);
-    CHECK(created->session->message_count() == 0);
+    REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fake: /missing") != std::string::npos; }));
     screen = visible_screen(terminal);
-    CHECK(screen.find("Unknown slash command '/missing'") != std::string::npos);
+    CHECK(screen.find("Unknown slash command '/missing'") == std::string::npos);
     CHECK(screen.find("Session Info") == std::string::npos);
 
     REQUIRE(terminal.inject_input("/quit\r"));
