@@ -196,7 +196,7 @@ TEST_CASE("SDK fresh persisted snapshot is passive session and Agent state", "[s
     created->session->close();
 }
 
-TEST_CASE("resume ignores imported unavailable tools and exposes only the fixed executable registry",
+TEST_CASE("resume replays the recorded tool loadout and ignores unavailable imported tools",
         "[coding_agent][snapshot][resume][tool-loadout][issue779][spec]") {
     TestPaths paths;
     tests::RuntimeFixture runtime;
@@ -217,13 +217,14 @@ TEST_CASE("resume ignores imported unavailable tools and exposes only the fixed 
             .description = "Declared by the imported transcript but not registered by pike.",
             .parameters = support::JsonValue{support::JsonValue::object_t{}},
     });
+    imported_loadout.tools_removed.push_back(ai::ToolReference{.name = "read"});
     imported_loadout.tools_removed.push_back(ai::ToolReference{.name = "pi-extension-removed-tool"});
     REQUIRE(store->append(ai::MessageVariant{std::move(imported_loadout)}).has_value());
 
     auto resumed = resume_for_frontend(paths, runtime);
     REQUIRE(resumed.has_value());
     const auto snapshot = resumed->session->snapshot();
-    const std::vector<std::string> expected_tools{"bash", "edit", "read", "write"};
+    const std::vector<std::string> expected_tools{"bash", "edit", "write"};
     CHECK(snapshot.agent_state.active_tool_names == expected_tools);
     CHECK(std::ranges::find(snapshot.agent_state.active_tool_names, "pi-extension-tool") ==
             snapshot.agent_state.active_tool_names.end());

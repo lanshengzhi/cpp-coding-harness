@@ -413,7 +413,7 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// thinking level) when it is not already scoped, then append the
     /// `provider/id` reference to the global `enabledModels` when one exists
     /// (case-insensitive dedupe). A no-op for an empty scope.
-    void add_persisted_default_to_non_empty_scope(const ai::Model& model);
+    [[nodiscard]] support::ExpectedVoid add_persisted_default_to_non_empty_scope(const ai::Model& model);
     /// Shared model-switch tail (pi `setModel`/`cycleModel` after the auth
     /// decision): swap the live Agent model, append the `model_change` entry,
     /// and re-clamp the thinking level (session-only — pi

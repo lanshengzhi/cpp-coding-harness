@@ -30,8 +30,11 @@
 #include <cstdint>
 #include <exception>
 #include <optional>
+#include <span>
 #include <stop_token>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace cch::coding_agent {
 namespace {
@@ -47,6 +50,38 @@ namespace {
         }
     }
     return std::nullopt;
+}
+
+[[nodiscard]] std::vector<std::string> replay_active_tool_names(
+        const std::vector<ai::MessageVariant>& history, std::span<const std::string> available_names) {
+    std::vector<std::string> active_names;
+    bool has_system_message = false;
+    for (const auto& message : history) {
+        const auto* system = std::get_if<ai::SystemMessage>(&message);
+        if (system == nullptr) {
+            continue;
+        }
+        has_system_message = true;
+        for (const auto& tool : system->tools_added) {
+            if (std::ranges::find(available_names, tool.name) != available_names.end() &&
+                    std::ranges::find(active_names, tool.name) == active_names.end()) {
+                active_names.push_back(tool.name);
+            }
+        }
+        for (const auto& tool : system->tools_removed) {
+            std::erase(active_names, tool.name);
+        }
+    }
+    if (!has_system_message) {
+        return {available_names.begin(), available_names.end()};
+    }
+    std::vector<std::string> ordered_names;
+    for (const auto& name : available_names) {
+        if (std::ranges::find(active_names, name) != active_names.end()) {
+            ordered_names.push_back(name);
+        }
+    }
+    return ordered_names;
 }
 
 /// pi's verbatim overflow-recovery failure message (`agent-session.ts`
@@ -192,6 +227,14 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
         branch_history_to_persist_.assign(branch_start, session_.history.end());
     }
     options.system_prompt = rebuild_system_prompt();
+    if (session_.resumed) {
+        std::vector<std::string> available_names;
+        for (const auto& tool : services_.tools.definitions()) {
+            available_names.push_back(tool.name);
+        }
+        const auto active_names = replay_active_tool_names(session_.history, available_names);
+        services_.tools.retain_tools(active_names);
+    }
     // pi `_installAgentNextTurnRefresh`: the between-turn trigger compacts
     // before the next assistant response of the same run, so a long tool loop
     // cannot grow past the context window (pi 0.84.4, #6879). The hook is

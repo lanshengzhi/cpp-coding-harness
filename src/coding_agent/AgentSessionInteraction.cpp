@@ -634,16 +634,16 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::set_model(
 /// model — without a thinking level — when it is not already scoped, then
 /// append the `provider/id` reference to the global `enabledModels` when one
 /// exists (pi compares case-insensitively). A no-op for an empty scope.
-void AgentSession::Impl::add_persisted_default_to_non_empty_scope(const ai::Model& model) {
-    if (scoped_models_.empty()) return;
+support::ExpectedVoid AgentSession::Impl::add_persisted_default_to_non_empty_scope(const ai::Model& model) {
+    if (scoped_models_.empty()) return {};
     for (const auto& scoped : scoped_models_) {
-        if (scoped.model.provider == model.provider && scoped.model.id == model.id) return;
+        if (scoped.model.provider == model.provider && scoped.model.id == model.id) return {};
     }
     scoped_models_.push_back(ScopedModel{.model = model, .thinking_level = std::nullopt});
 
-    if (!services_.settings_manager) return;
+    if (!services_.settings_manager) return {};
     const auto& enabled = services_.settings_manager->settings().enabled_models;
-    if (!enabled || enabled->empty()) return;
+    if (!enabled || enabled->empty()) return {};
     const std::string reference = model.provider + "/" + model.id;
     const auto matches = [&reference](const std::string& pattern) {
         if (pattern.size() != reference.size()) return false;
@@ -656,11 +656,11 @@ void AgentSession::Impl::add_persisted_default_to_non_empty_scope(const ai::Mode
         return true;
     };
     for (const auto& pattern : *enabled) {
-        if (matches(pattern)) return;
+        if (matches(pattern)) return {};
     }
     auto updated = *enabled;
     updated.push_back(reference);
-    (void)services_.settings_manager->set_enabled_models(updated);
+    return services_.settings_manager->set_enabled_models(updated);
 }
 
 /// pi `_cycleScopedModel`/`_cycleAvailableModel` shared tail: apply the model
@@ -696,7 +696,9 @@ void AgentSession::Impl::add_persisted_default_to_non_empty_scope(const ai::Mode
                 co_return std::unexpected(std::move(saved.error()));
             }
         }
-        add_persisted_default_to_non_empty_scope(active_model);
+        if (auto promoted = add_persisted_default_to_non_empty_scope(active_model); !promoted) {
+            co_return std::unexpected(std::move(promoted.error()));
+        }
     }
 
     // Re-clamp the thinking level for the new model's capabilities (pi

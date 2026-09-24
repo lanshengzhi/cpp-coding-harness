@@ -5,8 +5,10 @@
 #include <algorithm>
 #include <cctype>
 #include <optional>
+#include <span>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -116,6 +118,14 @@ public:
             }
         }
         return metadata;
+    }
+
+    /// Retain only the named tools, in the registry's existing storage.
+    /// Unknown names are ignored. This is used when a resumed transcript
+    /// reconstructs the active tool loadout before the Agent is assembled.
+    void retain_tools(std::span<const std::string> names) {
+        const std::unordered_set<std::string> retained{names.begin(), names.end()};
+        std::erase_if(tools_, [&retained](const auto& entry) { return !retained.contains(entry.first); });
     }
 
     [[nodiscard]] std::vector<ai::Tool> definitions() const {
