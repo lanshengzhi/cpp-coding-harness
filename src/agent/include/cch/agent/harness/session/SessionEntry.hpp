@@ -77,7 +77,8 @@ struct CompactionEntryValue {
     std::optional<std::string> first_kept_entry_id;
     std::size_t tokens_before{0};
     /// pi `retainedTail?: AgentMessage[]` — recent messages kept on the entry
-    /// itself; context rebuild projects compactionSummary + retained tail.
+    /// itself; context rebuild projects retained system updates, the summary,
+    /// then the remaining tail.
     std::optional<std::vector<ai::MessageVariant>> retained_tail{};
     std::optional<support::JsonValue> details{};
     std::optional<ai::Usage> usage{};

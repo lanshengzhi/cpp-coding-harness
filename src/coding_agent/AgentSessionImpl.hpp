@@ -68,7 +68,7 @@ struct RetrySettings {
 /// public handle moves or is destroyed keeps the implementation alive.
 struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Impl> {
     explicit Impl(runtime::AgentSessionAssembly assembly);
-    [[nodiscard]] support::ExpectedVoid persist_initial_system_message();
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> persist_initial_system_message();
     Impl(const Impl&) = delete;
     Impl& operator=(const Impl&) = delete;
     Impl(Impl&&) = delete;

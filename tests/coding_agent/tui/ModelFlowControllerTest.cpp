@@ -302,6 +302,30 @@ TEST_CASE("ModelFlowController switches on an exact /model reference and opens t
     CHECK(fixture.presenter.errors.empty());
 }
 
+TEST_CASE("ModelFlowController surfaces a runtime catalog diagnostic after a /model refresh",
+        "[coding_agent][tui][model-flows][model-refresh-diagnostic][spec]") {
+    ModelFlowFixture fixture;
+    fixture.write_models(kReasoningAndPlainKeyed);
+    fixture.kimi_guard.set("dummy-kimi-key");
+    fixture.boot();
+
+    // This malformed built-in overlay falls back to the built-in provider
+    // while ModelRuntime keeps the provider-composition diagnostic.
+    fixture.write_models(R"({"providers":{"kimi-coding":{"name":"Broken Kimi"}}})");
+    // A cache miss follows pi's refresh path. `get_available()` succeeds with
+    // the cached models even though provider recomposition kept a diagnostic.
+    fixture.flows->open_model_selector("no-such-model");
+    fixture.drain();
+
+    REQUIRE(fixture.warnings.size() == 1);
+    CHECK(fixture.warnings.front().find("must specify") != std::string::npos);
+    CHECK(fixture.presenter.errors.empty());
+    CHECK(std::count(fixture.presenter.statuses.begin(),
+                  fixture.presenter.statuses.end(),
+                  std::string{"Refreshing model catalogs…"}) == 1);
+    CHECK(std::dynamic_pointer_cast<coding_agent::tui::ModelSelectorComponent>(fixture.presenter.slot) != nullptr);
+}
+
 TEST_CASE("ModelFlowController opens the scoped-models selector through the presenter",
         "[coding_agent][tui][model-flows][issue503][spec]") {
     ModelFlowFixture fixture;

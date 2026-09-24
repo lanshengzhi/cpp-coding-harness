@@ -626,7 +626,7 @@ private:
     /// own Impl from the assembled value. Friend-owned
     /// (runtime::SessionFactory); defined in the implementation where Impl
     /// is complete.
-    [[nodiscard]] static support::Expected<std::unique_ptr<AgentSession>> bind_assembly(
+    [[nodiscard]] static boost::asio::awaitable<support::Expected<std::unique_ptr<AgentSession>>> bind_assembly(
             runtime::AgentSessionAssembly assembly);
 };
 

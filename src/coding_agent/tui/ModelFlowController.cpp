@@ -99,7 +99,10 @@ namespace {
                 auto refreshed = co_await support::detail::await_async_result(runtime->get_available());
                 if (state->settled) co_return;
                 state->settled = true;
-                if (!refreshed) state->error_message = refreshed.error().message;
+                if (!refreshed)
+                    state->error_message = refreshed.error().message;
+                else
+                    state->error_message = runtime->get_error();
                 timer->cancel();
             },
             boost::asio::detached);

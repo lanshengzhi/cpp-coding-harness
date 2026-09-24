@@ -26,6 +26,7 @@
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "agent/harness/session/SessionJournalTestHooks.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
@@ -203,6 +204,26 @@ TEST_CASE("session creation reports failure through the error channel, not stdio
     REQUIRE_FALSE(created);
     CHECK(capture_out.content().empty());
     CHECK(capture_err.content().empty());
+}
+
+TEST_CASE("session creation removes the published file when an initial entry append fails",
+        "[coding_agent][runtime][assembly-contract][persistence-failure][spec]") {
+    AssemblyFixture fix;
+    fix.write_models(kTwoProviderModels);
+    fix.alpha_guard.set("alpha-key");
+    fix.beta_guard.set("beta-key");
+
+    const auto session_path = fix.workspace.path() / "partial-session.jsonl";
+    auto request = fix.make_request();
+    request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_path};
+    // The factory first persists the model and thinking level. The leading
+    // System Message is the third append and must stay on the reserved worker
+    // path; fail it to verify creation cleans up the published session file.
+    harness::session::testing::fail_nth_append_for_test(session_path, 3);
+
+    const auto created = fix.create(std::move(request));
+    REQUIRE_FALSE(created);
+    CHECK_FALSE(std::filesystem::exists(session_path));
 }
 
 TEST_CASE("project settings defaults select the model only while the project is trusted",

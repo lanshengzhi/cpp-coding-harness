@@ -235,7 +235,8 @@ TEST_CASE("manual compaction on an idle session persists a CompactionEntry and r
     CHECK(value->first_kept_entry_id == result->first_kept_entry_id);
     CHECK(value->tokens_before == result->tokens_before);
     REQUIRE(value->retained_tail.has_value());
-    CHECK(value->retained_tail->size() == 4);
+    CHECK(value->retained_tail->size() == 5);
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(value->retained_tail->front()));
     REQUIRE(value->details.has_value());
     REQUIRE(value->usage.has_value());
     CHECK_FALSE(value->from_hook.value_or(false));
@@ -372,7 +373,8 @@ TEST_CASE("manual compaction aborts an in-flight run before compacting", "[codin
     const auto value = find_compaction_entry(paths);
     REQUIRE(value.has_value());
     REQUIRE(value->retained_tail.has_value());
-    CHECK(value->retained_tail->size() == 4);
+    CHECK(value->retained_tail->size() == 5);
+    REQUIRE(std::holds_alternative<ai::SystemMessage>(value->retained_tail->front()));
 
     session->close();
 }
