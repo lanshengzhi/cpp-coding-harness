@@ -2,12 +2,12 @@
 
 #include "MessageNormalization.hpp"
 #include "MessageText.hpp"
+#include "ProviderDetection.hpp"
 #include "ai/Headers.hpp"
 #include "ai/SimpleOptions.hpp"
 #include "support/Json.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -31,27 +31,6 @@ struct ResolvedCompletionsCompat {
     std::optional<OpenAICompletionsCacheControlFormat> cache_control_format{std::nullopt};
 };
 
-[[nodiscard]] bool contains_case_insensitive(std::string_view value, std::string_view needle) {
-    if (needle.empty() || needle.size() > value.size()) {
-        return false;
-    }
-    for (std::size_t offset = 0; offset + needle.size() <= value.size(); ++offset) {
-        bool matches = true;
-        for (std::size_t index = 0; index < needle.size(); ++index) {
-            const auto left = static_cast<unsigned char>(value[offset + index]);
-            const auto right = static_cast<unsigned char>(needle[index]);
-            if (std::tolower(left) != std::tolower(right)) {
-                matches = false;
-                break;
-            }
-        }
-        if (matches) {
-            return true;
-        }
-    }
-    return false;
-}
-
 [[nodiscard]] const OpenAICompletionsCompat* completions_compat(const Model& model) {
     if (!model.compat) {
         return nullptr;
@@ -60,28 +39,25 @@ struct ResolvedCompletionsCompat {
 }
 
 [[nodiscard]] ResolvedCompletionsCompat resolve_compat(const Model& model) {
-    // debt: replace URL heuristics with explicit provider metadata when custom
-    // provider composition carries that identity through the model contract.
-    const bool is_deepseek = model.provider == "deepseek" || contains_case_insensitive(model.base_url, "deepseek.com");
-    const bool is_openrouter =
-            model.provider == "openrouter" || contains_case_insensitive(model.base_url, "openrouter.ai");
+    const bool deepseek = is_deepseek(model);
+    const bool openrouter = is_openrouter(model);
     const bool openrouter_developer_model =
-            is_openrouter && (model.id.starts_with("openai/") || model.id.starts_with("anthropic/"));
+            openrouter && (model.id.starts_with("openai/") || model.id.starts_with("anthropic/"));
 
     ResolvedCompletionsCompat resolved{
-            .supports_store = !is_deepseek,
-            .supports_developer_role = openrouter_developer_model || (!is_openrouter && !is_deepseek),
+            .supports_store = !deepseek,
+            .supports_developer_role = openrouter_developer_model || (!openrouter && !deepseek),
             .supports_strict_mode = false,
             .supports_reasoning_effort = true,
-            .requires_reasoning_content = is_deepseek,
+            .requires_reasoning_content = deepseek,
             .supports_long_cache_retention = true,
-            .max_tokens_field = is_deepseek ? OpenAICompletionsMaxTokensField::MaxTokens
-                                            : OpenAICompletionsMaxTokensField::MaxCompletionTokens,
-            .thinking_format = is_deepseek     ? OpenAICompletionsThinkingFormat::DeepSeek
-                               : is_openrouter ? OpenAICompletionsThinkingFormat::OpenRouter
-                                               : OpenAICompletionsThinkingFormat::OpenAI,
+            .max_tokens_field = deepseek ? OpenAICompletionsMaxTokensField::MaxTokens
+                                         : OpenAICompletionsMaxTokensField::MaxCompletionTokens,
+            .thinking_format = deepseek     ? OpenAICompletionsThinkingFormat::DeepSeek
+                               : openrouter ? OpenAICompletionsThinkingFormat::OpenRouter
+                                            : OpenAICompletionsThinkingFormat::OpenAI,
             .cache_control_format =
-                    is_openrouter && model.id.starts_with("anthropic/")
+                    openrouter && model.id.starts_with("anthropic/")
                             ? std::optional<OpenAICompletionsCacheControlFormat>{OpenAICompletionsCacheControlFormat::
                                               Anthropic}
                             : std::nullopt,

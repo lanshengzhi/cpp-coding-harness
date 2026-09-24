@@ -13,6 +13,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "support/OverlayWidthBound.hpp"
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -344,19 +346,8 @@ TEST_CASE("ScopedModelsSelector cancels on Escape and Ctrl+C clears the search f
     CHECK(recorder.cancellations == 2);
 }
 
-/// Every emitted line must fit the render width bound exactly: the TUI render
-/// path asserts each line's visible width <= the bound and aborts the whole
-/// app on a single over-wide line (issue #426). The scoped-models selector
-/// used to emit raw, untruncated lines — this pins the width-boundary
-/// behavior.
-static void check_all_lines_bounded(const tui::RenderResult& rendered, std::size_t width) {
-    REQUIRE_FALSE(rendered.lines.empty());
-    for (const auto& line : rendered.lines) {
-        const auto visible = cch::tui::visible_width(strip_ansi(line));
-        CHECK(visible <= width);
-    }
-}
-
+/// The render width bound and its failure mode are shared with the other
+/// overlay sweeps: see `support/OverlayWidthBound.hpp` (issue #426, #790).
 TEST_CASE("ScopedModelsSelector never emits a line wider than the render width",
         "[coding_agent][tui][scoped-models][issue426][spec]") {
     auto theme = test_theme();
@@ -368,7 +359,7 @@ TEST_CASE("ScopedModelsSelector never emits a line wider than the render width",
     for (const std::size_t width : {8ul, 10ul, 16ul}) {
         const auto rendered = selector.render(width);
         REQUIRE(rendered);
-        check_all_lines_bounded(*rendered, width);
+        tests::check_all_lines_bounded(*rendered, width);
     }
 }
 

@@ -15,7 +15,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const fixtureDir = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(fixtureDir, "../..");
 const piCheckout = process.env.PI_CHECKOUT ?? path.resolve(repoRoot, "../pi");
-const frozenCommit = "1a584a7a56eb5e7b4ff8ccbd46430f1533282eed";
+const frozenCommit = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe";
 const head = execFileSync("git", ["-C", piCheckout, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 if (head !== frozenCommit) {
 	throw new Error(`pi checkout must be at ${frozenCommit}, found ${head}`);

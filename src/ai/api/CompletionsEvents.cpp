@@ -69,8 +69,7 @@ void apply_usage(const Model& model, const JsonObject& usage, AssistantMessage& 
 [[nodiscard]] support::ExpectedVoid append_reasoning_detail(const JsonObject& detail,
         std::vector<support::JsonValue>& details,
         AssistantMessage& assistant,
-        std::optional<std::size_t> thinking_index,
-        AssistantEventSink& sink) {
+        std::optional<std::size_t> thinking_index) {
     const auto type = json_string_member(detail, "type");
     if (!type) {
         return {};
@@ -110,7 +109,6 @@ void apply_usage(const Model& model, const JsonObject& usage, AssistantMessage& 
     if (serialized) {
         thinking.thinking_signature = std::move(*serialized);
     }
-    static_cast<void>(sink);
     return {};
 }
 
@@ -488,8 +486,8 @@ support::Expected<CompletionsProcessOutcome> CompletionsEventProcessor::process(
                 if (!object) {
                     continue;
                 }
-                auto appended = append_reasoning_detail(
-                        *object, impl_->reasoning_details, assistant, impl_->thinking_index, sink);
+                auto appended =
+                        append_reasoning_detail(*object, impl_->reasoning_details, assistant, impl_->thinking_index);
                 if (!appended) {
                     return std::unexpected(appended.error());
                 }

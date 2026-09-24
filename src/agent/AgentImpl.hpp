@@ -40,6 +40,27 @@ struct AgentSubscriptionAnchor {
     return support::make_error(support::ErrorCode::Validation, "agent is busy (prompt already in flight)");
 }
 
+/// The continuation rejection for an empty or system-only transcript. The
+/// public path checks it before draining queued input; the private session
+/// path checks it in the turn machine.
+[[nodiscard]] inline support::Error continuation_no_messages_error() {
+    return support::make_error(support::ErrorCode::Validation, "Cannot continue: no messages in context");
+}
+
+/// The continuation rejection for an assistant-terminal transcript with no
+/// queued input to fall back to.
+[[nodiscard]] inline support::Error continuation_from_assistant_error() {
+    return support::make_error(support::ErrorCode::Validation, "Cannot continue from message role: assistant");
+}
+
+/// The host-configured turn cap exhaustion, shared by the turn machine's
+/// post-loop exit and the public continuation's pre-drain admission check.
+[[nodiscard]] inline support::Error max_turns_exceeded_error() {
+    return support::make_error(support::ErrorCode::Validation,
+            "max turns exceeded",
+            "agent reached the configured max_turns before a final assistant response");
+}
+
 [[nodiscard]] inline std::vector<std::string> tool_names(const std::vector<ai::Tool>& definitions) {
     std::vector<std::string> names;
     names.reserve(definitions.size());
@@ -138,6 +159,14 @@ struct AgentExecutionSnapshot {
     std::string system_prompt;
     std::vector<ai::MessageVariant> messages;
     std::vector<ai::Tool> tools;
+};
+
+/// The first turn's seed input for one run: messages carried into turn 1 plus
+/// whether the caller already drained steering input, so the turn machine must
+/// not poll the steering queue again at turn 1.
+struct InitialInput {
+    std::vector<ai::MessageVariant> messages;
+    bool steering_already_drained{false};
 };
 
 /// Run configuration that is not live Agent state. It is owned by Agent::Impl
@@ -261,7 +290,8 @@ struct Agent::Impl {
     [[nodiscard]] static boost::asio::awaitable<support::ExpectedVoid> run_loop(std::shared_ptr<Impl> impl,
             std::optional<ai::UserMessage> user_message,
             AgentEventCommitter commitment,
-            std::stop_source stop_source);
+            std::stop_source stop_source,
+            InitialInput initial_input);
 
     /// The Agent Turn state machine (pi `agent-loop.ts` `runLoop`; lifecycle
     /// order per ADR 0014). Reads live state at each turn boundary through
@@ -272,6 +302,7 @@ struct Agent::Impl {
     [[nodiscard]] static boost::asio::awaitable<support::ExpectedVoid> run_turns(std::shared_ptr<Impl> impl,
             std::shared_ptr<CommitmentState> commitment_state,
             std::optional<ai::UserMessage> user_message,
+            InitialInput initial_input,
             std::stop_token stop_token);
 
     RunPolicy run_policy;

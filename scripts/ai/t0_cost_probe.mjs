@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const EXPECTED_PI_REVISION = "1a584a7a56eb5e7b4ff8ccbd46430f1533282eed";
+const EXPECTED_PI_REVISION = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe";
 
 function parseArgs(argv) {
 	const args = {

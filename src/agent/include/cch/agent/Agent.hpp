@@ -85,6 +85,18 @@ public:
         std::string user_prompt,
         AgentEventCommitter commitment);
 
+    /// Continue from the retained transcript without adding a new prompt.
+    /// Empty or system-only history is rejected. If the last message is an
+    /// assistant message, a queued steering message takes precedence over a
+    /// queued follow-up message as the continuation input.
+    /// [compat-pi] pi v0.87.1 `agent.continue()` / `runAgentLoopContinue`.
+    [[nodiscard]] support::AsyncResult<void> continue_run();
+
+    /// Continue with the same transcript and queued-input semantics, while
+    /// strongly committing lifecycle events after state reduction and weak
+    /// observer delivery.
+    [[nodiscard]] support::AsyncResult<void> continue_run(AgentEventCommitter commitment);
+
     /// Request cancellation of the active run. Idempotent and a no-op while
     /// idle. The provider completes an accepted request through the ordinary
     /// assistant `aborted` lifecycle; this method adds no result channel.
@@ -183,15 +195,16 @@ private:
         AgentEventCommitter commitment,
         std::stop_source stop_source);
 
-    /// Continue the loop without a new user message (pi `agent.continue()` /
-    /// `runAgentLoopContinue`), used by the session assembly's overflow
-    /// compact-and-retry-once. The live message list's last message must not
-    /// be an assistant message (the session removes the failed error message
-    /// before continuing); the loop rejects the empty and assistant-terminal
-    /// cases with pi's continuation errors.
+    /// Session-internal continuation used by overflow compact-and-retry-once.
+    /// Unlike the public operation, this path does not use queued input to make
+    /// an assistant-terminal transcript continuable; the session removes the
+    /// failed assistant error message before calling it.
     [[nodiscard]] support::AsyncResult<void> continue_run(
         AgentEventCommitter commitment,
         std::stop_source stop_source);
+
+    [[nodiscard]] support::AsyncResult<void> continue_run_with_queue_fallback(
+            AgentEventCommitter commitment, std::stop_source stop_source);
 
     std::shared_ptr<Impl> impl_;
 };

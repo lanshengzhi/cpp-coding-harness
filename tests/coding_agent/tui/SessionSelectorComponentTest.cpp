@@ -4,6 +4,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "support/OverlayWidthBound.hpp"
+
 #include "coding_agent/tui/KeybindingsManager.hpp"
 #include "coding_agent/tui/SessionSelector.hpp"
 #include "coding_agent/tui/Theme.hpp"
@@ -365,4 +367,31 @@ TEST_CASE("session selector search delegates the query and filtered rows to the 
     }
     static_cast<void>(component.handle_input(tui::KeyEvent{.key = "escape"}));
     CHECK(cancellations == 1);
+}
+
+TEST_CASE(
+        "SessionSelector bounds every row at narrow widths", "[coding_agent][tui][session-selector][issue790][spec]") {
+    auto theme = test_theme();
+    auto keybindings = test_keybindings();
+    const auto loader = [] {
+        return std::vector<coding_agent::session_discovery::SessionInfo>{
+                make_session("narrow-session", std::nullopt, "a long session message that must be bounded")};
+    };
+    coding_agent::tui::SessionSelectorComponent component(
+            theme,
+            keybindings,
+            loader,
+            [] { return std::vector<coding_agent::session_discovery::SessionInfo>{}; },
+            std::optional<std::filesystem::path>{},
+            [](std::string) -> support::ExpectedVoid { return {}; },
+            [] {},
+            [] {},
+            [](std::string, std::string) { return support::ExpectedVoid{}; },
+            [] {});
+
+    for (const auto width : tests::kNarrowOverlayWidths) {
+        const auto rendered = component.render(width);
+        REQUIRE(rendered);
+        tests::check_all_lines_bounded(*rendered, width);
+    }
 }

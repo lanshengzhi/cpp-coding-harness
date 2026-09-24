@@ -392,11 +392,7 @@ void AuthFlowController::show_ambient_auth_dialog(const AuthSelectorProvider& op
                     [self] { self->presenter_->restore_prompt_slot(); });
             }
         });
-    dialog->show_info(
-        option.method_name.value_or("Authentication") +
-            " is configured outside cch.",
-        {},
-        true);
+    dialog->show_info(option.method_name.value_or("Authentication") + " is configured outside pike.", {}, true);
     presenter_->replace_prompt_slot(std::move(dialog));
 }
 

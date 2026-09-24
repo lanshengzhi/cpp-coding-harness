@@ -44,6 +44,14 @@ namespace cch::ai {
     return text ? std::optional<std::string_view>{*text} : std::nullopt;
 }
 
+/// Present boolean member, strictly typed.
+[[nodiscard]] inline std::optional<bool> json_bool_member(
+        const support::JsonValue::object_t& value, std::string_view name) {
+    const auto* found = json_member(value, name);
+    const auto* flag = found ? found->get_if<bool>() : nullptr;
+    return flag ? std::optional<bool>{*flag} : std::nullopt;
+}
+
 /// Raw numeric member, unvalidated (JSON numbers parse as doubles). Callers
 /// apply their own finiteness/sign rules.
 [[nodiscard]] inline std::optional<double> json_number_member(

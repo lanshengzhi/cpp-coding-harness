@@ -904,7 +904,11 @@ support::Expected<cch::tui::RenderResult> SessionSelectorComponent::render(
     const auto spacing = width > cch::tui::visible_width(left) + right_width
         ? width - cch::tui::visible_width(left) - right_width
         : std::size_t{0};
-    lines.push_back(left + std::string(spacing, ' ') + right_text);
+    // The right-hand scope/name/sort cluster is fixed-width; it must be bounded
+    // when the terminal is narrower than the cluster alone (issue #790).
+    auto header = cch::tui::truncate_text(left + std::string(spacing, ' ') + right_text, width, "");
+    if (!header) return std::unexpected(header.error());
+    lines.push_back(std::move(*header));
 
     // Hint lines (all branches truncate to width).
     std::string hint_line_1;

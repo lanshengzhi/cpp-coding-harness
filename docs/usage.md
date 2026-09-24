@@ -127,7 +127,7 @@ Project settings in `.pi/settings.json` load only after Project Trust and overri
 | `/reload` | Reload settings, bindings, skills, prompts, themes, and context files. |
 | `/quit` | Shut down cleanly (aliases `/exit` and `/q`). |
 
-Built-in slash submissions are parsed and validated by the Native TUI router. Unknown slash commands produce a visible routing error instead of being sent as ordinary prompts; registered Prompt Templates, enabled `/skill:<name>` resources, and compatible absolute-path submissions may be explicitly preserved by the host. Print mode does not dispatch slash commands.
+Built-in slash submissions are parsed and validated by the Native TUI router. An unrecognized slash submission is sent as an ordinary Agent Prompt, matching pi's fall-through; a validation failure for a known command stays a visible routing error. Registered Prompt Templates, enabled `/skill:<name>` resources, and compatible absolute-path submissions are Agent Prompts for the same reason. Print mode does not dispatch slash commands.
 
 ## User Bash
 

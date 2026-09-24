@@ -402,7 +402,8 @@ TEST_CASE("browser login succeeds through the callback server and cancels the pr
     REQUIRE(auth_url != nullptr);
     CHECK(auth_url->instructions == "A browser window should open. Complete login to finish.");
 
-    // The authorize URL carries pi's exact originator and PKCE params.
+    // The authorize URL carries pi's exact PKCE params and this harness's
+    // own originator (single-sourced client identity, issue #757).
     const auto& url = *harness.auth_url;
     CHECK(url.starts_with(
         "https://auth.openai.com/oauth/authorize?response_type=code"
@@ -412,7 +413,7 @@ TEST_CASE("browser login succeeds through the callback server and cancels the pr
     CHECK(query_param(url, "code_challenge_method") == "S256");
     CHECK(query_param(url, "id_token_add_organizations") == "true");
     CHECK(query_param(url, "codex_cli_simplified_flow") == "true");
-    CHECK(query_param(url, "originator") == "pi");
+    CHECK(query_param(url, "originator") == "pike");
     CHECK(query_param(url, "state") == fired_state);
 
     // PKCE: the challenge in the URL equals base64url(SHA256(verifier)) of the

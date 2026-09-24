@@ -13,8 +13,8 @@ from shutil import copyfile
 from typing import Any
 
 
-BASELINE_PREFIX = "1a584a7a5"
-BASELINE_REVISION = "1a584a7a56eb5e7b4ff8ccbd46430f1533282eed"
+BASELINE_PREFIX = "f07218c4"
+BASELINE_REVISION = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe"
 TARGET_PROVIDERS = (
     "deepseek",
     "kimi-coding",

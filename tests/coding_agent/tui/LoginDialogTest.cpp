@@ -143,13 +143,10 @@ TEST_CASE(
     DialogFixture fixture;
     auto dialog = fixture.make("Kimi For Coding setup");
 
-    dialog.show_info(
-        "Kimi API key is configured outside cch.",
-        {{"https://kimi.example/docs", "Docs"}},
-        true);
+    dialog.show_info("Kimi API key is configured outside pike.", {{"https://kimi.example/docs", "Docs"}}, true);
 
     const auto screen = screen_of(dialog);
-    CHECK(screen.find("Kimi API key is configured outside cch.") != std::string::npos);
+    CHECK(screen.find("Kimi API key is configured outside pike.") != std::string::npos);
     CHECK(screen.find("Docs: https://kimi.example/docs") != std::string::npos);
     CHECK(screen.find("to close") != std::string::npos);
     // The info branch never opens a browser.
