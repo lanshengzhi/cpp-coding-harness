@@ -492,6 +492,8 @@ std::vector<HotkeyHelpRow> hotkey_help_rows(const cch::tui::KeybindingRegistry& 
                              std::size_t order) {
         if (section.empty()) return;
         const auto keys = registry.key_text(action_id);
+        // debt: O(n²) grouping scan; replace with an indexed row map if the
+        // resolved help catalog grows beyond the current small fixed table.
         const auto existing = std::find_if(rows.begin(), rows.end(), [section, group](const auto& row) {
             return row.section == section && row.group == group;
         });
