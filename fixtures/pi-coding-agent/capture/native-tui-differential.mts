@@ -1,0 +1,784 @@
+#!/usr/bin/env tsx
+/**
+ * Deterministic dual-runtime Native TUI evidence harness (issue #800).
+ *
+ * The default mode runs the frozen pi checkout and the rebuilt Pike test
+ * binary through the same scenario/input records, then writes a sanitized
+ * structural report. `--verify` is the CTest mode: it regenerates the
+ * projections and compares them with the checked-in report without requiring
+ * frame-timing-dependent raw ANSI bytes to repeat byte-for-byte.
+ *
+ * `--runtime pi` is an internal per-scenario child mode. It exists so each pi
+ * capture gets a fresh session, terminal, and faux Provider; the parent still
+ * owns scenario definitions and comparison policy.
+ *
+ * Offline is the default and is enforced by the parent environment. A live
+ * manual run is intentionally separate: use the documented command in
+ * fixtures/pi-coding-agent/README.md with a real PTY and your own provider
+ * settings. No live provider is contacted by this harness.
+ */
+
+import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const scriptPath = fileURLToPath(import.meta.url);
+const scriptDir = path.dirname(scriptPath);
+const fixtureDir = path.resolve(scriptDir, "..");
+const repoRoot = path.resolve(fixtureDir, "../..");
+const differentialDir = path.join(fixtureDir, "differential");
+const reportPath = path.join(differentialDir, "report.json");
+const frozenCommit = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe";
+const packageName = "@earendil-works/pi-coding-agent";
+const packageVersion = "0.87.1";
+const profile = Object.freeze({
+	home: "/home/tester",
+	userProfile: "/home/tester",
+	agentDirectory: "/tmp/cpp-harness-pike-differential-<scenario>",
+	workspace: "<deterministic-workspace>",
+	viewportRows: 24,
+	settings: { theme: "dark" },
+	terminalVariables: {
+		TERM: "xterm-256color",
+		COLORTERM: "truecolor",
+		COLORFGBG: "15;0",
+		NO_COLOR: undefined,
+	},
+	provider: "deterministic-faux",
+});
+
+type Scenario = {
+	id: string;
+	width: number;
+	inputs: string[];
+	resize?: string;
+	omissions: string[];
+	omissionPatterns?: string[];
+};
+
+const scenarios: Scenario[] = [
+	{ id: "boot-72", width: 72, inputs: [], omissions: [] },
+	{ id: "boot-100", width: 100, inputs: [], omissions: [] },
+	{ id: "boot-120", width: 120, inputs: [], omissions: [] },
+	{ id: "boot-41", width: 41, inputs: [], omissions: [] },
+	{ id: "model-selector", width: 100, inputs: ["\x0c", "\r"], omissions: [] },
+	{ id: "settings-selector", width: 100, inputs: ["/settings", "\r", "\r", "\x1b"], omissions: ["pi-only extension settings are not a Supported Capability"], omissionPatterns: ["Auto-compact", "Auto-resize", "Block images", "Show hardware cursor", "extension", "Extension", "package", "Package"] },
+	{ id: "thinking-selector", width: 100, inputs: ["/thinking", "\r", "\r"], omissions: [] },
+	{ id: "editor-long", width: 72, inputs: ["A long editor line that must wrap without losing the fixture-authored suffix", "\x15"], omissions: [] },
+	{ id: "editor-cjk", width: 72, inputs: ["混在文本 mixed 日本語 ✅", "\x15"], omissions: [] },
+	{ id: "editor-token", width: 41, inputs: ["UNBREAKABLE_TOKEN_abcdefghijklmnopqrstuvwxyz0123456789", "\x15"], omissions: [] },
+	{ id: "user-message", width: 72, inputs: ["deterministic user prompt\r"], omissions: [] },
+	{ id: "tool-result", width: 100, inputs: ["run the deterministic tool\r"], omissions: [] },
+	{ id: "status-footer", width: 100, inputs: ["deterministic status prompt\r"], omissions: ["pi provider-catalog and extension-status chrome is outside the Supported Capability subset"], omissionPatterns: ["provider", "Provider", "extension", "Extension", "cache", "Cache"] },
+	{ id: "resize", width: 72, inputs: [], resize: "100x30", omissions: [] },
+	{ id: "scrollback", width: 72, inputs: ["line one\r", "line two\r", "line three\r", "line four\r", "line five\r", "line six\r"], omissions: [] },
+];
+
+const volatileModelProse = [
+	"deterministic assistant reply",
+	"deterministic status reply",
+	"deterministic tool answer",
+	"deterministic scrollback reply 1",
+	"deterministic scrollback reply 2",
+	"deterministic scrollback reply 3",
+	"deterministic scrollback reply 4",
+	"deterministic scrollback reply 5",
+	"deterministic scrollback reply 6",
+];
+
+function childEnvironment(extra: Record<string, string>): NodeJS.ProcessEnv {
+	const environment: NodeJS.ProcessEnv = {
+		PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin`,
+		LANG: "C.UTF-8",
+		LC_ALL: "C.UTF-8",
+		TZ: "UTC",
+	};
+	return {
+		...environment,
+		HOME: profile.home,
+		USERPROFILE: profile.userProfile,
+		PI_AGENT_DIR: profile.agentDirectory,
+		PI_OFFLINE: "1",
+		PI_SKIP_VERSION_CHECK: "1",
+		TERM: profile.terminalVariables.TERM,
+		COLORTERM: profile.terminalVariables.COLORTERM,
+		COLORFGBG: profile.terminalVariables.COLORFGBG,
+		...extra,
+	};
+}
+
+function repositoryRootFromEnvironment(): string {
+	return process.env.CCH_SOURCE_DIR ?? repoRoot;
+}
+
+function piCheckout(): string {
+	return process.env.PI_CHECKOUT ?? path.resolve(repositoryRootFromEnvironment(), "../pi");
+}
+
+function frozenCheckoutOrSkip(): string {
+	const checkout = piCheckout();
+	const tsx = path.join(checkout, "node_modules/.bin/tsx");
+	if (!existsSync(checkout) || !existsSync(tsx)) {
+		throw new SkipError(`pi checkout or tsx is unavailable at ${checkout}`);
+	}
+	const head = execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+	if (head !== frozenCommit) throw new Error(`pi checkout must be ${frozenCommit}, found ${head}`);
+	const packageJson = JSON.parse(readFileSync(path.join(checkout, "packages/coding-agent/package.json"), "utf8")) as {
+		name: string;
+		version: string;
+	};
+	if (packageJson.name !== packageName || packageJson.version !== packageVersion) {
+		throw new Error(`pi checkout must declare ${packageName}@${packageVersion}`);
+	}
+	return checkout;
+}
+
+class SkipError extends Error {}
+
+function parseDimensions(value: string): { columns: number; rows: number } {
+	const match = /^(\d+)x(\d+)$/.exec(value);
+	if (match === null) throw new Error(`invalid differential dimensions: ${value}`);
+	return { columns: Number(match[1]), rows: Number(match[2]) };
+}
+
+function writeJson(pathname: string, value: unknown, pretty = false): void {
+	const serialized = pretty ? JSON.stringify(value, null, 2) : JSON.stringify(value);
+	writeFileSync(pathname, `${serialized}\n`);
+}
+
+function captureTsconfig(checkout: string): string {
+	if (existsSync(path.join(checkout, "node_modules/grok-mermaid"))) {
+		return path.join(checkout, "tsconfig.json");
+	}
+	const rootConfig = JSON.parse(readFileSync(path.join(checkout, "tsconfig.json"), "utf8")) as {
+		compilerOptions?: { paths?: Record<string, string[]> };
+	};
+	const paths = { ...(rootConfig.compilerOptions?.paths ?? {}) };
+	paths["grok-mermaid"] = [path.resolve(scriptDir, "grok-mermaid-stub.mts")];
+	const capturePath = path.join(checkout, "tsconfig.capture.json");
+	writeFileSync(
+		capturePath,
+		`${JSON.stringify({
+			compilerOptions: {
+				target: "ES2022",
+				module: "NodeNext",
+				moduleResolution: "NodeNext",
+				allowImportingTsExtensions: true,
+				rewriteRelativeImportExtensions: true,
+				esModuleInterop: true,
+				skipLibCheck: true,
+				types: ["node"],
+				baseUrl: ".",
+				paths,
+			},
+		}, null, 2)}\n`,
+	);
+	return capturePath;
+}
+
+function hex(value: string): string {
+	return Buffer.from(value, "utf8").toString("hex");
+}
+
+function scenarioEnvironment(scenario: Scenario, output: string): Record<string, string> {
+	return {
+		CCH_DIFFERENTIAL_SCENARIO: scenario.id,
+		CCH_DIFFERENTIAL_WIDTH: String(scenario.width),
+		CCH_DIFFERENTIAL_INPUTS: scenario.inputs.map((input) => hex(input) || "-").join("|"),
+		CCH_DIFFERENTIAL_OUTPUT: output,
+		PI_AGENT_DIR: `/tmp/cpp-harness-pike-differential-${scenario.id}`,
+		...(scenario.resize === undefined ? {} : { CCH_DIFFERENTIAL_RESIZE: scenario.resize }),
+	};
+}
+
+function runPike(scenario: Scenario, output: string): Record<string, unknown> {
+	const binary = process.env.CCH_DIFFERENTIAL_BINARY ?? path.join(repositoryRootFromEnvironment(), "build/cch_tests_coding_agent_interactive");
+	if (!existsSync(binary)) throw new Error(`Pike differential test binary not found at ${binary}`);
+	const pikeEnvironment = scenarioEnvironment(scenario, output);
+	pikeEnvironment.CCH_DIFFERENTIAL_WORKSPACE = `/tmp/cpp-harness-pike-differential-${process.pid}-${scenario.id}`;
+	try {
+		execFileSync(binary, ["[issue800]"], {
+			cwd: repositoryRootFromEnvironment(),
+			env: childEnvironment(pikeEnvironment),
+			stdio: ["ignore", "pipe", "pipe"],
+			encoding: "utf8",
+		});
+	} catch (error) {
+		const detail = error instanceof Error ? error.message : String(error);
+		throw new Error(`Pike differential scenario ${scenario.id} failed: ${detail}`);
+	}
+	return JSON.parse(readFileSync(output, "utf8")) as Record<string, unknown>;
+}
+
+async function runPi(scenario: Scenario, output: string): Promise<Record<string, unknown>> {
+	const checkout = frozenCheckoutOrSkip();
+	const tsx = path.join(checkout, "node_modules/.bin/tsx");
+	const result = execFileSync(tsx, ["--tsconfig", captureTsconfig(checkout), scriptPath, "--runtime", "pi"], {
+		cwd: repositoryRootFromEnvironment(),
+		env: childEnvironment({
+			...scenarioEnvironment(scenario, output),
+			PI_CHECKOUT: checkout,
+		}),
+		stdio: ["ignore", "pipe", "pipe"],
+		encoding: "utf8",
+	});
+	void result;
+	return JSON.parse(readFileSync(output, "utf8")) as Record<string, unknown>;
+}
+
+function replaceFixturePaths(value: string, workspace: string, repositoryRoot: string, scenario?: Scenario): string {
+	const scenarioWorkspace = scenario === undefined
+		? undefined
+		: `/tmp/cpp-harness-pike-differential-${scenario.id}`;
+	return value
+		.replaceAll(workspace, "<deterministic-workspace>")
+		.replaceAll(scenarioWorkspace ?? "/tmp/cpp-harness-pike-differential-unused", "<deterministic-workspace>")
+		.replaceAll(/\/tmp\/cpp-harness-pike-differential-[0-9]+[A-Za-z0-9_.-]*/g, "<deterministic-workspace>")
+		.replaceAll("/tmp/cpp-harness-pike-differential", "<deterministic-workspace>")
+		.replaceAll("/tmp/cpp-harness-pike-differential/", "<deterministic-workspace>/")
+		.replaceAll(repositoryRoot, "<repository-root>")
+		.replaceAll(/<repository-root> \([^)\r\n]*/g, "<repository-root> (<branch>)")
+		.replaceAll(/\/home\/[A-Za-z0-9_.-]+/g, "<home>")
+		.replaceAll(/<home>\/Work\/github\/coding-agent\/[A-Za-z0-9_.-]+/g, "<repository-root>")
+		.replaceAll(/\/tmp\/pi-suite-[A-Za-z0-9_-]+/g, "<deterministic-workspace>")
+		.replaceAll("faux-1", "<model>")
+		.replaceAll("faux-2", "<model>")
+		.replaceAll("fake-model", "<model>");
+}
+
+function normalizeCellText(value: string, workspace: string, repositoryRoot: string, scenario?: Scenario): string {
+	return replaceFixturePaths(value, workspace, repositoryRoot, scenario)
+		.split("\n")
+		.map((line) => {
+			let normalized = line.trimEnd();
+			for (const prose of volatileModelProse) normalized = normalized.replaceAll(prose, "<model-prose>");
+			return normalized;
+		})
+		.join("\n");
+}
+
+function xterm256Color(index: number): [number, number, number] {
+	const base = [0, 95, 135, 175, 215, 255];
+	if (index < 16) {
+		if (index < 8) return [index & 1 ? 205 : 0, index & 2 ? 205 : 0, index & 4 ? 205 : 0];
+		return [index & 1 ? 255 : 92, index & 2 ? 255 : 92, index & 4 ? 255 : 92];
+	}
+	if (index < 232) {
+		const offset = index - 16;
+		return [base[Math.floor(offset / 36) % 6], base[Math.floor(offset / 6) % 6], base[offset % 6]];
+	}
+	const gray = 8 + (index - 232) * 10;
+	return [gray, gray, gray];
+}
+
+function nearestXterm256([red, green, blue]: [number, number, number]): number {
+	let best = 0;
+	let bestDistance = Number.POSITIVE_INFINITY;
+	for (let index = 0; index < 256; ++index) {
+		const candidate = xterm256Color(index);
+		const distance = (red - candidate[0]) ** 2 + (green - candidate[1]) ** 2 + (blue - candidate[2]) ** 2;
+		if (distance < bestDistance) {
+			best = index;
+			bestDistance = distance;
+		}
+	}
+	return best;
+}
+
+function normalizeSgrToken(token: string): string {
+	return token
+		.replace(/(38|48);2;(\d+);(\d+);(\d+)/g, (_match, role: string, red: string, green: string, blue: string) =>
+			`${role};5;${nearestXterm256([Number(red), Number(green), Number(blue)] as [number, number, number])}`)
+		.replace(/(38|48);5;(\d+)/g, (_match, role: string, index: string) => `${role};5;${Number(index)}`);
+}
+
+function verifySgrNormalization(): void {
+	assert.equal(normalizeSgrToken("\x1b[38;2;95;135;175m"), "\x1b[38;5;67m");
+	assert.equal(normalizeSgrToken("\x1b[48;2;95;135;175m"), "\x1b[48;5;67m");
+	assert.equal(normalizeSgrToken("\x1b[38;5;67m"), "\x1b[38;5;67m");
+	assert.equal(normalizeSgrToken("\x1b[48;5;67m"), "\x1b[48;5;67m");
+}
+
+function sgrTokens(ansi: string): string[] {
+	return [...ansi.matchAll(/\x1b\[[0-9;:]*m/g)].map((match) => match[0]);
+}
+
+function normalizeCapture(capture: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
+	const workspace = typeof capture.workspace === "string" ? capture.workspace : "/tmp/cpp-harness-pike-differential";
+	const snapshots = Array.isArray(capture.snapshots) ? capture.snapshots : [];
+	return {
+		runtime: capture.runtime,
+		scenario: capture.scenario,
+		width: capture.width,
+		inputs: capture.inputs,
+		snapshots: snapshots.map((item) => {
+			const snapshot = item as Record<string, unknown>;
+			const ansi = typeof snapshot.ansi === "string" ? replaceFixturePaths(snapshot.ansi, workspace, repositoryRoot, scenario) : "";
+			return {
+				visible: Array.isArray(snapshot.visible)
+					? snapshot.visible.map((line) => normalizeCellText(String(line), workspace, repositoryRoot, scenario))
+					: [],
+				scrollback: Array.isArray(snapshot.scrollback)
+					? snapshot.scrollback.map((line) => normalizeCellText(String(line), workspace, repositoryRoot, scenario))
+					: [],
+				ansi,
+				sgr: sgrTokens(ansi),
+			};
+		}),
+	};
+}
+
+function stableProjection(capture: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
+	const normalized = normalizeCapture(capture, scenario, repositoryRoot);
+	return {
+		runtime: normalized.runtime,
+		scenario: normalized.scenario,
+		width: normalized.width,
+		inputs: normalized.inputs,
+		snapshots: (normalized.snapshots as Record<string, unknown>[]).map((snapshot) => ({
+			visible: snapshot.visible,
+			scrollback: snapshot.scrollback,
+			sgr: (snapshot.sgr as string[]).map(normalizeSgrToken),
+		})),
+	};
+}
+
+function omitProjectionLines(projection: Record<string, unknown>, patterns: string[]): Record<string, unknown> {
+	if (patterns.length === 0) return projection;
+	const snapshots = projection.snapshots as Record<string, unknown>[];
+	return {
+		...projection,
+		snapshots: snapshots.map((snapshot) => ({
+			visible: (snapshot.visible as string[]).filter((line) => !patterns.some((pattern) => line.includes(pattern))),
+			scrollback: (snapshot.scrollback as string[]).filter((line) => !patterns.some((pattern) => line.includes(pattern))),
+		})),
+	};
+}
+
+function isIntentionalSubsetOmission(scenario: Pick<Scenario, "omissions">, omissionTextEqual: boolean, sgrEqual: boolean, pikeObserved: boolean, piObserved: boolean): boolean {
+	return scenario.omissions.length > 0 && piObserved && !pikeObserved && omissionTextEqual && sgrEqual;
+}
+
+function verifyProjectionPolicy(): void {
+	const scenario = { omissions: ["pi-only chrome"] };
+	assert.equal(isIntentionalSubsetOmission(scenario, true, true, false, true), true);
+	assert.equal(isIntentionalSubsetOmission(scenario, true, true, true, true), false);
+	assert.equal(isIntentionalSubsetOmission(scenario, true, true, false, false), false);
+}
+
+function compare(pike: Record<string, unknown>, pi: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
+	const pikeProjection = stableProjection(pike, scenario, repositoryRoot);
+	const piProjection = stableProjection(pi, scenario, repositoryRoot);
+	const pikeSnapshots = pikeProjection.snapshots as Record<string, unknown>[];
+	const piSnapshots = piProjection.snapshots as Record<string, unknown>[];
+	const visibleEqual = JSON.stringify(pikeSnapshots.map((item) => item.visible)) === JSON.stringify(piSnapshots.map((item) => item.visible));
+	const scrollbackEqual = JSON.stringify(pikeSnapshots.map((item) => item.scrollback)) === JSON.stringify(piSnapshots.map((item) => item.scrollback));
+	const sgrEqual = JSON.stringify(pikeSnapshots.map((item) => item.sgr)) === JSON.stringify(piSnapshots.map((item) => item.sgr));
+	const equal = visibleEqual && scrollbackEqual && sgrEqual;
+	const omissionProjection = omitProjectionLines(pikeProjection, scenario.omissionPatterns ?? []);
+	const piOmissionProjection = omitProjectionLines(piProjection, scenario.omissionPatterns ?? []);
+	const omissionTextEqual = JSON.stringify(omissionProjection.snapshots) === JSON.stringify(piOmissionProjection.snapshots);
+	const pikeText = JSON.stringify(pikeProjection.snapshots);
+	const piText = JSON.stringify(piProjection.snapshots);
+	const pikeObserved = (scenario.omissionPatterns ?? []).some((pattern) => pikeText.includes(pattern));
+	const piObserved = (scenario.omissionPatterns ?? []).some((pattern) => piText.includes(pattern));
+	const omissionOnly = isIntentionalSubsetOmission(scenario, omissionTextEqual, sgrEqual, pikeObserved, piObserved);
+	return {
+		projection: {
+			visibleCellTextEqual: visibleEqual,
+			scrollbackStructureEqual: scrollbackEqual,
+			sgrStructureEqual: sgrEqual,
+			omissionTextEqual,
+		},
+		classification: equal ? "match" : omissionOnly ? "intentional-subset-omission" : "supported-capability-regression",
+		omissions: scenario.omissions,
+		omissionEvidence: {
+			patterns: scenario.omissionPatterns ?? [],
+			pikeObserved,
+			piObserved,
+			status: piObserved && !pikeObserved ? "intentional-subset-omission" : "requires-review",
+		},
+	};
+}
+
+function digest(value: unknown): string {
+	return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function runLiveManual(): number {
+	const outputDirectory = process.env.CCH_DIFFERENTIAL_LIVE_OUTPUT_DIR ?? "/tmp/cpp-harness-pike-differential-live";
+	mkdirSync(outputDirectory, { recursive: true });
+	const pikeBinary = process.env.CCH_DIFFERENTIAL_LIVE_PIKE ?? path.join(repositoryRootFromEnvironment(), "build/pike");
+	const piCheckoutPath = frozenCheckoutOrSkip();
+	const quote = (part: string) => `'${part.replaceAll("'", "'\\''")}'`;
+	const piCommand = [path.join(piCheckoutPath, "node_modules/.bin/tsx"), path.join(piCheckoutPath, "packages/coding-agent/src/cli.ts"), ...(process.env.CCH_DIFFERENTIAL_LIVE_PI_ARGS?.split(" ") ?? [])].map(quote).join(" ");
+	const commands = [
+		{ name: "pike", command: `${quote(pikeBinary)} ${process.env.CCH_DIFFERENTIAL_LIVE_PIKE_ARGS ?? "--no-session --no-skills --no-prompt-templates --no-approve"}` },
+		{ name: "pi", command: piCommand },
+	];
+	for (const scenario of scenarios) {
+		for (const item of commands) {
+			const resize = scenario.resize === undefined ? "" : (() => {
+				const dimensions = parseDimensions(scenario.resize as string);
+				return `stty cols ${dimensions.columns} rows ${dimensions.rows}; `;
+			})();
+			const result = spawnSync("script", ["-qfec", `${resize}${item.command}`, "/dev/null"], {
+				cwd: repositoryRootFromEnvironment(),
+				env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" },
+				input: `${scenario.inputs.join("")}\x04`,
+				encoding: "buffer",
+				timeout: 30_000,
+			});
+			if (result.error) throw result.error;
+			writeFileSync(path.join(outputDirectory, `${item.name}-${scenario.id}.raw`), result.stdout);
+			console.log(`${item.name}/${scenario.id}: captured ${result.stdout.length} bytes in ${outputDirectory}`);
+		}
+	}
+	console.log("Manual captures are raw local evidence; review and sanitize them before sharing.");
+	return 0;
+}
+
+function reportMetadata(report: Record<string, unknown>): Record<string, unknown> {
+	return {
+		schema: report.schema,
+		baseline: report.baseline,
+		profile: report.profile,
+		structuralProjection: report.structuralProjection,
+	};
+}
+
+function requireStringArray(value: unknown, label: string): asserts value is string[] {
+	if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) throw new Error(`${label} must be an array of strings`);
+}
+
+function validateReportCaptures(report: Record<string, unknown>): void {
+	if (!Array.isArray(report.scenarios)) throw new Error("differential report scenarios must be an array");
+	for (const item of report.scenarios as Record<string, unknown>[]) {
+		requireStringArray(item.inputs, `differential report inputs for ${String(item.id)}`);
+		const captures = item.captures as Record<string, unknown> | undefined;
+		if (!captures || typeof captures !== "object") throw new Error(`differential report is missing captures for ${String(item.id)}`);
+		for (const runtime of ["pike", "pi"]) {
+			const capture = captures[runtime] as Record<string, unknown> | undefined;
+			if (!capture || typeof capture !== "object" || !Array.isArray(capture.snapshots) || capture.snapshots.length === 0) {
+				throw new Error(`differential report is missing ${runtime} snapshots for ${String(item.id)}`);
+			}
+			if (capture.runtime !== runtime || capture.scenario !== item.id || capture.width !== item.width || JSON.stringify(capture.inputs) !== JSON.stringify(item.inputs)) {
+				throw new Error(`differential report has mismatched ${runtime} capture identity for ${String(item.id)}`);
+			}
+			for (const snapshot of capture.snapshots as Record<string, unknown>[]) {
+				requireStringArray(snapshot.visible, `differential report visible cells for ${runtime}/${String(item.id)}`);
+				requireStringArray(snapshot.scrollback, `differential report scrollback for ${runtime}/${String(item.id)}`);
+				requireStringArray(snapshot.sgr, `differential report SGR tokens for ${runtime}/${String(item.id)}`);
+				if (typeof snapshot.ansi !== "string") throw new Error(`differential report is missing ANSI for ${runtime}/${String(item.id)}`);
+				if (JSON.stringify(snapshot.sgr) !== JSON.stringify(sgrTokens(snapshot.ansi))) {
+					throw new Error(`differential report SGR tokens do not match ANSI for ${runtime}/${String(item.id)}`);
+				}
+			}
+		}
+	}
+}
+
+function validateStableDigests(report: Record<string, unknown>, repositoryRoot: string): void {
+	const byId = new Map(scenarios.map((scenario) => [scenario.id, scenario]));
+	for (const item of report.scenarios as Record<string, unknown>[]) {
+		const scenario = byId.get(String(item.id));
+		if (!scenario) throw new Error(`differential report contains unknown scenario ${String(item.id)}`);
+		const captures = item.captures as Record<string, Record<string, unknown>>;
+		const actualDigest = digest({
+			pike: stableProjection(captures.pike, scenario, repositoryRoot),
+			pi: stableProjection(captures.pi, scenario, repositoryRoot),
+		});
+		if (item.stableDigest !== actualDigest) throw new Error(`differential report stable digest is stale for ${scenario.id}`);
+	}
+}
+
+async function runParent(): Promise<number> {
+	const checkout = frozenCheckoutOrSkip();
+	const repositoryRoot = repositoryRootFromEnvironment();
+	const temporaryDirectory = path.join(differentialDir, `.verify-${process.pid}`);
+	rmSync(temporaryDirectory, { recursive: true, force: true });
+	mkdirSync(temporaryDirectory, { recursive: true });
+	const report: Record<string, unknown> = {
+		schema: 1,
+		baseline: {
+			piCommit: frozenCommit,
+			artifact: `${packageName}@${packageVersion}`,
+		},
+		profile,
+		structuralProjection: {
+			cellText: "trimmed visible cells with fixture paths, model ids, and model prose projected",
+			ansi: "full ANSI capture retained; ordered SGR tokens with 256-color normalization are the compared style projection",
+			scrollback: "scrollback cell rows are compared separately from the visible viewport",
+		},
+		scenarios: [] as Record<string, unknown>[],
+	};
+	try {
+		for (const scenario of scenarios) {
+			const pikeOutput = path.join(temporaryDirectory, `${scenario.id}.pike.json`);
+			const piOutput = path.join(temporaryDirectory, `${scenario.id}.pi.json`);
+			const pike = runPike(scenario, pikeOutput);
+			const pi = await runPi(scenario, piOutput);
+			const comparison = compare(pike, pi, scenario, repositoryRoot);
+			const pikeCapture = normalizeCapture(pike, scenario, repositoryRoot);
+			const piCapture = normalizeCapture(pi, scenario, repositoryRoot);
+			(report.scenarios as Record<string, unknown>[]).push({
+				id: scenario.id,
+				width: scenario.width,
+				inputs: scenario.inputs,
+				resize: scenario.resize,
+				...comparison,
+				captures: { pike: pikeCapture, pi: piCapture },
+				stableDigest: digest({
+					pike: stableProjection(pikeCapture, scenario, repositoryRoot),
+					pi: stableProjection(piCapture, scenario, repositoryRoot),
+				}),
+			});
+			console.log(`${scenario.id}: ${comparison.classification}`);
+		}
+	} finally {
+		rmSync(temporaryDirectory, { recursive: true, force: true });
+		void checkout;
+	}
+	if (process.argv.includes("--write")) {
+		mkdirSync(differentialDir, { recursive: true });
+		writeJson(reportPath, report, true);
+		console.log(`wrote ${reportPath}`);
+		return 0;
+	}
+	if (!existsSync(reportPath)) throw new Error(`checked-in report is missing: ${reportPath}; run with --write`);
+	const expected = JSON.parse(readFileSync(reportPath, "utf8")) as Record<string, unknown>;
+	if (JSON.stringify(reportMetadata(report)) !== JSON.stringify(reportMetadata(expected))) {
+		throw new Error("Native TUI differential report metadata changed; inspect the checked-in evidence.");
+	}
+	validateReportCaptures(report);
+	validateReportCaptures(expected);
+	validateStableDigests(expected, repositoryRoot);
+	const actualStable = (report.scenarios as Record<string, unknown>[]).map((item) => ({
+		id: item.id,
+		width: item.width,
+		inputs: item.inputs,
+		classification: item.classification,
+		projection: item.projection,
+		omissionEvidence: item.omissionEvidence,
+		stableDigest: item.stableDigest,
+	}));
+	const expectedStable = (expected.scenarios as Record<string, unknown>[]).map((item) => ({
+		id: item.id,
+		width: item.width,
+		inputs: item.inputs,
+		classification: item.classification,
+		projection: item.projection,
+		omissionEvidence: item.omissionEvidence,
+		stableDigest: item.stableDigest,
+	}));
+	if (JSON.stringify(actualStable) !== JSON.stringify(expectedStable)) {
+		console.error("Native TUI differential projection changed; inspect the report and classify the delta.");
+		console.error("Use --write only after reviewing Supported Capability regressions versus intentional omissions.");
+		return 1;
+	}
+	console.log(`verified ${actualStable.length} Native TUI differential scenarios against ${reportPath}`);
+	return 0;
+}
+
+async function runPiChild(): Promise<number> {
+	const scenario = scenarios.find((item) => item.id === process.env.CCH_DIFFERENTIAL_SCENARIO);
+	const output = process.env.CCH_DIFFERENTIAL_OUTPUT;
+	if (!scenario || !output) throw new Error("pi child requires CCH_DIFFERENTIAL_SCENARIO and CCH_DIFFERENTIAL_OUTPUT");
+	const checkout = piCheckout();
+	const source = (relative: string) => pathToFileURL(path.join(checkout, relative)).href;
+	const { createHarness } = await import(source("packages/coding-agent/test/suite/harness.ts"));
+	const { fauxAssistantMessage, fauxText, fauxToolCall } = await import(source("packages/ai/src/providers/faux.ts"));
+	const { AgentSessionRuntime } = await import(source("packages/coding-agent/src/core/agent-session-runtime.ts"));
+	const { InteractiveMode } = await import(source("packages/coding-agent/src/modes/interactive/interactive-mode.ts"));
+	const { VirtualTerminal } = await import(source("packages/tui/test/virtual-terminal.ts"));
+
+	const harness = await createHarness({
+		models: [
+			{ id: "faux-1", name: "Faux Reasoning", reasoning: true },
+			{ id: "faux-2", name: "Faux Plain", reasoning: false },
+		],
+		settings: { theme: "dark" },
+	});
+	writeFileSync(path.join(harness.tempDir, "notes.txt"), "alpha\n");
+	const response = (text: string) => fauxAssistantMessage(text);
+	if (scenario.id === "user-message") harness.setResponses([response("deterministic assistant reply")]);
+	if (scenario.id === "status-footer") harness.setResponses([response("deterministic status reply")]);
+	if (scenario.id === "tool-result") {
+		harness.setResponses([
+			fauxAssistantMessage([fauxText("I will read the deterministic fixture."), fauxToolCall("read", { path: "notes.txt" })], { stopReason: "toolUse" }),
+			response("deterministic tool answer"),
+		]);
+	}
+	if (scenario.id === "scrollback") {
+		harness.setResponses(Array.from({ length: 6 }, (_, index) => response(`deterministic scrollback reply ${index + 1}`)));
+	}
+
+	class RecordingTerminal extends VirtualTerminal {
+		ansi = "";
+
+		override write(data: string): void {
+			this.ansi += data;
+			super.write(data);
+		}
+	}
+
+	const terminal = new RecordingTerminal(scenario.width, profile.viewportRows);
+	const services = {
+		cwd: harness.tempDir,
+		agentDir: `/tmp/cpp-harness-pike-differential-${scenario.id}`,
+		modelRuntime: harness.session.modelRuntime,
+		settingsManager: harness.settingsManager,
+		resourceLoader: harness.session.resourceLoader,
+		diagnostics: [],
+	};
+	const runtimeHost = new AgentSessionRuntime(harness.session, services, async () => {
+		throw new Error("session replacement is not used by the differential capture");
+	});
+	const mode = new InteractiveMode(runtimeHost, {
+		terminal,
+		tuiMode: "regular",
+		initialThemeSetting: "dark",
+	});
+	void mode.run().catch((error: unknown) => {
+		console.error(error);
+		process.exitCode = 1;
+	});
+	await waitForTerminalText(terminal, "Press ctrl+o");
+	let ansiOffset = 0;
+	const snapshots: Record<string, unknown>[] = [await capture(terminal, harness.tempDir, ansiOffset)];
+	ansiOffset = terminal.ansi.length;
+	if (scenario.resize !== undefined) {
+		const dimensions = parseDimensions(scenario.resize);
+		const resizeOffset = terminal.ansi.length;
+		terminal.resize(dimensions.columns, dimensions.rows);
+		await waitForTerminalAnsi(terminal, resizeOffset);
+		snapshots.push(await capture(terminal, harness.tempDir, ansiOffset));
+		ansiOffset = terminal.ansi.length;
+	}
+	let responseIndex = 0;
+	for (const input of scenario.inputs) {
+		const inputOffset = terminal.ansi.length;
+		await sendInputSequence(terminal, input);
+		if (scenario.id === "tool-result" && input.endsWith("\r")) {
+			await waitForTerminalText(terminal, "I will read the deterministic fixture.");
+			snapshots.push(await capture(terminal, harness.tempDir, ansiOffset));
+			ansiOffset = terminal.ansi.length;
+		}
+		if (input.endsWith("\r") && ["user-message", "tool-result", "status-footer", "scrollback"].includes(scenario.id)) {
+			const expected = scenario.id === "user-message"
+				? "deterministic assistant reply"
+				: scenario.id === "status-footer"
+					? "deterministic status reply"
+					: scenario.id === "tool-result"
+						? "deterministic tool answer"
+						: `deterministic scrollback reply ${responseIndex + 1}`;
+			await waitForTerminalText(terminal, expected);
+			responseIndex += 1;
+		} else if (scenario.id === "settings-selector" && input === "\x1b") {
+			await waitForTerminalTextAbsent(terminal, "Type to search");
+		} else {
+			await waitForTerminalAnsi(terminal, inputOffset);
+		}
+		snapshots.push(await capture(terminal, harness.tempDir, ansiOffset));
+		ansiOffset = terminal.ansi.length;
+	}
+	const report = {
+		runtime: "pi",
+		scenario: scenario.id,
+		width: scenario.width,
+		workspace: harness.tempDir,
+		inputs: scenario.inputs,
+		snapshots,
+	};
+	writeJson(output, report);
+	harness.cleanup();
+	await delay(10);
+	// The Native TUI owns interval-driven render work. The child has already
+	// written its complete capture, so terminate this isolated evidence
+	// process instead of allowing the live renderer to keep the event loop
+	// alive after the comparison boundary.
+	process.exit(0);
+}
+
+async function capture(terminal: { flush(): Promise<void>; getViewport(): string[]; getScrollBuffer(): string[]; ansi: string }, workspace: string, ansiOffset: number): Promise<Record<string, unknown>> {
+	await terminal.flush();
+	const visible = terminal.getViewport();
+	const buffer = terminal.getScrollBuffer();
+	return {
+		visible,
+		scrollback: buffer.slice(0, Math.max(0, buffer.length - visible.length)),
+		ansi: terminal.ansi.slice(ansiOffset),
+		workspace,
+	};
+}
+
+async function sendInputSequence(terminal: { sendInput(data: string): void }, input: string): Promise<void> {
+	let remaining = input;
+	while (remaining.length > 0) {
+		const enter = remaining.indexOf("\r");
+		if (enter < 0) {
+			terminal.sendInput(remaining);
+			return;
+		}
+		if (enter > 0) terminal.sendInput(remaining.slice(0, enter));
+		terminal.sendInput("\r");
+		remaining = remaining.slice(enter + 1);
+	}
+}
+
+async function waitForTerminalText(terminal: { flush(): Promise<void>; getViewport(): string[] }, expected: string): Promise<void> {
+	const deadline = Date.now() + 3_000;
+	while (Date.now() < deadline) {
+		await terminal.flush();
+		if (terminal.getViewport().join("\n").includes(expected)) return;
+		await delay(20);
+	}
+	throw new Error(`pi differential scenario did not render expected text: ${expected}\n${terminal.getViewport().join("\n")}`);
+}
+
+async function waitForTerminalTextAbsent(terminal: { flush(): Promise<void>; getViewport(): string[] }, unexpected: string): Promise<void> {
+	const deadline = Date.now() + 3_000;
+	while (Date.now() < deadline) {
+		await terminal.flush();
+		if (!terminal.getViewport().join("\n").includes(unexpected)) return;
+		await delay(20);
+	}
+	throw new Error(`pi differential scenario retained expected-to-leave text: ${unexpected}`);
+}
+
+async function waitForTerminalAnsi(terminal: { flush(): Promise<void>; ansi: string }, offset: number): Promise<void> {
+	const deadline = Date.now() + 3_000;
+	while (Date.now() < deadline) {
+		await terminal.flush();
+		if (terminal.ansi.length > offset) return;
+		await delay(20);
+	}
+	throw new Error(`pi differential scenario did not render after input at ANSI offset ${offset}`);
+}
+
+function delay(milliseconds: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function main(): Promise<number> {
+	try {
+		if (process.argv.includes("--runtime")) return await runPiChild();
+		if (process.argv.includes("--live")) return runLiveManual();
+		verifySgrNormalization();
+		verifyProjectionPolicy();
+		return await runParent();
+	} catch (error) {
+		if (error instanceof SkipError) {
+			console.log(`SKIP: ${error.message}`);
+			return 77;
+		}
+		console.error(error);
+		if (process.argv.includes("--runtime")) process.exit(1);
+		return 1;
+	}
+}
+
+process.exitCode = await main();

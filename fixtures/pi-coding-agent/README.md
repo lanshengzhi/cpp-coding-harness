@@ -201,6 +201,62 @@ sibling checkout's when absent — and the generated `packages/ai/src/providers/
 which it provisions from the sibling checkout or a minimal stub, since the faux scenarios never
 read it).
 
+## Dual-runtime Native TUI differential (`differential/`)
+
+Issue [#800](https://github.com/lanshengzhi/cpp-coding-harness/issues/800) adds a deterministic
+comparison seam beside the existing C++-side goldens. `capture/native-tui-differential.mts` runs
+Pike's Native TUI VirtualTerminal and pi v0.87.1's Native TUI VirtualTerminal through the same
+scenario records and input byte sequences. The checked-in `differential/report.json` retains
+visible cell rows, scrollback rows, raw ANSI output, and the SGR-token projection for both
+runtimes. It is not an opaque whole-session screenshot: each scenario and transition remains
+addressable as structured rows.
+
+The profile pins `HOME`/`USERPROFILE` to `/home/tester`, each scenario's agent directory to
+a synthetic scenario-specific path, the viewport to 24 rows, terminal capabilities to
+`xterm-256color` + truecolor, and the provider
+to deterministic faux responses. Fixture paths and model prose are projected before comparison;
+credentials, real home paths, wall-clock values, and machine identifiers never enter the report.
+Formal boot fixtures are checked in at 72, 100, and 120 columns, with 41 columns as the narrow
+robustness fixture. The remaining scenarios cover model/settings/thinking selectors, long/CJK/
+unbreakable editor input, user/tool/status transitions, resize, and scrollback growth.
+
+Regenerate the report after reviewing the raw diffs:
+
+```bash
+cmake --build --preset vcpkg --target cch_tests_coding_agent_interactive
+../pi/node_modules/.bin/tsx \\
+  fixtures/pi-coding-agent/capture/native-tui-differential.mts --write
+```
+
+CTest runs the same command in verification mode through
+`tests/coding_agent/NativeTuiDifferentialTest.py`. Verification compares the stable cell,
+scrollback, and SGR projections and the classification, while retaining raw ANSI as captured
+evidence without requiring frame-timing-dependent byte order to be an opaque golden. A missing
+optional frozen pi checkout is an explicit skip; a checkout at the wrong commit is an error.
+
+A row is `match` when all three structural projections agree. A row whose remaining delta is
+confined to a documented omission is reported as `intentional-subset-omission`; this is reserved for pi surfaces outside the
+Supported Capability subset, never for a difference in a claimed Native TUI capability. Every
+other difference is reported as `supported-capability-regression`, so the checked-in report
+makes stale Supported Capability rows visible and prevents a new drift from being silently
+absorbed. The report's omissions and classifications are review evidence, not a waiver for a
+future Supported Capability change.
+
+For a live/manual pass, use a real terminal and credentials outside the default CTest path:
+
+```bash
+CCH_DIFFERENTIAL_LIVE_PIKE_ARGS='--provider <provider> --model <model> --no-skills' \\
+CCH_DIFFERENTIAL_LIVE_PI_ARGS='--provider <provider> --model <model> --no-skills' \\
+CCH_DIFFERENTIAL_LIVE_OUTPUT_DIR=/tmp/native-tui-live \\
+  ../pi/node_modules/.bin/tsx \\
+  fixtures/pi-coding-agent/capture/native-tui-differential.mts --live
+```
+
+The live mode records raw PTY bytes for every scenario under the requested temporary output
+directory for human review only. It is never part of the offline regression command and its
+output must be scrubbed before being attached to an issue. The normal `--write`/`--verify` path
+always uses faux providers and makes no network request.
+
 ## Capability-to-source checklist
 
 One line per scoped capability, tying it to the frozen pi source, the G record that decided it,
