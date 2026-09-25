@@ -63,32 +63,52 @@ struct HelpTemplate {
     std::size_t order;
 };
 
+[[nodiscard]] HelpTemplate make_help_template(std::string_view id,
+        std::string_view section,
+        std::string_view group,
+        std::string_view description,
+        std::size_t order) {
+    return {
+            .id = id,
+            .section = section,
+            .group = group,
+            .description = description,
+            .order = order,
+    };
+}
+
 /// The one built-in help catalog. The registry remains the source of every
 /// key; this table supplies only the documented pi row metadata.
 [[nodiscard]] const std::vector<HelpTemplate>& builtin_help_templates() {
     static const std::vector<HelpTemplate> kTemplates{
-            {"tui.editor.cursorUp", "Navigation", "cursor-move", "Move cursor / browse history", 1},
-            {"tui.editor.cursorDown", "Navigation", "cursor-move", "Move cursor / browse history", 1},
-            {"tui.editor.cursorLeft", "Navigation", "cursor-move", "Move cursor / browse history", 1},
-            {"tui.editor.cursorRight", "Navigation", "cursor-move", "Move cursor / browse history", 1},
-            {"tui.editor.cursorWordLeft", "Navigation", "word-move", "Move by word", 2},
-            {"tui.editor.cursorWordRight", "Navigation", "word-move", "Move by word", 2},
-            {"tui.editor.cursorLineStart", "Navigation", "line-start", "Start of line", 3},
-            {"tui.editor.cursorLineEnd", "Navigation", "line-end", "End of line", 4},
-            {"tui.editor.jumpForward", "Navigation", "jump-forward", "Jump forward to character", 5},
-            {"tui.editor.jumpBackward", "Navigation", "jump-backward", "Jump backward to character", 6},
-            {"tui.editor.pageUp", "Navigation", "page", "Scroll by page", 7},
-            {"tui.editor.pageDown", "Navigation", "page", "Scroll by page", 7},
-            {"tui.input.submit", "Editing", "submit", "Send message", 1},
-            {"tui.input.newLine", "Editing", "newline", "New line", 2},
-            {"tui.editor.deleteWordBackward", "Editing", "delete-word-backward", "Delete word backwards", 3},
-            {"tui.editor.deleteWordForward", "Editing", "delete-word-forward", "Delete word forwards", 4},
-            {"tui.editor.deleteToLineStart", "Editing", "delete-line-start", "Delete to start of line", 5},
-            {"tui.editor.deleteToLineEnd", "Editing", "delete-line-end", "Delete to end of line", 6},
-            {"tui.editor.yank", "Editing", "yank", "Paste the most-recently-deleted text", 7},
-            {"tui.editor.yankPop", "Editing", "yank-pop", "Cycle through the deleted text after pasting", 8},
-            {"tui.editor.undo", "Editing", "undo", "Undo", 9},
-            {"tui.input.tab", "Other", "tab", "Path completion / accept autocomplete", 1},
+            make_help_template("tui.editor.cursorUp", "Navigation", "cursor-move", "Move cursor / browse history", 1),
+            make_help_template("tui.editor.cursorDown", "Navigation", "cursor-move", "Move cursor / browse history", 1),
+            make_help_template("tui.editor.cursorLeft", "Navigation", "cursor-move", "Move cursor / browse history", 1),
+            make_help_template(
+                    "tui.editor.cursorRight", "Navigation", "cursor-move", "Move cursor / browse history", 1),
+            make_help_template("tui.editor.cursorWordLeft", "Navigation", "word-move", "Move by word", 2),
+            make_help_template("tui.editor.cursorWordRight", "Navigation", "word-move", "Move by word", 2),
+            make_help_template("tui.editor.cursorLineStart", "Navigation", "line-start", "Start of line", 3),
+            make_help_template("tui.editor.cursorLineEnd", "Navigation", "line-end", "End of line", 4),
+            make_help_template("tui.editor.jumpForward", "Navigation", "jump-forward", "Jump forward to character", 5),
+            make_help_template(
+                    "tui.editor.jumpBackward", "Navigation", "jump-backward", "Jump backward to character", 6),
+            make_help_template("tui.editor.pageUp", "Navigation", "page", "Scroll by page", 7),
+            make_help_template("tui.editor.pageDown", "Navigation", "page", "Scroll by page", 7),
+            make_help_template("tui.input.submit", "Editing", "submit", "Send message", 1),
+            make_help_template("tui.input.newLine", "Editing", "newline", "New line", 2),
+            make_help_template(
+                    "tui.editor.deleteWordBackward", "Editing", "delete-word-backward", "Delete word backwards", 3),
+            make_help_template(
+                    "tui.editor.deleteWordForward", "Editing", "delete-word-forward", "Delete word forwards", 4),
+            make_help_template(
+                    "tui.editor.deleteToLineStart", "Editing", "delete-line-start", "Delete to start of line", 5),
+            make_help_template("tui.editor.deleteToLineEnd", "Editing", "delete-line-end", "Delete to end of line", 6),
+            make_help_template("tui.editor.yank", "Editing", "yank", "Paste the most-recently-deleted text", 7),
+            make_help_template(
+                    "tui.editor.yankPop", "Editing", "yank-pop", "Cycle through the deleted text after pasting", 8),
+            make_help_template("tui.editor.undo", "Editing", "undo", "Undo", 9),
+            make_help_template("tui.input.tab", "Other", "tab", "Path completion / accept autocomplete", 1),
     };
     return kTemplates;
 }
@@ -466,9 +486,11 @@ support::Expected<KeybindingsManagerResult> load_keybindings_manager(
             add_diagnostic(diagnostics, std::move(issue.code), std::move(issue.message), path);
         }
         bound_diagnostics(diagnostics);
+        auto help = std::make_shared<const std::vector<HotkeyHelpRow>>(hotkey_help_rows(*resolution->registry));
         return KeybindingsManagerResult{
-            .registry = std::move(resolution->registry),
-            .diagnostics = std::move(diagnostics),
+                .registry = std::move(resolution->registry),
+                .help = std::move(help),
+                .diagnostics = std::move(diagnostics),
         };
     }
 }
@@ -519,11 +541,11 @@ std::vector<HotkeyHelpRow> hotkey_help_rows(const cch::tui::KeybindingRegistry& 
     for (const auto& definition : builtin_help_templates()) {
         add(definition.id, definition.section, definition.group, definition.description, definition.order);
     }
-    // Known application actions remain visible as Unbound when the host has
-    // not assembled them. The metadata comes from the same canonical catalog
-    // used to create assembled definitions; no active registry entry is
-    // fabricated for these rows.
+    // Known application actions that the host did not assemble stay out of
+    // help, matching the diagnosed-and-skipped policy. Assembled rows still
+    // take their keys from the immutable registry.
     for (const auto& definition : application_templates()) {
+        if (registry.find(definition.id) == nullptr) continue;
         add(definition.id,
                 definition.help_section,
                 definition.help_group,

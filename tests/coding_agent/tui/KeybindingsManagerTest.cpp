@@ -214,6 +214,9 @@ TEST_CASE("Known-but-unassembled tui ids are diagnosed as unavailable and never 
     CHECK(manager->registry->find("tui.altScreen.pageUp") == nullptr);
     CHECK(manager->registry->find("tui.altScreen.previousPrompt") == nullptr);
     CHECK(manager->registry->entries().size() == 30);
+    const auto text = coding_agent::tui::format_hotkeys_text(*manager->help);
+    CHECK(text.find("tui.input.copy") == std::string::npos);
+    CHECK(text.find("app.model.select") == std::string::npos);
 }
 
 TEST_CASE("Keybindings manager bounds diagnostics and redacts invalid key text",
@@ -384,7 +387,7 @@ TEST_CASE("/hotkeys shows both claims for a user key conflict", "[coding_agent][
 TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
         "[coding_agent][keybindings][issue796][spec]") {
     // Default registry with no application actions assembled: pi sections
-    // render with effective keys, app rows render Unbound.
+    // render with effective keys; unavailable application rows are skipped.
     coding_agent::tui::KeybindingsManagerRequest request;
     const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
     REQUIRE(manager);
@@ -401,7 +404,7 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     CHECK(text.find("Move cursor / browse history") != std::string::npos);
     CHECK(text.find("enter  Send message") != std::string::npos);
     CHECK(text.find("/  Slash commands") != std::string::npos);
-    CHECK(text.find("Unbound  Exit (when editor is empty)") != std::string::npos);
+    CHECK(text.find("Exit (when editor is empty)") == std::string::npos);
 
     // The component seam and the inline chat block use one formatter. The
     // narrow render still contains all three section headings rather than
@@ -420,7 +423,7 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     }
     CHECK(wide_text.find("Move cursor / browse history") != std::string::npos);
     CHECK(wide_text.find("enter  Send message") != std::string::npos);
-    CHECK(wide_text.find("Unbound  Exit (when editor is empty)") != std::string::npos);
+    CHECK(wide_text.find("Exit (when editor is empty)") == std::string::npos);
 
     const auto rendered = view->render(24);
     REQUIRE(rendered);

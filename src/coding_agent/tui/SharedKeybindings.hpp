@@ -4,8 +4,11 @@
 
 #include <memory>
 #include <mutex>
+#include <vector>
 
 namespace cch::coding_agent::tui {
+
+struct HotkeyHelpRow;
 
 /// pi's mutable `KeybindingsManager` consumption shape over the immutable
 /// resolved `KeybindingRegistry` (ADR 0035): every durable view component
@@ -28,11 +31,17 @@ public:
         std::shared_ptr<const cch::tui::KeybindingRegistry> current)
         : current_(std::move(current)) {}
 
+    SharedKeybindings(std::shared_ptr<const cch::tui::KeybindingRegistry> current,
+            std::shared_ptr<const std::vector<HotkeyHelpRow>> help)
+        : current_(std::move(current)), help_(std::move(help)) {}
+
     /// pi `KeybindingsManager.reload()`: swap the current registry. The
     /// previous registry is released once no observer references it.
-    void replace(std::shared_ptr<const cch::tui::KeybindingRegistry> current) {
+    void replace(std::shared_ptr<const cch::tui::KeybindingRegistry> current,
+            std::shared_ptr<const std::vector<HotkeyHelpRow>> help = {}) {
         std::lock_guard lock(mutex_);
         current_ = std::move(current);
+        help_ = std::move(help);
     }
 
     /// The current registry as a strong reference (ephemeral consumers).
@@ -48,11 +57,17 @@ public:
         return *current_;
     }
 
+    [[nodiscard]] std::shared_ptr<const std::vector<HotkeyHelpRow>> help() const {
+        std::lock_guard lock(mutex_);
+        return help_;
+    }
+
     [[nodiscard]] explicit operator bool() const { return get() != nullptr; }
 
 private:
     mutable std::mutex mutex_;
     std::shared_ptr<const cch::tui::KeybindingRegistry> current_;
+    std::shared_ptr<const std::vector<HotkeyHelpRow>> help_;
 };
 
 } // namespace cch::coding_agent::tui

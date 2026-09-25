@@ -9,6 +9,7 @@
 // Repository-private `cch_coding_agent` implementation header: not part of
 // an Owner Interface, not installed, never exported.
 
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -21,6 +22,7 @@ class KeybindingRegistry;
 } // namespace cch::tui
 
 namespace cch::coding_agent::tui {
+struct HotkeyHelpRow;
 
 /// pi `handleSessionCommand`: the Session Info chat block over the session
 /// name, file, id, message counts, and token totals (pi `getSessionStats`
@@ -42,5 +44,7 @@ inline constexpr std::string_view kHelpCommandText =
 /// metadata; the `/`, `!`, `!!` command rows are the documented literals.
 /// Unassembled or unbound actions render as `Unbound` like `key_hint`.
 [[nodiscard]] std::string format_hotkeys_text(const cch::tui::KeybindingRegistry& registry);
+
+[[nodiscard]] std::string format_hotkeys_text(std::span<const HotkeyHelpRow> rows);
 
 } // namespace cch::coding_agent::tui

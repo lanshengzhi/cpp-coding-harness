@@ -10,7 +10,6 @@
 #include <string_view>
 
 namespace cch::coding_agent::tui {
-namespace {} // namespace
 
 std::string format_session_info(const coding_agent::AgentSession& session) {
     // pi `handleSessionCommand` shape: Name (when set), File, ID, the
@@ -44,12 +43,10 @@ std::string format_session_info(const coding_agent::AgentSession& session) {
     return info;
 }
 
-std::string format_hotkeys_text(const cch::tui::KeybindingRegistry& registry) {
-    // Section and row metadata travel with the resolved definitions. The only
-    // literals here are the three documented section names and the three
-    // non-key command rows; every keybinding row is projected from the same
-    // immutable registry used by dispatch and hints.
-    const auto rows = hotkey_help_rows(registry);
+std::string format_hotkeys_text(std::span<const HotkeyHelpRow> rows) {
+    // The rows are resolved once by KeybindingsManager; this formatter only
+    // lays them out. The only literals are the documented section names and
+    // the three non-key command rows.
     std::string text = "Keyboard Shortcuts\n";
     constexpr std::string_view kSections[] = {"Navigation", "Editing", "Other"};
     for (const auto section : kSections) {
@@ -65,6 +62,10 @@ std::string format_hotkeys_text(const cch::tui::KeybindingRegistry& registry) {
         }
     }
     return text;
+}
+
+std::string format_hotkeys_text(const cch::tui::KeybindingRegistry& registry) {
+    return format_hotkeys_text(hotkey_help_rows(registry));
 }
 
 } // namespace cch::coding_agent::tui

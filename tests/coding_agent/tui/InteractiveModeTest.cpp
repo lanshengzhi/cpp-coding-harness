@@ -3898,8 +3898,9 @@ TEST_CASE("Native TUI settings opens only supported overlays and hotkeys renders
     // app.suspend and app.editor.external assembled with P15's editor chrome.
     CHECK(screen.find("Suspend to background") != std::string::npos);
     CHECK(screen.find("Edit message in external editor") != std::string::npos);
-    // The unassembled clipboard action renders Unbound on its pi row.
-    CHECK(screen.find("Unbound  Paste image or text from clipboard") != std::string::npos);
+    // The known-but-unassembled clipboard action is diagnosed and omitted;
+    // it never appears as an active or Unbound help row.
+    CHECK(screen.find("Paste image or text from clipboard") == std::string::npos);
     CHECK(created->session->message_count() == 1);
 
     REQUIRE(terminal.inject_input("\x1b[17~"));

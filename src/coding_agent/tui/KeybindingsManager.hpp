@@ -32,8 +32,11 @@ struct KeybindingsManagerRequest {
     std::vector<cch::tui::KeybindingDefinition> application_definitions{};
 };
 
+struct HotkeyHelpRow;
+
 struct KeybindingsManagerResult {
     std::shared_ptr<const cch::tui::KeybindingRegistry> registry{};
+    std::shared_ptr<const std::vector<HotkeyHelpRow>> help{};
     std::vector<KeybindingDiagnostic> diagnostics{};
 };
 
