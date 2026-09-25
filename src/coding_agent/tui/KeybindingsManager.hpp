@@ -51,9 +51,10 @@ app_keybinding_definitions(
 [[nodiscard]] support::Expected<KeybindingsManagerResult> load_keybindings_manager(
     KeybindingsManagerRequest request);
 
-// ── Registry help entries (one per assembled registry entry; the
-//    `/hotkeys` chat block in SlashCommandEffects renders pi's hardcoded
-//    sections instead) ────────────────────────────────────────────────────
+// ── Registry help entries ────────────────────────────────────────────────
+// These are the assembled-registry projection used by component consumers;
+// the inline `/hotkeys` chat block is rendered by the single formatter in
+// SlashCommandEffects so both surfaces share the same effective keys.
 
 struct HotkeyHelpEntry {
     std::string id{};
@@ -72,7 +73,8 @@ struct HotkeyHelpEntry {
     std::string_view action_id,
     std::string_view description);
 
-/// The `/hotkeys` overlay content rendered from the assembled registry.
+/// The `/hotkeys` component seam, rendered through the same formatter as the
+/// inline chat block and the same assembled registry.
 [[nodiscard]] std::unique_ptr<cch::tui::Component> make_hotkey_help_view(
     std::shared_ptr<const cch::tui::KeybindingRegistry> registry);
 

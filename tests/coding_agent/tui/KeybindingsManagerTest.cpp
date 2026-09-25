@@ -82,12 +82,7 @@ TEST_CASE("Hotkey help and hints expose the exact registry used for dispatch",
     CHECK(manager->registry->matches(
         tui::KeyEvent{.key = "enter", .ctrl = true},
         found->id));
-    auto view = coding_agent::tui::make_hotkey_help_view(manager->registry);
-    const auto rendered = view->render(100);
-    REQUIRE(rendered);
-    CHECK(std::any_of(rendered->lines.begin(), rendered->lines.end(), [](const auto& line) {
-        return line.find("ctrl+enter/f2") != std::string::npos;
-    }));
+    CHECK(coding_agent::tui::format_hotkeys_text(*manager->registry).find("enter  Send message") != std::string::npos);
 }
 
 TEST_CASE("Keybindings manager diagnoses malformed values and user conflicts without installing them",
@@ -376,12 +371,34 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     REQUIRE(manager);
     const auto text = coding_agent::tui::format_hotkeys_text(*manager->registry);
     CHECK(text.find("Keyboard Shortcuts") != std::string::npos);
-    CHECK(text.find("Navigation") != std::string::npos);
-    CHECK(text.find("Editing") != std::string::npos);
+    const auto navigation = text.find("Navigation");
+    const auto editing = text.find("Editing");
+    const auto other = text.find("Other");
+    REQUIRE(navigation != std::string::npos);
+    REQUIRE(editing != std::string::npos);
+    REQUIRE(other != std::string::npos);
+    CHECK(navigation < editing);
+    CHECK(editing < other);
     CHECK(text.find("Move cursor / browse history") != std::string::npos);
     CHECK(text.find("enter  Send message") != std::string::npos);
     CHECK(text.find("/  Slash commands") != std::string::npos);
     CHECK(text.find("Unbound  Exit (when editor is empty)") != std::string::npos);
+
+    // The component seam and the inline chat block use one formatter. The
+    // narrow render still contains all three section headings rather than
+    // dropping the earlier sections at the right edge.
+    auto view = coding_agent::tui::make_hotkey_help_view(manager->registry);
+    const auto rendered = view->render(24);
+    REQUIRE(rendered);
+    std::string narrow_text;
+    for (const auto& line : rendered->lines) {
+        narrow_text += line;
+        narrow_text.push_back('\n');
+    }
+    CHECK(narrow_text.find("Navigation") != std::string::npos);
+    CHECK(narrow_text.find("Editing") != std::string::npos);
+    CHECK(narrow_text.find("Other") != std::string::npos);
+    CHECK(narrow_text.find("Keyboard Shortcuts") != std::string::npos);
 
     // A user override shows up verbatim on its pi row, and assembled queue
     // actions render with pi's default keys.

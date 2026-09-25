@@ -1,5 +1,6 @@
 #include "KeybindingsManager.hpp"
 
+#include "SlashCommandEffects.hpp"
 #include "coding_agent/ResourceDiagnosticPolicy.hpp"
 #include "support/Json.hpp"
 
@@ -354,26 +355,12 @@ std::string key_hint(
 
 std::unique_ptr<cch::tui::Component> make_hotkey_help_view(
     std::shared_ptr<const cch::tui::KeybindingRegistry> registry) {
-    std::string text = "Hotkeys\n";
-    if (registry) {
-        auto entries = hotkey_help_entries(*registry);
-        std::stable_sort(entries.begin(), entries.end(), [](const auto& left, const auto& right) {
-            const auto left_application = left.category == "Application";
-            const auto right_application = right.category == "Application";
-            if (left_application != right_application) return left_application;
-            if (left.category != right.category) return left.category < right.category;
-            return left.id < right.id;
-        });
-        std::string category;
-        for (const auto& entry : entries) {
-            if (entry.category != category) {
-                category = entry.category;
-                text += "\n" + category + "\n";
-            }
-            text += std::format("{}  {} — {}\n", entry.keys, entry.id, entry.description);
-        }
-    }
-    return std::make_unique<cch::tui::Text>(std::move(text));
+    // Keep one help projection for both the inline `/hotkeys` block and the
+    // component seam. The registry supplies every effective key; this wrapper
+    // must not grow a second category-sorted table that can drift from the
+    // transcript view.
+    const auto text = registry ? format_hotkeys_text(*registry) : std::string{"Hotkeys\n"};
+    return std::make_unique<cch::tui::Text>(text);
 }
 
 } // namespace cch::coding_agent::tui
