@@ -359,10 +359,13 @@ support::ExpectedVoid Tui::render() {
     // `applyLineResets` after `render()` and after `compositeOverlays()`, so a
     // reset can never land inside a background span, #707). Padding keeps the
     // first-diff comparison byte-stable across renders.
+    // ANSI bytes do not occupy terminal cells; pad by visible columns so a
+    // shorter replacement cannot leave the previous row's suffix visible.
     const auto pad_and_reset_rows = [&](std::vector<std::string>& lines) {
         for (auto& line : lines) {
-            if (line.size() < dimensions.columns) {
-                line.append(dimensions.columns - line.size(), ' ');
+            const auto visible_columns = detail::measure_visible_width(line).width;
+            if (visible_columns < dimensions.columns) {
+                line.append(dimensions.columns - visible_columns, ' ');
             }
             detail::apply_line_reset(line);
         }
@@ -400,8 +403,10 @@ support::ExpectedVoid Tui::render() {
                 auto prepared = detail::prepare_rendered_line(next_raw[index], dimensions.columns);
                 if (!prepared) return std::unexpected(prepared.error());
                 auto prepared_row = std::move(prepared->text);
-                if (prepared_row.size() < dimensions.columns) {
-                    prepared_row.append(dimensions.columns - prepared_row.size(), ' ');
+                // `prepared->width` is the cell width; `prepared_row.size()` also
+                // contains ANSI and OSC bytes and is not a padding bound.
+                if (prepared->width < dimensions.columns) {
+                    prepared_row.append(dimensions.columns - prepared->width, ' ');
                 }
                 detail::apply_line_reset(prepared_row);
                 lines[index] = std::move(prepared_row);

@@ -48,5 +48,5 @@ Press ctrl+o to show full startup help and loaded resources.
 ────────────────────────────────────────────────────────────────────────
                                                                         
 ────────────────────────────────────────────────────────────────────────
-/tmp/cpp-harness-rendering-message-pipeline             
+/tmp/cpp-harness-rendering-message-pipeline                             
 ?/128k (auto)                                                 fake-model

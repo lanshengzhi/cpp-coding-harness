@@ -131,8 +131,8 @@
       "rows": 4,
       "pi": "select-list.test.ts \"normalizes multiline descriptions to single line\" — multiline descriptions render on one line with the primary label column aligned",
       "expected": [
-        "→ Short               line one line two                   ",
-        "  A very long primar  second description                ",
+        "→ Short               line one line two                     ",
+        "  A very long primar  second description                    ",
         "",
         ""
       ]

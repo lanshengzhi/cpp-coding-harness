@@ -1,3 +1,4 @@
+#include <cch/tui/Overlay.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
@@ -293,6 +294,57 @@ TEST_CASE("Normal updates begin at first changed visible line", "[tui][render][i
         "",
     };
     CHECK(terminal.screen() == expected_screen);
+}
+
+TEST_CASE("Tui pads styled dock rows by visible width at formal and robustness widths",
+        "[tui][render][dock][issue794][spec]") {
+    for (const auto columns : {41U, 72U, 100U, 120U}) {
+        cch::tui::VirtualTerminal terminal({.columns = columns, .rows = 5});
+        cch::tui::Tui tui(terminal);
+        auto component = std::make_unique<TranscriptDockComponent>();
+        auto* component_pointer = component.get();
+        component_pointer->set_lines({"transcript"});
+        component_pointer->set_dock_lines({"old editor", "old footer"});
+        component_pointer->set_viewport_height(3);
+        REQUIRE(tui.add_child(std::move(component)));
+        REQUIRE(tui.start());
+        REQUIRE(tui.render());
+
+        component_pointer->set_dock_lines({"\x1b[38;5;196mnew\x1b[39m", "new footer"});
+        REQUIRE(tui.render());
+        CHECK(terminal.screen()[3] == "new" + std::string(columns - 3, ' '));
+        CHECK(terminal.screen()[4] == "new footer" + std::string(columns - 10, ' '));
+
+        const auto resized_columns = columns == 41U ? 40U : columns + 1U;
+        REQUIRE(terminal.inject_resize({.columns = resized_columns, .rows = 5}));
+        REQUIRE(tui.render());
+        CHECK(terminal.screen()[3] == "new" + std::string(resized_columns - 3, ' '));
+        CHECK(terminal.screen()[4] == "new footer" + std::string(resized_columns - 10, ' '));
+    }
+}
+
+TEST_CASE("Tui pads composited overlay rows by visible width before overwriting the screen",
+        "[tui][render][overlay][issue794][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 12, .rows = 3});
+    cch::tui::Tui tui(terminal);
+    auto base = std::make_unique<FixedTextComponent>(std::vector<std::string>{"old content"});
+    auto* base_pointer = base.get();
+    REQUIRE(tui.add_child(std::move(base)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    base_pointer->set_lines({""});
+    cch::tui::OverlayOptions options;
+    options.position = cch::tui::OverlayPosition::Absolute;
+    options.absolute_column = 0;
+    options.absolute_row = 0;
+    auto overlay = std::make_unique<cch::tui::Overlay>(options);
+    REQUIRE(overlay->add_child(
+            std::make_unique<FixedTextComponent>(std::vector<std::string>{"\x1b[38;5;196mX\x1b[39m"})));
+    REQUIRE(tui.add_overlay(std::move(overlay)));
+    REQUIRE(tui.render());
+
+    CHECK(terminal.screen()[0] == "X           ");
 }
 
 TEST_CASE("Shrinking content clears stale rows below new content", "[tui][render][issue49][compat-pi]") {
