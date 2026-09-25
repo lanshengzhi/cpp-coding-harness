@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 def main() -> int:
-    source_dir = Path(os.environ.get("CCH_SOURCE_DIR", Path(__file__).parents[2]))
+    source_dir = Path(os.environ.get("CCH_SOURCE_DIR", Path(__file__).parents[3]))
     checkout = Path(os.environ.get("PI_CHECKOUT", source_dir.parent / "pi"))
     tsx = checkout / "node_modules" / ".bin" / "tsx"
     if not checkout.is_dir() or not tsx.is_file():

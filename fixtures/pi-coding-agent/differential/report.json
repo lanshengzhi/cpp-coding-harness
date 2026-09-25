@@ -41,7 +41,7 @@
   },
   "structuralProjection": {
     "cellText": "trimmed visible cells with fixture paths, model ids, and model prose projected",
-    "ansi": "full canonical RGB ANSI capture retained; ordered SGR tokens are the compared style projection",
+    "ansi": "raw ANSI retained as captured evidence only; verification compares cell text plus the normalized ordered SGR token structure, never raw ANSI byte parity",
     "screenshot": "themeParity.renderedScreenshots retains the rendered terminal cell rows as text screenshots",
     "scrollback": "scrollback cell rows are compared separately from the visible viewport"
   },
@@ -14268,53 +14268,70 @@
         "role": "text",
         "pike": "#d4d4d4",
         "pi": "#d4d4d4",
+        "exactTokenMatch": true,
+        "partnersPreserved": true,
         "classification": "match"
       },
       {
         "role": "muted",
         "pike": "#808080",
         "pi": "#808080",
+        "exactTokenMatch": true,
+        "partnersPreserved": true,
         "classification": "match"
       },
       {
         "role": "border",
         "pike": "#5f87ff",
         "pi": "#5f87ff",
+        "exactTokenMatch": true,
+        "partnersPreserved": true,
         "classification": "match"
       },
       {
         "role": "accent",
         "pike": "#8abeb7",
         "pi": "#8abeb7",
+        "exactTokenMatch": true,
+        "partnersPreserved": true,
         "classification": "match"
       },
       {
         "role": "success",
         "pike": "#b5bd68",
         "pi": "#b5bd68",
+        "exactTokenMatch": true,
+        "partnersPreserved": true,
         "classification": "match"
       },
       {
         "role": "warning",
         "pike": "#ffff00",
         "pi": "#ffff00",
+        "exactTokenMatch": true,
+        "partnersPreserved": true,
         "classification": "match"
       },
       {
         "role": "error",
         "pike": "#cc6666",
         "pi": "#cc6666",
+        "exactTokenMatch": true,
+        "partnersPreserved": true,
         "classification": "match"
       },
       {
         "role": "selectedBg",
         "pike": "#3a3a4a",
         "pi": "#3a3a4a",
+        "exactTokenMatch": true,
+        "partnersPreserved": true,
         "classification": "match"
       }
     ],
     "classification": "match",
     "supportedCapabilityMismatches": [],
+    "paletteDifferences": [],
     "intentionalDivergences": [],
     "deferredTokenPolicy": [
       {

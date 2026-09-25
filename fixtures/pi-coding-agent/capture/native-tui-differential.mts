@@ -5,8 +5,13 @@
  * The default mode runs the frozen pi checkout and the rebuilt Pike test
  * binary through the same scenario/input records, then writes a sanitized
  * structural report. `--verify` is the CTest mode: it regenerates the
- * projections and compares them with the checked-in report without requiring
- * frame-timing-dependent raw ANSI bytes to repeat byte-for-byte.
+ * projections and compares them with the checked-in report. The compared
+ * boundary is visible/scrollback cell text plus the normalized, ordered SGR
+ * token structure; raw ANSI bytes are retained as captured evidence only and
+ * are never compared, so the harness makes no full raw-ANSI byte-parity
+ * claim. Theme parity compares the canonical semantic role mapping (exact RGB
+ * is retained as evidence); a palette difference that preserves the role
+ * partition is not a regression (issue #797).
  *
  * `--runtime pi` is an internal per-scenario child mode. It exists so each pi
  * capture gets a fresh session, terminal, and faux Provider; the parent still
@@ -44,6 +49,11 @@ const semanticThemeRoles = Object.freeze([
 	"error",
 	"selectedBg",
 ]);
+// Semantic role mapping is the parity authority (issue #797): exact-token
+// match and a partition-preserving palette difference both satisfy the
+// contract; only a broken role mapping is a Supported Capability regression.
+const acceptableThemeParityClassifications = new Set(["match", "semantic-role-match-palette-difference"]);
+const acceptableThemeRoleClassifications = new Set(["match", "semantic-role-preserved-palette-difference"]);
 const profile = Object.freeze({
 	home: "/home/tester",
 	userProfile: "/home/tester",
@@ -378,14 +388,40 @@ function normalizeThemeEvidence(value: unknown, label: string): ThemeEvidence {
 	return { name: theme.name as string, colorCapability: theme.colorCapability as string, colors };
 }
 
+// Semantic role partners: the set of canonical roles sharing role's color.
+// The parity contract compares this mapping, not raw RGB identity (issue
+// #797): a palette difference that preserves the partition is evidence, not a
+// Supported Capability regression.
+function themeRolePartners(colors: Record<string, string>, role: string): string[] {
+	return semanticThemeRoles.filter((other) => colors[other] === colors[role]);
+}
+
 function themeRoleComparison(pike: ThemeEvidence, pi: ThemeEvidence): Record<string, unknown> {
-	const roles = semanticThemeRoles.map((role) => ({
-		role,
-		pike: pike.colors[role],
-		pi: pi.colors[role],
-		classification: pike.colors[role] === pi.colors[role] ? "match" : "supported-capability-regression",
-	}));
-	const supportedCapabilityMismatches = roles.filter((role) => role.classification !== "match");
+	const roles = semanticThemeRoles.map((role) => {
+		const pikePartners = themeRolePartners(pike.colors, role);
+		const piPartners = themeRolePartners(pi.colors, role);
+		const exactTokenMatch = pike.colors[role] === pi.colors[role];
+		const partnersPreserved = JSON.stringify(pikePartners) === JSON.stringify(piPartners);
+		// Exact-token equality short-circuits the per-role verdict: when a
+		// partition break leaves a role's own color unchanged (its partner moved
+		// onto it), the role whose color changed is the one flagged, so a broken
+		// mapping always surfaces as at least one regression row.
+		const classification = exactTokenMatch
+			? "match"
+			: partnersPreserved
+				? "semantic-role-preserved-palette-difference"
+				: "supported-capability-regression";
+		return {
+			role,
+			pike: pike.colors[role],
+			pi: pi.colors[role],
+			exactTokenMatch,
+			partnersPreserved,
+			classification,
+		};
+	});
+	const supportedCapabilityMismatches = roles.filter((role) => role.classification === "supported-capability-regression");
+	const paletteDifferences = roles.filter((role) => role.classification === "semantic-role-preserved-palette-difference");
 	const deferredFallbacks: Record<string, string> = {
 		scrollbarThumb: "selectedBg",
 		scrollbarTrack: "muted",
@@ -407,8 +443,13 @@ function themeRoleComparison(pike: ThemeEvidence, pi: ThemeEvidence): Record<str
 	return {
 		canonicalTheme: { name: profile.theme.name, source: profile.theme.source, colorCapability: profile.theme.colorCapability },
 		roles,
-		classification: supportedCapabilityMismatches.length === 0 ? "match" : "supported-capability-regression",
+		classification: supportedCapabilityMismatches.length > 0
+			? "supported-capability-regression"
+			: paletteDifferences.length > 0
+				? "semantic-role-match-palette-difference"
+				: "match",
 		supportedCapabilityMismatches,
+		paletteDifferences,
 		intentionalDivergences: [],
 		deferredTokenPolicy,
 		deferredDifferences: deferredTokenPolicy.filter((token) => token.classification === "deferred-capability-difference"),
@@ -422,9 +463,77 @@ function verifyThemeParityPolicy(): void {
 	const matching = themeRoleComparison(pike, pi);
 	assert.equal(matching.classification, "match");
 	assert.equal((matching.supportedCapabilityMismatches as unknown[]).length, 0);
+	// Exact-token equality is retained as evidence on every role row.
+	for (const role of matching.roles as Record<string, unknown>[]) assert.equal(role.exactTokenMatch, true);
 	const mismatched = themeRoleComparison(pike, { ...pi, colors: { ...colors, accent: "#654321" } });
 	assert.equal(mismatched.classification, "supported-capability-regression");
 	assert.equal((mismatched.supportedCapabilityMismatches as Record<string, unknown>[])[0]?.role, "accent");
+	// A palette difference that preserves the semantic role partition is
+	// recorded as evidence, never as a false Supported Capability regression:
+	// this is the case an exact-hex stand-in misclassifies (issue #797).
+	const shiftedPalette = Object.fromEntries(semanticThemeRoles.map((role) => [role, "#abcdef"]));
+	const shifted = themeRoleComparison(pike, { ...pi, colors: shiftedPalette });
+	assert.equal(shifted.classification, "semantic-role-match-palette-difference");
+	assert.equal((shifted.supportedCapabilityMismatches as unknown[]).length, 0);
+	assert.equal((shifted.paletteDifferences as unknown[]).length, semanticThemeRoles.length);
+	assert.equal(((shifted.roles as Record<string, unknown>[])[0]).exactTokenMatch, false);
+	// Collapsing two roles the canonical profile distinguishes is a regression
+	// even though every pi color remains a plausible palette entry: this is the
+	// case a palette-membership stand-in would let through.
+	const trulyCollapsed = themeRoleComparison(
+		{ name: "dark", colorCapability: "truecolor", colors: { ...colors, text: "#111111" } },
+		{ name: "dark", colorCapability: "truecolor", colors: { ...colors, text: "#111111", muted: "#111111" } },
+	);
+	assert.equal(trulyCollapsed.classification, "supported-capability-regression");
+	const collapsedRoles = (trulyCollapsed.supportedCapabilityMismatches as Record<string, unknown>[]).map((role) => role.role);
+	// The collapsed role is the one whose color moved onto text's; text itself
+	// still renders the same color, so exact-token evidence stays a match.
+	assert.deepEqual(collapsedRoles, ["muted"]);
+	const mutedRow = (trulyCollapsed.roles as Record<string, unknown>[]).find((role) => role.role === "muted");
+	assert.equal(mutedRow?.partnersPreserved, false);
+}
+
+function verifyAnsiBoundary(): void {
+	// The compared projection is visible/scrollback cell text plus the
+	// normalized, ordered SGR token structure. Raw ANSI bytes are retained as
+	// captured evidence only and never enter the projection (issue #800).
+	const scenario = scenarios.find((item) => item.id === "boot-72");
+	if (!scenario) throw new Error("ANSI boundary verification requires the boot-72 scenario");
+	const theme = {
+		name: "dark",
+		colorCapability: "truecolor",
+		colors: Object.fromEntries(semanticThemeRoles.map((role) => [role, "#123456"])),
+	};
+	const makeCapture = (ansi: string): Record<string, unknown> => ({
+		runtime: "evidence",
+		scenario: scenario.id,
+		width: scenario.width,
+		workspace: "/tmp/cpp-harness-pike-differential",
+		inputs: [],
+		theme,
+		snapshots: [{ visible: ["row"], scrollback: [], ansi }],
+	});
+	const projection = stableProjection(makeCapture("\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m"), scenario, repoRoot);
+	assert.deepEqual(Object.keys((projection.snapshots as Record<string, unknown>[])[0]).sort(), ["scrollback", "sgr", "visible"]);
+	// Same cell text and same normalized SGR structure, different raw framing
+	// bytes (cursor moves, erase sequences): not a difference.
+	const reframed = compare(
+		makeCapture("\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m\x1b[1;1H"),
+		makeCapture("\x1b[1;1H\x1b[38;2;18;52;86mrow\x1b[0m"),
+		scenario,
+		repoRoot,
+	);
+	assert.equal(reframed.classification, "match");
+	// Same cell text with a different normalized SGR structure: a regression.
+	const restyled = compare(
+		makeCapture("\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m"),
+		makeCapture("\x1b[2J\x1b[H\x1b[38;2;99;99;99mrow\x1b[0m"),
+		scenario,
+		repoRoot,
+	);
+	assert.equal(restyled.classification, "supported-capability-regression");
+	assert.equal((restyled.projection as Record<string, unknown>).sgrStructureEqual, false);
+	assert.equal((restyled.projection as Record<string, unknown>).visibleCellTextEqual, true);
 }
 
 function normalizeCapture(capture: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
@@ -608,19 +717,28 @@ function validateReportCaptures(report: Record<string, unknown>): void {
 
 function validateThemeParity(report: Record<string, unknown>): void {
 	const parity = report.themeParity as Record<string, unknown> | undefined;
-	if (!parity || parity.classification !== "match") {
-		throw new Error("canonical Native TUI theme parity is not a match");
+	// Semantic role mapping is the authority: exact-token match and a
+	// partition-preserving palette difference both satisfy the contract; only a
+	// broken role mapping is a Supported Capability regression (issue #797).
+	if (!parity || !acceptableThemeParityClassifications.has(String(parity.classification))) {
+		throw new Error("canonical Native TUI theme parity is not a semantic-role match");
 	}
 	if (!Array.isArray(parity.roles) || parity.roles.length !== semanticThemeRoles.length) {
 		throw new Error("canonical theme parity must record every semantic role");
 	}
 	for (const role of parity.roles as Record<string, unknown>[]) {
-		if (!semanticThemeRoles.includes(String(role.role)) || role.classification !== "match") {
-			throw new Error(`canonical theme role ${String(role.role)} is not a match`);
+		if (!semanticThemeRoles.includes(String(role.role)) || !acceptableThemeRoleClassifications.has(String(role.classification))) {
+			throw new Error(`canonical theme role ${String(role.role)} breaks the semantic role mapping`);
+		}
+		if (typeof role.pike !== "string" || typeof role.pi !== "string" || typeof role.exactTokenMatch !== "boolean" || typeof role.partnersPreserved !== "boolean") {
+			throw new Error(`canonical theme role ${String(role.role)} is missing exact-token evidence`);
 		}
 	}
 	if (!Array.isArray(parity.supportedCapabilityMismatches) || parity.supportedCapabilityMismatches.length !== 0) {
 		throw new Error("canonical theme parity has an unclassified Supported Capability mismatch");
+	}
+	if (!Array.isArray(parity.paletteDifferences)) {
+		throw new Error("canonical theme parity must record palette differences as evidence");
 	}
 	if (!Array.isArray(parity.deferredTokenPolicy) || parity.deferredTokenPolicy.length === 0) {
 		throw new Error("canonical theme parity must record deferred token policy");
@@ -656,7 +774,7 @@ async function runParent(): Promise<number> {
 		profile,
 		structuralProjection: {
 			cellText: "trimmed visible cells with fixture paths, model ids, and model prose projected",
-			ansi: "full canonical RGB ANSI capture retained; ordered SGR tokens are the compared style projection",
+			ansi: "raw ANSI retained as captured evidence only; verification compares cell text plus the normalized ordered SGR token structure, never raw ANSI byte parity",
 			screenshot: "themeParity.renderedScreenshots retains the rendered terminal cell rows as text screenshots",
 			scrollback: "scrollback cell rows are compared separately from the visible viewport",
 		},
@@ -949,6 +1067,7 @@ async function main(): Promise<number> {
 		verifySgrNormalization();
 		verifyProjectionPolicy();
 		verifyThemeParityPolicy();
+		verifyAnsiBoundary();
 		return await runParent();
 	} catch (error) {
 		if (error instanceof SkipError) {

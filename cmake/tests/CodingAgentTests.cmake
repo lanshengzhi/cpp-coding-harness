@@ -192,12 +192,14 @@ include_guard(GLOBAL)
         PROPERTIES RESOURCE_LOCK "cch-interactive-boot-e2e-workspace")
     add_dependencies(cch_tests_coding_agent_interactive ${CCH_PARITY_BUILD_GATE_TARGET})
 
-    # Issue #800: the dual-runtime Native TUI evidence harness. The adapter
-    # skips when the optional frozen pi checkout is unavailable; it never
-    # contacts a provider or treats a missing checkout as a pass.
+    # Issue #800: the dual-runtime Native TUI evidence harness. The CTest
+    # adapter lives beside the capture harness under fixtures/pi-coding-agent
+    # (test support), not in the tests/<owner> C++ test layout; it skips when
+    # the optional frozen pi checkout is unavailable and never contacts a
+    # provider or treats a missing checkout as a pass.
     add_test(
         NAME cch_native_tui_dual_runtime_differential
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/coding_agent/NativeTuiDifferentialTest.py
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/pi-coding-agent/capture/native-tui-differential-ctest.py
     )
     set_tests_properties(cch_native_tui_dual_runtime_differential PROPERTIES
         LABELS "coding_agent;tui;differential;issue800;spec"

@@ -4,8 +4,9 @@
 // golden. The TypeScript harness supplies one scenario and the exact input
 // sequence; this process runs the same sequence through Pike's Native TUI
 // VirtualTerminal and writes both visible cells and terminal output. The
-// harness compares the two runtimes and keeps the existing C++ goldens as
-// independent byte-level gates.
+// harness compares visible cell text plus the normalized, ordered SGR token
+// structure — raw ANSI bytes are retained as evidence only, never compared —
+// and keeps the existing C++ goldens as independent byte-level gates.
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -319,9 +320,8 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
     drain_ready(io, std::chrono::milliseconds{20});
 
     std::vector<support::JsonValue> snapshots;
-    auto output_offset = output_size(terminal);
     snapshots.push_back(snapshot(terminal, 0));
-    output_offset = output_size(terminal);
+    auto output_offset = output_size(terminal);
     const auto resize = environment_or_empty("CCH_DIFFERENTIAL_RESIZE");
     for (const auto dimensions : parse_resize_sequence(resize)) {
         const auto resize_offset = output_size(terminal);

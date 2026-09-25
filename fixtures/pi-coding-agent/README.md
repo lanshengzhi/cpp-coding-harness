@@ -223,9 +223,16 @@ Fixture paths and model prose are projected before comparison; credentials, real
 wall-clock values, and machine identifiers never enter the report.
 
 The report's `themeParity` section compares the canonical semantic roles `text`, `muted`,
-`border`, `accent`, `success`, `warning`, `error`, and `selectedBg` as RGB evidence. A raw RGB
-value is evidence only within this canonical theme profile, never a cross-theme identity rule.
-The report also records the deferred scrollbar/search-match token policy separately; it does
+`border`, `accent`, `success`, `warning`, `error`, and `selectedBg` under the canonical dark
+truecolor profile. The comparison authority is the semantic role mapping: for every role, the
+set of roles sharing its color must be identical across the two runtimes. Exact RGB values are
+retained per role as evidence (`exactTokenMatch`, `pike`, `pi`), but raw RGB is evidence only
+within this canonical theme profile, never a cross-theme identity rule. A role whose palette
+value differs while the role partition is preserved is classified
+`semantic-role-preserved-palette-difference` and reported under `paletteDifferences` as
+evidence, not as a regression; only a broken role mapping (a role collapsed onto or split away
+from its canonical partners) is a `supported-capability-regression`. The report also records the
+deferred scrollbar/search-match token policy separately; it does
 not promote Deferred theme-loader or scrollbar capabilities into the Pike contract. Formal boot
 fixtures are checked in at 72, 100, and 120 columns, with 41 columns as the narrow robustness
 fixture. The `themeParity.renderedScreenshots` rows are the rendered terminal-cell screenshots
@@ -243,16 +250,24 @@ cmake --build --preset vcpkg --target cch_tests_coding_agent_interactive
 ```
 
 CTest runs the same command in verification mode through
-`tests/coding_agent/NativeTuiDifferentialTest.py`. Verification compares the stable cell,
-scrollback, and SGR projections and the classification, while retaining raw ANSI as captured
-evidence without requiring frame-timing-dependent byte order to be an opaque golden. A missing
+the adapter `fixtures/pi-coding-agent/capture/native-tui-differential-ctest.py` (test support
+beside the capture harness, not a `tests/<owner>` C++ test). Verification compares visible cell
+text, scrollback cell rows, and the normalized, ordered SGR token structure, plus the
+classification — never the raw ANSI byte stream. Raw ANSI is retained in the report as captured
+evidence only; the harness makes no full raw-ANSI byte-parity claim, because frame timing makes
+raw byte order nondeterministic. `verifyAnsiBoundary()` asserts this boundary on every run: the
+stable projection carries no `ansi` key, reframed raw bytes with identical cell text and
+normalized SGR structure classify as `match`, and identical cell text with a different
+normalized SGR structure classifies as `supported-capability-regression`. A missing
 optional frozen pi checkout is an explicit skip; a checkout at the wrong commit is an error.
 
 A row is `match` when all three structural projections agree. A row whose remaining delta is
 confined to a documented omission is reported as `intentional-subset-omission`; this is reserved for pi surfaces outside the
 Supported Capability subset, never for a difference in a claimed Native TUI capability. The
-separate `themeParity.classification` is the token-level authority for this issue: it must be
-`match`, and an unclassified Supported Capability token mismatch fails verification. Every
+separate `themeParity.classification` is the semantic-role authority for this issue: it must be
+`match` or `semantic-role-match-palette-difference` (palette evidence with the role mapping
+preserved), and a broken role mapping is an unclassified Supported Capability token mismatch
+that fails verification. Every
 other difference is reported as `supported-capability-regression`, so the checked-in report
 makes stale Supported Capability rows visible and prevents a new drift from being silently
 absorbed. The report's omissions and classifications are review evidence, not a waiver for a
