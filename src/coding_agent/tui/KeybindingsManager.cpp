@@ -4,8 +4,6 @@
 #include "coding_agent/ResourceDiagnosticPolicy.hpp"
 #include "support/Json.hpp"
 
-#include <cch/tui/Text.hpp>
-
 #include <cch/support/Error.hpp>
 #include <algorithm>
 #include <filesystem>
@@ -53,64 +51,6 @@ struct ApplicationTemplate {
             .help_description = help_description,
             .help_order = help_order,
     };
-}
-
-struct HelpTemplate {
-    std::string_view id;
-    std::string_view section;
-    std::string_view group;
-    std::string_view description;
-    std::size_t order;
-};
-
-[[nodiscard]] HelpTemplate make_help_template(std::string_view id,
-        std::string_view section,
-        std::string_view group,
-        std::string_view description,
-        std::size_t order) {
-    return {
-            .id = id,
-            .section = section,
-            .group = group,
-            .description = description,
-            .order = order,
-    };
-}
-
-/// The one built-in help catalog. The registry remains the source of every
-/// key; this table supplies only the documented pi row metadata.
-[[nodiscard]] const std::vector<HelpTemplate>& builtin_help_templates() {
-    static const std::vector<HelpTemplate> kTemplates{
-            make_help_template("tui.editor.cursorUp", "Navigation", "cursor-move", "Move cursor / browse history", 1),
-            make_help_template("tui.editor.cursorDown", "Navigation", "cursor-move", "Move cursor / browse history", 1),
-            make_help_template("tui.editor.cursorLeft", "Navigation", "cursor-move", "Move cursor / browse history", 1),
-            make_help_template(
-                    "tui.editor.cursorRight", "Navigation", "cursor-move", "Move cursor / browse history", 1),
-            make_help_template("tui.editor.cursorWordLeft", "Navigation", "word-move", "Move by word", 2),
-            make_help_template("tui.editor.cursorWordRight", "Navigation", "word-move", "Move by word", 2),
-            make_help_template("tui.editor.cursorLineStart", "Navigation", "line-start", "Start of line", 3),
-            make_help_template("tui.editor.cursorLineEnd", "Navigation", "line-end", "End of line", 4),
-            make_help_template("tui.editor.jumpForward", "Navigation", "jump-forward", "Jump forward to character", 5),
-            make_help_template(
-                    "tui.editor.jumpBackward", "Navigation", "jump-backward", "Jump backward to character", 6),
-            make_help_template("tui.editor.pageUp", "Navigation", "page", "Scroll by page", 7),
-            make_help_template("tui.editor.pageDown", "Navigation", "page", "Scroll by page", 7),
-            make_help_template("tui.input.submit", "Editing", "submit", "Send message", 1),
-            make_help_template("tui.input.newLine", "Editing", "newline", "New line", 2),
-            make_help_template(
-                    "tui.editor.deleteWordBackward", "Editing", "delete-word-backward", "Delete word backwards", 3),
-            make_help_template(
-                    "tui.editor.deleteWordForward", "Editing", "delete-word-forward", "Delete word forwards", 4),
-            make_help_template(
-                    "tui.editor.deleteToLineStart", "Editing", "delete-line-start", "Delete to start of line", 5),
-            make_help_template("tui.editor.deleteToLineEnd", "Editing", "delete-line-end", "Delete to end of line", 6),
-            make_help_template("tui.editor.yank", "Editing", "yank", "Paste the most-recently-deleted text", 7),
-            make_help_template(
-                    "tui.editor.yankPop", "Editing", "yank-pop", "Cycle through the deleted text after pasting", 8),
-            make_help_template("tui.editor.undo", "Editing", "undo", "Undo", 9),
-            make_help_template("tui.input.tab", "Other", "tab", "Path completion / accept autocomplete", 1),
-    };
-    return kTemplates;
 }
 
 /// The app layer adopts pi's full 43-action `AppKeybindings` table
@@ -454,6 +394,10 @@ support::Expected<std::vector<cch::tui::KeybindingDefinition>> app_keybinding_de
                 .default_keys = source->keys,
                 .description = std::string(source->description),
                 .category = std::string(source->category),
+                .help_section = std::string(source->help_section),
+                .help_group = std::string(source->help_group),
+                .help_description = std::string(source->help_description),
+                .help_order = source->help_order,
         });
     }
     return definitions;
@@ -538,19 +482,8 @@ std::vector<HotkeyHelpRow> hotkey_help_rows(const cch::tui::KeybindingRegistry& 
         existing->keys += keys;
     };
 
-    for (const auto& definition : builtin_help_templates()) {
-        add(definition.id, definition.section, definition.group, definition.description, definition.order);
-    }
-    // Known application actions that the host did not assemble stay out of
-    // help, matching the diagnosed-and-skipped policy. Assembled rows still
-    // take their keys from the immutable registry.
-    for (const auto& definition : application_templates()) {
-        if (registry.find(definition.id) == nullptr) continue;
-        add(definition.id,
-                definition.help_section,
-                definition.help_group,
-                definition.help_description,
-                definition.help_order);
+    for (const auto& entry : registry.entries()) {
+        add(entry.id, entry.help_section, entry.help_group, entry.help_description, entry.help_order);
     }
     for (auto& row : rows) {
         if (row.keys.empty()) row.keys = "Unbound";
@@ -577,16 +510,6 @@ std::string key_hint(
     std::string_view description) {
     const auto keys = registry.key_text(action_id);
     return std::format("{} {}", keys.empty() ? "Unbound" : keys, description);
-}
-
-std::unique_ptr<cch::tui::Component> make_hotkey_help_view(
-    std::shared_ptr<const cch::tui::KeybindingRegistry> registry) {
-    // Keep one help projection for both the inline `/hotkeys` block and the
-    // component seam. The registry supplies every effective key; this wrapper
-    // must not grow a second category-sorted table that can drift from the
-    // transcript view.
-    const auto text = registry ? format_hotkeys_text(*registry) : std::string{"Hotkeys\n"};
-    return std::make_unique<cch::tui::Text>(text);
 }
 
 } // namespace cch::coding_agent::tui

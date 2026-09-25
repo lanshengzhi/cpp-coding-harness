@@ -19,11 +19,10 @@ struct HotkeyHelpRow;
 /// mutation (issue #418).
 ///
 /// Thread contract: `replace` is confined to the executor thread (the
-/// `/reload` flow), and `registry()`/`get()` are safe from any thread. Callers
-/// that hold a `registry()` reference for the duration of a render or input
-/// dispatch must serialize against `replace` (the owning `InteractiveView`
-/// does this through its view mutex); `get()` returns a strong reference that
-/// keeps the current registry alive for ephemeral consumers (selectors).
+/// `/reload` flow). `get()` and `help()` return strong references and are safe
+/// from any thread. A caller holding the `registry()` reference across a
+/// render or input dispatch must serialize it with `replace`; the owning
+/// `InteractiveView` supplies that serialization.
 class SharedKeybindings final {
 public:
     SharedKeybindings() = default;
@@ -50,8 +49,8 @@ public:
         return current_;
     }
 
-    /// The current registry by reference. Safe only while the caller
-    /// serializes against `replace` (the view mutex).
+    /// The current registry by reference. The caller must serialize this
+    /// reference against `replace` for the duration of its use.
     [[nodiscard]] const cch::tui::KeybindingRegistry& registry() const {
         std::lock_guard lock(mutex_);
         return *current_;

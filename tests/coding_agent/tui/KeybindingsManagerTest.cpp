@@ -4,6 +4,7 @@
 #include "support/TempWorkspace.hpp"
 
 #include <cch/tui/Keys.hpp>
+#include <cch/tui/Text.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -379,7 +380,7 @@ TEST_CASE("/hotkeys shows both claims for a user key conflict", "[coding_agent][
     const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
     REQUIRE(manager);
     CHECK(has_diagnostic(*manager, "conflicting_user_key"));
-    const auto text = coding_agent::tui::format_hotkeys_text(*manager->registry);
+    const auto text = coding_agent::tui::format_hotkeys_text(*manager->help);
     CHECK(text.find("f1  Clear editor (first) / exit (second)") != std::string::npos);
     CHECK(text.find("f1  Exit (when editor is empty)") != std::string::npos);
 }
@@ -391,7 +392,7 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     coding_agent::tui::KeybindingsManagerRequest request;
     const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
     REQUIRE(manager);
-    const auto text = coding_agent::tui::format_hotkeys_text(*manager->registry);
+    const auto text = coding_agent::tui::format_hotkeys_text(*manager->help);
     CHECK(text.find("Keyboard Shortcuts") != std::string::npos);
     const auto navigation = text.find("Navigation");
     const auto editing = text.find("Editing");
@@ -409,7 +410,7 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     // The component seam and the inline chat block use one formatter. The
     // narrow render still contains all three section headings rather than
     // dropping the earlier sections at the right edge.
-    auto view = coding_agent::tui::make_hotkey_help_view(manager->registry);
+    auto view = std::make_unique<cch::tui::Text>(coding_agent::tui::format_hotkeys_text(*manager->help));
     REQUIRE(view);
     const auto wide_rendered = view->render(200);
     REQUIRE(wide_rendered);
@@ -450,9 +451,10 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     remapped.application_definitions = std::move(*definitions);
     const auto remapped_manager = coding_agent::tui::load_keybindings_manager(std::move(remapped));
     REQUIRE(remapped_manager);
-    const auto remapped_text = coding_agent::tui::format_hotkeys_text(*remapped_manager->registry);
+    const auto remapped_text = coding_agent::tui::format_hotkeys_text(*remapped_manager->help);
     CHECK(remapped_text.find("f6  Exit (when editor is empty)") != std::string::npos);
-    auto remapped_view = coding_agent::tui::make_hotkey_help_view(remapped_manager->registry);
+    auto remapped_view =
+            std::make_unique<cch::tui::Text>(coding_agent::tui::format_hotkeys_text(*remapped_manager->help));
     REQUIRE(remapped_view);
     const auto remapped_rendered = remapped_view->render(200);
     REQUIRE(remapped_rendered);

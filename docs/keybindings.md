@@ -88,8 +88,9 @@ holds without the action existing.
 
 Application (`app.*`) actions are registered only by a frontend that assembles
 the corresponding capability. The app layer adopts pi's full 42-action
-`AppKeybindings` catalog (`pi:packages/coding-agent/src/core/keybindings.ts` at
-`83114817`, ADR 0036). The Native TUI composition assembles pi's default bound
+`AppKeybindings` catalog plus the product-added `app.thinking.save` action
+(43 total; `pi:packages/coding-agent/src/core/keybindings.ts` at `83114817`,
+ADR 0036). The Native TUI composition assembles pi's default bound
 set in the main editor:
 
 | Action ID | Default keys | Active-run behavior |

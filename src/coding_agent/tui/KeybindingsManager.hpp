@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
 #include <cch/support/Error.hpp>
 
@@ -40,8 +39,9 @@ struct KeybindingsManagerResult {
     std::vector<KeybindingDiagnostic> diagnostics{};
 };
 
-/// The app layer adopts pi's full 42-action `AppKeybindings` table
-/// (`pi:packages/coding-agent/src/core/keybindings.ts` at `83114817`, ADR
+/// The app layer adopts pi's full 42-action `AppKeybindings` table plus the
+/// product-added `app.thinking.save` action (43 total;
+/// `pi:packages/coding-agent/src/core/keybindings.ts` at `83114817`, ADR
 /// 0036): this returns baseline definitions only for the concrete application
 /// action IDs selected by an assembling frontend, drawn from the full
 /// catalog. Unknown IDs fail rather than creating placeholders.
@@ -79,9 +79,9 @@ struct HotkeyHelpRow {
 [[nodiscard]] std::vector<HotkeyHelpEntry> hotkey_help_entries(
     const cch::tui::KeybindingRegistry& registry);
 
-/// Help rows derived from registry metadata, including known application
-/// actions that are not assembled in the current host. Their keys are looked
-/// up in the same immutable registry; absent actions therefore render Unbound.
+/// Help rows derived from the metadata on assembled registry entries. Keys are
+/// looked up in that same immutable registry; known-but-unassembled actions
+/// are diagnosed and omitted rather than fabricated as help rows.
 [[nodiscard]] std::vector<HotkeyHelpRow> hotkey_help_rows(const cch::tui::KeybindingRegistry& registry);
 
 /// `keys description` for one action, "Unbound" for an empty binding.
@@ -89,10 +89,5 @@ struct HotkeyHelpRow {
     const cch::tui::KeybindingRegistry& registry,
     std::string_view action_id,
     std::string_view description);
-
-/// The `/hotkeys` component seam, rendered through the same formatter as the
-/// inline chat block and the same assembled registry.
-[[nodiscard]] std::unique_ptr<cch::tui::Component> make_hotkey_help_view(
-    std::shared_ptr<const cch::tui::KeybindingRegistry> registry);
 
 } // namespace cch::coding_agent::tui
