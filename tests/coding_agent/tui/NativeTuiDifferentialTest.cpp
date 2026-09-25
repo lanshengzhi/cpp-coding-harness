@@ -20,6 +20,7 @@
 #include "support/RuntimeLoopDriver.hpp"
 #include "support/ScriptedRuntimeFixture.hpp"
 #include "support/Json.hpp"
+#include "support/ModelFixture.hpp"
 
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
@@ -187,6 +188,25 @@ void write_capture(const std::filesystem::path& path,
     return "deterministic tool answer";
 }
 
+[[nodiscard]] std::vector<ai::Model> differential_catalog() {
+    auto reasoning = tests::make_full_thinking_model("faux-1");
+    reasoning.provider = "faux";
+    reasoning.api = "faux";
+    reasoning.name = "Faux Reasoning";
+    reasoning.base_url = "http://localhost:0";
+    reasoning.input = {ai::ModelInput::Text, ai::ModelInput::Image};
+    reasoning.context_window = 128000;
+    reasoning.max_tokens = 16384;
+
+    auto plain = tests::make_model("faux-2", "faux", "faux");
+    plain.name = "Faux Plain";
+    plain.base_url = "http://localhost:0";
+    plain.input = {ai::ModelInput::Text, ai::ModelInput::Image};
+    plain.context_window = 128000;
+    plain.max_tokens = 16384;
+    return {std::move(reasoning), std::move(plain)};
+}
+
 void add_scripted_responses(tests::ScriptedRuntimeFixture& scripted, std::string_view scenario) {
     if (scenario == "tool-result") {
         auto tool_turn = ai::assistant_text_message("I will read the deterministic fixture.");
@@ -234,6 +254,9 @@ void add_scripted_responses(tests::ScriptedRuntimeFixture& scripted, std::string
     request.workspace = workspace;
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
+    request.session_facts.provider = "faux";
+    request.session_facts.model = "faux-1";
+    request.session_facts.thinking = "off";
     request.execution_runtime_target = runtime.make_target();
     request.model_runtime = scripted.runtime;
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
@@ -289,7 +312,7 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
     }
     tests::EnvVarGuard home{"HOME"};
     home.set("/home/tester");
-    tests::ScriptedRuntimeFixture scripted;
+    auto scripted = tests::ScriptedRuntimeFixture(differential_catalog());
     add_scripted_responses(scripted, scenario);
     tests::RuntimeFixture runtime;
     auto session = make_session(runtime, scripted, workspace);
@@ -343,7 +366,9 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
             drain_ready(io, std::chrono::milliseconds{20});
             snapshots.push_back(snapshot(terminal, output_offset));
             output_offset = output_size(terminal);
-            REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "deterministic tool answer"); }));
+            CHECK(tests::pump_until(io, [&] { return screen_contains(terminal, "alpha"); }));
+            CHECK(tests::pump_until(io, [&] { return screen_contains(terminal, "deterministic tool answer"); }));
+            CHECK_FALSE(screen_contains(terminal, "ENOENT"));
         } else if (input.ends_with("\r") &&
                    (scenario == "user-message" || scenario == "status-footer" || scenario == "scrollback")) {
             const auto expected = scenario == "user-message" ? "deterministic assistant reply"

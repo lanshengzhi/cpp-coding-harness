@@ -85,16 +85,21 @@ private:
 };
 
 /// A concrete scripted Provider used by the runtime fixture. Its catalog
-/// contains the real `fake/fake-model` or `sdk-host/fake-model` identity, and
-/// its stream is controlled by the shared FIFO/gating state.
+/// contains either the default `fake/fake-model` and `sdk-host/fake-model`
+/// identities or a caller-supplied deterministic catalog, and its stream is
+/// controlled by the shared FIFO/gating state.
 class ScriptedRuntimeProvider final : public ScriptedProvider {
 public:
-    ScriptedRuntimeProvider(std::string provider_id, std::shared_ptr<ScriptedProviderControl> control, bool configured)
+    ScriptedRuntimeProvider(std::string provider_id,
+            std::shared_ptr<ScriptedProviderControl> control,
+            bool configured,
+            std::vector<ai::Model> catalog = {})
         : ScriptedProvider(std::move(provider_id), configured ? detail::fixture_auth() : unconfigured_fixture_auth()),
-          control_(std::move(control)) {}
+          control_(std::move(control)), catalog_(std::move(catalog)) {}
 
     [[nodiscard]] std::string_view name() const noexcept override { return provider_id(); }
     [[nodiscard]] std::vector<ai::Model> models() const override {
+        if (!catalog_.empty()) return catalog_;
         ai::Model model;
         model.id = "fake-model";
         model.name = "fake-model";
@@ -267,6 +272,7 @@ public:
 
 private:
     std::shared_ptr<ScriptedProviderControl> control_;
+    std::vector<ai::Model> catalog_;
 };
 
 [[nodiscard]] inline coding_agent::ModelRuntimeTestProvider scripted_runtime_definition(
@@ -285,17 +291,34 @@ struct ScriptedRuntimeFixture final {
     std::shared_ptr<coding_agent::ModelRuntime> runtime;
     std::shared_ptr<ScriptedProviderControl> control;
 
-    ScriptedRuntimeFixture()
+    ScriptedRuntimeFixture() : ScriptedRuntimeFixture(std::vector<ai::Model>{}) {}
+
+    explicit ScriptedRuntimeFixture(std::vector<ai::Model> catalog)
         : kimi_api_key(std::make_shared<EnvVarGuard>("KIMI_API_KEY", std::nullopt)),
           control(std::make_shared<ScriptedProviderControl>()) {
+        const bool custom_catalog = !catalog.empty();
+        std::string catalog_provider;
+        std::vector<std::string> catalog_ids;
+        if (custom_catalog) {
+            catalog_provider = catalog.front().provider;
+            for (const auto& model : catalog) {
+                if (model.provider != catalog_provider || model.id.empty()) std::terminate();
+                catalog_ids.push_back(model.id);
+            }
+        }
         coding_agent::ModelRuntimeOptions options;
         options.models_path = std::filesystem::path{};
         options.credentials = std::make_shared<detail::FixtureCredentialStore>();
         std::vector<coding_agent::ModelRuntimeTestProvider> definitions;
-        definitions.push_back(
-                scripted_runtime_definition(std::make_shared<ScriptedRuntimeProvider>("fake", control, true)));
-        definitions.push_back(
-                scripted_runtime_definition(std::make_shared<ScriptedRuntimeProvider>("sdk-host", control, false)));
+        if (!custom_catalog) {
+            definitions.push_back(
+                    scripted_runtime_definition(std::make_shared<ScriptedRuntimeProvider>("fake", control, true)));
+            definitions.push_back(
+                    scripted_runtime_definition(std::make_shared<ScriptedRuntimeProvider>("sdk-host", control, false)));
+        } else {
+            definitions.push_back(scripted_runtime_definition(
+                    std::make_shared<ScriptedRuntimeProvider>(catalog_provider, control, true, std::move(catalog))));
+        }
         auto created = coding_agent::create_model_runtime_for_testing(std::move(options),
                 coding_agent::ModelRuntimeTestOptions{
                         .providers = std::move(definitions),
@@ -305,12 +328,23 @@ struct ScriptedRuntimeFixture final {
         }
         runtime = std::move(*created);
 
-        if (!runtime->model("fake", "fake-model") || !runtime->model("sdk-host", "fake-model")) {
-            std::terminate();
-        }
-        const auto available = run_async_result(runtime->get_available());
-        if (!available || available->size() != 1 || available->front().provider != "fake") {
-            std::terminate();
+        if (!custom_catalog) {
+            if (!runtime->model("fake", "fake-model") || !runtime->model("sdk-host", "fake-model")) {
+                std::terminate();
+            }
+            const auto available = run_async_result(runtime->get_available());
+            if (!available || available->size() != 1 || available->front().provider != "fake") {
+                std::terminate();
+            }
+        } else {
+            for (const auto& id : catalog_ids) {
+                if (!runtime->model(catalog_provider, id)) std::terminate();
+            }
+            const auto available = run_async_result(runtime->get_available());
+            if (!available || available->size() != catalog_ids.size() ||
+                    available->front().provider != catalog_provider) {
+                std::terminate();
+            }
         }
     }
 };
