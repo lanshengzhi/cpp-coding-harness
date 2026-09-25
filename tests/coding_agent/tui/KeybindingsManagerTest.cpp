@@ -4,6 +4,7 @@
 #include "support/TempWorkspace.hpp"
 
 #include <cch/tui/Keys.hpp>
+#include <cch/tui/Text.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -11,6 +12,7 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -82,12 +84,7 @@ TEST_CASE("Hotkey help and hints expose the exact registry used for dispatch",
     CHECK(manager->registry->matches(
         tui::KeyEvent{.key = "enter", .ctrl = true},
         found->id));
-    auto view = coding_agent::tui::make_hotkey_help_view(manager->registry);
-    const auto rendered = view->render(100);
-    REQUIRE(rendered);
-    CHECK(std::any_of(rendered->lines.begin(), rendered->lines.end(), [](const auto& line) {
-        return line.find("ctrl+enter/f2") != std::string::npos;
-    }));
+    CHECK(coding_agent::tui::format_hotkeys_text(*manager->registry).find("enter  Send message") != std::string::npos);
 }
 
 TEST_CASE("Keybindings manager diagnoses malformed values and user conflicts without installing them",
@@ -218,6 +215,9 @@ TEST_CASE("Known-but-unassembled tui ids are diagnosed as unavailable and never 
     CHECK(manager->registry->find("tui.altScreen.pageUp") == nullptr);
     CHECK(manager->registry->find("tui.altScreen.previousPrompt") == nullptr);
     CHECK(manager->registry->entries().size() == 30);
+    const auto text = coding_agent::tui::format_hotkeys_text(*manager->help);
+    CHECK(text.find("tui.input.copy") == std::string::npos);
+    CHECK(text.find("app.model.select") == std::string::npos);
 }
 
 TEST_CASE("Keybindings manager bounds diagnostics and redacts invalid key text",
@@ -357,6 +357,12 @@ TEST_CASE("/hotkeys renders only the assembled subset from the resolved registry
     });
     REQUIRE(session_new != entries.end());
     CHECK(session_new->keys == "Unbound");
+    const auto help_text = coding_agent::tui::format_hotkeys_text(*manager->help);
+    CHECK(help_text.find("Unbound  Start a new session") != std::string::npos);
+    CHECK(help_text.find("Unbound  Open session tree") != std::string::npos);
+    CHECK(help_text.find("Unbound  Fork current session") != std::string::npos);
+    CHECK(help_text.find("Unbound  Resume a session") != std::string::npos);
+    CHECK(help_text.find("Open model selector") == std::string::npos);
 
     // The assembled main-editor action renders like dispatch observes it.
     const auto interrupt = std::find_if(entries.begin(), entries.end(), [](const auto& entry) {
@@ -368,20 +374,75 @@ TEST_CASE("/hotkeys renders only the assembled subset from the resolved registry
               *manager->registry, "app.interrupt", "interrupt") == "escape interrupt");
 }
 
-TEST_CASE("/hotkeys chat block follows pi sections over the effective registry", "[coding_agent][keybindings][spec]") {
+TEST_CASE("/hotkeys shows both claims for a user key conflict", "[coding_agent][keybindings][issue796][spec]") {
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({"app.clear":"f1","app.exit":"f1"})");
+    constexpr std::array<std::string_view, 2> kAssembled{"app.clear", "app.exit"};
+    const auto definitions = coding_agent::tui::app_keybinding_definitions(kAssembled);
+    REQUIRE(definitions);
+    coding_agent::tui::KeybindingsManagerRequest request;
+    request.agent_config_directory = config.path();
+    request.application_definitions = *definitions;
+    const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
+    REQUIRE(manager);
+    CHECK(has_diagnostic(*manager, "conflicting_user_key"));
+    const auto text = coding_agent::tui::format_hotkeys_text(*manager->help);
+    CHECK(text.find("f1  Clear editor (first) / exit (second)") != std::string::npos);
+    CHECK(text.find("f1  Exit (when editor is empty)") != std::string::npos);
+}
+
+TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
+        "[coding_agent][keybindings][issue796][spec]") {
     // Default registry with no application actions assembled: pi sections
-    // render with effective keys, app rows render Unbound.
+    // render with effective keys; unavailable application rows are skipped.
     coding_agent::tui::KeybindingsManagerRequest request;
     const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
     REQUIRE(manager);
-    const auto text = coding_agent::tui::format_hotkeys_text(*manager->registry);
+    const auto text = coding_agent::tui::format_hotkeys_text(*manager->help);
     CHECK(text.find("Keyboard Shortcuts") != std::string::npos);
-    CHECK(text.find("Navigation") != std::string::npos);
-    CHECK(text.find("Editing") != std::string::npos);
+    const auto navigation = text.find("Navigation");
+    const auto editing = text.find("Editing");
+    const auto other = text.find("Other");
+    REQUIRE(navigation != std::string::npos);
+    REQUIRE(editing != std::string::npos);
+    REQUIRE(other != std::string::npos);
+    CHECK(navigation < editing);
+    CHECK(editing < other);
     CHECK(text.find("Move cursor / browse history") != std::string::npos);
     CHECK(text.find("enter  Send message") != std::string::npos);
     CHECK(text.find("/  Slash commands") != std::string::npos);
-    CHECK(text.find("Unbound  Exit (when editor is empty)") != std::string::npos);
+    CHECK(text.find("Exit (when editor is empty)") == std::string::npos);
+
+    // The component seam and the inline chat block use one formatter. The
+    // narrow render still contains all three section headings rather than
+    // dropping the earlier sections at the right edge.
+    auto view = std::make_unique<cch::tui::Text>(coding_agent::tui::format_hotkeys_text(*manager->help));
+    REQUIRE(view);
+    const auto wide_rendered = view->render(200);
+    REQUIRE(wide_rendered);
+    std::string wide_text;
+    for (const auto& line : wide_rendered->lines) {
+        auto trimmed = line;
+        while (!trimmed.empty() && trimmed.back() == ' ')
+            trimmed.pop_back();
+        wide_text += trimmed;
+        wide_text.push_back('\n');
+    }
+    CHECK(wide_text.find("Move cursor / browse history") != std::string::npos);
+    CHECK(wide_text.find("enter  Send message") != std::string::npos);
+    CHECK(wide_text.find("Exit (when editor is empty)") == std::string::npos);
+
+    const auto rendered = view->render(24);
+    REQUIRE(rendered);
+    std::string narrow_text;
+    for (const auto& line : rendered->lines) {
+        narrow_text += line;
+        narrow_text.push_back('\n');
+    }
+    CHECK(narrow_text.find("Navigation") != std::string::npos);
+    CHECK(narrow_text.find("Editing") != std::string::npos);
+    CHECK(narrow_text.find("Other") != std::string::npos);
+    CHECK(narrow_text.find("Keyboard Shortcuts") != std::string::npos);
 
     // A user override shows up verbatim on its pi row, and assembled queue
     // actions render with pi's default keys.
@@ -396,8 +457,25 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     remapped.application_definitions = std::move(*definitions);
     const auto remapped_manager = coding_agent::tui::load_keybindings_manager(std::move(remapped));
     REQUIRE(remapped_manager);
-    const auto remapped_text = coding_agent::tui::format_hotkeys_text(*remapped_manager->registry);
+    const auto remapped_text = coding_agent::tui::format_hotkeys_text(*remapped_manager->help);
     CHECK(remapped_text.find("f6  Exit (when editor is empty)") != std::string::npos);
+    auto remapped_view =
+            std::make_unique<cch::tui::Text>(coding_agent::tui::format_hotkeys_text(*remapped_manager->help));
+    REQUIRE(remapped_view);
+    const auto remapped_rendered = remapped_view->render(200);
+    REQUIRE(remapped_rendered);
+    const auto remapped_component_text = std::accumulate(remapped_rendered->lines.begin(),
+            remapped_rendered->lines.end(),
+            std::string{},
+            [](std::string text, const auto& line) {
+                auto trimmed = line;
+                while (!trimmed.empty() && trimmed.back() == ' ')
+                    trimmed.pop_back();
+                text += trimmed;
+                text.push_back('\n');
+                return text;
+            });
+    CHECK(remapped_component_text.find("f6  Exit (when editor is empty)") != std::string::npos);
     CHECK(remapped_text.find("ctrl+x  Copy selection or last assistant message") != std::string::npos);
     CHECK(remapped_text.find("alt+enter  Queue follow-up message") != std::string::npos);
     CHECK(remapped_text.find("alt+up  Restore queued messages") != std::string::npos);

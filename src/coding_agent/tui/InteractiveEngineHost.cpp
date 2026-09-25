@@ -78,7 +78,8 @@ void InteractiveEngine::show_help_command() {
 
 void InteractiveEngine::open_hotkeys() {
     if (view_ == nullptr || !keybindings_) return;
-    view_->append_frontend_message(format_hotkeys_text(*keybindings_->get()));
+    const auto help = keybindings_->help();
+    view_->append_frontend_message(help ? format_hotkeys_text(*help) : format_hotkeys_text(*keybindings_->get()));
     tui_.invalidate();
 }
 

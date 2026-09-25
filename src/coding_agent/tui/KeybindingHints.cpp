@@ -24,6 +24,12 @@ namespace {
     return result;
 }
 
+[[nodiscard]] std::string effective_key_text(
+        const cch::tui::KeybindingRegistry& keybindings, std::string_view action, bool capitalize = false) {
+    const auto text = keybindings.key_text(action);
+    return text.empty() ? "Unbound" : format_key_text(text, capitalize);
+}
+
 [[nodiscard]] std::string styled_hint_line(
     const LiveTheme& theme,
     const std::string& key_text,
@@ -61,25 +67,18 @@ std::string key_hint(
     const cch::tui::KeybindingRegistry& keybindings,
     std::string_view action,
     std::string_view description) {
-    const auto key_text = keybindings.key_text(action);
-    return styled_hint_line(
-        theme,
-        key_text.empty() ? "Unbound" : format_key_text(key_text),
-        description);
+    return styled_hint_line(theme, effective_key_text(keybindings, action), description);
 }
 
 std::string raw_key_hint(
     const LiveTheme& theme,
     std::string_view key,
     std::string_view description) {
-    return styled_hint_line(theme, format_key_text(key), description);
+    return styled_hint_line(theme, key.empty() ? "Unbound" : format_key_text(key), description);
 }
 
 std::string generic_select_list_hint(const cch::tui::KeybindingRegistry& keybindings) {
-    const auto key_label = [&keybindings](std::string_view action) {
-        const auto text = keybindings.key_text(action);
-        return text.empty() ? std::string{"Unbound"} : format_key_text(text);
-    };
+    const auto key_label = [&keybindings](std::string_view action) { return effective_key_text(keybindings, action); };
     return "↑↓ navigate  " + key_label("tui.select.confirm") + " select  " + key_label("tui.select.cancel") + " cancel";
 }
 
@@ -107,14 +106,11 @@ support::Expected<cch::tui::RenderResult> KeybindingHints::render(std::size_t wi
     if (!expanded_) {
         // pi's compact startup instructions, without the logo.
         text += key_hint(theme_, keybindings, "app.interrupt", "interrupt");
-        text += theme_.foreground(
-            ThemeToken::Muted,
-            std::format(
-                " · {} · / commands",
-                format_key_text(std::format(
-                    "{}/{}",
-                    keybindings.key_text("app.clear"),
-                    keybindings.key_text("app.exit")))));
+        text += theme_.foreground(ThemeToken::Muted,
+                std::format(" · {} · / commands",
+                        std::format("{}/{}",
+                                effective_key_text(keybindings, "app.clear"),
+                                effective_key_text(keybindings, "app.exit"))));
         if (user_bash_available_) text += theme_.foreground(ThemeToken::Muted, " · ! bash");
         text += theme_.foreground(ThemeToken::Muted, " · ");
         text += key_hint(theme_, keybindings, "app.tools.expand", "more");
@@ -136,22 +132,15 @@ support::Expected<cch::tui::RenderResult> KeybindingHints::render(std::size_t wi
         };
         append(key_hint(theme_, keybindings, "app.interrupt", "to interrupt"));
         append(key_hint(theme_, keybindings, "app.clear", "to clear"));
-        append(raw_key_hint(
-            theme_,
-            std::format(
-                "{} twice",
-                format_key_text(keybindings.key_text("app.clear"))),
-            "to exit"));
+        append(raw_key_hint(theme_, std::format("{} twice", effective_key_text(keybindings, "app.clear")), "to exit"));
         append(key_hint(theme_, keybindings, "app.exit", "to exit (empty)"));
         append(key_hint(theme_, keybindings, "app.suspend", "to suspend"));
         append(key_hint(theme_, keybindings, "app.thinking.cycle", "to cycle thinking level"));
-        append(raw_key_hint(
-            theme_,
-            std::format(
-                "{}/{}",
-                format_key_text(keybindings.key_text("app.model.cycleForward")),
-                format_key_text(keybindings.key_text("app.model.cycleBackward"))),
-            "to cycle models"));
+        append(raw_key_hint(theme_,
+                std::format("{}/{}",
+                        effective_key_text(keybindings, "app.model.cycleForward"),
+                        effective_key_text(keybindings, "app.model.cycleBackward")),
+                "to cycle models"));
         append(key_hint(theme_, keybindings, "app.model.select", "to select model"));
         append(key_hint(theme_, keybindings, "app.tools.expand", "to expand tools"));
         append(key_hint(theme_, keybindings, "app.thinking.toggle", "to expand thinking"));

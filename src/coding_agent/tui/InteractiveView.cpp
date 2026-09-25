@@ -97,8 +97,9 @@ void InteractiveView::set_autocomplete_provider(std::unique_ptr<cch::tui::Autoco
     editor_.set_autocomplete_provider(std::move(provider));
 }
 
-void InteractiveView::set_keybindings(std::shared_ptr<const cch::tui::KeybindingRegistry> registry) {
-    keybindings_->replace(registry);
+void InteractiveView::set_keybindings(std::shared_ptr<const cch::tui::KeybindingRegistry> registry,
+        std::shared_ptr<const std::vector<HotkeyHelpRow>> help) {
+    keybindings_->replace(registry, help);
     editor_.set_keybindings(std::move(registry));
 }
 

@@ -1,5 +1,7 @@
 #include "coding_agent/tui/Footer.hpp"
 #include "coding_agent/tui/FooterDataProvider.hpp"
+#include "coding_agent/tui/KeybindingHints.hpp"
+#include "coding_agent/tui/KeybindingsManager.hpp"
 #include "coding_agent/tui/StatusIndicator.hpp"
 
 #include "support/TempWorkspace.hpp"
@@ -43,6 +45,32 @@ struct FooterFixture {
 }
 
 } // namespace
+
+TEST_CASE("Header hints render unbound paired keys explicitly", "[coding_agent][tui][keybindings][issue796][spec]") {
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({"app.clear":[],"app.exit":[],"app.model.cycleForward":[]})");
+    constexpr std::array<std::string_view, 4> kAssembled{
+            "app.clear", "app.exit", "app.model.cycleForward", "app.model.cycleBackward"};
+    const auto definitions = coding_agent::tui::app_keybinding_definitions(kAssembled);
+    REQUIRE(definitions);
+    coding_agent::tui::KeybindingsManagerRequest request;
+    request.agent_config_directory = config.path();
+    request.application_definitions = *definitions;
+    const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
+    REQUIRE(manager);
+
+    coding_agent::tui::LiveTheme theme{coding_agent::tui::builtin_dark_theme(), tui::TerminalColorCapability::Xterm256};
+    auto shared = std::make_shared<coding_agent::tui::SharedKeybindings>(manager->registry);
+    coding_agent::tui::KeybindingHints hints(theme, std::move(shared), false, false);
+    hints.set_expanded(true);
+    const auto rendered = hints.render(200);
+    REQUIRE(rendered);
+    std::string text;
+    for (const auto& line : rendered->lines)
+        text += tui::strip_terminal_sequences(line);
+    CHECK(text.find("Unbound twice to exit") != std::string::npos);
+    CHECK(text.find("Unbound/shift+ctrl+p to cycle models") != std::string::npos);
+}
 
 TEST_CASE("Footer formatTokens matches pi's compact formatting", "[coding_agent][tui][footer][issue411][spec]") {
     CHECK(coding_agent::tui::format_tokens(0) == "0");

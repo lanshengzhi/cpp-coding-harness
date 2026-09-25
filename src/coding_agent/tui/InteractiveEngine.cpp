@@ -348,7 +348,7 @@ support::ExpectedVoid InteractiveEngine::re_catalog_keybindings() {
         return std::unexpected(manager.error());
     } else {
         if (view_ != nullptr) {
-            view_->set_keybindings(manager->registry);
+            view_->set_keybindings(manager->registry, manager->help);
             for (const auto& diagnostic : manager->diagnostics) {
                 view_->append_diagnostic(diagnostic.message);
             }
@@ -374,7 +374,7 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
         if (!keybindings_) {
             keybindings_ = std::make_shared<SharedKeybindings>();
         }
-        keybindings_->replace(manager->registry);
+        keybindings_->replace(manager->registry, manager->help);
         diagnostics.keybindings = std::move(manager->diagnostics);
     }
 

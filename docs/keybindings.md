@@ -88,8 +88,9 @@ holds without the action existing.
 
 Application (`app.*`) actions are registered only by a frontend that assembles
 the corresponding capability. The app layer adopts pi's full 42-action
-`AppKeybindings` catalog (`pi:packages/coding-agent/src/core/keybindings.ts` at
-`83114817`, ADR 0036). The Native TUI composition assembles pi's default bound
+`AppKeybindings` catalog plus the product-added `app.thinking.save` action
+(43 total; `pi:packages/coding-agent/src/core/keybindings.ts` at `83114817`,
+ADR 0036). The Native TUI composition assembles pi's default bound
 set in the main editor:
 
 | Action ID | Default keys | Active-run behavior |
@@ -118,7 +119,8 @@ scoped-models selector bind their scoped action sets (`app.session.*`
 filter/rename/delete, `app.tree.*`, `app.models.*`) inside those components, and
 the header hints render the assembled subset only. `/hotkeys` renders pi's
 hardcoded Navigation/Editing/Other sections as an inline chat block over the
-effective registry, with unassembled or unbound actions marked `Unbound`.
+effective registry, with assembled-but-unbound actions marked `Unbound` and
+known-but-unassembled actions omitted.
 
 Ordinary `tui.input.submit` starts a prompt while idle and admits steering input
 while a run is active. Alt+Enter acts like ordinary submit while idle. The
