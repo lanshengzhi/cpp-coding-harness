@@ -1457,37 +1457,24 @@ struct PreparedAssemblyTarget final {
             std::filesystem::path{coding_agent::kDefaultAuthGuidanceDocsPath});
     }
 
-    // Resume: explicit provider/model overrides are allowed but warned.
-    if (is_resume) {
-        std::optional<std::string> override_provider;
-        std::optional<std::string> override_model;
-        if (plan.cli_selection.model || plan.cli_selection.provider) {
-            if (plan.cli_selection.model) {
-                override_model = resolved_model;
-            }
-            override_provider = plan.cli_selection.provider;
-        } else if (plan.requested_model) {
-            override_provider = plan.requested_model->provider;
-            override_model = plan.requested_model->id;
-        }
-        const bool provider_overridden = override_provider.has_value() &&
-                                         stored_provider.has_value() &&
-                                         *override_provider != *stored_provider;
-        const bool model_overridden = override_model.has_value() &&
-                                      stored_model.has_value() &&
-                                      *override_model != *stored_model;
-        if (provider_overridden || model_overridden) {
-            diagnostics.push_back(make_diag(
-                SessionDiagnostic::Severity::Warning,
+    // Resume: explicit provider/model metadata is allowed but warned when
+    // its effective identity differs from the active path's model_change.
+    // Compare canonical resolved values rather than CLI spelling so a thinking
+    // suffix or case-normalized provider does not manufacture a false warning.
+    const bool explicit_model_metadata = plan.cli_selection.model.has_value() ||
+                                         plan.cli_selection.provider.has_value() || plan.requested_model.has_value();
+    const bool effective_model_changed = is_resume && explicit_model_metadata && stored_provider.has_value() &&
+                                         stored_model.has_value() &&
+                                         (resolved_provider != *stored_provider || resolved_model != *stored_model);
+    if (effective_model_changed) {
+        diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Warning,
                 "resume_provider_override",
-                std::format(
-                    "Resumed session provider/model metadata overridden by explicit request; "
-                    "was ({}/{}) now ({}/{})",
-                    stored_provider.value_or(""),
-                    stored_model.value_or(""),
-                    resolved_provider,
-                    resolved_model)));
-        }
+                std::format("Resumed session provider/model metadata overridden by explicit request; "
+                            "was ({}/{}) now ({}/{})",
+                        *stored_provider,
+                        *stored_model,
+                        resolved_provider,
+                        resolved_model)));
     }
 
     // 6. The runtime is the session's canonical ModelRuntime, held for
@@ -1606,6 +1593,7 @@ struct PreparedAssemblyTarget final {
                     target_cleanup_path,
                     provider = resolved_provider,
                     model = resolved_model,
+                    model_changed = effective_model_changed,
                     effective_thinking_level,
                     branch_seed = std::move(plan.in_memory_branch_seed),
                     session_name = plan.session_name]() mutable {
@@ -1630,6 +1618,14 @@ struct PreparedAssemblyTarget final {
                         return fail(published.error());
                     }
                     open = std::move(*published);
+                    // An explicit resume identity change becomes the active
+                    // persisted path so a later plain resume keeps the model
+                    // selected by the request that performed the change.
+                    if (model_changed) {
+                        if (auto appended = open.store->append_model_change(std::nullopt, provider, model); !appended) {
+                            return fail(appended.error());
+                        }
+                    }
                     // pi sdk.ts: a resumed session without a
                     // `thinking_level_change` entry gets the restored level
                     // appended so a later resume restores it.
