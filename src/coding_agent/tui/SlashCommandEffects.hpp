@@ -38,9 +38,9 @@ inline constexpr std::string_view kHelpCommandText =
     "/login /logout /resume /fork /tree /reload /compact /trust";
 
 /// pi `handleHotkeysCommand`: the Keyboard Shortcuts chat block over the
-/// effective registry. Sections and row meanings follow pi's hardcoded
-/// Navigation/Editing/Other tables (plus the `/`, `!`, `!!` rows);
-/// unassembled or unbound actions render as `Unbound` like `key_hint`.
+/// effective registry. Navigation/Editing/Other rows come from registry
+/// metadata; the `/`, `!`, `!!` command rows are the documented literals.
+/// Unassembled or unbound actions render as `Unbound` like `key_hint`.
 [[nodiscard]] std::string format_hotkeys_text(const cch::tui::KeybindingRegistry& registry);
 
 } // namespace cch::coding_agent::tui

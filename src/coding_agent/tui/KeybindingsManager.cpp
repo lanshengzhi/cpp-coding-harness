@@ -29,18 +29,29 @@ struct ApplicationTemplate {
     std::vector<std::string> keys;
     std::string_view description;
     std::string_view category;
+    std::string_view help_section;
+    std::string_view help_group;
+    std::string_view help_description;
+    std::size_t help_order;
 };
 
-[[nodiscard]] ApplicationTemplate make_application_template(
-    std::string_view id,
-    std::vector<std::string> keys,
-    std::string_view description,
-    std::string_view category) {
+[[nodiscard]] ApplicationTemplate make_application_template(std::string_view id,
+        std::vector<std::string> keys,
+        std::string_view description,
+        std::string_view category,
+        std::string_view help_section = {},
+        std::string_view help_group = {},
+        std::string_view help_description = {},
+        std::size_t help_order = 0) {
     return {
-        .id = id,
-        .keys = std::move(keys),
-        .description = description,
-        .category = category,
+            .id = id,
+            .keys = std::move(keys),
+            .description = description,
+            .category = category,
+            .help_section = help_section,
+            .help_group = help_group,
+            .help_description = help_description,
+            .help_order = help_order,
     };
 }
 
@@ -48,38 +59,133 @@ struct ApplicationTemplate {
 /// (pi:packages/coding-agent/src/core/keybindings.ts; the #36 baseline at
 /// `83114817`, with v0.87.1's `app.thinking.save` added for the thinking
 /// selector's save-as-default action, #774). Descriptions and default keys
-/// are pi-verbatim; the category column is
-/// the registry help-view grouping (the `/hotkeys` chat block in
-/// SlashCommandEffects renders pi's hardcoded sections instead).
+/// are pi-verbatim; the help metadata is carried into the resolved registry
+/// and is the single source for the `/hotkeys` section and row projection.
 [[nodiscard]] const std::vector<ApplicationTemplate>& application_templates() {
     static const std::vector<ApplicationTemplate> kTemplates{
-            make_application_template("app.interrupt", {"escape"}, "Cancel or abort", "Application"),
-            make_application_template("app.clear", {"ctrl+c"}, "Clear editor", "Application"),
-            make_application_template("app.exit", {"ctrl+d"}, "Exit when editor is empty", "Application"),
-            make_application_template("app.suspend", {"ctrl+z"}, "Suspend to background", "Application"),
-            make_application_template(
-                    "app.thinking.cycle", {"shift+tab"}, "Cycle thinking level", "Models and thinking"),
+            make_application_template("app.interrupt",
+                    {"escape"},
+                    "Cancel or abort",
+                    "Application",
+                    "Other",
+                    "interrupt",
+                    "Cancel autocomplete / abort streaming",
+                    2),
+            make_application_template("app.clear",
+                    {"ctrl+c"},
+                    "Clear editor",
+                    "Application",
+                    "Other",
+                    "clear",
+                    "Clear editor (first) / exit (second)",
+                    3),
+            make_application_template("app.exit",
+                    {"ctrl+d"},
+                    "Exit when editor is empty",
+                    "Application",
+                    "Other",
+                    "exit",
+                    "Exit (when editor is empty)",
+                    4),
+            make_application_template("app.suspend",
+                    {"ctrl+z"},
+                    "Suspend to background",
+                    "Application",
+                    "Other",
+                    "suspend",
+                    "Suspend to background",
+                    5),
+            make_application_template("app.thinking.cycle",
+                    {"shift+tab"},
+                    "Cycle thinking level",
+                    "Models and thinking",
+                    "Other",
+                    "thinking-cycle",
+                    "Cycle thinking level",
+                    6),
             make_application_template("app.thinking.save", {"ctrl+s"}, "Save thinking level", "Models and thinking"),
-            make_application_template(
-                    "app.model.cycleForward", {"ctrl+p"}, "Cycle to next model", "Models and thinking"),
-            make_application_template(
-                    "app.model.cycleBackward", {"shift+ctrl+p"}, "Cycle to previous model", "Models and thinking"),
-            make_application_template("app.model.select", {"ctrl+l"}, "Open model selector", "Models and thinking"),
-            make_application_template("app.tools.expand", {"ctrl+o"}, "Toggle tool output", "Display and queue"),
-            make_application_template("app.thinking.toggle", {"ctrl+t"}, "Toggle thinking blocks", "Display and queue"),
+            make_application_template("app.model.cycleForward",
+                    {"ctrl+p"},
+                    "Cycle to next model",
+                    "Models and thinking",
+                    "Other",
+                    "model-cycle",
+                    "Cycle models",
+                    7),
+            make_application_template("app.model.cycleBackward",
+                    {"shift+ctrl+p"},
+                    "Cycle to previous model",
+                    "Models and thinking",
+                    "Other",
+                    "model-cycle",
+                    "Cycle models",
+                    7),
+            make_application_template("app.model.select",
+                    {"ctrl+l"},
+                    "Open model selector",
+                    "Models and thinking",
+                    "Other",
+                    "model-select",
+                    "Open model selector",
+                    8),
+            make_application_template("app.tools.expand",
+                    {"ctrl+o"},
+                    "Toggle tool output",
+                    "Display and queue",
+                    "Other",
+                    "tools-expand",
+                    "Toggle tool output expansion",
+                    9),
+            make_application_template("app.thinking.toggle",
+                    {"ctrl+t"},
+                    "Toggle thinking blocks",
+                    "Display and queue",
+                    "Other",
+                    "thinking-toggle",
+                    "Toggle thinking block visibility",
+                    10),
             make_application_template(
                     "app.session.toggleNamedFilter", {"ctrl+n"}, "Toggle named session filter", "Sessions"),
-            make_application_template("app.editor.external", {"ctrl+g"}, "Open external editor", "Application"),
-            make_application_template(
-                    "app.message.copy", {"ctrl+x"}, "Copy selection or last assistant message", "Display and queue"),
-            make_application_template(
-                    "app.message.followUp", {"alt+enter"}, "Queue follow-up message", "Display and queue"),
-            make_application_template(
-                    "app.message.dequeue", {"alt+up"}, "Restore queued messages", "Display and queue"),
+            make_application_template("app.editor.external",
+                    {"ctrl+g"},
+                    "Open external editor",
+                    "Application",
+                    "Other",
+                    "external-editor",
+                    "Edit message in external editor",
+                    11),
+            make_application_template("app.message.copy",
+                    {"ctrl+x"},
+                    "Copy selection or last assistant message",
+                    "Display and queue",
+                    "Other",
+                    "message-copy",
+                    "Copy selection or last assistant message",
+                    12),
+            make_application_template("app.message.followUp",
+                    {"alt+enter"},
+                    "Queue follow-up message",
+                    "Display and queue",
+                    "Other",
+                    "message-follow-up",
+                    "Queue follow-up message",
+                    13),
+            make_application_template("app.message.dequeue",
+                    {"alt+up"},
+                    "Restore queued messages",
+                    "Display and queue",
+                    "Other",
+                    "message-dequeue",
+                    "Restore queued messages",
+                    14),
             make_application_template("app.clipboard.pasteImage",
                     {"ctrl+v"},
                     "Paste image from clipboard (text fallback)",
-                    "Application"),
+                    "Application",
+                    "Other",
+                    "clipboard-paste",
+                    "Paste image or text from clipboard",
+                    15),
             make_application_template("app.session.new", {}, "Start a new session", "Sessions"),
             make_application_template("app.session.tree", {}, "Open session tree", "Sessions"),
             make_application_template("app.session.fork", {}, "Fork current session", "Sessions"),
@@ -286,10 +392,14 @@ support::Expected<std::vector<cch::tui::KeybindingDefinition>> app_keybinding_de
                 std::format("unknown baseline application keybinding '{}'", id)));
         }
         definitions.push_back({
-            .id = std::string(source->id),
-            .default_keys = source->keys,
-            .description = std::string(source->description),
-            .category = std::string(source->category),
+                .id = std::string(source->id),
+                .default_keys = source->keys,
+                .description = std::string(source->description),
+                .category = std::string(source->category),
+                .help_section = std::string(source->help_section),
+                .help_group = std::string(source->help_group),
+                .help_description = std::string(source->help_description),
+                .help_order = source->help_order,
         });
     }
     return definitions;
@@ -343,6 +453,67 @@ std::vector<HotkeyHelpEntry> hotkey_help_entries(
         });
     }
     return result;
+}
+
+std::vector<HotkeyHelpRow> hotkey_help_rows(const cch::tui::KeybindingRegistry& registry) {
+    std::vector<HotkeyHelpRow> rows;
+    const auto add = [&rows, &registry](std::string_view section,
+                             std::string_view group,
+                             std::string_view description,
+                             std::size_t order,
+                             std::string_view action_id) {
+        if (section.empty()) return;
+        const auto existing = std::find_if(rows.begin(), rows.end(), [section, group](const auto& row) {
+            return row.section == section && row.group == group;
+        });
+        if (existing == rows.end()) {
+            rows.push_back({
+                    .section = std::string(section),
+                    .group = std::string(group),
+                    .keys = registry.key_text(action_id),
+                    .description = std::string(description),
+                    .order = order,
+            });
+            return;
+        }
+        const auto keys = registry.key_text(action_id);
+        if (keys.empty() || (!existing->keys.empty() && existing->keys == "Unbound")) return;
+        if (!existing->keys.empty()) existing->keys.push_back('/');
+        existing->keys += keys;
+    };
+
+    for (const auto& entry : registry.entries()) {
+        add(entry.help_section, entry.help_group, entry.help_description, entry.help_order, entry.id);
+    }
+    // Known application actions remain visible as Unbound when the host has
+    // not assembled them. The metadata comes from the same canonical catalog
+    // used to create assembled definitions; no active registry entry is
+    // fabricated for these rows.
+    for (const auto& definition : application_templates()) {
+        if (registry.find(definition.id) != nullptr) continue;
+        add(definition.help_section,
+                definition.help_group,
+                definition.help_description,
+                definition.help_order,
+                definition.id);
+    }
+    for (auto& row : rows) {
+        if (row.keys.empty()) row.keys = "Unbound";
+    }
+    const auto section_rank = [](std::string_view section) {
+        if (section == "Navigation") return 0;
+        if (section == "Editing") return 1;
+        if (section == "Other") return 2;
+        return 3;
+    };
+    std::stable_sort(rows.begin(), rows.end(), [&section_rank](const auto& left, const auto& right) {
+        const auto left_section = section_rank(left.section);
+        const auto right_section = section_rank(right.section);
+        if (left_section != right_section) return left_section < right_section;
+        if (left.order != right.order) return left.order < right.order;
+        return left.group < right.group;
+    });
+    return rows;
 }
 
 std::string key_hint(

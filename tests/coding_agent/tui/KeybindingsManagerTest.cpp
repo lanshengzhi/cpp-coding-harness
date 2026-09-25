@@ -11,6 +11,7 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -363,7 +364,25 @@ TEST_CASE("/hotkeys renders only the assembled subset from the resolved registry
               *manager->registry, "app.interrupt", "interrupt") == "escape interrupt");
 }
 
-TEST_CASE("/hotkeys chat block follows pi sections over the effective registry", "[coding_agent][keybindings][spec]") {
+TEST_CASE("/hotkeys shows both claims for a user key conflict", "[coding_agent][keybindings][issue796][spec]") {
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({"app.clear":"f1","app.exit":"f1"})");
+    constexpr std::array<std::string_view, 2> kAssembled{"app.clear", "app.exit"};
+    const auto definitions = coding_agent::tui::app_keybinding_definitions(kAssembled);
+    REQUIRE(definitions);
+    coding_agent::tui::KeybindingsManagerRequest request;
+    request.agent_config_directory = config.path();
+    request.application_definitions = *definitions;
+    const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
+    REQUIRE(manager);
+    CHECK(has_diagnostic(*manager, "conflicting_user_key"));
+    const auto text = coding_agent::tui::format_hotkeys_text(*manager->registry);
+    CHECK(text.find("f1  Clear editor (first) / exit (second)") != std::string::npos);
+    CHECK(text.find("f1  Exit (when editor is empty)") != std::string::npos);
+}
+
+TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
+        "[coding_agent][keybindings][issue796][spec]") {
     // Default registry with no application actions assembled: pi sections
     // render with effective keys, app rows render Unbound.
     coding_agent::tui::KeybindingsManagerRequest request;
@@ -388,6 +407,20 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     // narrow render still contains all three section headings rather than
     // dropping the earlier sections at the right edge.
     auto view = coding_agent::tui::make_hotkey_help_view(manager->registry);
+    const auto wide_rendered = view->render(200);
+    REQUIRE(wide_rendered);
+    std::string wide_text;
+    for (const auto& line : wide_rendered->lines) {
+        auto trimmed = line;
+        while (!trimmed.empty() && trimmed.back() == ' ')
+            trimmed.pop_back();
+        wide_text += trimmed;
+        wide_text.push_back('\n');
+    }
+    CHECK(wide_text.find("Move cursor / browse history") != std::string::npos);
+    CHECK(wide_text.find("enter  Send message") != std::string::npos);
+    CHECK(wide_text.find("Unbound  Exit (when editor is empty)") != std::string::npos);
+
     const auto rendered = view->render(24);
     REQUIRE(rendered);
     std::string narrow_text;
@@ -415,6 +448,21 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     REQUIRE(remapped_manager);
     const auto remapped_text = coding_agent::tui::format_hotkeys_text(*remapped_manager->registry);
     CHECK(remapped_text.find("f6  Exit (when editor is empty)") != std::string::npos);
+    auto remapped_view = coding_agent::tui::make_hotkey_help_view(remapped_manager->registry);
+    const auto remapped_rendered = remapped_view->render(200);
+    REQUIRE(remapped_rendered);
+    const auto remapped_component_text = std::accumulate(remapped_rendered->lines.begin(),
+            remapped_rendered->lines.end(),
+            std::string{},
+            [](std::string text, const auto& line) {
+                auto trimmed = line;
+                while (!trimmed.empty() && trimmed.back() == ' ')
+                    trimmed.pop_back();
+                text += trimmed;
+                text.push_back('\n');
+                return text;
+            });
+    CHECK(remapped_component_text.find("f6  Exit (when editor is empty)") != std::string::npos);
     CHECK(remapped_text.find("ctrl+x  Copy selection or last assistant message") != std::string::npos);
     CHECK(remapped_text.find("alt+enter  Queue follow-up message") != std::string::npos);
     CHECK(remapped_text.find("alt+up  Restore queued messages") != std::string::npos);

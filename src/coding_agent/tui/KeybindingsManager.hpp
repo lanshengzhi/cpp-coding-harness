@@ -4,6 +4,7 @@
 #include <cch/tui/Keybindings.hpp>
 #include <cch/support/Error.hpp>
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <span>
@@ -63,9 +64,22 @@ struct HotkeyHelpEntry {
     std::string category{};
 };
 
+struct HotkeyHelpRow {
+    std::string section{};
+    std::string group{};
+    std::string keys{};
+    std::string description{};
+    std::size_t order{};
+};
+
 /// One help entry per assembled registry entry (never a no-op binding).
 [[nodiscard]] std::vector<HotkeyHelpEntry> hotkey_help_entries(
     const cch::tui::KeybindingRegistry& registry);
+
+/// Help rows derived from registry metadata, including known application
+/// actions that are not assembled in the current host. Their keys are looked
+/// up in the same immutable registry; absent actions therefore render Unbound.
+[[nodiscard]] std::vector<HotkeyHelpRow> hotkey_help_rows(const cch::tui::KeybindingRegistry& registry);
 
 /// `keys description` for one action, "Unbound" for an empty binding.
 [[nodiscard]] std::string key_hint(

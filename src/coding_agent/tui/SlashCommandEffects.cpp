@@ -1,47 +1,16 @@
 #include "SlashCommandEffects.hpp"
 
 #include "coding_agent/AgentSession.hpp"
+#include "coding_agent/tui/KeybindingsManager.hpp"
 
 #include <cch/tui/Keybindings.hpp>
 
 #include <format>
-#include <span>
 #include <string>
 #include <string_view>
 
 namespace cch::coding_agent::tui {
-namespace {
-
-// pi `handleHotkeysCommand` rows that combine several actions on one table
-// line; the formatter joins their effective keys with `/`.
-constexpr std::string_view kCursorMoveIds[] = {
-        "tui.editor.cursorUp", "tui.editor.cursorDown", "tui.editor.cursorLeft", "tui.editor.cursorRight"};
-constexpr std::string_view kWordMoveIds[] = {"tui.editor.cursorWordLeft", "tui.editor.cursorWordRight"};
-constexpr std::string_view kPageIds[] = {"tui.editor.pageUp", "tui.editor.pageDown"};
-constexpr std::string_view kModelCycleIds[] = {"app.model.cycleForward", "app.model.cycleBackward"};
-
-// pi `formatKeys` empty case plus the pike `key_hint` convention: an absent
-// or unbound action renders as `Unbound` rather than an empty span.
-[[nodiscard]] std::string display_keys(const cch::tui::KeybindingRegistry& registry, std::string_view id) {
-    const auto text = registry.key_text(id);
-    return text.empty() ? "Unbound" : text;
-}
-
-// One combined row: the effective keys of each action joined with `/`, or
-// `Unbound` when none of the actions is bound.
-[[nodiscard]] std::string display_keys_many(
-        const cch::tui::KeybindingRegistry& registry, std::span<const std::string_view> ids) {
-    std::string text;
-    for (const auto id : ids) {
-        const auto keys = registry.key_text(id);
-        if (keys.empty()) continue;
-        if (!text.empty()) text.push_back('/');
-        text += keys;
-    }
-    return text.empty() ? "Unbound" : text;
-}
-
-} // namespace
+namespace {} // namespace
 
 std::string format_session_info(const coding_agent::AgentSession& session) {
     // pi `handleSessionCommand` shape: Name (when set), File, ID, the
@@ -76,47 +45,25 @@ std::string format_session_info(const coding_agent::AgentSession& session) {
 }
 
 std::string format_hotkeys_text(const cch::tui::KeybindingRegistry& registry) {
-    // pi `handleHotkeysCommand` sections and row meanings; keys are the
-    // effective registry values so user overrides show up verbatim.
+    // Section and row metadata travel with the resolved definitions. The only
+    // literals here are the three documented section names and the three
+    // non-key command rows; every keybinding row is projected from the same
+    // immutable registry used by dispatch and hints.
+    const auto rows = hotkey_help_rows(registry);
     std::string text = "Keyboard Shortcuts\n";
-    text += "\nNavigation\n";
-    text += std::format("{}  Move cursor / browse history\n", display_keys_many(registry, kCursorMoveIds));
-    text += std::format("{}  Move by word\n", display_keys_many(registry, kWordMoveIds));
-    text += std::format("{}  Start of line\n", display_keys(registry, "tui.editor.cursorLineStart"));
-    text += std::format("{}  End of line\n", display_keys(registry, "tui.editor.cursorLineEnd"));
-    text += std::format("{}  Jump forward to character\n", display_keys(registry, "tui.editor.jumpForward"));
-    text += std::format("{}  Jump backward to character\n", display_keys(registry, "tui.editor.jumpBackward"));
-    text += std::format("{}  Scroll by page\n", display_keys_many(registry, kPageIds));
-    text += "\nEditing\n";
-    text += std::format("{}  Send message\n", display_keys(registry, "tui.input.submit"));
-    text += std::format("{}  New line\n", display_keys(registry, "tui.input.newLine"));
-    text += std::format("{}  Delete word backwards\n", display_keys(registry, "tui.editor.deleteWordBackward"));
-    text += std::format("{}  Delete word forwards\n", display_keys(registry, "tui.editor.deleteWordForward"));
-    text += std::format("{}  Delete to start of line\n", display_keys(registry, "tui.editor.deleteToLineStart"));
-    text += std::format("{}  Delete to end of line\n", display_keys(registry, "tui.editor.deleteToLineEnd"));
-    text += std::format("{}  Paste the most-recently-deleted text\n", display_keys(registry, "tui.editor.yank"));
-    text += std::format(
-            "{}  Cycle through the deleted text after pasting\n", display_keys(registry, "tui.editor.yankPop"));
-    text += std::format("{}  Undo\n", display_keys(registry, "tui.editor.undo"));
-    text += "\nOther\n";
-    text += std::format("{}  Path completion / accept autocomplete\n", display_keys(registry, "tui.input.tab"));
-    text += std::format("{}  Cancel autocomplete / abort streaming\n", display_keys(registry, "app.interrupt"));
-    text += std::format("{}  Clear editor (first) / exit (second)\n", display_keys(registry, "app.clear"));
-    text += std::format("{}  Exit (when editor is empty)\n", display_keys(registry, "app.exit"));
-    text += std::format("{}  Suspend to background\n", display_keys(registry, "app.suspend"));
-    text += std::format("{}  Cycle thinking level\n", display_keys(registry, "app.thinking.cycle"));
-    text += std::format("{}  Cycle models\n", display_keys_many(registry, kModelCycleIds));
-    text += std::format("{}  Open model selector\n", display_keys(registry, "app.model.select"));
-    text += std::format("{}  Toggle tool output expansion\n", display_keys(registry, "app.tools.expand"));
-    text += std::format("{}  Toggle thinking block visibility\n", display_keys(registry, "app.thinking.toggle"));
-    text += std::format("{}  Edit message in external editor\n", display_keys(registry, "app.editor.external"));
-    text += std::format("{}  Copy selection or last assistant message\n", display_keys(registry, "app.message.copy"));
-    text += std::format("{}  Queue follow-up message\n", display_keys(registry, "app.message.followUp"));
-    text += std::format("{}  Restore queued messages\n", display_keys(registry, "app.message.dequeue"));
-    text += std::format("{}  Paste image or text from clipboard\n", display_keys(registry, "app.clipboard.pasteImage"));
-    text += "/  Slash commands\n";
-    text += "!  Run bash command\n";
-    text += "!!  Run bash command (excluded from context)\n";
+    constexpr std::string_view kSections[] = {"Navigation", "Editing", "Other"};
+    for (const auto section : kSections) {
+        text += "\n" + std::string{section} + "\n";
+        for (const auto& row : rows) {
+            if (row.section != section) continue;
+            text += std::format("{}  {}\n", row.keys, row.description);
+        }
+        if (section == "Other") {
+            text += "/  Slash commands\n";
+            text += "!  Run bash command\n";
+            text += "!!  Run bash command (excluded from context)\n";
+        }
+    }
     return text;
 }
 
