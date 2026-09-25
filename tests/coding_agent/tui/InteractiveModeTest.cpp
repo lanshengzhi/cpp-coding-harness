@@ -3828,7 +3828,7 @@ TEST_CASE("Native TUI /reload re-catalogs keybindings.json into the shared slot"
 }
 
 TEST_CASE("Native TUI settings opens only supported overlays and hotkeys renders inline",
-        "[coding_agent][tui][overlays][issue60][spec]") {
+        "[coding_agent][tui][overlays][issue60][issue796][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;

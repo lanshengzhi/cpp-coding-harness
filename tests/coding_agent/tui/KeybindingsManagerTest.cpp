@@ -357,6 +357,12 @@ TEST_CASE("/hotkeys renders only the assembled subset from the resolved registry
     });
     REQUIRE(session_new != entries.end());
     CHECK(session_new->keys == "Unbound");
+    const auto help_text = coding_agent::tui::format_hotkeys_text(*manager->help);
+    CHECK(help_text.find("Unbound  Start a new session") != std::string::npos);
+    CHECK(help_text.find("Unbound  Open session tree") != std::string::npos);
+    CHECK(help_text.find("Unbound  Fork current session") != std::string::npos);
+    CHECK(help_text.find("Unbound  Resume a session") != std::string::npos);
+    CHECK(help_text.find("Open model selector") == std::string::npos);
 
     // The assembled main-editor action renders like dispatch observes it.
     const auto interrupt = std::find_if(entries.begin(), entries.end(), [](const auto& entry) {

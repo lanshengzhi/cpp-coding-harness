@@ -42,7 +42,8 @@ inline constexpr std::string_view kHelpCommandText =
 /// pi `handleHotkeysCommand`: the Keyboard Shortcuts chat block over the
 /// effective registry. Navigation/Editing/Other rows come from registry
 /// metadata; the `/`, `!`, `!!` command rows are the documented literals.
-/// Unassembled or unbound actions render as `Unbound` like `key_hint`.
+/// Assembled-but-unbound actions render as `Unbound`; known-but-unassembled
+/// actions are diagnosed and omitted.
 [[nodiscard]] std::string format_hotkeys_text(const cch::tui::KeybindingRegistry& registry);
 
 [[nodiscard]] std::string format_hotkeys_text(std::span<const HotkeyHelpRow> rows);

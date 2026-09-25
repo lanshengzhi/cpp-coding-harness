@@ -48,8 +48,7 @@ struct FooterFixture {
 
 TEST_CASE("Header hints render unbound paired keys explicitly", "[coding_agent][tui][keybindings][issue796][spec]") {
     tests::TempWorkspace config;
-    config.write("keybindings.json",
-            R"({"app.clear":[],"app.exit":[],"app.model.cycleForward":[],"app.model.cycleBackward":[]})");
+    config.write("keybindings.json", R"({"app.clear":[],"app.exit":[],"app.model.cycleForward":[]})");
     constexpr std::array<std::string_view, 4> kAssembled{
             "app.clear", "app.exit", "app.model.cycleForward", "app.model.cycleBackward"};
     const auto definitions = coding_agent::tui::app_keybinding_definitions(kAssembled);
@@ -70,7 +69,7 @@ TEST_CASE("Header hints render unbound paired keys explicitly", "[coding_agent][
     for (const auto& line : rendered->lines)
         text += tui::strip_terminal_sequences(line);
     CHECK(text.find("Unbound twice to exit") != std::string::npos);
-    CHECK(text.find("Unbound/Unbound to cycle models") != std::string::npos);
+    CHECK(text.find("Unbound/shift+ctrl+p to cycle models") != std::string::npos);
 }
 
 TEST_CASE("Footer formatTokens matches pi's compact formatting", "[coding_agent][tui][footer][issue411][spec]") {

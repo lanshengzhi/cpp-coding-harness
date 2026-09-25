@@ -184,10 +184,38 @@ struct ApplicationTemplate {
                     "clipboard-paste",
                     "Paste image or text from clipboard",
                     15),
-            make_application_template("app.session.new", {}, "Start a new session", "Sessions"),
-            make_application_template("app.session.tree", {}, "Open session tree", "Sessions"),
-            make_application_template("app.session.fork", {}, "Fork current session", "Sessions"),
-            make_application_template("app.session.resume", {}, "Resume a session", "Sessions"),
+            make_application_template("app.session.new",
+                    {},
+                    "Start a new session",
+                    "Sessions",
+                    "Other",
+                    "session-new",
+                    "Start a new session",
+                    16),
+            make_application_template("app.session.tree",
+                    {},
+                    "Open session tree",
+                    "Sessions",
+                    "Other",
+                    "session-tree",
+                    "Open session tree",
+                    17),
+            make_application_template("app.session.fork",
+                    {},
+                    "Fork current session",
+                    "Sessions",
+                    "Other",
+                    "session-fork",
+                    "Fork current session",
+                    18),
+            make_application_template("app.session.resume",
+                    {},
+                    "Resume a session",
+                    "Sessions",
+                    "Other",
+                    "session-resume",
+                    "Resume a session",
+                    19),
             make_application_template(
                     "app.tree.foldOrUp", {"ctrl+left", "alt+left"}, "Fold tree branch or move up", "Tree navigation"),
             make_application_template("app.tree.unfoldOrDown",
@@ -463,6 +491,7 @@ std::vector<HotkeyHelpRow> hotkey_help_rows(const cch::tui::KeybindingRegistry& 
                              std::string_view description,
                              std::size_t order) {
         if (section.empty()) return;
+        const auto keys = registry.key_text(action_id);
         const auto existing = std::find_if(rows.begin(), rows.end(), [section, group](const auto& row) {
             return row.section == section && row.group == group;
         });
@@ -470,23 +499,18 @@ std::vector<HotkeyHelpRow> hotkey_help_rows(const cch::tui::KeybindingRegistry& 
             rows.push_back({
                     .section = std::string(section),
                     .group = std::string(group),
-                    .keys = registry.key_text(action_id),
+                    .keys = keys.empty() ? "Unbound" : keys,
                     .description = std::string(description),
                     .order = order,
             });
             return;
         }
-        const auto keys = registry.key_text(action_id);
-        if (keys.empty() || (!existing->keys.empty() && existing->keys == "Unbound")) return;
         if (!existing->keys.empty()) existing->keys.push_back('/');
-        existing->keys += keys;
+        existing->keys += keys.empty() ? "Unbound" : keys;
     };
 
     for (const auto& entry : registry.entries()) {
         add(entry.id, entry.help_section, entry.help_group, entry.help_description, entry.help_order);
-    }
-    for (auto& row : rows) {
-        if (row.keys.empty()) row.keys = "Unbound";
     }
     const auto section_rank = [](std::string_view section) {
         if (section == "Navigation") return 0;
