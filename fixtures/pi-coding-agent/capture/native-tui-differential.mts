@@ -34,18 +34,39 @@ const reportPath = path.join(differentialDir, "report.json");
 const frozenCommit = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe";
 const packageName = "@earendil-works/pi-coding-agent";
 const packageVersion = "0.87.1";
+const semanticThemeRoles = Object.freeze([
+	"text",
+	"muted",
+	"border",
+	"accent",
+	"success",
+	"warning",
+	"error",
+	"selectedBg",
+]);
 const profile = Object.freeze({
 	home: "/home/tester",
 	userProfile: "/home/tester",
-	agentDirectory: "/tmp/cpp-harness-pike-differential-<scenario>",
+	xdgConfigHome: "/tmp/cpp-harness-pike-differential-<scenario>/xdg/config",
+	agentDirectory: "/tmp/cpp-harness-pike-differential-<scenario>/xdg/config/pike/agent",
 	workspace: "<deterministic-workspace>",
+	projectResourceDirectory: "<deterministic-workspace>/.pi",
+	userAgentsDirectory: "/home/tester/.agents",
 	viewportRows: 24,
-	settings: { theme: "dark" },
+	settings: { theme: "dark", scope: "in-memory" },
+	theme: { name: "dark", source: "built-in", colorCapability: "truecolor" },
+	locale: { LANG: "C.UTF-8", LC_ALL: "C.UTF-8" },
 	terminalVariables: {
 		TERM: "xterm-256color",
 		COLORTERM: "truecolor",
 		COLORFGBG: "15;0",
 		NO_COLOR: undefined,
+	},
+	configuration: {
+		credentials: "in-memory faux provider",
+		extensions: "disabled",
+		userSettings: "in-memory dark theme",
+		projectResources: "empty deterministic .pi directory",
 	},
 	provider: "deterministic-faux",
 });
@@ -100,7 +121,6 @@ function childEnvironment(extra: Record<string, string>): NodeJS.ProcessEnv {
 		...environment,
 		HOME: profile.home,
 		USERPROFILE: profile.userProfile,
-		PI_AGENT_DIR: profile.agentDirectory,
 		PI_OFFLINE: "1",
 		PI_SKIP_VERSION_CHECK: "1",
 		TERM: profile.terminalVariables.TERM,
@@ -183,18 +203,35 @@ function hex(value: string): string {
 	return Buffer.from(value, "utf8").toString("hex");
 }
 
+function scenarioPaths(scenario: Scenario): { xdgConfigHome: string; agentDirectory: string } {
+	const root = `/tmp/cpp-harness-pike-differential-${process.pid}-${scenario.id}`;
+	return {
+		xdgConfigHome: `${root}/xdg/config`,
+		agentDirectory: `${root}/xdg/config/pike/agent`,
+	};
+}
+
 function scenarioEnvironment(scenario: Scenario, output: string): Record<string, string> {
+	const paths = scenarioPaths(scenario);
 	return {
 		CCH_DIFFERENTIAL_SCENARIO: scenario.id,
 		CCH_DIFFERENTIAL_WIDTH: String(scenario.width),
 		CCH_DIFFERENTIAL_INPUTS: scenario.inputs.map((input) => hex(input) || "-").join("|"),
 		CCH_DIFFERENTIAL_OUTPUT: output,
-		PI_AGENT_DIR: `/tmp/cpp-harness-pike-differential-${scenario.id}`,
+		CCH_DIFFERENTIAL_AGENT_DIRECTORY: paths.agentDirectory,
+		XDG_CONFIG_HOME: paths.xdgConfigHome,
+		PI_CODING_AGENT_DIR: paths.agentDirectory,
 		...(scenario.resize === undefined ? {} : { CCH_DIFFERENTIAL_RESIZE: scenario.resize }),
 	};
 }
 
+function resetScenarioRoot(scenario: Scenario): void {
+	const paths = scenarioPaths(scenario);
+	rmSync(path.dirname(paths.xdgConfigHome), { recursive: true, force: true });
+}
+
 function runPike(scenario: Scenario, output: string): Record<string, unknown> {
+	resetScenarioRoot(scenario);
 	const binary = process.env.CCH_DIFFERENTIAL_BINARY ?? path.join(repositoryRootFromEnvironment(), "build/cch_tests_coding_agent_interactive");
 	if (!existsSync(binary)) throw new Error(`Pike differential test binary not found at ${binary}`);
 	const pikeEnvironment = scenarioEnvironment(scenario, output);
@@ -214,6 +251,7 @@ function runPike(scenario: Scenario, output: string): Record<string, unknown> {
 }
 
 async function runPi(scenario: Scenario, output: string): Promise<Record<string, unknown>> {
+	resetScenarioRoot(scenario);
 	const checkout = frozenCheckoutOrSkip();
 	const tsx = path.join(checkout, "node_modules/.bin/tsx");
 	const result = execFileSync(tsx, ["--tsconfig", captureTsconfig(checkout), scriptPath, "--runtime", "pi"], {
@@ -306,6 +344,81 @@ function sgrTokens(ansi: string): string[] {
 	return [...ansi.matchAll(/\x1b\[[0-9;:]*m/g)].map((match) => match[0]);
 }
 
+type ThemeEvidence = {
+	name: string;
+	colorCapability: string;
+	colors: Record<string, string>;
+};
+
+function normalizeThemeEvidence(value: unknown, label: string): ThemeEvidence {
+	if (typeof value !== "object" || value === null) throw new Error(`${label} theme evidence must be an object`);
+	const theme = value as Record<string, unknown>;
+	if (theme.name !== profile.theme.name || theme.colorCapability !== profile.theme.colorCapability) {
+		throw new Error(`${label} theme evidence does not use the canonical dark truecolor profile`);
+	}
+	if (typeof theme.colors !== "object" || theme.colors === null) throw new Error(`${label} theme colors must be an object`);
+	const colors: Record<string, string> = {};
+	for (const [role, color] of Object.entries(theme.colors as Record<string, unknown>)) {
+		if (typeof color !== "string" || !/^#[0-9a-f]{6}$/i.test(color)) {
+			throw new Error(`${label} theme role ${role} must be canonical RGB evidence`);
+		}
+		colors[role] = color.toLowerCase();
+	}
+	for (const role of semanticThemeRoles) {
+		if (colors[role] === undefined) throw new Error(`${label} theme is missing semantic role ${role}`);
+	}
+	return { name: theme.name as string, colorCapability: theme.colorCapability as string, colors };
+}
+
+function themeRoleComparison(pike: ThemeEvidence, pi: ThemeEvidence): Record<string, unknown> {
+	const roles = semanticThemeRoles.map((role) => ({
+		role,
+		pike: pike.colors[role],
+		pi: pi.colors[role],
+		classification: pike.colors[role] === pi.colors[role] ? "match" : "supported-capability-regression",
+	}));
+	const supportedCapabilityMismatches = roles.filter((role) => role.classification !== "match");
+	const deferredFallbacks: Record<string, string> = {
+		scrollbarThumb: "selectedBg",
+		scrollbarTrack: "muted",
+		searchMatchBg: "selectedBg",
+		searchMatchText: "text",
+	};
+	const deferredTokenPolicy = Object.entries(deferredFallbacks).map(([role, fallback]) => {
+		const pikeColor = pike.colors[role] ?? pike.colors[fallback];
+		const piColor = pi.colors[role];
+		return {
+			role,
+			pike: pikeColor,
+			pi: piColor,
+			fallback,
+			classification: pikeColor === piColor ? "aligned-in-canonical-profile" : "deferred-capability-difference",
+			rationale: "the corresponding pi surface is Deferred and is not promoted by this evidence profile",
+		};
+	});
+	return {
+		canonicalTheme: { name: profile.theme.name, source: profile.theme.source, colorCapability: profile.theme.colorCapability },
+		roles,
+		classification: supportedCapabilityMismatches.length === 0 ? "match" : "supported-capability-regression",
+		supportedCapabilityMismatches,
+		intentionalDivergences: [],
+		deferredTokenPolicy,
+		deferredDifferences: deferredTokenPolicy.filter((token) => token.classification === "deferred-capability-difference"),
+	};
+}
+
+function verifyThemeParityPolicy(): void {
+	const colors = Object.fromEntries(semanticThemeRoles.map((role) => [role, "#123456"]));
+	const pike = { name: "dark", colorCapability: "truecolor", colors };
+	const pi = { name: "dark", colorCapability: "truecolor", colors: { ...colors } };
+	const matching = themeRoleComparison(pike, pi);
+	assert.equal(matching.classification, "match");
+	assert.equal((matching.supportedCapabilityMismatches as unknown[]).length, 0);
+	const mismatched = themeRoleComparison(pike, { ...pi, colors: { ...colors, accent: "#654321" } });
+	assert.equal(mismatched.classification, "supported-capability-regression");
+	assert.equal((mismatched.supportedCapabilityMismatches as Record<string, unknown>[])[0]?.role, "accent");
+}
+
 function normalizeCapture(capture: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
 	const workspace = typeof capture.workspace === "string" ? capture.workspace : "/tmp/cpp-harness-pike-differential";
 	const snapshots = Array.isArray(capture.snapshots) ? capture.snapshots : [];
@@ -314,13 +427,15 @@ function normalizeCapture(capture: Record<string, unknown>, scenario: Scenario, 
 		scenario: capture.scenario,
 		width: capture.width,
 		inputs: capture.inputs,
+		theme: normalizeThemeEvidence(capture.theme, `${String(capture.runtime)}/${scenario.id}`),
 		snapshots: snapshots.map((item) => {
 			const snapshot = item as Record<string, unknown>;
 			const ansi = typeof snapshot.ansi === "string" ? replaceFixturePaths(snapshot.ansi, workspace, repositoryRoot, scenario) : "";
+			const visible = Array.isArray(snapshot.visible)
+				? snapshot.visible.map((line) => normalizeCellText(String(line), workspace, repositoryRoot, scenario))
+				: [];
 			return {
-				visible: Array.isArray(snapshot.visible)
-					? snapshot.visible.map((line) => normalizeCellText(String(line), workspace, repositoryRoot, scenario))
-					: [],
+				visible,
 				scrollback: Array.isArray(snapshot.scrollback)
 					? snapshot.scrollback.map((line) => normalizeCellText(String(line), workspace, repositoryRoot, scenario))
 					: [],
@@ -447,6 +562,7 @@ function reportMetadata(report: Record<string, unknown>): Record<string, unknown
 		baseline: report.baseline,
 		profile: report.profile,
 		structuralProjection: report.structuralProjection,
+		themeParity: report.themeParity,
 	};
 }
 
@@ -468,6 +584,7 @@ function validateReportCaptures(report: Record<string, unknown>): void {
 			if (capture.runtime !== runtime || capture.scenario !== item.id || capture.width !== item.width || JSON.stringify(capture.inputs) !== JSON.stringify(item.inputs)) {
 				throw new Error(`differential report has mismatched ${runtime} capture identity for ${String(item.id)}`);
 			}
+			normalizeThemeEvidence(capture.theme, `checked-in ${runtime}/${String(item.id)}`);
 			for (const snapshot of capture.snapshots as Record<string, unknown>[]) {
 				requireStringArray(snapshot.visible, `differential report visible cells for ${runtime}/${String(item.id)}`);
 				requireStringArray(snapshot.scrollback, `differential report scrollback for ${runtime}/${String(item.id)}`);
@@ -478,6 +595,27 @@ function validateReportCaptures(report: Record<string, unknown>): void {
 				}
 			}
 		}
+	}
+}
+
+function validateThemeParity(report: Record<string, unknown>): void {
+	const parity = report.themeParity as Record<string, unknown> | undefined;
+	if (!parity || parity.classification !== "match") {
+		throw new Error("canonical Native TUI theme parity is not a match");
+	}
+	if (!Array.isArray(parity.roles) || parity.roles.length !== semanticThemeRoles.length) {
+		throw new Error("canonical theme parity must record every semantic role");
+	}
+	for (const role of parity.roles as Record<string, unknown>[]) {
+		if (!semanticThemeRoles.includes(String(role.role)) || role.classification !== "match") {
+			throw new Error(`canonical theme role ${String(role.role)} is not a match`);
+		}
+	}
+	if (!Array.isArray(parity.supportedCapabilityMismatches) || parity.supportedCapabilityMismatches.length !== 0) {
+		throw new Error("canonical theme parity has an unclassified Supported Capability mismatch");
+	}
+	if (!Array.isArray(parity.deferredTokenPolicy) || parity.deferredTokenPolicy.length === 0) {
+		throw new Error("canonical theme parity must record deferred token policy");
 	}
 }
 
@@ -502,7 +640,7 @@ async function runParent(): Promise<number> {
 	rmSync(temporaryDirectory, { recursive: true, force: true });
 	mkdirSync(temporaryDirectory, { recursive: true });
 	const report: Record<string, unknown> = {
-		schema: 1,
+		schema: 2,
 		baseline: {
 			piCommit: frozenCommit,
 			artifact: `${packageName}@${packageVersion}`,
@@ -510,7 +648,8 @@ async function runParent(): Promise<number> {
 		profile,
 		structuralProjection: {
 			cellText: "trimmed visible cells with fixture paths, model ids, and model prose projected",
-			ansi: "full ANSI capture retained; ordered SGR tokens with 256-color normalization are the compared style projection",
+			ansi: "full canonical RGB ANSI capture retained; ordered SGR tokens are the compared style projection",
+			screenshot: "themeParity.renderedScreenshots retains the rendered terminal cell rows as text screenshots",
 			scrollback: "scrollback cell rows are compared separately from the visible viewport",
 		},
 		scenarios: [] as Record<string, unknown>[],
@@ -542,6 +681,26 @@ async function runParent(): Promise<number> {
 		rmSync(temporaryDirectory, { recursive: true, force: true });
 		void checkout;
 	}
+	const firstScenario = (report.scenarios as Record<string, unknown>[])[0];
+	const firstCaptures = firstScenario.captures as Record<string, Record<string, unknown>>;
+	const themeParity = themeRoleComparison(
+		normalizeThemeEvidence(firstCaptures.pike.theme, "Pike"),
+		normalizeThemeEvidence(firstCaptures.pi.theme, "pi"),
+	);
+	themeParity.renderedScreenshots = (report.scenarios as Record<string, unknown>[])
+		.filter((item) => typeof item.id === "string" && item.id.startsWith("boot-"))
+		.map((item) => {
+			const captures = item.captures as Record<string, Record<string, unknown>>;
+			const pikeSnapshots = captures.pike.snapshots as Record<string, unknown>[];
+			const piSnapshots = captures.pi.snapshots as Record<string, unknown>[];
+			return {
+				id: item.id,
+				width: item.width,
+				pike: pikeSnapshots[pikeSnapshots.length - 1]?.visible,
+				pi: piSnapshots[piSnapshots.length - 1]?.visible,
+			};
+		});
+	report.themeParity = themeParity;
 	if (process.argv.includes("--write")) {
 		mkdirSync(differentialDir, { recursive: true });
 		writeJson(reportPath, report, true);
@@ -555,6 +714,8 @@ async function runParent(): Promise<number> {
 	}
 	validateReportCaptures(report);
 	validateReportCaptures(expected);
+	validateThemeParity(report);
+	validateThemeParity(expected);
 	validateStableDigests(expected, repositoryRoot);
 	const actualStable = (report.scenarios as Record<string, unknown>[]).map((item) => ({
 		id: item.id,
@@ -593,6 +754,7 @@ async function runPiChild(): Promise<number> {
 	const { fauxAssistantMessage, fauxText, fauxToolCall } = await import(source("packages/ai/src/providers/faux.ts"));
 	const { AgentSessionRuntime } = await import(source("packages/coding-agent/src/core/agent-session-runtime.ts"));
 	const { InteractiveMode } = await import(source("packages/coding-agent/src/modes/interactive/interactive-mode.ts"));
+	const { getResolvedThemeColors } = await import(source("packages/coding-agent/src/modes/interactive/theme/theme.ts"));
 	const { VirtualTerminal } = await import(source("packages/tui/test/virtual-terminal.ts"));
 
 	const harness = await createHarness({
@@ -626,9 +788,12 @@ async function runPiChild(): Promise<number> {
 	}
 
 	const terminal = new RecordingTerminal(scenario.width, profile.viewportRows);
+	const agentDirectory = process.env.PI_CODING_AGENT_DIR ?? `/tmp/cpp-harness-pike-differential-${scenario.id}`;
+	mkdirSync(agentDirectory, { recursive: true });
+	mkdirSync(path.join(harness.tempDir, ".pi"), { recursive: true });
 	const services = {
 		cwd: harness.tempDir,
-		agentDir: `/tmp/cpp-harness-pike-differential-${scenario.id}`,
+		agentDir: agentDirectory,
 		modelRuntime: harness.session.modelRuntime,
 		settingsManager: harness.settingsManager,
 		resourceLoader: harness.session.resourceLoader,
@@ -691,6 +856,11 @@ async function runPiChild(): Promise<number> {
 		width: scenario.width,
 		workspace: harness.tempDir,
 		inputs: scenario.inputs,
+		theme: {
+			name: profile.theme.name,
+			colorCapability: profile.theme.colorCapability,
+			colors: getResolvedThemeColors(),
+		},
 		snapshots,
 	};
 	writeJson(output, report);
@@ -769,6 +939,7 @@ async function main(): Promise<number> {
 		if (process.argv.includes("--live")) return runLiveManual();
 		verifySgrNormalization();
 		verifyProjectionPolicy();
+		verifyThemeParityPolicy();
 		return await runParent();
 	} catch (error) {
 		if (error instanceof SkipError) {

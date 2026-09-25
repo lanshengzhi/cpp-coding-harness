@@ -203,22 +203,35 @@ read it).
 
 ## Dual-runtime Native TUI differential (`differential/`)
 
-Issue [#800](https://github.com/lanshengzhi/cpp-coding-harness/issues/800) adds a deterministic
-comparison seam beside the existing C++-side goldens. `capture/native-tui-differential.mts` runs
+Issue [#797](https://github.com/lanshengzhi/cpp-coding-harness/issues/797) adds canonical theme
+parity evidence to the deterministic comparison seam introduced by
+[#800](https://github.com/lanshengzhi/cpp-coding-harness/issues/800), beside the existing C++-side
+goldens. `capture/native-tui-differential.mts` runs
 Pike's Native TUI VirtualTerminal and pi v0.87.1's Native TUI VirtualTerminal through the same
 scenario records and input byte sequences. The checked-in `differential/report.json` retains
 visible cell rows, scrollback rows, raw ANSI output, and the SGR-token projection for both
 runtimes. It is not an opaque whole-session screenshot: each scenario and transition remains
 addressable as structured rows.
 
-The profile pins `HOME`/`USERPROFILE` to `/home/tester`, each scenario's agent directory to
-a synthetic scenario-specific path, the viewport to 24 rows, terminal capabilities to
-`xterm-256color` + truecolor, and the provider
-to deterministic faux responses. Fixture paths and model prose are projected before comparison;
-credentials, real home paths, wall-clock values, and machine identifiers never enter the report.
-Formal boot fixtures are checked in at 72, 100, and 120 columns, with 41 columns as the narrow
-robustness fixture. The remaining scenarios cover model/settings/thinking selectors, long/CJK/
-unbreakable editor input, user/tool/status transitions, resize, and scrollback growth.
+The profile pins `HOME`/`USERPROFILE` to `/home/tester`, `XDG_CONFIG_HOME` and the
+Agent Config Directory to a synthetic scenario-specific XDG tree, the project `.pi` and user
+`.agents` resource roots to deterministic locations, the viewport to 24 rows, locale to
+`C.UTF-8`, terminal capabilities to `xterm-256color` + truecolor, and the provider to
+deterministic faux responses. Pike and pi use the built-in `dark` theme with in-memory user
+settings; extensions, credentials, custom themes, and machine-specific configuration are excluded.
+Fixture paths and model prose are projected before comparison; credentials, real home paths,
+wall-clock values, and machine identifiers never enter the report.
+
+The report's `themeParity` section compares the canonical semantic roles `text`, `muted`,
+`border`, `accent`, `success`, `warning`, `error`, and `selectedBg` as RGB evidence. A raw RGB
+value is evidence only within this canonical theme profile, never a cross-theme identity rule.
+The report also records the deferred scrollbar/search-match token policy separately; it does
+not promote Deferred theme-loader or scrollbar capabilities into the Pike contract. Formal boot
+fixtures are checked in at 72, 100, and 120 columns, with 41 columns as the narrow robustness
+fixture. The `themeParity.renderedScreenshots` rows are the rendered terminal-cell screenshots
+for those widths, while each scenario retains its raw ANSI and ordered SGR capture. The remaining
+scenarios cover model/settings/thinking selectors, long/CJK/unbreakable editor input, user/tool/
+status transitions, resize, and scrollback growth.
 
 Regenerate the report after reviewing the raw diffs:
 
@@ -236,7 +249,9 @@ optional frozen pi checkout is an explicit skip; a checkout at the wrong commit 
 
 A row is `match` when all three structural projections agree. A row whose remaining delta is
 confined to a documented omission is reported as `intentional-subset-omission`; this is reserved for pi surfaces outside the
-Supported Capability subset, never for a difference in a claimed Native TUI capability. Every
+Supported Capability subset, never for a difference in a claimed Native TUI capability. The
+separate `themeParity.classification` is the token-level authority for this issue: it must be
+`match`, and an unclassified Supported Capability token mismatch fails verification. Every
 other difference is reported as `supported-capability-regression`, so the checked-in report
 makes stale Supported Capability rows visible and prevents a new drift from being silently
 absorbed. The report's omissions and classifications are review evidence, not a waiver for a

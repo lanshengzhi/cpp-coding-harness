@@ -10,6 +10,7 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ExpectedMacros.hpp"
@@ -20,6 +21,7 @@
 #include "support/Json.hpp"
 
 #include <cch/ai/Content.hpp>
+#include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/support/JsonValue.hpp>
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
@@ -34,10 +36,12 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <format>
 #include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 #include <unistd.h>
 
@@ -102,11 +106,42 @@ namespace {
     return support::JsonValue{std::move(values)};
 }
 
+void require_directory(const std::filesystem::path& path) {
+    std::error_code error;
+    std::filesystem::create_directories(path, error);
+    REQUIRE(!error);
+}
+
+std::string theme_color_hex(const coding_agent::tui::ResolvedThemeColor& color) {
+    const auto* rgb = std::get_if<coding_agent::tui::RgbThemeColor>(&color);
+    if (rgb == nullptr) std::terminate();
+    return std::format("#{:02x}{:02x}{:02x}",
+            static_cast<unsigned>(rgb->red),
+            static_cast<unsigned>(rgb->green),
+            static_cast<unsigned>(rgb->blue));
+}
+
+[[nodiscard]] support::JsonValue theme_evidence(tui::TerminalColorCapability capability) {
+    const auto theme = coding_agent::tui::builtin_dark_theme();
+    support::JsonValue::object_t colors;
+    for (const auto token : coding_agent::tui::all_theme_tokens())
+        colors.emplace(std::string{coding_agent::tui::theme_token_name(token)},
+                theme_color_hex(coding_agent::tui::color_for(theme, token)));
+    support::JsonValue::object_t root;
+    root.emplace("name", support::JsonValue{theme.name});
+    root.emplace("colorCapability",
+            support::JsonValue{
+                    std::string{capability == tui::TerminalColorCapability::TrueColor ? "truecolor" : "xterm256"}});
+    root.emplace("colors", support::JsonValue{std::move(colors)});
+    return support::JsonValue{std::move(root)};
+}
+
 void write_capture(const std::filesystem::path& path,
         std::string_view scenario,
         std::size_t width,
         const std::filesystem::path& workspace,
         const std::vector<std::string>& inputs,
+        tui::TerminalColorCapability capability,
         const std::vector<support::JsonValue>& snapshots) {
     support::JsonValue::object_t root;
     root.emplace("runtime", support::JsonValue{"pike"});
@@ -114,6 +149,7 @@ void write_capture(const std::filesystem::path& path,
     root.emplace("width", support::JsonValue{static_cast<double>(width)});
     root.emplace("workspace", support::JsonValue{workspace.string()});
     root.emplace("inputs", lines_json(inputs));
+    root.emplace("theme", theme_evidence(capability));
     root.emplace("snapshots", support::JsonValue{snapshots});
     const auto serialized = support::write_json(support::JsonValue{std::move(root)});
     REQUIRE(serialized.has_value());
@@ -208,13 +244,29 @@ void add_scripted_responses(tests::ScriptedRuntimeFixture& scripted, std::string
 } // namespace
 
 TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and ANSI",
-        "[coding_agent][tui][differential][issue800][spec]") {
+        "[coding_agent][tui][differential][issue797][issue800][spec]") {
     const auto scenario = environment_or_empty("CCH_DIFFERENTIAL_SCENARIO");
     if (scenario.empty()) SKIP("dual-runtime capture environment is not selected");
     const auto width = parse_size(environment_or_empty("CCH_DIFFERENTIAL_WIDTH"));
     const auto inputs = input_sequences();
     const auto output_path = environment_or_empty("CCH_DIFFERENTIAL_OUTPUT");
     const auto workspace = deterministic_workspace(scenario);
+    const std::filesystem::path configured_agent_directory{environment_or_empty("CCH_DIFFERENTIAL_AGENT_DIRECTORY")};
+    REQUIRE_FALSE(configured_agent_directory.empty());
+    tests::EnvVarGuard xdg_config_home{"XDG_CONFIG_HOME"};
+    xdg_config_home.set(configured_agent_directory.parent_path().parent_path().string());
+    const auto agent_config_directory = coding_agent::agent_config_dir();
+    REQUIRE(agent_config_directory == configured_agent_directory);
+    require_directory(workspace / ".pi");
+    require_directory(agent_config_directory / "skills");
+    require_directory(agent_config_directory / "prompts");
+    require_directory(agent_config_directory / "themes");
+    {
+        std::ofstream settings(agent_config_directory / "settings.json", std::ios::binary);
+        settings << R"({"theme":"dark"})";
+        settings.flush();
+        REQUIRE(settings.good());
+    }
     tests::EnvVarGuard home{"HOME"};
     home.set("/home/tester");
     tests::ScriptedRuntimeFixture scripted;
@@ -222,12 +274,20 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
     tests::RuntimeFixture runtime;
     auto session = make_session(runtime, scripted, workspace);
 
-    tui::VirtualTerminal terminal({.columns = width, .rows = 24});
+    tui::VirtualTerminal terminal({
+            .columns = width,
+            .rows = 24,
+            .capabilities =
+                    {
+                            .synchronized_output = true,
+                            .color = tui::TerminalColorCapability::TrueColor,
+                    },
+    });
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
                        .with_session(*session)
-                       .with_agent_config_directory(workspace)
+                       .with_agent_config_directory(agent_config_directory)
                        .build();
     boost::asio::co_spawn(io,
             coding_agent::tui::run_interactive_mode(terminal, std::move(run)),
@@ -289,7 +349,7 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
     }
 
     if (!output_path.empty()) {
-        write_capture(output_path, scenario, width, workspace, inputs, snapshots);
+        write_capture(output_path, scenario, width, workspace, inputs, terminal.capabilities().color, snapshots);
     }
 
     REQUIRE(terminal.inject_input("\x04"));
