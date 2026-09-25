@@ -407,6 +407,7 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     // narrow render still contains all three section headings rather than
     // dropping the earlier sections at the right edge.
     auto view = coding_agent::tui::make_hotkey_help_view(manager->registry);
+    REQUIRE(view);
     const auto wide_rendered = view->render(200);
     REQUIRE(wide_rendered);
     std::string wide_text;
@@ -449,6 +450,7 @@ TEST_CASE("/hotkeys chat block follows pi sections over the effective registry",
     const auto remapped_text = coding_agent::tui::format_hotkeys_text(*remapped_manager->registry);
     CHECK(remapped_text.find("f6  Exit (when editor is empty)") != std::string::npos);
     auto remapped_view = coding_agent::tui::make_hotkey_help_view(remapped_manager->registry);
+    REQUIRE(remapped_view);
     const auto remapped_rendered = remapped_view->render(200);
     REQUIRE(remapped_rendered);
     const auto remapped_component_text = std::accumulate(remapped_rendered->lines.begin(),

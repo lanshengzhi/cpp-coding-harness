@@ -3,7 +3,6 @@
 #include <cch/tui/Keys.hpp>
 #include <cch/support/Error.hpp>
 
-#include <cstddef>
 #include <memory>
 #include <optional>
 #include <span>
@@ -18,13 +17,6 @@ struct KeybindingDefinition {
     std::vector<std::string> default_keys{};
     std::string description{};
     std::string category{};
-    /// Optional `/hotkeys` presentation metadata. An empty section keeps an
-    /// assembled action out of the compact help view (for example selector-only
-    /// actions), while the registry remains the source of every rendered key.
-    std::string help_section{};
-    std::string help_group{};
-    std::string help_description{};
-    std::size_t help_order{0};
 };
 
 struct KeybindingOverride {
@@ -44,10 +36,6 @@ struct EffectiveKeybinding {
     std::vector<std::string> keys{};
     std::string description{};
     std::string category{};
-    std::string help_section{};
-    std::string help_group{};
-    std::string help_description{};
-    std::size_t help_order{0};
 };
 
 class KeybindingRegistry final {

@@ -55,12 +55,50 @@ struct ApplicationTemplate {
     };
 }
 
+struct HelpTemplate {
+    std::string_view id;
+    std::string_view section;
+    std::string_view group;
+    std::string_view description;
+    std::size_t order;
+};
+
+/// The one built-in help catalog. The registry remains the source of every
+/// key; this table supplies only the documented pi row metadata.
+[[nodiscard]] const std::vector<HelpTemplate>& builtin_help_templates() {
+    static const std::vector<HelpTemplate> kTemplates{
+            {"tui.editor.cursorUp", "Navigation", "cursor-move", "Move cursor / browse history", 1},
+            {"tui.editor.cursorDown", "Navigation", "cursor-move", "Move cursor / browse history", 1},
+            {"tui.editor.cursorLeft", "Navigation", "cursor-move", "Move cursor / browse history", 1},
+            {"tui.editor.cursorRight", "Navigation", "cursor-move", "Move cursor / browse history", 1},
+            {"tui.editor.cursorWordLeft", "Navigation", "word-move", "Move by word", 2},
+            {"tui.editor.cursorWordRight", "Navigation", "word-move", "Move by word", 2},
+            {"tui.editor.cursorLineStart", "Navigation", "line-start", "Start of line", 3},
+            {"tui.editor.cursorLineEnd", "Navigation", "line-end", "End of line", 4},
+            {"tui.editor.jumpForward", "Navigation", "jump-forward", "Jump forward to character", 5},
+            {"tui.editor.jumpBackward", "Navigation", "jump-backward", "Jump backward to character", 6},
+            {"tui.editor.pageUp", "Navigation", "page", "Scroll by page", 7},
+            {"tui.editor.pageDown", "Navigation", "page", "Scroll by page", 7},
+            {"tui.input.submit", "Editing", "submit", "Send message", 1},
+            {"tui.input.newLine", "Editing", "newline", "New line", 2},
+            {"tui.editor.deleteWordBackward", "Editing", "delete-word-backward", "Delete word backwards", 3},
+            {"tui.editor.deleteWordForward", "Editing", "delete-word-forward", "Delete word forwards", 4},
+            {"tui.editor.deleteToLineStart", "Editing", "delete-line-start", "Delete to start of line", 5},
+            {"tui.editor.deleteToLineEnd", "Editing", "delete-line-end", "Delete to end of line", 6},
+            {"tui.editor.yank", "Editing", "yank", "Paste the most-recently-deleted text", 7},
+            {"tui.editor.yankPop", "Editing", "yank-pop", "Cycle through the deleted text after pasting", 8},
+            {"tui.editor.undo", "Editing", "undo", "Undo", 9},
+            {"tui.input.tab", "Other", "tab", "Path completion / accept autocomplete", 1},
+    };
+    return kTemplates;
+}
+
 /// The app layer adopts pi's full 43-action `AppKeybindings` table
 /// (pi:packages/coding-agent/src/core/keybindings.ts; the #36 baseline at
 /// `83114817`, with v0.87.1's `app.thinking.save` added for the thinking
 /// selector's save-as-default action, #774). Descriptions and default keys
-/// are pi-verbatim; the help metadata is carried into the resolved registry
-/// and is the single source for the `/hotkeys` section and row projection.
+/// are pi-verbatim; help metadata is consumed by the single `/hotkeys` row
+/// projection below.
 [[nodiscard]] const std::vector<ApplicationTemplate>& application_templates() {
     static const std::vector<ApplicationTemplate> kTemplates{
             make_application_template("app.interrupt",
@@ -396,10 +434,6 @@ support::Expected<std::vector<cch::tui::KeybindingDefinition>> app_keybinding_de
                 .default_keys = source->keys,
                 .description = std::string(source->description),
                 .category = std::string(source->category),
-                .help_section = std::string(source->help_section),
-                .help_group = std::string(source->help_group),
-                .help_description = std::string(source->help_description),
-                .help_order = source->help_order,
         });
     }
     return definitions;
@@ -457,11 +491,11 @@ std::vector<HotkeyHelpEntry> hotkey_help_entries(
 
 std::vector<HotkeyHelpRow> hotkey_help_rows(const cch::tui::KeybindingRegistry& registry) {
     std::vector<HotkeyHelpRow> rows;
-    const auto add = [&rows, &registry](std::string_view section,
+    const auto add = [&rows, &registry](std::string_view action_id,
+                             std::string_view section,
                              std::string_view group,
                              std::string_view description,
-                             std::size_t order,
-                             std::string_view action_id) {
+                             std::size_t order) {
         if (section.empty()) return;
         const auto existing = std::find_if(rows.begin(), rows.end(), [section, group](const auto& row) {
             return row.section == section && row.group == group;
@@ -482,20 +516,19 @@ std::vector<HotkeyHelpRow> hotkey_help_rows(const cch::tui::KeybindingRegistry& 
         existing->keys += keys;
     };
 
-    for (const auto& entry : registry.entries()) {
-        add(entry.help_section, entry.help_group, entry.help_description, entry.help_order, entry.id);
+    for (const auto& definition : builtin_help_templates()) {
+        add(definition.id, definition.section, definition.group, definition.description, definition.order);
     }
     // Known application actions remain visible as Unbound when the host has
     // not assembled them. The metadata comes from the same canonical catalog
     // used to create assembled definitions; no active registry entry is
     // fabricated for these rows.
     for (const auto& definition : application_templates()) {
-        if (registry.find(definition.id) != nullptr) continue;
-        add(definition.help_section,
+        add(definition.id,
+                definition.help_section,
                 definition.help_group,
                 definition.help_description,
-                definition.help_order,
-                definition.id);
+                definition.help_order);
     }
     for (auto& row : rows) {
         if (row.keys.empty()) row.keys = "Unbound";
