@@ -57,6 +57,25 @@ namespace {
     return result;
 }
 
+[[nodiscard]] std::vector<tui::TerminalDimensions> parse_resize_sequence(std::string_view value) {
+    if (value.empty()) return {};
+    std::vector<tui::TerminalDimensions> result;
+    std::size_t start = 0;
+    while (start <= value.size()) {
+        const auto arrow = value.find("->", start);
+        const auto piece = value.substr(start, arrow == std::string_view::npos ? arrow : arrow - start);
+        const auto separator = piece.find('x');
+        if (separator == std::string_view::npos) std::abort();
+        result.push_back({
+                .columns = parse_size(piece.substr(0, separator)),
+                .rows = parse_size(piece.substr(separator + 1)),
+        });
+        if (arrow == std::string_view::npos) break;
+        start = arrow + 2;
+    }
+    return result;
+}
+
 [[nodiscard]] std::string environment_or_empty(const char* name) {
     const auto* value = std::getenv(name);
     return value == nullptr ? std::string{} : std::string{value};
@@ -304,13 +323,9 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
     snapshots.push_back(snapshot(terminal, 0));
     output_offset = output_size(terminal);
     const auto resize = environment_or_empty("CCH_DIFFERENTIAL_RESIZE");
-    if (!resize.empty()) {
-        const auto separator = resize.find('x');
-        REQUIRE(separator != std::string::npos);
-        const auto next_width = parse_size(resize.substr(0, separator));
-        const auto next_height = parse_size(resize.substr(separator + 1));
+    for (const auto dimensions : parse_resize_sequence(resize)) {
         const auto resize_offset = output_size(terminal);
-        REQUIRE(terminal.inject_resize({.columns = next_width, .rows = next_height}));
+        REQUIRE(terminal.inject_resize(dimensions));
         REQUIRE(tests::pump_until(io, [&] { return output_size(terminal) > resize_offset; }));
         drain_ready(io, std::chrono::milliseconds{20});
         snapshots.push_back(snapshot(terminal, output_offset));

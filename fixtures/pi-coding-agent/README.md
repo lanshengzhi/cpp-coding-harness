@@ -231,7 +231,8 @@ fixtures are checked in at 72, 100, and 120 columns, with 41 columns as the narr
 fixture. The `themeParity.renderedScreenshots` rows are the rendered terminal-cell screenshots
 for those widths, while each scenario retains its raw ANSI and ordered SGR capture. The remaining
 scenarios cover model/settings/thinking selectors, long/CJK/unbreakable editor input, user/tool/
-status transitions, resize, and scrollback growth.
+status transitions, resize cycles from each formal width to a narrower width and back, and
+scrollback growth.
 
 Regenerate the report after reviewing the raw diffs:
 

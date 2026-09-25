@@ -138,6 +138,7 @@ struct Editor::Impl {
     bool focused{false};
     std::size_t available_height{5};
     std::size_t layout_width{80};
+    std::size_t layout_padding{0};
     std::size_t scroll_offset{0};
     std::size_t last_echo_line_count{0};
     std::size_t last_echo_width{0};
@@ -795,11 +796,11 @@ struct Editor::Impl {
             notify_render_request();
         };
 
-        layout_width = width;
         auto layout_res = detail::EditorLayout::compute(detail::EditorLayoutOptions{
                 .document = &buffer.document(),
                 .cursor = buffer.cursor(),
                 .width = width,
+                .padding_x = options.padding_x,
                 .max_visible_lines = options.max_visible_lines,
                 .available_height = available_height,
                 .scroll_offset = scroll_offset,
@@ -813,6 +814,8 @@ struct Editor::Impl {
             return;
         }
 
+        layout_width = layout_res->layout_width;
+        layout_padding = layout_res->padding_width;
         scroll_offset = layout_res->scroll_offset;
 
         const auto& lines = layout_res->lines;
@@ -963,6 +966,17 @@ void Editor::set_theme(EditorTheme theme) {
     invalidate();
 }
 
+void Editor::set_padding_x(std::size_t padding) {
+    auto operation = impl_->serialized_operation(impl_);
+    operation.impl.options.padding_x = padding;
+    invalidate();
+}
+
+std::size_t Editor::padding_x() const {
+    auto operation = impl_->serialized_operation(impl_);
+    return operation.impl.options.padding_x;
+}
+
 void Editor::set_autocomplete_provider(std::unique_ptr<AutocompleteProvider> provider) {
     auto operation = impl_->serialized_operation(impl_);
     auto& impl = operation.impl;
@@ -993,12 +1007,11 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
     impl.wake_autocomplete();
     if (impl.callback_error) return std::unexpected(*impl.callback_error);
 
-    impl.layout_width = width;
-
     auto layout_res = detail::EditorLayout::compute(detail::EditorLayoutOptions{
             .document = &impl.buffer.document(),
             .cursor = impl.buffer.cursor(),
             .width = width,
+            .padding_x = impl.options.padding_x,
             .max_visible_lines = impl.options.max_visible_lines,
             .available_height = impl.available_height,
             .scroll_offset = impl.scroll_offset,
@@ -1011,6 +1024,8 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
         return std::unexpected(layout_res.error());
     }
 
+    impl.layout_width = layout_res->layout_width;
+    impl.layout_padding = layout_res->padding_width;
     impl.scroll_offset = layout_res->scroll_offset;
 
     if (impl.options.terminal) {
@@ -1240,7 +1255,9 @@ std::optional<CursorPosition> Editor::cursor_location() const {
             impl.buffer.cursor(),
             impl.border_rows(),
             impl.scroll_offset,
-            impl.content_height());
+            impl.content_height(),
+            std::nullopt,
+            impl.layout_padding);
 }
 
 void Editor::set_available_height(std::size_t rows) {

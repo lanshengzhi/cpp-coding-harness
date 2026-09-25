@@ -29,6 +29,7 @@ struct EditorLayoutOptions {
     const BufferDocument* document{nullptr};
     BufferCursor cursor{};
     std::size_t width{0};
+    std::size_t padding_x{0};
     std::size_t max_visible_lines{5};
     std::size_t available_height{5};
     std::size_t scroll_offset{0};
@@ -41,8 +42,17 @@ struct EditorLayoutOptions {
     EditorTopBorderSink* top_border_override{nullptr};
 };
 
+struct EditorContentWidth {
+    std::size_t padding{0};
+    std::size_t content{0};
+    std::size_t layout{0};
+};
+
 struct EditorLayoutResult {
     std::vector<std::string> lines{};
+    std::size_t padding_width{0};
+    std::size_t content_width{0};
+    std::size_t layout_width{0};
     std::size_t scroll_offset{0};
     std::optional<CursorPosition> cursor_position{std::nullopt};
 };
@@ -53,6 +63,9 @@ struct EditorLayoutResult {
 class EditorLayout final {
 public:
     EditorLayout() = delete;
+
+    [[nodiscard]] static EditorContentWidth calculate_content_width(
+            std::size_t outer_width, std::size_t requested_padding) noexcept;
 
     [[nodiscard]] static support::ExpectedVoid validate_width(const BufferDocument& document, std::size_t width);
 
@@ -65,7 +78,8 @@ public:
             std::size_t border_rows,
             std::size_t scroll_offset,
             std::size_t visible_count,
-            std::optional<std::size_t> cursor_line = std::nullopt);
+            std::optional<std::size_t> cursor_line = std::nullopt,
+            std::size_t left_padding = 0);
 
     [[nodiscard]] static support::Expected<EditorLayoutResult> compute(EditorLayoutOptions options);
 };

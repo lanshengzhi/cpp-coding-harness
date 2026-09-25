@@ -8,6 +8,7 @@
 #include <cch/support/Error.hpp>
 
 #include <algorithm>
+#include <exception>
 #include <format>
 #include <span>
 #include <string>
@@ -43,7 +44,6 @@ constexpr std::size_t kMaxAutocompleteRows = 5;
 void insert_fake_cursor(const EditorVisualLine& visual_line,
         const BufferDocument& doc,
         std::size_t cursor_column,
-        std::size_t width,
         std::string& line) {
     if (cursor_column < visual_line.end) {
         std::size_t byte_offset = 0;
@@ -57,14 +57,13 @@ void insert_fake_cursor(const EditorVisualLine& visual_line,
         line.insert(byte_offset + 4 + at_cursor.size(), "\x1b[27m");
         return;
     }
-    if (visible_width(line) < width) {
-        line += "\x1b[7m \x1b[27m";
-    }
+    line += "\x1b[7m \x1b[27m";
 }
 
 support::ExpectedVoid append_autocomplete_lines(const EditorCompletionMenuPresentation& menu,
         std::size_t available_height,
-        std::size_t width,
+        std::size_t content_width,
+        std::size_t padding,
         std::vector<std::string>& result) {
     if (!menu.open || menu.items.empty()) return {};
     const auto text_lines_count = result.size();
@@ -83,16 +82,30 @@ support::ExpectedVoid append_autocomplete_lines(const EditorCompletionMenuPresen
             text += " — " + menu.items[index].description;
         }
         TruncatedText item{std::move(text)};
-        if (auto rendered = item.render(width); !rendered) {
+        if (auto rendered = item.render(content_width); !rendered) {
             return std::unexpected(rendered.error());
         } else if (!rendered->lines.empty()) {
-            result.push_back(std::move(rendered->lines.front()));
+            std::string line(padding, ' ');
+            line += rendered->lines.front();
+            line.append(padding, ' ');
+            result.push_back(std::move(line));
         }
     }
     return {};
 }
 
 } // namespace
+
+EditorContentWidth EditorLayout::calculate_content_width(
+        std::size_t outer_width, std::size_t requested_padding) noexcept {
+    if (outer_width == 0) return {};
+
+    const auto max_padding = (outer_width - 1) / 2;
+    const auto padding = std::min(requested_padding, max_padding);
+    const auto content = std::max<std::size_t>(1, outer_width - padding * 2);
+    const auto layout = std::max<std::size_t>(1, content - (padding == 0 ? 1 : 0));
+    return {.padding = padding, .content = content, .layout = layout};
+}
 
 support::ExpectedVoid EditorLayout::validate_width(const BufferDocument& document, std::size_t width) {
     if (width == 0) {
@@ -113,6 +126,11 @@ support::ExpectedVoid EditorLayout::validate_width(const BufferDocument& documen
 }
 
 std::vector<EditorVisualLine> EditorLayout::construct_visual_lines(const BufferDocument& document, std::size_t width) {
+    struct IndexedGrapheme {
+        std::string text;
+        std::size_t segment;
+    };
+
     std::vector<EditorVisualLine> result;
     for (std::size_t line_index = 0; line_index < document.size(); ++line_index) {
         const auto& line = document[line_index];
@@ -120,37 +138,52 @@ std::vector<EditorVisualLine> EditorLayout::construct_visual_lines(const BufferD
             result.push_back({.logical_line = line_index, .start = 0, .end = 0, .text = {}});
             continue;
         }
-        std::size_t start = 0;
-        std::size_t used = 0;
-        std::string rendered;
-        for (std::size_t index = 0; index < line.size(); ++index) {
-            const auto segment_width = visible_width(line[index].text);
-            if (used != 0 && used + segment_width > width) {
-                result.push_back(
-                        {.logical_line = line_index, .start = start, .end = index, .text = std::move(rendered)});
-                start = index;
-                used = 0;
-                rendered.clear();
-            }
-            if (segment_width > width) {
-                for (const auto& grapheme : split_graphemes(line[index].text)) {
-                    if (used != 0 && used + grapheme_width(grapheme) > width) {
-                        result.push_back({.logical_line = line_index,
-                                .start = start,
-                                .end = index,
-                                .text = std::move(rendered)});
-                        rendered.clear();
-                        used = 0;
-                    }
-                    rendered += grapheme;
-                    used += grapheme_width(grapheme);
-                }
-            } else {
-                rendered += line[index].text;
-                used += segment_width;
+
+        std::string line_text;
+        std::vector<IndexedGrapheme> graphemes;
+        for (std::size_t segment = 0; segment < line.size(); ++segment) {
+            line_text += line[segment].text;
+            for (auto& grapheme : split_graphemes(line[segment].text)) {
+                graphemes.push_back({.text = std::move(grapheme), .segment = segment});
             }
         }
-        result.push_back({.logical_line = line_index, .start = start, .end = line.size(), .text = std::move(rendered)});
+
+        auto wrapped = wrap_text(line_text, width);
+        if (!wrapped) std::terminate();
+
+        std::size_t source_index = 0;
+        for (std::size_t wrapped_index = 0; wrapped_index < wrapped->size(); ++wrapped_index) {
+            auto& wrapped_line = (*wrapped)[wrapped_index];
+            if (wrapped_line.empty()) {
+                const auto segment = source_index < graphemes.size() ? graphemes[source_index].segment : line.size();
+                result.push_back({
+                        .logical_line = line_index,
+                        .start = segment,
+                        .end = segment,
+                        .text = {},
+                });
+                continue;
+            }
+
+            std::size_t start = line.size();
+            std::size_t end = line.size();
+            for (const auto& output_grapheme : split_graphemes(wrapped_line)) {
+                while (source_index < graphemes.size() && graphemes[source_index].text != output_grapheme) {
+                    ++source_index;
+                }
+                if (source_index == graphemes.size()) std::terminate();
+                if (start == line.size()) start = graphemes[source_index].segment;
+                end = graphemes[source_index].segment + 1;
+                ++source_index;
+            }
+            if (wrapped_index + 1 == wrapped->size()) end = line.size();
+            result.push_back({
+                    .logical_line = line_index,
+                    .start = start,
+                    .end = end,
+                    .text = std::move(wrapped_line),
+            });
+        }
     }
     return result;
 }
@@ -161,7 +194,8 @@ std::optional<CursorPosition> EditorLayout::compute_cursor_position(const Buffer
         std::size_t border_rows,
         std::size_t scroll_offset,
         std::size_t visible_count,
-        std::optional<std::size_t> cursor_line) {
+        std::optional<std::size_t> cursor_line,
+        std::size_t left_padding) {
     if (visual.empty()) return std::nullopt;
 
     std::size_t visual_row = 0;
@@ -202,18 +236,19 @@ std::optional<CursorPosition> EditorLayout::compute_cursor_position(const Buffer
         }
         col = std::min(col, vl_text_width);
     }
-    return CursorPosition{.column = col, .row = display_row};
+    return CursorPosition{.column = col + left_padding, .row = display_row};
 }
 
 support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions options) {
     static const BufferDocument kEmptyDocument{BufferLine{}};
     const auto& doc = options.document ? *options.document : kEmptyDocument;
 
-    if (auto valid = validate_width(doc, options.width); !valid) {
+    const auto widths = calculate_content_width(options.width, options.padding_x);
+    if (auto valid = validate_width(doc, widths.layout); !valid) {
         return std::unexpected(valid.error());
     }
 
-    auto visual = construct_visual_lines(doc, options.width);
+    auto visual = construct_visual_lines(doc, widths.layout);
 
     std::size_t cursor_line = 0;
     for (std::size_t index = 0; index < visual.size(); ++index) {
@@ -260,12 +295,16 @@ support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions 
 
     const auto end = std::min(visual.size(), scroll_offset + visible_count);
     for (std::size_t index = scroll_offset; index < end; ++index) {
-        auto line = visual[index].text;
+        auto content_line = visual[index].text;
         if (index == cursor_line) {
-            insert_fake_cursor(visual[index], doc, options.cursor.column, options.width, line);
+            insert_fake_cursor(visual[index], doc, options.cursor.column, content_line);
         }
-        const auto line_width = visible_width(line);
-        if (line_width < options.width) line.append(options.width - line_width, ' ');
+        const auto content_line_width = visible_width(content_line);
+        if (content_line_width < widths.content) content_line.append(widths.content - content_line_width, ' ');
+        auto line = std::string(widths.padding, ' ') + content_line;
+        const auto right_padding =
+                widths.padding > 0 && content_line_width > widths.content ? widths.padding - 1 : widths.padding;
+        line.append(right_padding, ' ');
         if (options.theme && options.theme->text) {
             auto styled = apply_text_style(options.theme->text, std::move(line), "Editor text");
             if (!styled) return std::unexpected(styled.error());
@@ -297,18 +336,24 @@ support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions 
     }
 
     if (options.include_autocomplete && options.autocomplete_menu) {
-        if (auto appended = append_autocomplete_lines(
-                    *options.autocomplete_menu, options.available_height, options.width, result);
+        if (auto appended = append_autocomplete_lines(*options.autocomplete_menu,
+                    options.available_height,
+                    widths.content,
+                    widths.padding,
+                    result);
                 !appended) {
             return std::unexpected(appended.error());
         }
     }
 
     std::optional<CursorPosition> cursor_position = compute_cursor_position(
-            doc, visual, options.cursor, border_rows, scroll_offset, visible_count, cursor_line);
+            doc, visual, options.cursor, border_rows, scroll_offset, visible_count, cursor_line, widths.padding);
 
     return EditorLayoutResult{
             .lines = std::move(result),
+            .padding_width = widths.padding,
+            .content_width = widths.content,
+            .layout_width = widths.layout,
             .scroll_offset = scroll_offset,
             .cursor_position = cursor_position,
     };

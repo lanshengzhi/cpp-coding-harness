@@ -6,6 +6,7 @@
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <format>
 #include <memory>
@@ -1417,6 +1418,101 @@ TEST_CASE("Editor renders a reverse-video fake cursor at the cursor position", "
     // The rendered line never exceeds the component width.
     for (const auto& line : rendered->lines) {
         CHECK(cch::tui::visible_width(line) <= 8);
+    }
+}
+
+TEST_CASE("Editor derives wrapping width from the rendered row width",
+        "[tui][editor][presentation][wrapping][width][issue795][spec]") {
+    struct WidthCase {
+        std::size_t width;
+        std::vector<std::size_t> expected_x_counts;
+    };
+    const std::vector<WidthCase> cases{
+            {41, {40, 40, 40, 32}},
+            {72, {71, 71, 10}},
+            {100, {99, 53}},
+            {120, {119, 33}},
+    };
+
+    for (const auto& width_case : cases) {
+        cch::tui::Editor editor;
+        editor.set_text(std::string(152, 'x'));
+
+        const auto rendered = editor.render(width_case.width);
+        REQUIRE(rendered);
+
+        std::vector<std::size_t> x_counts;
+        for (const auto& line : rendered->lines) {
+            CHECK(cch::tui::visible_width(line) <= width_case.width);
+            const auto count = static_cast<std::size_t>(std::count(line.begin(), line.end(), 'x'));
+            if (count != 0) x_counts.push_back(count);
+        }
+        CAPTURE(width_case.width, x_counts);
+        CHECK(x_counts == width_case.expected_x_counts);
+    }
+
+    cch::tui::Editor padded_editor;
+    padded_editor.set_focused(true);
+    padded_editor.set_padding_x(2);
+    CHECK(padded_editor.padding_x() == 2);
+    padded_editor.set_text(std::string(152, 'x'));
+
+    const auto padded = padded_editor.render(69);
+    REQUIRE(padded);
+    std::vector<std::size_t> padded_x_counts;
+    for (const auto& line : padded->lines) {
+        CHECK(cch::tui::visible_width(line) == 69);
+        const auto count = static_cast<std::size_t>(std::count(line.begin(), line.end(), 'x'));
+        if (count != 0) padded_x_counts.push_back(count);
+    }
+    CHECK(padded_x_counts == std::vector<std::size_t>{65, 65, 22});
+    const auto cursor = padded_editor.cursor_location();
+    REQUIRE(cursor);
+    CHECK(cursor->column == 24);
+    CHECK(cursor->row == 2);
+
+    cch::tui::Editor prose_editor;
+    prose_editor.set_text("A long editor line that must wrap without losing the fixture-authored suffix");
+    const auto prose = prose_editor.render(72);
+    REQUIRE(prose);
+    REQUIRE(prose->lines.size() == 2);
+    CHECK(prose->lines[0] ==
+            "A long editor line that must wrap without losing the fixture-authored   ");
+    CHECK(prose->lines[1].starts_with("suffix"));
+}
+
+TEST_CASE("Editor uses the shared break opportunities at formal terminal widths",
+        "[tui][editor][presentation][wrapping][unicode][width][issue795][spec]") {
+    std::string cjk;
+    for (int index = 0; index < 20; ++index) cjk += "中文混";
+    std::string mixed = "ASCII prefix ";
+    for (int index = 0; index < 10; ++index) mixed += "中文 mixed 日本語 ";
+    const std::vector<std::string> inputs{
+            "https://example.test/" + std::string(200, 'a'),
+            "/tmp/project/" + std::string(200, 'b'),
+            std::string(200, 'c'),
+            cjk,
+            mixed,
+    };
+
+    for (const auto width : {72UL, 100UL, 120UL}) {
+        for (const auto& input : inputs) {
+            const auto expected = cch::tui::wrap_text(input, width - 1);
+            REQUIRE(expected);
+            cch::tui::Editor editor;
+            editor.set_focused(true);
+            editor.set_text(input);
+            const auto rendered = editor.render(width);
+            REQUIRE(rendered);
+            REQUIRE(rendered->lines.size() == expected->size());
+            for (std::size_t index = 0; index < expected->size(); ++index) {
+                const auto visible = cch::tui::strip_terminal_sequences(rendered->lines[index]);
+                CAPTURE(width, input, index, visible, (*expected)[index]);
+                CHECK(visible.starts_with((*expected)[index]));
+                CHECK(cch::tui::visible_width(rendered->lines[index]) <= width);
+            }
+            CHECK(rendered->lines.back().find("\x1b[7m") != std::string::npos);
+        }
     }
 }
 

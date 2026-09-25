@@ -13,6 +13,40 @@ On supported Linux, the production CLI loads this file when interactive
 stdin/stdout selects the Native TUI. Print startup does not load a Native TUI
 keybinding registry.
 
+## Content width and wrapping contract
+
+Every Native TUI component receives the current terminal column count as its
+outer row width. The focused editor is the only surface that adds horizontal
+content gutters. For outer width `W` and effective gutter `P`, where
+`P = min(requested, floor((W - 1) / 2))`, the editor uses:
+
+- content width `C = W - 2P`;
+- wrap width `L = max(1, C - 1)` when `P = 0`, otherwise `L = C`.
+
+With no configured gutter, the final content cell is reserved for the fake or
+hardware cursor. Borders span all `W` columns. Editor text wraps at `L` visible
+columns and is padded back to `C`; a cursor at the end may occupy the reserved
+cell without exceeding `W`. The Native TUI uses the zero-gutter default.
+
+Wrapping is grapheme-safe. CJK graphemes are individual break opportunities;
+mixed ASCII/CJK text may continue a Latin token into the following CJK run.
+URLs, paths, hashes, and other unbreakable tokens start on a fresh line when
+needed and then fill the wrap width exactly. No grapheme is split across rows.
+Styling and ANSI state are reapplied on continuation rows.
+
+Selector item rows, status rows, and footer rows are single-line surfaces: they
+truncate to their content width rather than wrap. A selected settings
+description is the explicit exception and wraps inside its declared content
+width. Single-line selector search input scrolls horizontally. The focused
+multiline editor wraps vertically; the fixed dock does not enter native
+scrollback. Full transcript rows do enter native main-screen scrollback.
+
+Every composed row is padded or cleared to the outer width. Replacing the
+editor with a selector, resizing narrower, and resizing back must recompose the
+complete frame; stale cells from the previous composition are not valid output.
+The checked-in dual-runtime fixture records plain cell rows and ANSI/SGR tokens
+for widths 72, 100, and 120, with width 41 as the narrow robustness case.
+
 ## Format
 
 Each namespaced action accepts one key string, an array of alternative keys, or

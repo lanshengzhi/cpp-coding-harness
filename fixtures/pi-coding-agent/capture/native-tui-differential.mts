@@ -94,7 +94,9 @@ const scenarios: Scenario[] = [
 	{ id: "user-message", width: 72, inputs: ["deterministic user prompt\r"], omissions: [] },
 	{ id: "tool-result", width: 100, inputs: ["run the deterministic tool\r"], omissions: [] },
 	{ id: "status-footer", width: 100, inputs: ["deterministic status prompt\r"], omissions: ["pi provider-catalog and extension-status chrome is outside the Supported Capability subset"], omissionPatterns: ["provider", "Provider", "extension", "Extension", "cache", "Cache"] },
-	{ id: "resize", width: 72, inputs: [], resize: "100x30", omissions: [] },
+	{ id: "resize-72-41", width: 72, inputs: [], resize: "41x30->72x30", omissions: [] },
+	{ id: "resize-100-72", width: 100, inputs: [], resize: "72x40->100x40", omissions: [] },
+	{ id: "resize-120-100", width: 120, inputs: [], resize: "100x50->120x50", omissions: [] },
 	{ id: "scrollback", width: 72, inputs: ["line one\r", "line two\r", "line three\r", "line four\r", "line five\r", "line six\r"], omissions: [] },
 ];
 
@@ -162,6 +164,12 @@ function parseDimensions(value: string): { columns: number; rows: number } {
 	const match = /^(\d+)x(\d+)$/.exec(value);
 	if (match === null) throw new Error(`invalid differential dimensions: ${value}`);
 	return { columns: Number(match[1]), rows: Number(match[2]) };
+}
+
+function parseResizeSequence(value: string): Array<{ columns: number; rows: number }> {
+	const sequence = value.split("->").map(parseDimensions);
+	if (sequence.length === 0) throw new Error(`invalid differential resize sequence: ${value}`);
+	return sequence;
 }
 
 function writeJson(pathname: string, value: unknown, pretty = false): void {
@@ -537,7 +545,7 @@ function runLiveManual(): number {
 	for (const scenario of scenarios) {
 		for (const item of commands) {
 			const resize = scenario.resize === undefined ? "" : (() => {
-				const dimensions = parseDimensions(scenario.resize as string);
+				const dimensions = parseResizeSequence(scenario.resize as string).at(-1)!;
 				return `stty cols ${dimensions.columns} rows ${dimensions.rows}; `;
 			})();
 			const result = spawnSync("script", ["-qfec", `${resize}${item.command}`, "/dev/null"], {
@@ -816,12 +824,13 @@ async function runPiChild(): Promise<number> {
 	const snapshots: Record<string, unknown>[] = [await capture(terminal, harness.tempDir, ansiOffset)];
 	ansiOffset = terminal.ansi.length;
 	if (scenario.resize !== undefined) {
-		const dimensions = parseDimensions(scenario.resize);
-		const resizeOffset = terminal.ansi.length;
-		terminal.resize(dimensions.columns, dimensions.rows);
-		await waitForTerminalAnsi(terminal, resizeOffset);
-		snapshots.push(await capture(terminal, harness.tempDir, ansiOffset));
-		ansiOffset = terminal.ansi.length;
+		for (const dimensions of parseResizeSequence(scenario.resize)) {
+			const resizeOffset = terminal.ansi.length;
+			terminal.resize(dimensions.columns, dimensions.rows);
+			await waitForTerminalAnsi(terminal, resizeOffset);
+			snapshots.push(await capture(terminal, harness.tempDir, ansiOffset));
+			ansiOffset = terminal.ansi.length;
+		}
 	}
 	let responseIndex = 0;
 	for (const input of scenario.inputs) {

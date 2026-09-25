@@ -51,6 +51,9 @@ using EditorRenderRequestSink = std::move_only_function<support::ExpectedVoid()>
 
 struct EditorOptions {
     std::size_t max_visible_lines{5};
+    /// Horizontal padding on each editor content row. Rendering clamps it so
+    /// at least one content column remains at narrow widths.
+    std::size_t padding_x{0};
     std::shared_ptr<const KeybindingRegistry> keybindings{};
     /// One-shot timer for autocomplete debounce; without one, debounced
     /// requests run immediately (deterministic tests inject a manual timer).
@@ -105,6 +108,8 @@ public:
     /// Record a submitted prompt for cursor-boundary up/down recall (pi addToHistory).
     void add_to_history(std::string text);
     void set_theme(EditorTheme theme);
+    void set_padding_x(std::size_t padding);
+    [[nodiscard]] std::size_t padding_x() const;
     void set_autocomplete_provider(std::unique_ptr<AutocompleteProvider> provider);
     /// Swap the live keybinding table (pi's shared KeybindingsManager reload
     /// shape over the immutable registry, ADR 0035): subsequent input matches
