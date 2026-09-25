@@ -57,8 +57,6 @@ struct CliConfig {
     /// persisted creation and for session listing during session-family
     /// resolution.
     std::optional<std::string> session_dir;
-    /// pi `--thinking <level>` (off, minimal, low, medium, high, xhigh, max).
-    std::optional<std::string> thinking;
     /// pi `--list-models [search]`: has_value() when requested; an empty
     /// string is the bare flag, a non-empty string the fuzzy search pattern.
     std::optional<std::string> list_models;

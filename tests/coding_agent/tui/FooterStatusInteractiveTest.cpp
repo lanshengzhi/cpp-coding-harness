@@ -161,6 +161,71 @@ struct ResumedSessionFixture {
 
 } // namespace
 
+TEST_CASE("Native TUI startup status shows the provider-qualified model thinking suffix",
+        "[coding_agent][tui][footer][issue798][spec]") {
+    tests::TempWorkspace home;
+    tests::TempWorkspace config;
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard home_guard{"HOME", home.path().string()};
+    const tests::EnvVarGuard xdg_guard{"XDG_CONFIG_HOME", std::nullopt};
+    const auto agent_dir = tests::agent_root_under_home(home.path());
+    std::filesystem::create_directories(agent_dir);
+    home.write(".config/pike/agent/models.json", R"({
+      "providers": {
+        "alpha": {
+          "baseUrl": "https://alpha.example/v1",
+          "api": "openai-responses",
+          "apiKey": "dummy-alpha-key",
+          "models": [{
+            "id": "k3-256k",
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": "off",
+              "minimal": "minimal",
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            }
+          }]
+        }
+      }
+    })");
+
+    tests::RuntimeFixture runtime;
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    request.workspace = workspace.path();
+    request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{workspace.path() / "session.jsonl"};
+    request.session_facts.model = "alpha/k3-256k:low";
+    request.session_facts.no_skills = true;
+    request.session_facts.no_prompt_templates = true;
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
+    REQUIRE(created);
+    CHECK(created->resolved_identity.provider == "alpha");
+    CHECK(created->resolved_identity.model == "k3-256k");
+    CHECK(created->session->snapshot().agent_state.thinking_level == "low");
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal, make_run(*created->session, config.path())),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+
+    REQUIRE(tests::pump_until(
+            io, [&] { return visible_screen(terminal).find("k3-256k \xe2\x80\xa2 low") != std::string::npos; }));
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
+    CHECK(*run_result);
+}
+
 TEST_CASE("Native TUI footer renders usage totals, cache hit rate, context, and the model",
         "[coding_agent][tui][footer][issue411][spec]") {
     ResumedSessionFixture fixture;

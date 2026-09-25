@@ -149,6 +149,30 @@ constexpr std::string_view kKeyedReasoningProvider = R"({
   }
 })";
 
+/// One keyed reasoning provider whose map supports every pi thinking level.
+constexpr std::string_view kFullThinkingProvider = R"({
+  "providers": {
+    "alpha": {
+      "baseUrl": "https://alpha.example/v1",
+      "api": "openai-responses",
+      "apiKey": "dummy-alpha-key",
+      "models": [{
+        "id": "k3-256k",
+        "reasoning": true,
+        "thinkingLevelMap": {
+          "off": "off",
+          "minimal": "minimal",
+          "low": "low",
+          "medium": "medium",
+          "high": "high",
+          "xhigh": "xhigh",
+          "max": "max"
+        }
+      }]
+    }
+  }
+})";
+
 /// One keyed non-reasoning provider.
 [[nodiscard]] coding_agent::runtime::AgentSessionCreationRequest cli_request(
     const Fixture& fixture) {
@@ -222,6 +246,79 @@ TEST_CASE("CLI model resolution: --model wins over settings defaults",
     CHECK(result->session->provider() == "beta");
     CHECK(result->session->model() == "beta-1");
     result->session->close();
+}
+
+TEST_CASE("CLI model resolution: provider-qualified thinking suffixes select every supported level",
+        "[coding_agent][model-resolution][issue798][spec]") {
+    constexpr std::string_view levels[] = {"off", "minimal", "low", "medium", "high", "xhigh", "max"};
+
+    for (const auto level : levels) {
+        Fixture fixture;
+        fixture.write_models(kFullThinkingProvider);
+        auto request = cli_request(fixture);
+        request.session_facts.model = "alpha/k3-256k:" + std::string{level};
+
+        auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
+        REQUIRE(result.has_value());
+        CHECK(result->resolved_identity.provider == "alpha");
+        CHECK(result->resolved_identity.model == "k3-256k");
+        CHECK(result->session->snapshot().agent_state.thinking_level == level);
+        result->session->close();
+    }
+}
+
+TEST_CASE("CLI model resolution: explicit thinking overrides a model suffix",
+        "[coding_agent][model-resolution][issue798][spec]") {
+    Fixture fixture;
+    fixture.write_models(kFullThinkingProvider);
+    auto request = cli_request(fixture);
+    request.session_facts.model = "alpha/k3-256k:low";
+    request.session_facts.thinking = "high";
+
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
+    REQUIRE(result.has_value());
+    CHECK(result->resolved_identity.provider == "alpha");
+    CHECK(result->resolved_identity.model == "k3-256k");
+    CHECK(result->session->snapshot().agent_state.thinking_level == "high");
+    result->session->close();
+}
+
+TEST_CASE("CLI model resolution: an invalid thinking suffix has a bounded diagnostic",
+        "[coding_agent][model-resolution][issue798][spec]") {
+    Fixture fixture;
+    fixture.write_models(kFullThinkingProvider);
+    auto request = cli_request(fixture);
+    request.session_facts.model = "alpha/k3-256k:turbo";
+
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
+    REQUIRE_FALSE(result);
+    CHECK(result.error().message.find("Invalid thinking level \"turbo\"") != std::string::npos);
+    CHECK(result.error().message.find("Unknown model") == std::string::npos);
+}
+
+TEST_CASE("CLI model resolution: invalid provider and model selections keep bounded diagnostics",
+        "[coding_agent][model-resolution][issue798][spec]") {
+    struct InvalidSelection {
+        std::optional<std::string> provider;
+        std::string model;
+        std::string_view expected;
+    };
+    const InvalidSelection selections[] = {
+            {.provider = "missing", .model = "model", .expected = "Unknown provider \"missing\""},
+            {.provider = std::nullopt, .model = "missing/model", .expected = "Unknown model \"missing/model\""},
+    };
+
+    for (const auto& selection : selections) {
+        Fixture fixture;
+        fixture.write_models(kFullThinkingProvider);
+        auto request = cli_request(fixture);
+        request.session_facts.provider = selection.provider;
+        request.session_facts.model = selection.model;
+
+        auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
+        REQUIRE_FALSE(result);
+        CHECK(result.error().message.find(selection.expected) != std::string::npos);
+    }
 }
 
 TEST_CASE("CLI model resolution: settings default wins with configured auth",

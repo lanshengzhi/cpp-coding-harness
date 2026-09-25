@@ -1,5 +1,7 @@
 #include "CliParse.hpp"
 
+#include <cch/ai/Model.hpp>
+
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -713,6 +715,10 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
     if (session_dir_seen) {
         config.session_dir = std::move(session_dir_text);
     }
+    if (thinking_seen && !ai::parse_model_thinking_level(thinking_text)) {
+        return std::unexpected(
+                cli_error("Invalid thinking level \"" + thinking_text + "\" in --thinking " + thinking_text));
+    }
     if (model_seen) {
         config.session_facts.model = std::move(model_text);
     }
@@ -726,7 +732,7 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
         config.session_facts.api_key = std::move(api_key_text);
     }
     if (thinking_seen) {
-        config.thinking = std::move(thinking_text);
+        config.session_facts.thinking = std::move(thinking_text);
     }
     if (session_id_seen) {
         config.session_id = std::move(session_id_text);

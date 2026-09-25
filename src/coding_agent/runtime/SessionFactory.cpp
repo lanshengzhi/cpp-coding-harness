@@ -3,6 +3,7 @@
 #include <cch/agent/AgentContext.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AuthGuidance.hpp>
+#include <cch/coding_agent/ModelResolver.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
@@ -30,6 +31,7 @@
 #include <exception>
 #include <filesystem>
 #include <format>
+#include <iterator>
 #include <map>
 #include <optional>
 #include <set>
@@ -178,10 +180,11 @@ struct AssemblyPlan {
     /// from it (the request surface the deleted fake-provider CLI flag used to
     /// drive).
     bool cli_fake{false};
-    /// pi CLI model selection (`--provider`, `--model`, `--models`, `--api-key`).
+    /// pi CLI model selection (`--provider`, `--model`, `--thinking`, `--models`, `--api-key`).
     struct CliModelSelection {
         std::optional<std::string> provider;
         std::optional<std::string> model;
+        std::optional<std::string> thinking;
         std::vector<std::string> models;
         std::optional<std::string> api_key;
     };
@@ -487,15 +490,18 @@ void cleanup_factory_filesystem(harness::AsyncFileSystem* filesystem) {
     return value;
 }
 
+struct CliModelResolution {
+    ai::Model model;
+    std::optional<std::string> thinking_level;
+};
+
 /// Resolve a CLI `--model` pattern (with optional `--provider`) against the
 /// live runtime catalog using all models (not only pre-configured ones), so
 /// `--api-key` can enable first-time setup (pi `resolveCliModel` subset).
-/// Supports `--provider <name> --model <pattern>` and `--model <provider>/<pattern>`;
-/// exact id / `provider/id` matches win, then partial id/name matches.
-[[nodiscard]] support::Expected<ai::Model> resolve_cli_model_pattern(
-    const ModelRuntime& runtime,
-    const std::optional<std::string>& cli_provider,
-    std::string_view cli_model) {
+/// The shared pattern parser preserves full model-id matches before interpreting
+/// a final `:thinking` suffix, including provider-qualified spellings.
+[[nodiscard]] support::Expected<CliModelResolution> resolve_cli_model_pattern(
+        const ModelRuntime& runtime, const std::optional<std::string>& cli_provider, std::string_view cli_model) {
     const auto all_models = runtime.models();
     if (all_models.empty()) {
         return std::unexpected(support::make_error(
@@ -511,8 +517,7 @@ void cleanup_factory_filesystem(harness::AsyncFileSystem* filesystem) {
 
     std::optional<std::string> provider = cli_provider;
     std::string pattern{cli_model};
-    const bool inferred_provider =
-        !provider && pattern.find('/') != std::string::npos;
+    bool inferred_provider = false;
     if (!provider) {
         const auto slash = pattern.find('/');
         if (slash != std::string::npos) {
@@ -521,6 +526,7 @@ void cleanup_factory_filesystem(harness::AsyncFileSystem* filesystem) {
                 found != provider_map.end()) {
                 provider = found->second;
                 pattern = pattern.substr(slash + 1);
+                inferred_provider = true;
             }
         }
     }
@@ -533,35 +539,42 @@ void cleanup_factory_filesystem(harness::AsyncFileSystem* filesystem) {
                     "\". Use --list-models to see available providers/models."));
         }
         provider = found->second;
-        // Tolerate --model <provider>/<pattern> alongside --provider.
         const auto prefix = *provider + "/";
         if (lowercase(pattern).starts_with(lowercase(prefix))) {
             pattern = pattern.substr(prefix.size());
         }
     }
 
-    const auto first_match = [&](const auto& predicate) -> const ai::Model* {
-        const auto match = std::ranges::find_if(all_models, predicate);
-        return match == all_models.end() ? nullptr : &*match;
-    };
+    std::vector<ai::Model> candidates;
+    if (provider) {
+        candidates.reserve(all_models.size());
+        std::copy_if(all_models.begin(), all_models.end(), std::back_inserter(candidates), [&](const ai::Model& model) {
+            return model.provider == *provider;
+        });
+    } else {
+        candidates = all_models;
+    }
 
-    // Exact id / provider+id matches without provider inference.
-    const auto exact_match = [&](const ai::Model& model) {
-        return lowercase(model.id) == lowercase(std::string{cli_model}) ||
-               lowercase(model.provider + "/" + model.id) == lowercase(std::string{cli_model});
-    };
-    const auto prov_exact = [&](const auto& m) { return (!provider || m.provider == *provider) && m.id == pattern; };
-    const auto provider_partial_match = [&](const auto& model) {
-        return (!provider || model.provider == *provider) &&
-               (model.id.find(pattern) != std::string::npos || model.name.find(pattern) != std::string::npos);
-    };
-    const auto inferred_match = [&](const auto& m) { return m.id.find(cli_model) != std::string::npos; };
+    auto parsed = parse_model_pattern(pattern, candidates, /* allow_invalid_thinking_level_fallback */ false);
+    if (!parsed.model && inferred_provider) {
+        parsed = parse_model_pattern(cli_model, all_models, /* allow_invalid_thinking_level_fallback */ false);
+    }
+    if (parsed.model) {
+        return CliModelResolution{
+                .model = std::move(*parsed.model),
+                .thinking_level = std::move(parsed.thinking_level),
+        };
+    }
 
-    const ai::Model* matched_model = !provider ? first_match(exact_match) : nullptr;
-    if (!matched_model) matched_model = first_match(prov_exact);
-    if (!matched_model) matched_model = first_match(provider_partial_match);
-    if (!matched_model && inferred_provider) matched_model = first_match(inferred_match);
-    if (matched_model) return *matched_model;
+    const auto colon = pattern.rfind(':');
+    if (colon != std::string::npos) {
+        const auto suffix = std::string_view{pattern}.substr(colon + 1);
+        if (!suffix.empty() && !ai::parse_model_thinking_level(suffix)) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "Invalid thinking level \"" + std::string{suffix} + "\" in model \"" + std::string{cli_model} +
+                            "\""));
+        }
+    }
 
     return std::unexpected(support::make_error(
         support::ErrorCode::ModelValidation,
@@ -784,10 +797,11 @@ struct SessionTargetNormalizationOptions {
         plan.model_runtime_owned = false;
     }
     plan.cli_selection = AssemblyPlan::CliModelSelection{
-        .provider = std::move(request.session_facts.provider),
-        .model = std::move(request.session_facts.model),
-        .models = std::move(request.session_facts.models),
-        .api_key = std::move(request.session_facts.api_key),
+            .provider = std::move(request.session_facts.provider),
+            .model = std::move(request.session_facts.model),
+            .thinking = std::move(request.session_facts.thinking),
+            .models = std::move(request.session_facts.models),
+            .api_key = std::move(request.session_facts.api_key),
     };
     // Private test seams: an explicit request Model and custom tools flow
     // through the plan unchanged.
@@ -834,16 +848,16 @@ struct SessionTargetNormalizationOptions {
 /// first scoped entry's explicit `:level` when the scope selects the initial
 /// model (pi main.ts `buildSessionOptions`), regardless of which chain step
 /// selected the model.
-[[nodiscard]] support::Expected<ai::Model> resolve_cli_request_model(
-    const AssemblyPlan& plan,
-    const ModelRuntime& runtime,
-    bool is_resume,
-    const std::optional<std::string>& stored_provider,
-    const std::optional<std::string>& stored_model,
-    bool resume_restore_failed,
-    const coding_agent::UserSettings& settings,
-    std::vector<cch::coding_agent::ScopedModel>* out_scoped_models = nullptr,
-    std::optional<std::string>* out_scoped_thinking_level = nullptr) {
+[[nodiscard]] support::Expected<ai::Model> resolve_cli_request_model(const AssemblyPlan& plan,
+        const ModelRuntime& runtime,
+        bool is_resume,
+        const std::optional<std::string>& stored_provider,
+        const std::optional<std::string>& stored_model,
+        bool resume_restore_failed,
+        const coding_agent::UserSettings& settings,
+        std::vector<cch::coding_agent::ScopedModel>* out_scoped_models = nullptr,
+        std::optional<std::string>* out_scoped_thinking_level = nullptr,
+        std::optional<std::string>* out_model_thinking_level = nullptr) {
     const auto& selection = plan.cli_selection;
 
     // 0. `--models` / settings `enabledModels` scope the session's Ctrl+P
@@ -863,7 +877,14 @@ struct SessionTargetNormalizationOptions {
 
     // 1. CLI --model (with optional --provider) wins.
     if (selection.model) {
-        return resolve_cli_model_pattern(runtime, selection.provider, *selection.model);
+        auto resolved = resolve_cli_model_pattern(runtime, selection.provider, *selection.model);
+        if (!resolved) {
+            return std::unexpected(resolved.error());
+        }
+        if (out_model_thinking_level != nullptr) {
+            *out_model_thinking_level = std::move(resolved->thinking_level);
+        }
+        return std::move(resolved->model);
     }
 
     // 2. The resolved scope selects the initial model for new sessions when
@@ -1360,6 +1381,7 @@ struct PreparedAssemblyTarget final {
     ai::Model request_model;
     std::vector<cch::coding_agent::ScopedModel> scoped_models;
     std::optional<std::string> scoped_thinking_level;
+    std::optional<std::string> model_thinking_level;
     if (plan.requested_model) {
         // Private test seam: an explicit request Model wins directly.
         request_model = *plan.requested_model;
@@ -1379,9 +1401,16 @@ struct PreparedAssemblyTarget final {
             request_model.name = *settings.default_model;
         }
     } else {
-        auto resolved = resolve_cli_request_model(
-            plan, *runtime, is_resume, stored_provider, stored_model,
-            resume_restore_failed, settings, &scoped_models, &scoped_thinking_level);
+        auto resolved = resolve_cli_request_model(plan,
+                *runtime,
+                is_resume,
+                stored_provider,
+                stored_model,
+                resume_restore_failed,
+                settings,
+                &scoped_models,
+                &scoped_thinking_level,
+                &model_thinking_level);
         if (!resolved) {
             co_await discard_unpublished_session();
             co_return std::unexpected(resolved.error());
@@ -1433,7 +1462,9 @@ struct PreparedAssemblyTarget final {
         std::optional<std::string> override_provider;
         std::optional<std::string> override_model;
         if (plan.cli_selection.model || plan.cli_selection.provider) {
-            override_model = plan.cli_selection.model;
+            if (plan.cli_selection.model) {
+                override_model = resolved_model;
+            }
             override_provider = plan.cli_selection.provider;
         } else if (plan.requested_model) {
             override_provider = plan.requested_model->provider;
@@ -1545,19 +1576,20 @@ struct PreparedAssemblyTarget final {
         }
     }
 
-    // pi sdk.ts `createAgentSession` thinking restore: the effective
-    // pre-clamp level is the resumed `thinking_level_change` entry (when the
-    // session has one), else the settings `defaultThinkingLevel`, else pi's
-    // DEFAULT_THINKING_LEVEL ("medium"). An in-memory branch seed restores
-    // like a resume: the branch path's level wins over the settings default,
-    // so the appended entry and the Agent's live state never diverge. The
-    // Agent clamps the request at construction (ADR 0034 / #352), so the
-    // persisted initial entries below carry the same clamped value.
+    // pi buildSessionOptions/main.ts: an explicit `--thinking` overrides a
+    // `:thinking` suffix on `--model`; either overrides resumed, branch, scoped,
+    // and settings defaults. The Agent clamps the request at construction
+    // (ADR 0034 / #352), so persisted initial entries and live state agree.
+    auto cli_thinking_level = std::move(model_thinking_level);
+    if (plan.cli_selection.thinking) {
+        cli_thinking_level = plan.cli_selection.thinking;
+    }
     const std::string effective_thinking_level = ai::clamp_thinking_level_string(request_model,
-            is_resume && prepared_resume.resume.has_thinking_level_entry ? prepared_resume.resume.thinking_level
-            : plan.in_memory_branch_seed && plan.in_memory_branch_seed->context.has_thinking_level_entry
-                    ? plan.in_memory_branch_seed->context.thinking_level
-                    : scoped_thinking_level.value_or(settings.default_thinking_level.value_or("medium")));
+            cli_thinking_level.value_or(
+                    is_resume && prepared_resume.resume.has_thinking_level_entry ? prepared_resume.resume.thinking_level
+                    : plan.in_memory_branch_seed && plan.in_memory_branch_seed->context.has_thinking_level_entry
+                            ? plan.in_memory_branch_seed->context.thinking_level
+                            : scoped_thinking_level.value_or(settings.default_thinking_level.value_or("medium"))));
 
     // 9. Publish the session and its initial entries through one reserved
     // Runtime worker admission. SessionStore construction, JSONL parsing,
@@ -1690,11 +1722,11 @@ struct PreparedAssemblyTarget final {
     session_config.max_queued_bytes = plan.max_queued_bytes;
     session_config.model = std::move(request_model);
     session_config.scoped_models = std::move(scoped_models);
-    // pi main.ts `buildSessionOptions`: a scoped entry's explicit `:level`
-    // seeds the new-session thinking level (CLI `--thinking` precedence
-    // lands with the flag's session plumbing).
+    // pi main.ts `buildSessionOptions`: explicit CLI thinking wins, then a
+    // scoped entry's `:level`, then the settings default.
     session_config.default_thinking_level =
-            scoped_thinking_level ? scoped_thinking_level : settings.default_thinking_level;
+            cli_thinking_level ? cli_thinking_level
+                               : (scoped_thinking_level ? scoped_thinking_level : settings.default_thinking_level);
     // pi `_rebuildSystemPrompt` inputs resolved by the resource loader (P20):
     // the custom prompt, the append strings, and the Project Context Files.
     session_config.custom_prompt = std::move(system_prompt_text);

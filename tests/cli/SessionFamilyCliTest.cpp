@@ -85,6 +85,23 @@ std::string header_session_id(const std::filesystem::path& path) {
     return object.at("id").get<std::string>();
 }
 
+std::string session_entry_field(
+        const std::filesystem::path& path, std::string_view entry_type, std::string_view field) {
+    std::ifstream input(path, std::ios::binary);
+    std::string line;
+    while (std::getline(input, line)) {
+        auto parsed = cch::support::read_json(line);
+        if (!parsed) continue;
+        const auto* object = parsed->get_if<cch::support::JsonValue::object_t>();
+        if (object == nullptr) continue;
+        const auto type = object->find("type");
+        if (type == object->end() || type->second.get<std::string>() != entry_type) continue;
+        return object->at(std::string{field}).get<std::string>();
+    }
+    FAIL("session entry not found: " + std::string{entry_type});
+    return {};
+}
+
 /// The `parentSession` field from a session file's header, when present.
 std::optional<std::string> header_parent_session(const std::filesystem::path& path) {
     const auto content = read_file(path);
@@ -175,6 +192,59 @@ TEST_CASE("session-family: --session with a path opens-or-creates at the target"
     REQUIRE(resumed.exit_code == 0);
     CHECK(resumed.stdout_text == "fake: second\n");
     CHECK(user_message_count(session) == 2);
+}
+
+TEST_CASE("CLI model thinking suffix reaches the persisted session state", "[cli][session-family][issue798][spec]") {
+    SessionFixture fixture;
+    const auto session = fixture.workspace.path() / "thinking-suffix.jsonl";
+    auto model = cch::tests::scripted_request_model("alpha", "k3-256k");
+    model.api = "openai-responses";
+    model.reasoning = true;
+    model.thinking_level_map = cch::ai::ThinkingLevelMap{
+            {cch::ai::ModelThinkingLevel::Off, "off"},
+            {cch::ai::ModelThinkingLevel::Minimal, "minimal"},
+            {cch::ai::ModelThinkingLevel::Low, "low"},
+            {cch::ai::ModelThinkingLevel::Medium, "medium"},
+            {cch::ai::ModelThinkingLevel::High, "high"},
+            {cch::ai::ModelThinkingLevel::XHigh, "xhigh"},
+            {cch::ai::ModelThinkingLevel::Max, "max"},
+    };
+    std::vector<cch::coding_agent::ModelRuntimeTestProvider> providers;
+    providers.push_back(cch::coding_agent::ModelRuntimeTestProvider{
+            .definition =
+                    cch::ai::ProviderDefinition{
+                            .id = "alpha",
+                            .name = "alpha",
+                            .models = {std::move(model)},
+                            .auth = cch::tests::detail::fixture_auth(),
+                    },
+    });
+    auto runtime = cch::coding_agent::create_model_runtime_for_testing(
+            cch::coding_agent::ModelRuntimeOptions{
+                    .models_path = std::filesystem::path{},
+                    .credentials = std::make_shared<cch::tests::detail::FixtureCredentialStore>(),
+            },
+            cch::coding_agent::ModelRuntimeTestOptions{
+                    .providers = std::move(providers),
+            });
+    REQUIRE(runtime);
+
+    cch::tests::CliRunOptions options{
+            .args = {"--session", session.string(), "--model", "alpha/k3-256k:low"},
+            .cwd = fixture.workspace.path(),
+            .env = fixture.env,
+            .stdin_text = {},
+            .stdin_is_terminal = false,
+            .stdout_is_terminal = false,
+            .resume_picker = {},
+    };
+    const auto result = cch::tests::run_cli_with_runtime(std::move(options), std::move(*runtime));
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(session_entry_field(session, "session", "provider") == "alpha");
+    CHECK(session_entry_field(session, "session", "model") == "k3-256k");
+    CHECK(session_entry_field(session, "model_change", "modelId") == "k3-256k");
+    CHECK(session_entry_field(session, "thinking_level_change", "thinkingLevel") == "low");
 }
 
 TEST_CASE("session-family: --session initializes an existing empty file as a new session",
