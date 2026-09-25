@@ -407,6 +407,141 @@ TEST_CASE("CLI model resolution: resume re-resolves the stored model identity",
     resumed->session->close();
 }
 
+TEST_CASE("CLI model resolution: equivalent explicit resume metadata emits no override diagnostic",
+        "[coding_agent][model-resolution][resume][issue799][spec]") {
+    Fixture fixture;
+    fixture.write_models(kFullThinkingProvider);
+
+    {
+        auto request = cli_request(fixture);
+        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
+        REQUIRE(created.has_value());
+        REQUIRE(created->resolved_identity.provider == "alpha");
+        REQUIRE(created->resolved_identity.model == "k3-256k");
+        created->session->close();
+    }
+
+    auto request = cli_resume_request(fixture);
+    request.session_facts.provider = "ALPHA";
+    request.session_facts.model = "K3-256k:high";
+    auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
+
+    REQUIRE(resumed.has_value());
+    CHECK(std::none_of(resumed->diagnostics.begin(), resumed->diagnostics.end(), [](const auto& diagnostic) {
+        return diagnostic.code == "resume_provider_override";
+    }));
+    CHECK(resumed->resolved_identity.provider == "alpha");
+    CHECK(resumed->resolved_identity.model == "k3-256k");
+    CHECK(resumed->session->snapshot().agent_state.model.provider == "alpha");
+    CHECK(resumed->session->snapshot().agent_state.model.id == "k3-256k");
+    CHECK(resumed->session->snapshot().agent_state.thinking_level == "high");
+    resumed->session->close();
+
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
+    REQUIRE(loaded.has_value());
+    const harness::session::SessionEntry* model_change = nullptr;
+    for (const auto& entry : loaded->entries) {
+        if (entry.kind == harness::session::SessionEntryKind::ModelChange) {
+            model_change = &entry;
+        }
+    }
+    REQUIRE(model_change != nullptr);
+    const auto& model = std::get<harness::session::ModelChangeValue>(model_change->value);
+    CHECK(model.provider == "alpha");
+    CHECK(model.model_id == "k3-256k");
+}
+
+TEST_CASE("CLI model resolution: an actual resume model change emits one accurate diagnostic",
+        "[coding_agent][model-resolution][resume][issue799][spec]") {
+    Fixture fixture;
+    fixture.write_models(kTwoKeyedProviders);
+
+    {
+        auto request = cli_request(fixture);
+        request.session_facts.provider = "alpha";
+        request.session_facts.model = "alpha-1";
+        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
+        REQUIRE(created.has_value());
+        created->session->close();
+    }
+
+    auto request = cli_resume_request(fixture);
+    request.session_facts.provider = "beta";
+    request.session_facts.model = "beta-1";
+    auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
+
+    REQUIRE(resumed.has_value());
+    const auto override_count = std::count_if(resumed->diagnostics.begin(),
+            resumed->diagnostics.end(),
+            [](const auto& diagnostic) { return diagnostic.code == "resume_provider_override"; });
+    CHECK(override_count == 1);
+    const auto diagnostic = std::find_if(resumed->diagnostics.begin(),
+            resumed->diagnostics.end(),
+            [](const auto& value) { return value.code == "resume_provider_override"; });
+    REQUIRE(diagnostic != resumed->diagnostics.end());
+    CHECK(diagnostic->message == "Resumed session provider/model metadata overridden by explicit request; "
+                                 "was (alpha/alpha-1) now (beta/beta-1)");
+    CHECK(resumed->resolved_identity.provider == "beta");
+    CHECK(resumed->resolved_identity.model == "beta-1");
+    CHECK(resumed->session->snapshot().agent_state.model.provider == "beta");
+    CHECK(resumed->session->snapshot().agent_state.model.id == "beta-1");
+    resumed->session->close();
+
+    auto loaded = harness::session::SessionStore::load(fixture.session_file);
+    REQUIRE(loaded.has_value());
+    const harness::session::SessionEntry* model_change = nullptr;
+    for (const auto& entry : loaded->entries) {
+        if (entry.kind == harness::session::SessionEntryKind::ModelChange) {
+            model_change = &entry;
+        }
+    }
+    REQUIRE(model_change != nullptr);
+    const auto& model = std::get<harness::session::ModelChangeValue>(model_change->value);
+    CHECK(model.provider == "beta");
+    CHECK(model.model_id == "beta-1");
+
+    auto re_resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
+    REQUIRE(re_resumed.has_value());
+    CHECK(re_resumed->resolved_identity.provider == "beta");
+    CHECK(re_resumed->resolved_identity.model == "beta-1");
+    CHECK(std::none_of(re_resumed->diagnostics.begin(), re_resumed->diagnostics.end(), [](const auto& diagnostic) {
+        return diagnostic.code == "resume_provider_override";
+    }));
+    re_resumed->session->close();
+}
+
+TEST_CASE("CLI model resolution: resume without legacy model metadata emits no override diagnostic",
+        "[coding_agent][model-resolution][resume][issue799][spec]") {
+    Fixture fixture;
+    fixture.write_models(kTwoKeyedProviders);
+    auto store = harness::session::SessionStore::create_new(fixture.session_file,
+            harness::session::SessionMetadata{
+                    .session_id = "legacy-session",
+                    .created_at = "2026-09-25T00:00:00Z",
+                    .workspace = fixture.workspace.path(),
+                    .provider = "legacy",
+                    .model = "legacy-model",
+            });
+    REQUIRE(store.has_value());
+    REQUIRE(store->append(ai::user_text_message("hello")).has_value());
+
+    auto request = cli_resume_request(fixture);
+    request.session_facts.provider = "beta";
+    request.session_facts.model = "beta-1";
+    auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
+
+    REQUIRE(resumed.has_value());
+    CHECK(std::none_of(resumed->diagnostics.begin(), resumed->diagnostics.end(), [](const auto& diagnostic) {
+        return diagnostic.code == "resume_provider_override";
+    }));
+    CHECK(resumed->resolved_identity.provider == "beta");
+    CHECK(resumed->resolved_identity.model == "beta-1");
+    CHECK(resumed->session->snapshot().agent_state.model.provider == "beta");
+    CHECK(resumed->session->snapshot().agent_state.model.id == "beta-1");
+    CHECK(resumed->session->session_stats().user_messages == 1);
+    resumed->session->close();
+}
+
 TEST_CASE("CLI model resolution: resume without configured auth falls back with pi's message",
         "[coding_agent][model-resolution][resume][issue357])[spec]") {
     Fixture fixture;
