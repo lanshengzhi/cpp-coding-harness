@@ -252,33 +252,23 @@ cmake --build --preset vcpkg --target cch_tests_coding_agent_interactive
 CTest runs the same command in verification mode through
 the adapter `fixtures/pi-coding-agent/capture/native-tui-differential-ctest.py` (test support
 beside the capture harness, not a `tests/<owner>` C++ test). Verification re-captures the
- deterministic projection and checks that its report digest and classification are stable; it
- does not mean that every scenario is a parity match. The stable comparison uses visible cell
- text, scrollback cell rows, and the normalized, ordered SGR token structure, plus the
- classification — never the raw ANSI byte stream. Raw ANSI is retained in the report as captured
-evidence only; the harness makes no full raw-ANSI byte-parity claim, because frame timing makes
-raw byte order nondeterministic. `verifyAnsiBoundary()` asserts this boundary on every run: the
-stable projection carries no `ansi` key, reframed raw bytes with identical cell text and
-normalized SGR structure classify as `match`, and identical cell text with a different
-normalized SGR structure classifies as `supported-capability-regression`. A missing
-optional frozen pi checkout is an explicit skip; a checkout at the wrong commit is an error.
+report projection and checks that its report digest and triage record are stable; it does not
+mean that every scenario is a product match. The resolved comparison uses visible cell text,
+scrollback cell rows, and the resolved style of each cell. Raw ANSI and ordered SGR tokens are
+retained as diagnostic evidence only, because frame timing and SGR cadence are not the product
+acceptance boundary. The report records one explicit triage classification per scenario and
+links confirmed product differences to focused child issues. A missing optional frozen pi
+checkout is an explicit skip; a checkout at the wrong commit is an error.
 
-A row is `match` when all strict structural projections agree. A row whose remaining delta is
-confined to a documented omission is reported as `intentional-subset-omission`; this is reserved
-for pi surfaces outside the Supported Capability subset, never for a difference in a claimed
-Native TUI capability. The `profileProjection` is diagnostic-only: it removes exact pi runtime
-identity/startup-documentation rows and may project usage text for selected scenarios, but it
-never changes the strict classification or SGR comparison. Omission classification also retains
-the full SGR structure; styled omissions therefore remain `requires-review` until a cell-style
-projection can prove that the omitted rows account for the complete delta. The separate
-`themeParity.classification` is the semantic-role authority for this issue: it must be `match` or
-`semantic-role-match-palette-difference` (palette evidence with the role mapping preserved), and
-a broken role mapping is an unclassified Supported Capability token mismatch that fails
-verification. Every other difference is reported as `supported-capability-regression`, so the
-checked-in report makes stale Supported Capability rows visible and prevents a new drift from
-being silently absorbed. A successful `--verify` means the report is reproducible; it does not
-erase the classifications. The report's omissions and classifications are review evidence, not a
-waiver for a future Supported Capability change.
+A row's `triage.classification` is its single final review classification. The
+`observedClassification` and projection fields retain the raw structural evidence. The
+`profileProjection` removes exact pi runtime identity/startup-documentation rows and isolates
+provider usage for the declared response scenarios. Explicit omission patterns may remove only
+pi surfaces outside the Supported subset; they never erase a Supported row. The resolved styled
+cell projection is the authority for whether a remaining difference is intentional. The current
+product defects are tracked by #806–#812, while the report itself remains checked in as
+reproducible evidence. A successful `--verify` means the evidence and triage records are
+reproducible; it does not claim that the tracked product defects are fixed.
 
 For a live/manual pass, use a real terminal and credentials outside the default CTest path:
 

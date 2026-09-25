@@ -127,6 +127,75 @@ namespace {
     return support::JsonValue{std::move(values)};
 }
 
+[[nodiscard]] std::string canonical_color(std::string_view value) {
+    if (value.empty()) return {};
+    if (value.starts_with("38;2;") || value.starts_with("48;2;")) {
+        constexpr std::size_t prefix_length = 5;
+        const auto first = value.find(';', prefix_length);
+        const auto second = value.find(';', first + 1);
+        const auto red = parse_size(value.substr(prefix_length, first - prefix_length));
+        const auto green = parse_size(value.substr(first + 1, second - first - 1));
+        const auto blue = parse_size(value.substr(second + 1));
+        return std::format("#{:02x}{:02x}{:02x}", red, green, blue);
+    }
+    if (value.starts_with("38;5;")) return std::string{"palette:"} + std::string{value.substr(value.rfind(';') + 1)};
+    if (value.starts_with("48;5;")) return std::string{"palette:"} + std::string{value.substr(value.rfind(';') + 1)};
+    const auto code = parse_size(value);
+    if ((code >= 30 && code <= 37) || (code >= 40 && code <= 47)) return "palette:" + std::to_string(code - 30);
+    if ((code >= 90 && code <= 97) || (code >= 100 && code <= 107)) return "palette:" + std::to_string(code - 90);
+    return std::string{value};
+}
+
+[[nodiscard]] support::JsonValue style_json(const tui::VirtualTerminalStyle& style) {
+    support::JsonValue::object_t value;
+    value.emplace("bold", support::JsonValue{style.bold});
+    value.emplace("dim", support::JsonValue{style.dim});
+    value.emplace("italic", support::JsonValue{style.italic});
+    value.emplace("underline", support::JsonValue{style.underline});
+    value.emplace("blink", support::JsonValue{style.blink});
+    value.emplace("inverse", support::JsonValue{style.inverse});
+    value.emplace("hidden", support::JsonValue{style.hidden});
+    value.emplace("strikethrough", support::JsonValue{style.strikethrough});
+    value.emplace("foreground", support::JsonValue{canonical_color(style.fg_color)});
+    value.emplace("background", support::JsonValue{canonical_color(style.bg_color)});
+    return support::JsonValue{std::move(value)};
+}
+
+void append_styled_run(support::JsonValue::array_t& runs, std::string& text, const tui::VirtualTerminalStyle& style) {
+    if (text.empty()) return;
+    support::JsonValue::object_t run;
+    run.emplace("text", support::JsonValue{text});
+    run.emplace("style", style_json(style));
+    runs.emplace_back(support::JsonValue{std::move(run)});
+    text.clear();
+}
+
+[[nodiscard]] support::JsonValue styled_rows_json(const std::vector<std::vector<tui::VirtualTerminalCell>>& rows) {
+    support::JsonValue::array_t encoded_rows;
+    encoded_rows.reserve(rows.size());
+    for (const auto& row : rows) {
+        const tui::VirtualTerminalStyle default_style;
+        std::size_t occupied = 0;
+        for (std::size_t column = 0; column < row.size(); ++column) {
+            const auto& cell = row[column];
+            if (!cell.grapheme.empty() || cell.continuation || cell.style != default_style) occupied = column + 1;
+        }
+        support::JsonValue::array_t runs;
+        std::string text;
+        tui::VirtualTerminalStyle run_style;
+        for (std::size_t column = 0; column < occupied; ++column) {
+            const auto& cell = row[column];
+            if (cell.continuation) continue;
+            if (!text.empty() && cell.style != run_style) append_styled_run(runs, text, run_style);
+            if (text.empty()) run_style = cell.style;
+            text += cell.grapheme.empty() ? " " : cell.grapheme;
+        }
+        append_styled_run(runs, text, run_style);
+        encoded_rows.emplace_back(std::move(runs));
+    }
+    return support::JsonValue{std::move(encoded_rows)};
+}
+
 void require_directory(const std::filesystem::path& path) {
     std::error_code error;
     std::filesystem::create_directories(path, error);
@@ -268,6 +337,8 @@ void add_scripted_responses(tests::ScriptedRuntimeFixture& scripted, std::string
     support::JsonValue::object_t value;
     value.emplace("visible", lines_json(terminal.screen()));
     value.emplace("scrollback", lines_json(terminal.scrollback()));
+    value.emplace("styledVisible", styled_rows_json(terminal.cells()));
+    value.emplace("styledScrollback", styled_rows_json(terminal.scrollback_cells()));
     std::string ansi;
     for (std::size_t index = output_offset; index < terminal.output().size(); ++index) {
         ansi.append(terminal.output()[index]);
@@ -356,10 +427,10 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
     }
 
     std::size_t response_index = 0;
-    for (const auto& input : inputs) {
+    for (std::size_t input_index = 0; input_index < inputs.size(); ++input_index) {
+        const auto& input = inputs[input_index];
         const auto input_offset = output_size(terminal);
         REQUIRE(terminal.inject_input(input));
-        drain_ready(io, std::chrono::milliseconds{20});
         if (scenario == "tool-result" && input.ends_with("\r")) {
             REQUIRE(tests::pump_until(
                     io, [&] { return screen_contains(terminal, "I will read the deterministic fixture."); }));
@@ -382,6 +453,27 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
             REQUIRE(tests::pump_until(io, [&] { return !screen_contains(terminal, "Type to search"); }));
         } else {
             REQUIRE(tests::pump_until(io, [&] { return output_size(terminal) > input_offset; }));
+            if (scenario == "model-selector" && input_index == 0)
+                REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Only showing models"); }));
+            if (scenario == "model-selector" && input_index == 1)
+                REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Model:"); }));
+            if (scenario == "thinking-selector" && input_index == 0)
+                REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Set thinking level"); }));
+            if (scenario == "thinking-selector" && input_index == 1)
+                REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "No reasoning"); }));
+            if (scenario == "thinking-selector" && input_index == 2)
+                REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Thinking level:"); }));
+            if (scenario == "settings-selector" && input_index == 0)
+                REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Open settings menu"); }));
+            if (scenario == "settings-selector" && (input_index == 1 || input_index == 2))
+                REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Type to search"); }));
+            if (scenario == "editor-long" || scenario == "editor-cjk" || scenario == "editor-token") {
+                const auto expected_editor_text = inputs[0].substr(0, 20);
+                if (input_index == 0)
+                    REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, expected_editor_text); }));
+                else
+                    REQUIRE(tests::pump_until(io, [&] { return !screen_contains(terminal, expected_editor_text); }));
+            }
         }
         drain_ready(io, std::chrono::milliseconds{20});
         snapshots.push_back(snapshot(terminal, output_offset));

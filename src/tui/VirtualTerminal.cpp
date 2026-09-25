@@ -817,6 +817,10 @@ const std::vector<std::vector<VirtualTerminalCell>>& VirtualTerminal::cells() co
     return impl_->cells;
 }
 
+const std::vector<std::vector<VirtualTerminalCell>>& VirtualTerminal::scrollback_cells() const {
+    return impl_->scrollback_cells;
+}
+
 const std::vector<VirtualTerminalImage>& VirtualTerminal::images() const {
     return impl_->images;
 }

@@ -115,6 +115,7 @@ public:
     [[nodiscard]] const std::vector<std::string>& scrollback() const;
     [[nodiscard]] std::size_t viewport_top() const;
     [[nodiscard]] const std::vector<std::vector<VirtualTerminalCell>>& cells() const;
+    [[nodiscard]] const std::vector<std::vector<VirtualTerminalCell>>& scrollback_cells() const;
     [[nodiscard]] const std::vector<VirtualTerminalImage>& images() const;
     [[nodiscard]] VirtualTerminalStyle final_style() const;
     [[nodiscard]] CursorPosition cursor() const;
