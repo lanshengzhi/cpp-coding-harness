@@ -63,10 +63,21 @@ TEST_CASE("a registered tool is resolved by name and an unregistered one takes t
     // fallback draws the bold tool name: comparing the two is what shows the
     // lookup is by name rather than a single pair for every tool.
     //
-    // `bash` carries the empty half: `read` stopped being a stub in #825 and
-    // now draws its own title, so the "still empty" contrast is read off a
-    // tool that is still a stub.
-    auto& registered = registry.lookup("bash");
+    // A seam test must not use "is still a stub" as its evidence of "is
+    // registered": an empty call half is an implementation state that holds
+    // only until a renderer's own title lands. Probing a built-in name made
+    // this case depend on delivery progress — `read` stopped being empty in
+    // #825, and `bash` in #826, each of which moved the probe rather than
+    // breaking anything. The stub registered here is empty by construction, so
+    // the contrast no longer depends on which built-ins have been implemented.
+    registry.register_renderer("stub",
+            coding_agent::tui::ToolRenderer{
+                    .render_call =
+                            [](const coding_agent::tui::ToolRenderContext&) {
+                                return coding_agent::tui::ToolRenderedText{};
+                            },
+            });
+    auto& registered = registry.lookup("stub");
     REQUIRE(static_cast<bool>(registered.render_call));
     CHECK(registered.render_call(render_context(theme, args)).title.empty());
     auto& unregistered = registry.lookup("grep");
