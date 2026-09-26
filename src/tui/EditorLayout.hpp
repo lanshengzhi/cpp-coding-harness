@@ -72,10 +72,13 @@ public:
     [[nodiscard]] static std::vector<EditorVisualLine> construct_visual_lines(
             const BufferDocument& document, std::size_t width);
 
+    /// `rows_above_content` is the count of rendered rows above the first
+    /// content row (the top border when rendered). The bottom border sits
+    /// below the content and must not enter this offset.
     [[nodiscard]] static std::optional<CursorPosition> compute_cursor_position(const BufferDocument& document,
             std::span<const EditorVisualLine> visual,
             BufferCursor cursor,
-            std::size_t border_rows,
+            std::size_t rows_above_content,
             std::size_t scroll_offset,
             std::size_t visible_count,
             std::optional<std::size_t> cursor_line = std::nullopt,

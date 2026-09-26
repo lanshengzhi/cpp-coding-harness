@@ -1894,11 +1894,14 @@ TEST_CASE("Editor renders empty content with fake cursor padding and tracks focu
     CHECK(bordered->lines[1] == "\x1b[7m \x1b[27m     ");
     CHECK(bordered->lines[2] == "──────");
 
-    // Freezes existing behavior: border_rows() (2) is added to visual row (0) -> row 2.
+    // Only the top border (1 row) sits above the content; the cursor row
+    // must land on the content row so Tui's exit write of " " overwrites
+    // the fake cursor instead of the bottom border (pi beforeTerminalStop
+    // parity). Passing both border rows parks the cursor one row too low.
     const auto bordered_loc = editor.cursor_location();
     REQUIRE(bordered_loc.has_value());
     CHECK(bordered_loc->column == 0);
-    CHECK(bordered_loc->row == 2);
+    CHECK(bordered_loc->row == 1);
 }
 
 TEST_CASE("Editor wraps multi-cell Unicode graphemes and computes exact visual cursor positions",

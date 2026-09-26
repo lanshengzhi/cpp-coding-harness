@@ -191,7 +191,7 @@ std::vector<EditorVisualLine> EditorLayout::construct_visual_lines(const BufferD
 std::optional<CursorPosition> EditorLayout::compute_cursor_position(const BufferDocument& document,
         std::span<const EditorVisualLine> visual,
         BufferCursor cursor,
-        std::size_t border_rows,
+        std::size_t rows_above_content,
         std::size_t scroll_offset,
         std::size_t visible_count,
         std::optional<std::size_t> cursor_line,
@@ -219,7 +219,7 @@ std::optional<CursorPosition> EditorLayout::compute_cursor_position(const Buffer
         return std::nullopt;
     }
 
-    const std::size_t display_row = border_rows + visual_row - scroll_offset;
+    const std::size_t display_row = rows_above_content + visual_row - scroll_offset;
 
     const auto& vl = visual[visual_row];
     const std::size_t vl_text_width = visible_width(vl.text);
@@ -260,6 +260,7 @@ support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions 
     }
 
     const std::size_t border_rows = (options.theme && options.theme->border) ? 2 : 0;
+    const std::size_t top_border_rows = border_rows != 0 ? 1 : 0;
     const auto bordered = options.available_height > border_rows ? options.available_height - border_rows : 1;
     const auto visible_count = std::max<std::size_t>(1, std::min(options.max_visible_lines, bordered));
 
@@ -347,7 +348,7 @@ support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions 
     }
 
     std::optional<CursorPosition> cursor_position = compute_cursor_position(
-            doc, visual, options.cursor, border_rows, scroll_offset, visible_count, cursor_line, widths.padding);
+            doc, visual, options.cursor, top_border_rows, scroll_offset, visible_count, cursor_line, widths.padding);
 
     return EditorLayoutResult{
             .lines = std::move(result),

@@ -157,6 +157,14 @@ struct Editor::Impl {
         return theme.border ? 2 : 0;
     }
 
+    /// Rendered rows above the first content row: only the top border. The
+    /// bottom border sits below the content, so it never shifts the cursor
+    /// row (passing border_rows() here parks the hardware cursor one row too
+    /// low, on the bottom-border line).
+    [[nodiscard]] std::size_t top_border_rows() const {
+        return border_rows() != 0 ? 1 : 0;
+    }
+
     /// Content rows available inside the border, at least 1.
     [[nodiscard]] std::size_t content_height() const {
         const auto bordered = available_height > border_rows()
@@ -1253,7 +1261,7 @@ std::optional<CursorPosition> Editor::cursor_location() const {
     return detail::EditorLayout::compute_cursor_position(impl.buffer.document(),
             visual,
             impl.buffer.cursor(),
-            impl.border_rows(),
+            impl.top_border_rows(),
             impl.scroll_offset,
             impl.content_height(),
             std::nullopt,

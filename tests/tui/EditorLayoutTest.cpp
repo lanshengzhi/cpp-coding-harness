@@ -177,7 +177,8 @@ TEST_CASE("EditorLayout computes cursor position for empty and bordered document
     CHECK(layout->cursor_position->column == 0);
     CHECK(layout->cursor_position->row == 0);
 
-    // Case 2: bordered empty document (row 2 because border_rows = 2)
+    // Case 2: bordered empty document (row 1: only the top border sits
+    // above the content row; the bottom border must not shift the cursor)
     EditorTheme theme;
     theme.border = [](std::string s) { return s; };
     EditorLayoutOptions bordered_options{
@@ -193,7 +194,7 @@ TEST_CASE("EditorLayout computes cursor position for empty and bordered document
     REQUIRE(bordered_layout);
     REQUIRE(bordered_layout->cursor_position.has_value());
     CHECK(bordered_layout->cursor_position->column == 0);
-    CHECK(bordered_layout->cursor_position->row == 2);
+    CHECK(bordered_layout->cursor_position->row == 1);
 }
 
 TEST_CASE("EditorLayout computes exact visual cursor position for wrapped Unicode graphemes",
