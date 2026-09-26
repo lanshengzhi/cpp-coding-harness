@@ -1,5 +1,5 @@
-escape interrupt · ctrl+c/ctrl+d · / commands · ctrl+o more             
-Press ctrl+o to show full startup help and loaded resources.            
+ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ctrl+o more 
+ Press ctrl+o to show full startup help and loaded resources.           
                                                                         
  [compaction]                                                           
                                                                         

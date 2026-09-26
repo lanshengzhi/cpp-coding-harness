@@ -320,6 +320,7 @@ void add_scripted_responses(tests::ScriptedRuntimeFixture& scripted, std::string
         const std::filesystem::path& workspace) {
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::InMemorySessionTarget{};
+    request.provide_user_shell = true;
     request.workspace = workspace;
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;

@@ -2,6 +2,7 @@
 #include "coding_agent/tui/FooterDataProvider.hpp"
 #include "coding_agent/tui/KeybindingHints.hpp"
 #include "coding_agent/tui/KeybindingsManager.hpp"
+#include "coding_agent/tui/InteractiveStartup.hpp"
 #include "coding_agent/tui/StatusIndicator.hpp"
 
 #include "support/TempWorkspace.hpp"
@@ -70,6 +71,66 @@ TEST_CASE("Header hints render unbound paired keys explicitly", "[coding_agent][
         text += tui::strip_terminal_sequences(line);
     CHECK(text.find("Unbound twice to exit") != std::string::npos);
     CHECK(text.find("Unbound/shift+ctrl+p to cycle models") != std::string::npos);
+}
+
+TEST_CASE("Compact header hints keep pi's assembled actions at every formal boot width",
+        "[coding_agent][tui][hints][issue806][spec]") {
+    tests::TempWorkspace config;
+    const auto actions = coding_agent::tui::assemble_keybinding_actions(false);
+    std::vector<std::string_view> action_views;
+    action_views.reserve(actions.size());
+    for (const auto& action : actions)
+        action_views.push_back(action);
+    const auto definitions = coding_agent::tui::app_keybinding_definitions(action_views);
+    REQUIRE(definitions);
+    coding_agent::tui::KeybindingsManagerRequest request;
+    request.agent_config_directory = config.path();
+    request.application_definitions = *definitions;
+    const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
+    REQUIRE(manager);
+
+    coding_agent::tui::LiveTheme theme{coding_agent::tui::builtin_dark_theme(), tui::TerminalColorCapability::Xterm256};
+    auto shared = std::make_shared<coding_agent::tui::SharedKeybindings>(manager->registry);
+    coding_agent::tui::KeybindingHints hints(theme, std::move(shared), true, false);
+
+    const std::array<std::vector<std::string>, 4> expected{
+            std::vector<std::string>{
+                    " escape interrupt · ctrl+c/ctrl+d",
+                    " clear/exit · / commands · ! bash ·",
+                    " ctrl+o more",
+                    " Press ctrl+o to show full startup help",
+                    " and loaded resources.",
+            },
+            std::vector<std::string>{
+                    " escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash ·",
+                    " ctrl+o more",
+                    " Press ctrl+o to show full startup help and loaded resources.",
+            },
+            std::vector<std::string>{
+                    " escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more",
+                    " Press ctrl+o to show full startup help and loaded resources.",
+            },
+            std::vector<std::string>{
+                    " escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more",
+                    " Press ctrl+o to show full startup help and loaded resources.",
+            },
+    };
+    constexpr std::array<std::size_t, 4> kWidths{41, 72, 100, 120};
+    for (std::size_t index = 0; index < kWidths.size(); ++index) {
+        const auto rendered = hints.render(kWidths[index]);
+        REQUIRE(rendered);
+        const auto actual = [&] {
+            std::vector<std::string> lines;
+            for (const auto& line : rendered->lines) {
+                auto text = tui::strip_terminal_sequences(line);
+                while (!text.empty() && text.back() == ' ')
+                    text.pop_back();
+                lines.push_back(std::move(text));
+            }
+            return lines;
+        }();
+        CHECK(actual == expected[index]);
+    }
 }
 
 TEST_CASE("Footer formatTokens matches pi's compact formatting", "[coding_agent][tui][footer][issue411][spec]") {

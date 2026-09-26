@@ -74,7 +74,7 @@ std::string raw_key_hint(
     const LiveTheme& theme,
     std::string_view key,
     std::string_view description) {
-    return styled_hint_line(theme, key.empty() ? "Unbound" : format_key_text(key), description);
+    return styled_hint_line(theme, key.empty() ? "Unbound" : std::string{key}, description);
 }
 
 std::string generic_select_list_hint(const cch::tui::KeybindingRegistry& keybindings) {
@@ -106,12 +106,18 @@ support::Expected<cch::tui::RenderResult> KeybindingHints::render(std::size_t wi
     if (!expanded_) {
         // pi's compact startup instructions, without the logo.
         text += key_hint(theme_, keybindings, "app.interrupt", "interrupt");
-        text += theme_.foreground(ThemeToken::Muted,
-                std::format(" · {} · / commands",
-                        std::format("{}/{}",
-                                effective_key_text(keybindings, "app.clear"),
-                                effective_key_text(keybindings, "app.exit"))));
-        if (user_bash_available_) text += theme_.foreground(ThemeToken::Muted, " · ! bash");
+        text += theme_.foreground(ThemeToken::Muted, " · ");
+        text += raw_key_hint(theme_,
+                std::format("{}/{}",
+                        effective_key_text(keybindings, "app.clear"),
+                        effective_key_text(keybindings, "app.exit")),
+                "clear/exit");
+        text += theme_.foreground(ThemeToken::Muted, " · ");
+        text += raw_key_hint(theme_, "/", "commands");
+        if (user_bash_available_) {
+            text += theme_.foreground(ThemeToken::Muted, " · ");
+            text += raw_key_hint(theme_, "!", "bash");
+        }
         text += theme_.foreground(ThemeToken::Muted, " · ");
         text += key_hint(theme_, keybindings, "app.tools.expand", "more");
         // pi `compactOnboarding` (dim): `Press <keyText("app.tools.expand")>
@@ -158,7 +164,7 @@ support::Expected<cch::tui::RenderResult> KeybindingHints::render(std::size_t wi
         }
     }
 
-    cch::tui::Text component(std::move(text), 0, 0);
+    cch::tui::Text component(std::move(text), 1, 0);
     auto rendered = component.render(width);
     if (!rendered) return std::unexpected(rendered.error());
     return rendered;

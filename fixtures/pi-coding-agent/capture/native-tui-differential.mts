@@ -126,23 +126,23 @@ const scenarios: Scenario[] = [
 ];
 
 const triageByScenario: Record<string, Triage> = Object.fromEntries([
-	["boot-72", { classification: "product-defect", evidence: ["#806", "report.json:boot-72"], rationale: "The profile-stripped shared regular Native TUI header/composition remains different at 72 columns." }],
-	["boot-100", { classification: "product-defect", evidence: ["#806", "report.json:boot-100"], rationale: "The profile-stripped shared regular Native TUI header/composition remains different at 100 columns." }],
-	["boot-120", { classification: "product-defect", evidence: ["#806", "report.json:boot-120"], rationale: "The profile-stripped shared regular Native TUI header/composition remains different at 120 columns." }],
-	["boot-41", { classification: "product-defect", evidence: ["#806", "report.json:boot-41"], rationale: "The profile-stripped shared regular Native TUI header/composition remains different at the narrow width." }],
+	["boot-72", { classification: "match", evidence: ["report.json:boot-72"], rationale: "The profile-stripped shared regular Native TUI header matches pi at 72 columns." }],
+	["boot-100", { classification: "match", evidence: ["report.json:boot-100"], rationale: "The profile-stripped shared regular Native TUI header matches pi at 100 columns." }],
+	["boot-120", { classification: "match", evidence: ["report.json:boot-120"], rationale: "The profile-stripped shared regular Native TUI header matches pi at 120 columns." }],
+	["boot-41", { classification: "match", evidence: ["report.json:boot-41"], rationale: "The profile-stripped shared regular Native TUI header matches pi at the narrow width." }],
 	["model-selector", { classification: "product-defect", evidence: ["#808", "report.json:model-selector"], rationale: "The supported model row marker/order remains different after profile projection." }],
 	["settings-selector", { classification: "product-defect", evidence: ["#809", "report.json:settings-selector"], rationale: "Pi-only settings are documented omissions, but supported settings rows and transitions also differ." }],
 	["thinking-selector", { classification: "product-defect", evidence: ["#810", "report.json:thinking-selector"], rationale: "The supported thinking selector viewport and command-row presentation remain different." }],
 	["editor-long", { classification: "product-defect", evidence: ["#811", "report.json:editor-long"], rationale: "Wrapped editor input changes the supported workspace/footer composition." }],
-	["editor-cjk", { classification: "product-defect", evidence: ["#806", "report.json:editor-cjk"], rationale: "After profile projection, only the shared boot-header composition remains different." }],
+	["editor-cjk", { classification: "product-defect", evidence: ["report.json:editor-cjk"], rationale: "The shared header text matches after profile projection; a separate styled-cell difference remains." }],
 	["editor-token", { classification: "product-defect", evidence: ["#811", "report.json:editor-token"], rationale: "Narrow unbreakable input changes the supported workspace/footer composition." }],
-	["user-message", { classification: "product-defect", evidence: ["#806", "report.json:user-message", "profile:footer-stats"], rationale: "The supported residual is the shared boot header; provider usage is isolated by the deterministic profile." }],
+	["user-message", { classification: "product-defect", evidence: ["report.json:user-message", "profile:footer-stats"], rationale: "The shared header text matches after profile projection; a separate footer-stat difference remains." }],
 	["tool-result", { classification: "product-defect", evidence: ["#812", "report.json:tool-result"], rationale: "A successful Supported tool result has a stable presentation difference after fixture parity." }],
-	["status-footer", { classification: "product-defect", evidence: ["#806", "report.json:status-footer", "profile:footer-stats"], rationale: "The supported residual is the shared boot header; provider usage is isolated by the deterministic profile." }],
-	["resize-72-41", { classification: "product-defect", evidence: ["#806", "report.json:resize-72-41"], rationale: "After profile projection, only the shared boot-header composition remains different." }],
-	["resize-100-72", { classification: "product-defect", evidence: ["#806", "report.json:resize-100-72"], rationale: "After profile projection, only the shared boot-header composition remains different." }],
-	["resize-120-100", { classification: "product-defect", evidence: ["#806", "report.json:resize-120-100"], rationale: "After profile projection, only the shared boot-header composition remains different." }],
-	["scrollback", { classification: "product-defect", evidence: ["#806", "#807", "report.json:scrollback", "profile:footer-stats"], rationale: "The shared header remains different, and the supported native scrollback boundary has an additional stable ordering difference." }],
+	["status-footer", { classification: "product-defect", evidence: ["report.json:status-footer", "profile:footer-stats"], rationale: "The shared header text matches after profile projection; a separate footer-stat difference remains." }],
+	["resize-72-41", { classification: "match", evidence: ["report.json:resize-72-41"], rationale: "The profile-stripped shared regular Native TUI header matches pi after resizing." }],
+	["resize-100-72", { classification: "match", evidence: ["report.json:resize-100-72"], rationale: "The profile-stripped shared regular Native TUI header matches pi after resizing." }],
+	["resize-120-100", { classification: "match", evidence: ["report.json:resize-120-100"], rationale: "The profile-stripped shared regular Native TUI header matches pi after resizing." }],
+	["scrollback", { classification: "product-defect", evidence: ["#807", "report.json:scrollback", "profile:footer-stats"], rationale: "The shared header text matches after profile projection; the supported native scrollback boundary still has a stable ordering difference." }],
 ] satisfies Array<[string, Triage]>);
 
 const volatileModelProse = [
@@ -187,8 +187,12 @@ const usageProfileScenarios = new Set(["user-message", "status-footer", "tool-re
 // debt: this is a frozen v0.87.1 row allowlist; update it only when the differential baseline advances.
 const profileCellRowProjections = Object.freeze([
 	{ name: "runtime-identity", pattern: /^\s*pi v\d+\.\d+\.\d+\s*$/ },
+	{ name: "workspace-branch", pattern: /<deterministic-workspace>/ },
 	{ name: "startup-documentation", pattern: /^\s*Pi can explain its own features and look up its docs\. Ask it how to(?: use or extend Pi\.)?\s*$/ },
 	{ name: "startup-documentation", pattern: /^\s*use or extend Pi\.\s*$/ },
+	{ name: "startup-documentation", pattern: /^\s*Pi can explain its own features and\s*$/ },
+	{ name: "startup-documentation", pattern: /^\s*look up its docs\. Ask it how to use or\s*$/ },
+	{ name: "startup-documentation", pattern: /^\s*extend Pi\.\s*$/ },
 ]);
 
 function childEnvironment(extra: Record<string, string>): NodeJS.ProcessEnv {
@@ -846,7 +850,15 @@ function verifyProjectionPolicy(): void {
 
 	const profile = projectProfileCellRows([" pi v0.87.1", "Pi can explain its own features and look up its docs. Ask it how to", "use or extend Pi.", "kept"]);
 	assert.deepEqual(profile.rows, ["kept"]);
-	assert.deepEqual(profile.removed, { "runtime-identity": 1, "startup-documentation": 2 });
+	assert.deepEqual(profile.removed, { "runtime-identity": 1, "workspace-branch": 0, "startup-documentation": 2 });
+	const narrowDocumentation = projectProfileCellRows([
+		" Pi can explain its own features and",
+		" look up its docs. Ask it how to use or",
+		" extend Pi.",
+		"kept",
+	]);
+	assert.deepEqual(narrowDocumentation.rows, ["kept"]);
+	assert.deepEqual(narrowDocumentation.removed, { "runtime-identity": 0, "workspace-branch": 0, "startup-documentation": 3 });
 	assert.equal(normalizeCellText("/repository (main)", "/tmp/workspace", "/repository"), "<deterministic-workspace>");
 	assert.equal(replaceFixturePaths("/repository (main) suffix", "/tmp/workspace", "/repository"), "<repository-root> (<branch>) suffix");
 	assert.deepEqual(projectDiagnosticFooterRows(["0.0%/128k (auto) <model>", "kept"], { id: "user-message" }), ["<footer-stats> <model>", "kept"]);
