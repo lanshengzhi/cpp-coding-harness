@@ -10,40 +10,59 @@
 #include <cch/ai/Message.hpp>
 #include <cch/support/JsonValue.hpp>
 #include <cch/tui/TerminalImage.hpp>
+#include <cch/tui/Utils.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 using namespace cch;
 
 namespace {
 
-[[nodiscard]] coding_agent::tui::ToolRenderContext render_context(const coding_agent::tui::LiveTheme& theme,
-        const support::JsonValue& args,
-        std::string_view tool_name = "custom_tool") {
-    const std::string expand_key = "ctrl+o";
-    const std::string expand_hint = theme.foreground(coding_agent::tui::ThemeToken::Dim, expand_key) +
-                                    theme.foreground(coding_agent::tui::ThemeToken::Muted, " to expand");
-    return coding_agent::tui::ToolRenderContext{
-            .args = args,
-            .tool_name = tool_name,
-            .tool_call_id = "call_1",
-            .cwd = "/workspace",
-            .theme = theme,
-            .expand_key = expand_key,
-            .expand_hint = expand_hint,
-            .args_complete = false,
-            .execution_started = false,
-            .is_partial = true,
-            .is_error = false,
-            .expanded = false,
-            .started_at_ms = std::nullopt,
-            .ended_at_ms = std::nullopt,
-    };
-}
+/// A render context the seam cases drive directly: a chosen tool name and a
+/// chosen argument object.
+///
+/// `ToolRenderContext::args` is a reference and `expand_key`/`expand_hint` are
+/// views, so this owns the storage behind all three for the lifetime of every
+/// context it hands out. A bare function returning a context would leave every
+/// view it copied pointing at a destroyed temporary, and a dangling view
+/// usually still holds the right bytes in a reused stack slot — so only an
+/// aliasing check catches it, which is what the lifetime case below asserts.
+struct SeamContext {
+    explicit SeamContext(const coding_agent::tui::LiveTheme& a_theme,
+            support::JsonValue arguments = support::JsonValue::object_t{})
+        : theme(a_theme), args(std::move(arguments)),
+          expand_hint(a_theme.foreground(coding_agent::tui::ThemeToken::Dim, expand_key) +
+                      a_theme.foreground(coding_agent::tui::ThemeToken::Muted, " to expand")) {}
+
+    [[nodiscard]] coding_agent::tui::ToolRenderContext context(std::string_view tool_name = "custom_tool") const {
+        return coding_agent::tui::ToolRenderContext{
+                .args = args,
+                .tool_name = tool_name,
+                .tool_call_id = "call_1",
+                .cwd = "/workspace",
+                .theme = theme,
+                .expand_key = expand_key,
+                .expand_hint = expand_hint,
+                .args_complete = false,
+                .execution_started = false,
+                .is_partial = true,
+                .is_error = false,
+                .expanded = false,
+                .started_at_ms = std::nullopt,
+                .ended_at_ms = std::nullopt,
+        };
+    }
+
+    const coding_agent::tui::LiveTheme& theme;
+    support::JsonValue args;
+    std::string expand_key{"ctrl+o"};
+    std::string expand_hint;
+};
 
 [[nodiscard]] support::JsonValue parse(std::string_view json) {
     auto parsed = support::read_json(json);
@@ -53,11 +72,41 @@ namespace {
 
 } // namespace
 
+TEST_CASE("a seam context's key views name storage that outlives the context",
+        "[coding_agent][tui][tool-renderers][issue824][spec]") {
+    auto theme = tests::tool_render_theme();
+    SeamContext seam{theme, parse(R"({"alpha":"beta"})")};
+    const auto context = seam.context();
+
+    // The property, not the text. A renderer that only ever echoed the tool
+    // name — which is what the registry cases below did — passes on the bytes
+    // a dead temporary happens to leave behind, so a value comparison cannot
+    // stand in for ownership. Aliasing the fixture's own members is what says
+    // the views stay valid for as long as the component that holds them.
+    CHECK(context.expand_key.data() == seam.expand_key.data());
+    CHECK(context.expand_hint.data() == seam.expand_hint.data());
+    CHECK(&context.args == &seam.args);
+    CHECK(coding_agent::tui::json_string(context.args, "alpha") == "beta");
+
+    // And the views are readable after the context was handed out: a renderer
+    // that consumes both draws exactly the fixture's key text. The two pieces
+    // abut, because pi's `keyHint` is `dim(key) + muted(" to expand")` and the
+    // muted half carries the separating space.
+    const auto echo_expand_hint = [](const coding_agent::tui::ToolRenderContext& probe) {
+        return coding_agent::tui::ToolRenderedText{
+                .title = std::string{probe.tool_name} + " " + std::string{probe.expand_key} +
+                         cch::tui::strip_terminal_sequences(probe.expand_hint),
+        };
+    };
+    const auto rendered = echo_expand_hint(context);
+    CHECK(cch::tui::strip_terminal_sequences(rendered.title) == "custom_tool ctrl+octrl+o to expand");
+}
+
 TEST_CASE("a registered tool is resolved by name and an unregistered one takes the fallback",
         "[coding_agent][tui][tool-renderers][issue824][spec]") {
     auto registry = coding_agent::tui::ToolRendererRegistry::make_default();
     auto theme = tests::tool_render_theme();
-    const auto args = support::JsonValue::object_t{};
+    SeamContext seam{theme};
 
     // The registered pair draws its own (still empty) call text, while the
     // fallback draws the bold tool name: comparing the two is what shows the
@@ -79,10 +128,10 @@ TEST_CASE("a registered tool is resolved by name and an unregistered one takes t
             });
     auto& registered = registry.lookup("stub");
     REQUIRE(static_cast<bool>(registered.render_call));
-    CHECK(registered.render_call(render_context(theme, args)).title.empty());
+    CHECK(registered.render_call(seam.context()).title.empty());
     auto& unregistered = registry.lookup("grep");
     REQUIRE(static_cast<bool>(unregistered.render_call));
-    CHECK(unregistered.render_call(render_context(theme, args, "grep")).title ==
+    CHECK(unregistered.render_call(seam.context("grep")).title ==
             coding_agent::tui::bold_foreground(theme, coding_agent::tui::ThemeToken::ToolTitle, "grep"));
 }
 

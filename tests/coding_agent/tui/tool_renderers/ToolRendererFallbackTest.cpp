@@ -230,7 +230,7 @@ TEST_CASE("the fold hint composes both of its forms, with and without a total",
     // and the closing paren muted. A single-colour hint renders the same
     // visible text and passes both checks above.
     const std::string_view prefix = "\n... (23 more lines, 33 total,";
-    CHECK(with_total.rfind(theme.foreground(coding_agent::tui::ThemeToken::Muted, std::string{prefix}), 0) == 0);
+    CHECK(with_total.starts_with(theme.foreground(coding_agent::tui::ThemeToken::Muted, std::string{prefix})));
     CHECK(with_total.find(theme.foreground(coding_agent::tui::ThemeToken::Dim, "ctrl+o")) != std::string::npos);
     CHECK(with_total.find(theme.foreground(coding_agent::tui::ThemeToken::Muted, ")")) != std::string::npos);
 }

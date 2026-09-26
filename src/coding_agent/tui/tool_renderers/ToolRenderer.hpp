@@ -38,12 +38,15 @@ struct ToolRenderedResult {
 };
 
 /// pi `renderCall(args, theme, context) -> Component`. The parsed arguments
-/// arrive as `ToolRenderContext::args`.
-using ToolRenderCall = std::move_only_function<ToolRenderedText(const ToolRenderContext& context)>;
+/// arrive as `ToolRenderContext::args`. A `*Hook` alias, not `*Call`: the
+/// suffix vocabulary reserves `*Result` for a passive struct and this is a
+/// `move_only_function`.
+using ToolRenderCallHook = std::move_only_function<ToolRenderedText(const ToolRenderContext& context)>;
 
 /// pi `renderResult(result, options, theme, context) -> Component | undefined`.
-/// `expanded` and `is_partial` arrive as `ToolRenderContext` fields.
-using ToolRenderResult =
+/// `expanded` and `is_partial` arrive as `ToolRenderContext` fields. A
+/// `*Result` name would read as the passive struct this is not.
+using ToolRenderResultHook =
         std::move_only_function<ToolRenderedText(const ToolRenderedResult& result, const ToolRenderContext& context)>;
 
 /// pi `ToolRenderers` (`core/tools/renderers/index.ts:19`): the call/result
@@ -51,8 +54,8 @@ using ToolRenderResult =
 /// string-out seam — it never owns a component and never reaches into the
 /// host's box.
 struct ToolRenderer {
-    ToolRenderCall render_call{};
-    ToolRenderResult render_result{};
+    ToolRenderCallHook render_call{};
+    ToolRenderResultHook render_result{};
 };
 
 } // namespace cch::coding_agent::tui

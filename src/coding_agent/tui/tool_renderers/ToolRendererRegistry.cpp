@@ -36,11 +36,9 @@ constexpr std::size_t kFallbackPreviewLines = 10;
     if (result.output.empty()) return {};
     const auto max_lines = context.expanded ? std::numeric_limits<std::size_t>::max() : kFallbackPreviewLines;
     const auto fold = fold_head_lines(result.output, max_lines);
-    std::string body;
-    for (const auto& line : fold.lines) {
-        if (!body.empty()) body.push_back('\n');
-        body += context.theme.foreground(ThemeToken::ToolOutput, line);
-    }
+    auto body = join_rendered_rows(fold.lines, [&context](const std::string& line) {
+        return context.theme.foreground(ThemeToken::ToolOutput, line);
+    });
     if (fold.remaining > 0) body += fold_hint(context, fold.remaining);
     return ToolRenderedText{.blocks = {std::move(body)}};
 }

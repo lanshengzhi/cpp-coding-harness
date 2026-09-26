@@ -88,7 +88,7 @@ constexpr std::size_t kContentWidth = kScreenWidth - 2;
 [[nodiscard]] std::vector<std::string> body_of(const tests::ToolRenderScreen& screen) {
     auto rows = screen.visible;
     if (rows.size() >= 2 && rows.back().empty()) rows.pop_back();
-    if (!rows.empty() && rows.back().rfind("Took ", 0) == 0) rows.pop_back();
+    if (!rows.empty() && rows.back().starts_with("Took ")) rows.pop_back();
     return rows;
 }
 
@@ -356,7 +356,7 @@ TEST_CASE("a settled bash result renders pi's Took line from the execution clock
         const auto screen = tests::render_tool_screen(*component, kScreenWidth);
         REQUIRE(screen.visible.size() == 6);
         CHECK(screen.visible.at(3) == "done");
-        CHECK(screen.visible.at(4).rfind("Took ", 0) == 0);
+        CHECK(screen.visible.at(4).starts_with("Took "));
         CHECK(screen.visible.at(4).size() > std::string_view{"Took "}.size());
     }
 

@@ -123,10 +123,14 @@ TEST_CASE("a successful edit still renders details.diff through the diff rendere
 
     // The preservation requirement, asserted as the full block rather than as
     // `find("-1 alpha")`: the rows, their order, and the fact that the
-    // success text never reaches the screen.
+    // success text never reaches the screen. The blank row between the title
+    // and the first diff row is pi's `edit.ts:234` `new Spacer(1)`, so its
+    // absence is the divergence a "the diff is somewhere on screen" check
+    // sails straight past.
     const std::vector<std::string> expected{
             "",
             "edit notes.txt",
+            "",
             "-1 alpha",
             "+1 beta",
             "",
@@ -200,7 +204,9 @@ TEST_CASE("a failed edit renders the result text in the error colour and no diff
     auto keybindings = tests::tool_render_keybindings();
     // The error branch wins over `details.diff`, which the harness does carry
     // on a failed edit: a result half that checked the diff first renders the
-    // diff here and passes every success case.
+    // diff here and passes every success case. The blank row is the same
+    // `Spacer(1)` the success path draws, so the error path is not the one
+    // place the blank line is allowed to go missing.
     auto component = edit_component(
             theme, keybindings, "oldText not found in notes.txt.", diff_details("-1 alpha\n+1 beta"), true);
 
@@ -209,6 +215,7 @@ TEST_CASE("a failed edit renders the result text in the error colour and no diff
     const std::vector<std::string> expected{
             "",
             "edit notes.txt",
+            "",
             "oldText not found in notes.txt.",
             "",
     };

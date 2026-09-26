@@ -1,5 +1,4 @@
                                                                         
-                                                                        
  Resumed reply: the notes file is ready.                                
                                                                         
                                                                         
@@ -11,6 +10,7 @@
  I will edit notes.txt to replace the placeholder line.                 
                                                                         
  edit notes.txt                                                         
+                                                                        
  -1 alpha                                                               
  +1 beta                                                                
                                                                         
