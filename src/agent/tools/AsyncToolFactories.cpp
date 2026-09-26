@@ -6,6 +6,7 @@
 #include "support/Json.hpp"
 #include "support/JsonGlaze.hpp"
 #include "agent/harness/OutputLimiter.hpp"
+#include "agent/harness/session/RandomHex.hpp"
 #include "agent/tools/TerminalText.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -14,9 +15,12 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <filesystem>
 #include <map>
 #include <memory>
-#include <sstream>
+#include <optional>
+#include <string_view>
+#include <system_error>
 #include <utility>
 
 namespace cch::tools {
@@ -126,6 +130,119 @@ template <typename Args>
     return support::make_error(support::ErrorCode::Tool, "missing capability");
 }
 
+[[nodiscard]] const char* truncation_kind_name(harness::OutputTruncationKind kind) {
+    return kind == harness::OutputTruncationKind::Lines ? "lines" : "bytes";
+}
+
+/// pi's `ReadToolDetails` / `BashToolDetails` carry the whole `TruncationResult`
+/// minus `content`, which stays the model-facing text (pi `read.ts:27-29`,
+/// `bash.ts:50-53`, `truncate.ts:15-38`).
+[[nodiscard]] support::JsonValue truncation_details(const harness::OutputTruncation& truncation) {
+    const auto number = [](std::size_t value) { return support::JsonValue(static_cast<double>(value)); };
+    support::JsonValue::object_t object{
+            {"truncated", support::JsonValue(truncation.truncated)},
+            {"truncatedBy",
+                    truncation.truncated_by ? support::JsonValue(truncation_kind_name(*truncation.truncated_by))
+                                            : support::JsonValue(nullptr)},
+            {"totalLines", number(truncation.total_lines)},
+            {"totalBytes", number(truncation.total_bytes)},
+            {"outputLines", number(truncation.output_lines)},
+            {"outputBytes", number(truncation.output_bytes)},
+            {"lastLinePartial", support::JsonValue(truncation.last_line_partial)},
+            {"firstLineExceedsLimit", support::JsonValue(truncation.first_line_exceeds_limit)},
+            {"maxLines", number(truncation.max_lines)},
+            {"maxBytes", number(truncation.max_bytes)},
+    };
+    return support::JsonValue{std::move(object)};
+}
+
+/// pi `appendStatus` (`bash.ts:341`): a blank line separates the output from
+/// the status, and an empty output leaves the status standing alone.
+[[nodiscard]] std::string append_status(const std::string& text, const std::string& status) {
+    return text.empty() ? status : text + "\n\n" + status;
+}
+
+/// The model-facing outcome of one `bash` execution: the clean output the model
+/// reads, plus the truncation facts and the spill path when output was dropped.
+struct BashOutput {
+    std::string text;
+    std::optional<harness::OutputTruncation> truncation;
+    std::optional<std::string> full_output_path;
+};
+
+/// pi's `OutputAccumulator` spill path (`output-accumulator.ts:19-22`):
+/// `<tmpdir>/<prefix>-<unique-id>.log`. The prefix is pike's own, matching the
+/// User Bash spill artifact (ADR 0061), not pi's `pi-bash`.
+[[nodiscard]] std::optional<std::string> bash_spill_path() {
+    std::error_code error;
+    const auto directory = std::filesystem::temp_directory_path(error);
+    if (error) {
+        return std::nullopt;
+    }
+    return (directory / ("cch-bash-" + harness::session::random_hex_id(8) + ".log")).string();
+}
+
+/// pi `formatOutput` (`bash.ts:321-339`): the truncated tail plus one
+/// `\n\n`-separated summary line naming the spill file, and an `(no output)`
+/// default the failure paths suppress. Every branch produces the whole text, so
+/// a test asserting one branch can never pass on an empty result.
+boost::asio::awaitable<support::Expected<BashOutput>> format_bash_output(
+        std::shared_ptr<harness::AsyncFileSystem> filesystem,
+        std::string redacted_full_output,
+        std::string empty_text,
+        std::stop_token stop_token) {
+    const harness::OutputLimit output_limit;
+    const auto truncation = harness::truncate_output_tail(redacted_full_output, output_limit);
+    // pi `output.getLastLineBytes()`: the byte size of the final line of the
+    // complete output, needed before the text is moved into the spill write.
+    const auto last_newline = redacted_full_output.rfind('\n');
+    const auto last_line_bytes = last_newline == std::string::npos ? redacted_full_output.size()
+                                                                   : redacted_full_output.size() - last_newline - 1;
+    BashOutput output{
+            .text = truncation.text.empty() ? std::move(empty_text) : truncation.text,
+            .truncation = std::nullopt,
+            .full_output_path = std::nullopt,
+    };
+    if (!truncation.truncated) {
+        co_return output;
+    }
+
+    // The complete redacted output goes to the OS temp directory; the model is
+    // told the same path `details.fullOutputPath` carries.
+    const auto spill_path = bash_spill_path();
+    if (!spill_path) {
+        co_return std::unexpected(
+                support::make_error(support::ErrorCode::Workspace, "bash spill temporary directory is unavailable"));
+    }
+    if (auto written = co_await support::detail::await_async_result(
+                filesystem->writeFile(*spill_path, std::move(redacted_full_output), stop_token));
+            !written) {
+        // pi closes the spill file inside `finishOutput` and a write failure
+        // rejects the tool, so a missing "Full output" promise is never sent.
+        co_return std::unexpected(harness::to_util_error(written.error()));
+    }
+
+    const auto total_lines = truncation.total_lines;
+    const auto end_line = total_lines;
+    const auto start_line = total_lines - truncation.output_lines + 1;
+    const auto to_line = [](std::size_t line) { return std::to_string(line); };
+    if (truncation.last_line_partial) {
+        output.text += "\n\n[Showing last " + harness::format_output_size(truncation.output_bytes) + " of line " +
+                       to_line(end_line) + " (line is " + harness::format_output_size(last_line_bytes) +
+                       "). Full output: " + *spill_path + "]";
+    } else if (truncation.truncated_by == harness::OutputTruncationKind::Lines) {
+        output.text += "\n\n[Showing lines " + to_line(start_line) + "-" + to_line(end_line) + " of " +
+                       to_line(total_lines) + ". Full output: " + *spill_path + "]";
+    } else {
+        output.text += "\n\n[Showing lines " + to_line(start_line) + "-" + to_line(end_line) + " of " +
+                       to_line(total_lines) + " (" + harness::format_output_size(output_limit.max_bytes) +
+                       " limit). Full output: " + *spill_path + "]";
+    }
+    output.truncation = truncation;
+    output.full_output_path = *spill_path;
+    co_return output;
+}
+
 /// Build a pending `AsyncResult` whose producer runs `body` (a fresh
 /// awaitable) on the consuming coroutine's executor (the Agent loop's
 /// serialized domain) and bridges its terminal outcome. The executor is read
@@ -167,48 +284,84 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> read_
     if (!filesystem) {
         co_return std::unexpected(missing_capability_error());
     }
-    auto lines = co_await support::detail::await_async_result(
-            filesystem->readTextLines(parsed->path, std::nullopt, stop_token));
-    if (!lines) {
-        co_return error_result_from(lines.error());
+    // pi `read.ts:132-137` reads the file and splits the whole text on "\n", so
+    // the line count (and the out-of-range `offset` count) covers the trailing
+    // empty line a newline-terminated file ends with.
+    auto text = co_await support::detail::await_async_result(filesystem->readTextFile(parsed->path, stop_token));
+    if (!text) {
+        co_return error_result_from(text.error());
     }
-    // offset is 1-based; limit 0 means no explicit limit.
-    const auto offset = std::max(1, parsed->offset);
+    const auto all_lines = harness::split_lines(*text);
+    const std::size_t total_file_lines = all_lines.size();
+
+    // pi `read.ts:139-142`: offset is 1-indexed on input, 0-indexed on the
+    // buffer, and an offset past the end is an error.
+    const int start_line = std::max(0, parsed->offset - 1);
+    if (static_cast<std::size_t>(start_line) >= total_file_lines) {
+        co_return error_result("Offset " + std::to_string(parsed->offset) + " is beyond end of file (" +
+                               std::to_string(total_file_lines) + " lines total)");
+    }
+    const auto start_line_display = static_cast<std::size_t>(start_line) + 1;
+
+    // pi `read.ts:143-154`: a user limit narrows the slice before truncation.
+    std::string selected;
+    std::optional<std::size_t> user_limited_lines;
+    if (parsed->limit > 0) {
+        const auto end_line = std::min(
+                static_cast<std::size_t>(start_line) + static_cast<std::size_t>(parsed->limit), total_file_lines);
+        user_limited_lines = end_line - static_cast<std::size_t>(start_line);
+    } else {
+        user_limited_lines = std::nullopt;
+    }
+    const std::size_t selected_end =
+            user_limited_lines ? static_cast<std::size_t>(start_line) + *user_limited_lines : total_file_lines;
+    for (std::size_t index = static_cast<std::size_t>(start_line); index < selected_end; ++index) {
+        if (index > static_cast<std::size_t>(start_line)) {
+            selected += '\n';
+        }
+        selected.append(all_lines[index]);
+    }
+
     const harness::OutputLimit output_limit;
-    std::string result;
-    std::size_t bytes = 0;
-    int emitted = 0;
-    bool truncated = false;
-    int line_number = 1;
-    for (const auto& line : *lines) {
-        if (line_number++ < offset) {
-            continue;
+    const auto truncation = harness::truncate_output_head(selected, output_limit);
+    const auto max_bytes_size = harness::format_output_size(output_limit.max_bytes);
+    std::string content = truncation.text;
+    std::optional<harness::OutputTruncation> details_truncation;
+    if (truncation.first_line_exceeds_limit) {
+        // pi `read.ts:158-162`: the notice is the whole content, and the
+        // suggested command carries the model-supplied path and the numeric cap.
+        const auto first_line_size =
+                harness::format_output_size(all_lines[static_cast<std::size_t>(start_line)].size());
+        content = "[Line " + std::to_string(start_line_display) + " is " + first_line_size + ", exceeds " +
+                  max_bytes_size + " limit. Use bash: sed -n '" + std::to_string(start_line_display) + "p' " +
+                  parsed->path + " | head -c " + std::to_string(output_limit.max_bytes) + "]";
+        details_truncation = truncation;
+    } else if (truncation.truncated) {
+        // pi `read.ts:163-173`.
+        const auto end_line_display = start_line_display + truncation.output_lines - 1;
+        const auto next_offset = end_line_display + 1;
+        content += "\n\n[Showing lines " + std::to_string(start_line_display) + "-" + std::to_string(end_line_display) +
+                   " of " + std::to_string(total_file_lines);
+        if (truncation.truncated_by != harness::OutputTruncationKind::Lines) {
+            content += " (" + max_bytes_size + " limit)";
         }
-        if (parsed->limit > 0 && emitted >= parsed->limit) {
-            break;
-        }
-        const auto next_bytes = bytes + line.size() + 1;
-        if (static_cast<std::size_t>(emitted) >= output_limit.max_lines || next_bytes > output_limit.max_bytes) {
-            truncated = true;
-            break;
-        }
-        result += line;
-        result += '\n';
-        bytes = next_bytes;
-        ++emitted;
+        content += ". Use offset=" + std::to_string(next_offset) + " to continue.]";
+        details_truncation = truncation;
+    } else if (user_limited_lines && static_cast<std::size_t>(start_line) + *user_limited_lines < total_file_lines) {
+        // pi `read.ts:174-178`: the limit stopped early but the file has more.
+        // pi sets no `details` in this branch, so one here would be a defect.
+        const auto consumed = static_cast<std::size_t>(start_line) + *user_limited_lines;
+        content += "\n\n[" + std::to_string(total_file_lines - consumed) +
+                   " more lines in file. Use offset=" + std::to_string(consumed + 1) + " to continue.]";
     }
-    if (!result.empty()) {
-        result.pop_back();
-    }
-    // Append continuation hint when truncated
-    if (truncated) {
-        int next_offset = offset + emitted;
-        result += "\n[output truncated]";
-        result += "\n\n[Output truncated. Use offset=" + std::to_string(next_offset) + " to continue.]";
+    std::optional<support::JsonValue> details;
+    if (details_truncation) {
+        details = support::JsonValue{
+                support::JsonValue::object_t{{"truncation", truncation_details(*details_truncation)}}};
     }
     co_return agent::AsyncToolExecutionResult{
-        .content = std::vector<ai::Content>{ai::text_content(std::move(result))},
-        .details = std::nullopt,
+            .content = std::vector<ai::Content>{ai::text_content(std::move(content))},
+            .details = std::move(details),
     };
 }
 
@@ -366,52 +519,67 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
     auto shell_result =
             co_await support::detail::await_async_result(shell->exec(parsed->command, std::move(exec_options)));
     if (!shell_result) {
-        co_return error_result_from(shell_result.error());
+        // pi `bash.ts:352-366`: only the abort and timeout sentinels become pi's
+        // status strings; every other execution error keeps its own text.
+        const auto& error = shell_result.error();
+        if (error.code != harness::ExecutionErrorCode::Aborted && error.code != harness::ExecutionErrorCode::Timeout) {
+            co_return error_result_from(error);
+        }
+        // The output streamed before the stop is still the model's, but the
+        // `(no output)` default is suppressed so the status stands alone.
+        const auto partial = tools::strip_terminal_escape_sequences(combine_output(full_stdout, full_stderr));
+        auto formatted = co_await format_bash_output(
+                filesystem, support::redact_text(partial), std::string{}, std::stop_token{});
+        if (!formatted) {
+            co_return error_result_from(formatted.error());
+        }
+        // The execution error carries no seconds (pi recovers them from its
+        // `timeout:<secs>` sentinel); the requested timeout is the only source.
+        const std::string status =
+                error.code == harness::ExecutionErrorCode::Aborted
+                        ? "Command aborted"
+                        : "Command timed out after " + std::to_string(parsed->timeout.value_or(0)) + " seconds";
+        co_return error_result(append_status(formatted->text, status));
     }
 
-    // Streamed callbacks carry pre-truncation output. When the Shell
-    // capability never fires them, the result fields are already capped at the
-    // execution layer and no complete output exists to spill.
+    // Streamed callbacks carry pre-truncation output. When the Shell capability
+    // never fires them, the result fields are the complete output it has.
     const bool streamed = received_stdout || received_stderr;
     const std::string& stdout_source = streamed ? full_stdout : shell_result->stdout_output;
     const std::string& stderr_source = streamed ? full_stderr : shell_result->stderr_output;
-    std::string full_output = tools::strip_terminal_escape_sequences(
-        combine_output(stdout_source, stderr_source));
+    const std::string full_output =
+            tools::strip_terminal_escape_sequences(combine_output(stdout_source, stderr_source));
 
     // Redact the complete output before splitting between model-visible and spill.
-    std::string redacted_full = support::redact_text(full_output);
-    auto limited_output = harness::limit_output_tail(redacted_full);
-    bool truncated = limited_output.truncated;
-    std::string output = std::move(limited_output.text);
-    if (truncated && streamed) {
-        std::string full_output_path;
-        auto ts = std::chrono::system_clock::now().time_since_epoch().count();
-        full_output_path = "bash-output-" + std::to_string(ts) + ".txt";
-        if (auto write = co_await support::detail::await_async_result(
-                    filesystem->writeFile(full_output_path, redacted_full, stop_token));
-                !write) {
-            full_output_path.clear();
-        }
-        output = "[output truncated, showing last " +
-            std::to_string(output.size()) +
-            " bytes]" + (!full_output_path.empty() ? " full output: " + full_output_path : "") +
-            "\n" + output;
-    } else if (truncated) {
-        output = "[output capped at execution layer, showing last " +
-            std::to_string(output.size()) + " bytes]\n" + output;
+    auto formatted =
+            co_await format_bash_output(filesystem, support::redact_text(full_output), "(no output)", stop_token);
+    if (!formatted) {
+        co_return error_result_from(formatted.error());
     }
-    std::ostringstream out;
-    out << "exit_code=" << shell_result->exitCode;
-    if (truncated) {
-        out << " truncated=true";
+
+    // pi `bash.ts:367-373`: "no exit code" is decided before a non-zero exit.
+    // The Shell capability reports an unknown child status as a negative code
+    // (`harness::process_exit_code`), which is this tool's null exit code.
+    if (shell_result->exitCode < 0) {
+        co_return error_result(append_status(formatted->text, "Command terminated without an exit code"));
     }
-    if (!output.empty()) {
-        out << "\n" << output;
+    if (shell_result->exitCode != 0) {
+        co_return error_result(
+                append_status(formatted->text, "Command exited with code " + std::to_string(shell_result->exitCode)));
+    }
+
+    std::optional<support::JsonValue> details;
+    if (formatted->truncation) {
+        support::JsonValue value{support::JsonValue::object_t{
+                {"truncation", truncation_details(*formatted->truncation)},
+                {"fullOutputPath", support::JsonValue(*formatted->full_output_path)},
+        }};
+        details = std::move(value);
     }
     co_return agent::AsyncToolExecutionResult{
-            .content = std::vector<ai::Content>{ai::text_content(out.str())},
-            .details = std::nullopt,
-            .is_error = shell_result->exitCode != 0,
+            .content = std::vector<ai::Content>{ai::text_content(std::move(formatted->text))},
+            .details = std::move(details),
+            .is_error = false,
     };
 }
 

@@ -4,130 +4,51 @@
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Utils.hpp>
 #include "coding_agent/BoundedText.hpp"
-#include "coding_agent/tui/DiffRenderer.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "coding_agent/tui/tool_renderers/RenderUtils.hpp"
 #include "support/Json.hpp"
-#include "support/JsonGlaze.hpp"
 
 #include <cch/support/Error.hpp>
-#include <algorithm>
+#include <chrono>
 #include <cstddef>
-#include <format>
+#include <cstdint>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace cch::coding_agent::tui {
 namespace {
 
-constexpr std::size_t kCollapsedPayloadBytes = 2048;
-constexpr std::size_t kCollapsedLogicalLines = 5;
+/// The tool block's box padding (`Box(1, 1, ...)`). A renderer that folds to
+/// the frame measures the *content* width, so the same constant drives both
+/// the box and the width the renderers are told about.
+constexpr std::size_t kBoxPaddingX = 1;
+
+/// pi's default terminal width, the value a rebuild before the first render
+/// publishes (`ToolRenderContext::width`).
+constexpr std::size_t kDefaultTerminalWidth = 80;
 
 [[nodiscard]] std::string safe_text(std::string text) {
     return bounded_redacted_presentation(std::move(text));
 }
 
-[[nodiscard]] bool needs_collapsing(std::string_view text) {
-    if (text.size() > kCollapsedPayloadBytes) return true;
-    return static_cast<std::size_t>(std::count(text.begin(), text.end(), '\n')) >=
-        kCollapsedLogicalLines;
+[[nodiscard]] ai::TimestampMs now_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count();
 }
 
-[[nodiscard]] std::string collapsed_text(std::string text, std::string_view hint) {
-    text = safe_text(std::move(text));
-    if (!needs_collapsing(text)) return text;
-
-    std::string collapsed;
-    std::size_t start = 0;
-    for (std::size_t line = 0; line < kCollapsedLogicalLines && start < text.size(); ++line) {
-        const auto end = text.find('\n', start);
-        const auto count = end == std::string::npos ? text.size() - start : end - start;
-        if (!collapsed.empty()) collapsed.push_back('\n');
-        collapsed.append(text, start, count);
-        if (end == std::string::npos) {
-            start = text.size();
-            break;
-        }
-        start = end + 1;
-    }
-    if (collapsed.size() > kCollapsedPayloadBytes) {
-        collapsed = bounded_redacted_presentation(std::move(collapsed), kCollapsedPayloadBytes);
-    }
-    collapsed += hint.empty()
-        ? "\n… (collapsed)"
-        : std::format("\n… ({} to expand)", hint);
-    return collapsed;
-}
-
-[[nodiscard]] std::string bold_tool_title(const LiveTheme& theme, std::string_view text) {
-    return theme.foreground_hook(ThemeToken::ToolTitle)(
-        std::format("\x1b[1m{}\x1b[22m", text));
-}
-
-/// Extracts the `path`/`file_path` argument for tool titles.
-[[nodiscard]] std::optional<std::string> argument_path(std::string_view arguments_json) {
-    auto parsed = support::read_json<glz::generic>(arguments_json);
-    if (!parsed) return std::nullopt;
-    auto value = support::json_from_glaze(std::move(*parsed));
-    const auto* object = value.get_if<support::JsonValue::object_t>();
-    if (object == nullptr) return std::nullopt;
-    const auto find_text = [&](std::string_view key) -> std::optional<std::string> {
-        const auto found = object->find(std::string{key});
-        if (found == object->end()) return std::nullopt;
-        const auto* text = found->second.get_if<std::string>();
-        if (text == nullptr) return std::nullopt;
-        return *text;
-    };
-    if (auto path = find_text("path")) return path;
-    return find_text("file_path");
-}
-
-/// Extracts the `command` argument for the bash tool title.
-[[nodiscard]] std::optional<std::string> argument_command(std::string_view arguments_json) {
-    auto parsed = support::read_json<glz::generic>(arguments_json);
-    if (!parsed) return std::nullopt;
-    auto value = support::json_from_glaze(std::move(*parsed));
-    const auto* object = value.get_if<support::JsonValue::object_t>();
-    if (object == nullptr) return std::nullopt;
-    const auto found = object->find("command");
-    if (found == object->end()) return std::nullopt;
-    const auto* text = found->second.get_if<std::string>();
-    if (text == nullptr) return std::nullopt;
-    return *text;
-}
-
-[[nodiscard]] std::string result_error_text(const ai::ToolResultMessage& result) {
+[[nodiscard]] std::string result_text(const ai::ToolResultMessage& result) {
     std::string text;
     for (const auto& block : result.content) {
-        if (const auto* value = std::get_if<ai::TextContent>(&block)) {
+        if (const auto* value = std::get_if<ai::TextContent>(&block); value != nullptr) {
             if (!text.empty()) text.push_back('\n');
             text += value->text;
         }
     }
-    return text;
-}
-
-[[nodiscard]] std::string result_text_content(const ai::ToolResultMessage& result) {
-    std::string text;
-    for (const auto& block : result.content) {
-        if (const auto* value = std::get_if<ai::TextContent>(&block)) {
-            if (!text.empty()) text.push_back('\n');
-            text += value->text;
-        }
-    }
-    return text;
-}
-
-[[nodiscard]] std::optional<std::string> result_diff(const ai::ToolResultMessage& result) {
-    if (!result.details) return std::nullopt;
-    const auto* object = result.details->get_if<support::JsonValue::object_t>();
-    if (object == nullptr) return std::nullopt;
-    const auto found = object->find("diff");
-    if (found == object->end()) return std::nullopt;
-    const auto* text = found->second.get_if<std::string>();
-    if (text == nullptr) return std::nullopt;
-    return *text;
+    // pi `getTextOutput` strips `\r` before the result is split into lines. The
+    // redacting bound is this component's existing presentation budget
+    // (ADR 0028); it is unchanged by the renderer seam.
+    return normalize_display_text(safe_text(std::move(text)));
 }
 
 } // namespace
@@ -138,18 +59,17 @@ struct ToolExecutionComponent::ImageSlot {
     std::string mime_type;
 };
 
-ToolExecutionComponent::ToolExecutionComponent(
-    const LiveTheme& theme,
-    std::shared_ptr<const SharedKeybindings> keybindings,
-    std::string tool_name,
-    std::string tool_call_id,
-    std::string arguments_json)
-    : theme_(theme),
-      keybindings_(std::move(keybindings)),
-      tool_name_(std::move(tool_name)),
-      tool_call_id_(std::move(tool_call_id)),
-      arguments_json_(safe_text(std::move(arguments_json))),
-      box_(1, 1, theme.background_hook(ThemeToken::ToolPendingBg)) {
+ToolExecutionComponent::ToolExecutionComponent(const LiveTheme& theme,
+        std::shared_ptr<const SharedKeybindings> keybindings,
+        std::string tool_name,
+        std::string tool_call_id,
+        std::string arguments_json,
+        std::string cwd,
+        ToolRendererRegistry registry)
+    : theme_(theme), keybindings_(std::move(keybindings)), tool_name_(std::move(tool_name)),
+      tool_call_id_(std::move(tool_call_id)), arguments_json_(safe_text(std::move(arguments_json))),
+      cwd_(std::move(cwd)), registry_(std::move(registry)),
+      box_(kBoxPaddingX, 1, theme.background_hook(ThemeToken::ToolPendingBg)) {
     rebuild();
 }
 
@@ -163,6 +83,7 @@ void ToolExecutionComponent::update_args(std::string arguments_json) {
 void ToolExecutionComponent::update_result(
     ai::ToolResultMessage result,
     bool is_partial) {
+    if (!is_partial && !ended_at_ms_.has_value()) ended_at_ms_ = now_ms();
     result_ = std::move(result);
     is_partial_ = is_partial;
     rebuild();
@@ -171,6 +92,37 @@ void ToolExecutionComponent::update_result(
 void ToolExecutionComponent::set_expanded(bool expanded) {
     expanded_ = expanded;
     rebuild();
+}
+
+void ToolExecutionComponent::mark_execution_started() {
+    if (started_at_ms_.has_value()) return;
+    started_at_ms_ = now_ms();
+    rebuild();
+}
+
+void ToolExecutionComponent::set_args_complete() {
+    if (args_complete_) return;
+    args_complete_ = true;
+    rebuild();
+}
+
+support::JsonValue ToolExecutionComponent::parsed_arguments() const {
+    if (auto parsed = support::read_json(arguments_json_); parsed) {
+        return std::move(*parsed);
+    }
+    return support::JsonValue::object_t{};
+}
+
+void ToolExecutionComponent::append_rendered(const ToolRenderedText& rendered) {
+    // pi gives each renderer one component holding the title and the body, so
+    // the blank lines a renderer writes into its own text survive: joining the
+    // pieces here is what keeps `title` + `"\n\n"` + body at one blank row.
+    std::string text = rendered.title;
+    for (const auto& block : rendered.blocks) {
+        if (!block.empty()) text += block;
+    }
+    if (text.empty()) return;
+    (void)box_.add_child(std::make_unique<cch::tui::Text>(std::move(text), 0, 0));
 }
 
 void ToolExecutionComponent::rebuild() {
@@ -182,119 +134,109 @@ void ToolExecutionComponent::rebuild() {
                 ? theme_.background_hook(ThemeToken::ToolErrorBg)
                 : theme_.background_hook(ThemeToken::ToolSuccessBg));
 
-    // Title (pi tool-execution.ts: bold toolTitle).
-    std::string title;
-    if (tool_name_ == "edit") {
-        title = "edit";
-        if (auto path = argument_path(arguments_json_)) {
-            title += " " + *path;
-        }
-    } else if (tool_name_ == "read" || tool_name_ == "write") {
-        title = tool_name_;
-        if (auto path = argument_path(arguments_json_)) {
-            title += " " + *path;
-        }
-    } else if (tool_name_ == "bash") {
-        title = "$";
-        if (auto command = argument_command(arguments_json_)) {
-            title += " " + *command;
-        }
-    } else {
-        title = tool_name_;
-    }
-    (void)box_.add_child(std::make_unique<cch::tui::Text>(bold_tool_title(theme_, title), 0, 0));
+    // The expand key is resolved once here so every renderer reads the same
+    // text (pi resolves it once per hint through `keyHint`).
+    const auto expand_key = keybindings_->registry().key_text("app.tools.expand");
+    expand_key_ = expand_key.empty() ? "Unbound" : expand_key;
+    expand_hint_ = theme_.foreground(ThemeToken::Dim, expand_key_) + theme_.foreground(ThemeToken::Muted, " to expand");
 
-    // Arguments preview.
-    if (!arguments_json_.empty()) {
-        const auto expand_hint = keybindings_->registry().key_text("app.tools.expand");
-        const auto hint = expand_hint.empty() ? "Unbound" : expand_hint;
-        const auto preview = expanded_
-            ? safe_text(arguments_json_)
-            : collapsed_text(arguments_json_, hint);
-        (void)box_.add_child(std::make_unique<cch::tui::Text>(
-            theme_.foreground(ThemeToken::ToolOutput, std::format("\n{}", preview)),
-            0,
-            0));
-    }
+    const auto args = parsed_arguments();
+    const auto terminal_width = last_rendered_width_.value_or(kDefaultTerminalWidth);
+    const auto content_width = terminal_width > 2 * kBoxPaddingX ? terminal_width - 2 * kBoxPaddingX : terminal_width;
+    const ToolRenderContext context{
+            .args = args,
+            .tool_name = tool_name_,
+            .tool_call_id = tool_call_id_,
+            .cwd = cwd_,
+            .width = content_width,
+            .theme = theme_,
+            .expand_key = expand_key_,
+            .expand_hint = expand_hint_,
+            .args_complete = args_complete_,
+            .execution_started = started_at_ms_.has_value(),
+            .is_partial = is_partial_,
+            .is_error = result_ && result_->is_error,
+            .expanded = expanded_,
+            .started_at_ms = started_at_ms_,
+            .ended_at_ms = ended_at_ms_,
+    };
 
-    if (!result_) return;
+    auto& renderer = registry_.lookup(tool_name_);
+    // A renderer pair with no call half draws pi's bare bold tool name.
+    const auto call = renderer.render_call
+                              ? renderer.render_call(context)
+                              : ToolRenderedText{
+                                        .title = bold_foreground(theme_, ThemeToken::ToolTitle, tool_name_),
+                                };
+    append_rendered(call);
 
-    // Edit results render through the diff renderer (pi edit.ts renderResult).
-    if (tool_name_ == "edit" && !result_->is_error) {
-        if (auto diff = result_diff(*result_)) {
-            (void)box_.add_child(std::make_unique<cch::tui::Text>(
-                std::format("\n{}", render_diff(theme_, *diff)),
-                0,
-                0));
-        }
-    } else if (result_->is_error) {
-        const auto error = result_error_text(*result_);
-        if (!error.empty()) {
-            (void)box_.add_child(std::make_unique<cch::tui::Text>(
-                theme_.foreground(ThemeToken::Error, std::format("\n{}", safe_text(error))),
-                0,
-                0));
-        }
-    } else {
-        const auto output = result_text_content(*result_);
-        if (!output.empty()) {
-            const auto expand_hint = keybindings_->registry().key_text("app.tools.expand");
-            const auto hint = expand_hint.empty() ? "Unbound" : expand_hint;
-            const auto preview = expanded_
-                ? safe_text(output)
-                : collapsed_text(output, hint);
-            (void)box_.add_child(std::make_unique<cch::tui::Text>(
-                theme_.foreground(ThemeToken::ToolOutput, std::format("\n{}", preview)),
-                0,
-                0));
-        }
+    if (!result_) {
+        rebuild_image_slots();
+        return;
     }
 
+    auto& result_renderer = renderer.render_result ? renderer.render_result : registry_.fallback().render_result;
+    const ToolRenderedResult rendered_result{
+            .output = result_text(*result_),
+            .details = result_->details,
+    };
+    append_rendered(result_renderer(rendered_result, context));
+    rebuild_image_slots();
+}
+
+void ToolExecutionComponent::rebuild_image_slots() {
     // Result images render inline (pi tool-execution.ts imageComponents).
     // Slots outlive box rebuilds; the components are rendered by this
     // component rather than nested in the box.
-    if (result_) {
-        std::size_t image_position = 0;
-        for (const auto& block : result_->content) {
-            const auto* image = std::get_if<ai::ImageContent>(&block);
-            if (image == nullptr) continue;
-            if (image_position < image_slots_.size()) {
-                image_slots_[image_position]->component->set_content(cch::tui::ImageContent{
+    if (!result_) return;
+    std::size_t image_position = 0;
+    for (const auto& block : result_->content) {
+        const auto* image = std::get_if<ai::ImageContent>(&block);
+        if (image == nullptr) continue;
+        if (image_position < image_slots_.size()) {
+            image_slots_[image_position]->component->set_content(cch::tui::ImageContent{
                     .encoded_data = image->data,
                     .mime_type = image->mime_type,
                     .filename = std::nullopt,
-                });
-                image_slots_[image_position]->data = image->data;
-                image_slots_[image_position]->mime_type = image->mime_type;
-            } else {
-                auto slot = std::make_unique<ImageSlot>(ImageSlot{
+            });
+            image_slots_[image_position]->data = image->data;
+            image_slots_[image_position]->mime_type = image->mime_type;
+        } else {
+            auto slot = std::make_unique<ImageSlot>(ImageSlot{
                     .component = std::make_unique<cch::tui::Image>(
-                        cch::tui::ImageContent{
-                            .encoded_data = image->data,
-                            .mime_type = image->mime_type,
-                            .filename = std::nullopt,
-                        },
-                        cch::tui::ImageOptions{
-                            .constraints = {
-                                .max_width = 60,
-                                .max_height = std::nullopt,
+                            cch::tui::ImageContent{
+                                    .encoded_data = image->data,
+                                    .mime_type = image->mime_type,
+                                    .filename = std::nullopt,
                             },
-                            .fallback_style = theme_.foreground_hook(ThemeToken::ToolOutput),
-                        }),
+                            cch::tui::ImageOptions{
+                                    .constraints =
+                                            {
+                                                    .max_width = 60,
+                                                    .max_height = std::nullopt,
+                                            },
+                                    .fallback_style = theme_.foreground_hook(ThemeToken::ToolOutput),
+                            }),
                     .data = image->data,
                     .mime_type = image->mime_type,
-                });
-                image_slots_.push_back(std::move(slot));
-            }
-            ++image_position;
+            });
+            image_slots_.push_back(std::move(slot));
         }
-        if (image_position < image_slots_.size()) {
-            image_slots_.resize(image_position);
-        }
+        ++image_position;
+    }
+    if (image_position < image_slots_.size()) {
+        image_slots_.resize(image_position);
     }
 }
 
 support::Expected<cch::tui::RenderResult> ToolExecutionComponent::render(std::size_t width) {
+    // pi `state.cachedWidth !== width`: a renderer that folds to the frame is
+    // rebuilt only when the measured width changes, which is a resize or the
+    // first paint. A stable terminal rebuilds nothing per frame.
+    if (last_rendered_width_ != width) {
+        last_rendered_width_ = width;
+        rebuild();
+    }
     auto rendered = box_.render(width);
     if (!rendered) return std::unexpected(rendered.error());
     for (const auto& slot : image_slots_) {

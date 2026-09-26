@@ -727,8 +727,16 @@ public:
         result.is_error = true;
         return result;
     }
+    // Thirteen lines, so the block is long enough for the fallback's ten-line
+    // fold (`ToolRendererRegistry.cpp:19`, pi `FALLBACK_PREVIEW_LINES`) to
+    // actually fold it. The seven-line shape this fixture used to supply was
+    // long enough for the pre-#824 component's five-line fold and for nothing
+    // since, so the collapse/expand property the case is named for stopped
+    // being exercised while the case kept asserting it. The tail marker is the
+    // last line so the head fold must hide it and expansion must reveal it.
     result.content.emplace_back(ai::text_content(
-        "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nTOOL OUTPUT END\n"));
+            "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\n"
+            "TOOL OUTPUT END\n"));
     return result;
 }
 
@@ -1263,7 +1271,13 @@ TEST_CASE("Native TUI renders resumed and live message images in source order wi
     }
     const auto resumed_screen = visible_screen(terminal);
     CHECK(resumed_screen.find("user before") < resumed_screen.find("user after"));
-    CHECK(resumed_screen.find("tool before") < resumed_screen.find("tool after"));
+    // pi `read.ts:111-115` returns the empty string for a collapsed
+    // successful read result, so the resumed read block shows its title line
+    // and none of the result's own text. The six images it carries are
+    // asserted above in row order, which is this case's source-order property.
+    CHECK(resumed_screen.find("tool before") == std::string::npos);
+    CHECK(resumed_screen.find("tool after") == std::string::npos);
+    CHECK(resumed_screen.find("read ...") != std::string::npos);
     CHECK(resumed_screen.find("custom before") < resumed_screen.find("custom after"));
 
     coding_agent::PromptOptions live_options;
@@ -1796,7 +1810,6 @@ TEST_CASE("Native TUI renders a resumed rich transcript before accepting continu
     const auto thinking_position = screen.find("inspect the saved state");
     const auto assistant_position = screen.find("I will read the persisted file.");
     const auto tool_position = screen.find("read saved.txt");
-    const auto result_position = screen.find("persisted tool output");
     const auto followup_position = screen.find("I will continue after the tool.");
     const auto custom_position = screen.find("[notice]");
     const auto compaction_position = screen.find("Compacted from 1,200 tokens");
@@ -1805,7 +1818,6 @@ TEST_CASE("Native TUI renders a resumed rich transcript before accepting continu
     REQUIRE(thinking_position != std::string::npos);
     REQUIRE(assistant_position != std::string::npos);
     REQUIRE(tool_position != std::string::npos);
-    REQUIRE(result_position != std::string::npos);
     REQUIRE(followup_position != std::string::npos);
     REQUIRE(custom_position != std::string::npos);
     REQUIRE(compaction_position != std::string::npos);
@@ -1817,9 +1829,15 @@ TEST_CASE("Native TUI renders a resumed rich transcript before accepting continu
     // pi renders tool components after the whole assistant message.
     CHECK(assistant_position < followup_position);
     CHECK(followup_position < tool_position);
-    CHECK(tool_position < result_position);
-    CHECK(result_position < custom_position);
+    CHECK(tool_position < custom_position);
     CHECK(custom_position < branch_position);
+    // pi `read.ts:111-115` returns the empty string for a collapsed
+    // successful read result, so the resumed read block's own text is not on
+    // the screen: the title line is the whole block. `app.tools.expand` is
+    // unbound in this session (the case asserts `Unbound to expand` above), so
+    // there is no in-screen route to the body here; the expanded shape is
+    // asserted by the read renderer's own screen cases.
+    CHECK(screen.find("persisted tool output") == std::string::npos);
     REQUIRE(terminal.inject_input("\x1b[19~"));
     drain_ready(io);
     CHECK(visible_screen(terminal).find("inspect the saved state") == std::string::npos);
@@ -1963,7 +1981,17 @@ TEST_CASE("Native TUI correlates repeated Tool Call IDs and locally expands long
     CHECK(count_text(screen, "probe-read") == 1);
     CHECK(count_text(screen, "partial tool output") == 1);
     CHECK(screen.find("STALE ARGUMENT") == std::string::npos);
-    CHECK(screen.find(R"({"path":"large.txt"})") != std::string::npos);
+    // `probe-read` has no registered renderer, so it takes pi's generic
+    // fallback framing (`tool-execution.ts:421-432`): the bold tool name, a
+    // blank line, then the arguments as `JSON.stringify(args, null, 2)`. The
+    // compact single-line row this assertion used to require is the framing
+    // the seam replaced (User Story 13), so the indented row is asserted
+    // instead and the compact one is asserted absent. The needle carries the
+    // row's own leading newline and the box margin plus the two-space indent,
+    // so it is the whole row's start and not a substring that could sit
+    // anywhere in the block.
+    CHECK(screen.find("\n   \"path\": \"large.txt\"") != std::string::npos);
+    CHECK(screen.find(R"({"path":"large.txt"})") == std::string::npos);
     CHECK(screen.find("STALE SNAPSHOT") == std::string::npos);
     CHECK(count_text(screen, "LATEST SNAPSHOT") == 1);
 
@@ -1971,7 +1999,14 @@ TEST_CASE("Native TUI correlates repeated Tool Call IDs and locally expands long
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(count_text(screen, "probe-read") == 1);
+    // The ten kept rows are the first ten, so `line 1` survives: the fallback
+    // folds from the head, which is what separates it from bash's tail fold.
     CHECK(screen.find("line 1") != std::string::npos);
+    CHECK(screen.find("line 10") != std::string::npos);
+    CHECK(screen.find("line 11") == std::string::npos);
+    // The hint row itself, exactly: it is the only place the fallback's fold
+    // hint is checked on screen, and the count is the folded-away remainder.
+    CHECK(screen.find("... (3 more lines, ctrl+o to expand)") != std::string::npos);
     CHECK(screen.find("TOOL OUTPUT END") == std::string::npos);
     REQUIRE(tool_pointer->emit_late_update());
     drain_ready(io);

@@ -77,3 +77,4 @@ Minimal routing set; the full rationale lives in `docs/adr/`.
 | Shared message variant | [ADR 0005](../adr/0005-keep-provider-and-product-messages-in-their-owning-modules.md) | `cch_ai` owns `MessageVariant`; `cch_agent_core` consolidates agent & harness |
 | Released product identity | [ADR 0045](../adr/0045-name-the-released-runtime-pike-and-preserve-owner-package-names.md) | Single released product is `pike`; Owner packages preserve internal names |
 | Path resolution & containment | [ADR 0057](../adr/0057-retire-workspace-containment-and-align-path-resolution-with-pi-resolvetocwd.md) | Uniform pi `resolveToCwd` resolution at host-process permissions; workspace containment and scope splits retired |
+| Tool-execution rendering | [ADR 0061](../adr/0061-align-tool-execution-rendering-with-pi-v0-87-1.md) | Application-layer Tool Renderer registry keyed by tool name; `read`/`bash` truncation metadata moves from model-visible `content` to structured `details` |
