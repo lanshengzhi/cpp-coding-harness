@@ -1263,7 +1263,13 @@ TEST_CASE("Native TUI renders resumed and live message images in source order wi
     }
     const auto resumed_screen = visible_screen(terminal);
     CHECK(resumed_screen.find("user before") < resumed_screen.find("user after"));
-    CHECK(resumed_screen.find("tool before") < resumed_screen.find("tool after"));
+    // pi `read.ts:111-115` returns the empty string for a collapsed
+    // successful read result, so the resumed read block shows its title line
+    // and none of the result's own text. The six images it carries are
+    // asserted above in row order, which is this case's source-order property.
+    CHECK(resumed_screen.find("tool before") == std::string::npos);
+    CHECK(resumed_screen.find("tool after") == std::string::npos);
+    CHECK(resumed_screen.find("read ...") != std::string::npos);
     CHECK(resumed_screen.find("custom before") < resumed_screen.find("custom after"));
 
     coding_agent::PromptOptions live_options;
@@ -1796,7 +1802,6 @@ TEST_CASE("Native TUI renders a resumed rich transcript before accepting continu
     const auto thinking_position = screen.find("inspect the saved state");
     const auto assistant_position = screen.find("I will read the persisted file.");
     const auto tool_position = screen.find("read saved.txt");
-    const auto result_position = screen.find("persisted tool output");
     const auto followup_position = screen.find("I will continue after the tool.");
     const auto custom_position = screen.find("[notice]");
     const auto compaction_position = screen.find("Compacted from 1,200 tokens");
@@ -1805,7 +1810,6 @@ TEST_CASE("Native TUI renders a resumed rich transcript before accepting continu
     REQUIRE(thinking_position != std::string::npos);
     REQUIRE(assistant_position != std::string::npos);
     REQUIRE(tool_position != std::string::npos);
-    REQUIRE(result_position != std::string::npos);
     REQUIRE(followup_position != std::string::npos);
     REQUIRE(custom_position != std::string::npos);
     REQUIRE(compaction_position != std::string::npos);
@@ -1817,9 +1821,15 @@ TEST_CASE("Native TUI renders a resumed rich transcript before accepting continu
     // pi renders tool components after the whole assistant message.
     CHECK(assistant_position < followup_position);
     CHECK(followup_position < tool_position);
-    CHECK(tool_position < result_position);
-    CHECK(result_position < custom_position);
+    CHECK(tool_position < custom_position);
     CHECK(custom_position < branch_position);
+    // pi `read.ts:111-115` returns the empty string for a collapsed
+    // successful read result, so the resumed read block's own text is not on
+    // the screen: the title line is the whole block. `app.tools.expand` is
+    // unbound in this session (the case asserts `Unbound to expand` above), so
+    // there is no in-screen route to the body here; the expanded shape is
+    // asserted by the read renderer's own screen cases.
+    CHECK(screen.find("persisted tool output") == std::string::npos);
     REQUIRE(terminal.inject_input("\x1b[19~"));
     drain_ready(io);
     CHECK(visible_screen(terminal).find("inspect the saved state") == std::string::npos);
