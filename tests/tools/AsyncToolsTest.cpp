@@ -18,10 +18,12 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <map>
 #include <memory>
 #include <optional>
 #include <stop_token>
+#include <string>
 #include <utility>
 #include <thread>
 
@@ -103,6 +105,10 @@ public:
                     })};
             }
         }
+        if (next_exec_error) {
+            return support::AsyncResult<harness::ShellExecResult, harness::ExecutionError>{
+                    std::unexpected(*next_exec_error)};
+        }
         return support::AsyncResult<harness::ShellExecResult, harness::ExecutionError>{
             std::expected<harness::ShellExecResult, harness::ExecutionError>{next_shell_result}};
     }
@@ -113,6 +119,7 @@ public:
     std::optional<std::map<std::string, std::string>> last_env;
     std::string streamed_stdout;
     std::string streamed_stderr;
+    std::optional<harness::ExecutionError> next_exec_error;
     harness::ShellExecResult next_shell_result{.stdout_output = "ok", .stderr_output = "", .exitCode = 0};
 };
 
@@ -171,6 +178,33 @@ agent::ToolInvocation invocation(std::string name, std::string json) {
     auto args = support::read_json(json);
     REQUIRE(args);
     return agent::ToolInvocation{"call-1", std::move(name), std::move(*args), std::move(json)};
+}
+
+/// The whole `details.truncation` object, asserting its presence. A helper that
+/// returns the sub-object keeps every content assertion below a full-text one
+/// instead of a substring that an empty result would satisfy.
+const support::JsonValue& truncation_details(const agent::AsyncToolExecutionResult& result) {
+    REQUIRE(result.details);
+    const auto& object = result.details->get_object();
+    REQUIRE(object.count("truncation") == 1);
+    return object.at("truncation");
+}
+
+std::string truncated_by(const support::JsonValue& truncation) { return truncation.at("truncatedBy").get_string(); }
+
+[[nodiscard]] std::string read_file_at(const std::string& path) {
+    std::ifstream file(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+}
+
+/// `n` numbered lines joined by "\n" with a trailing newline, the shape both
+/// fixtures below need.
+[[nodiscard]] std::string numbered_lines(int count) {
+    std::string text;
+    for (int line = 1; line <= count; ++line) {
+        text += "line" + std::to_string(line) + "\n";
+    }
+    return text;
 }
 
 } // namespace
@@ -542,8 +576,199 @@ TEST_CASE("async bash tool shadows absent PI_* facts with empty values and injec
     CHECK_FALSE(shell->last_env.has_value());
 }
 
-TEST_CASE("async bash tool spill file contains complete output beyond the visible limit",
-        "[tools][async][issue73][spec]") {
+TEST_CASE("async bash tool returns clean output with no exit-code prefix and no details",
+        "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    shell->streamed_stdout = "first\nsecond\n";
+    shell->next_shell_result.stdout_output = shell->streamed_stdout;
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
+
+    auto result = run_tool([&]() {
+        return tool.execute(
+                invocation("bash", R"({"command":"emit-two-lines"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    // The whole content, so the deleted `exit_code=0` prefix cannot reappear
+    // unnoticed, and `truncated=true` cannot ride along either.
+    CHECK(ai::text_from_content(result->content) == "first\nsecond\n");
+    // pi: a clean exit with no truncation carries no details at all.
+    CHECK_FALSE(result->details);
+    // No spill: nothing was truncated.
+    CHECK(filesystem->last_write_path.empty());
+}
+
+TEST_CASE("async bash tool renders empty clean output as pi's literal (no output)", "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    shell->next_shell_result.stdout_output = "";
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
+
+    auto result = run_tool([&]() {
+        return tool.execute(invocation("bash", R"({"command":"true"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    // The literal pi `formatOutput` default, not an empty string: a test that
+    // only asserted "no exit_code= in the text" would pass on either.
+    CHECK(ai::text_from_content(result->content) == "(no output)");
+    CHECK_FALSE(result->details);
+}
+
+TEST_CASE("async bash tool truncates from the tail with pi's line-limit summary and a spill file",
+        "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    auto shell = std::make_shared<CapturingShell>();
+    // A real filesystem: the spill path's existence and contents are part of
+    // the model contract, so a capture double that records the write proves
+    // nothing about the file.
+    auto filesystem = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    const harness::OutputLimit limit;
+    shell->streamed_stdout = numbered_lines(static_cast<int>(limit.max_lines) + 100);
+    shell->next_shell_result.stdout_output = shell->streamed_stdout;
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
+
+    auto result = run_tool([&]() {
+        return tool.execute(
+                invocation("bash", R"({"command":"emit-large-output"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    REQUIRE(result->details);
+    const auto& object = result->details->get_object();
+    REQUIRE(object.count("fullOutputPath") == 1);
+    const auto path = object.at("fullOutputPath").get_string();
+    // pi `output-accumulator.ts:19-22`: the spill lives in the OS temp
+    // directory as `<prefix>-<id>.log`; the working directory is not involved.
+    CHECK(path.starts_with(std::filesystem::temp_directory_path().string() + "/"));
+    CHECK(path.ends_with(".log"));
+    CHECK_FALSE(path.find("bash-output-") != std::string::npos);
+    // The path the model reads is the same string details carries.
+    const auto visible = ai::text_from_content(result->content);
+    const int total_lines = static_cast<int>(limit.max_lines) + 100;
+    const int start_line = total_lines - static_cast<int>(limit.max_lines) + 1;
+    std::string expected;
+    for (int line = start_line; line <= total_lines; ++line) {
+        expected += "line" + std::to_string(line);
+        if (line != total_lines) {
+            expected += '\n';
+        }
+    }
+    expected += "\n\n[Showing lines " + std::to_string(start_line) + "-" + std::to_string(total_lines) + " of " +
+                std::to_string(total_lines) + ". Full output: " + path + "]";
+    CHECK(visible == expected);
+    // The deleted markers are gone, asserted on the full text above and here as
+    // the property they used to carry.
+    CHECK(visible.find("exit_code=") == std::string::npos);
+    CHECK(visible.find("truncated=true") == std::string::npos);
+    CHECK(visible.find("[output truncated") == std::string::npos);
+
+    const auto& truncation = object.at("truncation");
+    CHECK(truncation.at("truncated").get_boolean());
+    CHECK(truncated_by(truncation) == "lines");
+    CHECK(truncation.at("totalLines").get_number() == static_cast<double>(total_lines));
+    CHECK(truncation.at("outputLines").get_number() == static_cast<double>(limit.max_lines));
+    CHECK(truncation.at("maxLines").get_number() == static_cast<double>(limit.max_lines));
+    CHECK(truncation.at("maxBytes").get_number() == static_cast<double>(limit.max_bytes));
+    CHECK_FALSE(truncation.at("lastLinePartial").get_boolean());
+    CHECK_FALSE(truncation.at("firstLineExceedsLimit").get_boolean());
+    // `content` must not travel into details: it is the model-facing text.
+    CHECK(object.count("content") == 0);
+    CHECK(truncation.get_object().count("content") == 0);
+
+    // The file exists and holds the complete output, not the visible tail.
+    std::error_code exists_error;
+    REQUIRE(std::filesystem::exists(path, exists_error));
+    CHECK_FALSE(exists_error);
+    const auto spilled = read_file_at(path);
+    CHECK(spilled == shell->streamed_stdout);
+    // The spill is the complete output while the visible text is only the last
+    // 2000 lines, so the file is strictly the longer one here.
+    CHECK(spilled.size() > visible.size());
+    CHECK(visible.size() <= limit.max_bytes);
+}
+
+TEST_CASE("async bash tool truncates on the byte limit and names the limit in the summary",
+        "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    const harness::OutputLimit limit;
+    // Ten 8 KB lines: under the line limit, far over the byte limit, and the
+    // last line is whole, so the byte-limit variant of the summary is the one
+    // pi emits.
+    shell->streamed_stdout.clear();
+    for (int line = 0; line < 10; ++line) {
+        shell->streamed_stdout += std::string(8 * 1024, static_cast<char>('a' + line)) + "\n";
+    }
+    shell->next_shell_result.stdout_output = shell->streamed_stdout;
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
+
+    auto result = run_tool([&]() {
+        return tool.execute(
+                invocation("bash", R"({"command":"emit-wide-output"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    REQUIRE(result->details);
+    const auto& object = result->details->get_object();
+    const auto path = object.at("fullOutputPath").get_string();
+    const auto& truncation = object.at("truncation");
+    CHECK(truncated_by(truncation) == "bytes");
+    // 6 * 8193 = 49158 fits; the 7th line crosses 50 KB.
+    const auto output_lines = 6u;
+    const auto total_lines = 10u;
+    const auto start_line = total_lines - output_lines + 1;
+    std::string expected;
+    for (unsigned index = 0; index < output_lines; ++index) {
+        expected += std::string(8 * 1024, static_cast<char>('a' + total_lines - output_lines + index)) + "\n";
+    }
+    expected.pop_back();
+    expected += "\n\n[Showing lines " + std::to_string(start_line) + "-" + std::to_string(total_lines) + " of " +
+                std::to_string(total_lines) + " (50.0KB limit). Full output: " + path + "]";
+    CHECK(ai::text_from_content(result->content) == expected);
+    CHECK(read_file_at(path) == shell->streamed_stdout);
+}
+
+TEST_CASE("async bash tool reports a cut final line with pi's last-line summary", "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    const harness::OutputLimit limit;
+    // Two complete lines then one 80 KB line: the tail of that final line is
+    // all that survives, which is the third of pi's three summary forms.
+    shell->streamed_stdout = "first\nsecond\n" + std::string(80 * 1024, 'z');
+    shell->next_shell_result.stdout_output = shell->streamed_stdout;
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
+
+    auto result = run_tool([&]() {
+        return tool.execute(
+                invocation("bash", R"({"command":"emit-one-wide-line"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    REQUIRE(result->details);
+    const auto& object = result->details->get_object();
+    const auto path = object.at("fullOutputPath").get_string();
+    const auto& truncation = object.at("truncation");
+    CHECK(truncation.at("lastLinePartial").get_boolean());
+    CHECK(truncated_by(truncation) == "bytes");
+    // 50.0KB of the 80.0KB final line, whose full size is named alongside.
+    CHECK(ai::text_from_content(result->content) ==
+            std::string(limit.max_bytes, 'z') +
+                    "\n\n[Showing last 50.0KB of line 3 (line is 80.0KB). Full output: " + path + "]");
+    CHECK(read_file_at(path) == shell->streamed_stdout);
+}
+
+TEST_CASE("async bash tool spill file holds the complete redacted output", "[tools][async][issue73][issue823][spec]") {
     tests::TempWorkspace workspace;
     auto shell = std::make_shared<CapturingShell>();
     auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
@@ -561,26 +786,32 @@ TEST_CASE("async bash tool spill file contains complete output beyond the visibl
     REQUIRE(result);
     CHECK_FALSE(result->is_error);
     const auto visible = ai::text_from_content(result->content);
-    CHECK(visible.find("truncated=true") != std::string::npos);
+    // Redaction is unchanged by the contract change, and it holds on the
+    // visible text as well as on the spill.
     CHECK(visible.find("super-secret") == std::string::npos);
     CHECK(visible.find("[REDACTED]") != std::string::npos);
     CHECK(visible.size() <= limit.max_bytes + 200);
-    CHECK_FALSE(filesystem->last_write_path.empty());
+    REQUIRE(result->details);
+    const auto path = result->details->get_object().at("fullOutputPath").get_string();
+    CHECK(visible.find(path) != std::string::npos);
+    CHECK(filesystem->last_write_path == path);
     CHECK(filesystem->last_write_content.find("super-secret") == std::string::npos);
     CHECK(filesystem->last_write_content.find("[REDACTED]") != std::string::npos);
     CHECK(filesystem->last_write_content.size() > limit.max_bytes);
     CHECK(filesystem->last_write_content.ends_with("complete-tail\xc3\xa9"));
 }
 
-TEST_CASE("async bash tool without streamed output reports capping at the execution layer without a spill file",
-        "[tools][async][issue73][spec]") {
+TEST_CASE("async bash tool without streamed output uses the execution-layer result and still spills",
+        "[tools][async][issue73][issue823][spec]") {
     tests::TempWorkspace workspace;
     auto shell = std::make_shared<CapturingShell>();
-    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    auto filesystem = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     const harness::OutputLimit limit;
     // streamed_stdout/streamed_stderr stay empty, so the fake Shell never
-    // fires the streaming callbacks and only the runner-capped result fields
-    // exist.
+    // fires the streaming callbacks and only the result fields exist. pi's
+    // accumulator has the same complete output in this case, so the tool
+    // formats and spills exactly as the streamed path does; what changed is
+    // that the "capped at execution layer" marker no longer exists.
     shell->next_shell_result.stdout_output =
             std::string(limit.max_bytes + 100, 'x') + "\napi_key=super-secret\ncomplete-tail";
     auto tool = tools::make_async_bash_tool(shell, filesystem);
@@ -593,16 +824,177 @@ TEST_CASE("async bash tool without streamed output reports capping at the execut
 
     REQUIRE(result);
     CHECK_FALSE(result->is_error);
+    REQUIRE(result->details);
+    const auto& object = result->details->get_object();
+    const auto path = object.at("fullOutputPath").get_string();
     const auto visible = ai::text_from_content(result->content);
-    CHECK(visible.find("truncated=true") != std::string::npos);
-    CHECK(visible.find("capped at execution layer") != std::string::npos);
-    CHECK(visible.find("full output:") == std::string::npos);
+    CHECK(visible.find("capped at execution layer") == std::string::npos);
     CHECK(visible.find("super-secret") == std::string::npos);
     CHECK(visible.find("complete-tail") != std::string::npos);
-    CHECK(visible.size() <= limit.max_bytes + 200);
-    // No spill file: the capped text is all that exists, so a "complete
-    // output" promise would be untruthful.
-    CHECK(filesystem->last_write_path.empty());
+    CHECK(visible.ends_with(". Full output: " + path + "]"));
+    // The spill is the redacted complete output, so the secret is gone from it
+    // too even though the raw result field carried it.
+    const auto spilled = read_file_at(path);
+    CHECK(spilled.find("super-secret") == std::string::npos);
+    CHECK(spilled.find("[REDACTED]") != std::string::npos);
+    CHECK(spilled == std::string(limit.max_bytes + 100, 'x') + "\napi_key=[REDACTED]\ncomplete-tail");
+    std::error_code exists_error;
+    REQUIRE(std::filesystem::exists(path, exists_error));
+    CHECK_FALSE(exists_error);
+}
+
+TEST_CASE("async bash tool returns a non-zero exit as pi's error text", "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    shell->streamed_stdout = "partial work\n";
+    shell->next_shell_result.stdout_output = shell->streamed_stdout;
+    shell->next_shell_result.exitCode = 3;
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
+
+    auto result = run_tool([&]() {
+        return tool.execute(invocation("bash", R"({"command":"fail"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK(result->is_error);
+    // pi `appendStatus`: the output, a blank line, then the status. The
+    // streamed output already ends in a newline, so the separator is the
+    // blank line pi adds on top of it.
+    CHECK(ai::text_from_content(result->content) == "partial work\n\n\nCommand exited with code 3");
+    CHECK_FALSE(result->details);
+}
+
+TEST_CASE("async bash tool reports a silent non-zero exit with pi's (no output) default",
+        "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    shell->next_shell_result.stdout_output = "";
+    shell->next_shell_result.exitCode = 127;
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
+
+    auto result = run_tool([&]() {
+        return tool.execute(
+                invocation("bash", R"({"command":"not-found"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK(result->is_error);
+    // The default applies on the exit-code paths, so the model sees both parts.
+    CHECK(ai::text_from_content(result->content) == "(no output)\n\nCommand exited with code 127");
+}
+
+TEST_CASE("async bash tool reports a missing exit code with pi's own status", "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    shell->streamed_stdout = "before the signal\n";
+    shell->next_shell_result.stdout_output = shell->streamed_stdout;
+    // `harness::process_exit_code` reports an unknown child status as a
+    // negative code; that is this tool's null exit code, and pi decides it
+    // before the non-zero check.
+    shell->next_shell_result.exitCode = -1;
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
+
+    auto result = run_tool([&]() {
+        return tool.execute(invocation("bash", R"({"command":"stopped"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK(result->is_error);
+    CHECK(ai::text_from_content(result->content) == "before the signal\n\n\nCommand terminated without an exit code");
+}
+
+TEST_CASE("async bash tool reports an abort as pi's bare status with no (no output) default",
+        "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    shell->next_exec_error = harness::ExecutionError{
+            .code = harness::ExecutionErrorCode::Aborted,
+            .message = "Operation aborted",
+    };
+    shell->next_shell_result.stdout_output = "";
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
+
+    auto result = run_tool([&]() {
+        return tool.execute(
+                invocation("bash", R"({"command":"sleep 100"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK(result->is_error);
+    // Exactly the status, with the `(no output)` default deliberately
+    // suppressed: the full-text assertion is the point of this case.
+    CHECK(ai::text_from_content(result->content) == "Command aborted");
+}
+
+TEST_CASE(
+        "async bash tool reports an abort after output as pi's output plus status", "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    shell->streamed_stdout = "so far\n";
+    shell->next_exec_error = harness::ExecutionError{
+            .code = harness::ExecutionErrorCode::Aborted,
+            .message = "Operation aborted",
+    };
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
+
+    auto result = run_tool([&]() {
+        return tool.execute(
+                invocation("bash", R"({"command":"sleep 100"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK(result->is_error);
+    CHECK(ai::text_from_content(result->content) == "so far\n\n\nCommand aborted");
+}
+
+TEST_CASE("async bash tool reports a timeout as pi's timed-out status", "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    shell->next_exec_error = harness::ExecutionError{
+            .code = harness::ExecutionErrorCode::Timeout,
+            .message = "shell command timed out",
+    };
+    shell->next_shell_result.stdout_output = "";
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
+
+    auto result = run_tool([&]() {
+        return tool.execute(invocation("bash", R"({"command":"sleep 100","timeout":5})"),
+                std::stop_token{},
+                agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK(result->is_error);
+    // Exactly the status: a timeout carries no `(no output)` prefix either.
+    CHECK(ai::text_from_content(result->content) == "Command timed out after 5 seconds");
+}
+
+TEST_CASE("async bash tool keeps a non-abort execution error's own text", "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    auto shell = std::make_shared<CapturingShell>();
+    auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
+    // pi rethrows every other exec error unchanged; only the abort and timeout
+    // sentinels become pi status strings.
+    shell->next_exec_error = harness::ExecutionError{
+            .code = harness::ExecutionErrorCode::SpawnError,
+            .message = "fork failed",
+    };
+    auto tool = tools::make_async_bash_tool(shell, filesystem);
+
+    auto result = run_tool([&]() {
+        return tool.execute(
+                invocation("bash", R"({"command":"anything"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK(result->is_error);
+    CHECK(ai::text_from_content(result->content) == "fork failed");
 }
 
 TEST_CASE("async bash tool strips ANSI escape sequences", "[tools][async][spec]") {
@@ -621,9 +1013,9 @@ TEST_CASE("async bash tool strips ANSI escape sequences", "[tools][async][spec]"
 
     REQUIRE(result);
     CHECK_FALSE(result->is_error);
-    const auto visible = ai::text_from_content(result->content);
-    CHECK(visible.find("red") != std::string::npos);
-    CHECK(visible.find('\x1b') == std::string::npos);
+    // The whole text, so a reintroduced escape or prefix cannot hide behind a
+    // substring match.
+    CHECK(ai::text_from_content(result->content) == "red");
 }
 
 TEST_CASE("async bash tool is disabled unless the Shell explicitly enables it", "[tools][async][spec]") {
@@ -640,6 +1032,276 @@ TEST_CASE("async bash tool is disabled unless the Shell explicitly enables it", 
 
     REQUIRE(result);
     CHECK(result->is_error);
+}
+
+TEST_CASE("async read tool returns a whole untruncated file with no hint and no details",
+        "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "line1\nline2\nline3\n");
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_read_file_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool.execute(invocation("read", R"({"path":"note.txt"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    // The whole file text and nothing else. A test asserting only that
+    // "[Showing" is absent passes on an empty result, so the full content is
+    // the assertion.
+    CHECK(ai::text_from_content(result->content) == "line1\nline2\nline3\n");
+    // pi sets no details in the untruncated branch.
+    CHECK_FALSE(result->details);
+}
+
+TEST_CASE("async read tool without a trailing newline returns the file verbatim", "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "no trailing newline");
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_read_file_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool.execute(invocation("read", R"({"path":"note.txt"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    CHECK(ai::text_from_content(result->content) == "no trailing newline");
+    CHECK_FALSE(result->details);
+}
+
+TEST_CASE("async read tool reports a limit-stopped read with pi's more-lines hint and no details",
+        "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "l1\nl2\nl3\nl4\nl5\n");
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_read_file_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool.execute(
+                invocation("read", R"({"path":"note.txt","limit":2})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    // 6 lines counted (5 plus the trailing empty one), 2 read, 4 left.
+    CHECK(ai::text_from_content(result->content) == "l1\nl2\n\n[4 more lines in file. Use offset=3 to continue.]");
+    // pi deliberately reports no details here even though the text carries a
+    // continuation hint; a "helpful" details is a contract change.
+    CHECK_FALSE(result->details);
+}
+
+TEST_CASE(
+        "async read tool reports a limit that consumed the whole file with no hint", "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    // No trailing newline, so pi's split has no extra empty line to report.
+    workspace.write("note.txt", "l1\nl2\nl3");
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_read_file_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool.execute(
+                invocation("read", R"({"path":"note.txt","limit":3})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    // The negative twin of the more-lines case: nothing follows the text.
+    CHECK(ai::text_from_content(result->content) == "l1\nl2\nl3");
+    CHECK_FALSE(result->details);
+}
+
+TEST_CASE("async read tool reports the line-limit truncation with pi's continuation hint",
+        "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    const harness::OutputLimit limit;
+    workspace.write("big.txt", numbered_lines(static_cast<int>(limit.max_lines) + 31));
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_read_file_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool.execute(invocation("read", R"({"path":"big.txt"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    const int total_lines = static_cast<int>(limit.max_lines) + 32;
+    std::string expected;
+    for (int line = 1; line <= static_cast<int>(limit.max_lines); ++line) {
+        expected += "line" + std::to_string(line) + "\n";
+    }
+    expected.pop_back();
+    expected += "\n\n[Showing lines 1-" + std::to_string(limit.max_lines) + " of " + std::to_string(total_lines) +
+                ". Use offset=" + std::to_string(limit.max_lines + 1) + " to continue.]";
+    CHECK(ai::text_from_content(result->content) == expected);
+    // The count is the whole file, not the kept slice: a cheap "does it end
+    // with a hint" check would not separate those two numbers.
+    CHECK(ai::text_from_content(result->content).find("of 2032.") != std::string::npos);
+
+    const auto& truncation = truncation_details(*result);
+    CHECK(truncation.at("truncated").get_boolean());
+    CHECK(truncated_by(truncation) == "lines");
+    CHECK(truncation.at("outputLines").get_number() == static_cast<double>(limit.max_lines));
+    // The hint counts the whole file (2032, pi's `read.ts` split), while
+    // `truncation.totalLines` counts the selected content pi hands to
+    // `truncateHead` (2031, after the trailing empty line is dropped). Pinning
+    // both is what keeps them from being conflated.
+    CHECK(truncation.at("totalLines").get_number() == 2031);
+    CHECK(truncation.at("maxLines").get_number() == static_cast<double>(limit.max_lines));
+    CHECK(truncation.at("maxBytes").get_number() == static_cast<double>(limit.max_bytes));
+    CHECK_FALSE(truncation.at("lastLinePartial").get_boolean());
+    CHECK_FALSE(truncation.at("firstLineExceedsLimit").get_boolean());
+}
+
+TEST_CASE("async read tool reports the byte-limit truncation with pi's limit-named hint",
+        "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    const harness::OutputLimit limit;
+    // 100 lines of 1 KB each: under the 2000-line limit, over the 50 KB byte
+    // limit, and no single line is oversized.
+    std::string body;
+    for (int line = 0; line < 100; ++line) {
+        body += std::string(1024, static_cast<char>('a' + line / 10)) + "\n";
+    }
+    workspace.write("wide.txt", body);
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_read_file_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool.execute(invocation("read", R"({"path":"wide.txt"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    // 49 lines of 1024 bytes plus their 48 joining newlines = 50224, which
+    // fits; the 50th crosses 51200.
+    const int kept_lines = 49;
+    std::string expected;
+    for (int line = 0; line < kept_lines; ++line) {
+        expected += std::string(1024, static_cast<char>('a' + line / 10));
+        if (line != kept_lines - 1) {
+            expected += '\n';
+        }
+    }
+    const auto summary = "\n\n[Showing lines 1-" + std::to_string(kept_lines) +
+                         " of 101 (50.0KB limit). Use offset=" + std::to_string(kept_lines + 1) + " to continue.]";
+    CHECK(ai::text_from_content(result->content) == expected + summary);
+
+    const auto& truncation = truncation_details(*result);
+    CHECK(truncated_by(truncation) == "bytes");
+    CHECK(truncation.at("outputLines").get_number() == static_cast<double>(kept_lines));
+    // `outputBytes` counts the retained text only, which the summary is not
+    // part of; asserting the exact figure keeps the two from being conflated.
+    CHECK(truncation.at("outputBytes").get_number() == static_cast<double>(expected.size()));
+    CHECK(truncation.at("totalBytes").get_number() == 102400 + 100);
+    CHECK_FALSE(truncation.at("firstLineExceedsLimit").get_boolean());
+}
+
+TEST_CASE("async read tool replaces an oversized first line with pi's sed fallback notice",
+        "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    const harness::OutputLimit limit;
+    workspace.write("huge.txt", std::string(60 * 1024, 'x'));
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_read_file_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool.execute(invocation("read", R"({"path":"huge.txt"})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    // The notice is the whole content, and it carries the model-supplied path
+    // and the numeric byte cap, not a formatted size.
+    CHECK(ai::text_from_content(result->content) ==
+            "[Line 1 is 60.0KB, exceeds 50.0KB limit. Use bash: sed -n '1p' huge.txt | head -c 51200]");
+
+    const auto& truncation = truncation_details(*result);
+    CHECK(truncation.at("firstLineExceedsLimit").get_boolean());
+    CHECK(truncated_by(truncation) == "bytes");
+    CHECK(truncation.at("outputLines").get_number() == 0);
+    CHECK(truncation.at("totalBytes").get_number() == static_cast<double>(60 * 1024));
+}
+
+TEST_CASE("async read tool names the absolute path argument in the oversized-first-line notice",
+        "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    const auto target = workspace.path() / "huge.log";
+    workspace.write("huge.log", std::string(60 * 1024, 'x'));
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_read_file_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool.execute(invocation("read", "{\"path\":\"" + target.string() + "\"}"),
+                std::stop_token{},
+                agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    // The argument the model supplied, so the suggested sed command is one the
+    // model can run as written.
+    CHECK(ai::text_from_content(result->content) ==
+            "[Line 1 is 60.0KB, exceeds 50.0KB limit. Use bash: sed -n '1p' " + target.string() + " | head -c 51200]");
+}
+
+TEST_CASE("async read tool rejects an out-of-range offset with pi's error text", "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "l1\nl2\nl3\nl4\nl5\n");
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_read_file_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool.execute(
+                invocation("read", R"({"path":"note.txt","offset":900})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK(result->is_error);
+    // The whole error text, with the file's own line count.
+    CHECK(ai::text_from_content(result->content) == "Offset 900 is beyond end of file (6 lines total)");
+    CHECK_FALSE(result->details);
+}
+
+TEST_CASE("async read tool accepts the last in-range offset", "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "l1\nl2\nl3\nl4\nl5\n");
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_read_file_tool(env);
+
+    // The negative twin of the out-of-range case: offset 6 is the trailing empty
+    // line pi's split produces, so it is in range and reads as empty.
+    auto result = run_tool([&]() {
+        return tool.execute(
+                invocation("read", R"({"path":"note.txt","offset":6})"), std::stop_token{}, agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    CHECK(ai::text_from_content(result->content).empty());
+    CHECK_FALSE(result->details);
+}
+
+TEST_CASE("async read tool applies offset and limit together with pi's line arithmetic",
+        "[tools][async][issue823][spec]") {
+    tests::TempWorkspace workspace;
+    workspace.write("note.txt", "l1\nl2\nl3\nl4\nl5\nl6\n");
+    auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
+    auto tool = tools::make_async_read_file_tool(env);
+
+    auto result = run_tool([&]() {
+        return tool.execute(invocation("read", R"({"path":"note.txt","offset":2,"limit":2})"),
+                std::stop_token{},
+                agent::ToolUpdateSink{});
+    });
+
+    REQUIRE(result);
+    CHECK_FALSE(result->is_error);
+    // Read l2 and l3 out of 7 counted lines, so 4 remain and the next offset
+    // is 4.
+    CHECK(ai::text_from_content(result->content) == "l2\nl3\n\n[4 more lines in file. Use offset=4 to continue.]");
+    CHECK_FALSE(result->details);
 }
 
 TEST_CASE("async read tool serves absolute paths inside and outside the workspace",

@@ -452,7 +452,9 @@ TEST_CASE("CLI bash tool is always available under the fixed tool set", "[cli][u
     // and its result reaches the model through the final assistant text.
     CHECK(result.stdout_text.find("unknown tool: bash") == std::string::npos);
     CHECK(result.stdout_text.find("bash is disabled") == std::string::npos);
-    CHECK(result.stdout_text.find("exit_code=0") != std::string::npos);
+    // The model's view of a clean `echo hi` is the bare output: the
+    // `exit_code=0` prefix is no longer part of the tool's content (#823).
+    CHECK(result.stdout_text == "fake observed: hi\n\n");
 }
 
 TEST_CASE("CLI rejects removed compatibility flags before model request", "[cli][u8][spec]") {
