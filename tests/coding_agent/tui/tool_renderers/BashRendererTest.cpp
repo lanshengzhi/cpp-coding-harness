@@ -405,6 +405,16 @@ TEST_CASE("the truncation warning draws pi's bracketed forms with the path verba
                         bash_details(R"({"truncated":true,"truncatedBy":"lines","outputLines":2000,"totalLines":5231})",
                                 "/tmp/cch-bash-ab12.log")));
         const auto screen = tests::render_tool_screen(*component, kScreenWidth);
+        // The whole block, not `.at(4)`: a renderer that also emitted a second
+        // warning row satisfies "the warning is present" and every `.at(n)`
+        // check, and the extra row is exactly what a duplicate-warning defect
+        // looks like on screen. One warning row, and nothing after it.
+        CHECK(body_of(screen) == std::vector<std::string>{"",
+                                         "$ ls",
+                                         "",
+                                         "done",
+                                         "[Full output: /tmp/cch-bash-ab12.log. Truncated: showing 2000 of 5231 "
+                                         "lines]"});
         CHECK(screen.visible.at(4) == "[Full output: /tmp/cch-bash-ab12.log. Truncated: showing 2000 of 5231 lines]");
     }
 
@@ -418,6 +428,12 @@ TEST_CASE("the truncation warning draws pi's bracketed forms with the path verba
         const auto screen = tests::render_tool_screen(*component, kScreenWidth);
         // A short path so pi's whole warning fits the 78-column content width;
         // the long form is the same text, wrapped, which the next case shows.
+        // The whole block again, so a second warning row fails here too.
+        CHECK(body_of(screen) == std::vector<std::string>{"",
+                                         "$ ls",
+                                         "",
+                                         "done",
+                                         "[Full output: /tmp/b.log. Truncated: 812 lines shown (50.0KB limit)]"});
         CHECK(screen.visible.at(4) == "[Full output: /tmp/b.log. Truncated: 812 lines shown (50.0KB limit)]");
     }
 
@@ -471,6 +487,13 @@ TEST_CASE("the truncation warning draws pi's bracketed forms with the path verba
                 R"({"command":"ls"})",
                 bash_result("done\n\n[Showing lines 1-5 of 9. Full output: /tmp/old.log]"));
         const auto screen = tests::render_tool_screen(*component, kScreenWidth);
+        // Both halves, or the case is worthless: the whole block shows the
+        // baked-in marker still on screen as ordinary output, and shows no row
+        // added for it. "No `Truncated:` substring" alone passes trivially for
+        // a renderer that dropped the output.
+        CHECK(body_of(screen) ==
+                std::vector<std::string>{
+                        "", "$ ls", "", "done", "", "[Showing lines 1-5 of 9. Full output: /tmp/old.log]"});
         CHECK(screen.visible.at(5) == "[Showing lines 1-5 of 9. Full output: /tmp/old.log]");
         for (const auto& row : screen.visible)
             CHECK(row.find("Truncated:") == std::string::npos);

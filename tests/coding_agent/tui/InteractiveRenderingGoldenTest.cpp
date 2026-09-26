@@ -26,10 +26,12 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/Json.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
@@ -226,6 +228,162 @@ struct PipelineSession {
     return fixture;
 }
 
+// ── tool-blocks: the four renderers and the fallback in one session view ────
+
+/// The `write` arguments as one JSON document. Built through the serializer
+/// rather than by hand so a content body carrying real newlines still parses:
+/// the host's argument parse is exact, and a hand-escaped literal that forgets
+/// one escape silently degrades to the empty-argument case.
+[[nodiscard]] std::string write_arguments_json(std::string content) {
+    support::JsonValue arguments{support::JsonValue::object_t{}};
+    arguments.get_object().emplace("path", support::JsonValue(std::string{"generated.txt"}));
+    arguments.get_object().emplace("content", support::JsonValue(std::move(content)));
+    auto json = support::write_json(arguments);
+    REQUIRE(json);
+    return *json;
+}
+
+[[nodiscard]] std::string prefixed_lines(std::string_view prefix, std::size_t first, std::size_t last) {
+    std::string text;
+    for (auto line = first; line <= last; ++line) {
+        if (!text.empty()) text.push_back('\n');
+        text += std::string{prefix} + " " + std::to_string(line);
+    }
+    return text;
+}
+
+/// The foreground colour the terminal recorded for the first cell of `text`.
+///
+/// The rendering goldens are plain cell text, so a wrong colour that keeps the
+/// same rows and the same text is invisible to every byte comparison in this
+/// file. This reads the styled cell instead, which is the only place a
+/// mis-coloured renderer can be caught at the screen level.
+[[nodiscard]] std::string foreground_at(
+        const tui::VirtualTerminal& terminal, std::string_view text, std::size_t offset = 0) {
+    const auto& screen = terminal.screen();
+    for (std::size_t row = 0; row < screen.size(); ++row) {
+        const auto column = screen[row].find(text);
+        if (column != std::string::npos) {
+            REQUIRE(column + offset < terminal.cells()[row].size());
+            return terminal.cells()[row][column + offset].style.fg_color;
+        }
+    }
+    return {};
+}
+
+[[nodiscard]] bool is_bold_at(const tui::VirtualTerminal& terminal, std::string_view text, std::size_t offset = 0) {
+    const auto& screen = terminal.screen();
+    for (std::size_t row = 0; row < screen.size(); ++row) {
+        const auto column = screen[row].find(text);
+        if (column != std::string::npos) {
+            REQUIRE(column + offset < terminal.cells()[row].size());
+            return terminal.cells()[row][column + offset].style.bold;
+        }
+    }
+    return false;
+}
+
+/// The leading SGR parameter list of a themed probe, i.e. the colour the
+/// VirtualTerminal records for that token's foreground.
+[[nodiscard]] std::string token_foreground(
+        const coding_agent::tui::LiveTheme& theme, coding_agent::tui::ThemeToken token) {
+    const auto styled = theme.foreground(token, "x");
+    const auto begin = styled.find("\x1b[");
+    REQUIRE(begin != std::string::npos);
+    const auto end = styled.find('m', begin);
+    REQUIRE(end != std::string::npos);
+    return styled.substr(begin + 2, end - begin - 2);
+}
+
+/// A resumed session whose one assistant turn drives five tool components: a
+/// collapsed `read`, a folded `bash`, a `write` whose preview is folded, an
+/// `edit` carrying `details.diff`, and one tool with no registered renderer, so
+/// the registry fallback's own framing is in the same view.
+struct ToolBlocksSession {
+    std::filesystem::path workspace;
+    tests::TempWorkspace config;
+    tests::RuntimeFixture runtime;
+    std::unique_ptr<coding_agent::AgentSession> session;
+};
+
+[[nodiscard]] std::unique_ptr<ToolBlocksSession> make_tool_blocks_session() {
+    auto fixture = std::make_unique<ToolBlocksSession>();
+    fixture->workspace = rendering_workspace_path("tool-blocks");
+    const auto session_file = fixture->workspace / "tool-blocks.jsonl";
+    auto store = harness::session::SessionStore::create_new(session_file,
+            {
+                    .session_id = "tool-blocks",
+                    .created_at = "2026-08-10T00:00:00Z",
+                    .workspace = fixture->workspace,
+                    .provider = "fake",
+                    .model = "fake-model",
+            });
+    REQUIRE(store);
+
+    REQUIRE(store->append(
+            ai::MessageVariant{ai::user_text_message("render every tool block in one view", 1'700'000'000'000)}));
+
+    auto content = prefixed_lines("gen", 1, 14) + "\n";
+
+    ai::AssistantMessage assistant;
+    assistant.provider = "fake";
+    assistant.api = "fake";
+    assistant.model = "fake-model";
+    assistant.stop_reason = ai::AssistantStopReason::ToolUse;
+    assistant.timestamp = 1'700'000'000'001;
+    assistant.content.emplace_back(ai::text_content("One turn, five tool blocks."));
+    // `offset`/`limit` on the read so the golden carries pi's line range, and
+    // an unregistered `probe` so the fallback is in the same screen.
+    assistant.content.emplace_back(
+            ai::tool_call_content("block-read", "read", R"({"path":"notes.txt","offset":5,"limit":3})"));
+    assistant.content.emplace_back(ai::tool_call_content("block-bash", "bash", R"({"command":"ls -la"})"));
+    assistant.content.emplace_back(ai::tool_call_content("block-write", "write", write_arguments_json(content)));
+    assistant.content.emplace_back(ai::tool_call_content(
+            "block-edit", "edit", R"({"path":"notes.txt","edits":[{"oldText":"alpha","newText":"beta"}]})"));
+    assistant.content.emplace_back(ai::tool_call_content("block-probe", "probe", R"({"query":"alpha","limit":2})"));
+    REQUIRE(store->append(ai::MessageVariant{assistant}));
+
+    // A collapsed successful read result renders nothing: pi `read.ts:111-115`.
+    REQUIRE(store->append(ai::MessageVariant{ai::ToolResultMessage{
+            .tool_call_id = "block-read",
+            .tool_name = "read",
+            .content = {ai::text_content("read body that stays hidden")},
+            .details = std::nullopt,
+            .is_error = false,
+            .timestamp = 1'700'000'000'002,
+    }}));
+
+    auto details_with_diff = support::JsonValue{support::JsonValue::object_t{}};
+    details_with_diff.get_object().emplace("diff", support::JsonValue(std::string{"-1 alpha\n+1 beta"}));
+    REQUIRE(store->append(ai::MessageVariant{ai::ToolResultMessage{
+            .tool_call_id = "block-edit",
+            .tool_name = "edit",
+            .content = {ai::text_content("Successfully replaced 1 block(s) in notes.txt.")},
+            .details = std::move(details_with_diff),
+            .is_error = false,
+            .timestamp = 1'700'000'000'003,
+    }}));
+
+    REQUIRE(store->append(ai::MessageVariant{
+            ai::tool_result_message("block-bash", "bash", prefixed_lines("bash", 1, 12), false, 1'700'000'000'004)}));
+    REQUIRE(store->append(ai::MessageVariant{
+            ai::tool_result_message("block-write", "write", "wrote 14 lines", false, 1'700'000'000'005)}));
+    REQUIRE(store->append(ai::MessageVariant{
+            ai::tool_result_message("block-probe", "probe", "probe answered in one line", false, 1'700'000'000'006)}));
+
+    coding_agent::runtime::AgentSessionCreationRequest resume;
+    resume.session_target = coding_agent::ExplicitResumeSessionTarget{session_file};
+    resume.execution_runtime_target = fixture->runtime.make_target();
+    resume.workspace = fixture->workspace;
+    resume.session_facts.no_skills = true;
+    resume.session_facts.no_prompt_templates = true;
+    auto created = fixture->runtime.run(coding_agent::create_agent_session_async(
+            std::move(resume), std::nullopt, cch::tests::cli_fake_overrides(tests::make_scripted_fake_models())));
+    REQUIRE(created);
+    fixture->session = std::move(created->session);
+    return fixture;
+}
+
 // ── model-switch: two keyed providers in a deterministic Agent Config Dir ───
 
 constexpr std::string_view kReasoningAndPlainKeyed = R"({
@@ -374,7 +532,14 @@ TEST_CASE("rendering golden: the full message pipeline renders in pi's shapes",
     CHECK(screen.find("inspect the saved state") != std::string::npos);
     CHECK(screen.find("I will read the persisted file.") != std::string::npos);
     CHECK(screen.find("read saved.txt") != std::string::npos);
-    CHECK(screen.find("persisted tool output") != std::string::npos);
+    // pi `read.ts:111-115` returns the empty string for a collapsed
+    // successful read result, so the pipeline's read block is its title line
+    // and the result's own text is nowhere on the screen. This assertion
+    // encoded the pre-renderer fallback framing; it is not weakened, it is
+    // stated the other way round, and the byte comparison above plus the
+    // `read saved.txt` title still pin the tool-execution component.
+    CHECK(screen.find("persisted tool output") == std::string::npos);
+    CHECK(screen.find(R"({"path":"saved.txt"})") == std::string::npos);
     CHECK(screen.find("$ ls -la") != std::string::npos);
     CHECK(screen.find("alpha") != std::string::npos);
     CHECK(screen.find("beta") != std::string::npos);
@@ -384,6 +549,130 @@ TEST_CASE("rendering golden: the full message pipeline renders in pi's shapes",
     // Collapsed branch-summary label line (pi branch-summary-message.ts); the
     // summary body renders only when expanded.
     CHECK(screen.find("Branch summary") != std::string::npos);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE("rendering golden: the four tool renderers and the fallback compose in one "
+          "session view",
+        "[coding_agent][tui][rendering][issue422][tool-renderers][issue828][compat-pi]") {
+    auto fixture = make_tool_blocks_session();
+    tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
+
+    // 64 rows hold the whole turn — five tool blocks, the user message and the
+    // assistant text — above the status/editor/footer rows, so the golden is a
+    // readable composition rather than a scrolled tail.
+    tui::VirtualTerminal terminal({.columns = 80, .rows = 64});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal, make_run(*fixture->session, fixture->config.path())),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+
+    const auto screen = visible_screen(terminal);
+    capture_golden("tool-blocks.txt", screen);
+
+    const auto expected = read_text_file(golden_path("tool-blocks.txt"));
+    CHECK(screen == expected);
+
+    // ── what the golden cannot express: the styling ──────────────────────
+    // The golden is plain cell text, so a renderer that emitted the right
+    // rows in the right colours would still produce a byte-identical file.
+    // A wrong token on any one of these four rows is invisible to the
+    // comparison above and visible only here. This is the gap the byte
+    // comparison leaves open, named and closed.
+    const coding_agent::tui::LiveTheme theme(
+            coding_agent::tui::select_builtin_theme(terminal.capabilities()), terminal.capabilities().color);
+    const auto tool_title = token_foreground(theme, coding_agent::tui::ThemeToken::ToolTitle);
+    const auto tool_output = token_foreground(theme, coding_agent::tui::ThemeToken::ToolOutput);
+    const auto muted = token_foreground(theme, coding_agent::tui::ThemeToken::Muted);
+    const auto removed = token_foreground(theme, coding_agent::tui::ThemeToken::ToolDiffRemoved);
+    const auto added = token_foreground(theme, coding_agent::tui::ThemeToken::ToolDiffAdded);
+
+    // 1. The read title: pi's bold `toolTitle` name. A plain-text title, or a
+    //    title in the `toolOutput` grey the bodies use, fails here.
+    CHECK(foreground_at(terminal, "read notes.txt:5-7") == tool_title);
+    CHECK(is_bold_at(terminal, "read notes.txt:5-7"));
+    // 2. The bash body: `toolOutput`, and the fold hint's count clause is
+    //    `muted` with a `dim` key inside it.
+    CHECK(foreground_at(terminal, "bash 8") == tool_output);
+    CHECK(foreground_at(terminal, "... (7 earlier lines, ") == muted);
+    // 3. The write preview body: `toolOutput` as well, from the arguments
+    //    rather than from any settled result.
+    CHECK(foreground_at(terminal, "gen 1") == tool_output);
+    CHECK(foreground_at(terminal, "... (4 more lines, ") == muted);
+    // 4. The edit diff: two distinct tokens, one per row, and neither row
+    //    carrying the other's. One colour for the whole diff renders the same
+    //    two rows of text and is what the golden cannot see.
+    CHECK(foreground_at(terminal, "alpha") == removed);
+    CHECK(foreground_at(terminal, "beta") == added);
+    CHECK(foreground_at(terminal, "alpha") != added);
+    CHECK(foreground_at(terminal, "beta") != removed);
+    CHECK(foreground_at(terminal, "alpha") != tool_output);
+    CHECK(foreground_at(terminal, "beta") != tool_output);
+    // The tokens are genuinely distinguishable in this theme, so the four
+    // checks above discriminate rather than comparing one colour to itself.
+    CHECK(tool_title != tool_output);
+    CHECK(removed != added);
+
+    // ── what the golden does express: the five blocks compose ────────────
+    // The whole (padded) screen row carrying `text`, or the empty string.
+    // Rows are byte-compared by the golden above; these assertions say which
+    // block each visible line belongs to, so a per-renderer case that only ever
+    // ran in isolation cannot hide a composition regression.
+    const auto row_of = [&screen](std::string_view text) -> std::string {
+        const auto at = screen.find(text);
+        if (at == std::string::npos) return {};
+        const auto previous_break = screen.rfind('\n', at);
+        const auto next_break = screen.find('\n', at);
+        const auto begin = previous_break == std::string::npos ? 0 : previous_break + 1;
+        const auto end = next_break == std::string::npos ? screen.size() : next_break;
+        return screen.substr(begin, end - begin);
+    };
+    const auto read_row = row_of("read notes.txt:5-7");
+    const auto bash_row = row_of("$ ls -la");
+    const auto write_row = row_of("write generated.txt");
+    const auto edit_row = row_of("edit notes.txt");
+    const auto probe_row = row_of("probe");
+    REQUIRE(!read_row.empty());
+    REQUIRE(!bash_row.empty());
+    REQUIRE(!write_row.empty());
+    REQUIRE(!edit_row.empty());
+    REQUIRE(!probe_row.empty());
+    // The read title is the whole collapsed block: the body's own text is on
+    // the screen nowhere, not merely off the rows this case looks at.
+    CHECK(screen.find("read body that stays hidden") == std::string::npos);
+    // The bash fold keeps the tail and drops the head, and the two folds in
+    // this view (`bash` and `write`) do not interfere.
+    CHECK(row_of("bash 8").find("bash 8") != std::string::npos);
+    CHECK(screen.find("bash 1 ") == std::string::npos);
+    CHECK(screen.find("bash 7\n") == std::string::npos);
+    CHECK(screen.find("gen 11") == std::string::npos);
+    CHECK(screen.find("gen 14") == std::string::npos);
+    // The write result text never reaches the screen: pi's write success
+    // renders nothing, and the content is on screen exactly once.
+    CHECK(screen.find("wrote 14 lines") == std::string::npos);
+    CHECK(screen.find("Successfully replaced") == std::string::npos);
+    // The fallback's own framing is in the same view: the bold name, the
+    // blank line, and the two-space-indented argument JSON. None of the four
+    // registered renderers prints an argument dump.
+    CHECK(!row_of("  \"query\": \"alpha\"").empty());
+    CHECK(!row_of("  \"limit\": 2").empty());
+    CHECK(screen.find(R"({"query":"alpha","limit":2})") == std::string::npos);
+    CHECK(!row_of("probe answered in one line").empty());
+    // Source order: pi renders the assistant message and then the tool
+    // components in call order.
+    CHECK(screen.find(read_row) < screen.find(bash_row));
+    CHECK(screen.find(bash_row) < screen.find(write_row));
+    CHECK(screen.find(write_row) < screen.find(edit_row));
+    CHECK(screen.find(edit_row) < screen.find(probe_row));
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
