@@ -87,6 +87,12 @@ private:
     /// renderer state; nullopt until the transition happens.
     std::optional<ai::TimestampMs> started_at_ms_{std::nullopt};
     std::optional<ai::TimestampMs> ended_at_ms_{std::nullopt};
+    /// pi `state.cachedWidth`: the width the last render measured at, so a
+    /// renderer that folds to the frame width is recomputed when that width
+    /// changes (pi's `if (state.cachedLines === undefined || state.cachedWidth !== width)`).
+    /// Nullopt until the first render, which keeps the first paint a width
+    /// change rather than a fold at the default.
+    std::optional<std::size_t> last_rendered_width_{std::nullopt};
     /// The resolved `app.tools.expand` key text and the hint built from it,
     /// refreshed per rebuild so a `/reload` shows the new binding.
     std::string expand_key_;

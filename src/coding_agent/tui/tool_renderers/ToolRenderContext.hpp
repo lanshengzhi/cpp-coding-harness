@@ -4,6 +4,7 @@
 
 #include <cch/support/JsonValue.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string_view>
@@ -35,6 +36,16 @@ struct ToolRenderContext {
     /// pi `cwd`: the working directory the tool execution runs in. Paths are
     /// resolved against it before they are linked or classified.
     std::string_view cwd;
+    /// The visible content width the rendered text is wrapped at, which is
+    /// the width the host was last rendered at less the tool block's own box
+    /// padding. pi reaches the same number in the renderer's
+    /// `render: (width) => ...` callback at *render* time; this seam returns
+    /// strings at rebuild time, so the host publishes the width it will
+    /// measure, keyed exactly as pi keys its fold cache
+    /// (`state.cachedWidth !== width`). The default is the 80-column terminal
+    /// pi assumes, used only by a rebuild that precedes the first render.
+    /// Only the fold-capable renderers read it; the rest ignore it.
+    std::size_t width{80};
     /// pi `theme`, passed through the context so a renderer needs one input.
     const LiveTheme& theme;
     /// The `app.tools.expand` key text, or `Unbound` when nothing is bound.

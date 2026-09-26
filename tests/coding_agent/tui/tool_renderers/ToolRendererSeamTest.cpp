@@ -111,10 +111,21 @@ TEST_CASE("the four built-in tool names render through the component without a f
                 .timestamp = 0,
         });
         const auto screen = tests::render_tool_screen(component, 80);
-        // The registered stub's own call text is still empty, so the block has
-        // no content and pi's `hideComponent` rule keeps it off the screen: no
-        // bold fallback name, no fallback argument JSON, no result body.
-        CHECK(screen.visible.empty());
+        // No tool name takes the fallback: none of the four blocks shows the
+        // fallback's bold bare name or its pretty-printed argument JSON. The
+        // three whose renderer is still a stub render nothing at all, which is
+        // pi's `hideComponent`; `bash` draws its own `$ ...` title since #826.
+        std::string joined;
+        for (const auto& row : screen.visible)
+            joined += row + "\n";
+        CHECK(joined.find("{\n") == std::string::npos);
+        CHECK(joined.find("\"file_path\"") == std::string::npos);
+        if (std::string_view{name} == "bash") {
+            CHECK(!screen.visible.empty());
+            CHECK(screen.visible.at(1) == "$ ...");
+        } else {
+            CHECK(screen.visible.empty());
+        }
     }
 }
 

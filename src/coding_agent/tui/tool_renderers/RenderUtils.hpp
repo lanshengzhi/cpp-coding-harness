@@ -2,7 +2,9 @@
 
 #include "coding_agent/tui/tool_renderers/ToolRenderContext.hpp"
 
+#include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
+#include <cch/tui/Text.hpp>
 
 #include <cstddef>
 #include <optional>
@@ -11,6 +13,8 @@
 #include <vector>
 
 namespace cch::coding_agent::tui {
+
+[[nodiscard]] std::vector<std::string> split_lines(std::string_view text);
 
 /// pi `theme.bold` under a foreground token: the tool-title bold every call
 /// header and the call fallback use.
@@ -42,6 +46,25 @@ struct HeadFold {
 };
 
 [[nodiscard]] HeadFold fold_head_lines(std::string_view text, std::size_t max_lines);
+
+/// pi `modes/interactive/components/visual-truncate.ts:8` `truncateToVisualLines`:
+/// keep the **last** `max_visual_lines` *visual* lines — lines are measured
+/// after wrapping at `width`, so one long logical line that wraps to three
+/// rows is three, not one. `skipped` is the number of **visual** lines dropped
+/// from the front, which is the count pi's earlier-lines hint reports.
+struct VisualFold {
+    /// The kept tail, in render order, each row already styled.
+    std::vector<std::string> lines{};
+    /// Visual lines dropped from the front.
+    std::size_t skipped{0};
+};
+
+/// pi's `truncateToVisualLines`. `padding_x` is pi's `paddingX`, which is `0`
+/// inside the tool block's box and `1` inside a plain container. Rendering
+/// can fail on a width too small for the text, which the caller propagates
+/// rather than silently folding an empty tail.
+[[nodiscard]] support::Expected<VisualFold> fold_tail_visual_lines(
+        std::string_view text, std::size_t max_visual_lines, std::size_t width, std::size_t padding_x = 0);
 
 /// pi's uniform fold hint `... (N more lines, <key> to expand)`. `total_lines`
 /// adds pi's write variant `... (N more lines, M total, <key> to expand)`.
