@@ -1,18 +1,18 @@
 #include "RenderUtils.hpp"
 
+#include <cch/tui/Text.hpp>
+
 #include <array>
 #include <cstddef>
 #include <format>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace cch::coding_agent::tui {
-namespace {
 
-/// pi's `text.split("\n")`: empty segments are kept, and the text keeps its
-/// own shape when it does not end in a newline.
-[[nodiscard]] std::vector<std::string> split_lines(std::string_view text) {
+std::vector<std::string> split_lines(std::string_view text) {
     std::vector<std::string> lines;
     std::size_t start = 0;
     while (true) {
@@ -25,8 +25,6 @@ namespace {
         start = end + 1;
     }
 }
-
-} // namespace
 
 std::string bold_foreground(const LiveTheme& theme, ThemeToken token, std::string_view text) {
     return theme.foreground(token, std::format("\x1b[1m{}\x1b[22m", text));
@@ -89,6 +87,24 @@ std::string fold_hint(const ToolRenderContext& context, std::size_t remaining, s
     hint += context.expand_hint;
     hint += context.theme.foreground(ThemeToken::Muted, ")");
     return hint;
+}
+
+support::Expected<VisualFold> fold_tail_visual_lines(
+        std::string_view text, std::size_t max_visual_lines, std::size_t width, std::size_t padding_x) {
+    if (text.empty()) return VisualFold{};
+    cch::tui::Text component(std::string{text}, padding_x, 0);
+    auto rendered = component.render(width);
+    if (!rendered) return std::unexpected(rendered.error());
+    auto all = std::move(rendered->lines);
+    if (all.size() <= max_visual_lines) return VisualFold{.lines = std::move(all), .skipped = 0};
+    const auto skipped = all.size() - max_visual_lines;
+    VisualFold folded;
+    folded.skipped = skipped;
+    folded.lines.reserve(max_visual_lines);
+    for (auto row = all.end() - static_cast<std::ptrdiff_t>(max_visual_lines); row != all.end(); ++row) {
+        folded.lines.push_back(std::move(*row));
+    }
+    return folded;
 }
 
 } // namespace cch::coding_agent::tui

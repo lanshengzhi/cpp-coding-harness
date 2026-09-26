@@ -5,6 +5,7 @@
 #include <cch/tui/Utils.hpp>
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "coding_agent/tui/tool_renderers/RenderUtils.hpp"
 
 #include <cch/support/Error.hpp>
 #include <algorithm>
@@ -185,16 +186,12 @@ support::Expected<cch::tui::RenderResult> BashExecutionComponent::render(std::si
                 preview += logical[index];
             }
             // pi bash-execution.ts truncateToVisualLines(`\n${styledOutput}`,
-            // 20, width, 1): the leading blank rides inside the window.
-            cch::tui::Text component(std::format("\n{}", preview), 1, 0);
-            auto wrapped = component.render(width);
-            if (!wrapped) return std::unexpected(wrapped.error());
-            auto visual = std::move(wrapped->lines);
-            if (visual.size() > kPreviewVisualLines) {
-                visual.erase(
-                    visual.begin(),
-                    visual.end() - static_cast<std::ptrdiff_t>(kPreviewVisualLines));
-            }
+            // 20, width, 1): the leading blank rides inside the window, and
+            // the shared helper keeps the same last 20 visual lines this
+            // component has always shown.
+            auto folded = fold_tail_visual_lines(std::format("\n{}", preview), kPreviewVisualLines, width, 1);
+            if (!folded) return std::unexpected(folded.error());
+            auto visual = std::move(folded->lines);
             for (auto& line : visual) {
                 line = theme_.foreground(ThemeToken::Muted, std::move(line));
             }

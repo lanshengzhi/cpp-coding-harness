@@ -19,6 +19,15 @@
 namespace cch::coding_agent::tui {
 namespace {
 
+/// The tool block's box padding (`Box(1, 1, ...)`). A renderer that folds to
+/// the frame measures the *content* width, so the same constant drives both
+/// the box and the width the renderers are told about.
+constexpr std::size_t kBoxPaddingX = 1;
+
+/// pi's default terminal width, the value a rebuild before the first render
+/// publishes (`ToolRenderContext::width`).
+constexpr std::size_t kDefaultTerminalWidth = 80;
+
 [[nodiscard]] std::string safe_text(std::string text) {
     return bounded_redacted_presentation(std::move(text));
 }
@@ -60,7 +69,7 @@ ToolExecutionComponent::ToolExecutionComponent(const LiveTheme& theme,
     : theme_(theme), keybindings_(std::move(keybindings)), tool_name_(std::move(tool_name)),
       tool_call_id_(std::move(tool_call_id)), arguments_json_(safe_text(std::move(arguments_json))),
       cwd_(std::move(cwd)), registry_(std::move(registry)),
-      box_(1, 1, theme.background_hook(ThemeToken::ToolPendingBg)) {
+      box_(kBoxPaddingX, 1, theme.background_hook(ThemeToken::ToolPendingBg)) {
     rebuild();
 }
 
@@ -132,11 +141,14 @@ void ToolExecutionComponent::rebuild() {
     expand_hint_ = theme_.foreground(ThemeToken::Dim, expand_key_) + theme_.foreground(ThemeToken::Muted, " to expand");
 
     const auto args = parsed_arguments();
+    const auto terminal_width = last_rendered_width_.value_or(kDefaultTerminalWidth);
+    const auto content_width = terminal_width > 2 * kBoxPaddingX ? terminal_width - 2 * kBoxPaddingX : terminal_width;
     const ToolRenderContext context{
             .args = args,
             .tool_name = tool_name_,
             .tool_call_id = tool_call_id_,
             .cwd = cwd_,
+            .width = content_width,
             .theme = theme_,
             .expand_key = expand_key_,
             .expand_hint = expand_hint_,
@@ -218,6 +230,13 @@ void ToolExecutionComponent::rebuild_image_slots() {
 }
 
 support::Expected<cch::tui::RenderResult> ToolExecutionComponent::render(std::size_t width) {
+    // pi `state.cachedWidth !== width`: a renderer that folds to the frame is
+    // rebuilt only when the measured width changes, which is a resize or the
+    // first paint. A stable terminal rebuilds nothing per frame.
+    if (last_rendered_width_ != width) {
+        last_rendered_width_ = width;
+        rebuild();
+    }
     auto rendered = box_.render(width);
     if (!rendered) return std::unexpected(rendered.error());
     for (const auto& slot : image_slots_) {
