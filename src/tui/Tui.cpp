@@ -620,6 +620,11 @@ support::ExpectedVoid Tui::render() {
         return write_full_buffer(frame_write_start);
     };
 
+    // The composed buffer rows visible on screen this frame (the dock owns
+    // the rest); shared by the repartition guard above and the viewport-top
+    // tracking below so the visible-window rule lives in one place.
+    const auto visible_window_rows = has_dock ? viewport_height : dimensions.rows;
+
     auto render_result = [&]() -> support::ExpectedVoid {
         if (first_render) {
             // pi fullRender(false): write the full buffer without clearing
@@ -655,6 +660,19 @@ support::ExpectedVoid Tui::render() {
         // transcript end, so no buffer line repaints them): clear that gap
         // in place like the differential clear-on-shrink below (#597).
         if (viewport_height_changed) {
+            // A grown viewport over a scrolled transcript moves the visible
+            // window above the tracked top: those rows live in the terminal's
+            // scrollback and address in place only as a clamp onto the visible
+            // top, so repaint the partition from a clean screen like any other
+            // change above the viewport instead of leaving stale dock pixels.
+            // (`admitted_prefix` is 0 on any viewport change, so the rewrite
+            // below never resumes a partial prefix; `force_clear` only states
+            // that, matching the above-viewport path.)
+            const auto new_visible_top = new_lines.size() > visible_window_rows ? new_lines.size() - visible_window_rows
+                                                                                 : std::size_t{0};
+            if (new_visible_top < viewport_top_) {
+                return clear_and_rewrite(/*force_clear=*/true);
+            }
             // Rewriting the full buffer overwrites image cells in the terminal,
             // even when the image's logical content and region are unchanged.
             // Retire placements first so image reconciliation at frame end
@@ -750,8 +768,8 @@ support::ExpectedVoid Tui::render() {
     // `previousViewportTop = max(prev, len - height)`). The stale-row clearing
     // inside the render body used the pre-write viewport, which is the correct
     // bound for rows already visible before any scroll.
-    const auto visible_rows = has_dock ? viewport_height : dimensions.rows;
-    viewport_top_ = std::max(viewport_top_, new_lines.size() > visible_rows ? new_lines.size() - visible_rows : 0U);
+    viewport_top_ = std::max(viewport_top_,
+        new_lines.size() > visible_window_rows ? new_lines.size() - visible_window_rows : 0U);
 
     // Position IME cursor based on focused component
     if (render_result) {

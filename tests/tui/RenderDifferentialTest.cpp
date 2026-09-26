@@ -975,3 +975,103 @@ TEST_CASE("Tui forces a clean repaint when content above a pending clear changes
     }
     REQUIRE(finished);
 }
+
+/// Flatten the visible terminal screen into one newline-joined string for
+/// substring assertions over dock-shrink repaints.
+[[nodiscard]] std::string flat_screen(const cch::tui::VirtualTerminal& terminal) {
+    std::string screen;
+    for (const auto& line : terminal.screen()) {
+        screen.append(line);
+        screen.push_back('\n');
+    }
+    return screen;
+}
+
+/// A selector-like dock: item rows framed by border rules, so the assertions
+/// below catch border-rule residue as well as item-row residue.
+[[nodiscard]] std::vector<std::string> selector_dock() {
+    return std::vector<std::string>{
+            "---rule---",
+            "sel-0000",
+            "sel-0001",
+            "sel-0002",
+            "sel-0003",
+            "sel-0004",
+            "sel-0005",
+            "sel-0006",
+            "---rule---",
+    };
+}
+
+TEST_CASE("Shrinking the dock over a scrolled transcript leaves no stale dock rows",
+        "[tui][dock]") {
+    // Model-selector close shape: a tall editor-slot replacement shrinks back
+    // to the plain editor while the transcript grows by one status line and
+    // the viewport grows into the vacated rows. Stale selector pixels must not
+    // survive in the grown viewport, even when the transcript already scrolled
+    // under the small viewport.
+    constexpr std::size_t kColumns = 12;
+    constexpr std::size_t kRows = 14;
+    cch::tui::VirtualTerminal terminal({.columns = kColumns, .rows = kRows});
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<TranscriptDockComponent>();
+    auto* view = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+
+    const auto selector = selector_dock();
+    view->set_lines(session_rows(8));
+    view->set_dock_lines(selector);
+    view->set_viewport_height(kRows - selector.size());
+    REQUIRE(tui.render());
+
+    auto transcript = session_rows(8);
+    transcript.emplace_back("status-row");
+    const std::vector<std::string> editor_dock{"edit", "foot"};
+    view->set_lines(transcript);
+    view->set_dock_lines(editor_dock);
+    view->set_viewport_height(kRows - editor_dock.size());
+    REQUIRE(tui.render());
+
+    const auto screen = flat_screen(terminal);
+    CHECK(screen.find("sel-") == std::string::npos);
+    CHECK(screen.find("---rule---") == std::string::npos);
+    CHECK(screen.find("status-row") != std::string::npos);
+    CHECK(screen.find("edit") != std::string::npos);
+}
+
+TEST_CASE("Shrinking the dock over a short transcript repaints without clearing scrollback",
+        "[tui][dock]") {
+    // The common selector-close shape: the transcript never scrolled, so the
+    // repartition must stay on the no-clear path (#597) and still leave no
+    // stale dock pixels in the grown viewport.
+    constexpr std::size_t kColumns = 12;
+    constexpr std::size_t kRows = 14;
+    cch::tui::VirtualTerminal terminal({.columns = kColumns, .rows = kRows});
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<TranscriptDockComponent>();
+    auto* view = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+
+    const auto selector = selector_dock();
+    view->set_lines(session_rows(3));
+    view->set_dock_lines(selector);
+    view->set_viewport_height(kRows - selector.size());
+    REQUIRE(tui.render());
+    (void)terminal.check_clear_screen_called();
+
+    auto transcript = session_rows(3);
+    transcript.emplace_back("status-row");
+    const std::vector<std::string> editor_dock{"edit", "foot"};
+    view->set_lines(transcript);
+    view->set_dock_lines(editor_dock);
+    view->set_viewport_height(kRows - editor_dock.size());
+    REQUIRE(tui.render());
+
+    CHECK_FALSE(terminal.check_clear_screen_called());
+    const auto screen = flat_screen(terminal);
+    CHECK(screen.find("sel-") == std::string::npos);
+    CHECK(screen.find("---rule---") == std::string::npos);
+    CHECK(screen.find("status-row") != std::string::npos);
+}
