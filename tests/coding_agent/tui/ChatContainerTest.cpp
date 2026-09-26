@@ -14,7 +14,9 @@
 #include <chrono>
 #include <limits>
 #include <memory>
+#include <ranges>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using namespace cch;
@@ -38,7 +40,98 @@ namespace {
             coding_agent::tui::builtin_dark_theme(), tui::TerminalColorCapability::TrueColor);
 }
 
+/// Composed cell rows strictly between the row carrying `from` and the row
+/// carrying `to`, asserting every one of them is visually blank. Composed rows
+/// are the rendering contract here: raw ANSI bytes and SGR cadence are
+/// explicitly out of parity scope.
+[[nodiscard]] std::size_t blank_row_gap(
+        const std::vector<std::string>& lines, std::string_view from, std::string_view to) {
+    const auto row_of = [&lines](std::string_view needle) -> std::size_t {
+        for (std::size_t index = 0; index < lines.size(); ++index) {
+            if (tests::strip_ansi(lines[index]).find(needle) != std::string::npos) return index;
+        }
+        FAIL("no composed row carries \"" << std::string{needle} << '"');
+        return lines.size();
+    };
+    const std::size_t from_row = row_of(from);
+    const std::size_t to_row = row_of(to);
+    REQUIRE(to_row > from_row);
+    for (std::size_t index = from_row + 1; index < to_row; ++index) {
+        const std::string visible = tests::strip_ansi(lines[index]);
+        CHECK(std::ranges::all_of(visible, [](char cell) { return cell == ' '; }));
+    }
+    return to_row - from_row - 1;
+}
+
+/// Index of the first composed row carrying visible (non-space) text.
+[[nodiscard]] std::size_t first_content_row(const std::vector<std::string>& lines) {
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const std::string visible = tests::strip_ansi(lines[index]);
+        if (visible.find_first_not_of(' ') != std::string::npos) return index;
+    }
+    FAIL("the composed transcript has no visible row");
+    return lines.size();
+}
+
 } // namespace
+
+TEST_CASE("ChatContainer separates an assistant reply from the next user message with pi's two blank rows",
+        "[coding_agent][tui][issue814][spec]") {
+    auto theme = test_theme();
+    coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
+
+    const auto add_turn = [&chat](std::string_view user_text, std::string_view reply_text) {
+        chat.append_committed_message(ai::user_text_message(std::string{user_text}));
+        ai::AssistantMessage assistant;
+        assistant.content.push_back(ai::TextContent{.text = std::string{reply_text}});
+        assistant.stop_reason = ai::AssistantStopReason::Stop;
+        chat.append_committed_message(assistant);
+    };
+    add_turn("question one", "reply one");
+    add_turn("question two", "reply two");
+
+    // The formal boot fixture set renders at 41/72/100/120 columns, and the
+    // gap must hold at every one of them.
+    for (const std::size_t width : {41U, 72U, 100U, 120U}) {
+        CAPTURE(width);
+        const auto rendered = chat.render(width);
+        REQUIRE(rendered);
+        const auto& lines = rendered->lines;
+
+        // pi's `addMessageToChat` user branch prepends one `Spacer(1)` to every
+        // user message that is not the chat container's first child, so both
+        // inter-message gaps are two blank rows: the user message box supplies
+        // one (its paddingY) and the leading Spacer supplies the other.
+        CHECK(blank_row_gap(lines, "question one", "reply one") == 2);
+        CHECK(blank_row_gap(lines, "reply one", "question two") == 2);
+        CHECK(blank_row_gap(lines, "question two", "reply two") == 2);
+    }
+}
+
+TEST_CASE("ChatContainer leaves the first user message unspaced when it opens the transcript",
+        "[coding_agent][tui][issue814][spec]") {
+    auto theme = test_theme();
+    coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
+
+    chat.append_committed_message(ai::user_text_message("opening question"));
+    ai::AssistantMessage assistant;
+    assistant.content.push_back(ai::TextContent{.text = "opening reply"});
+    assistant.stop_reason = ai::AssistantStopReason::Stop;
+    chat.append_committed_message(assistant);
+
+    const auto rendered = chat.render(80);
+    REQUIRE(rendered);
+    const auto& lines = rendered->lines;
+
+    // pi gates the leading Spacer on `chatContainer.children.length > 0`, so an
+    // empty transcript opens directly on the user message box padding row.
+    // The distinguishing assertion is the first *content* row, not a blank
+    // row 0: a Spacer row is blank too, so only the content index can tell an
+    // always-spaced implementation from the gated one.
+    REQUIRE(lines.size() > 2);
+    CHECK(blank_row_gap(lines, "opening question", "opening reply") == 2);
+    CHECK(first_content_row(lines) == 1);
+}
 
 TEST_CASE("ChatContainer completed messages transition to Committed state with cached lines",
         "[coding_agent][tui][issue602][spec]") {

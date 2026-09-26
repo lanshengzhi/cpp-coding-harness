@@ -768,6 +768,27 @@ struct ChatContainer::Impl {
             }
         }
     }
+    /// Whether the item corresponds to a pi chat-container child. pi only
+    /// adds a child when it has something to render: system messages and
+    /// `display: false` custom messages contribute none, while a standalone
+    /// tool result is a ToolExecutionComponent child.
+    [[nodiscard]] static bool contributes_chat_child(const ItemVariant& item) {
+        if (const auto* message = std::get_if<MessageItem>(&item); message != nullptr) {
+            return message->component != nullptr || !message->tools.empty();
+        }
+        return true;
+    }
+
+    /// pi `addMessageToChat` user branch: a `Spacer(1)` is added before every
+    /// user message that is not the chat container's first child. The user
+    /// message box supplies one blank row of its own (paddingY 1), so this
+    /// spacer is what makes both inter-message gaps two blank rows instead of
+    /// the reply-to-user gap collapsing to one (#814).
+    [[nodiscard]] static bool is_user_message(const ItemVariant& item) {
+        const auto* message = std::get_if<MessageItem>(&item);
+        return message != nullptr && std::get_if<ai::UserMessage>(&message->message) != nullptr;
+    }
+
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render_item(
             ItemVariant& item, std::size_t width, std::size_t item_index) {
         if (auto* message = std::get_if<MessageItem>(&item)) {
@@ -1131,8 +1152,16 @@ support::Expected<cch::tui::RenderResult> ChatContainer::render(std::size_t widt
     }
 
     cch::tui::RenderResult result;
+    // Folds in "the container already holds a child" so the per-item
+    // `children.length > 0` gate stays O(1) instead of rescanning the
+    // transcript. Only appends ever precede an item, so the running flag is
+    // exactly what pi's `chatContainer.children.length` reads at add time.
+    bool has_prior_chat_child = false;
     for (std::size_t index = 0; index < impl_->items.size(); ++index) {
         auto& item = impl_->items[index];
+        const bool leading_spacer = has_prior_chat_child && Impl::is_user_message(item);
+        has_prior_chat_child = has_prior_chat_child || Impl::contributes_chat_child(item);
+        if (leading_spacer) result.lines.emplace_back();
         if (auto* message = std::get_if<Impl::MessageItem>(&item)) {
             const auto* assistant = std::get_if<ai::AssistantMessage>(&message->message);
             const bool stale_empty_assistant_cache =

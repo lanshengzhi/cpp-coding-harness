@@ -6,11 +6,11 @@
                                                                         
  Resumed reply: the notes file is ready.                                
                                                                         
+                                                                        
  start the run                                                          
                                                                         
                                                                         
  Operation aborted                                                      
-                                                                        
                                                                         
                                                                         
                                                                         

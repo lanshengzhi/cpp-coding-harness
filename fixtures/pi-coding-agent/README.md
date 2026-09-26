@@ -274,10 +274,13 @@ A row's `triage.classification` is its single final review classification. The
 provider usage for the declared response scenarios. Explicit omission patterns may remove only
 pi surfaces outside the Supported subset; they never erase a Supported row. The resolved styled
 cell projection is the authority for whether a remaining difference is intentional. The current
-product defects are tracked by #806–#812; the `scrollback` scenario's retention delta is re-triaged
-onto the blank-row spacing defect in #814, while the report itself remains checked in as
-reproducible evidence. A successful `--verify` means the evidence and triage records are
-reproducible; it does not claim that the tracked product defects are fixed.
+product defects are tracked by #806–#812. The `scrollback` scenario's blank-row spacing defect
+was #814 and is fixed: both runtimes now render two blank rows between an assistant reply and the
+next user message, so their composed buffers grow one row per turn and
+`profileProjection.scrollbackStructureEqual` compares true. What remains on that row is the
+pi-only runtime-identity/startup-documentation block and the footer provider-usage row, which
+the profile projection already isolates. A successful `--verify` means the evidence and triage
+records are reproducible; it does not claim that the tracked product defects are fixed.
 
 For a live/manual pass, use a real terminal and credentials outside the default CTest path:
 
