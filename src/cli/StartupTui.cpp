@@ -6,6 +6,7 @@
 #include "coding_agent/tui/SessionSelector.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
+#include "coding_agent/tui/TerminationSignals.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <cch/support/Error.hpp>
@@ -107,7 +108,14 @@ startup_keybindings(
 template <typename T, typename Coroutine>
 [[nodiscard]] support::Expected<T> run_process_terminal_host(Coroutine coroutine) {
     boost::asio::io_context io;
-    cch::tui::ProcessTerminal terminal({.executor = io.get_executor()});
+    const cch::tui::ProcessTerminalOptions terminal_options{.executor = io.get_executor()};
+    // The startup hosts own the terminal before the main TUI exists (pi
+    // `selectSession` / `promptForMissingSessionCwd`), so they claim the
+    // termination signals for their own raw-mode window too. A failed claim only
+    // means this boot host runs without the guarantee.
+    coding_agent::tui::TerminationSignals termination;
+    (void)termination.arm_terminal(terminal_options.input_fd, terminal_options.output_fd);
+    cch::tui::ProcessTerminal terminal(terminal_options);
     auto future = boost::asio::co_spawn(
         io, std::move(coroutine)(terminal), boost::asio::use_future);
     io.run();

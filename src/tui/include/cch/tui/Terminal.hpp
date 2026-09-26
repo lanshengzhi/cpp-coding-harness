@@ -127,6 +127,16 @@ using TerminalResizeSink = std::move_only_function<support::ExpectedVoid(Termina
 constexpr auto kDrainInputMaxMs = std::chrono::milliseconds(1000);
 constexpr auto kDrainInputIdleMs = std::chrono::milliseconds(50);
 
+/// The mode disables that return a started terminal to its pre-start state
+/// without consulting terminal state: bracketed paste off, stacked Kitty
+/// keyboard protocol pop, modifyOtherKeys off, a closed synchronized update,
+/// scroll margins reset, cursor visible, and progress cleared. `Terminal::stop()`
+/// is the exact restore; this is the emergency restore a process takes when the
+/// terminal object cannot be reached (pi `emergencyTerminalExit`), so every mode
+/// Process Terminal enables while started has its disable here.
+constexpr std::string_view kTerminalEmergencyRestoreSequence =
+        "\x1b[?2004l\x1b[<u\x1b[>4;0m\x1b[?2026l\x1b[r\x1b[?25h\x1b]9;4;0;\x07";
+
 class Terminal {
 public:
     virtual ~Terminal() = default;

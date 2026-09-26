@@ -145,6 +145,30 @@ IoContextRunner& test_io() {
     return runner;
 }
 
+/// Releases an input read the test parked by clearing `O_NONBLOCK` on the
+/// shared description: restores the flag and feeds one byte, so a failing
+/// assertion above cannot leave the terminal's mutex held by that read when
+/// the terminal is destroyed.
+class ParkedInputRelease final {
+public:
+    ParkedInputRelease(int master, int alias) : master_(master), alias_(alias) {}
+    ~ParkedInputRelease() { release(); }
+    ParkedInputRelease(const ParkedInputRelease&) = delete;
+    ParkedInputRelease& operator=(const ParkedInputRelease&) = delete;
+    ParkedInputRelease(ParkedInputRelease&&) = delete;
+    ParkedInputRelease& operator=(ParkedInputRelease&&) = delete;
+
+    void release() {
+        const int flags = ::fcntl(alias_, F_GETFL);
+        if (flags != -1) (void)::fcntl(alias_, F_SETFL, flags | O_NONBLOCK);
+        (void)::write(master_, " ", 1);
+    }
+
+private:
+    int master_;
+    int alias_;
+};
+
 // Fill the terminal's bounded output queue with uniquely labelled 4 KB chunks
 // (the master is never read) until a write is refused with Busy. Returns the
 // concatenation of the admitted chunks so the drained bytes prove write order.
@@ -478,6 +502,123 @@ TEST_CASE("Process Terminal detects a resize with no input activity", "[tui][ter
     CHECK(resizes.back() == (cch::tui::TerminalDimensions{.columns = 101, .rows = 31}));
     CHECK(terminal.dimensions() == (cch::tui::TerminalDimensions{.columns = 101, .rows = 31}));
     REQUIRE(terminal.stop());
+}
+
+TEST_CASE(
+        "Process Terminal keeps running after the input descriptor loses non-blocking mode", "[tui][terminal][spec]") {
+    // O_NONBLOCK belongs to the open file description, which this process
+    // shares with every child that inherits the descriptor (tmux, script, and
+    // the herdr client all clear it on their own stdin). A cleared flag must
+    // not park the Runtime loop, because Asio performs the re-armed read from
+    // the completion handler: there is no readiness event behind it, so a
+    // blocking descriptor turns that read into a blocking read of the loop.
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    std::mutex events_mutex;
+    std::vector<std::string> inputs;
+    std::vector<cch::tui::TerminalDimensions> resizes;
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    REQUIRE(terminal.start(
+            [&](std::string input) -> cch::support::ExpectedVoid {
+                std::lock_guard lock(events_mutex);
+                inputs.push_back(std::move(input));
+                return {};
+            },
+            [&](cch::tui::TerminalDimensions dimensions) -> cch::support::ExpectedVoid {
+                std::lock_guard lock(events_mutex);
+                resizes.push_back(dimensions);
+                return {};
+            }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // An alias of the terminal's own descriptor is the same open file
+    // description, so clearing the flag through it clears it for the terminal
+    // exactly as an inherited-descriptor child does behind the terminal's back.
+    cch::support::UniqueFd alias(::dup(pty->slave.get()));
+    REQUIRE(alias);
+    const int flags = ::fcntl(alias.get(), F_GETFL);
+    REQUIRE(flags != -1);
+    REQUIRE(::fcntl(alias.get(), F_SETFL, flags & ~O_NONBLOCK) == 0);
+    ParkedInputRelease release(pty->master.get(), alias.get());
+
+    // One key press completes the armed read and re-arms it from the handler.
+    REQUIRE(::write(pty->master.get(), "q", 1) == 1);
+    REQUIRE(cch::tests::wait_until([&] {
+        std::lock_guard lock(events_mutex);
+        return !inputs.empty();
+    }));
+
+    // The re-armed read must not have parked the loop: the readiness-driven
+    // resize watchdog still has to observe a TIOCGWINSZ change without any
+    // further input activity.
+    winsize resized{
+            .ws_row = 33,
+            .ws_col = 103,
+            .ws_xpixel = 0,
+            .ws_ypixel = 0,
+    };
+    REQUIRE(::ioctl(pty->master.get(), TIOCSWINSZ, &resized) == 0);
+    const bool watchdog_alive = cch::tests::wait_until(
+            [&] {
+                std::lock_guard lock(events_mutex);
+                return !resizes.empty();
+            },
+            std::chrono::seconds(2));
+    const bool invariant_restored = (::fcntl(alias.get(), F_GETFL) & O_NONBLOCK) != 0;
+
+    // Release the parked read before asserting anything, so a regression fails
+    // the checks below instead of hanging on the terminal mutex it holds.
+    release.release();
+    REQUIRE(cch::tests::wait_until([&] {
+        std::lock_guard lock(events_mutex);
+        return inputs.size() >= 2;
+    }));
+
+    // The readiness-driven resize watchdog observed a TIOCGWINSZ change with no
+    // further input activity, and the read path re-asserted the
+    // started-session invariant on the shared description.
+    CHECK(watchdog_alive);
+    CHECK(invariant_restored);
+    CHECK(terminal.dimensions() == (cch::tui::TerminalDimensions{.columns = 103, .rows = 33}));
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE("Process Terminal stop disables every mode the emergency restore claims", "[tui][terminal][spec]") {
+    // The termination path cannot consult terminal state, so every mode Process
+    // Terminal turns on while started must have its disable in the emergency
+    // restore sequence. This pins the two against each other.
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    const auto startup = cch::tests::read_available(pty->master.get());
+    REQUIRE(terminal.stop());
+    const auto shutdown = cch::tests::read_available(pty->master.get());
+
+    struct ModePair {
+        std::string_view enable;
+        std::string_view disable;
+    };
+    // The two modes a start always turns on are required here, so a pairing
+    // cannot degrade silently when an enable disappears from start().
+    REQUIRE(startup.find("\x1b[?2004h") != std::string::npos);
+    REQUIRE(startup.find("\x1b[>7u") != std::string::npos);
+    CHECK(shutdown.find("\x1b[?2004l") != std::string::npos);
+    CHECK(shutdown.find("\x1b[<u") != std::string::npos);
+    CHECK(cch::tui::kTerminalEmergencyRestoreSequence.find("\x1b[?2004l") != std::string_view::npos);
+    CHECK(cch::tui::kTerminalEmergencyRestoreSequence.find("\x1b[<u") != std::string_view::npos);
+    // modifyOtherKeys is negotiated (it stays off once the Kitty protocol wins),
+    // so it is paired only when the terminal actually enabled it.
+    if (startup.find("\x1b[>4;2m") != std::string::npos) {
+        CHECK(shutdown.find("\x1b[>4;0m") != std::string::npos);
+        CHECK(cch::tui::kTerminalEmergencyRestoreSequence.find("\x1b[>4;0m") != std::string_view::npos);
+    }
+    // Cursor visibility and progress are restored by the sequence unconditionally.
+    CHECK(cch::tui::kTerminalEmergencyRestoreSequence.find("\x1b[?25h") != std::string_view::npos);
+    CHECK(cch::tui::kTerminalEmergencyRestoreSequence.find("\x1b]9;4;0;\x07") != std::string_view::npos);
 }
 
 TEST_CASE("Process Terminal never dispatches a resize after teardown begins", "[tui][terminal][issue628][spec]") {

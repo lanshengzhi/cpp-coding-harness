@@ -1,6 +1,7 @@
 #include "agent/harness/Process.hpp"
 
 #include "support/ProcessProbe.hpp"
+#include "support/PseudoTerminal.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -23,6 +24,7 @@
 #include <system_error>
 
 #include <csignal>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -43,6 +45,28 @@ support::Expected<T> run_awaitable(Start start) {
     io.run();
     return future.get();
 }
+
+/// Points the test process's own standard input at a descriptor for the
+/// duration, so a spawned child that inherited it would share that terminal.
+class ScopedStandardInput final {
+public:
+    ScopedStandardInput() : saved_(::dup(STDIN_FILENO)) {}
+    ~ScopedStandardInput() {
+        if (saved_ != -1) {
+            (void)::dup2(saved_, STDIN_FILENO);
+            ::close(saved_);
+        }
+    }
+    ScopedStandardInput(const ScopedStandardInput&) = delete;
+    ScopedStandardInput& operator=(const ScopedStandardInput&) = delete;
+    ScopedStandardInput(ScopedStandardInput&&) = delete;
+    ScopedStandardInput& operator=(ScopedStandardInput&&) = delete;
+
+    [[nodiscard]] bool hijack(int descriptor) const { return saved_ != -1 && ::dup2(descriptor, STDIN_FILENO) != -1; }
+
+private:
+    int saved_{-1};
+};
 
 } // namespace
 
@@ -426,4 +450,55 @@ TEST_CASE(
     CHECK(streamed_stderr.find("out-") == std::string::npos);
     CHECK(result->stdout_output == streamed_stdout);
     CHECK(result->stderr_output == streamed_stderr);
+}
+
+TEST_CASE("process runner gives the child the null device on stdin", "[harness][process][spec]") {
+    // pi spawns tool children with `stdio: [commandFromStdin ? "pipe" : "ignore",
+    // "pipe", "pipe"]`, so a command never sees the interactive terminal on its
+    // standard input. The parent's own standard input is pointed at a terminal
+    // here, so `readlink` reports the null device only when the spawn
+    // redirected it rather than inheriting a parent that already had one.
+    auto pty = tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    ScopedStandardInput standard_input;
+    REQUIRE(standard_input.hijack(pty->slave.get()));
+
+    harness::DefaultAsyncProcessRunner runner;
+    harness::ProcessRequest request;
+    request.executable = "/bin/sh";
+    request.arguments = {"-c", "readlink /proc/self/fd/0"};
+    request.working_directory = std::filesystem::current_path();
+    request.timeout = std::chrono::milliseconds{5000};
+    request.output_limit = harness::OutputLimit{.max_bytes = 4096, .max_lines = 4096};
+
+    auto result = run_awaitable<harness::ProcessResult>([&]() { return runner.run(std::move(request)); });
+
+    REQUIRE(result);
+    CHECK(result->exit_code == 0);
+    CHECK(result->stdout_output == "/dev/null\n");
+}
+
+TEST_CASE("process runner keeps the parent terminal out of the child stdin", "[harness][process][spec]") {
+    // The property behind the null device: the child's standard input is a
+    // different open file description than the parent's terminal, so a child
+    // that clears O_NONBLOCK on its own stdin cannot clear it for the Runtime
+    // loop's terminal reads (a child that inherited the description would).
+    auto pty = tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    ScopedStandardInput standard_input;
+    REQUIRE(standard_input.hijack(pty->slave.get()));
+
+    harness::DefaultAsyncProcessRunner runner;
+    harness::ProcessRequest request;
+    request.executable = "/bin/sh";
+    request.arguments = {"-c", "printf terminal-shared >/proc/self/fd/0"};
+    request.working_directory = std::filesystem::current_path();
+    request.timeout = std::chrono::milliseconds{5000};
+    request.output_limit = harness::OutputLimit{.max_bytes = 4096, .max_lines = 4096};
+
+    auto result = run_awaitable<harness::ProcessResult>([&]() { return runner.run(std::move(request)); });
+
+    REQUIRE(result);
+    CHECK(result->exit_code == 0);
+    CHECK(tests::read_available(pty->master.get(), std::chrono::milliseconds{200}).empty());
 }

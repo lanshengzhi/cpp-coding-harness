@@ -53,6 +53,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/AssistantMessageComponentTest.cpp
         tests/coding_agent/tui/ExternalEditorTest.cpp
         tests/coding_agent/tui/ChatContainerTest.cpp
+        tests/coding_agent/tui/TerminationSignalsTest.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
         tests/coding_agent/PiImportTest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp

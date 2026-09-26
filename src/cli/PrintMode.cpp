@@ -84,7 +84,9 @@ namespace {
     std::optional<int> signal_exit;
     signals.async_wait([&](const boost::system::error_code& error, int fired) {
         if (error) return;
-        signal_exit = fired == SIGHUP ? 129 : 143;
+        // 128 + signal, the exit-code convention the interactive termination
+        // claim derives the same way.
+        signal_exit = 128 + fired;
         // pi print-mode handler: dispose the session before exiting.
         session.abort();
         session.close();

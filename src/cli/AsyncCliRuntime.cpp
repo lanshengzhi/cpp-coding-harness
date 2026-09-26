@@ -14,6 +14,7 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
+#include "coding_agent/tui/TerminationSignals.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
@@ -179,7 +180,19 @@ void print_session_diagnostics(
         CliStreams streams,
         coding_agent::runtime::AgentSessionCreationRequest request) {
     auto io = std::make_shared<boost::asio::io_context>();
-    cch::tui::ProcessTerminal terminal({.executor = io->get_executor()});
+    const cch::tui::ProcessTerminalOptions terminal_options{.executor = io->get_executor()};
+    // pi interactive-mode `registerSignalHandlers`: SIGTERM/SIGHUP restore the
+    // terminal and exit 143/129. Claimed here, before the terminal enters raw
+    // mode and before the Runtime's workers exist, and owned independently of
+    // the loop: the terminal read a parked loop blocks on is exactly what an
+    // Asio signal-set completion cannot outlive. Declared before the terminal so
+    // it is torn down after it: the terminal's own teardown runs under the claim.
+    coding_agent::tui::TerminationSignals termination;
+    if (auto armed = termination.arm_terminal(terminal_options.input_fd, terminal_options.output_fd); !armed) {
+        streams.error << "Native TUI termination handling unavailable: " << armed.error().message << '\n';
+        streams.error.flush();
+    }
+    cch::tui::ProcessTerminal terminal(terminal_options);
     auto runtime_root = std::make_shared<harness::RuntimeRoot>(io, kRuntimeLimits);
     // One Models runtime shared by the boot Session and every in-session
     // replacement (ADR 0029/0030, issue #466): the Runtime loop, worker

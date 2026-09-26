@@ -214,9 +214,24 @@ struct OwnedPipe {
     };
 }
 
+/// Tool children take the null device on stdin (pi `stdio: [commandFromStdin ?
+/// "pipe" : "ignore", "pipe", "pipe"]`). A child must never inherit this
+/// process's terminal: `O_NONBLOCK` belongs to the open file description, so a
+/// child clearing the flag on its inherited stdin would clear it for the
+/// Runtime loop's terminal reads as well and stall the loop on its next read.
+[[nodiscard]] std::optional<support::UniqueFd> open_null_device(std::error_code& error) {
+    support::UniqueFd device(::open("/dev/null", O_RDONLY | O_CLOEXEC));
+    if (!device) {
+        error = current_system_error();
+        return std::nullopt;
+    }
+    return device;
+}
+
 enum class ChildSetupStage {
     ProcessGroup,
     WorkingDirectory,
+    Stdin,
     Stdout,
     Stderr,
     Exec,
@@ -258,19 +273,19 @@ void close_child_fd(int fd) noexcept {
     _exit(127);
 }
 
-[[noreturn]] void run_child(
-    const std::string& executable,
-    const std::string& working_directory,
-    const std::vector<char*>& arguments,
-    const std::vector<char*>& environment,
-    bool use_explicit_environment,
-    int stdout_source,
-    int stdout_sink,
-    int stderr_source,
-    int stderr_sink,
-    int error_source,
-    int error_sink,
-    bool merge_stderr) noexcept {
+[[noreturn]] void run_child(const std::string& executable,
+        const std::string& working_directory,
+        const std::vector<char*>& arguments,
+        const std::vector<char*>& environment,
+        bool use_explicit_environment,
+        int stdin_source,
+        int stdout_source,
+        int stdout_sink,
+        int stderr_source,
+        int stderr_sink,
+        int error_source,
+        int error_sink,
+        bool merge_stderr) noexcept {
     if (::setpgid(0, 0) == -1) {
         const int error_number = errno;
         fail_child(error_sink, ChildSetupStage::ProcessGroup, error_number);
@@ -278,6 +293,10 @@ void close_child_fd(int fd) noexcept {
     if (!working_directory.empty() && ::chdir(working_directory.c_str()) == -1) {
         const int error_number = errno;
         fail_child(error_sink, ChildSetupStage::WorkingDirectory, error_number);
+    }
+    if (::dup2(stdin_source, STDIN_FILENO) == -1) {
+        const int error_number = errno;
+        fail_child(error_sink, ChildSetupStage::Stdin, error_number);
     }
     if (::dup2(stdout_sink, STDOUT_FILENO) == -1) {
         const int error_number = errno;
@@ -293,6 +312,7 @@ void close_child_fd(int fd) noexcept {
         fail_child(error_sink, ChildSetupStage::Stderr, error_number);
     }
 
+    close_child_fd(stdin_source);
     close_child_fd(stdout_source);
     close_child_fd(stdout_sink);
     close_child_fd(stderr_source);
@@ -313,6 +333,8 @@ void close_child_fd(int fd) noexcept {
         return "process group";
     case ChildSetupStage::WorkingDirectory:
         return "working directory";
+    case ChildSetupStage::Stdin:
+        return "stdin";
     case ChildSetupStage::Stdout:
         return "stdout";
     case ChildSetupStage::Stderr:
@@ -542,6 +564,10 @@ boost::asio::awaitable<support::Expected<ProcessResult>> DefaultAsyncProcessRunn
             "process setup pipe creation failed",
             pipe_error));
     }
+    auto stdin_source = open_null_device(pipe_error);
+    if (!stdin_source) {
+        co_return std::unexpected(process_system_error("process stdin device creation failed", pipe_error));
+    }
 
     const std::string executable = request.executable.string();
     const std::string working_directory = request.working_directory.string();
@@ -584,22 +610,23 @@ boost::asio::awaitable<support::Expected<ProcessResult>> DefaultAsyncProcessRunn
             current_system_error()));
     }
     if (child == 0) {
-        run_child(
-            executable,
-            working_directory,
-            arguments,
-            environment,
-            use_explicit_environment,
-            stdout_fds->source.get(),
-            stdout_fds->sink.get(),
-            stderr_fds ? stderr_fds->source.get() : -1,
-            stderr_fds ? stderr_fds->sink.get() : -1,
-            error_fds->source.get(),
-            error_fds->sink.get(),
-            request.merge_stderr);
+        run_child(executable,
+                working_directory,
+                arguments,
+                environment,
+                use_explicit_environment,
+                stdin_source->get(),
+                stdout_fds->source.get(),
+                stdout_fds->sink.get(),
+                stderr_fds ? stderr_fds->source.get() : -1,
+                stderr_fds ? stderr_fds->sink.get() : -1,
+                error_fds->source.get(),
+                error_fds->sink.get(),
+                request.merge_stderr);
     }
 
     ChildGuard guard(executor, child, child);
+    (void)stdin_source->close();
     (void)stdout_fds->sink.close();
     if (stderr_fds) {
         (void)stderr_fds->sink.close();

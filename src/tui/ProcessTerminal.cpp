@@ -806,10 +806,29 @@ template <typename T> void process_input_chunk(T& impl, std::string_view chunk) 
     arm_fragment_deadline(impl);
 }
 
+/// Re-assert the started-session invariant on the input descriptor.
+/// `O_NONBLOCK` belongs to the open file description, which this process shares
+/// with every child that inherits the descriptor: tmux, script, and the herdr
+/// client all clear it on their own standard input. The descriptor has to stay
+/// non-blocking for as long as the terminal is started, because the runtime
+/// loop performs its next read from the read completion handler: Asio's
+/// speculative read has no fresh readiness event behind it, so a blocking
+/// descriptor parks the loop inside that read (and the mutex it holds) until a
+/// key press arrives. One `F_GETFL` per read is cheap enough to make the
+/// invariant self-healing instead of trusting every child that shares the
+/// description.
+template <typename T> void ensure_input_nonblocking(T& impl) noexcept {
+    if (!impl.modes.started || impl.options.input_fd < 0) return;
+    const int flags = ::fcntl(impl.options.input_fd, F_GETFL);
+    if (flags == -1 || (flags & O_NONBLOCK) != 0) return;
+    (void)::fcntl(impl.options.input_fd, F_SETFL, flags | O_NONBLOCK);
+}
+
 template <typename T> void poll_nonblocking(T& impl) {
     {
         std::lock_guard lock(impl.mutex);
         if (!impl.modes.started) return;
+        ensure_input_nonblocking(impl);
     }
     deliver_resize_if_changed(impl);
     drain_output(impl, true);
@@ -832,6 +851,9 @@ template <typename T> void arm_readiness_timer_locked(T& impl);
 
 template <typename T> void start_async_read(T& impl) {
     if (!impl.input_stream || !impl.modes.started) return;
+    // The re-arm below is the read Asio performs speculatively from this
+    // completion handler; the descriptor must be non-blocking before it runs.
+    ensure_input_nonblocking(impl);
     const auto weak_self = impl.self;
     const auto weak_alive = std::weak_ptr<std::atomic_bool>{impl.session_alive};
     impl.input_stream->async_read_some(boost::asio::buffer(impl.read_buffer),
@@ -1714,6 +1736,10 @@ support::ExpectedVoid ProcessTerminal::drain_input(
         std::chrono::milliseconds max_ms, std::chrono::milliseconds idle_ms) {
     std::unique_lock lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
+    // Asserted under the lock, before the drain releases it: the loop below
+    // reads until EAGAIN and assumes nobody cleared the flag on the shared
+    // description while it runs.
+    ensure_input_nonblocking(*impl_);
     if (impl_->keyboard_protocol_pushed) {
         if (auto popped = enqueue_output(*impl_, kKeyboardProtocolPop); !popped) {
             return popped;
