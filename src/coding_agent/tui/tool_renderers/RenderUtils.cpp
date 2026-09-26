@@ -83,7 +83,7 @@ HeadFold fold_head_lines(std::string_view text, std::size_t max_lines) {
 
 std::string fold_hint(const ToolRenderContext& context, std::size_t remaining, std::optional<std::size_t> total_lines) {
     const auto count = std::to_string(remaining);
-    const auto total = total_lines.has_value() ? std::format(", {} total", *total_lines) : std::string{};
+    const auto total = total_lines.has_value() ? std::format(" {} total,", *total_lines) : std::string{};
     auto hint = context.theme.foreground(ThemeToken::Muted, std::format("\n... ({} more lines,{}", count, total));
     hint += " ";
     hint += context.expand_hint;

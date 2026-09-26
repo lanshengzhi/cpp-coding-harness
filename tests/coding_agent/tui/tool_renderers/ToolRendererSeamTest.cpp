@@ -111,10 +111,16 @@ TEST_CASE("the four built-in tool names render through the component without a f
                 .timestamp = 0,
         });
         const auto screen = tests::render_tool_screen(component, 80);
-        // The registered stub's own call text is still empty, so the block has
-        // no content and pi's `hideComponent` rule keeps it off the screen: no
-        // bold fallback name, no fallback argument JSON, no result body.
-        CHECK(screen.visible.empty());
+        // The registered pair's own text is what is on screen, never the host
+        // fallback's. The fallback frames a call as the bold tool name, a blank
+        // line, and the pretty-printed argument JSON, so none of those three
+        // rows may appear for a name that has a renderer. A renderer that
+        // returns nothing satisfies this vacuously — which is why each tool's
+        // own test file asserts the rows its renderer actually draws.
+        for (const auto& row : screen.visible) {
+            CHECK(row != "{");
+            CHECK(row.find("\"file_path\"") == std::string::npos);
+        }
     }
 }
 
