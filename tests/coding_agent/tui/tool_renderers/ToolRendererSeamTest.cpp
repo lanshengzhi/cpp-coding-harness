@@ -99,14 +99,13 @@ TEST_CASE("a registered tool with an empty call half still draws pi's bare bold 
     CHECK(screen.visible == std::vector<std::string>{"", "probe", ""});
 }
 
-TEST_CASE("a built-in tool name with a still-stubbed pair renders through the component without a fallback body",
+TEST_CASE("the four built-in tool names render through the component without a fallback body",
         "[coding_agent][tui][tool-renderers][issue824][spec]") {
     auto theme = tests::tool_render_theme();
     auto keybindings = tests::tool_render_keybindings();
-    // The three still-stubbed names. `read` is excluded because #825 filled its
-    // pair in, so it no longer has the empty call text this case is about; its
-    // own screen shape is asserted in `ReadRendererTest.cpp`.
-    for (const auto* name : {"bash", "write", "edit"}) {
+    // Every built-in name now has a registered pair, so all four are in scope:
+    // #825 filled in `read`, #826 `bash`, and #827 `write` and `edit`.
+    for (const auto* name : {"read", "bash", "write", "edit"}) {
         coding_agent::tui::ToolExecutionComponent component(
                 theme, keybindings, name, "call_1", R"({"file_path":"notes.txt"})", "/workspace");
         component.update_result(ai::ToolResultMessage{
@@ -118,20 +117,20 @@ TEST_CASE("a built-in tool name with a still-stubbed pair renders through the co
                 .timestamp = 0,
         });
         const auto screen = tests::render_tool_screen(component, 80);
-        // No tool name takes the fallback: none of the four blocks shows the
-        // fallback's bold bare name or its pretty-printed argument JSON. The
-        // three whose renderer is still a stub render nothing at all, which is
-        // pi's `hideComponent`; `bash` draws its own `$ ...` title since #826.
-        std::string joined;
-        for (const auto& row : screen.visible)
-            joined += row + "\n";
-        CHECK(joined.find("{\n") == std::string::npos);
-        CHECK(joined.find("\"file_path\"") == std::string::npos);
+        // The registered pair's own text is what is on screen, never the host
+        // fallback's. The fallback frames a call as the bold tool name, a blank
+        // line, and the pretty-printed argument JSON, so none of those three
+        // rows may appear for a name that has a renderer. Each tool's own test
+        // file asserts the rows its renderer actually draws.
+        for (const auto& row : screen.visible) {
+            CHECK(row != "{");
+            CHECK(row.find("\"file_path\"") == std::string::npos);
+        }
+        // `bash` draws its own `$ ...` title rather than the fallback, so this
+        // block is not vacuous for it: the second row is the command title.
         if (std::string_view{name} == "bash") {
             CHECK(!screen.visible.empty());
             CHECK(screen.visible.at(1) == "$ ...");
-        } else {
-            CHECK(screen.visible.empty());
         }
     }
 }
