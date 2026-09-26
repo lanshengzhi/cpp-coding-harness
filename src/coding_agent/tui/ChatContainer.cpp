@@ -715,7 +715,8 @@ struct ChatContainer::Impl {
                 .name = name,
                 .arguments = arguments,
                 .result = {},
-                .component = std::make_unique<ToolExecutionComponent>(theme, keybindings, name, call_id, arguments),
+                .component =
+                        std::make_unique<ToolExecutionComponent>(theme, keybindings, name, call_id, arguments, cwd),
         });
         tool->component->set_expanded(tools_expanded);
         auto* tool_pointer = tool.get();
@@ -846,6 +847,9 @@ struct ChatContainer::Impl {
     std::shared_ptr<const SharedKeybindings> keybindings;
     std::deque<ItemVariant> items;
     std::unordered_map<std::string, std::unique_ptr<ToolItem>> owned_tools;
+    /// The session workspace, threaded into every tool execution so the
+    /// renderer seam resolves paths against it (pi `ToolRenderContext.cwd`).
+    std::string cwd;
     std::optional<std::size_t> active_assistant_item;
     bool tools_expanded{false};
     bool hide_thinking_block{false};
@@ -864,6 +868,7 @@ ChatContainer& ChatContainer::operator=(ChatContainer&&) noexcept = default;
 ChatContainer::~ChatContainer() = default;
 
 void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
+    impl_->cwd = snapshot.workspace.string();
     // The transcript is message-owned: a rebuild replaces MessageItems from
     // the snapshot. Host-appended notices (diagnostics, status, frontend)
     // are view-local and never appear in a snapshot, so dropping them on a
@@ -918,6 +923,7 @@ void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
     impl_->reconcile_tool_executions(snapshot.tool_executions);
 }
 void ChatContainer::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
+    impl_->cwd = snapshot.workspace.string();
     const auto& messages = snapshot.agent_state.messages;
     if (!snapshot.agent_state.streaming_message && impl_->transcript_needs_reconcile) {
         // A projection can briefly expose the newly submitted user message
@@ -1022,6 +1028,14 @@ void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
         if (std::holds_alternative<ai::AssistantMessage>(end->message)) {
             const auto& assistant = std::get<ai::AssistantMessage>(end->message);
             impl_->replace_assistant(assistant);
+            // pi: the streamed arguments are complete once the assistant
+            // message ends, which is what releases the diff preview and the
+            // full content preview.
+            for (auto& entry : impl_->owned_tools) {
+                if (entry.second != nullptr && entry.second->status == Impl::ToolStatus::Pending) {
+                    entry.second->component->set_args_complete();
+                }
+            }
             if (impl_->active_assistant_item) {
                 const auto index = *impl_->active_assistant_item;
                 impl_->active_assistant_item.reset();
@@ -1042,6 +1056,9 @@ void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
         auto& tool = impl_->ensure_tool(start->tool_call_id, start->tool_name, serialized_arguments(start->args), true);
         tool.status = Impl::ToolStatus::Pending;
         tool.in_flight = true;
+        // pi `markExecutionStarted` on the tool_execution_start event: the
+        // execution clock starts here, not when the arguments arrived.
+        tool.component->mark_execution_started();
         impl_->invalidate_and_update_tool_owner(&tool);
         return;
     }

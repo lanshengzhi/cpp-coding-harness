@@ -123,6 +123,13 @@ cch_parity_declare_target(
         src/coding_agent/tui/Theme.cpp
         src/coding_agent/tui/ThemeController.cpp
         src/coding_agent/tui/ToolExecutionComponent.cpp
+        src/coding_agent/tui/tool_renderers/BashRenderer.cpp
+        src/coding_agent/tui/tool_renderers/EditRenderer.cpp
+        src/coding_agent/tui/tool_renderers/PathPresentation.cpp
+        src/coding_agent/tui/tool_renderers/ReadRenderer.cpp
+        src/coding_agent/tui/tool_renderers/RenderUtils.cpp
+        src/coding_agent/tui/tool_renderers/ToolRendererRegistry.cpp
+        src/coding_agent/tui/tool_renderers/WriteRenderer.cpp
         src/coding_agent/tui/TreeSelector.cpp
         src/coding_agent/tui/UserMessageComponent.cpp
         src/coding_agent/tui/UserMessageSelector.cpp
