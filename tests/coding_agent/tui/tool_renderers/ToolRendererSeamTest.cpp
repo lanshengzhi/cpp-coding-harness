@@ -33,8 +33,8 @@ namespace {
 /// usually still holds the right bytes in a reused stack slot — so only an
 /// aliasing check catches it, which is what the lifetime case below asserts.
 struct SeamContext {
-    explicit SeamContext(const coding_agent::tui::LiveTheme& a_theme,
-            support::JsonValue arguments = support::JsonValue::object_t{})
+    explicit SeamContext(
+            const coding_agent::tui::LiveTheme& a_theme, support::JsonValue arguments = support::JsonValue::object_t{})
         : theme(a_theme), args(std::move(arguments)),
           expand_hint(a_theme.foreground(coding_agent::tui::ThemeToken::Dim, expand_key) +
                       a_theme.foreground(coding_agent::tui::ThemeToken::Muted, " to expand")) {}

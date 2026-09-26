@@ -304,7 +304,8 @@ TEST_CASE("a SKILL.md read titles as the skill label and a resource read as read
         // out so the case does not depend on this file's own encoding, and the
         // expectation is ordinary text — a `~`-only resolution leaves the two
         // UTF-8 bytes in the label and fails the comparison.
-        const std::string unicode_space = "{\"path\":\"my\xC2\xA0" "docs/AGENTS.md\"}";
+        const std::string unicode_space = "{\"path\":\"my\xC2\xA0"
+                                          "docs/AGENTS.md\"}";
         ReadBlock spaced(keybindings, unicode_space);
         spaced.succeed("alpha");
         CHECK(spaced.rows() == std::vector<std::string>{"", "read resource my docs/AGENTS.md (ctrl+o to expand)", ""});

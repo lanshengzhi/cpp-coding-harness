@@ -141,9 +141,8 @@ void strip_spill_footer(std::string& output,
 /// five **visual** lines with the earlier-lines hint above them (pi returns
 /// `["", hint, ...lines]`: a blank row, then the hint, then the tail).
 [[nodiscard]] std::string output_body(std::string_view output, const ToolRenderContext& context) {
-    const auto styled = join_rendered_rows(split_lines(output), [&context](const std::string& line) {
-        return context.theme.foreground(ThemeToken::ToolOutput, line);
-    });
+    const auto styled = join_rendered_rows(split_lines(output),
+            [&context](const std::string& line) { return context.theme.foreground(ThemeToken::ToolOutput, line); });
     if (context.expanded) return styled;
 
     // A failed measurement means the host's own render at this width fails

@@ -40,10 +40,9 @@ namespace {
     const auto fold = fold_head_lines(normalize_display_text(*content), max_lines);
 
     // pi `write.ts:120`: plain text, no highlighting, tabs as three spaces.
-    std::string body =
-            "\n\n" + join_rendered_rows(fold.lines, [&context](const std::string& line) {
-                return context.theme.foreground(ThemeToken::ToolOutput, replace_tabs(line));
-            });
+    std::string body = "\n\n" + join_rendered_rows(fold.lines, [&context](const std::string& line) {
+        return context.theme.foreground(ThemeToken::ToolOutput, replace_tabs(line));
+    });
     // pi `write.ts:122`: write is the one renderer whose hint carries the
     // total, which is what distinguishes it from read's.
     if (fold.remaining > 0) body += fold_hint(context, fold.remaining, fold.lines.size() + fold.remaining);

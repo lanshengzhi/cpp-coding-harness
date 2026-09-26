@@ -48,8 +48,7 @@ namespace cch::coding_agent::tui {
 [[nodiscard]] bool json_boolean(const support::JsonValue& parent, std::string_view key);
 
 /// A string member, or nullopt when the key is absent or holds another type.
-[[nodiscard]] std::optional<std::string_view> json_string(
-        const support::JsonValue& parent, std::string_view key);
+[[nodiscard]] std::optional<std::string_view> json_string(const support::JsonValue& parent, std::string_view key);
 
 /// The one fold-output join: pi styles each line of a folded body and joins
 /// the rendered rows with "\n", which is what every renderer turning folded

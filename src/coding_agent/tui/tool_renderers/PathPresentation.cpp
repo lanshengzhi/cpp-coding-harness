@@ -18,7 +18,7 @@ namespace {
 /// `/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g`, as the UTF-8 byte sequences
 /// those fifteen code points encode to. Every match becomes one ASCII space.
 constexpr std::array<std::string_view, 15> kUnicodeSpaceBytes{
-        "\xC2\xA0",    // U+00A0 no-break space
+        "\xC2\xA0",     // U+00A0 no-break space
         "\xE2\x80\x80", // U+2000 en quad
         "\xE2\x80\x81", // U+2001 em quad
         "\xE2\x80\x82", // U+2002 en space
@@ -41,9 +41,8 @@ constexpr std::array<std::string_view, 15> kUnicodeSpaceBytes{
     normalized.reserve(path.size());
     std::size_t at = 0;
     while (at < path.size()) {
-        const auto* replacement = std::ranges::find_if(kUnicodeSpaceBytes, [&path, at](std::string_view space) {
-            return path.substr(at).starts_with(space);
-        });
+        const auto* replacement = std::ranges::find_if(
+                kUnicodeSpaceBytes, [&path, at](std::string_view space) { return path.substr(at).starts_with(space); });
         if (replacement == kUnicodeSpaceBytes.end()) {
             normalized.push_back(path[at]);
             ++at;
