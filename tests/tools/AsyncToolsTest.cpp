@@ -239,7 +239,13 @@ TEST_CASE("async read_file tool uses Glaze typed args", "[tools][async][u6][spec
 
     REQUIRE(result);
     CHECK_FALSE(result->is_error);
-    CHECK(ai::text_from_content(result->content) == "line2");
+    // pi `read.ts:136-178`: "line1\nline2\n" splits into 3 elements (the
+    // terminating newline yields a trailing empty), so offset=2 limit=1 selects
+    // `line2` and leaves `startLine + userLimitedLines = 2 < 3`. Branch (c)
+    // therefore fires and the model is told the file has more. `details` stays
+    // unset in this branch, so the read renderer draws no truncation warning.
+    CHECK(ai::text_from_content(result->content) == "line2\n\n[1 more lines in file. Use offset=3 to continue.]");
+    CHECK_FALSE(result->details.has_value());
 }
 
 TEST_CASE("async edit tool applies disjoint edits and returns pi-shaped diff details",
