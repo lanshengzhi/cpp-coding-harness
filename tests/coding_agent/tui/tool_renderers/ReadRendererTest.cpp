@@ -290,21 +290,24 @@ TEST_CASE("a SKILL.md read titles as the skill label and a resource read as read
     }
 
     SECTION("the classification resolves through pi's full resolveToCwd, not `~` alone") {
-        // ADR 0057's three preprocessing steps reach the label as well as the
-        // gate. A `~`-only resolution leaves the marker in the cwd-relative
-        // path, so the two rows below are the discriminating assertions: an
-        // assertion on the *classification* alone passes either way, because
-        // `basename` reads the same file name off both resolutions.
+        // ADR 0057's three preprocessing steps reach the resolved path. What
+        // the label is computed from is where they show, so the label is what
+        // is asserted: an assertion on the compact/don't-compact *gate* alone
+        // passes either way, because `basename` reads the same file name off
+        // both resolutions.
         ReadBlock at_marked(keybindings, R"({"path":"@docs/AGENTS.md"})");
         at_marked.succeed("alpha");
         CHECK(at_marked.rows() == std::vector<std::string>{"", "read resource docs/AGENTS.md (ctrl+o to expand)", ""});
 
-        // pi `utils/paths.ts:7` `UNICODE_SPACES`: a U+00A0 no-break space
-        // between two directory name segments is one ASCII space.
-        const std::string unicode_space = std::string{R"({"path":"do"} + "\xC2\xA0" + R"(cs/AGENTS.md"})";
+        // pi `utils/paths.ts:7` `UNICODE_SPACES`: the U+00A0 no-break space
+        // inside the directory name is one ASCII space. The bytes are spelled
+        // out so the case does not depend on this file's own encoding, and the
+        // expectation is ordinary text — a `~`-only resolution leaves the two
+        // UTF-8 bytes in the label and fails the comparison.
+        const std::string unicode_space = "{\"path\":\"my\xC2\xA0" "docs/AGENTS.md\"}";
         ReadBlock spaced(keybindings, unicode_space);
         spaced.succeed("alpha");
-        CHECK(spaced.rows() == std::vector<std::string>{"", "read resource docs/AGENTS.md (ctrl+o to expand)", ""});
+        CHECK(spaced.rows() == std::vector<std::string>{"", "read resource my docs/AGENTS.md (ctrl+o to expand)", ""});
 
         // The `~` step the same helper performs: the classification follows
         // the expanded home, not a literal `~` directory under the cwd.

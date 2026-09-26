@@ -85,10 +85,13 @@ TEST_CASE("a seam context's key views name storage that outlives the context",
     // the views stay valid for as long as the component that holds them.
     CHECK(context.expand_key.data() == seam.expand_key.data());
     CHECK(context.expand_hint.data() == seam.expand_hint.data());
-    CHECK(context.args.get_object().at("alpha") == support::JsonValue(std::string{"beta"}));
+    CHECK(&context.args == &seam.args);
+    CHECK(coding_agent::tui::json_string(context.args, "alpha") == "beta");
 
     // And the views are readable after the context was handed out: a renderer
-    // that consumes both draws exactly the fixture's key text.
+    // that consumes both draws exactly the fixture's key text. The two pieces
+    // abut, because pi's `keyHint` is `dim(key) + muted(" to expand")` and the
+    // muted half carries the separating space.
     const auto echo_expand_hint = [](const coding_agent::tui::ToolRenderContext& probe) {
         return coding_agent::tui::ToolRenderedText{
                 .title = std::string{probe.tool_name} + " " + std::string{probe.expand_key} +
@@ -96,7 +99,7 @@ TEST_CASE("a seam context's key views name storage that outlives the context",
         };
     };
     const auto rendered = echo_expand_hint(context);
-    CHECK(cch::tui::strip_terminal_sequences(rendered.title) == "custom_tool ctrl+o ctrl+o to expand");
+    CHECK(cch::tui::strip_terminal_sequences(rendered.title) == "custom_tool ctrl+octrl+o to expand");
 }
 
 TEST_CASE("a registered tool is resolved by name and an unregistered one takes the fallback",

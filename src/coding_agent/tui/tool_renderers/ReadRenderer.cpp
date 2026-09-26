@@ -47,18 +47,16 @@ constexpr double kDefaultMaxBytes = 50.0 * 1024.0;
 /// neither gets no suffix at all — not `:1`. Visible forms are `:1`, `:5`, and
 /// `:5-104`.
 [[nodiscard]] std::string read_line_range(const support::JsonValue& args, const LiveTheme& theme) {
-    const auto* object = args.get_if<support::JsonValue::object_t>();
-    if (object == nullptr) return {};
     // pi `read.ts:29` tests the keys for `undefined`, not for a value, so a
     // JSON null offset or limit still takes the range branch.
-    const bool has_offset = json_member(*object, "offset") != nullptr;
-    const bool has_limit = json_member(*object, "limit") != nullptr;
+    const bool has_offset = json_member(args, "offset") != nullptr;
+    const bool has_limit = json_member(args, "limit") != nullptr;
     if (!has_offset && !has_limit) return {};
-    const auto start = json_number(*object, "offset").value_or(1.0);
+    const auto start = json_number(args, "offset").value_or(1.0);
     // pi's `endLine` is `startLine + limit - 1` when a limit is present and the
     // empty string otherwise, and a computed `0` is falsy in JavaScript, so a
     // `limit` of 0 also leaves the range open.
-    const auto end = has_limit ? start + json_number(*object, "limit").value_or(0.0) - 1.0 : 0.0;
+    const auto end = has_limit ? start + json_number(args, "limit").value_or(0.0) - 1.0 : 0.0;
     const auto range = end == 0.0 ? std::format(":{}", start) : std::format(":{}-{}", start, end);
     return theme.foreground(ThemeToken::Warning, range);
 }
@@ -147,28 +145,27 @@ struct CompactReadClassification {
 /// into the result text — rendering as plain text with no migration.
 [[nodiscard]] std::optional<std::string> truncation_warning(const support::JsonValue* details) {
     if (details == nullptr) return std::nullopt;
-    const auto* object = details->get_if<support::JsonValue::object_t>();
-    if (object == nullptr) return std::nullopt;
-    const auto* truncation = json_member(*object, "truncation");
+    // Every read below goes through the `JsonValue` the details already own, so
+    // the pointer `json_member` returns stays valid for the whole function.
+    const auto* truncation = json_member(*details, "truncation");
     if (truncation == nullptr) return std::nullopt;
-    const auto* fields = truncation->get_if<support::JsonValue::object_t>();
-    if (fields == nullptr || !json_boolean(*fields, "truncated")) return std::nullopt;
+    if (!json_boolean(*truncation, "truncated")) return std::nullopt;
 
-    if (json_boolean(*fields, "firstLineExceedsLimit")) {
+    if (json_boolean(*truncation, "firstLineExceedsLimit")) {
         return std::format("[First line exceeds {} limit]",
                 harness::format_output_size(
-                        static_cast<std::size_t>(json_number(*fields, "maxBytes").value_or(kDefaultMaxBytes))));
+                        static_cast<std::size_t>(json_number(*truncation, "maxBytes").value_or(kDefaultMaxBytes))));
     }
-    if (json_string(*fields, "truncatedBy") == "lines") {
+    if (json_string(*truncation, "truncatedBy") == "lines") {
         return std::format("[Truncated: showing {} of {} lines ({} line limit)]",
-                json_number(*fields, "outputLines").value_or(0.0),
-                json_number(*fields, "totalLines").value_or(0.0),
-                static_cast<std::size_t>(json_number(*fields, "maxLines").value_or(kDefaultMaxLines)));
+                json_number(*truncation, "outputLines").value_or(0.0),
+                json_number(*truncation, "totalLines").value_or(0.0),
+                static_cast<std::size_t>(json_number(*truncation, "maxLines").value_or(kDefaultMaxLines)));
     }
     return std::format("[Truncated: {} lines shown ({} limit)]",
-            json_number(*fields, "outputLines").value_or(0.0),
+            json_number(*truncation, "outputLines").value_or(0.0),
             harness::format_output_size(
-                    static_cast<std::size_t>(json_number(*fields, "maxBytes").value_or(kDefaultMaxBytes))));
+                    static_cast<std::size_t>(json_number(*truncation, "maxBytes").value_or(kDefaultMaxBytes))));
 }
 
 } // namespace
