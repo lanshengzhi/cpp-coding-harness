@@ -131,7 +131,7 @@ const triageByScenario: Record<string, Triage> = Object.fromEntries([
 	["boot-120", { classification: "match", evidence: ["report.json:boot-120"], rationale: "The profile-stripped shared regular Native TUI header matches pi at 120 columns." }],
 	["boot-41", { classification: "match", evidence: ["report.json:boot-41"], rationale: "The profile-stripped shared regular Native TUI header matches pi at the narrow width." }],
 	["model-selector", { classification: "product-defect", evidence: ["#808", "report.json:model-selector"], rationale: "The supported model row marker/order remains different after profile projection." }],
-	["settings-selector", { classification: "product-defect", evidence: ["#809", "report.json:settings-selector"], rationale: "Pi-only settings are documented omissions, but supported settings rows and transitions also differ." }],
+	["settings-selector", { classification: "product-defect", evidence: ["#809", "report.json:settings-selector"], rationale: "Pi-only settings are documented omissions, but supported settings rows and transitions also differ. This row rests on profileProjection.visibleCellTextEqual=false and on the unresolved omission projection, not on profileProjection.scrollbackStructureEqual: the length compensation already pays back the pi-only row pi adds inside its viewport and the retained rows still differ." }],
 	["thinking-selector", { classification: "product-defect", evidence: ["#810", "report.json:thinking-selector"], rationale: "The supported thinking selector viewport and command-row presentation remain different." }],
 	["editor-long", { classification: "product-defect", evidence: ["#811", "report.json:editor-long"], rationale: "Wrapped editor input changes the supported workspace/footer composition." }],
 	["editor-cjk", { classification: "product-defect", evidence: ["report.json:editor-cjk"], rationale: "The shared header text matches after profile projection; a separate styled-cell difference remains." }],
@@ -142,7 +142,7 @@ const triageByScenario: Record<string, Triage> = Object.fromEntries([
 	["resize-72-41", { classification: "match", evidence: ["report.json:resize-72-41"], rationale: "The profile-stripped shared regular Native TUI header matches pi after resizing." }],
 	["resize-100-72", { classification: "match", evidence: ["report.json:resize-100-72"], rationale: "The profile-stripped shared regular Native TUI header matches pi after resizing." }],
 	["resize-120-100", { classification: "match", evidence: ["report.json:resize-120-100"], rationale: "The profile-stripped shared regular Native TUI header matches pi after resizing." }],
-	["scrollback", { classification: "product-defect", evidence: ["#807", "report.json:scrollback", "profile:footer-stats"], rationale: "The shared header text matches after profile projection; the supported native scrollback boundary still has a stable ordering difference." }],
+	["scrollback", { classification: "product-defect", evidence: ["#814", "report.json:scrollback", "profile:footer-stats"], rationale: "After the length-compensated comparison the profile-projected composed content and row order agree at every barrier, and every barrier the compensation pays for compares equal. profileProjection.scrollbackStructureEqual is still false, resting on the barriers where no profile projection explains pi's taller buffer, so the residual split delta is the blank-row spacing defect in #814 rather than a scrollback boundary or ordering difference." }],
 ] satisfies Array<[string, Triage]>);
 
 const volatileModelProse = [
@@ -708,7 +708,9 @@ function stableProjection(capture: Record<string, unknown>, scenario: Scenario, 
 	};
 }
 
-function projectProfileCellRows(rows: string[]): { rows: string[]; removed: Record<string, number> } {
+type ProfileCellProjection = { rows: string[]; removed: Record<string, number> };
+
+function projectProfileCellRows(rows: string[]): ProfileCellProjection {
 	const removed: Record<string, number> = {};
 	for (const projection of profileCellRowProjections) removed[projection.name] = 0;
 	const retained = rows.flatMap((line) => {
@@ -720,6 +722,80 @@ function projectProfileCellRows(rows: string[]): { rows: string[]; removed: Reco
 		return line.trim() === "" ? [] : [line];
 	});
 	return { rows: retained, removed };
+}
+
+// Rows the profile projection removed from one composed buffer that the other
+// runtime kept. A projection both runtimes share (the workspace/branch row)
+// is never exclusive, so it never discounts anything.
+function exclusiveProfileRemovals(mine: Record<string, number>, theirs: Record<string, number>): number {
+	let total = 0;
+	for (const name of new Set([...Object.keys(mine), ...Object.keys(theirs)])) {
+		total += Math.max(0, (mine[name] ?? 0) - (theirs[name] ?? 0));
+	}
+	return total;
+}
+
+type ScrollbackGeometry = { retained: string[]; height: number; viewportRemoved: Record<string, number> };
+
+// A snapshot is a fixed-height viewport plus the rows retained above it, so a
+// taller composed buffer retains more rows for identical scroll behaviour. A
+// retained-row count compared raw across two buffers of different height
+// therefore reports every upstream height difference as a scrollback-structure
+// difference (issue #815). The comparison is length-compensated: the height a
+// buffer carries beyond the shorter of the two is discounted from its retained
+// rows, but only up to the rows the profile projection removed from that
+// runtime's viewport. Heights are measured before the projection, because the
+// split is a property of the rendered buffer and the projected rows are exactly
+// what the discount pays for. Rows removed above the split never need a
+// discount (they are already out of the retained accounting), a projection
+// both runtimes share never discounts, and product height (blank-row spacing,
+// #814) is never discounted because no profile projection explains it. A
+// genuine viewport-top or ordering difference therefore still compares
+// unequal: the compensation is bounded, never a constant `true`.
+// debt: the height term is a bound, not a second estimate: a projected
+// viewport row is part of its own buffer, so it binds only when a capture
+// claims a height it did not render. The discount trims the retained tail, so
+// a difference confined to the trimmed rows is not compared. Revisit both
+// terms if the profile projection ever removes rows a runtime did not render.
+function scrollbackGeometry(snapshot: Record<string, unknown>, scenario: Pick<Scenario, "id">): ScrollbackGeometry {
+	const scrollback = snapshot.scrollback as string[];
+	const visible = snapshot.visible as string[];
+	return {
+		retained: projectProfileCellRows(projectDiagnosticFooterRows(scrollback, scenario)).rows,
+		height: scrollback.length + visible.length,
+		viewportRemoved: projectProfileCellRows(projectDiagnosticFooterRows(visible, scenario)).removed,
+	};
+}
+
+function compensatedRetainedRows(retained: string[], discount: number): string[] {
+	return retained.slice(0, Math.max(0, retained.length - discount));
+}
+
+function compareScrollbackStructure(
+	pike: Record<string, unknown>,
+	pi: Record<string, unknown>,
+	scenario: Pick<Scenario, "id">,
+): { equal: boolean; lengthCompensation: { pike: number[]; pi: number[] } } {
+	const pikeSnapshots = pike.snapshots as Record<string, unknown>[];
+	const piSnapshots = pi.snapshots as Record<string, unknown>[];
+	const pikeCompensation: number[] = [];
+	const piCompensation: number[] = [];
+	const shared = Math.min(pikeSnapshots.length, piSnapshots.length);
+	// Every barrier is measured, not just the equal prefix, so the recorded
+	// compensation stays per-barrier evidence for an unequal scenario too.
+	let equal = pikeSnapshots.length === piSnapshots.length;
+	for (let index = 0; index < shared; index += 1) {
+		const pikeGeometry = scrollbackGeometry(pikeSnapshots[index] as Record<string, unknown>, scenario);
+		const piGeometry = scrollbackGeometry(piSnapshots[index] as Record<string, unknown>, scenario);
+		const shortest = Math.min(pikeGeometry.height, piGeometry.height);
+		const pikeDiscount = Math.min(pikeGeometry.height - shortest, exclusiveProfileRemovals(pikeGeometry.viewportRemoved, piGeometry.viewportRemoved));
+		const piDiscount = Math.min(piGeometry.height - shortest, exclusiveProfileRemovals(piGeometry.viewportRemoved, pikeGeometry.viewportRemoved));
+		pikeCompensation.push(pikeDiscount);
+		piCompensation.push(piDiscount);
+		const same = JSON.stringify(compensatedRetainedRows(pikeGeometry.retained, pikeDiscount)) === JSON.stringify(compensatedRetainedRows(piGeometry.retained, piDiscount));
+		if (!same) equal = false;
+	}
+	return { equal, lengthCompensation: { pike: pikeCompensation, pi: piCompensation } };
 }
 
 function projectProfileStyledRows(rows: unknown, scenario: Pick<Scenario, "id">): unknown[] {
@@ -751,10 +827,12 @@ function compareProfileProjection(pike: Record<string, unknown>, pi: Record<stri
 	const piProjected = profileProjectionForComparison(pi, scenario);
 	const pikeSnapshots = pikeProjected.snapshots as Record<string, unknown>[];
 	const piSnapshots = piProjected.snapshots as Record<string, unknown>[];
+	const scrollback = compareScrollbackStructure(pike, pi, scenario);
 	return {
 		visibleCellTextEqual: JSON.stringify(pikeSnapshots.map((item) => item.visible)) === JSON.stringify(piSnapshots.map((item) => item.visible)),
 		visibleCellPresentationEqual: styledPresentationEqual(pikeProjected, piProjected),
-		scrollbackStructureEqual: JSON.stringify(pikeSnapshots.map((item) => item.scrollback)) === JSON.stringify(piSnapshots.map((item) => item.scrollback)),
+		scrollbackStructureEqual: scrollback.equal,
+		scrollbackLengthCompensation: scrollback.lengthCompensation,
 		scrollbackCellPresentationEqual: JSON.stringify(pikeSnapshots.map((item) => item.styledScrollback)) === JSON.stringify(piSnapshots.map((item) => item.styledScrollback)),
 		footerStatsProjected: usageProfileScenarios.has(String(pike.scenario)),
 		removedCellRows: {
@@ -863,6 +941,38 @@ function verifyProjectionPolicy(): void {
 	assert.equal(replaceFixturePaths("/repository (main) suffix", "/tmp/workspace", "/repository"), "<repository-root> (<branch>) suffix");
 	assert.deepEqual(projectDiagnosticFooterRows(["0.0%/128k (auto) <model>", "kept"], { id: "user-message" }), ["<footer-stats> <model>", "kept"]);
 	assert.deepEqual(projectDiagnosticFooterRows(["0.0%/128k (auto) <model>"], { id: "boot-72" }), ["0.0%/128k (auto) <model>"]);
+
+	const retainedSnapshot = (retained: string[], visible: string[]) => ({ snapshots: [{ scrollback: retained, visible }] });
+	const sharedViewport = ["third", "fourth"];
+	const pikeRetained = retainedSnapshot(["first", "second"], sharedViewport);
+	// Two pi-only rows inside pi's viewport push two retained rows out of view.
+	// A pure profile height difference must not read as a scrollback-structure
+	// difference, and the verdict must not depend on which runtime is left.
+	const piHeightOnly = retainedSnapshot(["first", "second", "third", "fourth"], [" pi v0.87.1", " use or extend Pi."]);
+	const heightOnlyCompared = compareScrollbackStructure(pikeRetained, piHeightOnly, { id: "boot-72" });
+	assert.equal(heightOnlyCompared.equal, true);
+	assert.deepEqual(heightOnlyCompared.lengthCompensation, { pike: [0], pi: [2] });
+	assert.equal(compareScrollbackStructure(piHeightOnly, pikeRetained, { id: "boot-72" }).equal, true);
+	// A genuine viewport-top difference with no height to compensate stays unequal.
+	const viewportTop = compareScrollbackStructure(pikeRetained, retainedSnapshot(["first", "second", "third"], sharedViewport), { id: "boot-72" });
+	assert.equal(viewportTop.equal, false);
+	assert.deepEqual(viewportTop.lengthCompensation, { pike: [0], pi: [0] });
+	// Retained rows in a different order stay unequal.
+	assert.equal(compareScrollbackStructure(pikeRetained, retainedSnapshot(["second", "first"], sharedViewport), { id: "boot-72" }).equal, false);
+	// The compensation pays for the height a pi-only viewport row added, not a
+	// retained-row difference: with the same two rows pushed out of view, a
+	// reordered retained row still compares unequal.
+	const masked = compareScrollbackStructure(pikeRetained, retainedSnapshot(["second", "first", "third", "fourth"], [" pi v0.87.1", " use or extend Pi."]), { id: "boot-72" });
+	assert.equal(masked.equal, false);
+	assert.deepEqual(masked.lengthCompensation, { pike: [0], pi: [2] });
+	// A height difference no profile projection explains is product height, not
+	// a compensation: it stays unequal even though the buffers differ in height.
+	assert.equal(compareScrollbackStructure(retainedSnapshot(["first"], ["second"]), retainedSnapshot(["first", "second"], ["third"]), { id: "boot-72" }).equal, false);
+	// A pi-only row above the split shortens the retained accounting by itself,
+	// so it needs no compensation and the retained rows still match.
+	const chromeAboveSplit = compareScrollbackStructure(pikeRetained, retainedSnapshot([" pi v0.87.1", "first", "second"], sharedViewport), { id: "boot-72" });
+	assert.equal(chromeAboveSplit.equal, true);
+	assert.deepEqual(chromeAboveSplit.lengthCompensation, { pike: [0], pi: [0] });
 }
 
 function compare(pike: Record<string, unknown>, pi: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
@@ -1077,7 +1187,7 @@ async function runParent(): Promise<number> {
 			ansi: "raw ANSI retained as captured evidence only; verification compares resolved cell presentation, never raw ANSI byte parity",
 			sgr: "ordered SGR tokens are retained as diagnostic evidence; resolved cell style is the comparison authority, while truecolor values remain exact",
 			screenshot: "themeParity.renderedScreenshots retains the rendered terminal cell rows as text screenshots",
-			scrollback: "scrollback cell rows are compared separately from the visible viewport",
+			scrollback: "scrollback cell rows are compared separately from the visible viewport; the profileProjection comparison is length-compensated, discounting a height surplus only up to the profile rows one runtime removed from its viewport, and records the per-barrier discount as scrollbackLengthCompensation",
 			profile: "resolved projection removes exact pi runtime-identity/startup-documentation rows and isolates provider usage for user-message, status-footer, tool-result, and scrollback",
 			omission: "declared pi-only rows are removed only with explicit patterns; the resolved styled-cell projection decides whether the remaining delta is intentional",
 			verification: "--verify checks reproducible report digests and one explicit triage classification per scenario; product defects remain visible in child issues",

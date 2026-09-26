@@ -254,11 +254,19 @@ the adapter `fixtures/pi-coding-agent/capture/native-tui-differential-ctest.py` 
 beside the capture harness, not a `tests/<owner>` C++ test). Verification re-captures the
 report projection and checks that its report digest and triage record are stable; it does not
 mean that every scenario is a product match. The resolved comparison uses visible cell text,
-scrollback cell rows, and the resolved style of each cell. Raw ANSI and ordered SGR tokens are
-retained as diagnostic evidence only, because frame timing and SGR cadence are not the product
-acceptance boundary. The report records one explicit triage classification per scenario and
-links confirmed product differences to focused child issues. A missing optional frozen pi
-checkout is an explicit skip; a checkout at the wrong commit is an error.
+scrollback cell rows, and the resolved style of each cell. The profile-projected scrollback
+comparison is length-compensated: a snapshot is a fixed-height viewport plus the rows retained
+above it, so a taller composed buffer retains more rows for identical scroll behaviour. The
+harness therefore discounts a buffer's height surplus from its retained rows, but only up to the
+profile rows that runtime alone removed from its viewport, and records the per-barrier discount as
+`scrollbackLengthCompensation`. A projection both runtimes share never discounts, a projection
+above the split needs none, and product height such as blank-row spacing (#814) is never
+discounted — so a genuine viewport-top or ordering difference still reports unequal. Raw ANSI
+and ordered SGR tokens are retained as diagnostic evidence only, because frame timing and SGR
+cadence are not the product acceptance boundary. The report records one explicit triage
+classification per scenario and links confirmed product differences to focused child issues. A
+missing optional frozen pi checkout is an explicit skip; a checkout at the wrong commit is an
+error.
 
 A row's `triage.classification` is its single final review classification. The
 `observedClassification` and projection fields retain the raw structural evidence. The
@@ -266,7 +274,8 @@ A row's `triage.classification` is its single final review classification. The
 provider usage for the declared response scenarios. Explicit omission patterns may remove only
 pi surfaces outside the Supported subset; they never erase a Supported row. The resolved styled
 cell projection is the authority for whether a remaining difference is intentional. The current
-product defects are tracked by #806–#812, while the report itself remains checked in as
+product defects are tracked by #806–#812; the `scrollback` scenario's retention delta is re-triaged
+onto the blank-row spacing defect in #814, while the report itself remains checked in as
 reproducible evidence. A successful `--verify` means the evidence and triage records are
 reproducible; it does not claim that the tracked product defects are fixed.
 
