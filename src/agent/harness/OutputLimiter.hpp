@@ -67,7 +67,7 @@ struct OutputTruncation {
     }
 }
 
-/// pi `splitLinesForCounting` (`truncate.ts:43-51`): the same split without the
+/// pi `splitLinesForCounting` (`truncate.ts:47`): the same split without the
 /// trailing empty element, and no lines at all for the empty string.
 [[nodiscard]] inline std::vector<std::string_view> split_lines_for_counting(std::string_view text) {
     if (text.empty()) {

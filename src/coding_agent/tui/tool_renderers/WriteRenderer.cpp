@@ -39,7 +39,11 @@ namespace {
     const auto max_lines = context.expanded ? std::numeric_limits<std::size_t>::max() : kWritePreviewLines;
     const auto fold = fold_head_lines(normalize_display_text(*content), max_lines);
 
-    // pi `write.ts:120`: plain text, no highlighting, tabs as three spaces.
+    // pi `write.ts:120`: tabs as three spaces (`replaceTabs`) and, on pi's
+    // no-language branch, plain `toolOutput` text. pike renders the plain form
+    // unconditionally: this repository has no syntax highlighter, so the
+    // `lang` branch pi takes for a recognised extension has no counterpart.
+    // Recorded as an Intentional Divergence in ADR 0061.
     std::string body = "\n\n" + join_rendered_rows(fold.lines, [&context](const std::string& line) {
         return context.theme.foreground(ThemeToken::ToolOutput, replace_tabs(line));
     });

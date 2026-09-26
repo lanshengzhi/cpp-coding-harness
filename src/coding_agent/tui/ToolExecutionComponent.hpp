@@ -32,7 +32,7 @@ public:
     /// the shared slot (ADR 0035, #418). `cwd` is the session workspace the
     /// tool execution runs in (pi `ToolRenderContext.cwd`). The renderer table
     /// is passed in the way pi's `ToolExecutionComponent` constructor receives
-    /// the registered tool definition (`tool-execution.ts:3489`); the default
+    /// the registered tool definition (`tool-execution.ts:81`); the default
     /// is the built-in table.
     ToolExecutionComponent(const LiveTheme& theme,
             std::shared_ptr<const SharedKeybindings> keybindings,
