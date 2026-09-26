@@ -289,6 +289,31 @@ TEST_CASE("a SKILL.md read titles as the skill label and a resource read as read
         CHECK(block.rows() == std::vector<std::string>{"", "read resource /etc/CLAUDE.md (ctrl+o to expand)", ""});
     }
 
+    SECTION("the classification resolves through pi's full resolveToCwd, not `~` alone") {
+        // ADR 0057's three preprocessing steps reach the label as well as the
+        // gate. A `~`-only resolution leaves the marker in the cwd-relative
+        // path, so the two rows below are the discriminating assertions: an
+        // assertion on the *classification* alone passes either way, because
+        // `basename` reads the same file name off both resolutions.
+        ReadBlock at_marked(keybindings, R"({"path":"@docs/AGENTS.md"})");
+        at_marked.succeed("alpha");
+        CHECK(at_marked.rows() == std::vector<std::string>{"", "read resource docs/AGENTS.md (ctrl+o to expand)", ""});
+
+        // pi `utils/paths.ts:7` `UNICODE_SPACES`: a U+00A0 no-break space
+        // between two directory name segments is one ASCII space.
+        const std::string unicode_space = std::string{R"({"path":"do"} + "\xC2\xA0" + R"(cs/AGENTS.md"})";
+        ReadBlock spaced(keybindings, unicode_space);
+        spaced.succeed("alpha");
+        CHECK(spaced.rows() == std::vector<std::string>{"", "read resource docs/AGENTS.md (ctrl+o to expand)", ""});
+
+        // The `~` step the same helper performs: the classification follows
+        // the expanded home, not a literal `~` directory under the cwd.
+        const tests::EnvVarGuard home("HOME", "/home/agent");
+        ReadBlock tilde(keybindings, R"({"path":"~/skills/pdf/SKILL.md"})");
+        tilde.succeed("alpha");
+        CHECK(tilde.rows() == std::vector<std::string>{"", "[skill] pdf (ctrl+o to expand)", ""});
+    }
+
     SECTION("the resource set is exactly pi's five names, matched case-sensitively") {
         for (const auto* name : {"AGENTS.md", "AGENTS.MD", "AGENTS.override.md", "CLAUDE.md", "CLAUDE.MD"}) {
             ReadBlock block(keybindings, std::string{R"({"path":")"} + name + R"("})");
@@ -310,14 +335,16 @@ TEST_CASE("a SKILL.md read titles as the skill label and a resource read as read
         CHECK(markdown.rows() == std::vector<std::string>{"", "read notes/foo.md", ""});
     }
 
-    SECTION("a file_path-only read is not classified") {
-        // The classification reads `args.path` only, so this is the plain form
-        // even though the title's `file_path ?? path` precedence would have
-        // resolved the path. Asserting only "an SKILL.md read is compact" with
-        // `file_path` would pass while this asymmetry is broken.
-        ReadBlock block(keybindings, R"({"file_path":"skills/pdf/SKILL.md"})");
-        block.succeed("alpha");
-        CHECK(block.rows() == std::vector<std::string>{"", "read skills/pdf/SKILL.md", ""});
+    SECTION("both path spellings classify, because pi reads `file_path ?? path`") {
+        // pi `read.ts:70` reads `str(args?.file_path ?? args?.path)`, the same
+        // two-key precedence the title uses. Asserting only the `path`
+        // spelling passes whether or not `file_path` works at all, so both are
+        // driven here and both must reach the skill label.
+        for (const auto* arguments : {R"({"path":"skills/pdf/SKILL.md"})", R"({"file_path":"skills/pdf/SKILL.md"})"}) {
+            ReadBlock block(keybindings, arguments);
+            block.succeed("alpha");
+            CHECK(block.rows() == std::vector<std::string>{"", "[skill] pdf (ctrl+o to expand)", ""});
+        }
     }
 }
 

@@ -38,29 +38,11 @@ struct TruncationFacts {
     std::size_t max_bytes{kDefaultMaxBytes};
 };
 
-[[nodiscard]] const support::JsonValue* member(const support::JsonValue& parent, std::string_view key) {
-    const auto* object = parent.get_if<support::JsonValue::object_t>();
-    if (object == nullptr) return nullptr;
-    const auto found = object->find(std::string{key});
-    return found == object->end() ? nullptr : &found->second;
-}
-
-[[nodiscard]] bool boolean_member(const support::JsonValue& parent, std::string_view key) {
-    const auto* value = member(parent, key);
-    const auto* boolean = value == nullptr ? nullptr : value->get_if<bool>();
-    return boolean != nullptr && *boolean;
-}
-
-[[nodiscard]] std::size_t number_member(const support::JsonValue& parent, std::string_view key, std::size_t fallback) {
-    const auto* value = member(parent, key);
-    const auto* number = value == nullptr ? nullptr : value->get_if<double>();
-    return number == nullptr ? fallback : static_cast<std::size_t>(*number);
-}
-
-/// pi `bash.ts:44`: `const timeout = args?.timeout` and `timeout ? ... : ""`,
-/// so an absent, null, or zero timeout prints no suffix at all.
+/// pi `bash.ts:45-46`: `const timeout = args?.timeout` and
+/// `timeout ? ... : ""`, so an absent, null, or zero timeout prints no suffix
+/// at all.
 [[nodiscard]] std::optional<double> truthy_timeout(const support::JsonValue& args) {
-    const auto* value = member(args, "timeout");
+    const auto* value = json_member(args, "timeout");
     if (value == nullptr) return std::nullopt;
     const auto* number = value->get_if<double>();
     if (number == nullptr || *number == 0.0) return std::nullopt;
@@ -69,25 +51,22 @@ struct TruncationFacts {
 
 [[nodiscard]] std::optional<std::string> full_output_path(const support::JsonValue* details) {
     if (details == nullptr) return std::nullopt;
-    const auto* value = member(*details, "fullOutputPath");
-    if (value == nullptr) return std::nullopt;
-    const auto* path = value->get_if<std::string>();
-    if (path == nullptr || path->empty()) return std::nullopt;
-    return *path;
+    const auto path = json_string(*details, "fullOutputPath");
+    if (!path || path->empty()) return std::nullopt;
+    return std::string{*path};
 }
 
 [[nodiscard]] std::optional<TruncationFacts> truncation_facts(const support::JsonValue* details) {
     if (details == nullptr) return std::nullopt;
-    const auto* value = member(*details, "truncation");
+    const auto* value = json_member(*details, "truncation");
     if (value == nullptr) return std::nullopt;
-    const auto* by = member(*value, "truncatedBy");
-    const auto* by_lines = by == nullptr ? nullptr : by->get_if<std::string>();
     return TruncationFacts{
-            .truncated = boolean_member(*value, "truncated"),
-            .truncated_by_lines = by_lines != nullptr && *by_lines == "lines",
-            .output_lines = number_member(*value, "outputLines", 0),
-            .total_lines = number_member(*value, "totalLines", 0),
-            .max_bytes = number_member(*value, "maxBytes", kDefaultMaxBytes),
+            .truncated = json_boolean(*value, "truncated"),
+            .truncated_by_lines = json_string(*value, "truncatedBy") == "lines",
+            .output_lines = static_cast<std::size_t>(json_number(*value, "outputLines").value_or(0.0)),
+            .total_lines = static_cast<std::size_t>(json_number(*value, "totalLines").value_or(0.0)),
+            .max_bytes = static_cast<std::size_t>(
+                    json_number(*value, "maxBytes").value_or(static_cast<double>(kDefaultMaxBytes))),
     };
 }
 
@@ -162,11 +141,9 @@ void strip_spill_footer(std::string& output,
 /// five **visual** lines with the earlier-lines hint above them (pi returns
 /// `["", hint, ...lines]`: a blank row, then the hint, then the tail).
 [[nodiscard]] std::string output_body(std::string_view output, const ToolRenderContext& context) {
-    std::string styled;
-    for (const auto& line : split_lines(output)) {
-        if (!styled.empty()) styled.push_back('\n');
-        styled += context.theme.foreground(ThemeToken::ToolOutput, line);
-    }
+    const auto styled = join_rendered_rows(split_lines(output), [&context](const std::string& line) {
+        return context.theme.foreground(ThemeToken::ToolOutput, line);
+    });
     if (context.expanded) return styled;
 
     // A failed measurement means the host's own render at this width fails
@@ -175,13 +152,7 @@ void strip_spill_footer(std::string& output,
     auto folded = fold_tail_visual_lines(styled, kPreviewLines, context.width, 0);
     if (!folded) return styled;
 
-    std::string rows;
-    bool first = true;
-    const auto append_row = [&](std::string&& row) {
-        if (!first) rows.push_back('\n');
-        rows += std::move(row);
-        first = false;
-    };
+    std::vector<std::string> rows;
     if (folded->skipped > 0) {
         auto hint = context.theme.foreground(ThemeToken::Muted, std::format("... ({} earlier lines,", folded->skipped));
         hint += " ";
@@ -192,16 +163,17 @@ void strip_spill_footer(std::string& output,
         if (const auto bounded = cch::tui::truncate_text(hint, context.width, "...", false)) {
             hint = *bounded;
         }
-        append_row(std::move(hint));
+        rows.push_back(std::move(hint));
     }
+    rows.reserve(rows.size() + folded->lines.size());
     for (auto& row : folded->lines) {
         // `Text::render` right-pads every row to the frame. pi keeps those
         // rows because they are final; here they go back through the host's
         // own `Text`, which pads again, so the padding is dropped rather than
         // carried inside the block's text.
-        append_row(trim_end(std::move(row)));
+        rows.push_back(trim_end(std::move(row)));
     }
-    return rows;
+    return join_rendered_rows(rows, [](const std::string& row) { return row; });
 }
 
 /// pi `bash.ts:108-123`: the `warning`-coloured bracket joining the spill path

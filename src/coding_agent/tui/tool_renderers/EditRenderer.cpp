@@ -26,7 +26,7 @@ namespace {
     };
 }
 
-/// pi `edit.ts:97` `result.details?.diff`, read as the display diff string
+/// pi `edit.ts:108` `result.details?.diff`, read as the display diff string
 /// `AsyncToolFactories.cpp:452` writes.
 [[nodiscard]] std::optional<std::string_view> result_diff(const ToolRenderedResult& result) {
     if (!result.details.has_value()) return std::nullopt;
@@ -40,19 +40,26 @@ namespace {
 }
 
 /// pi `formatEditResult` (`edit.ts:87-114`).
+///
+/// Every block this returns is `\n`-prefixed. In pi the blank row is not in
+/// the string at all: `edit.ts:234` adds `new Spacer(1)` to the result
+/// container *after* the `if (!output) return` gate, so it precedes whatever
+/// text the result half produced — diff or error alike. This seam's host joins
+/// `title` and the blocks with no separator of its own
+/// (`ToolExecutionComponent.cpp:117`), so the renderer owns that leading
+/// newline here. The output matches pi; the responsibility for the blank row
+/// does not, which is a fact about the seam worth recording in the ADR.
 [[nodiscard]] ToolRenderedText render_edit_result(const ToolRenderedResult& result, const ToolRenderContext& context) {
     if (context.is_error) {
-        // pi `edit.ts:91-97`: no text renders nothing. pi's
+        // pi `edit.ts:97-106`: no text renders nothing. pi's
         // `errorText === previewError` suppression is part of the deferred
         // pre-execution preview and is dead without it.
         if (result.output.empty()) return {};
-        // pi `edit.ts:98`: no leading newline inside the string, because the
-        // host lays the result half out as its own block beneath the title.
         return ToolRenderedText{
-                .blocks = {context.theme.foreground(ThemeToken::Error, result.output)},
+                .blocks = {"\n" + context.theme.foreground(ThemeToken::Error, result.output)},
         };
     }
-    // pi `edit.ts:102-105`: the success path renders `details.diff`, and
+    // pi `edit.ts:107-111`: the success path renders `details.diff`, and
     // suppresses it only when the call half is already showing the same diff
     // from the pre-execution preview. That preview is out of scope, so there
     // is never a `previewDiff` here and the suppression guard is deliberately
@@ -60,7 +67,7 @@ namespace {
     const auto diff = result_diff(result);
     if (!diff.has_value()) return {};
     return ToolRenderedText{
-            .blocks = {render_diff(context.theme, *diff)},
+            .blocks = {"\n" + render_diff(context.theme, *diff)},
     };
 }
 

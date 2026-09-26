@@ -11,7 +11,7 @@
 
 namespace cch::coding_agent::tui {
 
-/// pi `ToolRenderContext` (`core/extensions/types.ts:424-450`) narrowed to
+/// pi `ToolRenderContext` (`core/extensions/types.ts:425-450`) narrowed to
 /// what a string-out renderer needs: the live presentation state a renderer
 /// reads, owned by the host `ToolExecutionComponent` and valid only for the
 /// duration of one renderer's call.

@@ -31,6 +31,44 @@ namespace cch::coding_agent::tui {
 /// pi `render-utils.ts:31` `replaceTabs`: a tab renders as three spaces.
 [[nodiscard]] std::string replace_tabs(std::string_view text);
 
+/// pi's optional-chained member read over one JSON object: the value at `key`,
+/// or nullptr when `parent` is not an object or carries no such key. A key
+/// present with a JSON null value is *present*, which is what keeps pi's
+/// `args?.offset === undefined` gate and its `get_if<T>()` read on one
+/// spelling.
+[[nodiscard]] const support::JsonValue* json_member(const support::JsonValue& parent, std::string_view key);
+
+/// A numeric member as pi's arithmetic sees it: nullopt when the key is absent
+/// or holds a non-number, so the caller applies the default pi documents for
+/// that field rather than one invented here.
+[[nodiscard]] std::optional<double> json_number(const support::JsonValue& parent, std::string_view key);
+
+/// A JSON boolean member. A missing or non-boolean one is `false`, so a caller
+/// distinguishes pi's warning cases by which field it asks for.
+[[nodiscard]] bool json_boolean(const support::JsonValue& parent, std::string_view key);
+
+/// A string member, or nullopt when the key is absent or holds another type.
+[[nodiscard]] std::optional<std::string_view> json_string(
+        const support::JsonValue& parent, std::string_view key);
+
+/// The one fold-output join: pi styles each line of a folded body and joins
+/// the rendered rows with "\n", which is what every renderer turning folded
+/// lines into a block does. `render_row` maps one line to its styled row; a
+/// caller whose rows are already rendered passes its rows straight through.
+/// The separator is written between rows rather than before each one, so a
+/// row that renders empty still holds its place.
+template <typename RenderRow>
+[[nodiscard]] std::string join_rendered_rows(const std::vector<std::string>& lines, RenderRow render_row) {
+    std::string body;
+    bool first = true;
+    for (const auto& line : lines) {
+        if (!first) body.push_back('\n');
+        first = false;
+        body += render_row(line);
+    }
+    return body;
+}
+
 /// pi `render-utils.ts:35` `normalizeDisplayText`: drop carriage returns.
 [[nodiscard]] std::string normalize_display_text(std::string_view text);
 
@@ -47,7 +85,8 @@ struct HeadFold {
 
 [[nodiscard]] HeadFold fold_head_lines(std::string_view text, std::size_t max_lines);
 
-/// pi `modes/interactive/components/visual-truncate.ts:8` `truncateToVisualLines`:
+/// pi `modes/interactive/components/visual-truncate.ts:27`
+/// `truncateToVisualLines`:
 /// keep the **last** `max_visual_lines` *visual* lines — lines are measured
 /// after wrapping at `width`, so one long logical line that wraps to three
 /// rows is three, not one. `skipped` is the number of **visual** lines dropped

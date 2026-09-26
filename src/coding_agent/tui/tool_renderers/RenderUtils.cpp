@@ -46,6 +46,33 @@ std::optional<std::string_view> string_argument(
     return std::string_view{};
 }
 
+const support::JsonValue* json_member(const support::JsonValue& parent, std::string_view key) {
+    const auto* object = parent.get_if<support::JsonValue::object_t>();
+    if (object == nullptr) return nullptr;
+    const auto found = object->find(std::string{key});
+    return found == object->end() ? nullptr : &found->second;
+}
+
+std::optional<double> json_number(const support::JsonValue& parent, std::string_view key) {
+    const auto* value = json_member(parent, key);
+    if (value == nullptr) return std::nullopt;
+    const auto* number = value->get_if<double>();
+    return number == nullptr ? std::nullopt : std::optional<double>{*number};
+}
+
+bool json_boolean(const support::JsonValue& parent, std::string_view key) {
+    const auto* value = json_member(parent, key);
+    const auto* boolean = value == nullptr ? nullptr : value->get_if<bool>();
+    return boolean != nullptr && *boolean;
+}
+
+std::optional<std::string_view> json_string(const support::JsonValue& parent, std::string_view key) {
+    const auto* value = json_member(parent, key);
+    if (value == nullptr) return std::nullopt;
+    const auto* text = value->get_if<std::string>();
+    return text == nullptr ? std::nullopt : std::optional<std::string_view>{*text};
+}
+
 std::string replace_tabs(std::string_view text) {
     std::string replaced;
     replaced.reserve(text.size());
@@ -80,9 +107,8 @@ HeadFold fold_head_lines(std::string_view text, std::size_t max_lines) {
 }
 
 std::string fold_hint(const ToolRenderContext& context, std::size_t remaining, std::optional<std::size_t> total_lines) {
-    const auto count = std::to_string(remaining);
     const auto total = total_lines.has_value() ? std::format(" {} total,", *total_lines) : std::string{};
-    auto hint = context.theme.foreground(ThemeToken::Muted, std::format("\n... ({} more lines,{}", count, total));
+    auto hint = context.theme.foreground(ThemeToken::Muted, std::format("\n... ({} more lines,{}", remaining, total));
     hint += " ";
     hint += context.expand_hint;
     hint += context.theme.foreground(ThemeToken::Muted, ")");
