@@ -727,8 +727,16 @@ public:
         result.is_error = true;
         return result;
     }
+    // Thirteen lines, so the block is long enough for the fallback's ten-line
+    // fold (`ToolRendererRegistry.cpp:19`, pi `FALLBACK_PREVIEW_LINES`) to
+    // actually fold it. The seven-line shape this fixture used to supply was
+    // long enough for the pre-#824 component's five-line fold and for nothing
+    // since, so the collapse/expand property the case is named for stopped
+    // being exercised while the case kept asserting it. The tail marker is the
+    // last line so the head fold must hide it and expansion must reveal it.
     result.content.emplace_back(ai::text_content(
-        "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nTOOL OUTPUT END\n"));
+            "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\n"
+            "TOOL OUTPUT END\n"));
     return result;
 }
 
@@ -1973,7 +1981,17 @@ TEST_CASE("Native TUI correlates repeated Tool Call IDs and locally expands long
     CHECK(count_text(screen, "probe-read") == 1);
     CHECK(count_text(screen, "partial tool output") == 1);
     CHECK(screen.find("STALE ARGUMENT") == std::string::npos);
-    CHECK(screen.find(R"({"path":"large.txt"})") != std::string::npos);
+    // `probe-read` has no registered renderer, so it takes pi's generic
+    // fallback framing (`tool-execution.ts:421-432`): the bold tool name, a
+    // blank line, then the arguments as `JSON.stringify(args, null, 2)`. The
+    // compact single-line row this assertion used to require is the framing
+    // the seam replaced (User Story 13), so the indented row is asserted
+    // instead and the compact one is asserted absent. The needle carries the
+    // row's own leading newline and the box margin plus the two-space indent,
+    // so it is the whole row's start and not a substring that could sit
+    // anywhere in the block.
+    CHECK(screen.find("\n   \"path\": \"large.txt\"") != std::string::npos);
+    CHECK(screen.find(R"({"path":"large.txt"})") == std::string::npos);
     CHECK(screen.find("STALE SNAPSHOT") == std::string::npos);
     CHECK(count_text(screen, "LATEST SNAPSHOT") == 1);
 
@@ -1981,7 +1999,14 @@ TEST_CASE("Native TUI correlates repeated Tool Call IDs and locally expands long
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(count_text(screen, "probe-read") == 1);
+    // The ten kept rows are the first ten, so `line 1` survives: the fallback
+    // folds from the head, which is what separates it from bash's tail fold.
     CHECK(screen.find("line 1") != std::string::npos);
+    CHECK(screen.find("line 10") != std::string::npos);
+    CHECK(screen.find("line 11") == std::string::npos);
+    // The hint row itself, exactly: it is the only place the fallback's fold
+    // hint is checked on screen, and the count is the folded-away remainder.
+    CHECK(screen.find("... (3 more lines, ctrl+o to expand)") != std::string::npos);
     CHECK(screen.find("TOOL OUTPUT END") == std::string::npos);
     REQUIRE(tool_pointer->emit_late_update());
     drain_ready(io);
