@@ -62,7 +62,11 @@ TEST_CASE("a registered tool is resolved by name and an unregistered one takes t
     // The registered pair draws its own (still empty) call text, while the
     // fallback draws the bold tool name: comparing the two is what shows the
     // lookup is by name rather than a single pair for every tool.
-    auto& registered = registry.lookup("read");
+    //
+    // `bash` carries the empty half: `read` stopped being a stub in #825 and
+    // now draws its own title, so the "still empty" contrast is read off a
+    // tool that is still a stub.
+    auto& registered = registry.lookup("bash");
     REQUIRE(static_cast<bool>(registered.render_call));
     CHECK(registered.render_call(render_context(theme, args)).title.empty());
     auto& unregistered = registry.lookup("grep");
@@ -95,11 +99,14 @@ TEST_CASE("a registered tool with an empty call half still draws pi's bare bold 
     CHECK(screen.visible == std::vector<std::string>{"", "probe", ""});
 }
 
-TEST_CASE("the four built-in tool names render through the component without a fallback body",
+TEST_CASE("a built-in tool name with a still-stubbed pair renders through the component without a fallback body",
         "[coding_agent][tui][tool-renderers][issue824][spec]") {
     auto theme = tests::tool_render_theme();
     auto keybindings = tests::tool_render_keybindings();
-    for (const auto* name : {"read", "bash", "write", "edit"}) {
+    // The three still-stubbed names. `read` is excluded because #825 filled its
+    // pair in, so it no longer has the empty call text this case is about; its
+    // own screen shape is asserted in `ReadRendererTest.cpp`.
+    for (const auto* name : {"bash", "write", "edit"}) {
         coding_agent::tui::ToolExecutionComponent component(
                 theme, keybindings, name, "call_1", R"({"file_path":"notes.txt"})", "/workspace");
         component.update_result(ai::ToolResultMessage{
