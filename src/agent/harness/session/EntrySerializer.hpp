@@ -12,9 +12,11 @@
 
 namespace cch::harness::session {
 
-/// Private adapter that converts between session entry domain objects and
-/// JSONL lines. EntrySerializer owns the DTOs, redaction rules, and parsing
-/// logic; JsonlSessionStore only coordinates file I/O through SessionJournal.
+/// Private adapter that owns session entry identity, construction, and the
+/// JSONL wire encoding. EntrySerializer owns the DTOs, redaction rules, and
+/// parsing logic; JsonlSessionStore only coordinates file I/O through
+/// SessionJournal, and the SessionStore facade's in-memory alternative mints
+/// its entries through the new_*_entry twins of the serialize_* methods.
 class EntrySerializer {
 public:
     /// One serialized append: the wire line plus the SessionEntry the line
@@ -26,6 +28,32 @@ public:
         std::string line;
         SessionEntry entry;
     };
+
+    /// Mint one fresh Session Entry of the given kind without serializing a
+    /// line and without append-time redaction (redaction is persistence
+    /// policy, so the in-memory store keeps the caller's values verbatim).
+    /// Identity, timestamp, and every per-kind value normalization match the
+    /// serialize_* twin below exactly, so a live in-memory session rebuilds
+    /// the same context a reloaded JSONL session would.
+    [[nodiscard]] static SessionEntry new_message_entry(
+            const ai::MessageVariant& message, std::optional<std::string> parent_id);
+    [[nodiscard]] static SessionEntry new_model_change_entry(
+            std::optional<std::string> parent_id, std::string provider, std::string model_id);
+    [[nodiscard]] static SessionEntry new_thinking_level_change_entry(
+            std::optional<std::string> parent_id, std::string thinking_level);
+    [[nodiscard]] static SessionEntry new_label_change_entry(
+            std::optional<std::string> parent_id, std::string target_id, std::optional<std::string> label);
+    [[nodiscard]] static SessionEntry new_compaction_entry(
+            std::optional<std::string> parent_id, CompactionEntryValue value);
+    [[nodiscard]] static SessionEntry new_branch_summary_entry(std::optional<std::string> parent_id,
+            std::string from_id,
+            std::string summary,
+            std::optional<support::JsonValue> details,
+            std::optional<bool> from_hook,
+            std::optional<ai::Usage> usage = std::nullopt);
+    [[nodiscard]] static SessionEntry new_session_info_entry(std::optional<std::string> parent_id, std::string name);
+    [[nodiscard]] static SessionEntry new_leaf_entry(
+            std::optional<std::string> parent_id, std::optional<std::string> target_id);
 
     [[nodiscard]] support::Expected<std::string> serialize_header(const SessionMetadata& metadata) const;
 
@@ -87,13 +115,6 @@ public:
     [[nodiscard]] support::Expected<SerializationResult> serialize_leaf(
         std::optional<std::string> parent_id,
         std::optional<std::string> target_id) const;
-
-    /// Fresh 8-char hex entry id (pi `generateId`). Exposed for the
-    /// in-memory store, which builds entries without serializing a line.
-    [[nodiscard]] static std::string new_entry_id();
-
-    /// Current time as epoch milliseconds (the entry timestamp domain).
-    [[nodiscard]] static ai::TimestampMs now_timestamp_ms();
 
     /// Round-trip writer: re-emit a parsed `SessionEntry` as its pi wire line
     /// (byte-identical to the source line for pi-captured files) using the
