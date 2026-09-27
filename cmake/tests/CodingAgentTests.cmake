@@ -21,7 +21,6 @@ include_guard(GLOBAL)
         tests/harness/RuntimeRootTest.cpp
         tests/harness/WorkspaceFileSystemTest.cpp
         tests/harness/compaction/CompactionTest.cpp
-        tests/harness/session/InMemorySessionStoreTest.cpp
         tests/harness/session/JsonlSessionStoreTest.cpp
         tests/harness/session/SessionMessageJsonTest.cpp
         tests/harness/session/SessionRedactionCoverageTest.cpp

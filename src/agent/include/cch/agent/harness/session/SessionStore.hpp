@@ -12,13 +12,9 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <variant>
 #include <vector>
 
 namespace cch::harness::session {
-
-class InMemorySessionStore;
-class JsonlSessionStore;
 
 /// The Runtime-facing Session Store: a closed concrete facade over the two
 /// supported persistence alternatives — a JSONL session file and an
@@ -32,8 +28,9 @@ class JsonlSessionStore;
 /// incrementally updates the cached tree, so topology queries and context
 /// reconstruction never re-read or re-parse the session file (pi
 /// SessionManager, which keeps `fileEntries`/`byId` in memory and advances
-/// them in `_appendEntry`). In-memory sessions update the same live tree
-/// without disk I/O.
+/// them in `_appendEntry`). In-memory sessions mint the same entries through
+/// the same value normalizations without disk I/O and without append-time
+/// redaction, which is persistence policy.
 ///
 /// Mutating appends and tree queries are internally synchronized so the
 /// serialized Session Event Commitment channel can execute appends on
@@ -162,9 +159,6 @@ private:
     struct Impl;
 
     explicit SessionStore(std::unique_ptr<Impl> impl);
-
-    /// The closed set of persistence alternatives.
-    using StorageVariant = std::variant<JsonlSessionStore, InMemorySessionStore>;
 
     std::unique_ptr<Impl> impl_;
 };

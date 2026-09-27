@@ -292,6 +292,17 @@ struct RoundTripBase {
     return entry;
 }
 
+/// The wire omits an empty retained tail, so the mirrored entry and the
+/// in-memory mint drop it too: an engaged-but-empty tail would otherwise
+/// select the retained-tail context path instead of the `first_kept_entry_id`
+/// path a reloaded session takes.
+[[nodiscard]] CompactionEntryValue normalize_retained_tail(CompactionEntryValue value) {
+    if (value.retained_tail && value.retained_tail->empty()) {
+        value.retained_tail.reset();
+    }
+    return value;
+}
+
 [[nodiscard]] support::Expected<EntrySerializer::SerializationResult> finish_entry(
     support::Expected<std::string> line,
     SessionEntry entry) {
@@ -1097,11 +1108,7 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     std::optional<std::string> parent_id,
     CompactionEntryValue value) const {
     auto base = fresh_entry_base(parent_id);
-    // The wire omits an empty retained tail; the mirrored entry does the
-    // same so live-tree and reload reads agree.
-    if (value.retained_tail && value.retained_tail->empty()) {
-        value.retained_tail.reset();
-    }
+    value = normalize_retained_tail(std::move(value));
     // Redact before the value is mirrored into the DTO and the live entry, so
     // the line and the live tree agree exactly as they do on the message path.
     redact_summary_entry_text(value.summary, value.details);
@@ -1188,12 +1195,72 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
             std::move(base), SessionEntryKind::Leaf, dto, LeafEntryValue{.target_id = std::move(target_id)});
 }
 
-std::string EntrySerializer::new_entry_id() {
-    return generate_entry_id();
+SessionEntry EntrySerializer::new_message_entry(
+        const ai::MessageVariant& message, std::optional<std::string> parent_id) {
+    // No redaction and no wire DTO round trip: the in-memory store keeps the
+    // caller's message exactly as pi's non-persisting SessionManager does.
+    SessionEntry entry;
+    entry.kind = SessionEntryKind::Message;
+    entry.entry_id = generate_entry_id();
+    entry.parent_id = std::move(parent_id);
+    entry.timestamp = ms_since_epoch();
+    entry.message = message;
+    return entry;
 }
 
-ai::TimestampMs EntrySerializer::now_timestamp_ms() {
-    return ms_since_epoch();
+SessionEntry EntrySerializer::new_model_change_entry(
+        std::optional<std::string> parent_id, std::string provider, std::string model_id) {
+    return make_entry(fresh_entry_base(std::move(parent_id)),
+            SessionEntryKind::ModelChange,
+            ModelChangeValue{.provider = std::move(provider), .model_id = std::move(model_id)});
+}
+
+SessionEntry EntrySerializer::new_thinking_level_change_entry(
+        std::optional<std::string> parent_id, std::string thinking_level) {
+    return make_entry(fresh_entry_base(std::move(parent_id)),
+            SessionEntryKind::ThinkingLevelChange,
+            ThinkingLevelChangeValue{.thinking_level = std::move(thinking_level)});
+}
+
+SessionEntry EntrySerializer::new_label_change_entry(
+        std::optional<std::string> parent_id, std::string target_id, std::optional<std::string> label) {
+    return make_entry(fresh_entry_base(std::move(parent_id)),
+            SessionEntryKind::Label,
+            LabelEntryValue{.target_id = std::move(target_id), .label = std::move(label)});
+}
+
+SessionEntry EntrySerializer::new_compaction_entry(std::optional<std::string> parent_id, CompactionEntryValue value) {
+    return make_entry(fresh_entry_base(std::move(parent_id)),
+            SessionEntryKind::Compaction,
+            normalize_retained_tail(std::move(value)));
+}
+
+SessionEntry EntrySerializer::new_branch_summary_entry(std::optional<std::string> parent_id,
+        std::string from_id,
+        std::string summary,
+        std::optional<support::JsonValue> details,
+        std::optional<bool> from_hook,
+        std::optional<ai::Usage> usage) {
+    return make_entry(fresh_entry_base(std::move(parent_id)),
+            SessionEntryKind::BranchSummary,
+            BranchSummaryEntryValue{.from_id = std::move(from_id),
+                    .summary = std::move(summary),
+                    .details = std::move(details),
+                    .usage = std::move(usage),
+                    .from_hook = from_hook});
+}
+
+SessionEntry EntrySerializer::new_session_info_entry(std::optional<std::string> parent_id, std::string name) {
+    return make_entry(fresh_entry_base(std::move(parent_id)),
+            SessionEntryKind::SessionInfo,
+            SessionInfoEntryValue{.name = std::move(name)});
+}
+
+SessionEntry EntrySerializer::new_leaf_entry(
+        std::optional<std::string> parent_id, std::optional<std::string> target_id) {
+    return make_entry(fresh_entry_base(std::move(parent_id)),
+            SessionEntryKind::Leaf,
+            LeafEntryValue{.target_id = std::move(target_id)});
 }
 
 support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEntry& entry) const {

@@ -140,6 +140,101 @@ TEST_CASE("in-memory Session Store maintains a live tree without a session file"
     CHECK_FALSE(store.path().has_value());
 }
 
+TEST_CASE("the in-memory alternative keeps entries the JSONL alternative refuses or redacts",
+        "[harness][session][store][issue464][issue665][spec]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "alternative-divergence.jsonl";
+    auto persisted = harness::session::SessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(persisted);
+    auto memory = harness::session::SessionStore::in_memory(metadata_for(workspace));
+
+    // An assistant record without the identity and real timestamp a provider
+    // supplies is one the JSONL writer refuses because the parser could not
+    // read it back (issue665); the in-memory alternative never touches a wire
+    // line, so it keeps the record. Both halves are asserted because either
+    // policy changing on its own breaks the property being named.
+    ai::AssistantMessage assistant;
+    assistant.content.emplace_back(ai::TextContent{
+            .text = "in-memory keeps sk-live-value",
+            .text_signature = std::nullopt,
+    });
+    assistant.stop_reason = ai::AssistantStopReason::Stop;
+    CHECK_FALSE(persisted->append(ai::MessageVariant{assistant}).has_value());
+    REQUIRE(memory.append(ai::MessageVariant{assistant}).has_value());
+
+    // Redaction is persistence policy: a session that never writes keeps the
+    // caller's summary verbatim, so context rebuild and inspection answer the
+    // values the session actually holds.
+    const harness::session::CompactionEntryValue compaction{
+            .summary = "summary with sk-live-value",
+            .first_kept_entry_id = "first-kept",
+            .tokens_before = 1000,
+    };
+    REQUIRE(persisted->append_compaction(std::nullopt, compaction).has_value());
+    REQUIRE(memory.append_compaction(std::nullopt, compaction).has_value());
+
+    const auto memory_entries = memory.entries();
+    REQUIRE(memory_entries.size() == 2);
+    REQUIRE(memory_entries[0].kind == harness::session::SessionEntryKind::Message);
+    REQUIRE(memory_entries[0].message.has_value());
+    const auto& kept = std::get<ai::AssistantMessage>(*memory_entries[0].message);
+    REQUIRE(kept.content.size() == 1);
+    CHECK(std::get<ai::TextContent>(kept.content.front()).text == "in-memory keeps sk-live-value");
+    const auto& memory_compaction = std::get<harness::session::CompactionEntryValue>(memory_entries[1].value);
+    CHECK(memory_compaction.summary == "summary with sk-live-value");
+
+    // The persisted side wrote neither refused record unredacted: the
+    // unreadable assistant is absent and the summary reached the file
+    // redacted. A regression that stopped redacting at the persistence
+    // boundary fails here even though every in-memory assertion above holds.
+    const auto reloaded = harness::session::SessionStore::load(path);
+    REQUIRE(reloaded);
+    REQUIRE(reloaded->entries.size() == 2);
+    REQUIRE(reloaded->entries.back().kind == harness::session::SessionEntryKind::Compaction);
+    const auto& stored = std::get<harness::session::CompactionEntryValue>(reloaded->entries.back().value);
+    CHECK(stored.summary.find("sk-live-value") == std::string::npos);
+    CHECK(stored.summary != memory_compaction.summary);
+}
+
+TEST_CASE("an engaged but empty compaction tail is dropped by both persistence alternatives",
+        "[harness][session][store][issue464][spec]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "empty-retained-tail.jsonl";
+    auto persisted = harness::session::SessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(persisted);
+    auto memory = harness::session::SessionStore::in_memory(metadata_for(workspace));
+
+    const harness::session::CompactionEntryValue value{
+            .summary = "summary",
+            .first_kept_entry_id = "first-kept",
+            .tokens_before = 1000,
+            .retained_tail = std::vector<ai::MessageVariant>{},
+    };
+    REQUIRE(persisted->append_compaction(std::nullopt, value).has_value());
+    REQUIRE(memory.append_compaction(std::nullopt, value).has_value());
+
+    // An empty tail must not survive as an engaged optional: context rebuild
+    // branches on it, so an engaged-but-empty tail would take the
+    // retained-tail path where a reloaded session takes the first-kept path.
+    for (const auto* store : {&*persisted, &memory}) {
+        const auto entries = store->entries();
+        REQUIRE(entries.size() == 1);
+        const auto& compaction = std::get<harness::session::CompactionEntryValue>(entries.front().value);
+        CHECK_FALSE(compaction.retained_tail.has_value());
+    }
+
+    // The live tree above is only a mirror. Re-read the file, because a
+    // regression that dropped the tail from the mirror while the wire line
+    // still carried an engaged empty tail would satisfy every check above and
+    // still diverge from a reloaded session.
+    const auto reloaded = harness::session::SessionStore::load(path);
+    REQUIRE(reloaded);
+    REQUIRE(reloaded->entries.size() == 2);
+    REQUIRE(reloaded->entries.back().kind == harness::session::SessionEntryKind::Compaction);
+    const auto& reloaded_compaction = std::get<harness::session::CompactionEntryValue>(reloaded->entries.back().value);
+    CHECK_FALSE(reloaded_compaction.retained_tail.has_value());
+}
+
 TEST_CASE("JSONL Session Store writes typed entries and mirrors them into the live tree",
         "[harness][session][store][issue464][issue490][spec]") {
     tests::TempWorkspace workspace;

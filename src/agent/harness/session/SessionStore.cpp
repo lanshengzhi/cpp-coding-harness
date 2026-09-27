@@ -1,40 +1,44 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 
-#include "agent/harness/session/InMemorySessionStore.hpp"
+#include "agent/harness/session/EntrySerializer.hpp"
 #include "agent/harness/session/JsonlSessionStore.hpp"
 
-#include <functional>
 #include <mutex>
 #include <utility>
 
 namespace cch::harness::session {
 
 struct SessionStore::Impl {
-    Impl(JsonlSessionStore jsonl, SessionTree live_tree)
-        : store(std::move(jsonl)), tree(std::move(live_tree)) {}
-    Impl(InMemorySessionStore memory, SessionTree live_tree)
-        : store(std::move(memory)), tree(std::move(live_tree)) {}
+    explicit Impl(SessionTree live_tree) : tree(std::move(live_tree)) {}
 
-    StorageVariant store;
+    /// The persistence alternative, engaged only for JSONL sessions; an
+    /// in-memory session has no journal and no durable append position.
+    std::optional<JsonlSessionStore> persistence;
     SessionTree tree;
     // Serializes appends and tree queries between Runtime worker threads
     // (Session Event Commitment channel) and the Session loop (session-
     // assembly appends, topology queries, context reconstruction).
     std::mutex mutex;
 
-    /// Run one store-shaped append under the append lock against the active
-    /// alternative and mirror every accepted entry into the live tree, so one
-    /// append is a single persist-plus-tree step.
-    template <typename Op> [[nodiscard]] support::ExpectedVoid append_via(Op op) {
-        std::lock_guard lock(mutex);
-        auto entries = std::visit([&](auto& active) { return std::invoke(op, active); }, store);
-        if (!entries) {
-            return std::unexpected(entries.error());
+    /// Mirror one in-memory append into the live tree.
+    void record(SessionEntry entry) { tree.append_entry(std::move(entry)); }
+
+    /// Mirror a persisting append's accepted entries into the live tree.
+    [[nodiscard]] support::ExpectedVoid record_persisted(support::Expected<std::vector<SessionEntry>> outcome) {
+        if (!outcome) {
+            return std::unexpected(outcome.error());
         }
-        for (auto& entry : *entries) {
-            tree.append_entry(std::move(entry));
+        for (auto& entry : *outcome) {
+            record(std::move(entry));
         }
         return {};
+    }
+
+    /// The live tree's current leaf as an explicit append parent (nullopt at
+    /// the root position) — pi `appendMessage` hangs the message under it.
+    [[nodiscard]] std::optional<std::string> leaf_parent() const {
+        const auto& leaf = tree.leaf_id();
+        return leaf.empty() ? std::nullopt : std::optional<std::string>{leaf};
     }
 };
 
@@ -49,8 +53,9 @@ support::Expected<SessionStore> SessionStore::create_new(
     }
     LoadedSession empty;
     empty.metadata = std::move(metadata);
-    SessionTree tree(std::move(empty));
-    return SessionStore(std::make_unique<Impl>(std::move(*jsonl), std::move(tree)));
+    auto impl = std::make_unique<Impl>(SessionTree(std::move(empty)));
+    impl->persistence = std::move(*jsonl);
+    return SessionStore(std::move(impl));
 }
 
 support::Expected<SessionStore> SessionStore::open_existing(const std::filesystem::path& path) {
@@ -65,15 +70,15 @@ support::Expected<SessionStore> SessionStore::open_existing(const std::filesyste
     if (!jsonl) {
         return std::unexpected(jsonl.error());
     }
-    SessionTree tree(std::move(*loaded));
-    return SessionStore(std::make_unique<Impl>(std::move(*jsonl), std::move(tree)));
+    auto impl = std::make_unique<Impl>(SessionTree(std::move(*loaded)));
+    impl->persistence = std::move(*jsonl);
+    return SessionStore(std::move(impl));
 }
 
 SessionStore SessionStore::in_memory(SessionMetadata metadata) {
     LoadedSession empty;
     empty.metadata = std::move(metadata);
-    SessionTree tree(std::move(empty));
-    return SessionStore(std::make_unique<Impl>(InMemorySessionStore{}, std::move(tree)));
+    return SessionStore(std::make_unique<Impl>(SessionTree(std::move(empty))));
 }
 
 support::Expected<LoadedSession> SessionStore::load(const std::filesystem::path& path) {
@@ -86,31 +91,19 @@ SessionStore::~SessionStore() = default;
 
 support::ExpectedVoid SessionStore::append(const ai::MessageVariant& message) {
     std::lock_guard lock(impl_->mutex);
-    if (auto* jsonl = std::get_if<JsonlSessionStore>(&impl_->store)) {
+    if (auto& jsonl = impl_->persistence) {
+        // The message is durable before its leaf marker, so a marker failure
+        // must not leave the live tree behind the file.
         auto outcome = jsonl->append(message);
-        // Mirror every durably written entry even when the outcome is an
-        // error (the message persists before its leaf marker, so a marker
-        // failure must not leave the live tree behind the file).
         for (auto& entry : outcome.entries) {
-            impl_->tree.append_entry(std::move(entry));
+            impl_->record(std::move(entry));
         }
         if (!outcome.status) {
             return std::unexpected(outcome.status.error());
         }
         return {};
     }
-    // In-memory: pi `appendMessage` hangs the message under the current
-    // leaf (null at the root position).
-    const auto& leaf = impl_->tree.leaf_id();
-    auto entries = std::get<InMemorySessionStore>(impl_->store).append(
-        message,
-        leaf.empty() ? std::nullopt : std::optional<std::string>{leaf});
-    if (!entries) {
-        return std::unexpected(entries.error());
-    }
-    for (auto& entry : *entries) {
-        impl_->tree.append_entry(std::move(entry));
-    }
+    impl_->record(EntrySerializer::new_message_entry(message, impl_->leaf_parent()));
     return {};
 }
 
@@ -118,33 +111,51 @@ support::ExpectedVoid SessionStore::append_model_change(
     std::optional<std::string> parent_id,
     std::string provider,
     std::string model_id) {
-    return impl_->append_via([&](auto& active) {
-        return active.append_model_change(std::move(parent_id), std::move(provider), std::move(model_id));
-    });
+    std::lock_guard lock(impl_->mutex);
+    if (auto& jsonl = impl_->persistence) {
+        return impl_->record_persisted(
+                jsonl->append_model_change(std::move(parent_id), std::move(provider), std::move(model_id)));
+    }
+    impl_->record(
+            EntrySerializer::new_model_change_entry(std::move(parent_id), std::move(provider), std::move(model_id)));
+    return {};
 }
 
 support::ExpectedVoid SessionStore::append_thinking_level_change(
     std::optional<std::string> parent_id,
     std::string thinking_level) {
-    return impl_->append_via([&](auto& active) {
-        return active.append_thinking_level_change(std::move(parent_id), std::move(thinking_level));
-    });
+    std::lock_guard lock(impl_->mutex);
+    if (auto& jsonl = impl_->persistence) {
+        return impl_->record_persisted(
+                jsonl->append_thinking_level_change(std::move(parent_id), std::move(thinking_level)));
+    }
+    impl_->record(EntrySerializer::new_thinking_level_change_entry(std::move(parent_id), std::move(thinking_level)));
+    return {};
 }
 
 support::ExpectedVoid SessionStore::append_label_change(
     std::optional<std::string> parent_id,
     std::string target_id,
     std::optional<std::string> label) {
-    return impl_->append_via([&](auto& active) {
-        return active.append_label_change(std::move(parent_id), std::move(target_id), std::move(label));
-    });
+    std::lock_guard lock(impl_->mutex);
+    if (auto& jsonl = impl_->persistence) {
+        return impl_->record_persisted(
+                jsonl->append_label_change(std::move(parent_id), std::move(target_id), std::move(label)));
+    }
+    impl_->record(
+            EntrySerializer::new_label_change_entry(std::move(parent_id), std::move(target_id), std::move(label)));
+    return {};
 }
 
 support::ExpectedVoid SessionStore::append_compaction(
     std::optional<std::string> parent_id,
     CompactionEntryValue value) {
-    return impl_->append_via(
-            [&](auto& active) { return active.append_compaction(std::move(parent_id), std::move(value)); });
+    std::lock_guard lock(impl_->mutex);
+    if (auto& jsonl = impl_->persistence) {
+        return impl_->record_persisted(jsonl->append_compaction(std::move(parent_id), std::move(value)));
+    }
+    impl_->record(EntrySerializer::new_compaction_entry(std::move(parent_id), std::move(value)));
+    return {};
 }
 
 support::ExpectedVoid SessionStore::append_branch_summary(std::optional<std::string> parent_id,
@@ -153,28 +164,44 @@ support::ExpectedVoid SessionStore::append_branch_summary(std::optional<std::str
         std::optional<support::JsonValue> details,
         std::optional<bool> from_hook,
         std::optional<ai::Usage> usage) {
-    return impl_->append_via([&](auto& active) {
-        return active.append_branch_summary(std::move(parent_id),
+    std::lock_guard lock(impl_->mutex);
+    if (auto& jsonl = impl_->persistence) {
+        return impl_->record_persisted(jsonl->append_branch_summary(std::move(parent_id),
                 std::move(from_id),
                 std::move(summary),
                 std::move(details),
                 from_hook,
-                std::move(usage));
-    });
+                std::move(usage)));
+    }
+    impl_->record(EntrySerializer::new_branch_summary_entry(std::move(parent_id),
+            std::move(from_id),
+            std::move(summary),
+            std::move(details),
+            from_hook,
+            std::move(usage)));
+    return {};
 }
 
 support::ExpectedVoid SessionStore::append_session_info(
     std::optional<std::string> parent_id,
     std::string name) {
-    return impl_->append_via(
-            [&](auto& active) { return active.append_session_info(std::move(parent_id), std::move(name)); });
+    std::lock_guard lock(impl_->mutex);
+    if (auto& jsonl = impl_->persistence) {
+        return impl_->record_persisted(jsonl->append_session_info(std::move(parent_id), std::move(name)));
+    }
+    impl_->record(EntrySerializer::new_session_info_entry(std::move(parent_id), std::move(name)));
+    return {};
 }
 
 support::ExpectedVoid SessionStore::append_leaf(
     std::optional<std::string> parent_id,
     std::optional<std::string> target_id) {
-    return impl_->append_via(
-            [&](auto& active) { return active.append_leaf(std::move(parent_id), std::move(target_id)); });
+    std::lock_guard lock(impl_->mutex);
+    if (auto& jsonl = impl_->persistence) {
+        return impl_->record_persisted(jsonl->append_leaf(std::move(parent_id), std::move(target_id)));
+    }
+    impl_->record(EntrySerializer::new_leaf_entry(std::move(parent_id), std::move(target_id)));
+    return {};
 }
 
 // --- Live tree queries (snapshots taken under the append lock) ---
@@ -249,8 +276,8 @@ std::optional<std::string> SessionStore::get_session_name() const {
 std::optional<std::filesystem::path> SessionStore::path() const {
     // The path is fixed at construction, so this read does not need the
     // append lock.
-    if (const auto* jsonl = std::get_if<JsonlSessionStore>(&impl_->store)) {
-        return jsonl->path();
+    if (impl_->persistence) {
+        return impl_->persistence->path();
     }
     return std::nullopt;
 }
