@@ -1,0 +1,64 @@
+ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ctrl+o more         
+ Press ctrl+o to show full startup help and loaded resources.                   
+                                                                                
+ render every tool block in one view                                            
+                                                                                
+                                                                                
+ One turn, five tool blocks.                                                    
+                                                                                
+ read notes.txt:5-7                                                             
+                                                                                
+                                                                                
+ $ ls -la                                                                       
+                                                                                
+ ... (7 earlier lines, ctrl+o to expand)                                        
+ bash 8                                                                         
+ bash 9                                                                         
+ bash 10                                                                        
+ bash 11                                                                        
+ bash 12                                                                        
+                                                                                
+                                                                                
+ write generated.txt                                                            
+                                                                                
+ gen 1                                                                          
+ gen 2                                                                          
+ gen 3                                                                          
+ gen 4                                                                          
+ gen 5                                                                          
+ gen 6                                                                          
+ gen 7                                                                          
+ gen 8                                                                          
+ gen 9                                                                          
+ gen 10                                                                         
+ ... (4 more lines, 14 total, ctrl+o to expand)                                 
+                                                                                
+                                                                                
+ edit notes.txt                                                                 
+                                                                                
+ -1 alpha                                                                       
+ +1 beta                                                                        
+                                                                                
+                                                                                
+ probe                                                                          
+                                                                                
+ {                                                                              
+   "limit": 2,                                                                  
+   "query": "alpha"                                                             
+ }                                                                              
+ probe answered in one line                                                     
+                                                                                
+
+
+
+
+
+
+
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+/tmp/cpp-harness-rendering-tool-blocks                                          
+0.1%/128k (auto)                                                      fake-model

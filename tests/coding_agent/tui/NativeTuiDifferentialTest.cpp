@@ -438,8 +438,15 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
             drain_ready(io, std::chrono::milliseconds{20});
             snapshots.push_back(snapshot(terminal, output_offset));
             output_offset = output_size(terminal);
-            CHECK(tests::pump_until(io, [&] { return screen_contains(terminal, "alpha"); }));
             CHECK(tests::pump_until(io, [&] { return screen_contains(terminal, "deterministic tool answer"); }));
+            // pi `read.ts:111-115` returns the empty string for a collapsed
+            // successful read result, so neither runtime shows the file body:
+            // the checked-in pi capture for this scenario carries `read
+            // notes.txt` and no `alpha` either. The assertion is on the title
+            // being present and the body being absent, not on a body that only
+            // pike used to draw.
+            CHECK(screen_contains(terminal, "read notes.txt"));
+            CHECK_FALSE(screen_contains(terminal, "alpha"));
             CHECK_FALSE(screen_contains(terminal, "ENOENT"));
         } else if (input.ends_with("\r") &&
                    (scenario == "user-message" || scenario == "status-footer" || scenario == "scrollback")) {

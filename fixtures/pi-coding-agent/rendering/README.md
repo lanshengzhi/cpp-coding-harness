@@ -13,6 +13,19 @@ G6 record, #394), so these screens are the committed byte-level gate.
   thinking/text, the tool-execution block for a `read` call, the
   bash-execution block (`$ ls -la`), a custom `[notice]` message, and a
   `[branch]` branch-summary message.
+- `tool-blocks.txt` — the four tool renderers and the registry fallback in
+  one session view at 80×64 (#828): a collapsed `read` whose title carries
+  pi's `offset`/`limit` range and whose body renders nothing, a `bash` folded
+  to its last five visual lines, a `write` whose argument-derived preview is
+  folded at ten lines, an `edit` rendering `details.diff`, and one tool with
+  no registered renderer taking the fallback's bold-name, blank-line,
+  two-space-indented argument JSON. This is the composition evidence: each
+  renderer is proven in its own component-level case, and this screen shows
+  they compose without interfering. The screen is plain cell text, so the case
+  additionally asserts the styled cells (the `toolTitle` bold title, the
+  `toolOutput` bodies, the `muted` fold-hint clauses, and the two distinct
+  `toolDiffRemoved`/`toolDiffAdded` rows) — the wrong rendering this golden
+  cannot express is a wrong colour on an otherwise identical screen.
 - `model-switch.txt` — a key flow at 72×24: Ctrl+L opens the model selector,
   Down+Enter switches the session model to `beta-1`, with the `Model: beta-1`
   status and the footer's `(beta) beta-1` model.

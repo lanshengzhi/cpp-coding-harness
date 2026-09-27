@@ -54,6 +54,12 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/ExternalEditorTest.cpp
         tests/coding_agent/tui/ChatContainerTest.cpp
         tests/coding_agent/tui/TerminationSignalsTest.cpp
+        tests/coding_agent/tui/tool_renderers/BashRendererTest.cpp
+        tests/coding_agent/tui/tool_renderers/EditRendererTest.cpp
+        tests/coding_agent/tui/tool_renderers/ReadRendererTest.cpp
+        tests/coding_agent/tui/tool_renderers/ToolRendererFallbackTest.cpp
+        tests/coding_agent/tui/tool_renderers/ToolRendererSeamTest.cpp
+        tests/coding_agent/tui/tool_renderers/WriteRendererTest.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
         tests/coding_agent/PiImportTest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp

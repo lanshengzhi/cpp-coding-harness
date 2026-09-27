@@ -171,6 +171,10 @@ _Avoid_: Tool Execution, multiple Agent Turns
 The execution lifecycle of one tool call from admission through its Tool Call Outcome.
 _Avoid_: Tool Call Batch, Tool Call Outcome
 
+**Tool Renderer**:
+The application-layer presentation of one tool's call and result on the terminal: a render-call/render-result pair keyed by tool name in the interactive TUI, never a property of the headless Tool definition.
+_Avoid_: Tool Execution, tool-name if-else inside the tool-execution component
+
 **Agent Stream Flow**:
 The Agent's consumption of one model stream within an Agent Turn: the per-turn stream request options, the single terminal outcome contract (success or classified error with assistant stop state), and structured error delivery back to the turn machine.
 _Avoid_: Provider request, per-adapter option struct, second exception hierarchy
