@@ -1,5 +1,7 @@
 #include "RenderUtils.hpp"
 
+#include "agent/harness/OutputLimiter.hpp"
+
 #include <cch/tui/Text.hpp>
 
 #include <array>
@@ -13,17 +15,8 @@
 namespace cch::coding_agent::tui {
 
 std::vector<std::string> split_lines(std::string_view text) {
-    std::vector<std::string> lines;
-    std::size_t start = 0;
-    while (true) {
-        const auto end = text.find('\n', start);
-        if (end == std::string_view::npos) {
-            lines.emplace_back(text.substr(start));
-            return lines;
-        }
-        lines.emplace_back(text.substr(start, end - start));
-        start = end + 1;
-    }
+    const auto views = harness::split_lines(text);
+    return {views.begin(), views.end()};
 }
 
 std::string bold_foreground(const LiveTheme& theme, ThemeToken token, std::string_view text) {
@@ -44,6 +37,21 @@ std::optional<std::string_view> string_argument(
         return std::nullopt;
     }
     return std::string_view{};
+}
+
+std::optional<TruncationDetails> parse_truncation_details(const support::JsonValue* details) {
+    if (details == nullptr) return std::nullopt;
+    const auto* truncation = json_member(*details, "truncation");
+    if (truncation == nullptr) return std::nullopt;
+    return TruncationDetails{
+            .truncated = json_boolean(*truncation, "truncated"),
+            .truncated_by_lines = json_string(*truncation, "truncatedBy") == "lines",
+            .first_line_exceeds_limit = json_boolean(*truncation, "firstLineExceedsLimit"),
+            .output_lines = json_number(*truncation, "outputLines").value_or(0.0),
+            .total_lines = json_number(*truncation, "totalLines").value_or(0.0),
+            .max_lines = json_number(*truncation, "maxLines").value_or(TruncationDetails{}.max_lines),
+            .max_bytes = json_number(*truncation, "maxBytes").value_or(TruncationDetails{}.max_bytes),
+    };
 }
 
 const support::JsonValue* json_member(const support::JsonValue& parent, std::string_view key) {
