@@ -202,6 +202,20 @@ history.
 
 Each of these is decided out, with its reason, and none carries a placeholder surface.
 
+- **Progressive rendering of streamed arguments.** pi parses the **partial** argument object, so a
+  title reveals its path as soon as that value closes and a `write` preview grows as the content
+  arrives. `ToolExecutionComponent` parses the accumulated argument text with an **exact** JSON
+  parse, so a half-streamed object is an empty object: every title shows `...` for the whole stream
+  and the `write` preview appears in one piece when the arguments close. The consequence is
+  visible — less information during the streaming window, not a different settled screen.
+
+  This is a deliberate narrowing rather than an oversight. The `partial-json` port is private to
+  `cch_ai` (`src/ai/api/PartialJson.hpp`), and reaching it from the frontend means widening that
+  owner's interface, which the Product Architecture Contract makes an architecture-visible change
+  rather than a detail of this alignment. The alternative — rendering a growing JSON fragment — is
+  the behaviour this change exists to remove, so the two options are a narrower seam or a leaked
+  fragment, and the narrower seam is the one that keeps a title from showing malformed JSON.
+  Closing it is its own proposal, with its own boundary review.
 - **Syntax highlighting for `read` results and `write` previews.** The repository has no
   highlighting implementation; adopting one means a new dependency. Recorded as an Intentional
   Divergence, raisable as its own proposal.
@@ -246,6 +260,15 @@ Each of these is decided out, with its reason, and none carries a placeholder su
 - **The old agent-layer truncation assertions are prior art, not a contract.** Tests that assert
   `[output truncated]`, `[Output truncated. …]`, or the `exit_code=` prefix were pinning the old
   model contract and are updated with it.
+- **A label selection cannot stand in for the unfiltered suite.** Three checks in this change were
+  individually green and jointly wrong: `cch_native_tui_dual_runtime_differential` returned a skip
+  code rather than a result from a worktree, because its adapter resolves the frozen pi checkout
+  outside the source tree; `async read_file tool uses Glaze typed args` carries no `harness` label,
+  so no `-L` selection reached it; and a shared fold helper's second overload had no caller, so no
+  test could execute it. Each is a check that cannot distinguish the property from the check's own
+  absence, which is the failure the acceptance discipline in `docs/agents/validation.md` is
+  written against. The unfiltered suite caught two of the three and is the delivery tier for that
+  reason.
 
 ## References
 
