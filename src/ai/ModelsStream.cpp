@@ -149,28 +149,11 @@ struct PreparedProviderRequest {
     ProviderStreamOptions options{};
 };
 
-/// Per-API session headers for cache reuse: Codex clamps the prompt cache
-/// key and aliases it as session-id; openai-responses may suppress its
-/// session_id affinity field while retaining x-client-request-id.
-void apply_session_headers(RequestHeaders& headers, const Model& model, const std::string& session_id) {
-    if (model.api == "openai-codex-responses") {
-        const auto codex_session_id = detail::clamp_openai_prompt_cache_key(session_id);
-        set_header(headers, "session-id", codex_session_id);
-        set_header(headers, "x-client-request-id", codex_session_id);
-    } else if (model.api == "openai-responses") {
-        const auto* compat = model.compat ? std::get_if<OpenAIResponsesCompat>(&*model.compat) : nullptr;
-        const bool suppress_session_id =
-                compat != nullptr &&
-                compat->session_affinity_format == OpenAIResponsesSessionAffinityFormat::OpenAINoSession;
-        if (!suppress_session_id) {
-            set_header(headers, "session_id", session_id);
-        }
-        set_header(headers, "x-client-request-id", session_id);
-    }
-}
-
-[[nodiscard]] support::Expected<PreparedProviderRequest> prepare_provider_request(
-        Model model, const AiContext& context, AuthResult auth_result, SimpleStreamOptions options) {
+[[nodiscard]] support::Expected<PreparedProviderRequest> prepare_provider_request(Provider& provider,
+        Model model,
+        const AiContext& context,
+        AuthResult auth_result,
+        SimpleStreamOptions options) {
     if (auth_result.auth.base_url) {
         model.base_url = *auth_result.auth.base_url;
     }
@@ -185,7 +168,7 @@ void apply_session_headers(RequestHeaders& headers, const Model& model, const st
 
     auto request_headers = request_headers_from_auth(auth_result.auth);
     if (request_session_id) {
-        apply_session_headers(request_headers, model, *request_session_id);
+        provider.prepare_session_affinity_headers(model, *request_session_id, request_headers);
     }
     merge_headers(request_headers, options.headers);
     auto transformed_headers = transform_request_headers(std::move(request_headers), options.transform_headers);
@@ -302,7 +285,7 @@ void apply_session_headers(RequestHeaders& headers, const Model& model, const st
         co_return terminal;
     }
 
-    auto prepared = prepare_provider_request(model_value, context, std::move(**auth), std::move(options));
+    auto prepared = prepare_provider_request(*selected, model_value, context, std::move(**auth), std::move(options));
     if (!prepared) {
         CCH_TRY(terminal, co_await terminal_failure(model_value, prepared.error(), sink));
         co_return terminal;

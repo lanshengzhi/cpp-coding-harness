@@ -2,6 +2,7 @@
 
 #include "MessageConversion.hpp"
 #include "ai/Headers.hpp"
+#include "ai/SimpleOptions.hpp"
 #include "ai/Timestamps.hpp"
 #include "ai/api/PartialJson.hpp"
 #include "ai/api/ResponsesEventProcessor.hpp"
@@ -284,6 +285,13 @@ OpenAICodexResponsesAdapter::OpenAICodexResponsesAdapter(
 OpenAICodexResponsesAdapter::OpenAICodexResponsesAdapter(OpenAICodexResponsesAdapter&&) noexcept = default;
 OpenAICodexResponsesAdapter& OpenAICodexResponsesAdapter::operator=(OpenAICodexResponsesAdapter&&) noexcept = default;
 OpenAICodexResponsesAdapter::~OpenAICodexResponsesAdapter() = default;
+
+void OpenAICodexResponsesAdapter::prepare_session_affinity_headers(
+        std::string_view session_id, RequestHeaders& headers) const {
+    auto clamped_session_id = cch::ai::detail::clamp_openai_prompt_cache_key(session_id);
+    set_header(headers, "session-id", clamped_session_id);
+    set_header(headers, "x-client-request-id", std::move(clamped_session_id));
+}
 
 boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponsesAdapter::stream(
     const Model& model,

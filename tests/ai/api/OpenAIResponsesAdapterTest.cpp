@@ -305,13 +305,21 @@ TEST_CASE("DeepSeek Responses preserves post-merge transformed headers",
     const auto model = deepseek_model();
     auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
     REQUIRE(models);
+    bool saw_session_affinity = false;
     ai::SimpleStreamOptions options;
     options.api_key = "dummy-key";
-    options.transform_headers = [](ai::RequestHeaders headers)
-        -> support::Expected<ai::RequestHeaders> {
+    options.session_id = "session-1";
+    options.transform_headers = [&saw_session_affinity](
+                                        ai::RequestHeaders headers) -> support::Expected<ai::RequestHeaders> {
+        const auto session = headers.find("session_id");
+        const auto request = headers.find("x-client-request-id");
+        saw_session_affinity = session != headers.end() && session->second == "session-1" && request != headers.end() &&
+                               request->second == "session-1";
         headers.insert_or_assign("Authorization", "Custom dummy-auth");
         headers.insert_or_assign("Accept", "application/x-test-sse");
         headers.insert_or_assign("Content-Type", "application/x-test-json");
+        headers.insert_or_assign("session_id", "custom-session");
+        headers.insert_or_assign("x-client-request-id", "custom-request");
         return headers;
     };
 
@@ -320,10 +328,12 @@ TEST_CASE("DeepSeek Responses preserves post-merge transformed headers",
     REQUIRE(run.result);
     REQUIRE(transport->requests.size() == 1);
     const auto& headers = transport->requests.front().headers;
+    CHECK(saw_session_affinity);
     CHECK(headers.at("Authorization") == "Custom dummy-auth");
     CHECK(headers.at("Accept") == "application/x-test-sse");
     CHECK(headers.at("Content-Type") == "application/x-test-json");
-
+    CHECK(headers.at("session_id") == "custom-session");
+    CHECK(headers.at("x-client-request-id") == "custom-request");
     auto deletion_transport = std::make_shared<ScriptedTransport>();
     deletion_transport->attempts.push_back(TransportAttempt{
         .chunks = {terminal_sse("response.completed", "completed")},
@@ -333,11 +343,15 @@ TEST_CASE("DeepSeek Responses preserves post-merge transformed headers",
     REQUIRE(deletion_models);
     ai::SimpleStreamOptions deletion_options;
     deletion_options.api_key = "dummy-key";
+    deletion_options.session_id = "session-1";
+
     deletion_options.transform_headers = [](ai::RequestHeaders transformed)
         -> support::Expected<ai::RequestHeaders> {
         transformed.insert_or_assign("Authorization", std::nullopt);
         transformed.insert_or_assign("Accept", std::nullopt);
         transformed.insert_or_assign("Content-Type", std::nullopt);
+        transformed.insert_or_assign("session_id", std::nullopt);
+        transformed.insert_or_assign("x-client-request-id", std::nullopt);
         return transformed;
     };
 
@@ -350,6 +364,8 @@ TEST_CASE("DeepSeek Responses preserves post-merge transformed headers",
     CHECK_FALSE(deleted_headers.contains("Authorization"));
     CHECK_FALSE(deleted_headers.contains("Accept"));
     CHECK_FALSE(deleted_headers.contains("Content-Type"));
+    CHECK_FALSE(deleted_headers.contains("session_id"));
+    CHECK_FALSE(deleted_headers.contains("x-client-request-id"));
 }
 
 TEST_CASE("DeepSeek Responses partials start pending and flip to stop at final_answer",

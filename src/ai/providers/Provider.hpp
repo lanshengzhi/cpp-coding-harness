@@ -53,6 +53,9 @@ public:
     [[nodiscard]] virtual std::string_view name() const noexcept = 0;
     [[nodiscard]] virtual ProviderAuth& auth() noexcept = 0;
     [[nodiscard]] virtual std::vector<Model> models() const = 0;
+    /// Adds API-specific session-affinity headers before caller header transforms.
+    virtual void prepare_session_affinity_headers(
+            const Model& model, std::string_view session_id, RequestHeaders& headers) const = 0;
 
     /// One move-only, single-consumption model stream (ADR 0040 / #455).
     ///

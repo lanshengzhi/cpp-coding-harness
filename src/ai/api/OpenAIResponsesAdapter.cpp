@@ -156,6 +156,17 @@ OpenAIResponsesAdapter::OpenAIResponsesAdapter(OpenAIResponsesAdapter&&) noexcep
 OpenAIResponsesAdapter& OpenAIResponsesAdapter::operator=(OpenAIResponsesAdapter&&) noexcept = default;
 OpenAIResponsesAdapter::~OpenAIResponsesAdapter() = default;
 
+void OpenAIResponsesAdapter::prepare_session_affinity_headers(
+        const Model& model, std::string_view session_id, RequestHeaders& headers) const {
+    const auto* compat = model.compat ? std::get_if<OpenAIResponsesCompat>(&*model.compat) : nullptr;
+    const bool suppress_session_id = compat != nullptr && compat->session_affinity_format ==
+                                                                  OpenAIResponsesSessionAffinityFormat::OpenAINoSession;
+    if (!suppress_session_id) {
+        set_header(headers, "session_id", std::string{session_id});
+    }
+    set_header(headers, "x-client-request-id", std::string{session_id});
+}
+
 boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAIResponsesAdapter::stream(
     const Model& model,
     const AiContext& context,

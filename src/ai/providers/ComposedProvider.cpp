@@ -48,6 +48,14 @@ public:
     [[nodiscard]] std::string_view name() const noexcept override { return name_; }
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return models_; }
+    void prepare_session_affinity_headers(
+            const ai::Model& model, std::string_view session_id, ai::RequestHeaders& headers) const override {
+        if (model.api == "openai-codex-responses") {
+            codex_adapter_.prepare_session_affinity_headers(session_id, headers);
+        } else if (model.api == "openai-responses") {
+            responses_adapter_.prepare_session_affinity_headers(model, session_id, headers);
+        }
+    }
 
     [[nodiscard]] ai::ModelStream stream(
         ai::Model model,

@@ -303,6 +303,40 @@ TEST_CASE("Codex streams the frozen WS request and event sequence through Models
     CHECK(sent.front() == expected_request_bytes);
     CHECK(harness.http->requests.empty());
 }
+TEST_CASE("Codex affinity defaults reach header transformation and honor overrides",
+        "[ai][provider][codex][issue339][spec]") {
+    auto harness = make_codex_harness(codex_model());
+    auto session = std::make_shared<ScriptedWebSocket::Session>();
+    session->on_send = [](ScriptedWebSocket& socket, std::string_view) {
+        socket.session()->frames.push_back(simple_terminal());
+    };
+    harness.ws->connect_scripts.push_back(ScriptedWebSocketTransport::ConnectScript{.session = session});
+
+    const auto session_id = std::string(65, 's');
+    const auto clamped_session_id = std::string(64, 's');
+    bool saw_session_headers = false;
+    ai::SimpleStreamOptions options;
+    options.api_key = std::string{kCodexToken};
+    options.session_id = session_id;
+    options.transform_headers = [&saw_session_headers, &clamped_session_id](
+                                        ai::RequestHeaders headers) -> support::Expected<ai::RequestHeaders> {
+        const auto session_header = headers.find("session-id");
+        const auto request_header = headers.find("x-client-request-id");
+        saw_session_headers = session_header != headers.end() && session_header->second == clamped_session_id &&
+                              request_header != headers.end() && request_header->second == clamped_session_id;
+        headers.insert_or_assign("session-id", "custom-session");
+        headers.insert_or_assign("x-client-request-id", std::nullopt);
+        return headers;
+    };
+    const auto run = run_models(*harness.models, codex_model(), user_context("Say hello"), std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(saw_session_headers);
+    REQUIRE(harness.ws->requests.size() == 1);
+    const auto& headers = harness.ws->requests.front().headers;
+    CHECK(headers.at("session-id") == "custom-session");
+    CHECK_FALSE(headers.contains("x-client-request-id"));
+}
 
 TEST_CASE("Codex emits a string user message as one input_text and omits an empty block array (WS)",
         "[ai][provider][codex][issue366][compat-pi]") {

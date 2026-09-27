@@ -5,6 +5,7 @@
 
 #include <memory>
 
+#include <string_view>
 namespace cch::ai::api {
 
 /// Private protocol executor for the frozen `openai-responses` surface.
@@ -22,6 +23,10 @@ public:
     ~OpenAIResponsesAdapter();
     OpenAIResponsesAdapter(const OpenAIResponsesAdapter&) = delete;
     OpenAIResponsesAdapter& operator=(const OpenAIResponsesAdapter&) = delete;
+
+    /// Adds Responses session-affinity headers before caller request header transforms.
+    void prepare_session_affinity_headers(
+            const Model& model, std::string_view session_id, RequestHeaders& headers) const;
 
     /// Borrowed model and context must outlive the returned awaitable.
     [[nodiscard]] boost::asio::awaitable<support::Expected<AssistantMessage>> stream(

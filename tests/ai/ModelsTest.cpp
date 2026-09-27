@@ -145,6 +145,7 @@ public:
     [[nodiscard]] std::vector<ai::Model> models() const override {
         return catalog_available ? catalog : std::vector<ai::Model>{};
     }
+    void prepare_session_affinity_headers(const ai::Model&, std::string_view, ai::RequestHeaders&) const override {}
 
     [[nodiscard]] ai::ModelStream stream(
         ai::Model model,
@@ -193,6 +194,7 @@ public:
     [[nodiscard]] std::string_view name() const noexcept override { return "unsafe-terminal"; }
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return {}; }
+    void prepare_session_affinity_headers(const ai::Model&, std::string_view, ai::RequestHeaders&) const override {}
 
     [[nodiscard]] ai::ModelStream stream(
         ai::Model model,
@@ -231,6 +233,7 @@ public:
     [[nodiscard]] std::string_view name() const noexcept override { return "duplicate"; }
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return {}; }
+    void prepare_session_affinity_headers(const ai::Model&, std::string_view, ai::RequestHeaders&) const override {}
 
     [[nodiscard]] ai::ModelStream stream(
         ai::Model model,
@@ -820,7 +823,7 @@ TEST_CASE(
     options.transform_headers = [&transform_count](ai::RequestHeaders headers)
         -> support::Expected<ai::RequestHeaders> {
         ++transform_count;
-        CHECK(headers.at("session_id") == "session-1");
+        CHECK(headers.at("x-auth") == "request");
         headers.insert_or_assign("X-Transformed", "yes");
         return headers;
     };
@@ -858,48 +861,6 @@ TEST_CASE(
     CHECK(prepared.auth.headers.at("X-Model") == "model");
     CHECK(prepared.auth.headers.at("X-Transformed") == "yes");
     CHECK_FALSE(prepared.auth.headers.contains("X-Delete"));
-    CHECK(prepared.auth.headers.at("x-client-request-id") == "session-1");
-}
-
-TEST_CASE("Models prepares Codex session affinity headers", "[ai][models][issue339][spec]") {
-    auto credentials = std::make_shared<MemoryCredentialStore>();
-    auto auth_context = std::make_shared<FakeAuthContext>();
-    ai::ApiKeyAuth api_key;
-    api_key.name = "codex";
-    api_key.resolve =
-            [](const ai::AuthContext&,
-                    std::optional<ai::ApiKeyCredential>) -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
-        return tests::ready_result<std::optional<ai::AuthResult>>(ai::AuthResult{
-                .auth = ai::ModelAuth{.api_key = "dummy-codex"},
-                .source = "codex",
-        });
-    };
-    auto models = make_models(credentials, auth_context);
-    auto provider = std::make_shared<RecordingProvider>(
-        "openai-codex", ai::ProviderAuth{.api_key = std::move(api_key)});
-    REQUIRE(install_provider(models, provider));
-    auto model = tests::make_model(
-        "gpt-5.5", "openai-codex", "openai-codex-responses");
-    ai::SimpleStreamOptions options;
-    options.session_id = std::string(65, 's');
-    std::vector<ai::AssistantStreamEvent> events;
-
-    auto result = run_async_result(
-        models->stream(
-            std::move(model),
-            ai::AiContext{},
-            std::move(options)).run(
-        [&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
-            events.push_back(event);
-            return {};
-        }));
-
-    REQUIRE(result);
-    REQUIRE(provider->seen_options.size() == 1);
-    const auto& headers = provider->seen_options.front().auth.headers;
-    CHECK(headers.at("session-id") == std::string(64, 's'));
-    CHECK(headers.at("x-client-request-id") == std::string(64, 's'));
-    CHECK(provider->seen_options.front().session_id == std::string(65, 's'));
 }
 
 TEST_CASE("Models accepts header authentication and suppresses none-retention affinity",

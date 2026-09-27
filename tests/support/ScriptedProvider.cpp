@@ -262,6 +262,7 @@ public:
     [[nodiscard]] std::string_view name() const noexcept override { return name_; }
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return models_; }
+    void prepare_session_affinity_headers(const ai::Model&, std::string_view, ai::RequestHeaders&) const override {}
 
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext context, ai::ProviderStreamOptions options) override {
