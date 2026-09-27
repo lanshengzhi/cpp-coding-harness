@@ -543,10 +543,13 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
         }
         // The execution error carries no seconds (pi recovers them from its
         // `timeout:<secs>` sentinel); the requested timeout is the only source.
-        const std::string status =
-                error.code == harness::ExecutionErrorCode::Aborted
-                        ? "Command aborted"
-                        : std::format("Command timed out after {} seconds", parsed->timeout.value_or(0));
+        // The Shell capability reads a zero timeout as none, so a Timeout
+        // implies an explicit `timeout` argument; the fallback form exists so a
+        // fabricated "0 seconds" can never print.
+        const std::string status = error.code == harness::ExecutionErrorCode::Aborted ? "Command aborted"
+                                   : parsed->timeout.has_value()
+                                           ? std::format("Command timed out after {} seconds", *parsed->timeout)
+                                           : std::string{"Command timed out"};
         co_return error_result(append_status(formatted->text, status));
     }
 

@@ -35,13 +35,6 @@ constexpr std::array<std::string_view, 5> kCompactResourceFileNames{
 /// collapsed non-error result already returned the empty string below it.
 constexpr std::size_t kCollapsedPreviewLines = 10;
 
-/// pi `truncate.ts:11-12` `DEFAULT_MAX_LINES` / `DEFAULT_MAX_BYTES`, carried so
-/// a truncation object that omits them still renders pi's fallback text. The
-/// size formatting itself is pi's `formatSize`, reused as
-/// `harness::format_output_size` rather than restated here.
-constexpr double kDefaultMaxLines = 2000.0;
-constexpr double kDefaultMaxBytes = 50.0 * 1024.0;
-
 /// pi `read.ts:28-33` `formatReadLineRange`: the warning-coloured `:start-end`
 /// suffix, emitted only when `offset` or `limit` is present. A read with
 /// neither gets no suffix at all — not `:1`. Visible forms are `:1`, `:5`, and
@@ -144,28 +137,22 @@ struct CompactReadClassification {
 /// at all, which is also what keeps an old session file — whose marker is baked
 /// into the result text — rendering as plain text with no migration.
 [[nodiscard]] std::optional<std::string> truncation_warning(const support::JsonValue* details) {
-    if (details == nullptr) return std::nullopt;
-    // Every read below goes through the `JsonValue` the details already own, so
-    // the pointer `json_member` returns stays valid for the whole function.
-    const auto* truncation = json_member(*details, "truncation");
-    if (truncation == nullptr) return std::nullopt;
-    if (!json_boolean(*truncation, "truncated")) return std::nullopt;
+    const auto truncation = parse_truncation_details(details);
+    if (!truncation.has_value() || !truncation->truncated) return std::nullopt;
 
-    if (json_boolean(*truncation, "firstLineExceedsLimit")) {
+    if (truncation->first_line_exceeds_limit) {
         return std::format("[First line exceeds {} limit]",
-                harness::format_output_size(
-                        static_cast<std::size_t>(json_number(*truncation, "maxBytes").value_or(kDefaultMaxBytes))));
+                harness::format_output_size(static_cast<std::size_t>(truncation->max_bytes)));
     }
-    if (json_string(*truncation, "truncatedBy") == "lines") {
+    if (truncation->truncated_by_lines) {
         return std::format("[Truncated: showing {} of {} lines ({} line limit)]",
-                json_number(*truncation, "outputLines").value_or(0.0),
-                json_number(*truncation, "totalLines").value_or(0.0),
-                static_cast<std::size_t>(json_number(*truncation, "maxLines").value_or(kDefaultMaxLines)));
+                truncation->output_lines,
+                truncation->total_lines,
+                static_cast<std::size_t>(truncation->max_lines));
     }
     return std::format("[Truncated: {} lines shown ({} limit)]",
-            json_number(*truncation, "outputLines").value_or(0.0),
-            harness::format_output_size(
-                    static_cast<std::size_t>(json_number(*truncation, "maxBytes").value_or(kDefaultMaxBytes))));
+            truncation->output_lines,
+            harness::format_output_size(static_cast<std::size_t>(truncation->max_bytes)));
 }
 
 } // namespace

@@ -14,6 +14,9 @@
 
 namespace cch::coding_agent::tui {
 
+/// pi `String.prototype.split("\n")`, as an owning per-line copy of
+/// `harness::split_lines`: the renderers transform and store the lines, which
+/// the harness's views cannot do.
 [[nodiscard]] std::vector<std::string> split_lines(std::string_view text);
 
 /// pi `theme.bold` under a foreground token: the tool-title bold every call
@@ -30,6 +33,26 @@ namespace cch::coding_agent::tui {
 
 /// pi `render-utils.ts:31` `replaceTabs`: a tab renders as three spaces.
 [[nodiscard]] std::string replace_tabs(std::string_view text);
+
+/// pi `TruncationResult` (`core/tools/truncate.ts:15-38`) as `details.truncation`
+/// carries it: the fields the bash warning line and the read truncation warning
+/// both parse. Numbers stay doubles (JSON numbers format integral values
+/// identically either way); the `max*` fields carry pi's `?? DEFAULT_MAX_*`
+/// fallbacks (`truncate.ts:11-12`), so a truncation object that omits them still
+/// renders pi's fallback text.
+struct TruncationDetails {
+    bool truncated{false};
+    bool truncated_by_lines{false};
+    bool first_line_exceeds_limit{false};
+    double output_lines{0.0};
+    double total_lines{0.0};
+    double max_lines{2000.0};
+    double max_bytes{50.0 * 1024.0};
+};
+
+/// Reads `details.truncation` into `TruncationDetails`, or nullopt when the
+/// details or their `truncation` member is absent.
+[[nodiscard]] std::optional<TruncationDetails> parse_truncation_details(const support::JsonValue* details);
 
 /// pi's optional-chained member read over one JSON object: the value at `key`,
 /// or nullptr when `parent` is not an object or carries no such key. A key

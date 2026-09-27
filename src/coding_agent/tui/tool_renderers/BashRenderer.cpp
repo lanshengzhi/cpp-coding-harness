@@ -24,20 +24,6 @@ namespace {
 /// five **visual** lines of the output.
 constexpr std::size_t kPreviewLines = 5;
 
-/// pi `truncate.ts:12` `DEFAULT_MAX_BYTES`, the limit a byte-truncated result
-/// reports when it carries no limit of its own.
-constexpr std::size_t kDefaultMaxBytes = 50 * 1024;
-
-/// pi `truncationResult` as `details.truncation` carries it: the fields the
-/// warning line and the footer stripping read.
-struct TruncationFacts {
-    bool truncated{false};
-    bool truncated_by_lines{false};
-    std::size_t output_lines{0};
-    std::size_t total_lines{0};
-    std::size_t max_bytes{kDefaultMaxBytes};
-};
-
 /// pi `bash.ts:45-46`: `const timeout = args?.timeout` and
 /// `timeout ? ... : ""`, so an absent, null, or zero timeout prints no suffix
 /// at all.
@@ -54,20 +40,6 @@ struct TruncationFacts {
     const auto path = json_string(*details, "fullOutputPath");
     if (!path || path->empty()) return std::nullopt;
     return std::string{*path};
-}
-
-[[nodiscard]] std::optional<TruncationFacts> truncation_facts(const support::JsonValue* details) {
-    if (details == nullptr) return std::nullopt;
-    const auto* value = json_member(*details, "truncation");
-    if (value == nullptr) return std::nullopt;
-    return TruncationFacts{
-            .truncated = json_boolean(*value, "truncated"),
-            .truncated_by_lines = json_string(*value, "truncatedBy") == "lines",
-            .output_lines = static_cast<std::size_t>(json_number(*value, "outputLines").value_or(0.0)),
-            .total_lines = static_cast<std::size_t>(json_number(*value, "totalLines").value_or(0.0)),
-            .max_bytes = static_cast<std::size_t>(
-                    json_number(*value, "maxBytes").value_or(static_cast<double>(kDefaultMaxBytes))),
-    };
 }
 
 /// JavaScript's `trim` whitespace set, which pi's `.trim()` removes on both
@@ -95,7 +67,7 @@ constexpr std::string_view kWhitespace{" \t\n\r\f\v"};
 /// from eating unrelated bracketed text.
 void strip_spill_footer(std::string& output,
         bool is_partial,
-        const std::optional<TruncationFacts>& facts,
+        const std::optional<TruncationDetails>& facts,
         const std::optional<std::string>& path) {
     if (is_partial || !facts.has_value() || !facts->truncated || !path.has_value()) return;
     if (output.empty() || output.back() != ']') return;
@@ -180,7 +152,7 @@ void strip_spill_footer(std::string& output,
 /// fullOutputPath`, so a path with no truncation still warns, and the path is
 /// verbatim inside the brackets: never shortened, hyperlinked, or accented.
 [[nodiscard]] std::optional<std::string> warning_line(const ToolRenderContext& context,
-        const std::optional<TruncationFacts>& facts,
+        const std::optional<TruncationDetails>& facts,
         const std::optional<std::string>& path) {
     const auto truncated = facts.has_value() && facts->truncated;
     if (!truncated && !path.has_value()) return std::nullopt;
@@ -193,7 +165,7 @@ void strip_spill_footer(std::string& output,
         } else {
             warnings.push_back(std::format("Truncated: {} lines shown ({} limit)",
                     facts->output_lines,
-                    harness::format_output_size(facts->max_bytes)));
+                    harness::format_output_size(static_cast<std::size_t>(facts->max_bytes))));
         }
     }
     const auto joined = [&warnings] {
@@ -227,7 +199,7 @@ ToolRenderer make_bash_renderer() {
             .render_result = [](const ToolRenderedResult& result,
                                      const ToolRenderContext& context) -> ToolRenderedText {
                 const auto* details = result.details ? &*result.details : nullptr;
-                const auto facts = truncation_facts(details);
+                const auto facts = parse_truncation_details(details);
                 const auto path = full_output_path(details);
                 auto output = trim_text(result.output);
                 strip_spill_footer(output, context.is_partial, facts, path);

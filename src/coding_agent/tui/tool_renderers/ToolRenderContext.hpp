@@ -50,10 +50,13 @@ struct ToolRenderContext {
     const LiveTheme& theme;
     /// The `app.tools.expand` key text, or `Unbound` when nothing is bound.
     /// pi prints the empty key text in that case; `Unbound` is this
-    /// repository's existing divergence (`KeybindingHints.cpp`).
+    /// repository's existing divergence (`KeybindingHints.cpp`). The viewed
+    /// string is host-owned and valid for the duration of the call, like
+    /// `args`.
     std::string_view expand_key;
     /// pi `keyHint("app.tools.expand", "to expand")`, resolved once by the
-    /// host: `dim(expand_key) + muted(" to expand")`.
+    /// host: `dim(expand_key) + muted(" to expand")`. The viewed string is
+    /// host-owned and valid for the duration of the call, like `args`.
     std::string_view expand_hint;
     /// pi `argsComplete`: the streamed arguments stopped growing.
     bool args_complete{false};

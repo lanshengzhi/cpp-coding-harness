@@ -80,24 +80,36 @@ struct OutputTruncation {
     return lines;
 }
 
-/// pi `truncateHead` (`truncate.ts:71-160`): keep the first lines that fit, never
-/// a partial line, and report an empty text with `first_line_exceeds_limit` when
-/// the very first line alone is over the byte budget.
-[[nodiscard]] inline OutputTruncation truncate_output_head(std::string_view content, OutputLimit limit = {}) {
-    const auto lines = split_lines_for_counting(content);
-    OutputTruncation result{
+namespace detail {
+
+/// The prologue both truncation directions share: the untruncated result for
+/// `content`, returned as is when both limits fit and mutated into the
+/// truncated result otherwise.
+[[nodiscard]] inline OutputTruncation untruncated_result(
+        std::string_view content, std::size_t total_lines, OutputLimit limit) {
+    return OutputTruncation{
             .text = std::string(content),
             .truncated = false,
             .truncated_by = std::nullopt,
-            .total_lines = lines.size(),
+            .total_lines = total_lines,
             .total_bytes = content.size(),
-            .output_lines = lines.size(),
+            .output_lines = total_lines,
             .output_bytes = content.size(),
             .last_line_partial = false,
             .first_line_exceeds_limit = false,
             .max_lines = limit.max_lines,
             .max_bytes = limit.max_bytes,
     };
+}
+
+} // namespace detail
+
+/// pi `truncateHead` (`truncate.ts:71-160`): keep the first lines that fit, never
+/// a partial line, and report an empty text with `first_line_exceeds_limit` when
+/// the very first line alone is over the byte budget.
+[[nodiscard]] inline OutputTruncation truncate_output_head(std::string_view content, OutputLimit limit = {}) {
+    const auto lines = split_lines_for_counting(content);
+    auto result = detail::untruncated_result(content, lines.size(), limit);
     if (result.total_lines <= limit.max_lines && result.total_bytes <= limit.max_bytes) {
         return result;
     }
@@ -142,19 +154,7 @@ struct OutputTruncation {
 /// keep the tail of the final line itself when that line alone is over budget.
 [[nodiscard]] inline OutputTruncation truncate_output_tail(std::string_view content, OutputLimit limit = {}) {
     const auto lines = split_lines_for_counting(content);
-    OutputTruncation result{
-            .text = std::string(content),
-            .truncated = false,
-            .truncated_by = std::nullopt,
-            .total_lines = lines.size(),
-            .total_bytes = content.size(),
-            .output_lines = lines.size(),
-            .output_bytes = content.size(),
-            .last_line_partial = false,
-            .first_line_exceeds_limit = false,
-            .max_lines = limit.max_lines,
-            .max_bytes = limit.max_bytes,
-    };
+    auto result = detail::untruncated_result(content, lines.size(), limit);
     if (result.total_lines <= limit.max_lines && result.total_bytes <= limit.max_bytes) {
         return result;
     }
