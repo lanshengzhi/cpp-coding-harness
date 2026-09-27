@@ -705,7 +705,6 @@ TEST_CASE("async bash tool truncates on the byte limit and names the limit in th
     tests::TempWorkspace workspace;
     auto shell = std::make_shared<CapturingShell>();
     auto filesystem = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
-    const harness::OutputLimit limit;
     // Ten 8 KB lines: under the line limit, far over the byte limit, and the
     // last line is whole, so the byte-limit variant of the summary is the one
     // pi emits.
@@ -1163,7 +1162,6 @@ TEST_CASE("async read tool reports the line-limit truncation with pi's continuat
 TEST_CASE("async read tool reports the byte-limit truncation with pi's limit-named hint",
         "[tools][async][issue823][spec]") {
     tests::TempWorkspace workspace;
-    const harness::OutputLimit limit;
     // 100 lines of 1 KB each: under the 2000-line limit, over the 50 KB byte
     // limit, and no single line is oversized.
     std::string body;
@@ -1207,7 +1205,6 @@ TEST_CASE("async read tool reports the byte-limit truncation with pi's limit-nam
 TEST_CASE("async read tool replaces an oversized first line with pi's sed fallback notice",
         "[tools][async][issue823][spec]") {
     tests::TempWorkspace workspace;
-    const harness::OutputLimit limit;
     workspace.write("huge.txt", std::string(60 * 1024, 'x'));
     auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_read_file_tool(env);
