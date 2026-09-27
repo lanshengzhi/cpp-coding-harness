@@ -57,7 +57,10 @@ jobs:
             # 100us contract, but shared CI runners measure consistently ~2%
             # over it in Release. That is runner resourcing, not a
             # regression, so this lane excludes the quarantined test instead
-            # of re-tuning the bound. Debug still enforces the 2ms bound.
+            # of re-tuning the bound. The unoptimized lanes exclude the same
+            # label for the second entry, so the 2ms Debug bound runs only on a
+            # local `ctest --preset vcpkg`; docs/agents/validation.md section
+            # "Test quarantine" records the measured processor-clock values.
             # Re-enable when dedicated-runner measurements clear 100us with
             # headroom.
             ctest_label_exclude: "quarantine"

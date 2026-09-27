@@ -26,6 +26,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
+#include <ctime>
 #include <memory>
 #include <optional>
 #include <string>
@@ -40,6 +42,15 @@ using coding_agent::ProjectionStreamPatchMsg;
 
 namespace {
 
+/// Processor time the process has consumed since a fixed origin, as
+/// `std::clock` reports it. Descheduling does not advance it, so a cost
+/// contract measured on this clock measures the work itself instead of the
+/// host's scheduling; wall time on a busy host measures both.
+[[nodiscard]] std::chrono::nanoseconds processor_time() noexcept {
+    constexpr auto nanoseconds_per_tick = std::chrono::nanoseconds::period::den / std::chrono::nanoseconds::period::num;
+    return std::chrono::nanoseconds{static_cast<std::int64_t>(std::clock()) * nanoseconds_per_tick / CLOCKS_PER_SEC};
+}
+
 /// Scripted provider whose stream emits AssistantStart + TextStart followed by
 /// a caller-chosen number of TextDelta chunks, then completes. The agent
 /// reducer emits one MessageUpdateEvent per chunk, so `chunk_count` drives the
@@ -53,14 +64,19 @@ public:
     void set_chunk_count(std::size_t count) { chunk_count_ = count; }
 
     [[nodiscard]] std::chrono::nanoseconds delta_loop_elapsed() const noexcept { return *delta_loop_elapsed_; }
+    [[nodiscard]] std::chrono::nanoseconds delta_loop_processor_time() const noexcept {
+        return *delta_loop_processor_time_;
+    }
 
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext, coding_agent::ModelRuntimeTestStreamOptions) override {
         const std::size_t chunk_count = chunk_count_;
         const std::string chunk_text = chunk_text_;
         const auto elapsed = delta_loop_elapsed_;
+        const auto processor = delta_loop_processor_time_;
         return ai::detail::make_model_stream(
-                [model = std::move(model), chunk_count, chunk_text, elapsed](ai::AssistantEventSink sink) mutable
+                [model = std::move(model), chunk_count, chunk_text, elapsed, processor](
+                        ai::AssistantEventSink sink) mutable
                         -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                     auto partial = ai::assistant_text_message("");
                     partial.provider = "projection-fake";
@@ -76,6 +92,7 @@ public:
                             co_return std::unexpected(emitted.error());
                         }
                         const auto loop_start = std::chrono::steady_clock::now();
+                        const auto processor_start = processor_time();
                         for (std::size_t index = 0; index < chunk_count; ++index) {
                             std::get<ai::TextContent>(partial.content[0]).text += chunk_text;
                             if (auto emitted = sink(ai::TextDeltaEvent{
@@ -88,6 +105,7 @@ public:
                             }
                         }
                         *elapsed = std::chrono::steady_clock::now() - loop_start;
+                        *processor = processor_time() - processor_start;
                     }
                     partial.stop_reason = ai::AssistantStopReason::Stop;
                     co_return partial;
@@ -98,6 +116,7 @@ private:
     std::size_t chunk_count_{0};
     std::string chunk_text_{"chunk "};
     std::shared_ptr<std::chrono::nanoseconds> delta_loop_elapsed_{std::make_shared<std::chrono::nanoseconds>(0)};
+    std::shared_ptr<std::chrono::nanoseconds> delta_loop_processor_time_{std::make_shared<std::chrono::nanoseconds>(0)};
 };
 
 /// Scripted provider whose first request returns a caller-provided assistant
@@ -855,14 +874,26 @@ TEST_CASE("Projection publishes 100 message-update chunks inside the issue cost 
 
     provider->set_chunk_count(100);
     provider->set_chunk_text("x");
-    // Wall-clock single samples jitter on shared CI runners (the Release lane measured
-    // 229us against the 100us contract below); repeat the streaming pass and assert on the
-    // minimum. An algorithmic regression (per-event full-history materialization) slows
-    // every repetition, so the minimum still enforces the contract.
+    // Repeat the streaming pass and assert on the minimum, and measure the loop
+    // on the processor clock rather than the wall clock. A wall-clock sample
+    // adds the host's scheduling to the publication work: this build measured
+    // 1.23-1.37ms of loop time sequentially and overran the 2ms Debug bound in
+    // 6 of 8 concurrent runs at 3.08ms, and the Release lane measured 229us
+    // against the 100us contract below. Processor time is the work itself, and
+    // because it never exceeds wall time, nothing that passed the old bound can
+    // fail this one. A host whose CPUs are all busy still spends real processor
+    // time (8 concurrent copies of this case measure ~2.1ms each on an 8-CPU
+    // Debug host), which the `[quarantine]` tag and its lane exclusions already
+    // cover. The check still separates the property from its absence:
+    // re-materializing the full history per event (a temporary
+    // `agent_->state()` copy in the MessageUpdateEvent observer) measured
+    // 14.66ms, seven times the bound.
     auto elapsed = std::chrono::nanoseconds::max();
+    auto processor = std::chrono::nanoseconds::max();
     for (int pass = 0; pass < 5; ++pass) {
         REQUIRE(tests::run_awaitable(runtime, session.prompt("stream one hundred chunks")).has_value());
         elapsed = std::min(elapsed, provider->delta_loop_elapsed());
+        processor = std::min(processor, provider->delta_loop_processor_time());
     }
 
     // Issue #600 cost contract carried into ADR 0052: 100 MessageUpdateEvent
@@ -871,19 +902,20 @@ TEST_CASE("Projection publishes 100 message-update chunks inside the issue cost 
     // bounded bookkeeping); full snapshot copies stay confined to attach,
     // resync, and the rare degenerate coarse patch, so the deltas-loop
     // contract still holds.
-    INFO(std::string{"100-chunk projection publication loop: "} + std::to_string(elapsed.count()) + "ns");
+    INFO(std::string{"100-chunk projection publication loop: "} + std::to_string(processor.count()) + "ns processor, " +
+            std::to_string(elapsed.count()) + "ns wall");
 #if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
     // Sanitizers slow this loop systematically on CI (~55x under ASan: 5.6ms against
-    // the 2ms Debug bound), so wall-clock bounds are meaningless under instrumentation.
+    // the 2ms Debug bound), so the timing bound is meaningless under instrumentation.
     // The functional assertions above still execute on sanitizer lanes; only the timing
     // contract is scoped out (CODING_STANDARDS.md section 11.9).
 #elif defined(NDEBUG)
-    CHECK(elapsed < std::chrono::microseconds{100});
+    CHECK(processor < std::chrono::microseconds{100});
 #else
     // The supported Debug preset intentionally keeps assertions and disables
     // optimization; retain a generous sanity bound there and enforce the
     // issue's 0.1ms contract in Release.
-    CHECK(elapsed < std::chrono::milliseconds{2});
+    CHECK(processor < std::chrono::milliseconds{2});
 #endif
     session.close();
 }
