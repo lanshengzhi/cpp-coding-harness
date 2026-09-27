@@ -1,47 +1,186 @@
+// The regular file and directory operations built on path resolution:
+// the no-follow open/read/write primitives and the pi-shaped read,
+// write, metadata, and listing surface that uses them.
 #include "WorkspaceFileSystem.hpp"
 
+#include "AtomicWrite.hpp"
 #include "WorkspaceFileSystemErrors.hpp"
 #include "WorkspaceFileSystemIo.hpp"
 
-#include "AtomicWrite.hpp"
-
 #include <algorithm>
-#include <dirent.h>
-#include <limits>
-#include <sstream>
+#include <cstddef>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include <cerrno>
 #include <cstring>
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 namespace cch::harness {
-
-std::expected<std::string, FileError> WorkspaceFileSystem::absolutePath(const std::string& path) const {
-    auto resolved = resolve_to_cwd(path);
-    if (!resolved) {
-        return std::unexpected(util_error_to_file_error(resolved.error(), path));
+std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_file_for_read(
+        const std::string& requested, std::uintmax_t* size, std::stop_token stop_token) const {
+    if (stop_token.stop_requested()) {
+        return std::unexpected(operation_aborted_error(requested));
     }
-    return resolved->string();
+
+    auto target = resolve_to_cwd(requested);
+    if (!target) {
+        return std::unexpected(util_error_to_file_error(target.error(), requested));
+    }
+
+    int parent_errno = 0;
+    auto parent_guard = open_parent_directory(*target, false, &parent_errno);
+    if (!parent_guard) {
+        if (parent_errno == ENOENT) {
+            return std::unexpected(path_not_found_error(requested));
+        }
+        return std::unexpected(util_error_to_file_error(parent_guard.error(), requested));
+    }
+
+    const auto filename = target->filename().string();
+    return open_regular_file_in_parent(parent_guard->get(), filename, requested, size);
 }
 
-std::expected<std::string, FileError> WorkspaceFileSystem::joinPath(const std::vector<std::string>& parts) const {
-    std::filesystem::path result = root_;
-    for (const auto& part : parts) {
-        if (part.find('\0') != std::string::npos) {
+std::expected<support::UniqueFd, FileError> WorkspaceFileSystem::open_regular_file_in_parent(
+        int parent_fd, const std::string& filename, const std::string& requested, std::uintmax_t* size) const {
+    struct stat status{};
+    if (::fstatat(parent_fd, filename.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0) {
+        if (errno == ENOENT) {
+            return std::unexpected(path_not_found_error(requested));
+        }
+        return std::unexpected(FileError{
+                .code = FileErrorCode::PermissionDenied,
+                .message = "could not inspect file for reading: " + requested,
+                .path = std::string{requested},
+        });
+    }
+    if (S_ISLNK(status.st_mode)) {
+        return std::unexpected(FileError{
+                .code = FileErrorCode::PermissionDenied,
+                .message = "refusing to read through symlink: " + requested,
+                .path = std::string{requested},
+        });
+    }
+    if (!S_ISREG(status.st_mode)) {
+        return std::unexpected(FileError{
+                .code = FileErrorCode::IsDirectory,
+                .message = "path is not a regular file: " + requested,
+                .path = std::string{requested},
+        });
+    }
+
+    // O_NONBLOCK is harmless for regular files and closes the FIFO race
+    // between the no-follow type check and openat.
+    support::UniqueFd fd(::openat(parent_fd, filename.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC));
+    if (!fd) {
+        if (errno == ELOOP) {
             return std::unexpected(FileError{
-                    .code = FileErrorCode::Invalid,
-                    .message = "NUL bytes are not allowed in paths",
-                    .path = std::nullopt,
+                    .code = FileErrorCode::PermissionDenied,
+                    .message = "refusing to read through symlink: " + requested,
+                    .path = std::string{requested},
             });
         }
-        result /= part;
+        if (errno == ENOENT) {
+            return std::unexpected(path_not_found_error(requested));
+        }
+        return std::unexpected(FileError{
+                .code = FileErrorCode::PermissionDenied,
+                .message = "could not open file for reading: " + requested,
+                .path = std::string{requested},
+        });
     }
-    // No containment (ADR 0057): segments join against the workspace root
-    // and normalize lexically; results landing outside the root are
-    // returned, not rejected.
-    return result.lexically_normal().string();
+
+    if (::fstat(fd.get(), &status) != 0 || !S_ISREG(status.st_mode)) {
+        return std::unexpected(FileError{
+                .code = FileErrorCode::IsDirectory,
+                .message = "path is not a regular file: " + requested,
+                .path = std::string{requested},
+        });
+    }
+    if (size) {
+        *size = status.st_size < 0 ? 0 : static_cast<std::uintmax_t>(status.st_size);
+    }
+    return fd;
+}
+
+std::expected<std::string, FileError> WorkspaceFileSystem::read_existing_file_bounded(
+        const std::string& requested, std::size_t max_bytes, std::stop_token stop_token) const {
+    std::uintmax_t file_size = 0;
+    auto fd = open_regular_file_for_read(requested, &file_size, stop_token);
+    if (!fd) {
+        return std::unexpected(fd.error());
+    }
+    return read_bounded_from_open_file(fd->get(), file_size, requested, max_bytes, stop_token);
+}
+
+std::expected<std::string, FileError> WorkspaceFileSystem::read_bounded_from_open_file(int file_fd,
+        std::uintmax_t file_size,
+        const std::string& requested,
+        std::size_t max_bytes,
+        std::stop_token stop_token) const {
+    if (file_size > max_bytes) {
+        return std::unexpected(file_result_limit_error(requested));
+    }
+
+    std::string content;
+    content.reserve(static_cast<std::size_t>(file_size));
+    char buffer[4096];
+    ssize_t n = 0;
+    while ((n = ::read(file_fd, buffer, sizeof(buffer))) > 0) {
+        if (stop_token.stop_requested()) {
+            return std::unexpected(operation_aborted_error(requested));
+        }
+        const auto count = static_cast<std::size_t>(n);
+        if (count > max_bytes - content.size()) {
+            return std::unexpected(file_result_limit_error(requested));
+        }
+        content.append(buffer, count);
+    }
+    if (n < 0) {
+        return std::unexpected(FileError{
+                .code = FileErrorCode::Unknown,
+                .message = "could not read file: " + requested,
+                .path = std::string{requested},
+        });
+    }
+    return content;
+}
+
+support::Expected<std::size_t> WorkspaceFileSystem::write_file(
+        const std::string& requested, std::string_view content, bool create_parents, std::stop_token stop_token) const {
+    auto target = resolve_to_cwd(requested);
+    if (!target) {
+        return std::unexpected(target.error());
+    }
+
+    auto parent_guard = open_parent_directory(*target, create_parents);
+    if (!parent_guard) {
+        return std::unexpected(parent_guard.error());
+    }
+
+    const auto filename = target->filename().string();
+    struct stat target_status{};
+    if (::fstatat(parent_guard->get(), filename.c_str(), &target_status, AT_SYMLINK_NOFOLLOW) == 0) {
+        if (S_ISLNK(target_status.st_mode)) {
+            return std::unexpected(workspace_error("refusing to write through final symlink: " + requested));
+        }
+        if (!S_ISREG(target_status.st_mode)) {
+            return std::unexpected(workspace_error("target is not a regular file: " + requested));
+        }
+    } else if (errno != ENOENT) {
+        return std::unexpected(workspace_error("could not inspect target: " + requested));
+    }
+
+    auto written = write_atomic_file_at(parent_guard->get(), filename, content, stop_token);
+    if (!written) {
+        return std::unexpected(written.error());
+    }
+    return content.size();
 }
 
 std::expected<std::string, FileError> WorkspaceFileSystem::readTextFile(
@@ -491,25 +630,6 @@ std::expected<std::vector<FileInfo>, FileError> WorkspaceFileSystem::listDir(
                 FileError{FileErrorCode::Unknown, "could not read directory: " + path, std::string{path}});
     }
     return results;
-}
-
-std::expected<std::string, FileError> WorkspaceFileSystem::canonicalPath(const std::string& path) const {
-    auto resolved = resolve_to_cwd(path);
-    if (!resolved) {
-        return std::unexpected(util_error_to_file_error(resolved.error(), path));
-    }
-    std::error_code ec;
-    auto canonical = std::filesystem::canonical(*resolved, ec);
-    if (ec) {
-        // An unsearchable parent surfaces as a real EACCES here; report it
-        // honestly instead of claiming the path is missing (issue #702).
-        if (ec == std::errc::permission_denied || ec == std::errc::operation_not_permitted) {
-            return std::unexpected(permission_denied_error(path));
-        }
-        return std::unexpected(
-                FileError{FileErrorCode::NotFound, "could not canonicalize: " + path, std::string{path}});
-    }
-    return canonical.string();
 }
 
 std::expected<bool, FileError> WorkspaceFileSystem::exists(const std::string& path) const {
