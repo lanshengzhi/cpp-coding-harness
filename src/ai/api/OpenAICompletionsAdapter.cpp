@@ -4,6 +4,7 @@
 #include "MessageConversion.hpp"
 #include "ProviderDetection.hpp"
 #include "ai/Headers.hpp"
+#include "ai/api/RequestHeaders.hpp"
 #include "ai/Timestamps.hpp"
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
@@ -32,7 +33,10 @@ namespace {
 }
 
 [[nodiscard]] support::Expected<providers::StreamRequest> build_stream_request(
-        const Model& model, const AiContext& context, const ProviderStreamOptions& options) {
+        const Model& model, const AiContext& context, ProviderStreamOptions& options) {
+    if (auto prepared = prepare_stream_request_headers(model, options); !prepared) {
+        return std::unexpected(prepared.error());
+    }
     auto payload = build_adapter_payload(AdapterKind::OpenAICompletions, model, context, options);
     if (!payload) {
         return std::unexpected(payload.error());
@@ -139,13 +143,13 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICompletionsAda
     if (options.stop_token.stop_requested()) {
         co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Request was aborted"));
     }
+
+    CCH_TRY(request, build_stream_request(model, context, options));
     if ((!options.auth.api_key || options.auth.api_key->empty()) &&
             !has_header(options.auth.headers, "authorization") &&
             !has_header(options.auth.headers, "cf-aig-authorization")) {
         co_return std::unexpected(providers::make_stream_error("No API key for provider: " + model.provider));
     }
-
-    CCH_TRY(request, build_stream_request(model, context, options));
 
     AssistantMessage assistant;
     assistant.api = model.api;

@@ -23,9 +23,10 @@ namespace cch::ai {
 /// implementations use Model::api for their private protocol dispatch.
 struct ProviderStreamOptions {
     ModelAuth auth{};
-    /// Case-insensitive header tombstones retained after Models applies the
-    /// final transform, so an adapter does not recreate explicitly deleted
-    /// protocol defaults.
+    /// Caller header overrides are merged after adapter defaults and before the transform hook.
+    RequestHeaders header_overrides{};
+    TransformHeadersHook transform_headers{};
+    /// Header tombstones retained after the final transform so request builders do not recreate deleted defaults.
     std::vector<std::string> deleted_headers{};
     ProviderEnv env{};
     std::optional<double> temperature{std::nullopt};
@@ -53,9 +54,6 @@ public:
     [[nodiscard]] virtual std::string_view name() const noexcept = 0;
     [[nodiscard]] virtual ProviderAuth& auth() noexcept = 0;
     [[nodiscard]] virtual std::vector<Model> models() const = 0;
-    /// Adds API-specific session-affinity headers before caller header transforms.
-    virtual void prepare_session_affinity_headers(
-            const Model& model, std::string_view session_id, RequestHeaders& headers) const = 0;
 
     /// One move-only, single-consumption model stream (ADR 0040 / #455).
     ///

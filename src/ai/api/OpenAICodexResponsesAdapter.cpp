@@ -6,6 +6,7 @@
 #include "ai/Timestamps.hpp"
 #include "ai/api/PartialJson.hpp"
 #include "ai/api/ResponsesEventProcessor.hpp"
+#include "ai/api/RequestHeaders.hpp"
 #include "ai/auth/Pkce.hpp"
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
@@ -266,6 +267,60 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
 
 } // namespace
 
+namespace {
+
+struct CodexStreamRequests {
+    support::JsonValue payload{};
+    std::string body_json{};
+    providers::WebSocketConnectRequest websocket{};
+    providers::StreamRequest sse{};
+};
+
+[[nodiscard]] support::Expected<CodexStreamRequests> build_stream_request(
+        const Model& model, const AiContext& context, ProviderStreamOptions& options, std::string_view account_id) {
+    RequestHeaders adapter_defaults;
+    if (options.session_id) {
+        auto clamped_session_id = cch::ai::detail::clamp_openai_prompt_cache_key(*options.session_id);
+        adapter_defaults.emplace("session-id", clamped_session_id);
+        adapter_defaults.emplace("x-client-request-id", std::move(clamped_session_id));
+    }
+    if (auto prepared = prepare_stream_request_headers(model, options, std::move(adapter_defaults)); !prepared) {
+        return std::unexpected(prepared.error());
+    }
+
+    auto payload = build_adapter_payload(AdapterKind::OpenAICodexResponses, model, context, options);
+    if (!payload) {
+        return std::unexpected(payload.error());
+    }
+    auto body_json = support::write_json(*payload);
+    if (!body_json) {
+        return std::unexpected(body_json.error());
+    }
+    CodexStreamRequests requests{
+            .payload = std::move(*payload),
+            .body_json = std::move(*body_json),
+    };
+    const auto codex_url = resolve_codex_url(model.base_url);
+    const auto ws_headers = codex_headers(options, account_id, true);
+    const auto sse_headers = codex_headers(options, account_id, false);
+    requests.websocket.url = resolve_codex_websocket_url(model.base_url);
+    requests.websocket.headers = ws_headers;
+    requests.websocket.connect_timeout = kDefaultWebSocketConnectTimeout;
+    if (options.timeout_ms) {
+        requests.websocket.idle_timeout = std::chrono::milliseconds{*options.timeout_ms};
+    }
+    requests.websocket.stop_token = options.stop_token;
+
+    requests.sse.url = codex_url;
+    requests.sse.timeout = std::chrono::milliseconds{options.timeout_ms.value_or(30000)};
+    requests.sse.stop_token = options.stop_token;
+    requests.sse.headers.insert(sse_headers.begin(), sse_headers.end());
+    requests.sse.body = requests.body_json;
+    return requests;
+}
+
+} // namespace
+
 struct OpenAICodexResponsesAdapter::Impl {
     explicit Impl(providers::CodexWebSocketCacheConfig config)
         : cache(std::move(config)) {}
@@ -285,13 +340,6 @@ OpenAICodexResponsesAdapter::OpenAICodexResponsesAdapter(
 OpenAICodexResponsesAdapter::OpenAICodexResponsesAdapter(OpenAICodexResponsesAdapter&&) noexcept = default;
 OpenAICodexResponsesAdapter& OpenAICodexResponsesAdapter::operator=(OpenAICodexResponsesAdapter&&) noexcept = default;
 OpenAICodexResponsesAdapter::~OpenAICodexResponsesAdapter() = default;
-
-void OpenAICodexResponsesAdapter::prepare_session_affinity_headers(
-        std::string_view session_id, RequestHeaders& headers) const {
-    auto clamped_session_id = cch::ai::detail::clamp_openai_prompt_cache_key(session_id);
-    set_header(headers, "session-id", clamped_session_id);
-    set_header(headers, "x-client-request-id", std::move(clamped_session_id));
-}
 
 boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponsesAdapter::stream(
     const Model& model,
@@ -332,30 +380,12 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
         };
 
     CCH_TRY(account_id, extract_account_id(*options.auth.api_key));
-    CCH_TRY(payload, build_adapter_payload(
-        AdapterKind::OpenAICodexResponses, model, context, options));
-    CCH_TRY(body_json, support::write_json(payload));
-    const auto codex_url = resolve_codex_url(model.base_url);
+    CCH_TRY(requests, build_stream_request(model, context, options, account_id));
+    auto payload = std::move(requests.payload);
+    auto body_json = std::move(requests.body_json);
     const auto cache_session_id = options.session_id;
-
-    const auto ws_headers = codex_headers(options, account_id, true);
-    const auto sse_headers = codex_headers(options, account_id, false);
-    providers::WebSocketConnectRequest ws_request;
-    ws_request.url = resolve_codex_websocket_url(model.base_url);
-    ws_request.headers = ws_headers;
-    ws_request.connect_timeout = kDefaultWebSocketConnectTimeout;
-    if (options.timeout_ms) {
-        ws_request.idle_timeout = std::chrono::milliseconds{*options.timeout_ms};
-    }
-    ws_request.stop_token = options.stop_token;
-
-    providers::StreamRequest sse_request;
-    sse_request.url = codex_url;
-    sse_request.timeout = std::chrono::milliseconds{
-        options.timeout_ms.value_or(30000)};
-    sse_request.stop_token = options.stop_token;
-    sse_request.headers.insert(sse_headers.begin(), sse_headers.end());
-    sse_request.body = body_json;
+    auto ws_request = std::move(requests.websocket);
+    auto sse_request = std::move(requests.sse);
 
     CodexWebSocketCache& cache = impl_->cache;
     auto& sse_fallback_sessions = impl_->sse_fallback_sessions;

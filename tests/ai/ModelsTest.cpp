@@ -1,6 +1,7 @@
 #include <cch/ai/Models.hpp>
 #include <cch/support/Error.hpp>
 #include "ai/ModelStreamBridge.hpp"
+#include "ai/providers/ComposedProvider.hpp"
 #include "ai/auth/OpenRouterOAuth.hpp"
 #include "support/ScriptedProvider.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
@@ -145,36 +146,34 @@ public:
     [[nodiscard]] std::vector<ai::Model> models() const override {
         return catalog_available ? catalog : std::vector<ai::Model>{};
     }
-    void prepare_session_affinity_headers(const ai::Model&, std::string_view, ai::RequestHeaders&) const override {}
 
     [[nodiscard]] ai::ModelStream stream(
         ai::Model model,
         ai::AiContext,
         ai::ProviderStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), options = std::move(options)](
-                ai::AssistantEventSink sink)
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-                seen_models.push_back(model);
-                seen_options.push_back(options);
-                if (options.stop_token.stop_requested()) {
-                    co_return std::unexpected(support::make_error(
-                        support::ErrorCode::Cancelled,
-                        "provider cancelled"));
-                }
-                if (stream_failure) {
-                    co_return std::unexpected(*stream_failure);
-                }
-                ai::AssistantMessage message = ai::assistant_text_message("delegated");
-                message.api = model.api;
-                message.provider = id_;
-                message.model = model.id;
-                CCH_TRY_VOID(sink(ai::AssistantDoneEvent{
-                    .reason = message.stop_reason,
-                    .message = message,
-                }));
-                co_return message;
-            });
+                [this, model = std::move(model), options = std::move(options)](ai::AssistantEventSink sink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    seen_models.push_back(model);
+                    seen_options.push_back(std::move(options));
+                    const auto& recorded_options = seen_options.back();
+                    if (recorded_options.stop_token.stop_requested()) {
+                        co_return std::unexpected(
+                                support::make_error(support::ErrorCode::Cancelled, "provider cancelled"));
+                    }
+                    if (stream_failure) {
+                        co_return std::unexpected(*stream_failure);
+                    }
+                    ai::AssistantMessage message = ai::assistant_text_message("delegated");
+                    message.api = model.api;
+                    message.provider = id_;
+                    message.model = model.id;
+                    CCH_TRY_VOID(sink(ai::AssistantDoneEvent{
+                            .reason = message.stop_reason,
+                            .message = message,
+                    }));
+                    co_return message;
+                });
     }
 
     std::vector<ai::Model> catalog;
@@ -194,7 +193,6 @@ public:
     [[nodiscard]] std::string_view name() const noexcept override { return "unsafe-terminal"; }
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return {}; }
-    void prepare_session_affinity_headers(const ai::Model&, std::string_view, ai::RequestHeaders&) const override {}
 
     [[nodiscard]] ai::ModelStream stream(
         ai::Model model,
@@ -233,7 +231,6 @@ public:
     [[nodiscard]] std::string_view name() const noexcept override { return "duplicate"; }
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return {}; }
-    void prepare_session_affinity_headers(const ai::Model&, std::string_view, ai::RequestHeaders&) const override {}
 
     [[nodiscard]] ai::ModelStream stream(
         ai::Model model,
@@ -742,8 +739,7 @@ TEST_CASE("Models preserves stored OAuth when refresh fails", "[ai][models][auth
     CHECK(std::get<ai::OAuthCredential>(credentials->records.at("provider")) == original);
 }
 
-TEST_CASE("Models merges Model headers after resolved auth headers case insensitively",
-        "[ai][models][auth][issue338][spec]") {
+TEST_CASE("Models sends case-insensitively merged Model headers to the request", "[ai][models][auth][issue338][spec]") {
     auto credentials = std::make_shared<MemoryCredentialStore>();
     auto auth_context = std::make_shared<FakeAuthContext>();
     ai::ApiKeyAuth api_key;
@@ -764,103 +760,34 @@ TEST_CASE("Models merges Model headers after resolved auth headers case insensit
                 .source = "headers",
         });
     };
-    auto models = make_models(credentials, auth_context);
-    auto provider = std::make_shared<RecordingProvider>(
-        "provider", ai::ProviderAuth{.api_key = std::move(api_key)});
-    REQUIRE(install_provider(models, provider));
 
-    ai::Model request = tests::make_model("model", "provider", "api");
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks =
+                    {
+                            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_headers\","
+                            "\"status\":\"completed\"}}\n\n",
+                    },
+    });
+    auto request = tests::make_model("model", "provider", "openai-responses");
+    request.base_url = "https://example.invalid/v1";
+    request.max_tokens = 16;
     request.headers = ai::ModelHeaders{{"x-test", "model"}};
-    REQUIRE(run_models(models, std::move(request)).result);
+    auto provider = ai::providers::make_composed_provider("provider",
+            "provider",
+            std::vector<ai::Model>{request},
+            ai::ProviderAuth{.api_key = std::move(api_key)},
+            transport);
+    auto models = make_models(credentials, auth_context);
+    REQUIRE(install_provider(models, std::move(provider)));
 
-    REQUIRE(provider->seen_options.size() == 1);
-    const auto& headers = provider->seen_options.front().auth.headers;
+    const auto run = run_models(models, request);
+
+    REQUIRE(run.result);
+    REQUIRE(transport->requests.size() == 1);
+    const auto& headers = transport->requests.front().headers;
     CHECK(headers.at("x-test") == "model");
     CHECK(headers.at("Authorization") == "Bearer dummy");
-    CHECK(headers.size() == 2);
-}
-
-TEST_CASE(
-        "Models prepares the complete streamSimple request before Provider dispatch", "[ai][models][issue339][spec]") {
-    auto credentials = std::make_shared<MemoryCredentialStore>();
-    auto auth_context = std::make_shared<FakeAuthContext>();
-    ai::ApiKeyAuth api_key;
-    api_key.name = "prepared";
-    api_key.resolve =
-            [](const ai::AuthContext&,
-                    std::optional<ai::ApiKeyCredential>) -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
-        return tests::ready_result<std::optional<ai::AuthResult>>(ai::AuthResult{
-                .auth =
-                        ai::ModelAuth{
-                                .api_key = "dummy-key",
-                                .headers = {{"X-Auth", "auth"}, {"X-Delete", "remove"}},
-                        },
-                .env = {{"A", "auth"}, {"PI_CACHE_RETENTION", "short"}},
-                .source = "prepared",
-        });
-    };
-    auto models = make_models(credentials, auth_context);
-    auto provider = std::make_shared<RecordingProvider>(
-        "deepseek", ai::ProviderAuth{.api_key = std::move(api_key)});
-    REQUIRE(install_provider(models, provider));
-
-    auto model = tests::make_model("reasoning", "deepseek", "openai-responses");
-    model.reasoning = true;
-    model.context_window = 10000;
-    model.max_tokens = 9000;
-    model.headers = ai::ModelHeaders{{"X-Model", "model"}};
-    ai::AiContext context;
-    context.system_prompt = std::string(4000, 'x');
-    int transform_count = 0;
-    ai::SimpleStreamOptions options;
-    options.temperature = 0.25;
-    options.max_tokens = 9000;
-    options.headers = {
-        {"x-auth", std::string{"request"}},
-        {"x-delete", std::nullopt},
-    };
-    options.env = {{"A", "request"}, {"PI_CACHE_RETENTION", "long"}};
-    options.transform_headers = [&transform_count](ai::RequestHeaders headers)
-        -> support::Expected<ai::RequestHeaders> {
-        ++transform_count;
-        CHECK(headers.at("x-auth") == "request");
-        headers.insert_or_assign("X-Transformed", "yes");
-        return headers;
-    };
-    options.reasoning = ai::ThinkingLevel::High;
-    options.session_id = "session-1";
-    options.timeout_ms = 3210;
-    options.max_retries = 2;
-    options.max_retry_delay_ms = 12345;
-
-    std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_async_result(
-        models->stream(
-            std::move(model),
-            std::move(context),
-            std::move(options)).run(
-        [&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
-            events.push_back(event);
-            return {};
-        }));
-
-    REQUIRE(result);
-    CHECK(transform_count == 1);
-    REQUIRE(provider->seen_options.size() == 1);
-    const auto& prepared = provider->seen_options.front();
-    CHECK(prepared.temperature == 0.25);
-    CHECK(prepared.max_tokens == 4904);
-    CHECK(prepared.reasoning == ai::ModelThinkingLevel::High);
-    CHECK(prepared.session_id == "session-1");
-    CHECK(prepared.cache_retention == ai::CacheRetention::Long);
-    CHECK(prepared.timeout_ms == 3210);
-    CHECK(prepared.max_retries == 2);
-    CHECK(prepared.max_retry_delay_ms == 12345);
-    CHECK(prepared.env.at("A") == "request");
-    CHECK(prepared.auth.headers.at("x-auth") == "request");
-    CHECK(prepared.auth.headers.at("X-Model") == "model");
-    CHECK(prepared.auth.headers.at("X-Transformed") == "yes");
-    CHECK_FALSE(prepared.auth.headers.contains("X-Delete"));
 }
 
 TEST_CASE("Models accepts header authentication and suppresses none-retention affinity",
@@ -962,26 +889,6 @@ TEST_CASE("Models converts explicit callback failures into its single error chan
     const auto& provider_terminal = require_terminal_error(provider_run);
     REQUIRE(provider_terminal.failure);
     CHECK(provider_terminal.failure->code == support::ErrorCode::Stream);
-
-    auto header_models = make_models(credentials, auth_context);
-    REQUIRE(install_provider(header_models, std::make_shared<RecordingProvider>("header-provider")));
-    ai::SimpleStreamOptions header_options;
-    header_options.transform_headers = [](ai::RequestHeaders)
-        -> support::Expected<ai::RequestHeaders> {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Stream,
-            "Header transform failed",
-            "explicit header transform failure"));
-    };
-    auto header_run = run_models(
-        header_models,
-        tests::make_model("model", "header-provider", "api"),
-        {},
-        std::move(header_options));
-    REQUIRE(header_run.result);
-    const auto& header_terminal = require_terminal_error(header_run);
-    REQUIRE(header_terminal.failure);
-    CHECK(header_terminal.failure->code == support::ErrorCode::Stream);
 
     auto sink_models = make_models(credentials, auth_context);
     REQUIRE(install_provider(sink_models, std::make_shared<RecordingProvider>("sink-provider")));

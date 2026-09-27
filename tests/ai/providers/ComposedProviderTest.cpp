@@ -31,8 +31,9 @@ using tests::TransportAttempt;
 /// the provider.
 [[nodiscard]] ai::providers::StreamRequest run_stream(const std::string& provider_id,
         ai::ProviderStreamOptions options,
-        const std::shared_ptr<ScriptedTransport>& transport) {
-    auto model = tests::make_model("gpt-5.6-luna", provider_id, "openai-responses");
+        const std::shared_ptr<ScriptedTransport>& transport,
+        const std::string& api = "openai-responses") {
+    auto model = tests::make_model("gpt-5.6-luna", provider_id, api);
     model.base_url = "https://example.invalid/v1";
 
     ai::ProviderAuth auth;
@@ -70,17 +71,20 @@ using tests::TransportAttempt;
 
 } // namespace
 
-TEST_CASE("opencode-go injects the session affinity header", "[ai][providers][opencode-go][issue754][spec]") {
-    const auto transport = transport_with_one_attempt();
-    ai::ProviderStreamOptions options;
-    options.max_tokens = 16;
-    options.auth.api_key = std::string{"test-key"};
-    options.session_id = std::string{"session-abc"};
+TEST_CASE("opencode-go injects session affinity across its supported APIs",
+        "[ai][providers][opencode-go][issue754][spec]") {
+    for (const auto* api : {"anthropic-messages", "openai-completions", "openai-responses"}) {
+        const auto transport = transport_with_one_attempt();
+        ai::ProviderStreamOptions options;
+        options.max_tokens = 16;
+        options.auth.api_key = std::string{"test-key"};
+        options.session_id = std::string{"session-abc"};
 
-    const auto request = run_stream("opencode-go", std::move(options), transport);
+        const auto request = run_stream("opencode-go", std::move(options), transport, api);
 
-    REQUIRE(affinity_header(request).has_value());
-    CHECK(*affinity_header(request) == "session-abc");
+        REQUIRE(affinity_header(request).has_value());
+        CHECK(*affinity_header(request) == "session-abc");
+    }
 }
 
 TEST_CASE("an affinity header the caller already set is not replaced", "[ai][providers][opencode-go][issue754][spec]") {

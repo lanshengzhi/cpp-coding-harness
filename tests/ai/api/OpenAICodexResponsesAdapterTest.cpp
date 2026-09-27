@@ -1,4 +1,4 @@
-#include <cch/ai/Models.hpp>
+#include "ai/api/OpenAICodexResponsesAdapter.hpp"
 #include "ai/providers/StreamTransport.hpp"
 #include "support/ScriptedProvider.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
@@ -303,20 +303,23 @@ TEST_CASE("Codex streams the frozen WS request and event sequence through Models
     CHECK(sent.front() == expected_request_bytes);
     CHECK(harness.http->requests.empty());
 }
-TEST_CASE("Codex affinity defaults reach header transformation and honor overrides",
+TEST_CASE("Codex adapter exposes affinity defaults to header transformation and honors overrides",
         "[ai][provider][codex][issue339][spec]") {
-    auto harness = make_codex_harness(codex_model());
+    auto http = std::make_shared<ScriptedTransport>();
+    auto ws = std::make_shared<ScriptedWebSocketTransport>();
     auto session = std::make_shared<ScriptedWebSocket::Session>();
     session->on_send = [](ScriptedWebSocket& socket, std::string_view) {
         socket.session()->frames.push_back(simple_terminal());
     };
-    harness.ws->connect_scripts.push_back(ScriptedWebSocketTransport::ConnectScript{.session = session});
+    ws->connect_scripts.push_back(ScriptedWebSocketTransport::ConnectScript{.session = session});
+    ai::api::OpenAICodexResponsesAdapter adapter{http, ws};
+    const auto model = codex_model();
 
     const auto session_id = std::string(65, 's');
     const auto clamped_session_id = std::string(64, 's');
     bool saw_session_headers = false;
-    ai::SimpleStreamOptions options;
-    options.api_key = std::string{kCodexToken};
+    ai::ProviderStreamOptions options;
+    options.auth.api_key = std::string{kCodexToken};
     options.session_id = session_id;
     options.transform_headers = [&saw_session_headers, &clamped_session_id](
                                         ai::RequestHeaders headers) -> support::Expected<ai::RequestHeaders> {
@@ -328,14 +331,18 @@ TEST_CASE("Codex affinity defaults reach header transformation and honor overrid
         headers.insert_or_assign("x-client-request-id", std::nullopt);
         return headers;
     };
-    const auto run = run_models(*harness.models, codex_model(), user_context("Say hello"), std::move(options));
+    const auto result = run_awaitable(adapter.stream(model,
+            user_context("Say hello"),
+            std::move(options),
+            [](const ai::AssistantStreamEvent&) -> support::ExpectedVoid { return {}; }));
 
-    REQUIRE(run.result);
+    REQUIRE(result);
     CHECK(saw_session_headers);
-    REQUIRE(harness.ws->requests.size() == 1);
-    const auto& headers = harness.ws->requests.front().headers;
+    REQUIRE(ws->requests.size() == 1);
+    const auto& headers = ws->requests.front().headers;
     CHECK(headers.at("session-id") == "custom-session");
     CHECK_FALSE(headers.contains("x-client-request-id"));
+    CHECK(http->requests.empty());
 }
 
 TEST_CASE("Codex emits a string user message as one input_text and omits an empty block array (WS)",

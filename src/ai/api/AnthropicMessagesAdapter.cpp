@@ -46,14 +46,14 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> AnthropicMessagesAda
             support::ErrorCode::Cancelled,
             "Request was aborted"));
     }
+
+    CCH_TRY(request, build_anthropic_stream_request(model, context, options));
     if ((!options.auth.api_key || options.auth.api_key->empty()) &&
         !has_header(options.auth.headers, "authorization") &&
         !has_header(options.auth.headers, "x-api-key") &&
         !has_header(options.auth.headers, "cf-aig-authorization")) {
         co_return std::unexpected(providers::make_stream_error("No API key for provider: " + model.provider));
     }
-
-    CCH_TRY(request, build_anthropic_stream_request(model, context, options));
 
     AssistantMessage assistant;
     assistant.api = model.api;

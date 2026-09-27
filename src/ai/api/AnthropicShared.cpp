@@ -2,6 +2,7 @@
 
 #include "MessageConversion.hpp"
 #include "ai/Headers.hpp"
+#include "ai/api/RequestHeaders.hpp"
 #include "support/Json.hpp"
 
 #include <chrono>
@@ -25,7 +26,10 @@ using JsonObject = support::JsonValue::object_t;
 } // namespace
 
 support::Expected<providers::StreamRequest> build_anthropic_stream_request(
-        const Model& model, const AiContext& context, const ProviderStreamOptions& options) {
+        const Model& model, const AiContext& context, ProviderStreamOptions& options) {
+    if (auto prepared = prepare_stream_request_headers(model, options); !prepared) {
+        return std::unexpected(prepared.error());
+    }
     auto payload = build_adapter_payload(AdapterKind::AnthropicMessages, model, context, options);
     if (!payload) {
         return std::unexpected(payload.error());

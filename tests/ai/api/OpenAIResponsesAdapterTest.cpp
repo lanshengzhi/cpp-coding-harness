@@ -1,5 +1,6 @@
 #include <cch/ai/Models.hpp>
 #include "ai/providers/StreamTransport.hpp"
+#include "ai/api/OpenAIResponsesAdapter.hpp"
 #include "support/AiScenarioKit.hpp"
 #include "support/ScriptedProvider.hpp"
 #include "ai/providers/EnvApiKeyAuth.hpp"
@@ -366,6 +367,95 @@ TEST_CASE("DeepSeek Responses preserves post-merge transformed headers",
     CHECK_FALSE(deleted_headers.contains("Content-Type"));
     CHECK_FALSE(deleted_headers.contains("session_id"));
     CHECK_FALSE(deleted_headers.contains("x-client-request-id"));
+}
+
+TEST_CASE("OpenAI Responses adapter constructs session affinity headers", "[ai][provider][responses][issue339][spec]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    transport->attempts.push_back(TransportAttempt{
+            .chunks = {terminal_sse("response.completed", "completed")},
+    });
+    ai::api::OpenAIResponsesAdapter adapter{transport};
+    const auto model = deepseek_model();
+    ai::ProviderStreamOptions options;
+    options.auth.api_key = "dummy-key";
+    options.session_id = "session-1";
+    bool saw_affinity = false;
+    options.transform_headers = [&saw_affinity](ai::RequestHeaders headers) -> support::Expected<ai::RequestHeaders> {
+        const auto session = headers.find("session_id");
+        const auto request = headers.find("x-client-request-id");
+        saw_affinity = session != headers.end() && session->second == "session-1" && request != headers.end() &&
+                       request->second == "session-1";
+        headers.insert_or_assign("session_id", "custom-session");
+        headers.insert_or_assign("x-client-request-id", std::nullopt);
+        return headers;
+    };
+
+    const auto result = run_awaitable(adapter.stream(
+            model, request_context(), std::move(options), [](const ai::AssistantStreamEvent&) -> support::ExpectedVoid {
+                return {};
+            }));
+
+    REQUIRE(result);
+    REQUIRE(transport->requests.size() == 1);
+    const auto& headers = transport->requests.front().headers;
+    CHECK(saw_affinity);
+    CHECK(headers.at("session_id") == "custom-session");
+    CHECK_FALSE(headers.contains("x-client-request-id"));
+}
+
+TEST_CASE("OpenAI Responses adapter propagates header transformation failures before sending",
+        "[ai][provider][responses][issue339][spec]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    ai::api::OpenAIResponsesAdapter adapter{transport};
+    ai::ProviderStreamOptions options;
+    options.auth.api_key = "dummy-key";
+    options.session_id = "session-1";
+    options.transform_headers = [](ai::RequestHeaders) -> support::Expected<ai::RequestHeaders> {
+        return std::unexpected(support::make_error(support::ErrorCode::Stream, "Header transform failed"));
+    };
+
+    const auto result = run_awaitable(adapter.stream(deepseek_model(),
+            request_context(),
+            std::move(options),
+            [](const ai::AssistantStreamEvent&) -> support::ExpectedVoid { return {}; }));
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == support::ErrorCode::Stream);
+    CHECK(result.error().message == "Header transform failed");
+    CHECK(transport->requests.empty());
+}
+
+TEST_CASE("OpenAI Responses preserves configured affinity headers ahead of adapter defaults",
+        "[ai][provider][responses][issue339][spec]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    transport->attempts.push_back(TransportAttempt{
+            .chunks = {terminal_sse("response.completed", "completed")},
+    });
+    ai::api::OpenAIResponsesAdapter adapter{transport};
+    ai::ProviderStreamOptions options;
+    options.auth.api_key = "dummy-key";
+    options.auth.headers["Session_ID"] = "configured-session";
+    options.session_id = "session-1";
+    bool saw_configured_header = false;
+    options.transform_headers = [&saw_configured_header](
+                                        ai::RequestHeaders headers) -> support::Expected<ai::RequestHeaders> {
+        const auto session = headers.find("Session_ID");
+        const auto request = headers.find("x-client-request-id");
+        saw_configured_header = session != headers.end() && session->second == "configured-session" &&
+                                request != headers.end() && request->second == "session-1";
+        return headers;
+    };
+
+    const auto result = run_awaitable(adapter.stream(deepseek_model(),
+            request_context(),
+            std::move(options),
+            [](const ai::AssistantStreamEvent&) -> support::ExpectedVoid { return {}; }));
+
+    REQUIRE(result);
+    REQUIRE(transport->requests.size() == 1);
+    CHECK(saw_configured_header);
+    CHECK(transport->requests.front().headers.at("Session_ID") == "configured-session");
+    CHECK(transport->requests.front().headers.at("x-client-request-id") == "session-1");
 }
 
 TEST_CASE("DeepSeek Responses partials start pending and flip to stop at final_answer",

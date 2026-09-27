@@ -4,6 +4,7 @@
 #include "ai/Headers.hpp"
 #include "ai/Timestamps.hpp"
 #include "ai/api/ResponsesEventProcessor.hpp"
+#include "ai/api/RequestHeaders.hpp"
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/StreamEmit.hpp"
@@ -34,9 +35,21 @@ using JsonObject = support::JsonValue::object_t;
 }
 
 [[nodiscard]] support::Expected<providers::StreamRequest> build_stream_request(
-    const Model& model,
-    const AiContext& context,
-    const ProviderStreamOptions& options) {
+        const Model& model, const AiContext& context, ProviderStreamOptions& options) {
+    RequestHeaders adapter_defaults;
+    if (options.session_id) {
+        const auto* compat = model.compat ? std::get_if<OpenAIResponsesCompat>(&*model.compat) : nullptr;
+        const bool suppress_session_id =
+                compat != nullptr &&
+                compat->session_affinity_format == OpenAIResponsesSessionAffinityFormat::OpenAINoSession;
+        if (!suppress_session_id) {
+            adapter_defaults.emplace("session_id", *options.session_id);
+        }
+        adapter_defaults.emplace("x-client-request-id", *options.session_id);
+    }
+    if (auto prepared = prepare_stream_request_headers(model, options, std::move(adapter_defaults)); !prepared) {
+        return std::unexpected(prepared.error());
+    }
     auto payload = build_adapter_payload(
         AdapterKind::OpenAIResponses, model, context, options);
     if (!payload) {
@@ -156,17 +169,6 @@ OpenAIResponsesAdapter::OpenAIResponsesAdapter(OpenAIResponsesAdapter&&) noexcep
 OpenAIResponsesAdapter& OpenAIResponsesAdapter::operator=(OpenAIResponsesAdapter&&) noexcept = default;
 OpenAIResponsesAdapter::~OpenAIResponsesAdapter() = default;
 
-void OpenAIResponsesAdapter::prepare_session_affinity_headers(
-        const Model& model, std::string_view session_id, RequestHeaders& headers) const {
-    const auto* compat = model.compat ? std::get_if<OpenAIResponsesCompat>(&*model.compat) : nullptr;
-    const bool suppress_session_id = compat != nullptr && compat->session_affinity_format ==
-                                                                  OpenAIResponsesSessionAffinityFormat::OpenAINoSession;
-    if (!suppress_session_id) {
-        set_header(headers, "session_id", std::string{session_id});
-    }
-    set_header(headers, "x-client-request-id", std::string{session_id});
-}
-
 boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAIResponsesAdapter::stream(
     const Model& model,
     const AiContext& context,
@@ -187,13 +189,13 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAIResponsesAdapt
             support::ErrorCode::Cancelled,
             "Request was aborted"));
     }
+
+    CCH_TRY(request, build_stream_request(model, context, options));
     if ((!options.auth.api_key || options.auth.api_key->empty()) &&
             !has_header(options.auth.headers, "authorization") &&
             !has_header(options.auth.headers, "cf-aig-authorization")) {
         co_return std::unexpected(providers::make_stream_error("No API key for provider: " + model.provider));
     }
-
-    CCH_TRY(request, build_stream_request(model, context, options));
 
     AssistantMessage assistant;
     assistant.api = model.api;

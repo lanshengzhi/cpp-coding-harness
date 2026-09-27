@@ -1,7 +1,6 @@
 #include <cch/ai/Models.hpp>
 
 #include "support/AsyncResultBridge.hpp"
-#include "ai/Headers.hpp"
 #include "ai/ModelStreamBridge.hpp"
 #include "ai/Timestamps.hpp"
 #include "ai/providers/BoostBeastStreamTransport.hpp"
@@ -22,7 +21,6 @@
 #include <algorithm>
 #include <chrono>
 #include <exception>
-#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -77,55 +75,6 @@ namespace {
     return message;
 }
 
-/// Frozen pi treats each Provider catalog as best-effort: a throwing callback
-
-[[nodiscard]] RequestHeaders request_headers_from_auth(const ModelAuth& auth) {
-    RequestHeaders result;
-    for (const auto& [name, value] : auth.headers) {
-        result.emplace(name, value);
-    }
-    return result;
-}
-
-[[nodiscard]] ProviderHeaders concrete_headers(const RequestHeaders& headers) {
-    ProviderHeaders result;
-    for (const auto& [name, value] : headers) {
-        if (value) {
-            result.emplace(name, *value);
-        }
-    }
-    return result;
-}
-
-[[nodiscard]] std::vector<std::string> deleted_headers(const RequestHeaders& headers) {
-    std::vector<std::string> result;
-    for (const auto& [name, value] : headers) {
-        if (!value) {
-            result.push_back(name);
-        }
-    }
-    return result;
-}
-
-[[nodiscard]] support::ExpectedVoid assert_request_auth(const Model& model, const ModelAuth& auth) {
-    const bool scoped_api = model.api == "openai-codex-responses" || model.api == "openai-responses" ||
-                            model.api == "openai-completions" || model.api == "anthropic-messages";
-    if (!scoped_api || (auth.api_key && !auth.api_key->empty()) ||
-            has_non_empty_header(auth.headers, "authorization") || has_non_empty_header(auth.headers, "x-api-key") ||
-            has_non_empty_header(auth.headers, "cf-aig-authorization")) {
-        return {};
-    }
-    return std::unexpected(support::make_error(support::ErrorCode::Auth, "No API key for provider: " + model.provider));
-}
-
-[[nodiscard]] support::Expected<RequestHeaders> transform_request_headers(
-        RequestHeaders headers, TransformHeadersHook& transform) {
-    if (!transform) {
-        return headers;
-    }
-    return transform(std::move(headers));
-}
-
 [[nodiscard]] ModelThinkingLevel to_model_thinking_level(ThinkingLevel level) {
     switch (level) {
     case ThinkingLevel::Minimal:
@@ -149,11 +98,8 @@ struct PreparedProviderRequest {
     ProviderStreamOptions options{};
 };
 
-[[nodiscard]] support::Expected<PreparedProviderRequest> prepare_provider_request(Provider& provider,
-        Model model,
-        const AiContext& context,
-        AuthResult auth_result,
-        SimpleStreamOptions options) {
+[[nodiscard]] support::Expected<PreparedProviderRequest> prepare_provider_request(
+        Model model, const AiContext& context, AuthResult auth_result, SimpleStreamOptions options) {
     if (auth_result.auth.base_url) {
         model.base_url = *auth_result.auth.base_url;
     }
@@ -166,22 +112,6 @@ struct PreparedProviderRequest {
     const auto request_session_id =
             cache_retention == CacheRetention::None ? std::optional<std::string>{} : options.session_id;
 
-    auto request_headers = request_headers_from_auth(auth_result.auth);
-    if (request_session_id) {
-        provider.prepare_session_affinity_headers(model, *request_session_id, request_headers);
-    }
-    merge_headers(request_headers, options.headers);
-    auto transformed_headers = transform_request_headers(std::move(request_headers), options.transform_headers);
-    if (!transformed_headers) {
-        return std::unexpected(transformed_headers.error());
-    }
-
-    auto request_deleted_headers = deleted_headers(*transformed_headers);
-    auth_result.auth.headers = concrete_headers(*transformed_headers);
-    if (auto asserted = assert_request_auth(model, auth_result.auth); !asserted) {
-        return std::unexpected(asserted.error());
-    }
-
     const auto reasoning = options.reasoning ? std::optional<ModelThinkingLevel>{clamp_thinking_level(
                                                        model, to_model_thinking_level(*options.reasoning))}
                                              : std::nullopt;
@@ -192,7 +122,8 @@ struct PreparedProviderRequest {
             .options =
                     ProviderStreamOptions{
                             .auth = std::move(auth_result.auth),
-                            .deleted_headers = std::move(request_deleted_headers),
+                            .header_overrides = std::move(options.headers),
+                            .transform_headers = std::move(options.transform_headers),
                             .env = std::move(request_env),
                             .temperature = options.temperature,
                             .max_tokens = max_tokens,
@@ -285,7 +216,7 @@ struct PreparedProviderRequest {
         co_return terminal;
     }
 
-    auto prepared = prepare_provider_request(*selected, model_value, context, std::move(**auth), std::move(options));
+    auto prepared = prepare_provider_request(model_value, context, std::move(**auth), std::move(options));
     if (!prepared) {
         CCH_TRY(terminal, co_await terminal_failure(model_value, prepared.error(), sink));
         co_return terminal;

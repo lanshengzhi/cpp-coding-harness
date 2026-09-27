@@ -1,7 +1,6 @@
 #include "ComposedProvider.hpp"
 
 #include "ai/ModelStreamBridge.hpp"
-#include "ai/Headers.hpp"
 #include "ai/api/AnthropicMessagesAdapter.hpp"
 #include "ai/api/OpenAICodexResponsesAdapter.hpp"
 #include "ai/api/OpenAICompletionsAdapter.hpp"
@@ -48,14 +47,6 @@ public:
     [[nodiscard]] std::string_view name() const noexcept override { return name_; }
     [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
     [[nodiscard]] std::vector<ai::Model> models() const override { return models_; }
-    void prepare_session_affinity_headers(
-            const ai::Model& model, std::string_view session_id, ai::RequestHeaders& headers) const override {
-        if (model.api == "openai-codex-responses") {
-            codex_adapter_.prepare_session_affinity_headers(session_id, headers);
-        } else if (model.api == "openai-responses") {
-            responses_adapter_.prepare_session_affinity_headers(model, session_id, headers);
-        }
-    }
 
     [[nodiscard]] ai::ModelStream stream(
         ai::Model model,
@@ -67,11 +58,6 @@ public:
                         context = std::move(context),
                         options = std::move(options)](ai::AssistantEventSink sink) mutable
                         -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-                    if (self->provider_id_ == "opencode-go" && options.session_id && !options.session_id->empty()) {
-                        if (!find_header(options.auth.headers, "x-opencode-session")) {
-                            options.auth.headers.insert_or_assign("x-opencode-session", *options.session_id);
-                        }
-                    }
                     if (model.api == "openai-responses") {
                         CCH_TRY(message,
                                 co_await self->responses_adapter_.stream(
