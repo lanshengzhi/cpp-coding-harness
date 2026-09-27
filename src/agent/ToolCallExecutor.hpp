@@ -18,8 +18,9 @@
 namespace cch::agent {
 
 struct ToolCallExecutorOptions {
-    // Non-owning hooks borrowed from the run's owning AsyncAgentOptions; they
-    // must outlive the ToolCallExecutor built from these options.
+    // Non-owning hooks borrowed from the Agent's run policy, which owns the
+    // callables for every run that Agent starts; they must outlive the
+    // ToolCallExecutor built from these options.
     BeforeToolCallHook* before_tool_call{nullptr};
     AfterToolCallHook* after_tool_call{nullptr};
     std::stop_token stop_token;
