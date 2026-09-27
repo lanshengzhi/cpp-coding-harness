@@ -48,7 +48,7 @@ namespace {
 /// `title` and the blocks with no separator of its own
 /// (`ToolExecutionComponent.cpp:117`), so the renderer owns that leading
 /// newline here. The output matches pi; the responsibility for the blank row
-/// does not, which is a fact about the seam worth recording in the ADR.
+/// does not — recorded in ADR 0061 ("The blank row moves into the renderer").
 [[nodiscard]] ToolRenderedText render_edit_result(const ToolRenderedResult& result, const ToolRenderContext& context) {
     if (context.is_error) {
         // pi `edit.ts:97-106`: no text renders nothing. pi's

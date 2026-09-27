@@ -87,12 +87,8 @@ std::string replace_tabs(std::string_view text) {
 }
 
 std::string normalize_display_text(std::string_view text) {
-    std::string normalized;
-    normalized.reserve(text.size());
-    for (const auto character : text) {
-        if (character == '\r') continue;
-        normalized.push_back(character);
-    }
+    std::string normalized{text};
+    std::erase(normalized, '\r');
     return normalized;
 }
 

@@ -2,19 +2,11 @@
 
 #include "coding_agent/tui/Theme.hpp"
 
-#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
 
 namespace cch::coding_agent::tui {
-
-/// pi `os.homedir()` as this repository reads it elsewhere
-/// (`Footer.cpp`, `cch::tui`'s image-path shortening): `$HOME`, then
-/// `$USERPROFILE`, and the empty path when neither is set. One home lookup for
-/// the whole module, so the `~` expansion behind `resolve_to_cwd` and the
-/// shortening behind `shorten_path` cannot drift apart.
-[[nodiscard]] std::filesystem::path home_directory();
 
 /// pi `core/tools/path-utils.ts:48` `resolveToCwd`, which is ADR 0057's
 /// uniform path resolution: unicode-space normalization, leading-`@` stripping,

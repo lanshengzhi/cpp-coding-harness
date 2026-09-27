@@ -148,7 +148,7 @@ struct ReadBlock {
 } // namespace
 
 TEST_CASE("a collapsed successful read renders the title line and nothing else",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     ReadBlock block(tests::tool_render_keybindings(), R"({"path":"notes.txt"})");
     block.succeed("alpha\nbeta\ngamma");
@@ -169,7 +169,7 @@ TEST_CASE("a collapsed successful read renders the title line and nothing else",
 }
 
 TEST_CASE("an expanded successful read renders the whole file body",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     ReadBlock block(tests::tool_render_keybindings(), R"({"path":"notes.txt"})");
     block.succeed("alpha\nbeta\ngamma");
@@ -179,7 +179,7 @@ TEST_CASE("an expanded successful read renders the whole file body",
 }
 
 TEST_CASE("the read title carries pi's warning-coloured line range only when offset or limit is present",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     auto keybindings = tests::tool_render_keybindings();
     auto theme = tests::tool_render_theme();
@@ -240,7 +240,7 @@ TEST_CASE("the read title carries pi's warning-coloured line range only when off
 }
 
 TEST_CASE("an expanded read shows the plain read title even when the path classifies",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     auto keybindings = tests::tool_render_keybindings();
 
@@ -259,7 +259,7 @@ TEST_CASE("an expanded read shows the plain read title even when the path classi
 
 TEST_CASE("a SKILL.md read titles as the skill label and a resource read as read resource, and a plain markdown file "
           "as neither",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     auto keybindings = tests::tool_render_keybindings();
 
@@ -353,7 +353,7 @@ TEST_CASE("a SKILL.md read titles as the skill label and a resource read as read
 }
 
 TEST_CASE("the compact title and the compact hint carry pi's own tokens",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     auto keybindings = tests::tool_render_keybindings();
     auto theme = tests::tool_render_theme();
@@ -388,7 +388,7 @@ TEST_CASE("the compact title and the compact hint carry pi's own tokens",
 }
 
 TEST_CASE("the compact expand hint reads Unbound when the expand key is unbound",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     ReadBlock block(tests::tool_render_keybindings(/*bound=*/false), R"({"path":"skills/pdf/SKILL.md"})");
     block.succeed("alpha");
@@ -399,7 +399,7 @@ TEST_CASE("the compact expand hint reads Unbound when the expand key is unbound"
 }
 
 TEST_CASE("mid-stream read arguments put pi's progressive dots in the path slot",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     auto keybindings = tests::tool_render_keybindings();
 
@@ -419,7 +419,7 @@ TEST_CASE("mid-stream read arguments put pi's progressive dots in the path slot"
 }
 
 TEST_CASE("a read error shows ten lines and pi's remaining-lines hint",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     ReadBlock block(tests::tool_render_keybindings(), R"({"path":"missing.txt"})");
     block.fail(numbered_output(13));
@@ -450,7 +450,7 @@ TEST_CASE("a read error shows ten lines and pi's remaining-lines hint",
 }
 
 TEST_CASE("a read error's fold hint counts real lines, not the trailing empty one",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     ReadBlock block(tests::tool_render_keybindings(), R"({"path":"missing.txt"})");
     // Eleven real lines plus a trailing newline: pi's
@@ -465,7 +465,7 @@ TEST_CASE("a read error's fold hint counts real lines, not the trailing empty on
 }
 
 TEST_CASE("an expanded read error shows every line and no fold hint",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     ReadBlock block(tests::tool_render_keybindings(), R"({"path":"missing.txt"})");
     block.fail(numbered_output(13));
@@ -494,7 +494,7 @@ TEST_CASE("an expanded read error shows every line and no fold hint",
 }
 
 TEST_CASE("each of the three truncation warnings renders its own text",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     auto keybindings = tests::tool_render_keybindings();
 
@@ -613,7 +613,7 @@ TEST_CASE("each of the three truncation warnings renders its own text",
 }
 
 TEST_CASE("the truncation warning follows the fold hint on the last body row",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     // pi appends the warning after the fold hint, so a collapsed error with a
     // truncation object shows ten lines, the hint, and then the warning. A
@@ -644,7 +644,7 @@ TEST_CASE("the truncation warning follows the fold hint on the last body row",
 }
 
 TEST_CASE("an old session read whose marker is baked into the text adds no second warning line",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     ReadBlock block(tests::tool_render_keybindings(), R"({"path":"notes.txt"})");
     // A session file written before `details.truncation` existed carries the
@@ -663,7 +663,7 @@ TEST_CASE("an old session read whose marker is baked into the text adds no secon
 }
 
 TEST_CASE("a read body's tabs render as three spaces in the tool-output colour",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     auto theme = tests::tool_render_theme();
     ReadBlock block(tests::tool_render_keybindings(), R"({"path":"notes.txt"})");
@@ -680,7 +680,7 @@ TEST_CASE("a read body's tabs render as three spaces in the tool-output colour",
 }
 
 TEST_CASE("read is resolved by name and draws the read title, where an unregistered tool falls back",
-        "[coding_agent][tui][tool-renderers][read renderer][issue825][spec]") {
+        "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
     auto registry = coding_agent::tui::ToolRendererRegistry::make_default();
     auto& read = registry.lookup("read");

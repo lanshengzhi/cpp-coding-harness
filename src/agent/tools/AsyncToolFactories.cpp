@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
+#include <format>
 #include <map>
 #include <memory>
 #include <optional>
@@ -223,20 +224,23 @@ boost::asio::awaitable<support::Expected<BashOutput>> format_bash_output(
     }
 
     const auto total_lines = truncation.total_lines;
-    const auto end_line = total_lines;
     const auto start_line = total_lines - truncation.output_lines + 1;
-    const auto to_line = [](std::size_t line) { return std::to_string(line); };
     if (truncation.last_line_partial) {
-        output.text += "\n\n[Showing last " + harness::format_output_size(truncation.output_bytes) + " of line " +
-                       to_line(end_line) + " (line is " + harness::format_output_size(last_line_bytes) +
-                       "). Full output: " + *spill_path + "]";
+        output.text += std::format("\n\n[Showing last {} of line {} (line is {}). Full output: {}]",
+                harness::format_output_size(truncation.output_bytes),
+                total_lines,
+                harness::format_output_size(last_line_bytes),
+                *spill_path);
     } else if (truncation.truncated_by == harness::OutputTruncationKind::Lines) {
-        output.text += "\n\n[Showing lines " + to_line(start_line) + "-" + to_line(end_line) + " of " +
-                       to_line(total_lines) + ". Full output: " + *spill_path + "]";
+        output.text += std::format(
+                "\n\n[Showing lines {}-{} of {}. Full output: {}]", start_line, total_lines, total_lines, *spill_path);
     } else {
-        output.text += "\n\n[Showing lines " + to_line(start_line) + "-" + to_line(end_line) + " of " +
-                       to_line(total_lines) + " (" + harness::format_output_size(output_limit.max_bytes) +
-                       " limit). Full output: " + *spill_path + "]";
+        output.text += std::format("\n\n[Showing lines {}-{} of {} ({} limit). Full output: {}]",
+                start_line,
+                total_lines,
+                total_lines,
+                harness::format_output_size(output_limit.max_bytes),
+                *spill_path);
     }
     output.truncation = truncation;
     output.full_output_path = *spill_path;
@@ -298,8 +302,8 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> read_
     // buffer, and an offset past the end is an error.
     const int start_line = std::max(0, parsed->offset - 1);
     if (static_cast<std::size_t>(start_line) >= total_file_lines) {
-        co_return error_result("Offset " + std::to_string(parsed->offset) + " is beyond end of file (" +
-                               std::to_string(total_file_lines) + " lines total)");
+        co_return error_result(
+                std::format("Offset {} is beyond end of file ({} lines total)", parsed->offset, total_file_lines));
     }
     const auto start_line_display = static_cast<std::size_t>(start_line) + 1;
 
@@ -332,27 +336,31 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> read_
         // suggested command carries the model-supplied path and the numeric cap.
         const auto first_line_size =
                 harness::format_output_size(all_lines[static_cast<std::size_t>(start_line)].size());
-        content = "[Line " + std::to_string(start_line_display) + " is " + first_line_size + ", exceeds " +
-                  max_bytes_size + " limit. Use bash: sed -n '" + std::to_string(start_line_display) + "p' " +
-                  parsed->path + " | head -c " + std::to_string(output_limit.max_bytes) + "]";
+        content = std::format("[Line {} is {}, exceeds {} limit. Use bash: sed -n '{}p' {} | head -c {}]",
+                start_line_display,
+                first_line_size,
+                max_bytes_size,
+                start_line_display,
+                parsed->path,
+                output_limit.max_bytes);
         details_truncation = truncation;
     } else if (truncation.truncated) {
         // pi `read.ts:163-173`.
         const auto end_line_display = start_line_display + truncation.output_lines - 1;
         const auto next_offset = end_line_display + 1;
-        content += "\n\n[Showing lines " + std::to_string(start_line_display) + "-" + std::to_string(end_line_display) +
-                   " of " + std::to_string(total_file_lines);
+        content +=
+                std::format("\n\n[Showing lines {}-{} of {}", start_line_display, end_line_display, total_file_lines);
         if (truncation.truncated_by != harness::OutputTruncationKind::Lines) {
-            content += " (" + max_bytes_size + " limit)";
+            content += std::format(" ({} limit)", max_bytes_size);
         }
-        content += ". Use offset=" + std::to_string(next_offset) + " to continue.]";
+        content += std::format(". Use offset={} to continue.]", next_offset);
         details_truncation = truncation;
     } else if (user_limited_lines && static_cast<std::size_t>(start_line) + *user_limited_lines < total_file_lines) {
         // pi `read.ts:174-178`: the limit stopped early but the file has more.
         // pi sets no `details` in this branch, so one here would be a defect.
         const auto consumed = static_cast<std::size_t>(start_line) + *user_limited_lines;
-        content += "\n\n[" + std::to_string(total_file_lines - consumed) +
-                   " more lines in file. Use offset=" + std::to_string(consumed + 1) + " to continue.]";
+        content += std::format(
+                "\n\n[{} more lines in file. Use offset={} to continue.]", total_file_lines - consumed, consumed + 1);
     }
     std::optional<support::JsonValue> details;
     if (details_truncation) {
@@ -538,7 +546,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
         const std::string status =
                 error.code == harness::ExecutionErrorCode::Aborted
                         ? "Command aborted"
-                        : "Command timed out after " + std::to_string(parsed->timeout.value_or(0)) + " seconds";
+                        : std::format("Command timed out after {} seconds", parsed->timeout.value_or(0));
         co_return error_result(append_status(formatted->text, status));
     }
 
@@ -565,7 +573,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> bash_
     }
     if (shell_result->exitCode != 0) {
         co_return error_result(
-                append_status(formatted->text, "Command exited with code " + std::to_string(shell_result->exitCode)));
+                append_status(formatted->text, std::format("Command exited with code {}", shell_result->exitCode)));
     }
 
     std::optional<support::JsonValue> details;

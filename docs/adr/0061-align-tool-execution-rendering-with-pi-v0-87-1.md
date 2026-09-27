@@ -185,6 +185,14 @@ footer from the *displayed* text when the result has settled, leaving the path t
 own warning line. pike does the same, on the render side only: `content` keeps its summary line
 unconditionally, and it is the fold that drops it.
 
+### The blank row moves into the renderer
+
+pi's `edit` result text carries no leading newline: `edit.ts:234` adds a `Spacer(1)` to the result
+container after the `if (!output) return` gate, so the blank row precedes whatever the result half
+produced — diff or error alike. This seam's host joins `title` and `blocks` with no separator of
+its own, so each renderer owns its leading newline and every result block is `\n`-prefixed. The
+output matches pi; the responsibility for the blank row does not.
+
 ## Session compatibility: no migration, by choice
 
 Session files written before this change carry the old markers baked into their `content` and have

@@ -1,11 +1,11 @@
 #include "PathPresentation.hpp"
 
+#include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/tui/TerminalImage.hpp>
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <string>
@@ -65,7 +65,7 @@ constexpr std::array<std::string_view, 15> kUnicodeSpaceBytes{
 /// `~` is the home directory and a `~/` prefix is the home directory joined
 /// with the rest.
 [[nodiscard]] std::string expand_home_marker(std::string path) {
-    const auto home = home_directory();
+    const auto home = coding_agent::home_directory();
     if (home.empty()) return path;
     if (path == "~") return home.string();
     if (path.starts_with("~/")) return (home / path.substr(2)).string();
@@ -119,20 +119,12 @@ constexpr std::array<std::string_view, 15> kUnicodeSpaceBytes{
 
 } // namespace
 
-std::filesystem::path home_directory() {
-    const auto* home = std::getenv("HOME");
-    if (home != nullptr && *home != '\0') return home;
-    const auto* profile = std::getenv("USERPROFILE");
-    if (profile != nullptr && *profile != '\0') return profile;
-    return {};
-}
-
 std::string resolve_to_cwd(std::string_view path, std::string_view cwd) {
     return resolve_against_cwd(expand_home_marker(strip_at_prefix(normalize_unicode_spaces(path))), cwd);
 }
 
 std::string shorten_path(std::string_view path) {
-    const auto home = home_directory().string();
+    const auto home = coding_agent::home_directory().string();
     if (home.empty() || path.size() < home.size()) return std::string{path};
     const std::string_view home_prefix{home};
     if (!path.starts_with(home_prefix)) return std::string{path};
