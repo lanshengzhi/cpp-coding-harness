@@ -154,6 +154,9 @@ public:
     [[nodiscard]] virtual support::ExpectedVoid clear_screen() = 0;
     [[nodiscard]] virtual support::ExpectedVoid write(std::string_view output) = 0;
     [[nodiscard]] virtual support::ExpectedVoid set_cursor(CursorPosition position) = 0;
+    /// Move the physical cursor down by `rows`, preserving its column. The cursor
+    /// clamps at the active scrolling region; zero rows is a no-op.
+    [[nodiscard]] support::ExpectedVoid move_cursor_down(std::size_t rows);
     [[nodiscard]] virtual support::ExpectedVoid set_cursor_visible(bool visible) = 0;
 
     /// Configures the scrollable viewport margins (rows [top_row, bottom_row], 0-based inclusive).

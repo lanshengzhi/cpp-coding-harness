@@ -80,135 +80,23 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
 
 } // namespace
 
-Tui::Tui(Terminal& terminal)
-    : terminal_(terminal),
-      stream_decoder_(std::make_unique<detail::TerminalStreamDecoder>()),
-      compositor_(std::make_unique<detail::OverlayCompositor>()) {}
+Tui::RenderPipeline::RenderPipeline(Terminal& terminal) : terminal_(terminal) {}
 
-Tui::~Tui() {
-    (void)stop();
-}
-
-support::Expected<std::reference_wrapper<Component>> Tui::add_child(std::unique_ptr<Component> component) {
-    return detail::attach_child(children_, std::move(component), "");
-}
-
-support::Expected<std::reference_wrapper<Overlay>> Tui::add_overlay(std::unique_ptr<Overlay> overlay) {
-    return compositor_->add_overlay(std::move(overlay));
-}
-
-support::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
-    if (overlay == nullptr) return {};
-    if (!compositor_->owns(overlay)) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Overlay is not attached to this TUI"));
-    }
-
-    const bool was_focused = focused_ == static_cast<Component*>(overlay);
-    auto* return_focus = compositor_->return_focus(overlay);
-    if (was_focused) apply_focus(nullptr);
-    compositor_->forget_focus(overlay, return_focus);
-
-    if (auto removed = compositor_->remove(overlay); !removed) {
-        return std::unexpected(removed.error());
-    }
-
-    if (was_focused) {
-        if (focus_target_available(return_focus)) apply_focus(return_focus);
-        else fallback_focus();
-    }
-    return {};
-}
-
-support::ExpectedVoid Tui::hide_overlay(Overlay* overlay) {
-    if (overlay == nullptr) return {};
-    if (!compositor_->owns(overlay)) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Overlay is not attached to this TUI"));
-    }
-
-    auto* return_focus = compositor_->return_focus(overlay);
-    const auto was_focused = focused_ == static_cast<Component*>(overlay);
-    overlay->set_visible(false);
-
-    if (was_focused) {
-        apply_focus(nullptr);
-        if (focus_target_available(return_focus)) apply_focus(return_focus);
-        else fallback_focus();
-    }
-
-    invalidate();
-    return {};
-}
-
-support::ExpectedVoid Tui::restore_overlay(Overlay* overlay) {
-    if (overlay == nullptr) return {};
-    if (!compositor_->owns(overlay)) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Overlay is not attached to this TUI"));
-    }
-
-    overlay->set_visible(true);
-    invalidate();
-    return {};
-}
-
-support::ExpectedVoid Tui::start() {
-    if (started_) {
-        return {};
-    }
-
-    // The latch is armed before the terminal starts: ProcessTerminal
-    // forwards startup-preserved input synchronously inside start(), and
-    // dropping it on the not-yet-started guard would lose keystrokes typed
-    // during the capability probes (#610).
-    started_ = true;
-    if (auto result = terminal_.start(
-            [this](std::string input) -> support::ExpectedVoid {
-                handle_input(std::move(input));
-                return {};
-            },
-            [this](TerminalDimensions dimensions) -> support::ExpectedVoid {
-                handle_resize(dimensions);
-                return {};
-            });
-        !result) {
-        started_ = false;
-        return std::unexpected(result.error());
-    }
-
-    if (auto result = terminal_.set_cursor_visible(false); !result) {
-        started_ = false;
-        if (auto stopped = terminal_.stop(); !stopped) {
-            return std::unexpected(startup_rollback_error(result.error(), stopped.error()));
-        }
-        return std::unexpected(result.error());
-    }
-
+void Tui::RenderPipeline::start() noexcept {
     first_render_ = true;
-    pending_render_ = false;
     viewport_top_ = 0;
     previous_lines_.clear();
     previous_viewport_height_ = 0;
-    previous_dimensions_ = terminal_.dimensions();
     admitted_ = {};
-    return {};
 }
 
-support::ExpectedVoid Tui::stop() {
-    if (!started_) return {};
+void Tui::RenderPipeline::begin_frame() noexcept { frame_prepare_call_count_ = 0; }
 
-    started_ = false;
-    const auto stop_cursor = resolve_cursor_location();
-    if (auto* focusable = dynamic_cast<Focusable*>(focused_)) {
-        focusable->set_focused(false);
-    }
-    focused_ = nullptr;
-    compositor_->clear_focus_history();
+void Tui::RenderPipeline::note_prepared_line() noexcept { ++frame_prepare_call_count_; }
 
+std::size_t Tui::RenderPipeline::frame_prepare_call_count() const noexcept { return frame_prepare_call_count_; }
+
+support::ExpectedVoid Tui::RenderPipeline::stop(std::optional<CursorPosition> stop_cursor) {
     const auto image_result = remove_active_images();
     (void)terminal_.reset_scroll_margins();
     const auto dock_height = previous_dock_lines_.size();
@@ -218,10 +106,7 @@ support::ExpectedVoid Tui::stop() {
     const auto visible_dock_height = std::min(dock_height, dock_capacity);
     const auto dock_skip = dock_height - visible_dock_height;
     previous_dock_lines_.clear();
-    // pi TuiMainScreen::beforeTerminalStop: complete the current line, move
-    // down through the remaining bottom dock rows, and end the line so the
-    // shell prompt resumes below the composed frame. Relative movement avoids
-    // depending on the anchored buffer-row mapping after viewport scrolling.
+
     support::ExpectedVoid exit_result;
     if (!previous_lines_.empty()) {
         if (auto written = terminal_.write(" "); !written) {
@@ -251,32 +136,19 @@ support::ExpectedVoid Tui::stop() {
             auto rows_down = current_row < dimensions.rows - 1 ? dimensions.rows - 1 - current_row : std::size_t{0};
             if (stop_cursor && stop_cursor->column >= dimensions.columns && rows_down > 0) --rows_down;
             if (rows_down > 0) {
-                exit_result = terminal_.write(std::format("\x1b[{}B", rows_down));
+                exit_result = terminal_.move_cursor_down(rows_down);
             }
             if (exit_result) exit_result = terminal_.write("\r\n");
         }
     }
-    const auto cursor_result = terminal_.set_cursor_visible(true);
+
     active_images_.clear();
-    stream_decoder_->reset();
     first_render_ = true;
-    pending_render_ = false;
-
-    const auto stop_result = terminal_.stop();
-
     if (!image_result) return std::unexpected(image_result.error());
-    if (!exit_result) return std::unexpected(exit_result.error());
-    if (!cursor_result) return std::unexpected(cursor_result.error());
-    if (!stop_result) return std::unexpected(stop_result.error());
-    return {};
+    return exit_result;
 }
 
-support::ExpectedVoid Tui::clear_screen() {
-    if (!started_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "TUI must be started before clearing the screen"));
-    }
+support::ExpectedVoid Tui::RenderPipeline::clear_screen() {
     if (auto removed = remove_active_images(); !removed) {
         return std::unexpected(removed.error());
     }
@@ -288,7 +160,6 @@ support::ExpectedVoid Tui::clear_screen() {
     previous_lines_.clear();
     previous_raw_dock_lines_.clear();
     previous_raw_lines_.clear();
-    previous_dimensions_ = {};
     previous_viewport_height_ = 0;
     viewport_top_ = 0;
     admitted_ = {};
@@ -296,41 +167,12 @@ support::ExpectedVoid Tui::clear_screen() {
     return {};
 }
 
-support::ExpectedVoid Tui::render() {
-    if (!started_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "TUI must be started before rendering"));
-    }
-
-    const auto dimensions = terminal_.dimensions();
-    if (dimensions.columns == 0 || dimensions.rows == 0) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "TUI requires positive terminal dimensions"));
-    }
-
-    const auto capabilities = terminal_.capabilities();
-    // An overlay splices into prepared composed rows, so a visible overlay keeps
-    // the pre-#711 order: prepare -> composite -> pad -> reset. Without one,
-    // compositing leaves the composed rows untouched and preparation can follow
-    // the differential state, so only changed rows are prepared (#711).
-    const bool compose_overlays = compositor_->has_visible_overlays(dimensions);
-    frame_prepare_call_count_ = 0;
-    auto rendered = render_children(dimensions, compose_overlays);
-    if (!rendered) return std::unexpected(rendered.error());
-    // Main-screen images are buffer-absolute and follow content into the
-    // terminal's scrollback (fork-B image-follows-content): they are not
-    // bounded by the viewport, only by the composed buffer itself.
-    auto materialized = detail::OverlayCompositor::materialize_images(
-        std::move(*rendered),
-        capabilities,
-        dimensions.columns,
-        std::numeric_limits<std::size_t>::max());
-    if (auto overlay_result = compositor_->composite(dimensions, capabilities, materialized);
-        !overlay_result) {
-        return std::unexpected(overlay_result.error());
-    }
+support::ExpectedVoid Tui::RenderPipeline::render(RenderResult materialized,
+        TerminalDimensions dimensions,
+        TerminalDimensions previous_dimensions,
+        TerminalCapabilities capabilities,
+        bool compose_overlays,
+        std::optional<CursorPosition> cursor_location) {
     auto& new_lines = materialized.lines;
     auto desired_images = std::move(materialized.images);
     auto& new_dock_lines = materialized.dock_lines;
@@ -347,8 +189,8 @@ support::ExpectedVoid Tui::render() {
             has_dock && viewport_height >= 1 ? dimensions.rows - viewport_height : dimensions.rows;
     const std::size_t dock_skip = dock_height > dock_capacity ? dock_height - dock_capacity : 0;
 
-    const auto width_changed = dimensions.columns != previous_dimensions_.columns;
-    const auto height_changed = dimensions.rows != previous_dimensions_.rows;
+    const auto width_changed = dimensions.columns != previous_dimensions.columns;
+    const auto height_changed = dimensions.rows != previous_dimensions.rows;
     // A viewport/dock re-partition (overlay, autocomplete, editor wrap) moves
     // physical rows between viewport and dock: repaint the full buffer at the
     // new partition so orphaned rows rejoin with buffer content (#597).
@@ -773,7 +615,7 @@ support::ExpectedVoid Tui::render() {
 
     // Position IME cursor based on focused component
     if (render_result) {
-        auto cursor_loc = resolve_cursor_location();
+        auto cursor_loc = cursor_location;
         if (cursor_loc) {
             if (has_dock) {
                 std::size_t dock_row = cursor_loc->row;
@@ -876,56 +718,11 @@ support::ExpectedVoid Tui::render() {
             .viewport_height = viewport_height,
     };
     previous_viewport_height_ = viewport_height;
-    previous_dimensions_ = dimensions;
     first_render_ = false;
-    pending_render_ = false;
     return {};
 }
 
-support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensions, bool prepare_rows) {
-    RenderResult output;
-    for (const auto& child : children_) {
-        if (auto* viewport_aware = dynamic_cast<ViewportAware*>(child.get())) {
-            viewport_aware->set_available_height(dimensions.rows);
-        }
-        auto rendered = child->render(dimensions.columns);
-        if (!rendered) return std::unexpected(rendered.error());
-        const auto row_offset = output.lines.size();
-        for (auto& line : rendered->lines) {
-            if (!prepare_rows) {
-                // Frame-level preparation follows the differential state in
-                // `render`; only an overlay frame prepares here, before
-                // compositing splices into these rows (#711).
-                output.lines.push_back(std::move(line));
-                continue;
-            }
-            ++frame_prepare_call_count_;
-            auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
-            if (!prepared) return std::unexpected(prepared.error());
-            output.lines.push_back(std::move(prepared->text));
-        }
-        for (auto& image : rendered->images) {
-            image.region.row += row_offset;
-            output.images.push_back(std::move(image));
-        }
-        if (rendered->viewport_height.has_value()) {
-            output.viewport_height = rendered->viewport_height;
-        }
-        for (auto& line : rendered->dock_lines) {
-            if (!prepare_rows) {
-                output.dock_lines.push_back(std::move(line));
-                continue;
-            }
-            ++frame_prepare_call_count_;
-            auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
-            if (!prepared) return std::unexpected(prepared.error());
-            output.dock_lines.push_back(std::move(prepared->text));
-        }
-    }
-    return output;
-}
-
-support::ExpectedVoid Tui::remove_active_images() {
+support::ExpectedVoid Tui::RenderPipeline::remove_active_images() {
     while (!active_images_.empty()) {
         const auto image = active_images_.back();
         if (auto removed = terminal_.remove_image(image.handle, image.region); !removed) {
@@ -936,7 +733,7 @@ support::ExpectedVoid Tui::remove_active_images() {
     return {};
 }
 
-support::ExpectedVoid Tui::remove_images_intersecting(const CellRegion& region) {
+support::ExpectedVoid Tui::RenderPipeline::remove_images_intersecting(const CellRegion& region) {
     std::size_t index = 0;
     while (index < active_images_.size()) {
         const auto& image = active_images_[index];
@@ -952,8 +749,8 @@ support::ExpectedVoid Tui::remove_images_intersecting(const CellRegion& region) 
     return {};
 }
 
-support::ExpectedVoid Tui::remove_stale_images(
-    const std::vector<InlineImageRenderRegion>& desired_images) {
+support::ExpectedVoid Tui::RenderPipeline::remove_stale_images(
+        const std::vector<InlineImageRenderRegion>& desired_images) {
     std::size_t index = 0;
     while (index < active_images_.size()) {
         const auto& active = active_images_[index];
@@ -979,16 +776,11 @@ support::ExpectedVoid Tui::remove_stale_images(
     return {};
 }
 
-support::ExpectedVoid Tui::place_images(
-    const std::vector<InlineImageRenderRegion>& desired_images) {
+support::ExpectedVoid Tui::RenderPipeline::place_images(const std::vector<InlineImageRenderRegion>& desired_images) {
     for (const auto& image : desired_images) {
-        const auto active = std::find_if(
-            active_images_.begin(),
-            active_images_.end(),
-            [&](const auto& candidate) {
-                return candidate.resource_id == image.resource_id &&
-                    candidate.region == image.region;
-            });
+        const auto active = std::find_if(active_images_.begin(), active_images_.end(), [&](const auto& candidate) {
+            return candidate.resource_id == image.resource_id && candidate.region == image.region;
+        });
         if (active != active_images_.end() && active->revision == image.revision) {
             continue;
         }
@@ -1026,6 +818,244 @@ support::ExpectedVoid Tui::place_images(
     }
     return {};
 }
+std::size_t Tui::RenderPipeline::admitted_prefix(TerminalDimensions dimensions, std::size_t viewport_height) const {
+    if (dimensions.columns != admitted_.dimensions.columns || dimensions.rows != admitted_.dimensions.rows ||
+            viewport_height != admitted_.viewport_height) {
+        return 0;
+    }
+    return admitted_.rows;
+}
+Tui::Tui(Terminal& terminal)
+    : terminal_(terminal), stream_decoder_(std::make_unique<detail::TerminalStreamDecoder>()),
+      compositor_(std::make_unique<detail::OverlayCompositor>()), render_pipeline_(terminal) {}
+
+Tui::~Tui() { (void)stop(); }
+
+support::Expected<std::reference_wrapper<Component>> Tui::add_child(std::unique_ptr<Component> component) {
+    return detail::attach_child(children_, std::move(component), "");
+}
+
+support::Expected<std::reference_wrapper<Overlay>> Tui::add_overlay(std::unique_ptr<Overlay> overlay) {
+    return compositor_->add_overlay(std::move(overlay));
+}
+
+support::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
+    if (overlay == nullptr) return {};
+    if (!compositor_->owns(overlay)) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Overlay is not attached to this TUI"));
+    }
+
+    const bool was_focused = focused_ == static_cast<Component*>(overlay);
+    auto* return_focus = compositor_->return_focus(overlay);
+    if (was_focused) apply_focus(nullptr);
+    compositor_->forget_focus(overlay, return_focus);
+
+    if (auto removed = compositor_->remove(overlay); !removed) {
+        return std::unexpected(removed.error());
+    }
+
+    if (was_focused) {
+        if (focus_target_available(return_focus))
+            apply_focus(return_focus);
+        else
+            fallback_focus();
+    }
+    return {};
+}
+
+support::ExpectedVoid Tui::hide_overlay(Overlay* overlay) {
+    if (overlay == nullptr) return {};
+    if (!compositor_->owns(overlay)) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Overlay is not attached to this TUI"));
+    }
+
+    auto* return_focus = compositor_->return_focus(overlay);
+    const auto was_focused = focused_ == static_cast<Component*>(overlay);
+    overlay->set_visible(false);
+
+    if (was_focused) {
+        apply_focus(nullptr);
+        if (focus_target_available(return_focus))
+            apply_focus(return_focus);
+        else
+            fallback_focus();
+    }
+
+    invalidate();
+    return {};
+}
+
+support::ExpectedVoid Tui::restore_overlay(Overlay* overlay) {
+    if (overlay == nullptr) return {};
+    if (!compositor_->owns(overlay)) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Overlay is not attached to this TUI"));
+    }
+
+    overlay->set_visible(true);
+    invalidate();
+    return {};
+}
+
+support::ExpectedVoid Tui::start() {
+    if (started_) {
+        return {};
+    }
+
+    // The latch is armed before the terminal starts: ProcessTerminal
+    // forwards startup-preserved input synchronously inside start(), and
+    // dropping it on the not-yet-started guard would lose keystrokes typed
+    // during the capability probes (#610).
+    started_ = true;
+    if (auto result = terminal_.start(
+                [this](std::string input) -> support::ExpectedVoid {
+                    handle_input(std::move(input));
+                    return {};
+                },
+                [this](TerminalDimensions dimensions) -> support::ExpectedVoid {
+                    handle_resize(dimensions);
+                    return {};
+                });
+            !result) {
+        started_ = false;
+        return std::unexpected(result.error());
+    }
+
+    if (auto result = terminal_.set_cursor_visible(false); !result) {
+        started_ = false;
+        if (auto stopped = terminal_.stop(); !stopped) {
+            return std::unexpected(startup_rollback_error(result.error(), stopped.error()));
+        }
+        return std::unexpected(result.error());
+    }
+
+    render_pipeline_.start();
+    pending_render_ = false;
+    previous_dimensions_ = terminal_.dimensions();
+    return {};
+}
+
+support::ExpectedVoid Tui::stop() {
+    if (!started_) return {};
+
+    started_ = false;
+    const auto stop_cursor = resolve_cursor_location();
+    if (auto* focusable = dynamic_cast<Focusable*>(focused_)) {
+        focusable->set_focused(false);
+    }
+    focused_ = nullptr;
+    compositor_->clear_focus_history();
+
+    const auto exit_result = render_pipeline_.stop(stop_cursor);
+    const auto cursor_result = terminal_.set_cursor_visible(true);
+    stream_decoder_->reset();
+    pending_render_ = false;
+    const auto stop_result = terminal_.stop();
+
+    if (!exit_result) return std::unexpected(exit_result.error());
+    if (!cursor_result) return std::unexpected(cursor_result.error());
+    if (!stop_result) return std::unexpected(stop_result.error());
+    return {};
+}
+
+support::ExpectedVoid Tui::clear_screen() {
+    if (!started_) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "TUI must be started before clearing the screen"));
+    }
+    if (auto cleared = render_pipeline_.clear_screen(); !cleared) {
+        return std::unexpected(cleared.error());
+    }
+    previous_dimensions_ = {};
+    return {};
+}
+
+support::ExpectedVoid Tui::render() {
+    if (!started_) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "TUI must be started before rendering"));
+    }
+
+    const auto dimensions = terminal_.dimensions();
+    if (dimensions.columns == 0 || dimensions.rows == 0) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "TUI requires positive terminal dimensions"));
+    }
+
+    const auto capabilities = terminal_.capabilities();
+    // An overlay splices into prepared composed rows, so a visible overlay keeps
+    // the pre-#711 order: prepare -> composite -> pad -> reset. Without one,
+    // compositing leaves the composed rows untouched and preparation can follow
+    // the differential state, so only changed rows are prepared (#711).
+    const bool compose_overlays = compositor_->has_visible_overlays(dimensions);
+    render_pipeline_.begin_frame();
+    auto rendered = render_children(dimensions, compose_overlays);
+    if (!rendered) return std::unexpected(rendered.error());
+    // Main-screen images are buffer-absolute and follow content into the
+    // terminal's scrollback (fork-B image-follows-content): they are not
+    // bounded by the viewport, only by the composed buffer itself.
+    auto materialized = detail::OverlayCompositor::materialize_images(
+            std::move(*rendered), capabilities, dimensions.columns, std::numeric_limits<std::size_t>::max());
+    if (auto overlay_result = compositor_->composite(dimensions, capabilities, materialized); !overlay_result) {
+        return std::unexpected(overlay_result.error());
+    }
+    auto result = render_pipeline_.render(std::move(materialized),
+            dimensions,
+            previous_dimensions_,
+            capabilities,
+            compose_overlays,
+            resolve_cursor_location());
+    if (result) {
+        previous_dimensions_ = dimensions;
+        pending_render_ = false;
+    }
+    return result;
+}
+
+support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensions, bool prepare_rows) {
+    RenderResult output;
+    for (const auto& child : children_) {
+        if (auto* viewport_aware = dynamic_cast<ViewportAware*>(child.get())) {
+            viewport_aware->set_available_height(dimensions.rows);
+        }
+        auto rendered = child->render(dimensions.columns);
+        if (!rendered) return std::unexpected(rendered.error());
+        const auto row_offset = output.lines.size();
+        for (auto& line : rendered->lines) {
+            if (!prepare_rows) {
+                // Frame-level preparation follows the differential state in
+                // `render`; only an overlay frame prepares here, before
+                // compositing splices into these rows (#711).
+                output.lines.push_back(std::move(line));
+                continue;
+            }
+            render_pipeline_.note_prepared_line();
+            auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
+            if (!prepared) return std::unexpected(prepared.error());
+            output.lines.push_back(std::move(prepared->text));
+        }
+        for (auto& image : rendered->images) {
+            image.region.row += row_offset;
+            output.images.push_back(std::move(image));
+        }
+        if (rendered->viewport_height.has_value()) {
+            output.viewport_height = rendered->viewport_height;
+        }
+        for (auto& line : rendered->dock_lines) {
+            if (!prepare_rows) {
+                output.dock_lines.push_back(std::move(line));
+                continue;
+            }
+            render_pipeline_.note_prepared_line();
+            auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
+            if (!prepared) return std::unexpected(prepared.error());
+            output.dock_lines.push_back(std::move(prepared->text));
+        }
+    }
+    return output;
+}
 
 support::ExpectedVoid Tui::set_focus(Component* component) {
     if (component != nullptr && !owns(component)) {
@@ -1062,14 +1092,6 @@ void Tui::invalidate() {
     if (request_render && render_request_sink_) {
         (void)render_request_sink_();
     }
-}
-
-std::size_t Tui::admitted_prefix(TerminalDimensions dimensions, std::size_t viewport_height) const {
-    if (dimensions.columns != admitted_.dimensions.columns || dimensions.rows != admitted_.dimensions.rows ||
-            viewport_height != admitted_.viewport_height) {
-        return 0;
-    }
-    return admitted_.rows;
 }
 
 bool Tui::owns(const Component* component) const {
@@ -1159,7 +1181,9 @@ std::optional<CursorPosition> Tui::resolve_cursor_location() const {
 
 namespace detail::testing {
 
-std::size_t frame_prepare_call_count(const Tui& tui) noexcept { return tui.frame_prepare_call_count_; }
+std::size_t frame_prepare_call_count(const Tui& tui) noexcept {
+    return tui.render_pipeline_.frame_prepare_call_count();
+}
 
 } // namespace detail::testing
 

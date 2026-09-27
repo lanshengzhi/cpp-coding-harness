@@ -75,21 +75,63 @@ public:
 private:
     friend std::size_t detail::testing::frame_prepare_call_count(const Tui& tui) noexcept;
 
-    struct ActiveImage {
-        TerminalImageHandle handle;
-        CellRegion region;
-        std::uint64_t resource_id{0};
-        std::uint64_t revision{0};
+    /// Owns the state and terminal effects for differential frame rendering.
+    class RenderPipeline final {
+    public:
+        explicit RenderPipeline(Terminal& terminal);
+        void start() noexcept;
+        void begin_frame() noexcept;
+        void note_prepared_line() noexcept;
+        [[nodiscard]] std::size_t frame_prepare_call_count() const noexcept;
+        [[nodiscard]] support::ExpectedVoid stop(std::optional<CursorPosition> stop_cursor);
+        [[nodiscard]] support::ExpectedVoid clear_screen();
+        [[nodiscard]] support::ExpectedVoid render(RenderResult materialized,
+                TerminalDimensions dimensions,
+                TerminalDimensions previous_dimensions,
+                TerminalCapabilities capabilities,
+                bool compose_overlays,
+                std::optional<CursorPosition> cursor_location);
+
+    private:
+        struct ActiveImage {
+            TerminalImageHandle handle;
+            CellRegion region;
+            std::uint64_t resource_id{0};
+            std::uint64_t revision{0};
+        };
+
+        struct AdmittedFrame {
+            std::size_t rows{0};
+            TerminalDimensions dimensions{};
+            std::size_t viewport_height{0};
+            bool cleared{false};
+            std::size_t stale_below{0};
+            std::size_t stale_cleared{0};
+        };
+
+        [[nodiscard]] support::ExpectedVoid remove_active_images();
+        [[nodiscard]] support::ExpectedVoid remove_images_intersecting(const CellRegion& region);
+        [[nodiscard]] support::ExpectedVoid remove_stale_images(
+                const std::vector<InlineImageRenderRegion>& desired_images);
+        [[nodiscard]] support::ExpectedVoid place_images(const std::vector<InlineImageRenderRegion>& desired_images);
+        [[nodiscard]] std::size_t admitted_prefix(TerminalDimensions dimensions, std::size_t viewport_height) const;
+
+        Terminal& terminal_;
+        bool first_render_{true};
+        std::vector<std::string> previous_lines_;
+        std::vector<std::string> previous_dock_lines_;
+        /// Composed rows before frame-level preparation, used to reuse finalized rows.
+        std::vector<std::string> previous_raw_lines_;
+        std::vector<std::string> previous_raw_dock_lines_;
+        std::size_t frame_prepare_call_count_{0};
+        std::size_t previous_viewport_height_{0};
+        std::size_t viewport_top_{0};
+        AdmittedFrame admitted_;
+        std::vector<ActiveImage> active_images_;
     };
 
     [[nodiscard]] bool owns(const Component* component) const;
     [[nodiscard]] support::Expected<RenderResult> render_children(TerminalDimensions dimensions, bool prepare_rows);
-    [[nodiscard]] support::ExpectedVoid remove_active_images();
-    [[nodiscard]] support::ExpectedVoid remove_images_intersecting(const CellRegion& region);
-    [[nodiscard]] support::ExpectedVoid remove_stale_images(
-        const std::vector<InlineImageRenderRegion>& desired_images);
-    [[nodiscard]] support::ExpectedVoid place_images(
-        const std::vector<InlineImageRenderRegion>& desired_images);
     void handle_input(std::string input);
     void dispatch_input(const InputEventVariant& event);
     void handle_resize(TerminalDimensions dimensions);
@@ -98,60 +140,16 @@ private:
     void fallback_focus();
     [[nodiscard]] Focusable* find_focusable_target();
     [[nodiscard]] std::optional<CursorPosition> resolve_cursor_location() const;
-    /// Rows of `previous_lines_` admitted to the terminal under the given
-    /// partition, or 0 when the partition changed and every row must be
-    /// rewritten.
-    [[nodiscard]] std::size_t admitted_prefix(TerminalDimensions dimensions, std::size_t viewport_height) const;
 
     Terminal& terminal_; // must outlive this Tui.
     std::unique_ptr<detail::TerminalStreamDecoder> stream_decoder_;
     std::unique_ptr<detail::OverlayCompositor> compositor_;
+    RenderPipeline render_pipeline_;
     TuiRenderRequestSink render_request_sink_;
     std::vector<std::unique_ptr<Component>> children_;
     Component* focused_{nullptr}; // Null or aliases an element owned by children_ or the compositor's overlays.
     bool started_{false};
-    bool first_render_{true};
     bool pending_render_{false};
-    std::vector<std::string> previous_lines_;
-    std::vector<std::string> previous_dock_lines_;
-    /// Composed rows of the previous render before frame-level preparation
-    /// (normalization, width validation, padding, per-row reset). A row whose
-    /// composed bytes are unchanged reuses its previous finalized row instead
-    /// of being prepared again (#711).
-    std::vector<std::string> previous_raw_lines_;
-    std::vector<std::string> previous_raw_dock_lines_;
-    /// Frame-level `prepare_rendered_line` calls performed by the last render.
-    std::size_t frame_prepare_call_count_{0};
-    /// Viewport rows above the pinned dock on the previous render (#597: a
-    /// re-partition between scrollback viewport and dock leaves stale pixels
-    /// outside both differentials, so the render reflows like a resize).
-    std::size_t previous_viewport_height_{0};
-    /// Buffer row at the top of the visible viewport under the main-screen
-    /// scrollback flow (pi `TuiMainScreen` `previousViewportTop`): the
-    /// composed buffer's lines below it are the terminal's native scrollback.
-    std::size_t viewport_top_{0};
-    /// Physical write progress of the committed composed buffer: rows
-    /// [0, `rows`) of `previous_lines_` are on the terminal, written under
-    /// `dimensions` and `viewport_height`. `cleared` records that the committed
-    /// screen state rests on an unfinished clear frame (the clear is admitted
-    /// and the buffer was painted from the screen top), so a retry of that
-    /// frame resumes rather than clearing again. A shrunken buffer owes a clear
-    /// of the stale rows below it, down to `stale_below` (the pre-shrink
-    /// height); `stale_cleared` is the first stale row not yet cleared, so the
-    /// retry resumes that tail too. A frame ended by terminal backpressure
-    /// keeps this watermark so the retry resumes after the admitted rows
-    /// instead of re-emitting the buffer from its first changed row (#732); a
-    /// completed frame replaces it.
-    struct AdmittedFrame {
-        std::size_t rows{0};
-        TerminalDimensions dimensions{};
-        std::size_t viewport_height{0};
-        bool cleared{false};
-        std::size_t stale_below{0};
-        std::size_t stale_cleared{0};
-    };
-    AdmittedFrame admitted_;
-    std::vector<ActiveImage> active_images_;
     TerminalDimensions previous_dimensions_{};
 };
 

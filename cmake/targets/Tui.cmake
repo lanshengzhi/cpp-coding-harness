@@ -27,6 +27,7 @@ cch_parity_declare_target(
         src/tui/SelectList.cpp
         src/tui/SettingsList.cpp
         src/tui/TerminalImage.cpp
+        src/tui/Terminal.cpp
         src/tui/Text.cpp
         src/tui/TextBuffer.cpp
         src/tui/TruncatedText.cpp
