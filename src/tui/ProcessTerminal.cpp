@@ -1120,6 +1120,15 @@ template <typename T> void abandon_startup(T& impl) {
 } // namespace
 
 ProcessTerminal::ProcessTerminal(ProcessTerminalOptions options) : impl_(std::make_shared<Impl>(options)) {
+    // pi `getCapabilities()` (packages/tui terminal-image.ts) is synchronous
+    // and feeds `initTheme` ahead of TUI construction, so the env-derived
+    // color depth and appearance must already be observable here: the
+    // interactive engine builds its ThemeController from `capabilities()`
+    // before `start()`. `start()` re-detects both and refines the appearance
+    // with probe responses; the probe-backed capabilities (inline images,
+    // hyperlinks, synchronized output) remain start-time only.
+    impl_->capabilities.color = detect_color_capability();
+    impl_->capabilities.appearance = detect_terminal_appearance();
     impl_->self = impl_;
 }
 

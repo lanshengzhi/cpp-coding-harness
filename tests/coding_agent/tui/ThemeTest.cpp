@@ -1,7 +1,6 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/tui/Theme.hpp"
 
-#include <cch/tui/Editor.hpp>
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
@@ -473,7 +472,6 @@ TEST_CASE("Theme adapters resolve the current palette at callback time", "[codin
     auto generic_status = live.foreground_hook(coding_agent::tui::ThemeToken::Accent);
     auto generic_tool = live.background_hook(coding_agent::tui::ThemeToken::ToolPendingBg);
     auto markdown_style = live.markdown_style();
-    auto editor_theme = live.editor_theme();
     auto select_theme = live.select_list_theme();
     auto settings_theme = live.settings_list_theme();
 
@@ -484,11 +482,6 @@ TEST_CASE("Theme adapters resolve the current palette at callback time", "[codin
     const auto dark_link_url = markdown_style.link_url(" (https://example.com)");
     const auto dark_selection = select_theme.selected_text("selected");
     const auto dark_setting = settings_theme.label("setting", true);
-    tui::Editor editor;
-    editor.set_theme(std::move(editor_theme));
-    editor.set_text("editor");
-    const auto dark_editor = editor.render(8);
-    REQUIRE(dark_editor);
 
     live.replace(coding_agent::tui::builtin_light_theme(), tui::TerminalColorCapability::TrueColor);
     const auto light_status = generic_status("status");
@@ -498,8 +491,6 @@ TEST_CASE("Theme adapters resolve the current palette at callback time", "[codin
     const auto light_link_url = markdown_style.link_url(" (https://example.com)");
     const auto light_selection = select_theme.selected_text("selected");
     const auto light_setting = settings_theme.label("setting", true);
-    const auto light_editor = editor.render(8);
-    REQUIRE(light_editor);
 
     CHECK(dark_status != light_status);
     CHECK(dark_tool != light_tool);
@@ -508,7 +499,6 @@ TEST_CASE("Theme adapters resolve the current palette at callback time", "[codin
     CHECK(dark_link_url != light_link_url);
     CHECK(dark_selection != light_selection);
     CHECK(dark_setting != light_setting);
-    CHECK(dark_editor->lines != light_editor->lines);
 
     tui::Markdown markdown(
         "plain\n\n# heading\n\n[label](https://example.com)",
@@ -520,7 +510,10 @@ TEST_CASE("Theme adapters resolve the current palette at callback time", "[codin
     tui::VirtualTerminal light_terminal({.columns = 40, .rows = light_markdown->lines.size() + 1});
     REQUIRE(light_terminal.start([](std::string) -> support::ExpectedVoid { return {}; }, [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
     write_render_result(light_terminal, *light_markdown);
-    CHECK(color_at_text(light_terminal, "plain") == "38;2;31;35;40");
+    // pi passes `defaultTextStyle: undefined` for assistant markdown
+    // (assistant-message.ts), so the base text hook stays empty and body text
+    // renders at the terminal default foreground in both themes.
+    CHECK(color_at_text(light_terminal, "plain").empty());
     CHECK(color_at_text(light_terminal, "heading") == "38;2;154;115;38");
     CHECK(color_at_text(light_terminal, "label") == "38;2;84;125;167");
     CHECK(color_at_text(light_terminal, "https://example.com") == "38;2;118;118;118");
@@ -533,7 +526,7 @@ TEST_CASE("Theme adapters resolve the current palette at callback time", "[codin
     REQUIRE(dark_terminal.start([](std::string) -> support::ExpectedVoid { return {}; }, [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
     write_render_result(dark_terminal, *dark_markdown);
     CHECK(light_markdown->lines != dark_markdown->lines);
-    CHECK(color_at_text(dark_terminal, "plain") == "38;2;212;212;212");
+    CHECK(color_at_text(dark_terminal, "plain").empty());
     CHECK(color_at_text(dark_terminal, "heading") == "38;2;240;198;116");
     CHECK(color_at_text(dark_terminal, "label") == "38;2;129;162;190");
     CHECK(color_at_text(dark_terminal, "https://example.com") == "38;2;102;102;102");

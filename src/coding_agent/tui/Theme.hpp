@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cch/tui/Editor.hpp>
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/SelectList.hpp>
 #include <cch/tui/SettingsList.hpp>
@@ -117,7 +116,6 @@ public:
     [[nodiscard]] cch::tui::TextStyleHook foreground_hook(ThemeToken token) const;
     [[nodiscard]] cch::tui::BackgroundHook background_hook(ThemeToken token) const;
     [[nodiscard]] cch::tui::MarkdownStyleConfig markdown_style() const;
-    [[nodiscard]] cch::tui::EditorTheme editor_theme() const;
     [[nodiscard]] cch::tui::SelectListTheme select_list_theme() const;
     [[nodiscard]] cch::tui::SettingsListTheme settings_list_theme() const;
 

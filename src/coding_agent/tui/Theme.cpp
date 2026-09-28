@@ -583,7 +583,11 @@ cch::tui::BackgroundHook LiveTheme::background_hook(ThemeToken token) const {
 
 cch::tui::MarkdownStyleConfig LiveTheme::markdown_style() const {
     cch::tui::MarkdownStyleConfig style;
-    style.text = foreground_hook(ThemeToken::Text);
+    // pi leaves the base text unstyled: assistant messages pass
+    // `defaultTextStyle: undefined` (assistant-message.ts), and the callers
+    // that style body text override `.text` (user-message.ts
+    // fg("userMessageText"), custom-message.ts fg("customMessageText"),
+    // thinking runs use thinkingText italic).
     style.heading = foreground_hook(ThemeToken::MdHeading);
     style.emphasis = [](std::string text) { return attribute_style(3, 23, std::move(text)); };
     style.strong = [](std::string text) { return attribute_style(1, 22, std::move(text)); };
@@ -604,10 +608,6 @@ cch::tui::MarkdownStyleConfig LiveTheme::markdown_style() const {
     };
     style.link_url = foreground_hook(ThemeToken::MdLinkUrl);
     return style;
-}
-
-cch::tui::EditorTheme LiveTheme::editor_theme() const {
-    return {.text = foreground_hook(ThemeToken::Text)};
 }
 
 cch::tui::SelectListTheme LiveTheme::select_list_theme() const {

@@ -136,6 +136,21 @@ struct TestRunOptions {
     return {};
 }
 
+/// The fg SGR params of the first cell on the row above `text` — the
+/// editor's top border row when `text` is the editor's first content line.
+[[nodiscard]] std::string fg_above_text(const tui::VirtualTerminal& terminal, std::string_view text) {
+    const auto screen = terminal.screen();
+    for (std::size_t row = 1; row < screen.size(); ++row) {
+        if (screen[row].find(text) != std::string::npos) {
+            REQUIRE(row - 1 < terminal.cells().size());
+            REQUIRE(!terminal.cells()[row - 1].empty());
+            return terminal.cells()[row - 1][0].style.fg_color;
+        }
+    }
+    REQUIRE(false);
+    return {};
+}
+
 /// First request emits partial output, gates, and answers cancellation with an
 /// aborted outcome; later requests answer immediately so recovery is visible.
 class AbortAwareGatedChatProvider final : public tests::ScriptedProvider {
@@ -1936,22 +1951,24 @@ TEST_CASE("the editor enters Bash mode on trimmed ! input and recalls the origin
     coding_agent::tui::LiveTheme probe_theme(
         coding_agent::tui::select_builtin_theme(terminal.capabilities()),
         terminal.capabilities().color);
-    const auto bash_params = sgr_params(
-        probe_theme.foreground(coding_agent::tui::ThemeToken::BashMode, "x"));
-    const auto text_params = sgr_params(
-        probe_theme.foreground(coding_agent::tui::ThemeToken::Text, "x"));
+    const auto bash_params = sgr_params(probe_theme.foreground(coding_agent::tui::ThemeToken::BashMode, "x"));
 
-    // Bash mode starts as soon as the trimmed input begins with !.
+    // Bash mode starts as soon as the trimmed input begins with !. pi styles
+    // only the editor *border* (`updateEditorBorderColor` →
+    // `getBashModeBorderColor`, interactive-mode.ts); pi's `EditorTheme`
+    // (pi-tui editor.ts) has no text color, so the editor text keeps the
+    // terminal default foreground in both modes.
     REQUIRE(terminal.inject_input("  !echo marker"));
     drain_ready(io);
-    CHECK(fg_at_text(terminal, "!echo marker") == bash_params);
+    CHECK(fg_at_text(terminal, "!echo marker").empty());
+    CHECK(fg_above_text(terminal, "!echo marker") == bash_params);
 
-    // Ordinary text keeps the ordinary editor styling.
+    // Ordinary text is likewise unstyled.
     REQUIRE(terminal.inject_input("\x03"));
     drain_ready(io);
     REQUIRE(terminal.inject_input("plain text"));
     drain_ready(io);
-    CHECK(fg_at_text(terminal, "plain text") == text_params);
+    CHECK(fg_at_text(terminal, "plain text").empty());
 
     // A rejected second command is recalled to the editor verbatim (pi
     // setText(text), ADR 0028): no redaction, no re-serialized prefix.

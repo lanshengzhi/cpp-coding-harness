@@ -770,6 +770,55 @@ TEST_CASE("Process Terminal rolls back raw input after partial startup failure",
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
 }
 
+TEST_CASE("Process Terminal exposes env-derived color and appearance before start", "[tui][terminal][theme][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    ScopedEnvironmentVariable terminal_environment("TERM");
+    ScopedEnvironmentVariable program_environment("TERM_PROGRAM");
+    ScopedEnvironmentVariable color_terminal_environment("COLORTERM");
+    ScopedEnvironmentVariable foreground_background_environment("COLORFGBG");
+    ScopedEnvironmentVariable terminal_emulator_environment("TERMINAL_EMULATOR");
+    ScopedEnvironmentVariable tmux_environment("TMUX");
+    ScopedEnvironmentVariable kitty_environment("KITTY_WINDOW_ID");
+    ScopedEnvironmentVariable ghostty_environment("GHOSTTY_RESOURCES_DIR");
+    ScopedEnvironmentVariable wezterm_environment("WEZTERM_PANE");
+    ScopedEnvironmentVariable warp_environment("WARP_SESSION_ID");
+    ScopedEnvironmentVariable warp_uuid_environment("WARP_TERMINAL_SESSION_UUID");
+    ScopedEnvironmentVariable iterm_environment("ITERM_SESSION_ID");
+    ScopedEnvironmentVariable windows_terminal_environment("WT_SESSION");
+    terminal_environment.set("xterm-unknown");
+    program_environment.unset();
+    color_terminal_environment.unset();
+    foreground_background_environment.unset();
+    terminal_emulator_environment.unset();
+    tmux_environment.unset();
+    kitty_environment.unset();
+    ghostty_environment.unset();
+    wezterm_environment.unset();
+    warp_environment.unset();
+    warp_uuid_environment.unset();
+    iterm_environment.unset();
+    windows_terminal_environment.unset();
+
+    // pi `getCapabilities()` (packages/tui terminal-image.ts) is synchronous
+    // and feeds `initTheme` before the TUI is constructed, so the env-derived
+    // observations are available ahead of `start()`; `start()` re-detects and
+    // may refine the appearance with probe responses.
+    color_terminal_environment.set("24BIT");
+    foreground_background_environment.set("15;0");
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    CHECK(terminal.capabilities().color == cch::tui::TerminalColorCapability::TrueColor);
+    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
+
+    color_terminal_environment.unset();
+    foreground_background_environment.unset();
+    cch::tui::ProcessTerminal conservative(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    CHECK(conservative.capabilities().color == cch::tui::TerminalColorCapability::Xterm256);
+    CHECK(conservative.capabilities().appearance == cch::tui::TerminalAppearance::Unknown);
+}
+
 TEST_CASE("Process Terminal reports conservative color and appearance observations",
         "[tui][terminal][theme][issue55][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();

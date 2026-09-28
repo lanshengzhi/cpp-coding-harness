@@ -431,15 +431,16 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         // with `!` (where User Bash dispatch is available). The border color
         // follows the same transition: bash mode uses the bashMode token,
         // otherwise the thinking-level token (pi `updateEditorBorderColor`
-        // `getBashModeBorderColor` / `getThinkingBorderColor`).
+        // `getBashModeBorderColor` / `getThinkingBorderColor`). pi's
+        // `EditorTheme` (pi-tui editor.ts) carries no text color, so the
+        // editor text renders at the terminal default foreground in both
+        // modes; only the border is themed.
         const auto thinking_border_token = thinking_border_token_for(
             current_footer_data_.thinking_level);
         cch::tui::EditorTheme editor_theme;
         if (unsubmitted_bash_mode()) {
-            editor_theme.text = theme_->foreground_hook(ThemeToken::BashMode);
             editor_theme.border = theme_->foreground_hook(ThemeToken::BashMode);
         } else {
-            editor_theme.text = theme_->editor_theme().text;
             editor_theme.border = theme_->foreground_hook(thinking_border_token);
         }
         presented_bash_mode_ = unsubmitted_bash_mode();
