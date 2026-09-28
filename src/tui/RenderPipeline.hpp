@@ -70,7 +70,7 @@ private:
     [[nodiscard]] support::ExpectedVoid place_images(const std::vector<InlineImageRenderRegion>& desired_images);
     [[nodiscard]] std::size_t admitted_prefix(TerminalDimensions dimensions, std::size_t viewport_height) const;
 
-    Terminal& terminal_;
+    Terminal& terminal_; // must outlive this pipeline.
     bool first_render_{true};
     std::vector<std::string> previous_lines_;
     std::vector<std::string> previous_dock_lines_;
