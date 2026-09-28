@@ -497,3 +497,52 @@ TEST_CASE("Streaming assistant incremental block freeze maintains flat processin
     CHECK(max_chunk_us < 2000.0);
 #endif
 }
+
+TEST_CASE("ChatContainer settles an older repeated bash entry in place", "[coding_agent][tui][issue597][spec]") {
+    auto theme = test_theme();
+    coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
+
+    const auto bash = [](std::string command, std::string output, std::optional<int> exit_code) {
+        ai::BashExecutionMessage message;
+        message.command = std::move(command);
+        message.output = std::move(output);
+        message.exit_code = exit_code;
+        return ai::MessageVariant{message};
+    };
+
+    // Two runs of the same command. The message text is identical, so nothing
+    // in the transcript distinguishes the two blocks except their position.
+    coding_agent::AgentSessionSnapshot snapshot;
+    snapshot.agent_state.messages = {
+            ai::user_text_message("list the workspace"),
+            bash("ls", "first-run-output", 0),
+            ai::user_text_message("list it again"),
+            bash("ls", "second-run-output", 0),
+    };
+    chat.initialize(snapshot);
+
+    // The first shell settles after the second one already committed: the
+    // Core rewrites its own message in place, so the history keeps its size
+    // and only the values change.
+    auto& settled = std::get<ai::BashExecutionMessage>(snapshot.agent_state.messages[1]);
+    settled.output = "first-run-cancelled";
+    settled.exit_code = std::nullopt;
+    settled.cancelled = true;
+    chat.reconcile_snapshot(snapshot);
+
+    const auto screen = tests::rendered_screen(chat, 100);
+    const auto cancelled_row = screen.find("first-run-cancelled");
+    const auto untouched_row = screen.find("second-run-output");
+    REQUIRE(cancelled_row != std::string::npos);
+    REQUIRE(untouched_row != std::string::npos);
+    // Ordering, not mere presence: the settled block is the earlier one, and
+    // the later block keeps its own output.
+    CHECK(cancelled_row < untouched_row);
+    // The cancel flag reached the earlier block, not the later one.
+    const auto cancel_marker = screen.find("(cancelled)");
+    REQUIRE(cancel_marker != std::string::npos);
+    CHECK(cancel_marker < untouched_row);
+    // The pre-settlement value is gone: the view updated, it did not append.
+    CHECK(screen.find("first-run-output") == std::string::npos);
+    CHECK(chat.item_count() == 4);
+}

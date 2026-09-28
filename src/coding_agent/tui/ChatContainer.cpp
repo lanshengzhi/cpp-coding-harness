@@ -39,6 +39,24 @@ namespace {
     message.stop_reason = ai::AssistantStopReason::Pending;
     return message;
 }
+/// True when the Core settled a message the view already rendered, leaving
+/// the rendered value stale in place. Only the User Bash message is written
+/// after it enters the transcript: the shell return settles the cancel flag,
+/// the output tail, the exit code, the spill path, and the context
+/// exclusion. Every other message is append-only once committed.
+[[nodiscard]] bool settled_in_place(const ai::MessageVariant& current, const ai::MessageVariant& rendered) {
+    const auto* next = std::get_if<ai::BashExecutionMessage>(&current);
+    const auto* previous = std::get_if<ai::BashExecutionMessage>(&rendered);
+    if (next == nullptr || previous == nullptr) {
+        return false;
+    }
+    // The cheap outcome fields gate the string compares, so a settled block
+    // that only grew its output tail never touches the bounded output text.
+    return next->cancelled != previous->cancelled || next->truncated != previous->truncated ||
+           next->exclude_from_context != previous->exclude_from_context || next->exit_code != previous->exit_code ||
+           next->full_output_path != previous->full_output_path || next->output != previous->output;
+}
+
 [[nodiscard]] support::Expected<cch::tui::RenderResult> render_plain(const LiveTheme& theme,
         std::string text,
         std::size_t width,
@@ -311,6 +329,12 @@ struct ChatContainer::Impl {
         // Assistant tool components in call order (rendered after the
         // assistant message, pi renderSessionItems).
         std::vector<ToolItem*> tools;
+        // Position of the source message in the Projection read model, or
+        // nullopt for a message the view owns (a live assistant partial, a
+        // host push). It is how a later in-place rewrite of an already
+        // rendered message is addressed without guessing which entry
+        // changed.
+        std::optional<std::size_t> source_index;
         bool committed{false};
         CommittedLineCache cache;
     };
@@ -390,46 +414,30 @@ struct ChatContainer::Impl {
         }
     }
 
-    /// Refresh the latest committed bash entry when its snapshot counterpart
-    /// mutated in place (cancel flag, output, exit code). The append cursor
-    /// cannot observe same-size mutations, so without this the view keeps
-    /// the pre-cancel rendering forever (#597). Only the latest bash pair
-    /// is compared: cancellation always settles the newest execution, and
-    /// items interleave non-message entries so positional pairing beyond
-    /// the tail is unreliable. Pairing keys on the command text.
-    /// debt: misses in-place mutations of an older bash entry while a newer
-    /// one runs; upgrade when the projection exposes per-message versions or
-    /// a patch stream (issue #597 snapshot/patch stream).
-    void sync_committed_bash(const std::vector<ai::MessageVariant>& messages) {
-        const ai::BashExecutionMessage* updated = nullptr;
-        for (auto iterator = messages.rbegin(); iterator != messages.rend(); ++iterator) {
-            if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&*iterator); bash != nullptr) {
-                updated = bash;
-                break;
-            }
-        }
-        if (updated == nullptr) return;
-        for (auto iterator = items.rbegin(); iterator != items.rend(); ++iterator) {
-            auto* item = std::get_if<MessageItem>(&*iterator);
-            if (item == nullptr) continue;
-            auto* current = std::get_if<ai::BashExecutionMessage>(&item->message);
-            if (current == nullptr) continue;
-            if (current->command != updated->command) return;
-            if (current->output == updated->output && current->exit_code == updated->exit_code &&
-                    current->cancelled == updated->cancelled && current->truncated == updated->truncated &&
-                    current->full_output_path == updated->full_output_path &&
-                    current->exclude_from_context == updated->exclude_from_context) {
-                return;
-            }
-            item->message = ai::MessageVariant{*updated};
+    /// Apply an in-place rewrite of a message the view already rendered. A
+    /// message enters the transcript once, but the Core can still settle it
+    /// afterwards, and an append cursor cannot observe a same-size change
+    /// (#597). Every snapshot-backed item carries its own read-model
+    /// position, so the view updates exactly the message that changed
+    /// instead of pairing rendered blocks by command text — a heuristic
+    /// that mis-pairs repeated commands and never reaches past the last
+    /// bash entry.
+    void sync_mutated_messages(const std::vector<ai::MessageVariant>& messages) {
+        for (auto& entry : items) {
+            auto* item = std::get_if<MessageItem>(&entry);
+            if (item == nullptr || !item->source_index.has_value()) continue;
+            const auto& current = messages[*item->source_index];
+            if (!settled_in_place(current, item->message)) continue;
+            item->message = current;
             rebuild_message(*item);
             item->cache.invalidate();
             update_item_commitment(*item);
-            return;
         }
     }
 
-    void add_message(ai::MessageVariant message, bool from_snapshot = false) {
+    void add_message(ai::MessageVariant message,
+            std::optional<std::size_t> source_index = std::nullopt,
+            bool from_snapshot = false) {
         // Tool results settle their owning tool component; they never render
         // as standalone chat entries (pi addMessageToChat "toolResult").
         if (const auto* result = std::get_if<ai::ToolResultMessage>(&message)) {
@@ -440,6 +448,7 @@ struct ChatContainer::Impl {
                 .message = std::move(message),
                 .component = {},
                 .tools = {},
+                .source_index = source_index,
                 .committed = false,
                 .cache = {},
         });
@@ -706,6 +715,7 @@ struct ChatContainer::Impl {
                 .message = ai::MessageVariant{ai::ToolResultMessage{}},
                 .component = {},
                 .tools = {},
+                .source_index = std::nullopt,
                 .committed = false,
                 .cache = {},
         });
@@ -896,8 +906,8 @@ void ChatContainer::initialize(const AgentSessionSnapshot& snapshot) {
     for (auto& entry : pending_tools) {
         impl_->owned_tools.emplace(entry.first, std::move(entry.second));
     }
-    for (const auto& message : snapshot.agent_state.messages) {
-        impl_->add_message(message, true);
+    for (std::size_t index = 0; index < snapshot.agent_state.messages.size(); ++index) {
+        impl_->add_message(snapshot.agent_state.messages[index], index, true);
     }
     impl_->committed_message_count = snapshot.agent_state.messages.size();
     for (auto& item : impl_->items) {
@@ -969,10 +979,10 @@ void ChatContainer::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
     }
 
     for (; next_message < messages.size(); ++next_message) {
-        impl_->add_message(messages[next_message]);
+        impl_->add_message(messages[next_message], next_message);
     }
     impl_->committed_message_count = messages.size();
-    impl_->sync_committed_bash(messages);
+    impl_->sync_mutated_messages(messages);
     if (!messages.empty()) {
         if (const auto* assistant = std::get_if<ai::AssistantMessage>(&messages.back())) {
             impl_->update_latest_assistant(*assistant);
