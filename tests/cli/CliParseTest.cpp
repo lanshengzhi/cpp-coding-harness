@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "cli/CliParse.hpp"
+#include "coding_agent/cli/CliParse.hpp"
 #include "support/UniqueFd.hpp"
 
 #include <filesystem>

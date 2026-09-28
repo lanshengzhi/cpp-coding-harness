@@ -38,9 +38,6 @@ struct PrintModePlan {
 /// The session and the configured streams are borrowed and must outlive the
 /// call; the run is driven synchronously on the CLI Runtime loop.
 [[nodiscard]] int run_print_mode(
-    boost::asio::io_context& io,
-    coding_agent::AgentSession& session,
-    PrintModeConfig config,
-    PrintModePlan plan);
+        boost::asio::io_context& io, coding_agent::AgentSession& session, PrintModeConfig config, PrintModePlan plan);
 
 } // namespace cch::cli

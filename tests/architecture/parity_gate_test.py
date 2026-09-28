@@ -40,12 +40,16 @@ VALID_MANIFEST = {
             {
                 "id": "headless-no-frontend-dependencies",
                 "source_prefixes": ["src/agent/", "src/coding_agent/"],
-                "excluded_source_prefixes": ["src/coding_agent/tui/"],
+                "excluded_source_prefixes": [
+                    "src/coding_agent/tui/",
+                    "src/coding_agent/cli/",
+                ],
                 "forbidden_include_prefixes": [
                     "cch/tui/",
                     "coding_agent/tui/",
                     "tui/",
                     "src/tui/",
+                    "coding_agent/cli/",
                     "cli/",
                     "src/cli/",
                 ],
@@ -1406,7 +1410,7 @@ class IncludeRoleOwnershipTest(unittest.TestCase):
     def test_frontend_targets_can_include_tui_header(self):
         cases = (
             ("frontend_tui", "coding_agent/tui/render.cpp"),
-            ("frontend_cli", "cli/StartupTui.cpp"),
+            ("frontend_cli", "coding_agent/cli/StartupTui.cpp"),
         )
         for target_name, source_name in cases:
             with self.subTest(target_name=target_name):

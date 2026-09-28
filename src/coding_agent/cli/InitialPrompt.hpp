@@ -45,7 +45,6 @@ struct InitialMessageResult {
 /// prompting. File processing follows pi `processFileArguments`: text files
 /// become `<file name="...">` references, images are sniffed and attached as
 /// image content, empty files are skipped.
-[[nodiscard]] support::Expected<InitialMessageResult> build_initial_message(
-    const InitialMessageInput& input);
+[[nodiscard]] support::Expected<InitialMessageResult> build_initial_message(const InitialMessageInput& input);
 
 } // namespace cch::cli

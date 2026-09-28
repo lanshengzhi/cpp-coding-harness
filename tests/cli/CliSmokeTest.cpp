@@ -7,7 +7,7 @@
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
 
-#include "coding_agent/runtime/AsyncCliRuntime.hpp"
+#include "coding_agent/cli/AsyncCliRuntime.hpp"
 #include "support/Json.hpp"
 #include "support/AgentRootFixture.hpp"
 

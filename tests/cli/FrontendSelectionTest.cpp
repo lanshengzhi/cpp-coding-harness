@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "cli/FrontendSelection.hpp"
+#include "coding_agent/cli/FrontendSelection.hpp"
 
 using namespace cch;
 

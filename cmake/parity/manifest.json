@@ -11,13 +11,15 @@
           "src/coding_agent/"
         ],
         "excluded_source_prefixes": [
-          "src/coding_agent/tui/"
+          "src/coding_agent/tui/",
+          "src/coding_agent/cli/"
         ],
         "forbidden_include_prefixes": [
           "cch/tui/",
           "coding_agent/tui/",
           "tui/",
           "src/tui/",
+          "coding_agent/cli/",
           "cli/",
           "src/cli/"
         ]

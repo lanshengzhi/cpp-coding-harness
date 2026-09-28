@@ -55,8 +55,7 @@ struct NormalizedArgv {
     std::optional<std::string> list_models;
 };
 
-[[nodiscard]] NormalizedArgv normalize_argv(
-    const std::vector<std::string>& raw) {
+[[nodiscard]] NormalizedArgv normalize_argv(const std::vector<std::string>& raw) {
     NormalizedArgv normalized;
     normalized.tokens.reserve(raw.size());
     bool options_ended = false;
@@ -77,9 +76,7 @@ struct NormalizedArgv {
             std::string search;
             if (const auto equals = token.find('='); equals != std::string::npos) {
                 search = token.substr(equals + 1);
-            } else if (index + 1 < raw.size() &&
-                       !raw[index + 1].starts_with('-') &&
-                       !raw[index + 1].starts_with('@')) {
+            } else if (index + 1 < raw.size() && !raw[index + 1].starts_with('-') && !raw[index + 1].starts_with('@')) {
                 search = raw[++index];
             }
             normalized.list_models = std::move(search);
@@ -90,8 +87,7 @@ struct NormalizedArgv {
     return normalized;
 }
 
-[[nodiscard]] cch::support::ExpectedVoid validate_output_mode(
-    const std::string& mode_text) {
+[[nodiscard]] cch::support::ExpectedVoid validate_output_mode(const std::string& mode_text) {
     // The internal OutputMode reduces to the text default (pi): only
     // `--mode text` parses; the removed json/rpc values are hard-rejected so
     // no removed surface is ever accepted-but-ignored.
@@ -99,8 +95,7 @@ struct NormalizedArgv {
         return {};
     }
     if (mode_text == "json" || mode_text == "rpc") {
-        return std::unexpected(cli_error(
-            "--mode " + mode_text + " was removed; only --mode text is supported"));
+        return std::unexpected(cli_error("--mode " + mode_text + " was removed; only --mode text is supported"));
     }
     return std::unexpected(cli_error("unsupported --mode: " + mode_text));
 }
@@ -175,10 +170,7 @@ struct NormalizedArgv {
 }
 
 [[nodiscard]] cch::support::Error parse_error(std::string message) {
-    return cch::support::make_error(
-        cch::support::ErrorCode::Validation,
-        message,
-        message + "\n\n" + help_text());
+    return cch::support::make_error(cch::support::ErrorCode::Validation, message, message + "\n\n" + help_text());
 }
 
 [[nodiscard]] std::string import_help_text() {
@@ -269,15 +261,15 @@ struct OptionToken {
     const auto equals = token.find('=');
     if (equals == std::string_view::npos) {
         return OptionToken{
-            .name = token.substr(2),
-            .inline_value = {},
-            .has_inline_value = false,
+                .name = token.substr(2),
+                .inline_value = {},
+                .has_inline_value = false,
         };
     }
     return OptionToken{
-        .name = token.substr(2, equals - 2),
-        .inline_value = token.substr(equals + 1),
-        .has_inline_value = true,
+            .name = token.substr(2, equals - 2),
+            .inline_value = token.substr(equals + 1),
+            .has_inline_value = true,
     };
 }
 
@@ -288,8 +280,7 @@ struct OptionToken {
     if (std::isdigit(static_cast<unsigned char>(token[1])) != 0) {
         return true;
     }
-    return token[1] == '.' && token.size() > 2 &&
-        std::isdigit(static_cast<unsigned char>(token[2])) != 0;
+    return token[1] == '.' && token.size() > 2 && std::isdigit(static_cast<unsigned char>(token[2])) != 0;
 }
 
 /// Match the former option classifier for the retained argv surface. A lone `-`,
@@ -300,31 +291,27 @@ struct OptionToken {
         return static_cast<unsigned char>(token[2]) > 33;
     }
     if (token.size() > 1 && token.front() == '-' && token[1] != '-') {
-        return !is_negative_number(token) &&
-            static_cast<unsigned char>(token[1]) > 33;
+        return !is_negative_number(token) && static_cast<unsigned char>(token[1]) > 33;
     }
     return false;
 }
 
-[[nodiscard]] cch::support::Expected<std::string> consume_option_value(
-    std::string_view option_name,
-    const OptionToken& option,
-    const std::vector<std::string>& tokens,
-    std::size_t& index) {
+[[nodiscard]] cch::support::Expected<std::string> consume_option_value(std::string_view option_name,
+        const OptionToken& option,
+        const std::vector<std::string>& tokens,
+        std::size_t& index) {
     if (option.has_inline_value) {
         return std::string{option.inline_value};
     }
     if (index + 1 >= tokens.size()) {
-        return std::unexpected(parse_error(
-            std::format("--{}: 1 required TEXT missing", option_name)));
+        return std::unexpected(parse_error(std::format("--{}: 1 required TEXT missing", option_name)));
     }
     ++index;
     return tokens[index];
 }
 
 [[nodiscard]] cch::support::Expected<bool> parse_flag_value(
-    std::string_view original_token,
-    const OptionToken& option) {
+        std::string_view original_token, const OptionToken& option) {
     if (!option.has_inline_value || option.inline_value.empty()) {
         return true;
     }
@@ -335,26 +322,19 @@ struct OptionToken {
         return false;
     }
     return std::unexpected(parse_error(std::format(
-        "Could not convert: {} = {}",
-        original_token.substr(0, original_token.find('=')),
-        option.inline_value)));
+            "Could not convert: {} = {}", original_token.substr(0, original_token.find('=')), option.inline_value)));
 }
 
-[[nodiscard]] std::vector<std::string> split_model_patterns(
-    std::string_view models_text) {
+[[nodiscard]] std::vector<std::string> split_model_patterns(std::string_view models_text) {
     std::vector<std::string> patterns;
     std::size_t start = 0;
     while (start <= models_text.size()) {
         const auto comma = models_text.find(',', start);
         const auto end = comma == std::string_view::npos ? models_text.size() : comma;
         std::string pattern{models_text.substr(start, end - start)};
-        const auto not_space = [](unsigned char character) {
-            return !std::isspace(character);
-        };
+        const auto not_space = [](unsigned char character) { return !std::isspace(character); };
         pattern.erase(pattern.begin(), std::find_if(pattern.begin(), pattern.end(), not_space));
-        pattern.erase(
-            std::find_if(pattern.rbegin(), pattern.rend(), not_space).base(),
-            pattern.end());
+        pattern.erase(std::find_if(pattern.rbegin(), pattern.rend(), not_space).base(), pattern.end());
         if (!pattern.empty()) {
             patterns.push_back(std::move(pattern));
         }
@@ -368,19 +348,16 @@ struct OptionToken {
 
 } // namespace
 
-std::string_view project_version() {
-    return kProjectVersion;
-}
+std::string_view project_version() { return kProjectVersion; }
 
 cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
     CliConfig config;
     std::error_code cwd_ec;
     config.workspace = std::filesystem::current_path(cwd_ec);
     if (cwd_ec) {
-        return std::unexpected(cch::support::make_error(
-            cch::support::ErrorCode::Validation,
-            "could not determine the current working directory",
-            "the default workspace is unavailable: " + cwd_ec.message()));
+        return std::unexpected(cch::support::make_error(cch::support::ErrorCode::Validation,
+                "could not determine the current working directory",
+                "the default workspace is unavailable: " + cwd_ec.message()));
     }
 
     std::vector<std::string> raw_args;
@@ -705,8 +682,7 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
     if (approve_seen && no_approve_seen) {
         // Preserve the established normalized diagnostic for the mutually
         // exclusive project-trust flags.
-        return std::unexpected(parse_error(
-            "use either --session or --resume, not both"));
+        return std::unexpected(parse_error("use either --session or --resume, not both"));
     }
 
     if (session_seen && !session_text.empty()) {
@@ -764,8 +740,8 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
     // `--api-key` requires an explicit model (pi): it cannot name a provider
     // without a model, and never applies to a resume/default selection.
     if (api_key_seen && !model_seen && !provider_seen && !models_seen) {
-        return std::unexpected(cli_error(
-            "--api-key requires a model to be specified via --model, --provider/--model, or --models"));
+        return std::unexpected(
+                cli_error("--api-key requires a model to be specified via --model, --provider/--model, or --models"));
     }
 
     std::vector<std::string> prompt_text_parts;

@@ -15,10 +15,9 @@ namespace cch::cli {
 /// the yellow models.json warning on stderr, and
 /// `formatNoModelsAvailableMessage()` when no models exist. Runs post-runtime
 /// pre-stdin; the caller exits 0 after it returns.
-void print_list_models(
-    const coding_agent::ModelRuntime& runtime,
-    const std::optional<std::string>& search,
-    std::ostream& output,
-    std::ostream& error);
+void print_list_models(const coding_agent::ModelRuntime& runtime,
+        const std::optional<std::string>& search,
+        std::ostream& output,
+        std::ostream& error);
 
 } // namespace cch::cli

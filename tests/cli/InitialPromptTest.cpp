@@ -1,4 +1,4 @@
-#include "cli/InitialPrompt.hpp"
+#include "coding_agent/cli/InitialPrompt.hpp"
 #include "support/ImageFixture.hpp"
 #include "support/TempWorkspace.hpp"
 

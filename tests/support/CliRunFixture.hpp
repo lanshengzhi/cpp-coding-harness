@@ -1,8 +1,8 @@
 #pragma once
 
-#include "cli/CliParse.hpp"
+#include "coding_agent/cli/CliParse.hpp"
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
-#include "coding_agent/runtime/AsyncCliRuntime.hpp"
+#include "coding_agent/cli/AsyncCliRuntime.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/TempWorkspace.hpp"
 

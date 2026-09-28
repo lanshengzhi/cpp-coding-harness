@@ -5,7 +5,7 @@
 // `formatNoModelsAvailableMessage()` when no models exist — then exits 0
 // without touching session storage (the session manager is in-memory).
 
-#include "cli/ListModels.hpp"
+#include "coding_agent/cli/ListModels.hpp"
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "support/CliRunFixture.hpp"
 #include "support/EnvVarGuard.hpp"

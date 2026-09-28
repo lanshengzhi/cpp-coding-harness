@@ -50,38 +50,32 @@ struct StartupPickerResult {
 /// without one (pi's `selectSession` cancel → null, exit → process exit 0).
 /// The host stops and clears the screen before returning (pi
 /// `clearStartupTui` + `ui.stop()`).
-[[nodiscard]] boost::asio::awaitable<support::Expected<StartupPickerResult>>
-run_startup_session_picker(
-    cch::tui::Terminal& terminal,
-    StartupTuiOptions options,
-    coding_agent::tui::SessionListLoader current_loader,
-    coding_agent::tui::SessionListLoader all_loader);
+[[nodiscard]] boost::asio::awaitable<support::Expected<StartupPickerResult>> run_startup_session_picker(
+        cch::tui::Terminal& terminal,
+        StartupTuiOptions options,
+        coding_agent::tui::SessionListLoader current_loader,
+        coding_agent::tui::SessionListLoader all_loader);
 
 /// pi `startup-ui.ts` `showStartupSelector` subset for the boot missing-cwd
 /// prompt: the generic string-list selector over pi's verbatim
 /// `formatMissingSessionCwdPrompt` text with the Continue/Cancel options.
 /// Returns true on Continue, false on Cancel (pi main.ts exits 0 on cancel).
-[[nodiscard]] boost::asio::awaitable<support::Expected<bool>>
-run_startup_missing_cwd_prompt(
-    cch::tui::Terminal& terminal,
-    StartupTuiOptions options,
-    std::string title);
+[[nodiscard]] boost::asio::awaitable<support::Expected<bool>> run_startup_missing_cwd_prompt(
+        cch::tui::Terminal& terminal, StartupTuiOptions options, std::string title);
 
 /// The ProcessTerminal-backed picker host (the real CLI, pi main.ts
 /// `selectSession` before the main TUI): runs the startup TUI on its own
 /// terminal + io_context and returns the picked session path, or nullopt on
 /// cancel/exit. Fails cleanly when the descriptors are not terminals (pi's
 /// ProcessTerminal throws on piped stdin the same way).
-[[nodiscard]] support::Expected<std::optional<std::filesystem::path>>
-run_process_terminal_resume_picker(
-    StartupTuiOptions options,
-    coding_agent::tui::SessionListLoader current_loader,
-    coding_agent::tui::SessionListLoader all_loader);
+[[nodiscard]] support::Expected<std::optional<std::filesystem::path>> run_process_terminal_resume_picker(
+        StartupTuiOptions options,
+        coding_agent::tui::SessionListLoader current_loader,
+        coding_agent::tui::SessionListLoader all_loader);
 
 /// The ProcessTerminal-backed boot missing-cwd Continue/Cancel prompt (pi
 /// main.ts `promptForMissingSessionCwd` → `showStartupSelector`).
 [[nodiscard]] support::Expected<bool> run_process_terminal_missing_cwd_prompt(
-    StartupTuiOptions options,
-    std::string title);
+        StartupTuiOptions options, std::string title);
 
 } // namespace cch::cli

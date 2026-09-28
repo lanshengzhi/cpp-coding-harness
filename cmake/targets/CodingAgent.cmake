@@ -164,14 +164,14 @@ cch_parity_declare_target(
     ROLE implementation
     OWNER cch_coding_agent
     SOURCES
-        src/cli/AsyncCliRuntime.cpp
-        src/cli/CliParse.cpp
-        src/cli/FrontendSelection.cpp
-        src/cli/InitialPrompt.cpp
-        src/cli/ListModels.cpp
-        src/cli/PrintMode.cpp
-        src/cli/SessionFamily.cpp
-        src/cli/StartupTui.cpp
+        src/coding_agent/cli/AsyncCliRuntime.cpp
+        src/coding_agent/cli/CliParse.cpp
+        src/coding_agent/cli/FrontendSelection.cpp
+        src/coding_agent/cli/InitialPrompt.cpp
+        src/coding_agent/cli/ListModels.cpp
+        src/coding_agent/cli/PrintMode.cpp
+        src/coding_agent/cli/SessionFamily.cpp
+        src/coding_agent/cli/StartupTui.cpp
     DEPENDS
         cch_coding_agent
         frontend_tui

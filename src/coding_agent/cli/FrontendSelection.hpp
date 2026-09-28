@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cli/CliConfig.hpp"
+#include "coding_agent/cli/CliConfig.hpp"
 #include <cch/support/Error.hpp>
 
 namespace cch::cli {
@@ -26,8 +26,6 @@ struct FrontendEnvironment {
 /// either non-TTY stream select one-shot print output; interactive
 /// stdin/stdout selects the Native TUI (pi's TTY-based selection, `--mode
 /// text` leaves it unchanged).
-[[nodiscard]] support::Expected<Frontend> select_frontend(
-    const CliConfig& config,
-    FrontendEnvironment environment);
+[[nodiscard]] support::Expected<Frontend> select_frontend(const CliConfig& config, FrontendEnvironment environment);
 
 } // namespace cch::cli

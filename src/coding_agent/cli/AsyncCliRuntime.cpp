@@ -1,11 +1,11 @@
-#include "coding_agent/runtime/AsyncCliRuntime.hpp"
+#include "coding_agent/cli/AsyncCliRuntime.hpp"
 
-#include "cli/CliParse.hpp"
-#include "cli/InitialPrompt.hpp"
-#include "cli/ListModels.hpp"
-#include "cli/PrintMode.hpp"
-#include "cli/SessionFamily.hpp"
-#include "cli/StartupTui.hpp"
+#include "coding_agent/cli/CliParse.hpp"
+#include "coding_agent/cli/InitialPrompt.hpp"
+#include "coding_agent/cli/ListModels.hpp"
+#include "coding_agent/cli/PrintMode.hpp"
+#include "coding_agent/cli/SessionFamily.hpp"
+#include "coding_agent/cli/StartupTui.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/compat/pi/PiImport.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -58,9 +58,7 @@ constexpr harness::RuntimeLimits kRuntimeLimits{};
 /// reaches its target mailbox before the root and the loop are destroyed.
 /// RuntimeRoot::close releases the loop work guard, so the drain returns
 /// once the queued work is delivered.
-void close_runtime(
-    const std::shared_ptr<harness::RuntimeRoot>& runtime_root,
-    boost::asio::io_context& io) {
+void close_runtime(const std::shared_ptr<harness::RuntimeRoot>& runtime_root, boost::asio::io_context& io) {
     // Idle AgentSession close posts owned-filesystem cleanup to the Runtime
     // loop because it cannot await from its synchronous close() seam. Start
     // those cleanup operations before RuntimeRoot stops admission; otherwise
@@ -81,35 +79,23 @@ void close_runtime(
 /// pi `readPipedStdin`: read all of piped stdin and trim it; empty (or
 /// whitespace-only) content is absent and contributes nothing to the initial
 /// message merge.
-[[nodiscard]] support::Expected<std::string> read_piped_input(
-    std::istream& input,
-    bool stdin_is_terminal) {
+[[nodiscard]] support::Expected<std::string> read_piped_input(std::istream& input, bool stdin_is_terminal) {
     if (stdin_is_terminal) return std::string{};
 
     std::ostringstream collected;
     collected << input.rdbuf();
     if (input.bad()) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "could not read piped stdin"));
+        return std::unexpected(support::make_error(support::ErrorCode::Unknown, "could not read piped stdin"));
     }
     auto text = collected.str();
-    const auto not_space = [](unsigned char character) {
-        return !std::isspace(character);
-    };
+    const auto not_space = [](unsigned char character) { return !std::isspace(character); };
     text.erase(text.begin(), std::find_if(text.begin(), text.end(), not_space));
     text.erase(std::find_if(text.rbegin(), text.rend(), not_space).base(), text.end());
     return text;
 }
 
-void print_creation_error(
-    bool is_resume_target,
-    std::ostream& error_stream,
-    const support::Error& error) {
-    error_stream << (is_resume_target
-                         ? "could not resume session: "
-                         : "could not create session: ")
-                 << error.message;
+void print_creation_error(bool is_resume_target, std::ostream& error_stream, const support::Error& error) {
+    error_stream << (is_resume_target ? "could not resume session: " : "could not create session: ") << error.message;
     if (!error.detail.empty() && error.detail != error.message) {
         error_stream << ": " << error.detail;
     }
@@ -120,8 +106,7 @@ void print_creation_error(
 }
 
 void print_session_diagnostics(
-    std::ostream& error_stream,
-    const std::vector<coding_agent::SessionDiagnostic>& diagnostics) {
+        std::ostream& error_stream, const std::vector<coding_agent::SessionDiagnostic>& diagnostics) {
     for (const auto& diag : diagnostics) {
         const char* severity = "info";
         switch (diag.severity) {
@@ -154,22 +139,20 @@ void print_session_diagnostics(
 /// value for the boot and startup-TUI theme init, exactly like pi's
 /// `startupSettingsManager` (main.ts `startupSettingsManager.getSessionDir()`
 /// / `createStartupTui(settingsManager)`).
-[[nodiscard]] coding_agent::SettingsManager startup_settings(
-    const std::filesystem::path& workspace) {
-    return coding_agent::SettingsManager::create(
-        workspace, coding_agent::agent_config_dir(),
-        /* project_trusted */ false);
+[[nodiscard]] coding_agent::SettingsManager startup_settings(const std::filesystem::path& workspace) {
+    return coding_agent::SettingsManager::create(workspace,
+            coding_agent::agent_config_dir(),
+            /* project_trusted */ false);
 }
 
 /// pi `createStartupTui` options for the startup-TUI hosts (the `--resume`
 /// picker and the boot missing-cwd Continue/Cancel prompt): the agent
 /// config directory (keybindings.json read + boot theme load) and the raw
 /// global-scope `theme` setting for the G5 controller default init.
-[[nodiscard]] StartupTuiOptions startup_tui_options(
-    const coding_agent::SettingsManager& settings) {
+[[nodiscard]] StartupTuiOptions startup_tui_options(const coding_agent::SettingsManager& settings) {
     return StartupTuiOptions{
-        .agent_config_directory = coding_agent::agent_config_dir(),
-        .theme_setting = settings.settings().theme,
+            .agent_config_directory = coding_agent::agent_config_dir(),
+            .theme_setting = settings.settings().theme,
     };
 }
 
@@ -226,11 +209,7 @@ void print_session_diagnostics(
                        .build();
 
     auto future = boost::asio::co_spawn(
-        *io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            std::move(run)),
-        boost::asio::use_future);
+            *io, coding_agent::tui::run_interactive_mode(terminal, std::move(run)), boost::asio::use_future);
     while (future.wait_for(std::chrono::milliseconds{0}) != std::future_status::ready) {
         (void)io->run_one();
     }
@@ -285,25 +264,22 @@ void print_session_diagnostics(
     // the same way); the in-process CLI fixture injects a scripted picker.
     if (!resume_picker) {
         const auto options = startup_tui_options(settings);
-        resume_picker = [options](
-                             coding_agent::tui::SessionListLoader current_loader,
-                             coding_agent::tui::SessionListLoader all_loader) {
-            return run_process_terminal_resume_picker(
-                options, std::move(current_loader), std::move(all_loader));
+        resume_picker = [options](coding_agent::tui::SessionListLoader current_loader,
+                                coding_agent::tui::SessionListLoader all_loader) {
+            return run_process_terminal_resume_picker(options, std::move(current_loader), std::move(all_loader));
         };
     }
 
-    auto assembly = assemble_session_target(
-        config,
-        settings.settings().session_dir,
-        streams.input,
-        // pi takes over stdout outside interactive mode (output-guard.ts), so
-        // the cross-project notice, fork prompt, "Aborted.", and "No session
-        // selected" lines land on stderr in print mode and never pollute the
-        // one-shot stdout.
-        frontend == Frontend::Interactive ? streams.output : streams.error,
-        streams.error,
-        std::move(resume_picker));
+    auto assembly = assemble_session_target(config,
+            settings.settings().session_dir,
+            streams.input,
+            // pi takes over stdout outside interactive mode (output-guard.ts), so
+            // the cross-project notice, fork prompt, "Aborted.", and "No session
+            // selected" lines land on stderr in print mode and never pollute the
+            // one-shot stdout.
+            frontend == Frontend::Interactive ? streams.output : streams.error,
+            streams.error,
+            std::move(resume_picker));
     if (!assembly) {
         streams.error << assembly.error().message << '\n';
         return 1;
@@ -324,12 +300,10 @@ void print_session_diagnostics(
     // exactly like pi's `SessionManager.open(file, sessionDir, selectedCwd)`;
     // SessionFactory's creation-time check stays as the race fallback.
     std::optional<std::filesystem::path> boot_cwd_override;
-    if (auto issue = missing_session_cwd_issue(*assembly, config.workspace);
-        issue) {
+    if (auto issue = missing_session_cwd_issue(*assembly, config.workspace); issue) {
         if (frontend == Frontend::Interactive) {
             auto prompt = run_process_terminal_missing_cwd_prompt(
-                startup_tui_options(settings),
-                coding_agent::format_missing_session_cwd_prompt(*issue));
+                    startup_tui_options(settings), coding_agent::format_missing_session_cwd_prompt(*issue));
             if (!prompt) {
                 streams.error << prompt.error().message << '\n';
                 return 1;
@@ -339,9 +313,7 @@ void print_session_diagnostics(
             }
             boot_cwd_override = issue->fallback_cwd;
         } else {
-            streams.error
-                << coding_agent::format_missing_session_cwd_error(*issue)
-                << '\n';
+            streams.error << coding_agent::format_missing_session_cwd_error(*issue) << '\n';
             return 1;
         }
     }
@@ -355,9 +327,7 @@ void print_session_diagnostics(
     // The interactive Native TUI always receives its independent User Shell
     // (ADR 0026); the one-shot print path keeps ordinary-prompt semantics
     // for leading '!' text.
-    const bool is_resume_target =
-        std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
-            assembly->target);
+    const bool is_resume_target = std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(assembly->target);
     request.provide_user_shell = frontend == Frontend::Interactive;
     request.session_facts = config.session_facts;
     request.project_trust_override = config.session_facts.project_trust_override;
@@ -416,11 +386,7 @@ void print_session_diagnostics(
             close_runtime(runtime_root, *runtime_io);
             return exit_code;
         }
-        print_list_models(
-            *created->session->model_runtime(),
-            config.list_models,
-            streams.output,
-            streams.error);
+        print_list_models(*created->session->model_runtime(), config.list_models, streams.output, streams.error);
         created->session->close();
         close_runtime(runtime_root, *runtime_io);
         return 0;
@@ -428,8 +394,7 @@ void print_session_diagnostics(
 
     // pi `readPipedStdin`: piped stdin is trimmed and only present when it
     // has content; a TTY stdin contributes nothing.
-    auto piped_input = read_piped_input(
-        streams.input, environment.stdin_is_terminal);
+    auto piped_input = read_piped_input(streams.input, environment.stdin_is_terminal);
     if (!piped_input) {
         streams.error << piped_input.error().message << '\n';
         return 1;
@@ -439,16 +404,14 @@ void print_session_diagnostics(
     // text, and the first positional merge into the initial prompt with no
     // separator; remaining positionals prompt sequentially afterwards.
     auto initial = build_initial_message(InitialMessageInput{
-        .messages = config.messages,
-        .file_arguments = config.file_arguments,
-        .working_directory = config.workspace,
-        .stdin_content = std::move(*piped_input),
+            .messages = config.messages,
+            .file_arguments = config.file_arguments,
+            .working_directory = config.workspace,
+            .stdin_content = std::move(*piped_input),
     });
     if (!initial) {
-        streams.error << "could not prepare initial prompt: "
-                      << initial.error().message;
-        if (!initial.error().detail.empty() &&
-            initial.error().detail != initial.error().message) {
+        streams.error << "could not prepare initial prompt: " << initial.error().message;
+        if (!initial.error().detail.empty() && initial.error().detail != initial.error().message) {
             streams.error << ": " << initial.error().detail;
         }
         streams.error << '\n';
@@ -465,13 +428,10 @@ void print_session_diagnostics(
     // `InteractiveThemeController`) and the startup-TUI host consumes the
     // same init.
     {
-        auto boot_settings = coding_agent::SettingsManager::create(
-            config.workspace,
-            coding_agent::agent_config_dir(),
-            /* project_trusted */ false);
-        (void)coding_agent::tui::init_boot_theme(
-            coding_agent::agent_config_dir(),
-            boot_settings.settings().theme);
+        auto boot_settings = coding_agent::SettingsManager::create(config.workspace,
+                coding_agent::agent_config_dir(),
+                /* project_trusted */ false);
+        (void)coding_agent::tui::init_boot_theme(coding_agent::agent_config_dir(), boot_settings.settings().theme);
     }
 
     if (frontend == Frontend::Interactive) {
@@ -504,21 +464,21 @@ void print_session_diagnostics(
     }
     print_session_diagnostics(streams.error, created->diagnostics);
 
-    const int print_exit_code = run_print_mode(
-        *runtime_io,
-        *created->session,
-        PrintModeConfig{
-            .output = streams.output,
-            .error = streams.error,
-        },
-        PrintModePlan{
-            .initial_message = std::move(initial->initial_message),
-            .messages = std::move(initial->remaining_messages),
-            .initial_prompt_options = coding_agent::PromptOptions{
-                .expand_prompt_templates = true,
-                .images = std::move(initial->initial_images),
+    const int print_exit_code = run_print_mode(*runtime_io,
+            *created->session,
+            PrintModeConfig{
+                    .output = streams.output,
+                    .error = streams.error,
             },
-        });
+            PrintModePlan{
+                    .initial_message = std::move(initial->initial_message),
+                    .messages = std::move(initial->remaining_messages),
+                    .initial_prompt_options =
+                            coding_agent::PromptOptions{
+                                    .expand_prompt_templates = true,
+                                    .images = std::move(initial->initial_images),
+                            },
+            });
     // Final application Close (ADR 0040, issue #467): the prompts have
     // settled (a signal already closed the Session inside print mode; the
     // idempotent request below covers the normal exit), so stop Runtime
@@ -529,11 +489,7 @@ void print_session_diagnostics(
     return print_exit_code;
 }
 
-[[nodiscard]] int run_cli_entry(
-    int argc,
-    char** argv,
-    CliStreams streams,
-    CliRuntimeOptions options) {
+[[nodiscard]] int run_cli_entry(int argc, char** argv, CliStreams streams, CliRuntimeOptions options) {
     auto parsed = parse_args(argc, argv);
     if (!parsed) {
         // Parse errors carry the full help text in detail. Unified exit
@@ -570,9 +526,8 @@ void print_session_diagnostics(
         return 0;
     }
 
-    const FrontendEnvironment environment = options.environment_explicit
-        ? options.environment
-        : detect_frontend_environment();
+    const FrontendEnvironment environment =
+            options.environment_explicit ? options.environment : detect_frontend_environment();
     if (auto frontend = select_frontend(config, environment); !frontend) {
         const auto& error = frontend.error();
         streams.error << error.message;

@@ -4,7 +4,7 @@
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
 
-#include "cli/PrintMode.hpp"
+#include "coding_agent/cli/PrintMode.hpp"
 
 #include "coding_agent/AgentSession.hpp"
 #include "support/TempWorkspace.hpp"

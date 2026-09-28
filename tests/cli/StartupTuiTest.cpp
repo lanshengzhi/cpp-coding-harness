@@ -7,7 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include "cli/StartupTui.hpp"
+#include "coding_agent/cli/StartupTui.hpp"
 
 #include "support/EnvVarGuard.hpp"
 #include "support/PumpUntil.hpp"

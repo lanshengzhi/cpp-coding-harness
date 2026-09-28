@@ -1,8 +1,8 @@
 #pragma once
 
-#include "cli/CliConfig.hpp"
-#include "cli/FrontendSelection.hpp"
-#include "cli/SessionFamily.hpp"
+#include "coding_agent/cli/CliConfig.hpp"
+#include "coding_agent/cli/FrontendSelection.hpp"
+#include "coding_agent/cli/SessionFamily.hpp"
 
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/support/Error.hpp>
@@ -45,10 +45,6 @@ struct CliRuntimeOptions {
 
 /// The CLI entry chain (bootstrap parse -> help/version -> frontend selection
 /// -> runtime), shared by main() and the in-process CLI test seam.
-[[nodiscard]] int run_cli_entry(
-    int argc,
-    char** argv,
-    CliStreams streams,
-    CliRuntimeOptions options = {});
+[[nodiscard]] int run_cli_entry(int argc, char** argv, CliStreams streams, CliRuntimeOptions options = {});
 
 } // namespace cch::cli

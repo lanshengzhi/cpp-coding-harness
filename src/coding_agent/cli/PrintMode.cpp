@@ -26,21 +26,18 @@ namespace {
 /// like pi `runPrintMode`: the assistant's `errorMessage`, or the
 /// `Request <stopReason>` fallback. Redaction and the bounded-output policy
 /// are the C++ binary's own presentation guardrails.
-[[nodiscard]] std::string terminal_diagnostic(
-    const ai::AssistantMessage& assistant) {
+[[nodiscard]] std::string terminal_diagnostic(const ai::AssistantMessage& assistant) {
     if (assistant.error_message && !assistant.error_message->empty()) {
         return coding_agent::bounded_redacted_presentation(*assistant.error_message);
     }
-    return std::format(
-        "Request {}", ai::stop_reason_to_string(assistant.stop_reason));
+    return std::format("Request {}", ai::stop_reason_to_string(assistant.stop_reason));
 }
 
 /// pi `runPrintMode` text mode: only the final assistant message's `text`
 /// content blocks reach stdout. Returns false when the final message is a
 /// terminal error/aborted outcome (already reported on stderr with exit 1).
 [[nodiscard]] bool print_final_assistant_text(
-    const coding_agent::AgentSessionSnapshot& snapshot,
-    PrintModeConfig config) {
+        const coding_agent::AgentSessionSnapshot& snapshot, PrintModeConfig config) {
     const auto& messages = snapshot.agent_state.messages;
     if (messages.empty()) {
         return true;
@@ -51,7 +48,7 @@ namespace {
     }
 
     if (assistant->stop_reason == ai::AssistantStopReason::Error ||
-        assistant->stop_reason == ai::AssistantStopReason::Aborted) {
+            assistant->stop_reason == ai::AssistantStopReason::Aborted) {
         config.error << terminal_diagnostic(*assistant) << '\n';
         config.error.flush();
         return false;
@@ -71,9 +68,7 @@ namespace {
 /// session and the configured streams are borrowed; must outlive the
 /// coroutine.
 [[nodiscard]] boost::asio::awaitable<int> run_print_mode_coro(
-    coding_agent::AgentSession& session,
-    PrintModeConfig config,
-    PrintModePlan plan) {
+        coding_agent::AgentSession& session, PrintModeConfig config, PrintModePlan plan) {
     const auto executor = co_await boost::asio::this_coro::executor;
 
     // pi `registerSignalHandlers`: SIGTERM always, SIGHUP.
@@ -95,8 +90,7 @@ namespace {
     // Settles one prompt: a signal preempts everything (pi exits inside the
     // handler), then a prompt rejection keeps the C++ binary's loop-failed
     // report with a non-zero exit.
-    const auto settle = [&](support::ExpectedVoid prompted)
-        -> std::optional<int> {
+    const auto settle = [&](support::ExpectedVoid prompted) -> std::optional<int> {
         if (signal_exit) {
             return *signal_exit;
         }
@@ -112,9 +106,8 @@ namespace {
     bool settled = false;
 
     if (!plan.initial_message.empty() || !plan.initial_prompt_options.images.empty()) {
-        auto prompted = co_await session.prompt(
-            std::move(plan.initial_message),
-            std::move(plan.initial_prompt_options));
+        auto prompted =
+                co_await session.prompt(std::move(plan.initial_message), std::move(plan.initial_prompt_options));
         if (auto failed = settle(std::move(prompted))) {
             exit_code = *failed;
             settled = true;
@@ -153,14 +146,9 @@ namespace {
 } // namespace
 
 int run_print_mode(
-    boost::asio::io_context& io,
-    coding_agent::AgentSession& session,
-    PrintModeConfig config,
-    PrintModePlan plan) {
-    auto future = boost::asio::co_spawn(
-        io,
-        run_print_mode_coro(session, config, std::move(plan)),
-        boost::asio::use_future);
+        boost::asio::io_context& io, coding_agent::AgentSession& session, PrintModeConfig config, PrintModePlan plan) {
+    auto future =
+            boost::asio::co_spawn(io, run_print_mode_coro(session, config, std::move(plan)), boost::asio::use_future);
     while (future.wait_for(std::chrono::milliseconds{0}) != std::future_status::ready) {
         (void)io.run_one();
     }
