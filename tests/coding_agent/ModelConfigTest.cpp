@@ -248,29 +248,19 @@ TEST_CASE("ModelConfig warns on an unknown provider-level api a model inherits",
 
 TEST_CASE("ModelConfig records no warning for every api in pi's vocabulary",
         "[coding_agent][model-config][issue671][spec]") {
-    // pi `KnownApi` (`packages/ai/src/types.ts` at the frozen baseline). Every
-    // value here is a legitimate models.json api — including
+    // The vocabulary itself is pinned by `ai::kKnownModelApis` in the cch_ai
+    // suite; this case proves the validator consults that authority rather
+    // than a second list. Every name it holds — including
     // `openai-completions`, which is selected by the private completions
-    // adapter — so the vocabulary check stays silent for all of them.
-    constexpr std::array<std::string_view, 10> kPiKnownApis{
-            "openai-completions",
-            "mistral-conversations",
-            "openai-responses",
-            "azure-openai-responses",
-            "openai-codex-responses",
-            "anthropic-messages",
-            "bedrock-converse-stream",
-            "google-generative-ai",
-            "google-vertex",
-            "pi-messages",
-    };
+    // adapter, and names with no C++ adapter at all — is a legitimate
+    // models.json api, so the check stays silent for all of them.
     std::string models;
-    for (std::size_t index = 0; index < kPiKnownApis.size(); ++index) {
+    for (std::size_t index = 0; index < ai::kKnownModelApis.size(); ++index) {
         if (!models.empty()) {
             models += ",";
         }
-        models +=
-                "{\"id\":\"model-" + std::to_string(index) + "\",\"api\":\"" + std::string{kPiKnownApis[index]} + "\"}";
+        models += "{\"id\":\"model-" + std::to_string(index) + "\",\"api\":\"" +
+                  std::string{ai::kKnownModelApis[index]} + "\"}";
     }
     tests::TempWorkspace workspace;
     auto config = load_models_json(workspace, R"({"providers":{"deepseek":{
@@ -283,7 +273,7 @@ TEST_CASE("ModelConfig records no warning for every api in pi's vocabulary",
     const auto provider = config.provider("deepseek");
     REQUIRE(provider.has_value());
     REQUIRE(provider->models.has_value());
-    CHECK(provider->models->size() == kPiKnownApis.size());
+    CHECK(provider->models->size() == ai::kKnownModelApis.size());
 }
 
 TEST_CASE("ModelConfig unknown provider fields are ignored (no compat surface)",

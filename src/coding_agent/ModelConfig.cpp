@@ -2,8 +2,6 @@
 
 #include "support/Json.hpp"
 
-#include <algorithm>
-#include <array>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -24,35 +22,9 @@ using cch::support::JsonValue;
     return path + "." + std::string{child};
 }
 
-/// pi's api vocabulary (`KnownApi`, `packages/ai/src/types.ts` at the frozen
-/// baseline `83114817`): the values a `models.json` `api` may legitimately
-/// carry. This is a value-domain check, not an adapter registry — only three
-/// of these have a C++ adapter (ADR 0033), and the rest reach a stream-time
-/// failure exactly like any other unadapted api.
-///
-/// debt: a static copy of pi's list, so a baseline bump that adds or renames an
-/// api name warns spuriously until this table is extended. Upgrade when the
-/// pinned parity baseline moves.
-constexpr std::array<std::string_view, 10> kKnownModelApis{
-        "openai-completions",
-        "mistral-conversations",
-        "openai-responses",
-        "azure-openai-responses",
-        "openai-codex-responses",
-        "anthropic-messages",
-        "bedrock-converse-stream",
-        "google-generative-ai",
-        "google-vertex",
-        "pi-messages",
-};
-
-[[nodiscard]] bool is_known_model_api(std::string_view api) {
-    return std::ranges::find(kKnownModelApis, api) != kKnownModelApis.end();
-}
-
-[[nodiscard]] std::string known_model_apis_text() {
+[[nodiscard]] std::string known_model_api_vocabulary_text() {
     std::string text;
-    for (const auto& api : kKnownModelApis) {
+    for (const auto& api : ai::kKnownModelApis) {
         if (!text.empty()) {
             text += ", ";
         }
@@ -90,11 +62,12 @@ public:
     /// The value stays usable, so the provider and its models are never
     /// dropped; an unadapted api still fails at stream time (#671).
     void warn_unknown_api(std::string_view api, std::string path) {
-        if (is_known_model_api(api)) {
+        if (ai::is_known_model_api(api)) {
             return;
         }
         warning(std::move(path),
-                "Unknown model api \"" + std::string{api} + "\"; pi's known apis: " + known_model_apis_text());
+                "Unknown model api \"" + std::string{api} +
+                        "\"; pi's known apis: " + known_model_api_vocabulary_text());
     }
 
     /// Returns the value if it is the expected type, otherwise records an

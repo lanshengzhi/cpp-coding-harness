@@ -178,3 +178,32 @@ TEST_CASE("Thinking level wire vocabulary is public on the Model interface", "[a
     }
     CHECK_FALSE(ai::parse_model_thinking_level("turbo").has_value());
 }
+TEST_CASE("Model api vocabulary is public on the Model interface", "[ai][model][issue671][spec]") {
+    // The published table holds pi's `KnownApi` union verbatim, order
+    // included: a consumer that reports the vocabulary to a user quotes it
+    // in this order. Only four of the ten names have a C++ adapter
+    // (ADR 0033, ADR 0059); the rest are legal config values that fail at
+    // stream time, so membership is about the value domain, not reachability.
+    const std::array<std::string_view, 10> expected{
+            "openai-completions",
+            "mistral-conversations",
+            "openai-responses",
+            "azure-openai-responses",
+            "openai-codex-responses",
+            "anthropic-messages",
+            "bedrock-converse-stream",
+            "google-generative-ai",
+            "google-vertex",
+            "pi-messages",
+    };
+    CHECK(ai::kKnownModelApis == expected);
+    for (const auto& api : expected) {
+        CAPTURE(api);
+        CHECK(ai::is_known_model_api(api));
+    }
+    // An empty value and a near-miss name are both outside the vocabulary, so
+    // the predicate discriminates rather than accepting any non-empty string.
+    CHECK_FALSE(ai::is_known_model_api(""));
+    CHECK_FALSE(ai::is_known_model_api("openai-response"));
+    CHECK_FALSE(ai::is_known_model_api("OpenAI-Responses"));
+}

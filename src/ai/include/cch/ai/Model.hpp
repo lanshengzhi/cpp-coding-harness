@@ -2,6 +2,7 @@
 
 #include <cch/support/Error.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <map>
@@ -100,6 +101,37 @@ struct Model {
     std::optional<ModelHeaders> headers{std::nullopt};
     std::optional<ModelCompatVariant> compat{std::nullopt};
 };
+
+/// The api vocabulary a `Model::api` value may legitimately carry (pi
+/// `KnownApi`, `packages/ai/src/types.ts` at the frozen baseline
+/// `83114817`). This is a value-domain vocabulary, not an adapter registry:
+/// only four of these names have a C++ adapter (ADR 0033, ADR 0059), and the
+/// rest reach a stream-time failure exactly like any other unadapted api.
+/// cch_ai owns the vocabulary because it owns `Model::api`; a consumer that
+/// reads a configured api value validates it here instead of keeping a
+/// second copy of the names.
+inline constexpr std::array<std::string_view, 10> kKnownModelApis{
+        "openai-completions",
+        "mistral-conversations",
+        "openai-responses",
+        "azure-openai-responses",
+        "openai-codex-responses",
+        "anthropic-messages",
+        "bedrock-converse-stream",
+        "google-generative-ai",
+        "google-vertex",
+        "pi-messages",
+};
+
+/// Whether `api` is one of the ten known api wire names.
+[[nodiscard]] inline bool is_known_model_api(std::string_view api) {
+    for (const auto& known : kKnownModelApis) {
+        if (known == api) {
+            return true;
+        }
+    }
+    return false;
+}
 
 [[nodiscard]] cch::support::ExpectedVoid validate_model(const Model& model);
 [[nodiscard]] std::vector<ModelThinkingLevel> get_supported_thinking_levels(const Model& model);
