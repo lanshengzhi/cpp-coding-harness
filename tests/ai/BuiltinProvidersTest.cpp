@@ -188,6 +188,25 @@ TEST_CASE("the generated catalog pins provider counts API families and limits", 
     CHECK(codex_model->cost.tiers->front().input_tokens_above == 272000);
 }
 
+TEST_CASE("the generated catalog carries the OpenRouter session-affinity flag and nothing else",
+        "[ai][providers][issue760][spec]") {
+    std::size_t flagged = 0;
+    for (const auto& definition : ai::builtin_provider_definitions()) {
+        for (const auto& model : definition.models) {
+            const auto* compat = model.compat ? std::get_if<ai::OpenAICompletionsCompat>(&*model.compat) : nullptr;
+            const auto affinity = compat != nullptr ? compat->send_session_affinity_headers : std::nullopt;
+            if (affinity == std::nullopt) {
+                continue;
+            }
+            CHECK(*affinity == true);
+            CHECK(definition.id == "openrouter");
+            CHECK(model.api == "openai-completions");
+            ++flagged;
+        }
+    }
+    CHECK(flagged == 373);
+}
+
 TEST_CASE("the generated catalog preserves published token rates and zero-cost sentinels",
         "[ai][providers][issue760][spec]") {
     for (const auto& definition : ai::builtin_provider_definitions()) {

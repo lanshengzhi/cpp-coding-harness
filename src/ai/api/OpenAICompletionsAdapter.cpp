@@ -2,7 +2,6 @@
 
 #include "CompletionsEvents.hpp"
 #include "MessageConversion.hpp"
-#include "ProviderDetection.hpp"
 #include "ai/Headers.hpp"
 #include "ai/api/RequestHeaders.hpp"
 #include "ai/Timestamps.hpp"
@@ -32,6 +31,21 @@ namespace {
     return result + "/chat/completions";
 }
 
+/// A model's typed `sendSessionAffinityHeaders` decides the session-affinity
+/// header when it carries one; a config-only provider composes with no
+/// `compat` (ADR 0033), so the OpenRouter provider id is the default behind
+/// the flag. The shipped catalog sets the flag on every OpenRouter
+/// Completions record, which is why both paths agree there (ADR 0062).
+[[nodiscard]] bool completions_sends_session_affinity_headers(const Model& model) {
+    if (model.compat) {
+        if (const auto* compat = std::get_if<OpenAICompletionsCompat>(&*model.compat);
+                compat != nullptr && compat->send_session_affinity_headers) {
+            return *compat->send_session_affinity_headers;
+        }
+    }
+    return model.provider == "openrouter";
+}
+
 [[nodiscard]] support::Expected<providers::StreamRequest> build_stream_request(
         const Model& model, const AiContext& context, ProviderStreamOptions& options) {
     if (auto prepared = prepare_stream_request_headers(model, options); !prepared) {
@@ -51,8 +65,9 @@ namespace {
     request.timeout = std::chrono::milliseconds{options.timeout_ms.value_or(30000)};
     request.stop_token = options.stop_token;
     request.headers.insert(options.auth.headers.begin(), options.auth.headers.end());
-    if (is_openrouter(model) && options.session_id && options.cache_retention != CacheRetention::None &&
-            !has_header(request.headers, "x-session-id") && !header_deleted(options, "x-session-id")) {
+    if (completions_sends_session_affinity_headers(model) && options.session_id &&
+            options.cache_retention != CacheRetention::None && !has_header(request.headers, "x-session-id") &&
+            !header_deleted(options, "x-session-id")) {
         set_header(request.headers, "x-session-id", *options.session_id);
     }
     if (options.auth.api_key && !has_header(request.headers, "authorization") &&

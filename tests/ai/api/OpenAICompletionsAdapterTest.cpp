@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <stop_token>
 #include <string>
@@ -244,6 +245,140 @@ TEST_CASE("OpenRouter Chat Completions selects developer reasoning and affinity 
     CHECK(body->at("store").get_boolean() == false);
     CHECK(body->at("reasoning").at("effort").get_string() == "high");
     CHECK(body->at("tools").get_array().front().at("function").at("strict").get_boolean() == false);
+}
+
+namespace {
+
+/// One scripted "ok" completion, so a test asserts only the outbound request.
+[[nodiscard]] std::shared_ptr<tests::ScriptedTransport> ok_transport() {
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks =
+                    {
+                            "data: {\"id\":\"gw-1\",\"model\":\"openai/gpt-5\","
+                            "\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},"
+                            "\"finish_reason\":\"stop\"}]}\n\n"
+                            "data: [DONE]\n\n",
+                    },
+    });
+    return transport;
+}
+
+[[nodiscard]] support::JsonValue single_request_body(const tests::ScriptedTransport& transport) {
+    REQUIRE(transport.requests.size() == 1);
+    auto body = support::read_json(transport.requests.front().body);
+    REQUIRE(body);
+    return std::move(*body);
+}
+
+/// A reasoning Completions model with no typed `compat`, so the wire
+/// specialization under test comes from the provider id alone.
+[[nodiscard]] ai::Model vendor_id_model(std::string id, std::string provider, std::string base_url) {
+    auto model = tests::make_model(std::move(id), std::move(provider), "openai-completions");
+    model.base_url = std::move(base_url);
+    model.reasoning = true;
+    model.thinking_level_map = ai::ThinkingLevelMap{{ai::ModelThinkingLevel::High, "high"}};
+    return model;
+}
+
+/// One scripted request for a reasoning model driven at high effort.
+struct ScriptedRun {
+    std::shared_ptr<tests::ScriptedTransport> transport;
+    support::JsonValue body;
+};
+
+[[nodiscard]] ScriptedRun run_vendor_id_model(ai::Model model, std::uint64_t max_tokens, bool with_session_id) {
+    auto transport = ok_transport();
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy-gateway-key";
+    options.max_tokens = max_tokens;
+    options.reasoning = ai::ThinkingLevel::High;
+    if (with_session_id) {
+        options.session_id = "gateway-session";
+    }
+    const auto run = tests::run_models(*models, model, request_context(), std::move(options));
+    REQUIRE(run.result);
+    auto body = single_request_body(*transport);
+    return ScriptedRun{.transport = std::move(transport), .body = std::move(body)};
+}
+
+} // namespace
+
+TEST_CASE("OpenRouter wire specialization survives a non-vendor gateway base URL",
+        "[ai][api][completions][provider-identity]") {
+    const auto run = run_vendor_id_model(
+            vendor_id_model("openai/gpt-5", "openrouter", "https://gateway.internal.example/v1"), 123, true);
+
+    CHECK(run.transport->requests.front().url == "https://gateway.internal.example/v1/chat/completions");
+    CHECK(run.transport->requests.front().headers.at("x-session-id") == "gateway-session");
+    CHECK(run.body.at("messages").get_array().front().at("role").get_string() == "developer");
+    CHECK(run.body.at("reasoning").at("effort").get_string() == "high");
+    CHECK_FALSE(run.body.get_object().contains("reasoning_effort"));
+}
+
+TEST_CASE("DeepSeek wire specialization survives a non-vendor gateway base URL",
+        "[ai][api][completions][provider-identity]") {
+    const auto run = run_vendor_id_model(
+            vendor_id_model("deepseek-flash", "deepseek", "https://gateway.internal.example/v1"), 4096, false);
+
+    CHECK(run.body.at("messages").get_array().front().at("role").get_string() == "system");
+    CHECK(run.body.at("max_tokens").get_number() == 4096);
+    CHECK_FALSE(run.body.get_object().contains("max_completion_tokens"));
+    CHECK(run.body.at("thinking").at("type").get_string() == "enabled");
+    CHECK(run.body.at("reasoning_effort").get_string() == "high");
+    CHECK_FALSE(run.body.get_object().contains("store"));
+}
+
+TEST_CASE("A non-vendor provider id does not inherit vendor specialization from a vendor host",
+        "[ai][api][completions][provider-identity]") {
+    const auto run = run_vendor_id_model(
+            vendor_id_model("openai/gpt-5", "corp-gateway", "https://openrouter.ai/api/v1"), 123, true);
+
+    CHECK_FALSE(run.transport->requests.front().headers.contains("x-session-id"));
+    CHECK(run.body.at("reasoning_effort").get_string() == "high");
+    CHECK_FALSE(run.body.get_object().contains("reasoning"));
+}
+
+TEST_CASE("The typed session-affinity flag overrides the provider id default",
+        "[ai][api][completions][provider-identity]") {
+    auto suppressed = vendor_id_model("openai/gpt-5", "openrouter", "https://openrouter.ai/api/v1");
+    suppressed.compat = ai::ModelCompatVariant{ai::OpenAICompletionsCompat{
+            .send_session_affinity_headers = false,
+    }};
+    const auto suppressed_run = run_vendor_id_model(std::move(suppressed), 123, true);
+    CHECK_FALSE(suppressed_run.transport->requests.front().headers.contains("x-session-id"));
+
+    auto requested = vendor_id_model("openai/gpt-5", "corp-gateway", "https://gateway.internal.example/v1");
+    requested.compat = ai::ModelCompatVariant{ai::OpenAICompletionsCompat{
+            .send_session_affinity_headers = true,
+    }};
+    const auto requested_run = run_vendor_id_model(std::move(requested), 123, true);
+    CHECK(requested_run.transport->requests.front().headers.at("x-session-id") == "gateway-session");
+}
+
+TEST_CASE("The OpenAI prompt cache key follows the provider id, not the endpoint host",
+        "[ai][api][completions][provider-identity]") {
+    auto run_one = [](std::string provider, std::string base_url) {
+        auto transport = ok_transport();
+        auto model = tests::make_model("gpt-5", std::move(provider), "openai-completions");
+        model.base_url = std::move(base_url);
+        auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+        REQUIRE(models);
+
+        ai::SimpleStreamOptions options;
+        options.api_key = "dummy-openai-key";
+        options.session_id = "cache-session";
+        const auto run = tests::run_models(*models, model, request_context(), std::move(options));
+        REQUIRE(run.result);
+        const auto body = single_request_body(*transport);
+        return body.get_object().contains("prompt_cache_key");
+    };
+
+    CHECK(run_one("openai", "https://gateway.internal.example/v1"));
+    CHECK_FALSE(run_one("corp-gateway", "https://api.openai.com/v1"));
 }
 
 TEST_CASE("Kimi Coding uses the vendor Completions catalog and omits effort for highspeed",

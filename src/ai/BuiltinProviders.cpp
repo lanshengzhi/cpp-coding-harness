@@ -141,6 +141,10 @@ namespace {
             compat.supports_reasoning_effort = *value;
             populated = true;
         }
+        if (const auto value = json_bool_member(*compat_obj, "sendSessionAffinityHeaders"); value.has_value()) {
+            compat.send_session_affinity_headers = *value;
+            populated = true;
+        }
         if (populated) {
             return ModelCompatVariant{std::move(compat)};
         }

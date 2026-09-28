@@ -61,6 +61,8 @@ Normal Pike startup never consults the old pi directory or its environment overr
 
 Built-in and custom models are composed from the runtime catalog and `~/.pike/agent/models.json`. Select with `--model`, optionally qualified as `provider/model`; use `--provider` to narrow an unqualified model pattern.
 
+A custom `models.json` provider key also selects that provider's wire protocol behavior. Name the entry after the service it fronts — `openrouter`, `deepseek`, `openai` — whatever `baseUrl` points at, so a gateway or relay in front of a vendor keeps that vendor's request fields; an entry named something else is treated as a plain OpenAI-compatible endpoint. `baseUrl` selects where the request goes, never what it contains.
+
 Kimi Code is built in as provider `kimi-coding`, model `kimi-for-coding`:
 
 ```bash

@@ -57,6 +57,7 @@ struct OpenAICompletionsCompat {
     std::optional<OpenAICompletionsCacheControlFormat> cache_control_format{std::nullopt};
     std::optional<bool> supports_long_cache_retention{std::nullopt};
     std::optional<bool> supports_reasoning_effort{std::nullopt};
+    std::optional<bool> send_session_affinity_headers{std::nullopt};
 };
 
 /// Typed compatibility values populated by the shipped openai-responses

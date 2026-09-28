@@ -2,7 +2,6 @@
 
 #include "MessageNormalization.hpp"
 #include "MessageText.hpp"
-#include "ProviderDetection.hpp"
 #include "ai/Headers.hpp"
 #include "ai/SimpleOptions.hpp"
 #include "support/Json.hpp"
@@ -38,9 +37,15 @@ struct ResolvedCompletionsCompat {
     return std::get_if<OpenAICompletionsCompat>(&*model.compat);
 }
 
+/// Wire specializations are selected by the explicit provider identity
+/// `Model::provider` carries (ADR 0029), never by sniffing `base_url`: a
+/// gateway or reverse proxy in front of a vendor must not erase that
+/// vendor's protocol behavior, and a non-vendor endpoint must not acquire
+/// it (ADR 0062). A model's typed `compat`, when present, overrides each
+/// field; a config-only provider composes with none (ADR 0033).
 [[nodiscard]] ResolvedCompletionsCompat resolve_compat(const Model& model) {
-    const bool deepseek = is_deepseek(model);
-    const bool openrouter = is_openrouter(model);
+    const bool deepseek = model.provider == "deepseek";
+    const bool openrouter = model.provider == "openrouter";
     const bool openrouter_developer_model =
             openrouter && (model.id.starts_with("openai/") || model.id.starts_with("anthropic/"));
 
@@ -564,8 +569,7 @@ support::Expected<support::JsonValue> build_completions_payload(
         if (options.session_id) {
             payload.emplace("prompt_cache_key", detail::clamp_openai_prompt_cache_key(*options.session_id));
         }
-    } else if (contains_case_insensitive(model.base_url, "api.openai.com") &&
-               options.cache_retention != CacheRetention::None && options.session_id) {
+    } else if (model.provider == "openai" && options.cache_retention != CacheRetention::None && options.session_id) {
         payload.emplace("prompt_cache_key", detail::clamp_openai_prompt_cache_key(*options.session_id));
     }
     return support::JsonValue{std::move(payload)};
