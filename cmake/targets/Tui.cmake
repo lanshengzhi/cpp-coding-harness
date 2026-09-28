@@ -24,6 +24,7 @@ cch_parity_declare_target(
         src/tui/Overlay.cpp
         src/tui/OverlayCompositor.cpp
         src/tui/ProcessTerminal.cpp
+        src/tui/RenderPipeline.cpp
         src/tui/SelectList.cpp
         src/tui/SettingsList.cpp
         src/tui/TerminalImage.cpp

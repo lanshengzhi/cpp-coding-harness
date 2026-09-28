@@ -6,9 +6,10 @@
 
 #include <cch/support/Error.hpp>
 
-#include <cstdint>
+#include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,7 @@ using TuiRenderRequestSink = std::move_only_function<support::ExpectedVoid()>;
 namespace detail {
 class TerminalStreamDecoder;
 class OverlayCompositor;
+class RenderPipeline;
 } // namespace detail
 
 namespace detail::testing {
@@ -75,61 +77,6 @@ public:
 private:
     friend std::size_t detail::testing::frame_prepare_call_count(const Tui& tui) noexcept;
 
-    /// Owns the state and terminal effects for differential frame rendering.
-    class RenderPipeline final {
-    public:
-        explicit RenderPipeline(Terminal& terminal);
-        void start() noexcept;
-        void begin_frame() noexcept;
-        void note_prepared_line() noexcept;
-        [[nodiscard]] std::size_t frame_prepare_call_count() const noexcept;
-        [[nodiscard]] support::ExpectedVoid stop(std::optional<CursorPosition> stop_cursor);
-        [[nodiscard]] support::ExpectedVoid clear_screen();
-        [[nodiscard]] support::ExpectedVoid render(RenderResult materialized,
-                TerminalDimensions dimensions,
-                TerminalDimensions previous_dimensions,
-                TerminalCapabilities capabilities,
-                bool compose_overlays,
-                std::optional<CursorPosition> cursor_location);
-
-    private:
-        struct ActiveImage {
-            TerminalImageHandle handle;
-            CellRegion region;
-            std::uint64_t resource_id{0};
-            std::uint64_t revision{0};
-        };
-
-        struct AdmittedFrame {
-            std::size_t rows{0};
-            TerminalDimensions dimensions{};
-            std::size_t viewport_height{0};
-            bool cleared{false};
-            std::size_t stale_below{0};
-            std::size_t stale_cleared{0};
-        };
-
-        [[nodiscard]] support::ExpectedVoid remove_active_images();
-        [[nodiscard]] support::ExpectedVoid remove_images_intersecting(const CellRegion& region);
-        [[nodiscard]] support::ExpectedVoid remove_stale_images(
-                const std::vector<InlineImageRenderRegion>& desired_images);
-        [[nodiscard]] support::ExpectedVoid place_images(const std::vector<InlineImageRenderRegion>& desired_images);
-        [[nodiscard]] std::size_t admitted_prefix(TerminalDimensions dimensions, std::size_t viewport_height) const;
-
-        Terminal& terminal_;
-        bool first_render_{true};
-        std::vector<std::string> previous_lines_;
-        std::vector<std::string> previous_dock_lines_;
-        /// Composed rows before frame-level preparation, used to reuse finalized rows.
-        std::vector<std::string> previous_raw_lines_;
-        std::vector<std::string> previous_raw_dock_lines_;
-        std::size_t frame_prepare_call_count_{0};
-        std::size_t previous_viewport_height_{0};
-        std::size_t viewport_top_{0};
-        AdmittedFrame admitted_;
-        std::vector<ActiveImage> active_images_;
-    };
-
     [[nodiscard]] bool owns(const Component* component) const;
     [[nodiscard]] support::Expected<RenderResult> render_children(TerminalDimensions dimensions, bool prepare_rows);
     void handle_input(std::string input);
@@ -144,13 +91,12 @@ private:
     Terminal& terminal_; // must outlive this Tui.
     std::unique_ptr<detail::TerminalStreamDecoder> stream_decoder_;
     std::unique_ptr<detail::OverlayCompositor> compositor_;
-    RenderPipeline render_pipeline_;
+    std::unique_ptr<detail::RenderPipeline> render_pipeline_;
     TuiRenderRequestSink render_request_sink_;
     std::vector<std::unique_ptr<Component>> children_;
     Component* focused_{nullptr}; // Null or aliases an element owned by children_ or the compositor's overlays.
     bool started_{false};
     bool pending_render_{false};
-    TerminalDimensions previous_dimensions_{};
 };
 
 } // namespace cch::tui
