@@ -2,7 +2,7 @@
 
 #include "PathPresentation.hpp"
 #include "RenderUtils.hpp"
-#include "agent/harness/OutputLimiter.hpp"
+#include <cch/support/OutputLimiter.hpp>
 
 #include <cch/support/JsonValue.hpp>
 
@@ -142,7 +142,7 @@ struct CompactReadClassification {
 
     if (truncation->first_line_exceeds_limit) {
         return std::format("[First line exceeds {} limit]",
-                harness::format_output_size(static_cast<std::size_t>(truncation->max_bytes)));
+                support::format_output_size(static_cast<std::size_t>(truncation->max_bytes)));
     }
     if (truncation->truncated_by_lines) {
         return std::format("[Truncated: showing {} of {} lines ({} line limit)]",
@@ -152,7 +152,7 @@ struct CompactReadClassification {
     }
     return std::format("[Truncated: {} lines shown ({} limit)]",
             truncation->output_lines,
-            harness::format_output_size(static_cast<std::size_t>(truncation->max_bytes)));
+            support::format_output_size(static_cast<std::size_t>(truncation->max_bytes)));
 }
 
 } // namespace

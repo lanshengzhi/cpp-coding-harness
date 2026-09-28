@@ -12,6 +12,7 @@ include_guard(GLOBAL)
         tests/support/ExpectedMacrosTest.cpp
         tests/support/JsonGlazeTest.cpp
         tests/support/JsonValueIoTest.cpp
+        tests/support/OutputLimiterTest.cpp
         tests/support/PumpUntilTest.cpp
         tests/support/RedactorTest.cpp
         tests/support/TestRunnerIsolationTest.cpp

@@ -4,10 +4,9 @@
 #include <cch/ai/Message.hpp>
 #include <cch/ai/Model.hpp>
 #include <cch/ai/RequestOptions.hpp>
+#include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
-
-#include <boost/asio/awaitable.hpp>
 
 #include <cstddef>
 #include <functional>
@@ -47,9 +46,7 @@ inline constexpr CompactionSettings kDefaultCompactionSettings{};
 /// so an unknown (zero) context window behaves exactly like pi's JS
 /// arithmetic instead of underflowing.
 [[nodiscard]] bool should_compact(
-    std::size_t context_tokens,
-    std::size_t context_window,
-    const CompactionSettings& settings);
+        std::size_t context_tokens, std::size_t context_window, const CompactionSettings& settings);
 
 /// Detect a context-overflow assistant message (pi `isContextOverflow` in
 /// `packages/ai/src/utils/overflow.ts`): an `error` terminal whose message
@@ -58,9 +55,7 @@ inline constexpr CompactionSettings kDefaultCompactionSettings{};
 /// context window, or a `length` terminal whose zero-output usage fills the
 /// window. `context_window` 0 disables the usage-based cases, mirroring pi's
 /// truthiness gate.
-[[nodiscard]] bool is_context_overflow(
-    const ai::AssistantMessage& message,
-    std::size_t context_window);
+[[nodiscard]] bool is_context_overflow(const ai::AssistantMessage& message, std::size_t context_window);
 
 /// Estimate token count for one message using pi's conservative character
 /// heuristic (chars/4, `estimateTokens` in harness/compaction/compaction.ts).
@@ -81,18 +76,15 @@ struct ContextUsageEstimate {
 };
 
 /// Estimate context tokens for messages using provider usage when available.
-[[nodiscard]] ContextUsageEstimate estimate_context_tokens(
-    const std::vector<ai::MessageVariant>& messages);
+[[nodiscard]] ContextUsageEstimate estimate_context_tokens(const std::vector<ai::MessageVariant>& messages);
 
 /// The seam through which summarization streams run: the machinery builds the
 /// request context and options (including `cacheRetention: "none"` and a
 /// fresh session id) and the caller executes them through the session's
 /// `ModelRuntime::streamSimple`, mirroring pi's harness passing `models` into
 /// `compact`. The model used for summarization is the caller's captured model.
-using SummarizationStreamFn = std::move_only_function<
-    boost::asio::awaitable<support::Expected<ai::AssistantMessage>>(
-        ai::AiContext context,
-        ai::SimpleStreamOptions options)>;
+using SummarizationStreamFn = std::move_only_function<support::AsyncResult<ai::AssistantMessage>(
+        ai::AiContext context, ai::SimpleStreamOptions options)>;
 
 /// Generates the fresh session id each summarization request carries so
 /// compaction never pollutes the session's cache affinity (pi `uuidv7()`).
@@ -170,7 +162,7 @@ struct CompactionRunOptions {
 /// the caller's session-runtime jobs (pi `AgentSession.compact`). The `store`
 /// and `model` arguments are borrowed and must outlive the returned operation,
 /// which may suspend while summarization requests are running.
-[[nodiscard]] boost::asio::awaitable<support::Expected<CompactionOutcomeVariant>> compact(
+[[nodiscard]] support::AsyncResult<CompactionOutcomeVariant> compact(
         SessionStore& store, const ai::Model& model, CompactionRunOptions run_options);
 
 } // namespace cch::harness::session

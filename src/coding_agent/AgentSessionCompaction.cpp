@@ -2,7 +2,7 @@
 
 #include "agent/AgentMessageAccess.hpp"
 #include "support/AsyncResultBridge.hpp"
-#include "agent/harness/compaction/Compaction.hpp"
+#include <cch/agent/harness/session/Compaction.hpp>
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/redirect_error.hpp>
@@ -123,11 +123,19 @@ AgentSession::Impl::attempt_compaction(
     }
     const auto model = agent_->state().model;
 
-    harness::session::SummarizationStreamFn summarization_stream =
-            [factory = make_stream_factory(), model](ai::AiContext context, ai::SimpleStreamOptions options) mutable
-            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        auto stream = factory(model, std::move(context), std::move(options));
-        co_return co_await cch::support::detail::await_async_result(std::move(stream).run({}));
+    // The door may issue several summarization requests, and the factory is
+    // move-only, so each one-shot producer mints its own from the session's
+    // services rather than sharing a single captured instance. The session
+    // handle is what keeps those services alive across the suspension.
+    auto impl = shared_from_this();
+    harness::session::SummarizationStreamFn summarization_stream = [impl, model](ai::AiContext context,
+                                                                           ai::SimpleStreamOptions options) {
+        return support::detail::make_async_result(
+                [impl, model, context = std::move(context), options = std::move(options)]() mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    auto stream = impl->make_stream_factory()(model, std::move(context), std::move(options));
+                    co_return co_await support::detail::await_async_result(std::move(stream).run({}));
+                });
     };
 
     harness::session::CompactionRunOptions run_options;
@@ -140,7 +148,8 @@ AgentSession::Impl::attempt_compaction(
     run_options.summarization_stream = std::move(summarization_stream);
     run_options.on_compaction_start = std::move(on_compaction_start);
 
-    co_return co_await harness::session::compact(*session_.store, model, std::move(run_options));
+    co_return co_await support::detail::await_async_result(
+            harness::session::compact(*session_.store, model, std::move(run_options)));
 }
 
 boost::asio::awaitable<support::Expected<CompactionResult>> AgentSession::Impl::commit_compaction(

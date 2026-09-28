@@ -7,7 +7,7 @@
 #include "agent/harness/ShellResolver.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
 #include "support/AsyncResultBridge.hpp"
-#include "agent/harness/OutputLimiter.hpp"
+#include <cch/support/OutputLimiter.hpp>
 #include "agent/harness/Process.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -449,7 +449,7 @@ TEST_CASE("default process runner caps newline-free output without waiting for l
     request.arguments = {"-c", "printf '%60000s' '' | tr ' ' x"};
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds(5000);
-    request.output_limit = harness::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
+    request.output_limit = support::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
     std::string streamed_output;
     // The capture remains alive until run_awaitable_pi drives the process to quiescence.
     request.on_stdout = [&](std::string_view chunk) -> support::ExpectedVoid {
@@ -474,7 +474,7 @@ TEST_CASE("default process runner bounds truncated output on UTF-8 character bou
     request.arguments = {"-c", "printf '€%.0s' {1..500}"};
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds(5000);
-    request.output_limit = harness::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
+    request.output_limit = support::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
 
     auto result = run_awaitable<harness::ProcessResult>([&]() { return runner.run(std::move(request)); });
 

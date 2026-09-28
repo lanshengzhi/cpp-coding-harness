@@ -4,7 +4,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -611,4 +614,106 @@ TEST_CASE("moved Session Store keeps appending to the same session file", "[harn
     REQUIRE(loaded.has_value());
     REQUIRE(loaded->messages.size() == 1);
     CHECK(user_text(loaded->messages[0]) == "after move");
+}
+
+TEST_CASE("create_from_entries writes a re-chained branch file the loader reads back",
+        "[harness][session][store][issue540][spec]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "branched.jsonl";
+
+    // The fork flow hands over a re-chained entry list, never wire lines.
+    std::vector<harness::session::SessionEntry> entries;
+    harness::session::SessionEntry first;
+    first.kind = harness::session::SessionEntryKind::Message;
+    first.entry_id = "entry-first";
+    first.parent_id = std::nullopt;
+    first.timestamp = 1;
+    first.message = user_message("branched");
+    entries.push_back(std::move(first));
+    harness::session::SessionEntry second;
+    second.kind = harness::session::SessionEntryKind::Message;
+    second.entry_id = "entry-second";
+    second.parent_id = "entry-first";
+    second.timestamp = 2;
+    second.message = user_message("chained");
+    entries.push_back(std::move(second));
+
+    auto header = metadata_for(workspace);
+    header.session_id = "branched-session";
+    header.parent_session = workspace.path() / "source.jsonl";
+    REQUIRE(harness::session::SessionStore::create_from_entries(path, std::move(header), entries).has_value());
+
+    auto loaded = harness::session::SessionStore::load(path);
+    REQUIRE(loaded.has_value());
+    CHECK(loaded->metadata.session_id == "branched-session");
+    CHECK(loaded->metadata.parent_session == workspace.path() / "source.jsonl");
+    REQUIRE(loaded->messages.size() == 2);
+    CHECK(user_text(loaded->messages[0]) == "branched");
+    CHECK(user_text(loaded->messages[1]) == "chained");
+
+    // One wire line per entry: the facade terminates each line exactly once.
+    std::ifstream file(path);
+    REQUIRE(file.good());
+    const std::string contents{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+    CHECK(contents.find("\n\n") == std::string::npos);
+    CHECK(std::count(contents.begin(), contents.end(), '\n') == 3);
+}
+
+TEST_CASE("create_from_entries preserves a foreign entry line and refuses a nested header",
+        "[harness][session][store][issue540][spec]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "foreign.jsonl";
+
+    const std::string foreign_line = R"({"type":"retired_entry","id":"entry-foreign"})";
+    std::vector<harness::session::SessionEntry> entries;
+    harness::session::SessionEntry before;
+    before.kind = harness::session::SessionEntryKind::Message;
+    before.entry_id = "entry-before";
+    before.timestamp = 1;
+    before.message = user_message("before");
+    entries.push_back(std::move(before));
+    harness::session::SessionEntry foreign;
+    foreign.kind = harness::session::SessionEntryKind::Unknown;
+    foreign.entry_id = "entry-foreign";
+    foreign.raw_line = foreign_line;
+    entries.push_back(std::move(foreign));
+    // A foreign entry that is not last is the terminator boundary: the
+    // reader's `raw_line` carries no newline, so the facade must add it or
+    // the next entry concatenates onto one malformed JSON line.
+    harness::session::SessionEntry after;
+    after.kind = harness::session::SessionEntryKind::Message;
+    after.entry_id = "entry-after";
+    after.parent_id = "entry-before";
+    after.timestamp = 2;
+    after.message = user_message("after");
+    entries.push_back(std::move(after));
+
+    REQUIRE(harness::session::SessionStore::create_from_entries(path, metadata_for(workspace), entries).has_value());
+    auto loaded = harness::session::SessionStore::load(path);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->entries.size() == 4);
+    CHECK(loaded->entries[2].kind == harness::session::SessionEntryKind::Unknown);
+    REQUIRE(loaded->unknown_lines.size() == 1);
+    CHECK(loaded->unknown_lines.front() == foreign_line);
+    REQUIRE(loaded->messages.size() == 2);
+    CHECK(user_text(loaded->messages[0]) == "before");
+    CHECK(user_text(loaded->messages[1]) == "after");
+
+    std::ifstream file(path);
+    REQUIRE(file.good());
+    const std::string contents{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+    CHECK(contents.find("\n\n") == std::string::npos);
+    CHECK(std::count(contents.begin(), contents.end(), '\n') == 4);
+
+    // The header comes from metadata alone, so a nested one is rejected
+    // rather than written as a second session header.
+    std::vector<harness::session::SessionEntry> with_header;
+    with_header.push_back(loaded->entries.front());
+    auto rejected = harness::session::SessionStore::create_from_entries(
+            workspace.path() / "nested-header.jsonl", metadata_for(workspace), with_header);
+    REQUIRE_FALSE(rejected.has_value());
+    // The rejection precedes the journal, so no half-written session file is
+    // left at the target path.
+    std::error_code missing_ec;
+    CHECK_FALSE(std::filesystem::exists(workspace.path() / "nested-header.jsonl", missing_ec));
 }

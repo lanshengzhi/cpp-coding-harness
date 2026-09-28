@@ -20,7 +20,7 @@
 #include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
-#include "support/Redactor.hpp"
+#include <cch/support/Redactor.hpp>
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>

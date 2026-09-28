@@ -4,7 +4,7 @@
 
 #include <boost/multiprecision/cpp_int.hpp>
 
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 
 #include <algorithm>
 #include <cmath>

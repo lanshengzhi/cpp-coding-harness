@@ -1,6 +1,6 @@
 #include "agent/AgentImpl.hpp"
 
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 
 #include <algorithm>
 #include <memory>

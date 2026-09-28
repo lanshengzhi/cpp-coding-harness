@@ -15,7 +15,7 @@
 namespace cch::coding_agent::tui {
 
 /// pi `String.prototype.split("\n")`, as an owning per-line copy of
-/// `harness::split_lines`: the renderers transform and store the lines, which
+/// `support::split_lines`: the renderers transform and store the lines, which
 /// the harness's views cannot do.
 [[nodiscard]] std::vector<std::string> split_lines(std::string_view text);
 

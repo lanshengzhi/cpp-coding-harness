@@ -1,7 +1,7 @@
 #include "coding_agent/tui/TreeSelector.hpp"
 
 #include "coding_agent/tui/KeybindingHints.hpp"
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 #include "support/Json.hpp"
 
 #include <cch/tui/Utils.hpp>

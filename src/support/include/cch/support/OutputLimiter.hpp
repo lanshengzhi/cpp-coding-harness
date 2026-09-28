@@ -1,6 +1,6 @@
 #pragma once
 
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-namespace cch::harness {
+namespace cch::support {
 
 struct OutputLimit {
     std::size_t max_bytes{50 * 1024};
@@ -170,8 +170,8 @@ namespace detail {
             truncated_by = OutputTruncationKind::Bytes;
             if (kept.empty()) {
                 // The final line alone is over budget: keep its tail.
-                const auto tail_start = support::utf8_tail_start(
-                        lines[index], limit.max_bytes, std::numeric_limits<std::size_t>::max());
+                const auto tail_start =
+                        utf8_tail_start(lines[index], limit.max_bytes, std::numeric_limits<std::size_t>::max());
                 kept.push_back(lines[index].substr(tail_start));
                 kept_bytes = kept.front().size();
                 last_line_partial = true;
@@ -218,9 +218,7 @@ namespace detail {
     return format_output_size_tenths(static_cast<double>(bytes) / (1024.0 * 1024.0)) + "MB";
 }
 
-[[nodiscard]] inline OutputLimitResult limit_output_tail(
-    const std::string& input,
-    OutputLimit limit = {}) {
+[[nodiscard]] inline OutputLimitResult limit_output_tail(const std::string& input, OutputLimit limit = {}) {
     if (input.empty()) {
         return {};
     }
@@ -229,23 +227,21 @@ namespace detail {
     }
 
     // The byte/line walk and UTF-8 boundary repair are policy-free support
-    // mechanics. Redaction-marker repair remains local to this harness wrapper.
-    auto start = support::utf8_tail_start(input, limit.max_bytes, limit.max_lines);
-    const auto marker = input.rfind(support::kRedactionMarker, start);
-    if (marker != std::string::npos && marker < start && marker + support::kRedactionMarker.size() > start) {
-        start = marker + support::kRedactionMarker.size();
+    // mechanics. Redaction-marker repair remains local to this wrapper.
+    auto start = utf8_tail_start(input, limit.max_bytes, limit.max_lines);
+    const auto marker = input.rfind(kRedactionMarker, start);
+    if (marker != std::string::npos && marker < start && marker + kRedactionMarker.size() > start) {
+        start = marker + kRedactionMarker.size();
     }
 
     return OutputLimitResult{
-            .text = support::bounded_utf8(std::string_view(input).substr(start), limit.max_bytes),
+            .text = bounded_utf8(std::string_view(input).substr(start), limit.max_bytes),
             .truncated = start > 0,
     };
 }
 
-[[nodiscard]] inline OutputLimitResult limit_output_tail_redacted(
-    std::string input,
-    OutputLimit limit = {}) {
-    return limit_output_tail(support::redact_text(std::move(input)), limit);
+[[nodiscard]] inline OutputLimitResult limit_output_tail_redacted(std::string input, OutputLimit limit = {}) {
+    return limit_output_tail(redact_text(std::move(input)), limit);
 }
 
-} // namespace cch::harness
+} // namespace cch::support

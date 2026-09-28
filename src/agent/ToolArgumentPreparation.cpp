@@ -2,7 +2,7 @@
 
 #include "ToolArgumentDetail.hpp"
 
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 
 #include "support/Json.hpp"
 

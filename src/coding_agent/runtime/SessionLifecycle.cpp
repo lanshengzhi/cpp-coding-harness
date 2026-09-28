@@ -4,8 +4,6 @@
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
-#include "agent/harness/session/EntrySerializer.hpp"
-#include "agent/harness/session/SessionJournal.hpp"
 #include "support/UniqueFd.hpp"
 
 #include <cerrno>
@@ -387,16 +385,16 @@ support::Expected<PreparedResumeTarget> prepare_fork_target(
             resolved_source.string()));
     }
 
-    // Copy the raw non-header entry lines first: the loaded session moves
-    // into the tree below for context derivation. pi `forkFrom` copies every
-    // parsed non-header entry, including future/foreign entry types (the
-    // C++ Unknown kind keeps those raw lines verbatim).
-    std::vector<std::string> entry_lines;
+    // Copy the non-header entries first: the loaded session moves into the
+    // tree below for context derivation. pi `forkFrom` copies every parsed
+    // non-header entry, including future/foreign entry types (the C++
+    // Unknown kind keeps those raw lines verbatim).
+    std::vector<harness::session::SessionEntry> copied_entries;
     for (const auto& entry : loaded->entries) {
         if (entry.kind == harness::session::SessionEntryKind::Header) {
             continue;
         }
-        entry_lines.push_back(entry.raw_line);
+        copied_entries.push_back(entry);
     }
     if (std::none_of(
             loaded->entries.begin(), loaded->entries.end(),
@@ -474,21 +472,10 @@ support::Expected<PreparedResumeTarget> prepare_fork_target(
         .parent_session = resolved_source,
     };
 
-    harness::session::EntrySerializer serializer;
-    auto header_line = serializer.serialize_header(metadata);
-    if (!header_line) {
-        return std::unexpected(publication_error(
-            composed.session_path, std::move(header_line.error())));
-    }
-    auto journal = harness::session::SessionJournal::create_new(
-        composed.session_path, *header_line);
-    if (!journal) {
-        return std::unexpected(publication_error(composed.session_path, journal.error()));
-    }
-    for (const auto& line : entry_lines) {
-        if (auto appended = journal->append_line(line + '\n'); !appended) {
-            return std::unexpected(publication_error(composed.session_path, appended.error()));
-        }
+    if (auto written = harness::session::SessionStore::create_from_entries(
+                composed.session_path, std::move(metadata), std::move(copied_entries));
+            !written) {
+        return std::unexpected(publication_error(composed.session_path, written.error()));
     }
 
     // Re-resolve the new file exactly like a resume: the copied history's

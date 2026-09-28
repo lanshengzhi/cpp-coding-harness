@@ -3,7 +3,7 @@
 #include "coding_agent/tui/ErrorPresentation.hpp"
 #include "coding_agent/tui/InteractiveView.hpp"
 
-#include "agent/harness/compaction/Compaction.hpp"
+#include <cch/agent/harness/session/Compaction.hpp>
 
 #include <cch/ai/Message.hpp>
 

@@ -2,10 +2,10 @@
 
 #include "agent/tools/EditDiff.hpp"
 #include "support/AsyncResultBridge.hpp"
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 #include "support/Json.hpp"
 #include "support/JsonGlaze.hpp"
-#include "agent/harness/OutputLimiter.hpp"
+#include <cch/support/OutputLimiter.hpp>
 #include "agent/harness/session/RandomHex.hpp"
 #include "agent/tools/TerminalText.hpp"
 
@@ -131,14 +131,14 @@ template <typename Args>
     return support::make_error(support::ErrorCode::Tool, "missing capability");
 }
 
-[[nodiscard]] const char* truncation_kind_name(harness::OutputTruncationKind kind) {
-    return kind == harness::OutputTruncationKind::Lines ? "lines" : "bytes";
+[[nodiscard]] const char* truncation_kind_name(support::OutputTruncationKind kind) {
+    return kind == support::OutputTruncationKind::Lines ? "lines" : "bytes";
 }
 
 /// pi's `ReadToolDetails` / `BashToolDetails` carry the whole `TruncationResult`
 /// minus `content`, which stays the model-facing text (pi `read.ts:27-29`,
 /// `bash.ts:50-53`, `truncate.ts:15-38`).
-[[nodiscard]] support::JsonValue truncation_details(const harness::OutputTruncation& truncation) {
+[[nodiscard]] support::JsonValue truncation_details(const support::OutputTruncation& truncation) {
     const auto number = [](std::size_t value) { return support::JsonValue(static_cast<double>(value)); };
     support::JsonValue::object_t object{
             {"truncated", support::JsonValue(truncation.truncated)},
@@ -167,7 +167,7 @@ template <typename Args>
 /// reads, plus the truncation facts and the spill path when output was dropped.
 struct BashOutput {
     std::string text;
-    std::optional<harness::OutputTruncation> truncation;
+    std::optional<support::OutputTruncation> truncation;
     std::optional<std::string> full_output_path;
 };
 
@@ -192,8 +192,8 @@ boost::asio::awaitable<support::Expected<BashOutput>> format_bash_output(
         std::string redacted_full_output,
         std::string empty_text,
         std::stop_token stop_token) {
-    const harness::OutputLimit output_limit;
-    const auto truncation = harness::truncate_output_tail(redacted_full_output, output_limit);
+    const support::OutputLimit output_limit;
+    const auto truncation = support::truncate_output_tail(redacted_full_output, output_limit);
     // pi `output.getLastLineBytes()`: the byte size of the final line of the
     // complete output, needed before the text is moved into the spill write.
     const auto last_newline = redacted_full_output.rfind('\n');
@@ -227,11 +227,11 @@ boost::asio::awaitable<support::Expected<BashOutput>> format_bash_output(
     const auto start_line = total_lines - truncation.output_lines + 1;
     if (truncation.last_line_partial) {
         output.text += std::format("\n\n[Showing last {} of line {} (line is {}). Full output: {}]",
-                harness::format_output_size(truncation.output_bytes),
+                support::format_output_size(truncation.output_bytes),
                 total_lines,
-                harness::format_output_size(last_line_bytes),
+                support::format_output_size(last_line_bytes),
                 *spill_path);
-    } else if (truncation.truncated_by == harness::OutputTruncationKind::Lines) {
+    } else if (truncation.truncated_by == support::OutputTruncationKind::Lines) {
         output.text += std::format(
                 "\n\n[Showing lines {}-{} of {}. Full output: {}]", start_line, total_lines, total_lines, *spill_path);
     } else {
@@ -239,7 +239,7 @@ boost::asio::awaitable<support::Expected<BashOutput>> format_bash_output(
                 start_line,
                 total_lines,
                 total_lines,
-                harness::format_output_size(output_limit.max_bytes),
+                support::format_output_size(output_limit.max_bytes),
                 *spill_path);
     }
     output.truncation = truncation;
@@ -295,7 +295,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> read_
     if (!text) {
         co_return error_result_from(text.error());
     }
-    const auto all_lines = harness::split_lines(*text);
+    const auto all_lines = support::split_lines(*text);
     const std::size_t total_file_lines = all_lines.size();
 
     // pi `read.ts:139-142`: offset is 1-indexed on input, 0-indexed on the
@@ -326,16 +326,16 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> read_
         selected.append(all_lines[index]);
     }
 
-    const harness::OutputLimit output_limit;
-    const auto truncation = harness::truncate_output_head(selected, output_limit);
-    const auto max_bytes_size = harness::format_output_size(output_limit.max_bytes);
+    const support::OutputLimit output_limit;
+    const auto truncation = support::truncate_output_head(selected, output_limit);
+    const auto max_bytes_size = support::format_output_size(output_limit.max_bytes);
     std::string content = truncation.text;
-    std::optional<harness::OutputTruncation> details_truncation;
+    std::optional<support::OutputTruncation> details_truncation;
     if (truncation.first_line_exceeds_limit) {
         // pi `read.ts:158-162`: the notice is the whole content, and the
         // suggested command carries the model-supplied path and the numeric cap.
         const auto first_line_size =
-                harness::format_output_size(all_lines[static_cast<std::size_t>(start_line)].size());
+                support::format_output_size(all_lines[static_cast<std::size_t>(start_line)].size());
         content = std::format("[Line {} is {}, exceeds {} limit. Use bash: sed -n '{}p' {} | head -c {}]",
                 start_line_display,
                 first_line_size,
@@ -350,7 +350,7 @@ boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> read_
         const auto next_offset = end_line_display + 1;
         content +=
                 std::format("\n\n[Showing lines {}-{} of {}", start_line_display, end_line_display, total_file_lines);
-        if (truncation.truncated_by != harness::OutputTruncationKind::Lines) {
+        if (truncation.truncated_by != support::OutputTruncationKind::Lines) {
             content += std::format(" ({} limit)", max_bytes_size);
         }
         content += std::format(". Use offset={} to continue.]", next_offset);

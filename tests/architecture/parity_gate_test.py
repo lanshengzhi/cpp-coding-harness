@@ -51,6 +51,17 @@ VALID_MANIFEST = {
                 ],
             },
             {
+                "id": "no-agent-private-reach-through",
+                "source_prefixes": ["src/coding_agent/", "src/cli/"],
+                "excluded_source_prefixes": [],
+                "forbidden_include_prefixes": [
+                    "agent/harness/OutputLimiter.hpp",
+                    "agent/harness/compaction",
+                    "agent/harness/session/EntrySerializer.hpp",
+                    "agent/harness/session/SessionJournal.hpp",
+                ],
+            },
+            {
                 "id": "agent-no-ai-private-includes",
                 "source_prefixes": ["src/agent/"],
                 "excluded_source_prefixes": [],
@@ -234,6 +245,22 @@ class ManifestSchemaTest(unittest.TestCase):
         clause = rules["agent-no-ai-private-includes"]
         self.assertEqual(clause.source_prefixes, ("src/agent/",))
         self.assertEqual(clause.forbidden_include_prefixes, ("ai/", "src/ai/"))
+
+    def test_checked_in_manifest_closes_the_private_reach_through_paths(self):
+        manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
+        manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
+        rules = {rule.rule_id: rule for rule in manifest.architecture_contract.rules}
+        clause = rules["no-agent-private-reach-through"]
+        self.assertEqual(clause.source_prefixes, ("src/coding_agent/", "src/cli/"))
+        self.assertEqual(
+            clause.forbidden_include_prefixes,
+            (
+                "agent/harness/OutputLimiter.hpp",
+                "agent/harness/compaction",
+                "agent/harness/session/EntrySerializer.hpp",
+                "agent/harness/session/SessionJournal.hpp",
+            ),
+        )
 
     def test_provider_capability_is_outside_ai_interface_root(self):
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
@@ -1242,6 +1269,46 @@ class ArchitectureContractTest(unittest.TestCase):
                 self.assertIn("agent-no-ai-private-includes", diagnostics[0].message)
                 self.assertEqual(diagnostics[0].target, "cch_agent_core")
                 self.assertEqual(diagnostics[0].dependency, include_path)
+
+    def test_application_source_cannot_include_agent_private_header(self):
+        # The text-limiting, compaction, and session-serialization seams moved
+        # into Owner Interfaces, so reaching back into the private root is a
+        # reported contract violation rather than a review convention.
+        for include_path in (
+            "agent/harness/OutputLimiter.hpp",
+            "agent/harness/compaction/Compaction.hpp",
+            "agent/harness/session/EntrySerializer.hpp",
+            "agent/harness/session/SessionJournal.hpp",
+        ):
+            with self.subTest(include_path=include_path):
+                with tempfile.TemporaryDirectory() as tmp:
+                    diagnostics = run_include_case(
+                        tmp,
+                        "cch_coding_agent",
+                        "coding_agent/tui/tool_renderers/BashRenderer.cpp",
+                        include_path,
+                        spelling="quote",
+                    )
+                self.assertEqual(
+                    rule_ids(diagnostics), [pg.RULE_PRIVATE_REACH_THROUGH_INCLUDE]
+                )
+                self.assertIn("no-agent-private-reach-through", diagnostics[0].message)
+                self.assertEqual(diagnostics[0].target, "cch_coding_agent")
+                self.assertEqual(diagnostics[0].dependency, include_path)
+
+    def test_agent_private_prefix_does_not_forbid_sibling_headers(self):
+        # The rule names closed seams, not the whole private root: the
+        # application layer still composes the Runtime root and the process
+        # runner, so those keeps building.
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "coding_agent/runtime/SessionFactory.cpp",
+                "agent/harness/RuntimeRoot.hpp",
+                spelling="quote",
+            )
+        self.assertEqual(diagnostics, [])
 
     def test_dated_exception_allows_one_known_migration_source(self):
         data = deep_copy(VALID_MANIFEST)

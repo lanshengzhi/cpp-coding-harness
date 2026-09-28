@@ -2,7 +2,7 @@
 
 #include "ToolArgumentPreparation.hpp"
 
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 
 #include <algorithm>
 #include <array>

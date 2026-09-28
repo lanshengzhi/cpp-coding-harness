@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/support/Error.hpp>
-#include "agent/harness/OutputLimiter.hpp"
+#include <cch/support/OutputLimiter.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -23,7 +23,7 @@ struct ProcessRequest {
     std::chrono::milliseconds timeout{30000};
     std::map<std::string, std::string> environment;
     bool use_explicit_environment{false};
-    OutputLimit output_limit;
+    support::OutputLimit output_limit;
     std::stop_token stop_token;
 
     /// Called with stdout chunks as they are produced. A returned error

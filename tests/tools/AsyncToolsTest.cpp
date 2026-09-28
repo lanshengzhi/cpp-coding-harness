@@ -8,7 +8,7 @@
 #include "support/AsyncResultBridge.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
 #include "support/Json.hpp"
-#include "agent/harness/OutputLimiter.hpp"
+#include <cch/support/OutputLimiter.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -634,7 +634,7 @@ TEST_CASE("async bash tool truncates from the tail with pi's line-limit summary 
     // the model contract, so a capture double that records the write proves
     // nothing about the file.
     auto filesystem = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
-    const harness::OutputLimit limit;
+    const support::OutputLimit limit;
     shell->streamed_stdout = numbered_lines(static_cast<int>(limit.max_lines) + 100);
     shell->next_shell_result.stdout_output = shell->streamed_stdout;
     auto tool = tools::make_async_bash_tool(shell, filesystem);
@@ -746,7 +746,7 @@ TEST_CASE("async bash tool reports a cut final line with pi's last-line summary"
     tests::TempWorkspace workspace;
     auto shell = std::make_shared<CapturingShell>();
     auto filesystem = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
-    const harness::OutputLimit limit;
+    const support::OutputLimit limit;
     // Two complete lines then one 80 KB line: the tail of that final line is
     // all that survives, which is the third of pi's three summary forms.
     shell->streamed_stdout = "first\nsecond\n" + std::string(80 * 1024, 'z');
@@ -777,7 +777,7 @@ TEST_CASE("async bash tool spill file holds the complete redacted output", "[too
     tests::TempWorkspace workspace;
     auto shell = std::make_shared<CapturingShell>();
     auto filesystem = std::make_shared<CapturingFileSystem>(workspace.path());
-    const harness::OutputLimit limit;
+    const support::OutputLimit limit;
     shell->streamed_stdout = std::string(limit.max_bytes + 100, 'x') + "\napi_key=super-secret\ncomplete-tail\xc3\xa9";
     shell->next_shell_result.stdout_output = shell->streamed_stdout.substr(0, limit.max_bytes);
     auto tool = tools::make_async_bash_tool(shell, filesystem);
@@ -811,7 +811,7 @@ TEST_CASE("async bash tool without streamed output uses the execution-layer resu
     tests::TempWorkspace workspace;
     auto shell = std::make_shared<CapturingShell>();
     auto filesystem = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
-    const harness::OutputLimit limit;
+    const support::OutputLimit limit;
     // streamed_stdout/streamed_stderr stay empty, so the fake Shell never
     // fires the streaming callbacks and only the result fields exist. pi's
     // accumulator has the same complete output in this case, so the tool
@@ -1120,7 +1120,7 @@ TEST_CASE(
 TEST_CASE("async read tool reports the line-limit truncation with pi's continuation hint",
         "[tools][async][issue823][spec]") {
     tests::TempWorkspace workspace;
-    const harness::OutputLimit limit;
+    const support::OutputLimit limit;
     workspace.write("big.txt", numbered_lines(static_cast<int>(limit.max_lines) + 31));
     auto env = std::make_shared<harness::AsyncLocalFileSystem>(test_runtime_target(), workspace.path());
     auto tool = tools::make_async_read_file_tool(env);

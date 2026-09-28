@@ -1,4 +1,4 @@
-#include "Compaction.hpp"
+#include <cch/agent/harness/session/Compaction.hpp>
 
 #include <cch/agent/harness/session/SessionStore.hpp>
 
@@ -6,6 +6,7 @@
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/support/JsonValue.hpp>
+#include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
 
 #include <algorithm>
@@ -1091,9 +1092,8 @@ void extract_file_ops_from_message(
             stop_token);
     call.options.cache_retention = ai::CacheRetention::None;
     call.options.session_id = session_id_factory();
-
-    auto response = co_await stream_fn(
-        std::move(call.context), std::move(call.options));
+    auto response =
+            co_await support::detail::await_async_result(stream_fn(std::move(call.context), std::move(call.options)));
     if (!response) {
         co_return std::unexpected(response.error());
     }
@@ -1264,9 +1264,7 @@ generate_turn_prefix_summary(
     co_return result;
 }
 
-} // namespace
-
-boost::asio::awaitable<support::Expected<CompactionOutcomeVariant>> compact(
+[[nodiscard]] boost::asio::awaitable<support::Expected<CompactionOutcomeVariant>> compact_awaitable(
         SessionStore& store, const ai::Model& model, CompactionRunOptions run_options) {
     // The store's live tree answers the branch query from memory (pi
     // `SessionManager.getBranch`); the session file is not re-read. pi's
@@ -1312,6 +1310,15 @@ boost::asio::awaitable<support::Expected<CompactionOutcomeVariant>> compact(
         co_return std::unexpected(result.error());
     }
     co_return CompactionOutcomeVariant{std::move(*result)};
+}
+
+} // namespace
+
+support::AsyncResult<CompactionOutcomeVariant> compact(
+        SessionStore& store, const ai::Model& model, CompactionRunOptions run_options) {
+    return support::detail::make_async_result([store = &store, model, run_options = std::move(run_options)]() mutable {
+        return compact_awaitable(*store, model, std::move(run_options));
+    });
 }
 
 } // namespace cch::harness::session

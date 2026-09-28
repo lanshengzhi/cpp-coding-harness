@@ -1,7 +1,6 @@
 #include "RenderUtils.hpp"
 
-#include "agent/harness/OutputLimiter.hpp"
-
+#include <cch/support/OutputLimiter.hpp>
 #include <cch/tui/Text.hpp>
 
 #include <array>
@@ -15,7 +14,7 @@
 namespace cch::coding_agent::tui {
 
 std::vector<std::string> split_lines(std::string_view text) {
-    const auto views = harness::split_lines(text);
+    const auto views = support::split_lines(text);
     return {views.begin(), views.end()};
 }
 

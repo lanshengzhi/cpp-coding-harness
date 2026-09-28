@@ -1,7 +1,7 @@
 #include "agent/harness/session/EntryRedaction.hpp"
 
 #include "support/Json.hpp"
-#include "support/Redactor.hpp"
+#include <cch/support/Redactor.hpp>
 
 #include <cch/ai/Content.hpp>
 

@@ -1,4 +1,4 @@
-#include "support/Redactor.hpp"
+#include <cch/support/Redactor.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 

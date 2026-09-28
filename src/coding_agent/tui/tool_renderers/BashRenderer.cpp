@@ -2,9 +2,8 @@
 
 #include "coding_agent/tui/tool_renderers/RenderUtils.hpp"
 
-#include "agent/harness/OutputLimiter.hpp"
-
 #include <cch/support/JsonValue.hpp>
+#include <cch/support/OutputLimiter.hpp>
 #include <cch/tui/Utils.hpp>
 
 #include <cmath>
@@ -165,7 +164,7 @@ void strip_spill_footer(std::string& output,
         } else {
             warnings.push_back(std::format("Truncated: {} lines shown ({} limit)",
                     facts->output_lines,
-                    harness::format_output_size(static_cast<std::size_t>(facts->max_bytes))));
+                    support::format_output_size(static_cast<std::size_t>(facts->max_bytes))));
         }
     }
     const auto joined = [&warnings] {

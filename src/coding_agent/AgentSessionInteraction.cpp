@@ -8,7 +8,7 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 
-#include "agent/harness/OutputLimiter.hpp"
+#include <cch/support/OutputLimiter.hpp>
 #include "agent/AgentMessageAccess.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
@@ -83,8 +83,8 @@ constexpr std::size_t kMaxArtifactReferenceBytes = 1024;
 
 [[nodiscard]] std::string projection_tool_output_tail(const agent::AsyncToolExecutionResult& result, bool& truncated) {
     const auto text = ai::text_from_content(result.content);
-    auto limited = harness::limit_output_tail_redacted(text,
-            harness::OutputLimit{
+    auto limited = support::limit_output_tail_redacted(text,
+            support::OutputLimit{
                     .max_bytes = kProjectionToolOutputTailBytes,
                     .max_lines = kProjectionToolOutputTailLines,
             });

@@ -15,6 +15,7 @@ cch_parity_declare_target(
         src/agent/ToolSchemaCompile.cpp
         src/agent/ToolSchemaValidate.cpp
         src/agent/ToolCallExecutor.cpp
+        src/agent/ToolRegistry.cpp
         src/agent/harness/AsyncLocalFileSystem.cpp
         src/agent/harness/AsyncLocalShell.cpp
         src/agent/harness/Process.cpp

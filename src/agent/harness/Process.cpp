@@ -1,6 +1,6 @@
 #include "Process.hpp"
 
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 #include "support/UniqueFd.hpp"
 
 #include <boost/asio/as_tuple.hpp>
@@ -87,12 +87,11 @@ void cancel_output_pipe(boost::asio::posix::stream_descriptor& pipe) noexcept {
     return callback(chunk);
 }
 
-void append_limited(
-    OutputCapture& capture,
-    const char* data,
-    std::size_t size,
-    const OutputLimit& limit,
-    std::optional<std::move_only_function<support::ExpectedVoid(std::string_view)>>& callback) {
+void append_limited(OutputCapture& capture,
+        const char* data,
+        std::size_t size,
+        const support::OutputLimit& limit,
+        std::optional<std::move_only_function<support::ExpectedVoid(std::string_view)>>& callback) {
     bool line_limit_reached = limit.max_lines == 0 || capture.lines >= limit.max_lines;
     std::size_t offset = 0;
     while (offset < size && capture.bytes < limit.max_bytes && !line_limit_reached) {
@@ -126,9 +125,9 @@ void append_limited(
 }
 
 [[nodiscard]] boost::asio::awaitable<support::Expected<OutputCapture>> drain_pipe(
-    boost::asio::posix::stream_descriptor& pipe,
-    OutputLimit limit,
-    std::optional<std::move_only_function<support::ExpectedVoid(std::string_view)>> callback) {
+        boost::asio::posix::stream_descriptor& pipe,
+        support::OutputLimit limit,
+        std::optional<std::move_only_function<support::ExpectedVoid(std::string_view)>> callback) {
     OutputCapture capture;
     std::array<char, 4096> buffer{};
     for (;;) {
@@ -156,13 +155,12 @@ void append_limited(
 
 /// The pointed-to descriptor and result slots must outlive the returned
 /// awaitable; the caller waits for `done` before destroying them.
-[[nodiscard]] boost::asio::awaitable<void> drain_pipe_into(
-    boost::asio::posix::stream_descriptor* pipe,
-    OutputLimit limit,
-    std::optional<std::move_only_function<support::ExpectedVoid(std::string_view)>> callback,
-    OutputCapture* capture,
-    std::optional<support::Error>* drain_error,
-    bool* done) {
+[[nodiscard]] boost::asio::awaitable<void> drain_pipe_into(boost::asio::posix::stream_descriptor* pipe,
+        support::OutputLimit limit,
+        std::optional<std::move_only_function<support::ExpectedVoid(std::string_view)>> callback,
+        OutputCapture* capture,
+        std::optional<support::Error>* drain_error,
+        bool* done) {
     struct CompletionGuard final {
         bool* done;
         ~CompletionGuard() noexcept { *done = true; }
@@ -688,7 +686,7 @@ boost::asio::awaitable<support::Expected<ProcessResult>> DefaultAsyncProcessRunn
     std::optional<support::Error> terminal_error;
 
     auto start_drain = [&](boost::asio::posix::stream_descriptor& pipe,
-                               OutputLimit limit,
+                               support::OutputLimit limit,
                                std::optional<std::move_only_function<support::ExpectedVoid(std::string_view)>> callback,
                                OutputCapture& capture,
                                std::optional<support::Error>& drain_error,

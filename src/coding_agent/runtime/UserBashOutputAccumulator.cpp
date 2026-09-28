@@ -1,7 +1,7 @@
 #include "UserBashOutputAccumulator.hpp"
 
 #include "coding_agent/BoundedText.hpp"
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 
 #include <algorithm>
 #include <format>

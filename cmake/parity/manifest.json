@@ -23,6 +23,20 @@
         ]
       },
       {
+        "id": "no-agent-private-reach-through",
+        "source_prefixes": [
+          "src/coding_agent/",
+          "src/cli/"
+        ],
+        "excluded_source_prefixes": [],
+        "forbidden_include_prefixes": [
+          "agent/harness/OutputLimiter.hpp",
+          "agent/harness/compaction",
+          "agent/harness/session/EntrySerializer.hpp",
+          "agent/harness/session/SessionJournal.hpp"
+        ]
+      },
+      {
         "id": "agent-no-ai-private-includes",
         "source_prefixes": [
           "src/agent/"

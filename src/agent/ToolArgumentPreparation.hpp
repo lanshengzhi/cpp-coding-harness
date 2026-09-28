@@ -4,7 +4,7 @@
 #include <cch/ai/Tool.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 
 #include <cstddef>
 #include <string>

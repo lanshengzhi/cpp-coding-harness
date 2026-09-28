@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/coding_agent/ProjectResources.hpp>
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 
 #include <cstddef>
 #include <optional>

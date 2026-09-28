@@ -3,7 +3,7 @@
 #include "ExecutionShared.hpp"
 #include "ToolArgumentPreparation.hpp"
 #include "support/AsyncResultBridge.hpp"
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 #include "support/ExpectedMacros.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/support/Error.hpp>

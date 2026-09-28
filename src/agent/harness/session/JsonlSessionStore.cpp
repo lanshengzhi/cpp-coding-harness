@@ -4,6 +4,7 @@
 #include "agent/harness/session/SessionJournal.hpp"
 #include "agent/harness/session/SessionLeaf.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 #include <utility>
@@ -59,6 +60,60 @@ support::Expected<JsonlSessionStore> JsonlSessionStore::create_new(
     auto journal = SessionJournal::create_new(path, *header_json);
     if (!journal) {
         return std::unexpected(journal.error());
+    }
+
+    JsonlSessionStore store;
+    store.impl_ = std::make_unique<Impl>();
+    store.impl_->path = path;
+    store.impl_->metadata = std::move(metadata);
+    store.impl_->journal = std::move(*journal);
+    return store;
+}
+
+support::Expected<JsonlSessionStore> JsonlSessionStore::create_from_entries(
+        const std::filesystem::path& path, SessionMetadata metadata, std::vector<SessionEntry> entries) {
+    // The header comes from `metadata` alone, so a nested Header entry is a
+    // caller error. Reject it before the journal exists, so a rejected fork
+    // leaves no half-written session file at the target path.
+    if (std::any_of(entries.begin(), entries.end(), [](const SessionEntry& entry) {
+            return entry.kind == SessionEntryKind::Header;
+        })) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Session, "a new session file's header is written from metadata alone"));
+    }
+
+    EntrySerializer serializer;
+    auto header_json = serializer.serialize_header(metadata);
+    if (!header_json) {
+        return std::unexpected(header_json.error());
+    }
+
+    // Both arms are normalized to an unterminated wire line: a known kind
+    // loses the terminator `serialize_entry` adds, and a foreign kind keeps
+    // the `raw_line` the reader handed back without one.
+    std::vector<std::string> lines;
+    lines.reserve(entries.size());
+    for (const auto& entry : entries) {
+        if (entry.kind == SessionEntryKind::Unknown) {
+            lines.push_back(entry.raw_line);
+            continue;
+        }
+        auto line = serializer.serialize_entry(entry);
+        if (!line) {
+            return std::unexpected(line.error());
+        }
+        lines.push_back(line->ends_with('\n') ? line->substr(0, line->size() - 1) : std::move(*line));
+    }
+
+    auto journal = SessionJournal::create_new(path, *header_json);
+    if (!journal) {
+        return std::unexpected(journal.error());
+    }
+    for (auto& line : lines) {
+        line += '\n';
+        if (auto appended = journal->append_line(line); !appended) {
+            return std::unexpected(appended.error());
+        }
     }
 
     JsonlSessionStore store;

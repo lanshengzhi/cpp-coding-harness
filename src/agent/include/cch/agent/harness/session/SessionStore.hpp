@@ -59,6 +59,16 @@ public:
     /// session — the cached tree already answers those queries.
     [[nodiscard]] static support::Expected<LoadedSession> load(
         const std::filesystem::path& path);
+    /// Create a new JSONL session file holding exactly `metadata` plus
+    /// `entries`, in order (pi `createBranchedSession`'s file write). The
+    /// fork flow supplies an already re-chained entry list rather than
+    /// replaying appends; entry encoding, redaction, the header line, and
+    /// the journal stay private, so no caller outside this package ever
+    /// handles a wire line. A `Header` entry is rejected; an `Unknown`
+    /// entry is re-emitted from its stored wire line, so foreign entry
+    /// kinds survive a fork byte-identically.
+    [[nodiscard]] static support::ExpectedVoid create_from_entries(
+            const std::filesystem::path& path, SessionMetadata metadata, std::vector<SessionEntry> entries);
 
     SessionStore(SessionStore&&) noexcept;
     SessionStore& operator=(SessionStore&&) noexcept;

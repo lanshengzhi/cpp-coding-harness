@@ -40,6 +40,15 @@ public:
         const std::filesystem::path& path,
         SessionMetadata metadata);
     [[nodiscard]] static support::Expected<JsonlSessionStore> open_existing(const std::filesystem::path& path);
+    /// Create a new JSONL session file holding `metadata` plus exactly
+    /// `entries`, in the given order (pi `createBranchedSession`'s file
+    /// write). The fork flow hands over an already re-chained entry list
+    /// instead of replaying appends, so entry encoding and journal writes
+    /// stay here. A `Header` entry is rejected; an `Unknown` entry is
+    /// re-emitted from its stored wire line, so foreign entry kinds survive
+    /// a fork byte-identically.
+    [[nodiscard]] static support::Expected<JsonlSessionStore> create_from_entries(
+            const std::filesystem::path& path, SessionMetadata metadata, std::vector<SessionEntry> entries);
     /// Open for appending over an already-parsed session; the SessionStore
     /// facade loads once and shares the parse with its live tree.
     [[nodiscard]] static support::Expected<JsonlSessionStore> open_loaded(

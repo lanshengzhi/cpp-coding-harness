@@ -1,8 +1,6 @@
 #include "SessionFork.hpp"
 
 #include "coding_agent/SessionPathPolicy.hpp"
-#include "agent/harness/session/EntrySerializer.hpp"
-#include "agent/harness/session/SessionJournal.hpp"
 #include "support/Json.hpp"
 
 #include <cch/ai/Message.hpp>
@@ -222,21 +220,15 @@ struct LabelFacts {
     return kept;
 }
 
-/// Write one new session file at `session_path` from a header line and the
-/// retained entry lines; failures map to pi's verbatim fork error.
-[[nodiscard]] support::ExpectedVoid write_session_file(
-    const std::filesystem::path& session_path,
-    const std::string& header_line,
-    const std::vector<std::string>& entry_lines) {
-    auto journal = harness::session::SessionJournal::create_new(
-        session_path, header_line);
-    if (!journal) {
-        return std::unexpected(fork_session_error(journal.error()));
-    }
-    for (const auto& line : entry_lines) {
-        if (auto appended = journal->append_line(line + '\n'); !appended) {
-            return std::unexpected(fork_session_error(appended.error()));
-        }
+/// Write one new session file at `session_path` holding `metadata` and the
+/// retained entries, in order; failures map to pi's verbatim fork error.
+[[nodiscard]] support::ExpectedVoid write_session_file(const std::filesystem::path& session_path,
+        harness::session::SessionMetadata metadata,
+        std::vector<harness::session::SessionEntry> entries) {
+    if (auto written = harness::session::SessionStore::create_from_entries(
+                session_path, std::move(metadata), std::move(entries));
+            !written) {
+        return std::unexpected(fork_session_error(written.error()));
     }
     return {};
 }
@@ -289,18 +281,13 @@ struct LabelFacts {
     // Re-create the label entries for retained targets, chained after the
     // last retained entry (pi labelsToWrite).
     const auto labels = labels_for_path(tree, retained);
-    harness::session::EntrySerializer serializer;
-    std::vector<std::string> entry_lines;
-    entry_lines.reserve(retained.size() + labels.size());
+    std::vector<harness::session::SessionEntry> branch_entries;
+    branch_entries.reserve(retained.size() + labels.size());
     std::optional<std::string> chain_parent;
     for (const auto* entry : retained) {
         auto rewritten = *entry;
         rewritten.parent_id = chain_parent;
-        auto line = serializer.serialize_entry(rewritten);
-        if (!line) {
-            return std::unexpected(fork_session_error(line.error()));
-        }
-        entry_lines.push_back(std::move(*line));
+        branch_entries.push_back(std::move(rewritten));
         chain_parent = entry->entry_id;
     }
     for (const auto& [target_id, facts] : labels) {
@@ -310,15 +297,11 @@ struct LabelFacts {
         label_entry.parent_id = chain_parent;
         label_entry.timestamp = facts.timestamp;
         label_entry.value = harness::session::LabelEntryValue{
-            .target_id = target_id,
-            .label = facts.label,
+                .target_id = target_id,
+                .label = facts.label,
         };
-        auto line = serializer.serialize_entry(label_entry);
-        if (!line) {
-            return std::unexpected(fork_session_error(line.error()));
-        }
-        entry_lines.push_back(std::move(*line));
         chain_parent = label_entry.entry_id;
+        branch_entries.push_back(std::move(label_entry));
     }
 
     // Fresh identity + timestamped filename in the source session's directory
@@ -334,12 +317,7 @@ struct LabelFacts {
         .model = tree.metadata().model,
         .parent_session = source_path,
     };
-    auto header_line = serializer.serialize_header(metadata);
-    if (!header_line) {
-        return std::unexpected(fork_session_error(header_line.error()));
-    }
-    if (auto written = write_session_file(session_path, *header_line, entry_lines);
-        !written) {
+    if (auto written = write_session_file(session_path, std::move(metadata), std::move(branch_entries)); !written) {
         return std::unexpected(written.error());
     }
     return session_path;
@@ -362,12 +340,7 @@ struct LabelFacts {
         .model = {},
         .parent_session = source_path,
     };
-    harness::session::EntrySerializer serializer;
-    auto header_line = serializer.serialize_header(metadata);
-    if (!header_line) {
-        return std::unexpected(fork_session_error(header_line.error()));
-    }
-    if (auto written = write_session_file(session_path, *header_line, {}); !written) {
+    if (auto written = write_session_file(session_path, std::move(metadata), {}); !written) {
         return std::unexpected(written.error());
     }
     return session_path;

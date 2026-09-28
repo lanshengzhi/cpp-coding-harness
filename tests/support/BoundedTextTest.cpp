@@ -1,4 +1,4 @@
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 

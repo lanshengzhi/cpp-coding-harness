@@ -85,6 +85,15 @@ support::Expected<LoadedSession> SessionStore::load(const std::filesystem::path&
     return JsonlSessionStore::load(path);
 }
 
+support::ExpectedVoid SessionStore::create_from_entries(
+        const std::filesystem::path& path, SessionMetadata metadata, std::vector<SessionEntry> entries) {
+    auto jsonl = JsonlSessionStore::create_from_entries(path, std::move(metadata), std::move(entries));
+    if (!jsonl) {
+        return std::unexpected(jsonl.error());
+    }
+    return {};
+}
+
 SessionStore::SessionStore(SessionStore&&) noexcept = default;
 SessionStore& SessionStore::operator=(SessionStore&&) noexcept = default;
 SessionStore::~SessionStore() = default;

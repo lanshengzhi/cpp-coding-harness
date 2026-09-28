@@ -10,7 +10,7 @@
 // a complete spill file in the OS temporary directory.
 
 #include "support/UniqueFd.hpp"
-#include "agent/harness/OutputLimiter.hpp"
+#include <cch/support/OutputLimiter.hpp>
 
 #include <cch/support/Error.hpp>
 
@@ -121,7 +121,7 @@ private:
 /// Agent Session runtime executor; not thread-safe.
 class UserBashOutputAccumulator {
 public:
-    explicit UserBashOutputAccumulator(harness::OutputLimit limit = {}) : limit_(limit) {}
+    explicit UserBashOutputAccumulator(support::OutputLimit limit = {}) : limit_(limit) {}
 
     /// Feed one raw stdout/stderr chunk in callback-arrival order. The
     /// sanitized increment is reflected in tail() on return.
@@ -152,7 +152,7 @@ private:
     // construct) through the three-stage pipeline into the rolling tail.
     void pump(std::string_view raw, bool flush);
     // Retain the sanitized increment in the rolling tail, applying the same
-    // tail semantics as harness::limit_output_tail on the complete stream. Once
+    // tail semantics as support::limit_output_tail on the complete stream. Once
     // the tail truncates, the complete sanitized stream is spilled
     // incrementally; a spill failure preserves the bounded truncated result
     // and records a bounded redacted diagnostic instead of a path.
@@ -161,7 +161,7 @@ private:
     // exactly when its bytes exceed max_bytes or its lines exceed max_lines.
     [[nodiscard]] bool would_truncate(const std::string& emitted) const;
     [[nodiscard]] std::size_t tail_newlines() const;
-    // Backward-walk trim identical to harness::limit_output_tail: at most
+    // Backward-walk trim identical to support::limit_output_tail: at most
     // limit_.max_bytes bytes and limit_.max_lines lines, never splitting a
     // multibyte sequence at the cut point.
     void trim_tail();
@@ -169,7 +169,7 @@ private:
     // One maximum-length UTF-8 sequence: keeps the lead byte of a sequence
     // straddling the pre-cut window boundary available to the trim below.
     static constexpr std::size_t kBoundarySlack{4};
-    harness::OutputLimit limit_;
+    support::OutputLimit limit_;
     user_bash_output_detail::Utf8Safety utf8_;
     user_bash_output_detail::AnsiStrip ansi_;
     user_bash_output_detail::ControlFilter control_filter_;

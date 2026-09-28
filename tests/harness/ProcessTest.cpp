@@ -106,7 +106,7 @@ TEST_CASE("process runner drains both pipes beyond kernel buffer capacity", "[ha
 wait)"};
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds{2000};
-    request.output_limit = harness::OutputLimit{.max_bytes = 1024, .max_lines = 1000000};
+    request.output_limit = support::OutputLimit{.max_bytes = 1024, .max_lines = 1000000};
 
     std::size_t stdout_bytes = 0;
     std::size_t stderr_bytes = 0;
@@ -147,7 +147,7 @@ TEST_CASE("process runner contains a failing callback and keeps both pipes drain
 wait)"};
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds{5000};
-    request.output_limit = harness::OutputLimit{.max_bytes = 1024, .max_lines = 1000000};
+    request.output_limit = support::OutputLimit{.max_bytes = 1024, .max_lines = 1000000};
 
     int stdout_calls = 0;
     std::size_t stderr_bytes = 0;
@@ -214,7 +214,7 @@ TEST_CASE("process runner caps newline-free stderr output without stopping the d
     request.arguments = {"-c", R"(head -c 60000 /dev/zero | tr '\0' 'x' >&2)"};
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds{5000};
-    request.output_limit = harness::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
+    request.output_limit = support::OutputLimit{.max_bytes = 1024, .max_lines = 2000};
 
     std::size_t stderr_bytes = 0;
     // The capture remains alive until run_awaitable drives the process to quiescence.
@@ -243,7 +243,7 @@ TEST_CASE(
     request.arguments = {"-c", R"(for ((i=1; i<=5000; i++)); do echo "line-$i"; done)"};
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds{5000};
-    request.output_limit = harness::OutputLimit{.max_bytes = 1024 * 1024, .max_lines = 100};
+    request.output_limit = support::OutputLimit{.max_bytes = 1024 * 1024, .max_lines = 100};
 
     std::string streamed;
     // The capture remains alive until run_awaitable drives the process to quiescence.
@@ -421,7 +421,7 @@ TEST_CASE(
     request.arguments = {"-c", R"(for ((i=1; i<=100; i++)); do echo "out-$i"; echo "err-$i" >&2; done)"};
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds{5000};
-    request.output_limit = harness::OutputLimit{.max_bytes = 1024 * 1024, .max_lines = 100000};
+    request.output_limit = support::OutputLimit{.max_bytes = 1024 * 1024, .max_lines = 100000};
 
     std::string streamed_stdout;
     std::string streamed_stderr;
@@ -469,7 +469,7 @@ TEST_CASE("process runner gives the child the null device on stdin", "[harness][
     request.arguments = {"-c", "readlink /proc/self/fd/0"};
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds{5000};
-    request.output_limit = harness::OutputLimit{.max_bytes = 4096, .max_lines = 4096};
+    request.output_limit = support::OutputLimit{.max_bytes = 4096, .max_lines = 4096};
 
     auto result = run_awaitable<harness::ProcessResult>([&]() { return runner.run(std::move(request)); });
 
@@ -494,7 +494,7 @@ TEST_CASE("process runner keeps the parent terminal out of the child stdin", "[h
     request.arguments = {"-c", "printf terminal-shared >/proc/self/fd/0"};
     request.working_directory = std::filesystem::current_path();
     request.timeout = std::chrono::milliseconds{5000};
-    request.output_limit = harness::OutputLimit{.max_bytes = 4096, .max_lines = 4096};
+    request.output_limit = support::OutputLimit{.max_bytes = 4096, .max_lines = 4096};
 
     auto result = run_awaitable<harness::ProcessResult>([&]() { return runner.run(std::move(request)); });
 

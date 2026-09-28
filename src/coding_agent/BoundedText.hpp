@@ -1,6 +1,6 @@
 #pragma once
 
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 
 #include <cstddef>
 #include <string>

@@ -10,7 +10,7 @@
 #include "ai/providers/ProviderTestAccess.hpp"
 #include "ai/providers/RetryPolicy.hpp"
 #include "SimpleOptions.hpp"
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 #include "support/ExpectedMacros.hpp"
 
 #include <boost/asio/async_result.hpp>

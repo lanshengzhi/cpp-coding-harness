@@ -2,7 +2,7 @@
 
 #include "ai/Timestamps.hpp"
 #include "support/AsyncResultBridge.hpp"
-#include "support/BoundedText.hpp"
+#include <cch/support/BoundedText.hpp>
 
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>

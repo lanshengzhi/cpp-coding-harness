@@ -21,7 +21,7 @@
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/support/Error.hpp>
 #include "agent/harness/session/SessionMessageJson.hpp"
-#include "agent/harness/compaction/Compaction.hpp"
+#include <cch/agent/harness/session/Compaction.hpp>
 #include <cch/ai/Models.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include "support/FakeModelStream.hpp"
@@ -132,15 +132,24 @@ void append_prior_compaction(harness::session::SessionStore& store,
     return [](const ai::AssistantStreamEvent&) { return support::ExpectedVoid{}; };
 }
 
+[[nodiscard]] boost::asio::awaitable<support::Expected<ai::AssistantMessage>> stream_call(
+        std::shared_ptr<tests::FakeModelStream> runtime,
+        ai::Model model,
+        ai::AiContext context,
+        ai::SimpleStreamOptions options) {
+    auto stream = runtime->factory()(model, std::move(context), std::move(options));
+    co_return co_await support::detail::await_async_result(std::move(stream).run(noop_sink()));
+}
+
 /// A scripted summarization stream over the recording fake: each call pops
 /// the next scripted response and records the request.
 [[nodiscard]] harness::session::SummarizationStreamFn scripted_stream(
         std::shared_ptr<tests::FakeModelStream> runtime, ai::Model model) {
-    return [runtime = std::move(runtime), model = std::move(model)](
-                   ai::AiContext context, ai::SimpleStreamOptions options) mutable
-                   -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        auto stream = runtime->factory()(model, std::move(context), std::move(options));
-        co_return co_await support::detail::await_async_result(std::move(stream).run(noop_sink()));
+    return [runtime, model = std::move(model)](ai::AiContext context, ai::SimpleStreamOptions options) mutable {
+        return support::detail::make_async_result(
+                [runtime, model, context = std::move(context), options = std::move(options)]() mutable {
+                    return stream_call(runtime, model, std::move(context), std::move(options));
+                });
     };
 }
 
@@ -160,10 +169,18 @@ template <typename T> [[nodiscard]] T run_awaitable(boost::asio::awaitable<T> aw
     return std::move(*result);
 }
 
+/// Run one `compact` operation to its terminal outcome on a temporary
+/// executor, keeping the door's `AsyncResult` contract under test.
+template <typename T> [[nodiscard]] support::Expected<T> run_operation(support::AsyncResult<T> operation) {
+    return run_awaitable([operation = std::move(operation)]() mutable -> boost::asio::awaitable<support::Expected<T>> {
+        co_return co_await support::detail::await_async_result(std::move(operation));
+    }());
+}
+
 /// Run the one compaction door to its terminal outcome.
 [[nodiscard]] support::Expected<harness::session::CompactionOutcomeVariant> run_door(
         harness::session::SessionStore& store, const ai::Model& model, harness::session::CompactionRunOptions options) {
-    return run_awaitable(harness::session::compact(store, model, std::move(options)));
+    return run_operation(harness::session::compact(store, model, std::move(options)));
 }
 
 /// The text of the message an entry id resolves to: cut-point assertions read
@@ -625,12 +642,15 @@ TEST_CASE("split-turn compaction issues two requests with distinct fresh session
             .reserve_tokens = 2000,
             .keep_recent_tokens = 10,
     };
-    auto inner = scripted_stream(runtime, model);
-    options.summarization_stream = [&order, inner = std::move(inner)](
-                                           ai::AiContext context, ai::SimpleStreamOptions stream_options) mutable
-            -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        order.push_back("call");
-        co_return co_await inner(std::move(context), std::move(stream_options));
+    // The door issues more than one summarization request, so each one-shot
+    // producer mints its own move-only scripted seam over the shared fake.
+    options.summarization_stream = [order = &order, runtime, model](
+                                           ai::AiContext context, ai::SimpleStreamOptions stream_options) {
+        order->push_back("call");
+        return support::detail::make_async_result(
+                [runtime, model, context = std::move(context), stream_options = std::move(stream_options)]() mutable {
+                    return stream_call(runtime, model, std::move(context), std::move(stream_options));
+                });
     };
     options.session_id_factory = sequential_session_ids();
     // The auto trigger's `compaction_start` point: after preparation, before

@@ -1,7 +1,7 @@
 #include "coding_agent/runtime/UserBashOutputAccumulator.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
-#include "agent/harness/OutputLimiter.hpp"
+#include <cch/support/OutputLimiter.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -122,7 +122,7 @@ TEST_CASE("User Bash output accumulator passes quoted secret values through unch
 
 TEST_CASE("User Bash output accumulator keeps content exactly at the line and byte limits",
         "[coding_agent][runtime][issue86][spec]") {
-    const harness::OutputLimit limit{.max_bytes = 8, .max_lines = 3};
+    const support::OutputLimit limit{.max_bytes = 8, .max_lines = 3};
     runtime::UserBashOutputAccumulator accumulator{limit};
     accumulator.append("l1\nl2\nl3");
     accumulator.finish();
@@ -134,7 +134,7 @@ TEST_CASE("User Bash output accumulator keeps the tail when lines exceed the lim
         "[coding_agent][runtime][issue86][spec]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard tmpdir{"TMPDIR", workspace.path().string()};
-    const harness::OutputLimit limit{.max_bytes = 100, .max_lines = 3};
+    const support::OutputLimit limit{.max_bytes = 100, .max_lines = 3};
     runtime::UserBashOutputAccumulator accumulator{limit};
     accumulator.append("l1\nl2\nl3\nl4");
     accumulator.finish();
@@ -146,7 +146,7 @@ TEST_CASE("User Bash output accumulator keeps the tail when bytes exceed the lim
         "[coding_agent][runtime][issue86][spec]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard tmpdir{"TMPDIR", workspace.path().string()};
-    const harness::OutputLimit limit{.max_bytes = 8, .max_lines = 100};
+    const support::OutputLimit limit{.max_bytes = 8, .max_lines = 100};
     runtime::UserBashOutputAccumulator accumulator{limit};
     accumulator.append("xxl1\nl2\nl3");
     accumulator.finish();
@@ -158,7 +158,7 @@ TEST_CASE("User Bash output accumulator never splits a multibyte sequence at the
         "[coding_agent][runtime][issue86][spec]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard tmpdir{"TMPDIR", workspace.path().string()};
-    const harness::OutputLimit limit{.max_bytes = 4, .max_lines = 100};
+    const support::OutputLimit limit{.max_bytes = 4, .max_lines = 100};
     runtime::UserBashOutputAccumulator accumulator{limit};
     accumulator.append("x\xc3\xa9" "abc");
     accumulator.finish();
@@ -170,12 +170,12 @@ TEST_CASE("User Bash output accumulator matches whole-buffer tail semantics for 
         "[coding_agent][runtime][issue86][issue97][spec]") {
     tests::TempWorkspace workspace;
     tests::EnvVarGuard tmpdir{"TMPDIR", workspace.path().string()};
-    const harness::OutputLimit limit{.max_bytes = 64, .max_lines = 5};
+    const support::OutputLimit limit{.max_bytes = 64, .max_lines = 5};
     const std::string content =
         "alpha api_key=split-secret\nbeta\n\x1b[32mgamma\x1b[0m\r\ndelta\nepsilon\nzeta\neta";
     const std::string sanitized =
         "alpha api_key=split-secret\nbeta\ngamma\ndelta\nepsilon\nzeta\neta";
-    const auto expected = harness::limit_output_tail(sanitized, limit);
+    const auto expected = support::limit_output_tail(sanitized, limit);
     REQUIRE(expected.truncated);
     for (const std::size_t chunk_size : {std::size_t{1}, std::size_t{3}, std::size_t{17}}) {
         runtime::UserBashOutputAccumulator accumulator{limit};
@@ -208,7 +208,7 @@ TEST_CASE("User Bash output accumulator spills the complete sanitized stream to 
     std::filesystem::create_directories(spill_dir);
     tests::EnvVarGuard tmpdir{"TMPDIR", spill_dir.string()};
 
-    const harness::OutputLimit limit{.max_bytes = 64, .max_lines = 4};
+    const support::OutputLimit limit{.max_bytes = 64, .max_lines = 4};
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     const std::string sanitized =
         "one api_key=" + secret + "\ntwo\nthree\nfour\nfive\nsix\nseven\n";
@@ -233,7 +233,7 @@ TEST_CASE("User Bash output accumulator spills the complete sanitized stream to 
     // Secret-bearing output spills unchanged: no redaction anywhere (ADR 0028).
     CHECK(spilled.find(secret) != std::string::npos);
 
-    const auto expected_tail = harness::limit_output_tail(sanitized, limit);
+    const auto expected_tail = support::limit_output_tail(sanitized, limit);
     REQUIRE(expected_tail.truncated);
     CHECK(accumulator.tail() == expected_tail.text);
 
@@ -251,7 +251,7 @@ TEST_CASE("User Bash output accumulator records no spill path while output fits 
     std::filesystem::create_directories(spill_dir);
     tests::EnvVarGuard tmpdir{"TMPDIR", spill_dir.string()};
 
-    const harness::OutputLimit limit{.max_bytes = 64, .max_lines = 4};
+    const support::OutputLimit limit{.max_bytes = 64, .max_lines = 4};
     runtime::UserBashOutputAccumulator accumulator{limit};
     accumulator.append("one\ntwo\nthree\n");
     accumulator.finish();
@@ -270,13 +270,13 @@ TEST_CASE("User Bash output accumulator spill failure preserves the bounded trun
         "TMPDIR",
         (workspace.path() / "missing" / "deeper").string()};
 
-    const harness::OutputLimit limit{.max_bytes = 64, .max_lines = 4};
+    const support::OutputLimit limit{.max_bytes = 64, .max_lines = 4};
     const std::string sanitized = "one\ntwo\nthree\nfour\nfive\nsix\nseven\n";
     runtime::UserBashOutputAccumulator accumulator{limit};
     accumulator.append(sanitized);
     accumulator.finish();
 
-    const auto expected_tail = harness::limit_output_tail(sanitized, limit);
+    const auto expected_tail = support::limit_output_tail(sanitized, limit);
     REQUIRE(expected_tail.truncated);
     CHECK(accumulator.truncated());
     CHECK(accumulator.tail() == expected_tail.text);
