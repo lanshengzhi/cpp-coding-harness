@@ -1,5 +1,4 @@
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
-#include "coding_agent/ModelRuntimeTransportTestSupport.hpp"
 
 #include "support/ScriptedProvider.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -70,8 +69,10 @@ support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testin
         return std::unexpected(runtime.error());
     }
     auto providers = std::move(test_options.providers);
+    auto transports = std::move(test_options.transports);
     if (auto configured = (*runtime)->apply_test_models(
-                [providers = std::move(providers)](ai::Models& models) mutable -> support::ExpectedVoid {
+                [providers = std::move(providers), transports = std::move(transports)](
+                        ai::Models& models) mutable -> support::ExpectedVoid {
                     if (!providers.empty()) {
                         models.clear_providers();
                     }
@@ -80,23 +81,6 @@ support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testin
                             return std::unexpected(applied.error());
                         }
                     }
-                    return {};
-                });
-            !configured) {
-        return std::unexpected(configured.error());
-    }
-    return finish_test_runtime(std::move(runtime));
-}
-
-support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
-        ModelRuntimeOptions options, ModelRuntimeTransportTestOptions test_options) {
-    auto runtime = ModelRuntime::create_impl(std::move(options));
-    if (!runtime) {
-        return std::unexpected(runtime.error());
-    }
-    auto transports = std::move(test_options.transports);
-    if (auto configured = (*runtime)->apply_test_models(
-                [transports = std::move(transports)](ai::Models& models) mutable -> support::ExpectedVoid {
                     return tests::apply_scripted_transport_options(models, std::move(transports));
                 });
             !configured) {

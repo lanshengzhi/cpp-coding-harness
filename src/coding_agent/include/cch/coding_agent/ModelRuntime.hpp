@@ -23,7 +23,6 @@ class SessionFactory;
 }
 
 struct ModelRuntimeTestOptions;
-struct ModelRuntimeTransportTestOptions;
 
 /// Injectable creation options for ModelRuntime (pi `CreateModelRuntimeOptions`
 /// subset). Every field is optional; defaults derive from the Agent Config
@@ -200,8 +199,6 @@ private:
     friend class runtime::SessionFactory;
     friend support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
             ModelRuntimeOptions options, ModelRuntimeTestOptions test_options);
-    friend support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
-            ModelRuntimeOptions options, ModelRuntimeTransportTestOptions test_options);
     std::unique_ptr<Impl> impl_;
 };
 
