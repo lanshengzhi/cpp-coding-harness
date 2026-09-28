@@ -69,7 +69,7 @@ void require_virtual_terminal_accepts(const tui::RenderResult& lines, std::size_
         [](std::string) -> support::ExpectedVoid { return {}; },
         [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
     write_lines(terminal, lines);
-    CHECK(terminal.final_style() == tui::VirtualTerminalStyle{});
+    CHECK(terminal.final_style() == tui::TerminalStyle{});
 }
 
 [[nodiscard]] const tui::VirtualTerminalCell* find_cell(
@@ -187,7 +187,7 @@ TEST_CASE("Markdown preserves nested styles Unicode and link termination at narr
     CHECK(linked_cell->style.bold);
     CHECK(linked_cell->style.italic);
     CHECK(linked_cell->style.hyperlink == "https://example.com/long");
-    CHECK(terminal.final_style() == tui::VirtualTerminalStyle{});
+    CHECK(terminal.final_style() == tui::TerminalStyle{});
 }
 
 TEST_CASE(
@@ -392,7 +392,7 @@ TEST_CASE("Markdown applies configured padding and background to every cell", "[
     for (const auto& row : terminal.cells()) {
         for (const auto& cell : row) CHECK(cell.style.bg_color == "44");
     }
-    CHECK(terminal.final_style() == tui::VirtualTerminalStyle{});
+    CHECK(terminal.final_style() == tui::TerminalStyle{});
 }
 
 TEST_CASE("Markdown background survives inline styling and code blocks on every cell",

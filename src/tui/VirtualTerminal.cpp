@@ -73,23 +73,6 @@ constexpr std::string_view kClearScreenSequence = "\x1b[2J\x1b[H\x1b[3J";
 constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
 constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0;\x07";
 
-[[nodiscard]] VirtualTerminalStyle public_style(const detail::AnsiStyleState& style) {
-    return {
-        .bold = style.bold,
-        .dim = style.dim,
-        .italic = style.italic,
-        .underline = style.underline,
-        .blink = style.blink,
-        .inverse = style.inverse,
-        .hidden = style.hidden,
-        .strikethrough = style.strikethrough,
-        .fg_color = style.fg_color,
-        .bg_color = style.bg_color,
-        .hyperlink = style.hyperlink,
-        .hyperlink_params = style.hyperlink_params,
-    };
-}
-
 /// Build the visible text of one cell row: the graphemes up to the last
 /// occupied column (wide-grapheme continuations skipped, empty cells as
 /// spaces), trimming trailing blank columns like `screen()` does.
@@ -286,7 +269,7 @@ void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
             for (std::size_t offset = 0; offset < token.width; ++offset) {
                 clear_grapheme(row, impl.cursor.column + offset);
             }
-            const auto style = public_style(impl.style);
+            const TerminalStyle style = impl.style;
             row[impl.cursor.column] = {
                 .grapheme = token.text,
                 .continuation = false,
@@ -825,9 +808,7 @@ const std::vector<VirtualTerminalImage>& VirtualTerminal::images() const {
     return impl_->images;
 }
 
-VirtualTerminalStyle VirtualTerminal::final_style() const {
-    return public_style(impl_->style);
-}
+TerminalStyle VirtualTerminal::final_style() const { return impl_->style; }
 
 CursorPosition VirtualTerminal::cursor() const {
     return impl_->cursor;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/tui/Style.hpp>
 #include <cch/tui/Terminal.hpp>
 
 #include <cch/support/Error.hpp>
@@ -20,27 +21,10 @@ struct VirtualTerminalOptions {
     TerminalCapabilities capabilities{.synchronized_output = true};
 };
 
-struct VirtualTerminalStyle {
-    bool bold{false};
-    bool dim{false};
-    bool italic{false};
-    bool underline{false};
-    bool blink{false};
-    bool inverse{false};
-    bool hidden{false};
-    bool strikethrough{false};
-    std::string fg_color;
-    std::string bg_color;
-    std::string hyperlink;
-    std::string hyperlink_params;
-
-    bool operator==(const VirtualTerminalStyle&) const = default;
-};
-
 struct VirtualTerminalCell {
     std::string grapheme;
     bool continuation{false};
-    VirtualTerminalStyle style;
+    TerminalStyle style;
 
     bool operator==(const VirtualTerminalCell&) const = default;
 };
@@ -117,7 +101,7 @@ public:
     [[nodiscard]] const std::vector<std::vector<VirtualTerminalCell>>& cells() const;
     [[nodiscard]] const std::vector<std::vector<VirtualTerminalCell>>& scrollback_cells() const;
     [[nodiscard]] const std::vector<VirtualTerminalImage>& images() const;
-    [[nodiscard]] VirtualTerminalStyle final_style() const;
+    [[nodiscard]] TerminalStyle final_style() const;
     [[nodiscard]] CursorPosition cursor() const;
     /// Returns true if clear_screen() was called since the last check.
     /// Resets the flag on read.

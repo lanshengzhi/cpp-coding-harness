@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <exception>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -18,57 +19,165 @@
 namespace cch::tui::detail {
 namespace {
 
-[[nodiscard]] support::Expected<std::string> line_suffix_from_column(
-    std::string_view line,
-    std::size_t column) {
-    auto tokens = tokenize_terminal_output(line);
-    if (!tokens) return std::unexpected(tokens.error());
-
+/// The composed row under construction. `style` and `width` describe what
+/// has been appended so far, so the row's trailing width bound and its
+/// line-end reset are answered from the splice itself instead of by
+/// re-parsing the string the splice just built.
+struct ComposedRow {
+    std::string text;
     AnsiStyleState style;
-    std::string suffix;
+    std::size_t width{0};
+    /// A rendered line that spans rows has no representation inside one
+    /// physical row, so a splice that retains one is a malformed render.
+    bool spans_rows{false};
+
+    /// Append one control sequence carried by a token.
+    void append_code(std::string_view code) {
+        if (code.empty()) return;
+        text += code;
+        style.process_ansi(code);
+    }
+
+    /// Append a synthesized code run. `AnsiStyleState`'s getters return
+    /// concatenated sequences while `process_ansi` consumes one sequence at
+    /// a time, so the run is split the way a tokenization of the row would
+    /// split it. The run is a well-formed sequence list by construction.
+    void append_style_codes(std::string_view codes) {
+        if (codes.empty()) return;
+        text += codes;
+        const auto tokens = tokenize_terminal_output(codes);
+        if (!tokens) std::terminate();
+        for (const auto& token : *tokens) {
+            if (token.kind != TerminalTokenKind::Grapheme) style.process_ansi(token.text);
+        }
+    }
+
+    void append_grapheme(std::string_view grapheme, std::size_t columns) {
+        text += grapheme;
+        width += columns;
+    }
+
+    void append_spaces(std::size_t count) {
+        text.append(count, ' ');
+        width += count;
+    }
+};
+
+/// Append `source`'s first `limit` visible columns, padded out to `limit`:
+/// the base row's contribution left of a spliced region. This is
+/// `truncate_text(source, limit, "", pad = true)` evaluated over the tokens
+/// the caller already holds, so the same tokenization serves every piece of
+/// the splice.
+void append_leading_columns(ComposedRow& row, const std::vector<TerminalToken>& source, std::size_t limit) {
+    if (limit == 0) return;
+    std::size_t source_width = 0;
+    for (const auto& token : source)
+        source_width += token.width;
+
+    if (source_width <= limit) {
+        // This region closes with the style in force over *this* source
+        // alone, as `truncate_text` does — not with whatever the composed row
+        // carried in from an earlier region, which `row.style` holds.
+        AnsiStyleState style;
+        for (const auto& token : source) {
+            if (token.kind == TerminalTokenKind::Newline) row.spans_rows = true;
+            if (token.kind == TerminalTokenKind::Grapheme) {
+                row.append_grapheme(token.text, token.width);
+                continue;
+            }
+            style.process_ansi(token.text);
+            row.append_code(token.text);
+        }
+        row.append_style_codes(style.get_line_end_reset());
+        row.append_spaces(limit - source_width);
+        return;
+    }
+
+    std::size_t collected = 0;
+    for (const auto& token : source) {
+        if (token.kind != TerminalTokenKind::Grapheme) {
+            if (token.kind == TerminalTokenKind::Newline) row.spans_rows = true;
+            row.append_code(token.text);
+            continue;
+        }
+        if (collected + token.width > limit) break;
+        row.append_grapheme(token.text, token.width);
+        collected += token.width;
+    }
+    // pi's `finalizeTruncatedResult` surrounds the ellipsis with a full
+    // reset; the splice's ellipsis is empty, so one reset closes the region.
+    row.append_style_codes(kSgrReset);
+    row.append_spaces(limit - collected);
+}
+
+/// Append `source` from the visible column `cut` onward: the base row's
+/// contribution right of a spliced region. Its own style tracker walks the
+/// whole base row, so the codes reopened at `cut` are the ones in force
+/// there rather than whatever the leading columns left behind.
+void append_trailing_columns(ComposedRow& row, const std::vector<TerminalToken>& source, std::size_t cut) {
+    AnsiStyleState style;
     std::size_t visible_column = 0;
     bool suffix_started = false;
-    for (const auto& token : *tokens) {
+    for (const auto& token : source) {
         if (token.kind != TerminalTokenKind::Grapheme) {
+            if (token.kind == TerminalTokenKind::Newline) row.spans_rows = true;
             style.process_ansi(token.text);
-            if (suffix_started) suffix += token.text;
+            if (suffix_started) row.append_code(token.text);
             continue;
         }
 
         const auto next_column = visible_column + token.width;
-        if (next_column <= column) {
+        if (next_column <= cut) {
             visible_column = next_column;
             continue;
         }
         if (!suffix_started) {
-            suffix += style.get_active_codes();
+            row.append_style_codes(style.get_active_codes());
             suffix_started = true;
         }
-        if (visible_column < column) suffix.append(next_column - column, ' ');
-        else suffix += token.text;
+        if (visible_column < cut)
+            row.append_spaces(next_column - cut);
+        else
+            row.append_grapheme(token.text, token.width);
         visible_column = next_column;
     }
-    if (suffix_started) suffix += style.get_line_end_reset();
-    return suffix;
+    if (suffix_started) row.append_style_codes(style.get_line_end_reset());
 }
 
+/// Splice `replacement` over the base row's columns `[column, column +
+/// columns)`, leaving a row exactly `total_width` columns wide.
+///
+/// The base row and the replacement are each tokenized once and walked once;
+/// the three regions are emitted straight into the result. Re-deriving the
+/// splice from the three finished strings instead would re-parse the base row
+/// twice more and the assembled row once more per spliced row.
 [[nodiscard]] support::Expected<std::string> replace_line_region(
     std::string_view line,
     std::string_view replacement,
     std::size_t column,
     std::size_t columns,
     std::size_t total_width) {
-    auto prefix = truncate_text(line, column, "", true);
-    if (!prefix) return std::unexpected(prefix.error());
-    auto bounded_replacement = truncate_text(replacement, columns, "", true);
-    if (!bounded_replacement) return std::unexpected(bounded_replacement.error());
-    auto suffix = line_suffix_from_column(line, column + columns);
-    if (!suffix) return std::unexpected(suffix.error());
-    return truncate_text(
-        *prefix + *bounded_replacement + *suffix,
-        total_width,
-        "",
-        true);
+    auto line_tokens = tokenize_terminal_output(line);
+    if (!line_tokens) return std::unexpected(line_tokens.error());
+    auto replacement_tokens = tokenize_terminal_output(replacement);
+    if (!replacement_tokens) return std::unexpected(replacement_tokens.error());
+
+    ComposedRow row;
+    append_leading_columns(row, *line_tokens, column);
+    append_leading_columns(row, *replacement_tokens, columns);
+    append_trailing_columns(row, *line_tokens, column + columns);
+    if (row.spans_rows) {
+        return std::unexpected(invalid_terminal_text("Rendered terminal line contains a newline"));
+    }
+    if (total_width == 0) return std::string{};
+    if (row.width > total_width) {
+        // Unreachable while a spliced region fits the viewport it is laid out
+        // in; the bound keeps an over-wide base row from extending the row.
+        return truncate_text(std::move(row.text), total_width, "", true);
+    }
+    row.append_style_codes(row.style.get_line_end_reset());
+    row.append_spaces(total_width - row.width);
+    return std::move(row.text);
 }
 
 } // namespace

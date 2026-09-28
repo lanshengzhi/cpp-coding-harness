@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cch/tui/Style.hpp>
+
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
@@ -22,20 +24,10 @@ struct AnsiCode {
 [[nodiscard]] std::optional<AnsiCode> extract_ansi_code(std::string_view text, std::size_t position);
 [[nodiscard]] std::vector<std::string> split_graphemes(std::string_view text);
 
-struct AnsiStyleState {
-    bool bold{false};
-    bool dim{false};
-    bool italic{false};
-    bool underline{false};
-    bool blink{false};
-    bool inverse{false};
-    bool hidden{false};
-    bool strikethrough{false};
-    std::string fg_color;
-    std::string bg_color;
-    std::string hyperlink;
-    std::string hyperlink_params;
-
+/// The tracked style state: `TerminalStyle`'s attributes plus the ANSI
+/// processing that maintains them. Deriving keeps the attribute set defined
+/// once, so the tracker and the virtual terminal's cell style cannot drift.
+struct AnsiStyleState : TerminalStyle {
     [[nodiscard]] std::string get_active_codes() const;
     [[nodiscard]] bool has_active_codes() const;
     [[nodiscard]] bool has_sgr_codes() const;
@@ -117,5 +109,10 @@ struct PreparedRenderedLine {
 /// baseline): the shared tail of the in-line line-end reset and of pi's
 /// `SEGMENT_RESET`.
 inline constexpr std::string_view kOsc8LinkClose{"\x1b]8;;\x07"};
+
+/// The SGR full reset that pi's `finalizeTruncatedResult` places around a
+/// truncation's ellipsis. Shared so the width module and the compositing
+/// splice that reproduces the same rule agree on the byte.
+inline constexpr std::string_view kSgrReset{"\x1b[0m"};
 
 } // namespace cch::tui::detail

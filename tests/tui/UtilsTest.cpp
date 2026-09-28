@@ -182,7 +182,7 @@ TEST_CASE("wrap_text preserves control ordering around whitespace", "[tui][issue
     CHECK(styled_terminal.cells()[0][1].style.fg_color == "31");
     CHECK(styled_terminal.cells()[0][2].grapheme == "B");
     CHECK(styled_terminal.cells()[0][2].style.fg_color.empty());
-    CHECK(styled_terminal.final_style() == cch::tui::VirtualTerminalStyle{});
+    CHECK(styled_terminal.final_style() == cch::tui::TerminalStyle{});
 
     const auto linked = wrap_text("A \x1b]8;;u\x07" "B\x1b]8;;\x07", 10);
     REQUIRE(linked);
@@ -197,7 +197,7 @@ TEST_CASE("wrap_text preserves control ordering around whitespace", "[tui][issue
     CHECK(linked_terminal.cells()[0][1].grapheme == " ");
     CHECK(linked_terminal.cells()[0][1].style.hyperlink.empty());
     CHECK(linked_terminal.cells()[0][2].style.hyperlink == "u");
-    CHECK(linked_terminal.final_style() == cch::tui::VirtualTerminalStyle{});
+    CHECK(linked_terminal.final_style() == cch::tui::TerminalStyle{});
 
     const auto trailing = wrap_text("\x1b[31mA  ", 10);
     REQUIRE(trailing);
@@ -230,7 +230,7 @@ TEST_CASE("wrap_text preserves control ordering around whitespace", "[tui][issue
     REQUIRE(wrapped_terminal.write((*wrapped)[1]));
     CHECK(wrapped_terminal.cells()[0][0].style.fg_color == "31");
     CHECK(wrapped_terminal.cells()[1][0].style.fg_color.empty());
-    CHECK(wrapped_terminal.final_style() == cch::tui::VirtualTerminalStyle{});
+    CHECK(wrapped_terminal.final_style() == cch::tui::TerminalStyle{});
 }
 
 TEST_CASE("wrap_text prefers word boundaries and falls back for long words", "[tui][issue46][unicode][spec]") {

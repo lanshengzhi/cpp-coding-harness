@@ -247,7 +247,7 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(!std::is_copy_constructible_v<tui::Image>);
     static_assert(std::is_final_v<tui::Markdown>);
     static_assert(std::is_final_v<tui::Tui>);
-    static_assert(std::is_aggregate_v<tui::VirtualTerminalStyle>);
+    static_assert(std::is_aggregate_v<tui::TerminalStyle>);
     static_assert(std::is_aggregate_v<tui::VirtualTerminalCell>);
     static_assert(std::is_aggregate_v<tui::VirtualTerminalImage>);
     static_assert(std::is_final_v<tui::VirtualTerminal>);

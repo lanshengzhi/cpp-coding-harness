@@ -205,6 +205,32 @@ TEST_CASE("OverlayCompositor preserves ANSI styles when splicing line regions", 
     CHECK(tui::visible_width(output.lines[0]) == 10);
 }
 
+TEST_CASE("OverlayCompositor closes an open hyperlink once when the splice is shorter than the base row",
+        "[tui][overlay][spec]") {
+    tui::detail::OverlayCompositor compositor;
+    const tui::TerminalDimensions dimensions{.columns = 8, .rows = 1};
+
+    auto options = absolute_options(3, 0);
+    options.size_constraints.max_width = 2;
+    auto overlay = std::make_unique<tui::Overlay>(options);
+    REQUIRE(overlay->add_child(std::make_unique<StaticComponent>(std::vector<std::string>{"\x1b[31mXY"})));
+    REQUIRE(compositor.add_overlay(std::move(overlay)));
+
+    // The base row opens an OSC 8 link that is still open where the splice
+    // begins, so the leading columns close it. The row's own trailing reset
+    // must then find the link already closed: a style tracker that reads the
+    // leading columns' `\x1b[24m` + OSC 8 close as one run leaves the link
+    // open and emits a second, spurious close at the end of the row.
+    tui::RenderResult output{.lines = std::vector<std::string>{"\x1b[4m\x1b]8;;u\x07"
+                                                               "abc"}};
+    REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output));
+
+    CHECK(output.lines[0] == "\x1b[4m\x1b]8;;u\x07"
+                             "abc\x1b[24m\x1b]8;;\x07"
+                             "\x1b[31mXY   ");
+    CHECK(tui::visible_width(output.lines[0]) == 8);
+}
+
 TEST_CASE("OverlayCompositor clips base images intersecting overlaid regions", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};

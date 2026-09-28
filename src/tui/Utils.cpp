@@ -17,9 +17,6 @@
 namespace cch::tui {
 namespace {
 
-/// The ANSI SGR reset pi's truncateToWidth always emits around the ellipsis.
-constexpr std::string_view kSgrReset{"\x1b[0m"};
-
 /// One closed code-point range of pi's CJK line-break set.
 struct CjkBreakRange {
     char32_t first{0};
@@ -410,9 +407,9 @@ support::Expected<std::string> truncate_text(
     // pi's `finalizeTruncatedResult` is exactly
     // `prefix + "\x1b[0m" + ellipsis + "\x1b[0m"` (utils.ts at the frozen
     // baseline); the always-on resets close whatever the kept prefix left open.
-    result += kSgrReset;
+    result += detail::kSgrReset;
     result += ellipsis;
-    if (!ellipsis.empty()) result += kSgrReset;
+    if (!ellipsis.empty()) result += detail::kSgrReset;
     if (pad) result.append(max_width - collected_width - ellipsis_width, ' ');
     return result;
 }

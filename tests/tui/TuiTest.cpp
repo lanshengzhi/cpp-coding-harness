@@ -411,7 +411,7 @@ TEST_CASE("Tui renders attached Text through the VirtualTerminal seam", "[tui][i
     CHECK(terminal.output()[2] == "\x1b[?2026l");
     const cch::tui::CursorPosition expected_cursor{.column = 0, .row = 0};
     CHECK(terminal.cursor() == expected_cursor);
-    CHECK(terminal.final_style() == cch::tui::VirtualTerminalStyle{});
+    CHECK(terminal.final_style() == cch::tui::TerminalStyle{});
     CHECK_FALSE(terminal.modes().cursor_visible);
 
     REQUIRE(tui.stop());
@@ -449,7 +449,7 @@ TEST_CASE("Tui exposes styled Text cells with a default final style", "[tui][iss
     REQUIRE(terminal.cells()[0].size() == 4);
     CHECK(terminal.cells()[0][0].grapheme == "A");
     CHECK(terminal.cells()[0][0].style.fg_color == "31");
-    CHECK(terminal.final_style() == cch::tui::VirtualTerminalStyle{});
+    CHECK(terminal.final_style() == cch::tui::TerminalStyle{});
 }
 
 TEST_CASE("Tui preserves cursor and restoration failures from partial startup", "[tui][terminal][issue58][spec]") {

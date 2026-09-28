@@ -146,7 +146,7 @@ namespace {
     return std::string{value};
 }
 
-[[nodiscard]] support::JsonValue style_json(const tui::VirtualTerminalStyle& style) {
+[[nodiscard]] support::JsonValue style_json(const tui::TerminalStyle& style) {
     support::JsonValue::object_t value;
     value.emplace("bold", support::JsonValue{style.bold});
     value.emplace("dim", support::JsonValue{style.dim});
@@ -161,7 +161,7 @@ namespace {
     return support::JsonValue{std::move(value)};
 }
 
-void append_styled_run(support::JsonValue::array_t& runs, std::string& text, const tui::VirtualTerminalStyle& style) {
+void append_styled_run(support::JsonValue::array_t& runs, std::string& text, const tui::TerminalStyle& style) {
     if (text.empty()) return;
     support::JsonValue::object_t run;
     run.emplace("text", support::JsonValue{text});
@@ -174,7 +174,7 @@ void append_styled_run(support::JsonValue::array_t& runs, std::string& text, con
     support::JsonValue::array_t encoded_rows;
     encoded_rows.reserve(rows.size());
     for (const auto& row : rows) {
-        const tui::VirtualTerminalStyle default_style;
+        const tui::TerminalStyle default_style;
         std::size_t occupied = 0;
         for (std::size_t column = 0; column < row.size(); ++column) {
             const auto& cell = row[column];
@@ -182,7 +182,7 @@ void append_styled_run(support::JsonValue::array_t& runs, std::string& text, con
         }
         support::JsonValue::array_t runs;
         std::string text;
-        tui::VirtualTerminalStyle run_style;
+        tui::TerminalStyle run_style;
         for (std::size_t column = 0; column < occupied; ++column) {
             const auto& cell = row[column];
             if (cell.continuation) continue;
