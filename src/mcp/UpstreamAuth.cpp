@@ -142,34 +142,33 @@ AsyncResult<UpstreamAuth> resolve_upstream_auth(std::string server_id,
                     env_var = std::move(env_var),
                     from_environment = std::move(from_environment),
                     store = std::move(store)](AsyncCompletion<UpstreamAuth, Error> completion) mutable noexcept {
-                store->read_bearer(server_id).start(
-                        [completion = std::move(completion), server_id, env_var, from_environment, store](
-                                std::expected<std::optional<std::string>, Error> stored) mutable noexcept {
-                            if (!stored) {
-                                return completion(std::unexpected(
-                                        store_read_failure(stored.error(), server_id, env_var, from_environment)));
-                            }
-                            auto decided = decide_bearer(from_environment, *stored, server_id, env_var);
-                            if (decided.has_value()) {
-                                return completion(std::move(*decided));
-                            }
-                            store->write_bearer(server_id, from_environment)
-                                    .start([completion = std::move(completion),
-                                                    server_id,
-                                                    env_var,
-                                                    from_environment](
-                                                    std::expected<void, Error> written) mutable noexcept {
-                                        if (!written) {
-                                            return completion(std::unexpected(credential_error(written.error().code,
-                                                    "the Upstream MCP Server's bearer credential could not be persisted",
-                                                    server_id,
-                                                    env_var,
-                                                    from_environment)));
-                                        }
-                                        completion(Expected<UpstreamAuth>{
-                                                UpstreamAuth{.bearer = from_environment}});
-                                    });
-                        });
+                store->read_bearer(server_id).start([completion = std::move(completion),
+                                                            server_id,
+                                                            env_var,
+                                                            from_environment,
+                                                            store](std::expected<std::optional<std::string>, Error>
+                                                                    stored) mutable noexcept {
+                    if (!stored) {
+                        return completion(std::unexpected(
+                                store_read_failure(stored.error(), server_id, env_var, from_environment)));
+                    }
+                    auto decided = decide_bearer(from_environment, *stored, server_id, env_var);
+                    if (decided.has_value()) {
+                        return completion(std::move(*decided));
+                    }
+                    store->write_bearer(server_id, from_environment)
+                            .start([completion = std::move(completion), server_id, env_var, from_environment](
+                                           std::expected<void, Error> written) mutable noexcept {
+                                if (!written) {
+                                    return completion(std::unexpected(credential_error(written.error().code,
+                                            "the Upstream MCP Server's bearer credential could not be persisted",
+                                            server_id,
+                                            env_var,
+                                            from_environment)));
+                                }
+                                completion(Expected<UpstreamAuth>{UpstreamAuth{.bearer = from_environment}});
+                            });
+                });
             }));
 }
 

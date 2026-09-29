@@ -250,9 +250,8 @@ private:
                 stop_token_);
         resolution.start([self = Operation::shared_from_this(), on_ready = std::move(on_ready)](
                                  std::expected<UpstreamAuth, Error> auth) mutable noexcept {
-            self->queue_.post([on_ready = std::move(on_ready), auth = std::move(auth)]() mutable {
-                on_ready(std::move(auth));
-            });
+            self->queue_.post(
+                    [on_ready = std::move(on_ready), auth = std::move(auth)]() mutable { on_ready(std::move(auth)); });
         });
     }
 
