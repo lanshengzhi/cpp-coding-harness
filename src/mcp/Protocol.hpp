@@ -2,6 +2,7 @@
 
 #include <cch/support/JsonValue.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <string_view>
 
@@ -94,6 +95,32 @@ inline constexpr std::string_view kServerCapabilityTools{"tools"};
 /// and are not caller-tunable.
 inline constexpr std::size_t kMaxToolsPerUpstream{5000};
 inline constexpr std::size_t kMaxListPagesPerUpstream{1000};
+
+/// One `tools/call` exchange is bounded twice: it gets the 30 s default and it
+/// can never be given more than the 300 s cap, whatever a caller asks for. The
+/// cap is containment, not tuning, so it is not configurable (spec #833 story
+/// 24; issue #839).
+inline constexpr std::chrono::milliseconds kDefaultRequestTimeout{std::chrono::seconds{30}};
+inline constexpr std::chrono::milliseconds kMaxRequestTimeout{std::chrono::seconds{300}};
+
+/// The per-Upstream reconnect ladder (spec #833 story 9; issue #839). A failed
+/// connection waits `kInitialReconnectBackoff`, doubling per consecutive
+/// attempt and never exceeding `kMaxReconnectBackoff`, and gives up after
+/// `kMaxConnectAttempts` consecutive transport-level failures rather than
+/// retrying forever: a flapping or permanently dead Upstream costs a bounded
+/// amount of work — at most ten probes of a dead endpoint — and the ladder
+/// restarts only when the owner asks for a connection again.
+inline constexpr std::chrono::milliseconds kInitialReconnectBackoff{std::chrono::milliseconds{250}};
+inline constexpr std::chrono::milliseconds kMaxReconnectBackoff{std::chrono::seconds{30}};
+inline constexpr std::size_t kMaxConnectAttempts{10};
+
+/// The whole of one Upstream connection's cleanup — stopping the in-flight
+/// calls, dropping the connection, and cancelling the armed reconnect — is
+/// bounded to this. It is the backstop for a transport that ignores
+/// cancellation: a connection that cannot be quiesced in time is released
+/// anyway, and the operations still outstanding are reported as abandoned
+/// (ADR 0011; spec #833 story 10).
+inline constexpr std::chrono::milliseconds kConnectionCleanupBound{std::chrono::milliseconds{1000}};
 
 /// The bound on any Upstream-supplied text kept as a diagnostic. Diagnostics
 /// are redacted before they are truncated (CODING_STANDARDS.md §10.2).

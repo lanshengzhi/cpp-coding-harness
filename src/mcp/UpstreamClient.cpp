@@ -1,5 +1,6 @@
 #include <cch/mcp/UpstreamClient.hpp>
 
+#include "mcp/Diagnostics.hpp"
 #include "mcp/EraAdapter.hpp"
 #include "mcp/HeaderMirror.hpp"
 #include "mcp/JsonRpc.hpp"
@@ -93,13 +94,15 @@ private:
 /// §10.2), never carry an `Error::context` — which for a parse failure is the
 /// whole untrusted response body — and are redacted by the connection's
 /// resolved credential value as well, so an Upstream that echoes the bearer
-/// back cannot put it in a diagnostic (issue #838).
+/// back cannot put it in a diagnostic (issue #838). Both the bound and the
+/// shape rules live in the one private diagnostics point the connection
+/// machinery shares (issue #839).
 [[nodiscard]] std::string bounded_diagnostic(std::string text, std::string_view secret) {
-    return redaction::redacted_text(std::move(text), secret);
+    return diagnostics::bounded(std::move(text), secret);
 }
 
 [[nodiscard]] std::string diagnostic_of(const Error& error, std::string_view secret) {
-    return bounded_diagnostic(error.detail.empty() ? error.message : error.message + ": " + error.detail, secret);
+    return diagnostics::of(error, secret);
 }
 
 /// An error leaving this package, redacted by the connection's resolved
@@ -123,6 +126,14 @@ private:
         return answer.error();
     }
     const auto& response = *answer;
+    if (response.status_code == 401 || response.status_code == 403) {
+        // An authentication challenge is not a protocol violation: it is the
+        // Upstream refusing to serve the call until the user has authorized
+        // it, and the connection reads it as health evidence (ADR 0064).
+        return make_error(ErrorCode::Auth,
+                "the Upstream MCP Server requires authentication",
+                "the Upstream answered with HTTP status " + std::to_string(response.status_code));
+    }
     if (response.status_code < 200 || response.status_code > 299) {
         return ProtocolFailure{
                 .diagnostic = bounded_diagnostic(

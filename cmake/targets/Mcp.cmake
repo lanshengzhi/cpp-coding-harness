@@ -29,6 +29,7 @@ cch_parity_declare_target(
         src/mcp/SseResponseStream.cpp
         src/mcp/UpstreamAuth.cpp
         src/mcp/UpstreamClient.cpp
+        src/mcp/UpstreamConnection.cpp
         src/mcp/WireDto.cpp
         src/mcp/transport/BoostBeastStreamableHttpTransport.cpp
         src/mcp/transport/RetryPolicy.cpp

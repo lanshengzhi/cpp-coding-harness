@@ -103,6 +103,26 @@ These are containment bounds, not throughput policy: the walk they bound is boun
 - `a pagination walk at the cursor cap is admitted and one page past it is rejected` — `[mcp][catalog][limits][issue836]`: a 1,000-page walk succeeds, and the exchange that asks for page 1,001 is refused without being sent.
 - `a duplicate tool name across pages is rejected` and `a pagination cursor the Upstream already returned is rejected instead of followed` — `[mcp][catalog][limits][issue836]`: pins both loop rejections, and the second also pins the exchange count, so a rejection can never be "retried" into a loop.
 
+## MCP Host connection bounds (ADR 0064, ADR 0011, spec #833 stories 9 and 10, issue #839)
+
+The same private constants point bounds what one Upstream connection costs while it is trying, failing, and being torn down. These are not throughput policy either: the work they bound is one probe of one endpoint, so there is no queue to tune. They are containment plus liveness.
+
+- **`kDefaultRequestTimeout = 30 s`, `kMaxRequestTimeout = 300 s`.** One `tools/call` exchange gets the 30 s product deadline. A caller asking for more is capped rather than honored, because a per-call deadline the caller could raise would not be a containment bound.
+- **`kInitialReconnectBackoff = 250 ms`, `kMaxReconnectBackoff = 30 s`, `kMaxConnectAttempts = 10`.** The ladder waits 250 ms before the first reconnect and doubles per rung, never past 30 s, and after ten rungs it is spent: the connection reports `failed` and only an explicit request from its owner starts a new ladder. Ten rungs at the cap is ~5.5 minutes of a permanently dead endpoint before the host stops knocking, and the total cost is bounded in both attempts and wall time.
+- **`kConnectionCleanupBound = 1 s`.** The whole of a connection's close — stopping the admitted operations, dropping the client, cancelling the armed reconnect — is bounded to one second. A conforming transport answers its cancellation immediately, so the bound is a backstop for one that does not: a connection that cannot be quiesced in time is released anyway, and `UpstreamCloseOutcome::abandoned_operations` reports what was still outstanding.
+
+Storm protection is the property the ladder exists for, and it is a coalescing rule rather than a jitter value, so it is exact and testable: while one delay is armed, every additional failure and every transport-closure notification is absorbed instead of arming another, and a rung advances only when a delay actually elapses. Fifty failed tool calls plus a hundred closure notifications therefore cost one rung, not one hundred and fifty.
+
+### Regression properties (tests)
+
+- `a flapping Upstream is not reconnected once per failure` — `[mcp][connection][backoff][issue839]`: pins the whole ladder. Fifty failed calls and a hundred closure notifications arm exactly one delay, the delays are exactly `250, 500, 1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000` ms, the endpoint is probed exactly eleven times in total, and a hundred further notifications afterwards probe nothing.
+- `a spent ladder starts over only when the owner asks for a connection again` — `[mcp][connection][backoff][issue839]`: pins that a spent ladder is the owner's to restart, not the Upstream's to keep knocking with.
+- `no reconnect fires after a close that happened during the backoff` — `[mcp][connection][close][issue839]`: pins that the close cancels the armed delay and that letting it elapse anyway reconnects nothing.
+- `a close during an in-flight call reaches quiescence with nothing abandoned` — `[mcp][connection][close][issue839]`: cancellation reaches the request, the call reaches a terminal outcome, the cleanup bound is never needed, and the connection reports zero abandoned operations.
+- `a call that ignores cancellation is released at the cleanup bound` — `[mcp][connection][close][issue839]`: the connection asked for exactly the 1 s bound and, when it expired, released the connection and reported the one operation it abandoned.
+- `startup never waits for an Upstream that never answers` — `[mcp][connection][startup][issue839]`: the connection attempt is handed back while the Upstream is still silent, the connection reads `pending` with one operation in flight, and a tool call against it fails immediately instead of waiting.
+- `a tool call is bounded by the per-call deadline and capped at the containment bound` — `[mcp][connection][limits][issue839]`: every request the connection framed carries the 30 s default, and a caller that asked for ten minutes got the 300 s cap on the wire.
+
 ## Update procedure
 
 A limit changes only through the same evidence path: record the representative workload and environment, repeated samples and variance, the selection rule, the chosen value, and the regression property that protects it. When a limit changes, update this table, the `harness::RuntimeLimits` defaults, and — if the production value is no longer the default — the explicit set in `src/coding_agent/cli/AsyncCliRuntime.cpp`. The regression tests above must pass at the new values before the change is accepted.

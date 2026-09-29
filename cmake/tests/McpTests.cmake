@@ -2,7 +2,7 @@ include_guard(GLOBAL)
 
 # Orchestration include: top-level CMakeLists.txt only (relies on CMAKE_CURRENT_SOURCE_DIR = repo root).
 
-    # cch_mcp (issues #836, #837)
+    # cch_mcp (issues #836, #837, #839)
     #
     # Every case here drives the full client stack above the one injected
     # transport seam (`tests/support/ScriptedMcpTransport.hpp`), so the shard
@@ -12,7 +12,10 @@ include_guard(GLOBAL)
     # swap the scripted transport for the production Beast TLS transport and
     # talk to the test-only local MCP HTTP server
     # (`tests/support/LocalMcpHttpServer.hpp`) over a real socket, which is
-    # the same seam reached the other way.
+    # the same seam reached the other way. The connection cases drive the
+    # five-state Upstream Connection Status, the bounded reconnect ladder, and
+    # the two-phase close through the same scripted transport, with the
+    # connection's timer supplied by `tests::ScriptedMcpDelay`.
     add_executable(cch_tests_mcp
         tests/Catch2Main.cpp
         tests/support/LocalMcpHttpServer.cpp
@@ -23,6 +26,8 @@ include_guard(GLOBAL)
         tests/mcp/StreamableHttpTransportTest.cpp
         tests/mcp/UpstreamAuthTest.cpp
         tests/mcp/UpstreamClientStackTest.cpp
+        tests/mcp/UpstreamConnectionTest.cpp
+        tests/mcp/ConnectionCloseTest.cpp
         tests/mcp/WireContractTest.cpp
 )
     target_include_directories(cch_tests_mcp PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})

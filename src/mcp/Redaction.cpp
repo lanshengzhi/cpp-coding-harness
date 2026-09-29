@@ -1,7 +1,6 @@
 #include "mcp/Redaction.hpp"
 
-#include <cch/support/BoundedText.hpp>
-#include "mcp/Protocol.hpp"
+#include "mcp/Diagnostics.hpp"
 
 #include <cstddef>
 #include <string>
@@ -34,9 +33,7 @@ constexpr std::size_t kMinErasableSecretLength{8};
 
 } // namespace
 
-std::string bounded_diagnostic(std::string text) {
-    return cch::support::bounded_redacted_text(std::move(text), protocol::kMaxDiagnosticBytes, "...");
-}
+std::string bounded_diagnostic(std::string text) { return diagnostics::bounded(std::move(text)); }
 
 std::string erase_credential(std::string text, std::string_view secret) { return erase_all(std::move(text), secret); }
 
