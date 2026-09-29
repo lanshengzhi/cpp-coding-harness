@@ -108,9 +108,9 @@ public:
         }
         const auto found = stored_.find(server_id);
         return cch::support::AsyncResult<std::optional<std::string>>(
-                std::expected<std::optional<std::string>, support::Error>{found == stored_.end()
-                                                                                       ? std::optional<std::string>{}
-                                                                                       : std::optional<std::string>{found->second}});
+                std::expected<std::optional<std::string>, support::Error>{
+                        found == stored_.end() ? std::optional<std::string>{}
+                                               : std::optional<std::string>{found->second}});
     }
 
     [[nodiscard]] cch::support::AsyncResult<void> write_bearer(std::string server_id, std::string bearer) override {
@@ -146,7 +146,7 @@ private:
 /// the Upstream accepting the exchange, not only by the header's presence.
 [[nodiscard]] tests::LocalMcpHttpServer::Handler authenticated_upstream(std::string_view expected_bearer) {
     return [expected = std::string{"Bearer "} + std::string{expected_bearer}](
-                    const tests::RecordedHttpRequest& request) -> std::optional<tests::McpServerReply> {
+                   const tests::RecordedHttpRequest& request) -> std::optional<tests::McpServerReply> {
         if (request.header("Authorization") != expected) {
             return tests::McpServerReply{
                     .status_code = 401,
@@ -310,9 +310,8 @@ TEST_CASE("an Upstream that declares no bearer credential is sent no Authorizati
         "[mcp][credentials][auth][issue838][spec]") {
     auto transport = std::make_shared<tests::ScriptedMcpTransport>();
     script_conforming_upstream(*transport);
-    mcp::UpstreamClient client("open",
-            transport,
-            mcp::UpstreamClientOptions{.url = "https://upstream.example.com/mcp"});
+    mcp::UpstreamClient client(
+            "open", transport, mcp::UpstreamClientOptions{.url = "https://upstream.example.com/mcp"});
 
     auto catalog = tests::drive(client.list_tools());
     REQUIRE(catalog.has_value());
@@ -393,12 +392,13 @@ TEST_CASE("a bearer echoed back in a tool result never reaches the model's conte
     // The Upstream echoes the credential with no key and no recognizable
     // prefix, which is the form the shape-based rules cannot match.
     scripted.transport->answer(mcp::protocol::kMethodCallTool,
-            tests::ScriptedMcpAnswer{.result = tests::tool_call_result(JsonValue::array_t{
-                    JsonValue::object_t{
-                            {"type", JsonValue("text")},
-                            {"text", JsonValue(std::string{"your token is "} + std::string{kToken})},
-                    },
-            })});
+            tests::ScriptedMcpAnswer{
+                    .result = tests::tool_call_result(JsonValue::array_t{
+                            JsonValue::object_t{
+                                    {"type", JsonValue("text")},
+                                    {"text", JsonValue(std::string{"your token is "} + std::string{kToken})},
+                            },
+                    })});
 
     auto outcome = tests::drive(scripted.client.call_tool(mcp::UpstreamToolCall{
             .tool = post_message_tool(),

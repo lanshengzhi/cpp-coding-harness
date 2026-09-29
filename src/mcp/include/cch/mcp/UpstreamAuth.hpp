@@ -57,15 +57,12 @@ public:
     /// `mcp.<server-id>` key holds no credential. A store that cannot be read
     /// is an error, never a silent "no credential" — a failure to read must not
     /// be answered with an unauthenticated request.
-    [[nodiscard]] virtual cch::support::AsyncResult<std::optional<std::string>> read_bearer(
-            std::string server_id) = 0;
+    [[nodiscard]] virtual cch::support::AsyncResult<std::optional<std::string>> read_bearer(std::string server_id) = 0;
 
     /// The only write path: persist one Server Id's bearer under the
     /// `mcp.<server-id>` key, replacing any credential already there. The token
     /// reaches the store and nowhere else.
-    [[nodiscard]] virtual cch::support::AsyncResult<void> write_bearer(
-            std::string server_id,
-            std::string bearer) = 0;
+    [[nodiscard]] virtual cch::support::AsyncResult<void> write_bearer(std::string server_id, std::string bearer) = 0;
 };
 
 /// Resolve the live bearer for one Upstream MCP Server, per request
@@ -84,8 +81,7 @@ public:
 /// credential the request fails as a connection failure and nothing is sent:
 /// a guessed or empty token is never used. A server that declares no
 /// reference and has no store authenticates nothing.
-[[nodiscard]] cch::support::AsyncResult<UpstreamAuth> resolve_upstream_auth(
-        std::string server_id,
+[[nodiscard]] cch::support::AsyncResult<UpstreamAuth> resolve_upstream_auth(std::string server_id,
         std::optional<std::string> bearer_env_var,
         std::shared_ptr<UpstreamCredentialStore> store,
         std::stop_token stop_token = {});

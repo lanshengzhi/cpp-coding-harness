@@ -18,9 +18,7 @@ namespace {
 constexpr std::size_t kMinErasableSecretLength{8};
 
 /// Whether a value is distinctive enough to erase from arbitrary text.
-[[nodiscard]] bool erasable(std::string_view secret) {
-    return secret.size() >= kMinErasableSecretLength;
-}
+[[nodiscard]] bool erasable(std::string_view secret) { return secret.size() >= kMinErasableSecretLength; }
 
 [[nodiscard]] std::string erase_all(std::string text, std::string_view secret) {
     if (!erasable(secret)) {
@@ -40,9 +38,7 @@ std::string bounded_diagnostic(std::string text) {
     return cch::support::bounded_redacted_text(std::move(text), protocol::kMaxDiagnosticBytes, "...");
 }
 
-std::string erase_credential(std::string text, std::string_view secret) {
-    return erase_all(std::move(text), secret);
-}
+std::string erase_credential(std::string text, std::string_view secret) { return erase_all(std::move(text), secret); }
 
 std::string redacted_text(std::string text, std::string_view secret) {
     // The credential is erased before the shared rules and before the bound

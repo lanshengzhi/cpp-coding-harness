@@ -32,16 +32,13 @@ public:
     /// The stored bearer under `mcp.<server-id>`, `std::nullopt` when the key
     /// holds no API-key credential. A record of another type is not a bearer
     /// credential and resolves as absent rather than as a guess.
-    [[nodiscard]] cch::support::AsyncResult<std::optional<std::string>> read_bearer(
-            std::string server_id) override;
+    [[nodiscard]] cch::support::AsyncResult<std::optional<std::string>> read_bearer(std::string server_id) override;
 
     /// Persist one Server Id's bearer through `CredentialStore::modify`, the
     /// store's only write path. A record of another type is left alone: a
     /// record this path did not write is not one it may overwrite, which keeps
     /// an OAuth credential (#849) from being replaced by a bearer.
-    [[nodiscard]] cch::support::AsyncResult<void> write_bearer(
-            std::string server_id,
-            std::string bearer) override;
+    [[nodiscard]] cch::support::AsyncResult<void> write_bearer(std::string server_id, std::string bearer) override;
 
 private:
     std::shared_ptr<AuthStorage> auth_storage_;

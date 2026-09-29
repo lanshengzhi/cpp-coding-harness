@@ -37,7 +37,6 @@ namespace cch::mcp::redaction {
 /// result that echoed a credential back: the value reaches neither the model's
 /// context nor a session record with the secret still in it. Numbers, booleans,
 /// and structure are untouched — only text an Upstream supplied is rewritten.
-[[nodiscard]] cch::support::JsonValue redacted_value(
-        cch::support::JsonValue value, std::string_view secret);
+[[nodiscard]] cch::support::JsonValue redacted_value(cch::support::JsonValue value, std::string_view secret);
 
 } // namespace cch::mcp::redaction

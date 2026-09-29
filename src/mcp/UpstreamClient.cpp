@@ -106,9 +106,7 @@ private:
 /// credential value and bounded before it reaches a status surface or a
 /// session record (issue #838).
 [[nodiscard]] Error redacted_error(const Error& error, std::string_view secret) {
-    return make_error(error.code,
-            bounded_diagnostic(error.message, secret),
-            bounded_diagnostic(error.detail, secret));
+    return make_error(error.code, bounded_diagnostic(error.message, secret), bounded_diagnostic(error.detail, secret));
 }
 
 [[nodiscard]] double next_request_id(const std::shared_ptr<UpstreamClient::Connection>& connection) {
@@ -150,9 +148,9 @@ private:
         }
         if (decoded->is_error) {
             return ProtocolFailure{
-                    .diagnostic = bounded_diagnostic(
-                            "the Upstream MCP Server returned JSON-RPC error " +
-                                    std::to_string(decoded->error_code) + ": " + decoded->error_message,
+                    .diagnostic = bounded_diagnostic("the Upstream MCP Server returned JSON-RPC error " +
+                                                             std::to_string(decoded->error_code) + ": " +
+                                                             decoded->error_message,
                             secret),
                     .json_rpc_code = decoded->error_code,
             };
@@ -226,11 +224,11 @@ protected:
                              extra_headers = std::move(extra_headers),
                              on_outcome = std::move(on_outcome)](Expected<UpstreamAuth> auth) mutable {
             self->queue_.post([self = std::move(self),
-                                     params = std::move(params),
-                                     name = std::move(name),
-                                     extra_headers = std::move(extra_headers),
-                                     on_outcome = std::move(on_outcome),
-                                     auth = std::move(auth)]() mutable {
+                                      params = std::move(params),
+                                      name = std::move(name),
+                                      extra_headers = std::move(extra_headers),
+                                      on_outcome = std::move(on_outcome),
+                                      auth = std::move(auth)]() mutable {
                 self->dispatch(std::move(params),
                         std::move(name),
                         std::move(extra_headers),
@@ -257,10 +255,9 @@ private:
                 connection->options.bearer_env_var,
                 connection->options.credentials,
                 stop_token_);
-        resolution.start(
-                [on_ready = std::move(on_ready)](std::expected<UpstreamAuth, Error> auth) mutable noexcept {
-                    on_ready(std::move(auth));
-                });
+        resolution.start([on_ready = std::move(on_ready)](std::expected<UpstreamAuth, Error> auth) mutable noexcept {
+            on_ready(std::move(auth));
+        });
     }
 
     /// Frame and write the exchange `send` was asked for, with the resolved

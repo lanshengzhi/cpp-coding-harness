@@ -22,9 +22,7 @@ using support::Expected;
 using support::make_error;
 
 /// The credential key one Server Id occupies in the shared store.
-[[nodiscard]] std::string key_for(const std::string& server_id) {
-    return mcp::credential_key(server_id);
-}
+[[nodiscard]] std::string key_for(const std::string& server_id) { return mcp::credential_key(server_id); }
 
 /// The bearer a stored record carries, or `std::nullopt` when the key holds no
 /// record or holds a record of another type. A record this path did not write
@@ -55,18 +53,17 @@ McpCredentialStore::McpCredentialStore(std::shared_ptr<AuthStorage> auth_storage
 AsyncResult<std::optional<std::string>> McpCredentialStore::read_bearer(std::string server_id) {
     auto storage = auth_storage_;
     const std::string key = key_for(server_id);
-    return AsyncResult<std::optional<std::string>>(
-            AsyncResult<std::optional<std::string>>::producer_type(
-                    [storage, key](AsyncCompletion<std::optional<std::string>, Error> completion) mutable noexcept {
-                        storage->read(key)
-                                .start([completion = std::move(completion), key](
-                                               std::expected<std::optional<ai::Credential>, Error> record) mutable noexcept {
-                                    if (!record) {
-                                        return completion(std::unexpected(record.error()));
-                                    }
-                                    completion(Expected<std::optional<std::string>>{bearer_of(*record)});
-                                });
-                    }));
+    return AsyncResult<std::optional<std::string>>(AsyncResult<std::optional<std::string>>::producer_type(
+            [storage, key](AsyncCompletion<std::optional<std::string>, Error> completion) mutable noexcept {
+                storage->read(key).start(
+                        [completion = std::move(completion), key](
+                                std::expected<std::optional<ai::Credential>, Error> record) mutable noexcept {
+                            if (!record) {
+                                return completion(std::unexpected(record.error()));
+                            }
+                            completion(Expected<std::optional<std::string>>{bearer_of(*record)});
+                        });
+            }));
 }
 
 AsyncResult<void> McpCredentialStore::write_bearer(std::string server_id, std::string bearer) {
@@ -78,18 +75,18 @@ AsyncResult<void> McpCredentialStore::write_bearer(std::string server_id, std::s
                 // under its whole-file lock, so the replacement cannot race a
                 // concurrent write of the same key.
                 storage->modify(key,
-                        ai::CredentialModifyHook([key, bearer = std::move(bearer)](
-                                                          std::optional<ai::Credential> current) mutable
-                                                          -> AsyncResult<std::optional<ai::Credential>> {
-                            if (current.has_value() && !std::holds_alternative<ai::ApiKeyCredential>(*current)) {
-                                return AsyncResult<std::optional<ai::Credential>>(
-                                        Expected<std::optional<ai::Credential>>{std::unexpected(
-                                                conflicting_record_error(key))});
-                            }
-                            return AsyncResult<std::optional<ai::Credential>>(
-                                    Expected<std::optional<ai::Credential>>{
-                                            ai::ApiKeyCredential{.key = std::move(bearer), .env = {}}});
-                        }))
+                               ai::CredentialModifyHook([key, bearer = std::move(bearer)](
+                                                                std::optional<ai::Credential> current) mutable
+                                                                -> AsyncResult<std::optional<ai::Credential>> {
+                                   if (current.has_value() && !std::holds_alternative<ai::ApiKeyCredential>(*current)) {
+                                       return AsyncResult<std::optional<ai::Credential>>(
+                                               Expected<std::optional<ai::Credential>>{
+                                                       std::unexpected(conflicting_record_error(key))});
+                                   }
+                                   return AsyncResult<std::optional<ai::Credential>>(
+                                           Expected<std::optional<ai::Credential>>{
+                                                   ai::ApiKeyCredential{.key = std::move(bearer), .env = {}}});
+                               }))
                         .start([completion = std::move(completion)](
                                        std::expected<std::optional<ai::Credential>, Error> written) mutable noexcept {
                             if (!written) {

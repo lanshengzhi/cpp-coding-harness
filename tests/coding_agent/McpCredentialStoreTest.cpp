@@ -42,8 +42,7 @@ constexpr std::string_view kToken{"pike-mcp-upstream-bearer-0123456789abcdef"};
     return contents.str();
 }
 
-template <typename T, typename Action>
-T run_async(Action action) {
+template <typename T, typename Action> T run_async(Action action) {
     boost::asio::io_context io;
     std::optional<T> result;
     boost::asio::co_spawn(
@@ -72,23 +71,20 @@ TEST_CASE("the MCP credential store persists an Upstream bearer under its mcp.<s
     cch::coding_agent::McpCredentialStore store(storage);
 
     // Nothing is stored yet, and an absent key is not a failure.
-    const auto absent = run_async<cch::support::Expected<std::optional<std::string>>>([&]() {
-        return store.read_bearer("executor");
-    });
+    const auto absent = run_async<cch::support::Expected<std::optional<std::string>>>(
+            [&]() { return store.read_bearer("executor"); });
     REQUIRE(absent);
     CHECK_FALSE(absent->has_value());
 
-    const auto written = run_async<cch::support::Expected<void>>([&]() {
-        return store.write_bearer("executor", std::string{kToken});
-    });
+    const auto written = run_async<cch::support::Expected<void>>(
+            [&]() { return store.write_bearer("executor", std::string{kToken}); });
     REQUIRE(written);
 
     // The record is one ordinary API-key record under the `mcp.<server-id>`
     // key, so the store's key map stays a plain provider-id map and an MCP
     // credential can never collide with a provider's.
-    const auto record = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>([&]() {
-        return storage->read("mcp.executor");
-    });
+    const auto record = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>(
+            [&]() { return storage->read("mcp.executor"); });
     REQUIRE(record);
     REQUIRE(record->has_value());
     const auto* const api_key = std::get_if<cch::ai::ApiKeyCredential>(&**record);
@@ -98,17 +94,15 @@ TEST_CASE("the MCP credential store persists an Upstream bearer under its mcp.<s
 
     // The read path answers with the same value, and a second store over the
     // same file sees it: the credential is durable, not per-process.
-    const auto resolved = run_async<cch::support::Expected<std::optional<std::string>>>([&]() {
-        return cch::coding_agent::McpCredentialStore(open(path)).read_bearer("executor");
-    });
+    const auto resolved = run_async<cch::support::Expected<std::optional<std::string>>>(
+            [&]() { return cch::coding_agent::McpCredentialStore(open(path)).read_bearer("executor"); });
     REQUIRE(resolved);
     REQUIRE(resolved->has_value());
     CHECK(*resolved == kToken);
 
     // `list()` is metadata-only and reports the key without resolving it.
-    const auto listed = run_async<cch::support::Expected<std::vector<cch::ai::CredentialInfo>>>([&]() {
-        return storage->list();
-    });
+    const auto listed =
+            run_async<cch::support::Expected<std::vector<cch::ai::CredentialInfo>>>([&]() { return storage->list(); });
     REQUIRE(listed);
     REQUIRE(listed->size() == 1);
     CHECK(listed->front().provider_id == "mcp.executor");
@@ -126,22 +120,20 @@ TEST_CASE("the MCP credential store leaves a provider's credential and a record 
     // A provider credential and an OAuth record, as `cch_ai` OAuth (#849) will
     // leave under an MCP key.
     const auto seeded_provider = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>([&]() {
-        return storage->modify(
-                "anthropic",
+        return storage->modify("anthropic",
                 [](std::optional<cch::ai::Credential>)
-                    -> cch::support::AsyncResult<std::optional<cch::ai::Credential>> {
+                        -> cch::support::AsyncResult<std::optional<cch::ai::Credential>> {
                     return cch::support::AsyncResult<std::optional<cch::ai::Credential>>(
                             std::expected<std::optional<cch::ai::Credential>, cch::support::Error>{
-                                    std::optional<cch::ai::Credential>{cch::ai::ApiKeyCredential{
-                                            .key = "provider-key", .env = {}}}});
+                                    std::optional<cch::ai::Credential>{
+                                            cch::ai::ApiKeyCredential{.key = "provider-key", .env = {}}}});
                 });
     });
     REQUIRE(seeded_provider);
     const auto seeded_oauth = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>([&]() {
-        return storage->modify(
-                "mcp.executor",
+        return storage->modify("mcp.executor",
                 [](std::optional<cch::ai::Credential>)
-                    -> cch::support::AsyncResult<std::optional<cch::ai::Credential>> {
+                        -> cch::support::AsyncResult<std::optional<cch::ai::Credential>> {
                     return cch::support::AsyncResult<std::optional<cch::ai::Credential>>(
                             std::expected<std::optional<cch::ai::Credential>, cch::support::Error>{
                                     std::optional<cch::ai::Credential>{cch::ai::OAuthCredential{
@@ -152,29 +144,25 @@ TEST_CASE("the MCP credential store leaves a provider's credential and a record 
 
     // An OAuth record is not a bearer credential, so it neither reads as one
     // nor is replaced by one.
-    const auto not_a_bearer = run_async<cch::support::Expected<std::optional<std::string>>>([&]() {
-        return store.read_bearer("executor");
-    });
+    const auto not_a_bearer = run_async<cch::support::Expected<std::optional<std::string>>>(
+            [&]() { return store.read_bearer("executor"); });
     REQUIRE(not_a_bearer);
     CHECK_FALSE(not_a_bearer->has_value());
 
-    const auto refused = run_async<cch::support::Expected<void>>([&]() {
-        return store.write_bearer("executor", std::string{kToken});
-    });
+    const auto refused = run_async<cch::support::Expected<void>>(
+            [&]() { return store.write_bearer("executor", std::string{kToken}); });
     REQUIRE_FALSE(refused);
     CHECK(refused.error().code == cch::support::ErrorCode::Auth);
 
-    const auto untouched = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>([&]() {
-        return storage->read("mcp.executor");
-    });
+    const auto untouched = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>(
+            [&]() { return storage->read("mcp.executor"); });
     REQUIRE(untouched);
     REQUIRE(untouched->has_value());
     CHECK(std::get_if<cch::ai::OAuthCredential>(&**untouched) != nullptr);
 
     // The provider's own credential is untouched as well.
-    const auto provider = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>([&]() {
-        return storage->read("anthropic");
-    });
+    const auto provider = run_async<cch::support::Expected<std::optional<cch::ai::Credential>>>(
+            [&]() { return storage->read("anthropic"); });
     REQUIRE(provider);
     REQUIRE(provider->has_value());
     const auto* const provider_key = std::get_if<cch::ai::ApiKeyCredential>(&**provider);
@@ -193,18 +181,16 @@ TEST_CASE("the MCP credential store replaces the bearer a Server Id already hold
     REQUIRE(run_async<cch::support::Expected<void>>([&]() { return store.write_bearer("docs", "first-token"); }));
     REQUIRE(run_async<cch::support::Expected<void>>([&]() { return store.write_bearer("docs", "rotated-token"); }));
 
-    const auto resolved = run_async<cch::support::Expected<std::optional<std::string>>>([&]() {
-        return store.read_bearer("docs");
-    });
+    const auto resolved =
+            run_async<cch::support::Expected<std::optional<std::string>>>([&]() { return store.read_bearer("docs"); });
     REQUIRE(resolved);
     REQUIRE(resolved->has_value());
     CHECK(*resolved == "rotated-token");
 
     // Two Server Ids never share a key.
     REQUIRE(run_async<cch::support::Expected<void>>([&]() { return store.write_bearer("executor", "other-token"); }));
-    const auto other = run_async<cch::support::Expected<std::optional<std::string>>>([&]() {
-        return store.read_bearer("executor");
-    });
+    const auto other = run_async<cch::support::Expected<std::optional<std::string>>>(
+            [&]() { return store.read_bearer("executor"); });
     REQUIRE(other);
     REQUIRE(other->has_value());
     CHECK(*other == "other-token");
