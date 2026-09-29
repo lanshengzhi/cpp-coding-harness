@@ -514,6 +514,10 @@ std::vector<McpServerTrustPromptRequest> AgentSession::pending_mcp_server_trust_
     return impl_ ? impl_->pending_mcp_server_trust_requests() : std::vector<McpServerTrustPromptRequest>{};
 }
 
+std::vector<McpPublishedTool> AgentSession::mcp_published_tools() const {
+    return impl_ ? impl_->mcp_published_tools() : std::vector<McpPublishedTool>{};
+}
+
 support::AsyncResult<McpServerTrustResolution> AgentSession::ask_mcp_server_trust(
         std::string_view server_id, std::stop_token stop_token) {
     if (impl_ == nullptr) {

@@ -10,6 +10,7 @@ cch_parity_declare_target(
         src/agent/Agent.cpp
         src/agent/AgentRun.cpp
         src/agent/AgentSubscription.cpp
+        src/agent/AgentToolAccess.cpp
         src/agent/ToolArgumentPreparation.cpp
         src/agent/ToolFormatValidation.cpp
         src/agent/ToolSchemaCompile.cpp

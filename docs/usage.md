@@ -132,6 +132,10 @@ Project settings in `.pi/settings.json` load only after Project Trust and overri
 
 Built-in slash submissions are parsed and validated by the Native TUI router. An unrecognized slash submission is sent as an ordinary Agent Prompt, matching pi's fall-through; a validation failure for a known command stays a visible routing error. Registered Prompt Templates, enabled `/skill:<name>` resources, and compatible absolute-path submissions are Agent Prompts for the same reason. Print mode does not dispatch slash commands.
 
+## Upstream MCP Server tools
+
+An Upstream MCP Server configured with `"activation": "eager"` publishes its catalog into the model tool surface as soon as it connects, under a Qualified Tool Name `mcp__<server id>__<tool>`. Discovery never blocks session start: a server that withholds its catalog simply has no tools yet, and the next model request is the first that carries them. A `"lazy"` server — the default — publishes nothing, and a call to an `"approval": "ask"` server is refused with an explicit reason until the call-approval prompt lands. `/mcp` shows each server's connection status.
+
 ## User Bash
 
 In the Native TUI, a focused-editor submission beginning with `!` runs the remaining text as a shell command in the Session workspace. Its result is saved in Session history and may enter later model context. Use `!!` to save the execution while excluding it from model context.

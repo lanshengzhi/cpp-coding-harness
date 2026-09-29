@@ -103,6 +103,23 @@ These are containment bounds, not throughput policy: the walk they bound is boun
 - `a pagination walk at the cursor cap is admitted and one page past it is rejected` — `[mcp][catalog][limits][issue836]`: a 1,000-page walk succeeds, and the exchange that asks for page 1,001 is refused without being sent.
 - `a duplicate tool name across pages is rejected` and `a pagination cursor the Upstream already returned is rejected instead of followed` — `[mcp][catalog][limits][issue836]`: pins both loop rejections, and the second also pins the exchange count, so a rejection can never be "retried" into a loop.
 
+## MCP Host Upstream-tool bounds (ADR 0064, ADR 0007, ADR 0061, spec #833 stories 19-21 and 25, issue #842)
+
+The `cch_coding_agent` half of the MCP Host — the adaptation from a discovered Upstream tool descriptor into a callable `cch::agent::Tool` — is bounded here too. The value is a private constant next to the code that applies it, `src/coding_agent/runtime/McpToolBinding.cpp`, for the same reason the wire-layer values live in one point: a cap a configuration could raise would not be a containment limit.
+
+- **`kMcpQualifiedToolNameMaxLength = 64` characters.** A Qualified Tool Name is `mcp__<Server Id>__<tool>`, sanitized to `[a-zA-Z0-9_-]`; a name that would be longer keeps its head and a deterministic 8-hex-digit FNV-1a suffix, so a long third-party tool name is contained without two names ever collapsing onto one registered tool. This is a bound on a name an Upstream chose, and it is a *name* bound: how many tools a session may hold stays the per-server catalog cap of 5,000 from `cch_mcp`, times the number of configured servers.
+- **One upstream tool result is bounded by the product's ordinary tool-output limit** — 50 KiB and 2,000 lines, the same `OutputLimit` `read` and `bash` already use. A second, MCP-specific output limit would be a second thing to tune for the same containment. Redaction is applied to the complete serialized result *before* the limit, so a secret is erased rather than truncated in half.
+- **`kMaxDiagnosticBytes = 1024`**, restating the connection machinery's own bound for one upstream-supplied explanation that becomes a failed tool call, so an Upstream cannot turn a refusal into a flood of model-visible text.
+
+There is no fairness property to measure here: the work being bounded is in-memory value work over an already-admitted catalog, not a queue. The regression properties below pin the properties instead.
+
+### Regression properties (tests)
+
+- `a Qualified Tool Name namespaces the Server Id and the upstream tool name` and `an over-long Upstream tool name is truncated with a deterministic hash suffix` — `[mcp][issue842][spec]`: the sanitizing, the 64-character cap, the determinism a reconnect depends on, and the distinctness that keeps a truncation from retargeting a live tool.
+- `a flooding tool result is bounded and redacted before it is truncated` — `[mcp][issue842][spec]`: a megabyte of upstream content with a secret-shaped key at its tail comes back inside the 50 KiB bound with no trace of the secret, which is the redaction-before-truncation order made observable.
+- `invalid arguments make no upstream request` — `[mcp][issue842][spec]`: ADR 0007 validation of the Upstream's own schema rejects the call before the request exists, so a malformed call costs no round trip.
+- `a closed tool binding refuses a late publication and drains nothing` and `late discovery after session close registers nothing and resurrects no connection` — `[mcp][issue842][spec]`: pins that a catalog completing after Close re-registers nothing and knocks no further.
+
 ## MCP Host connection bounds (ADR 0064, ADR 0011, spec #833 stories 9 and 10, issue #839)
 
 The same private constants point bounds what one Upstream connection costs while it is trying, failing, and being torn down. These are not throughput policy either: the work they bound is one probe of one endpoint, so there is no queue to tune. They are containment plus liveness.
@@ -134,6 +151,16 @@ One more rule is a bound on work rather than on memory, and is exact rather than
 
 The cache is a shortcut and never a source of failure, so a miss degrades to the same `tools/list` walk that ran before the cache existed, and a catalog the cache refuses to admit is still returned to the caller from the walk that produced it.
 
+### Cross-session reuse: the production owner is still undecided (owed an ADR)
+
+`McpSessionHostOptions::catalog_cache` is an injection point, and **production does not fill it**: `SessionFactory` builds no cache, so a production session hands every connection a null `catalog_cache` and every connection walks `tools/list` exactly as it did before the cache existed. The cross-session reuse the cache was built for is therefore *not* delivered in production yet. What is shipped is the value, the decode, the cache, the connection path, and the session wiring that accepts and shares one instance; only the composition-root choice is open, and it is open on purpose:
+
+- A process-scope mutable owner (a `static` in `SessionFactory`, or any other process-global in `cch_coding_agent`) would be this repository's **first** process-global mutable state, which is a new architecture pattern and not a code-level inference (ADR 0053, CODING_STANDARDS §13.3).
+- The existing host-owned pattern for a long-lived shared service is the right *shape* — one `ModelRuntime` is built by the interactive host and handed to the boot Session and every in-session replacement, so closing one Session never releases what the next one needs (ADR 0029/0030). A host-owned `UpstreamCatalogCache` threaded the same way would introduce no new pattern.
+- What that shape does **not** settle is the cache's own `scope`. A `session`-scoped instance shared across Sessions would serve an Upstream's `session`-scoped catalog to a session that did not fetch it, which is exactly the contamination `cacheScope` exists to prevent; sharing across sessions therefore *requires* a `process`-scoped instance, i.e. the repository promising to an Upstream that the untrusted descriptors it advertises — names, descriptions, JSON Schemas, `x-mcp-header` annotations — stay live for a host-lifetime object and will be published into a later session's model context. That is a security-relevant lifetime policy, and choosing it inside a tool-publication change would be choosing it silently.
+
+**So the decision is recorded here as owed an ADR** rather than answered in code: which long-lived object owns a process-scoped cache, with what scope, in which frontends, and whether a cached catalog may be published into a later session at all. Until it is answered, the safe behaviour is the one in the tree: every session walks its own catalog, and `catalog_cache` stays caller-injected. A caller that wants cross-session reuse hands the host the cache of the session that ran before.
+
 ### Regression properties (tests)
 
 - `a warm cache answers a second listing without asking the Upstream again` — `[mcp][catalog][cache][issue848]`: the boundary of `kMaxCachedCatalogs` is nowhere near here, but the entry count is asserted alongside the request count so a cache that stopped holding anything could not pass.
@@ -141,6 +168,7 @@ The cache is a shortcut and never a source of failure, so a miss degrades to the
 - `a freshness hint longer than the host admits is clamped rather than refused` — `[mcp][catalog][cache][limits][issue848]`: a `ttlMs` of 1e12 arrives on the wire and comes back as exactly 24 h, with the catalog still usable.
 - `an Upstream that expires its catalog on every hint costs one refresh at a time` — `[mcp][catalog][cache][refresh][issue848]`: the `ttlMs: 0` case above. Ten listings against a refresh that never lands cost exactly two walks.
 - `a refresh re-applies the defensive catalog limits and leaves the cached entry alone` — `[mcp][catalog][cache][limits][issue848]`: a refresh is a real walk, so the 5,000-tool cap fails it exactly as it fails a cold fetch, and the entry the caller already holds survives the failure.
+- `a second session sharing the catalog cache asks the Upstream for nothing` and `a session with no shared cache still asks the Upstream for its catalog` — `[mcp][catalog][cache][issue848]`: the cross-session sharing mechanism is proven at the injection point, with the null-cache control that stops the first case from passing for the wrong reason. Neither asserts a production owner, because production has none (see above).
 
 ## Update procedure
 

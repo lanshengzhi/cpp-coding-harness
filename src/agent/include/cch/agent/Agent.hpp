@@ -16,6 +16,7 @@ namespace cch::agent {
 namespace detail {
 class AgentMessageAccess;
 class AgentPromptAccess;
+class AgentToolAccess;
 } // namespace detail
 
 /// Passive initial conversation state for a stateful Agent.
@@ -186,6 +187,7 @@ public:
 private:
     friend class detail::AgentMessageAccess;
     friend class detail::AgentPromptAccess;
+    friend class detail::AgentToolAccess;
 
     /// Execute one prompt using a caller-created prompt-scoped cancellation
     /// source. Copies of the source share one stop state, allowing an admission

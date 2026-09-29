@@ -14,6 +14,7 @@
 
 #include <cch/agent/Agent.hpp>
 #include <cch/coding_agent/McpServerTrust.hpp>
+#include <cch/coding_agent/McpToolBinding.hpp>
 #include <cch/coding_agent/McpUpstreamStatus.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
@@ -322,6 +323,11 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     [[nodiscard]] std::vector<McpUpstreamStatus> mcp_upstream_status() const;
     /// The configured servers still awaiting the user's first-enable consent.
     [[nodiscard]] std::vector<McpServerTrustPromptRequest> pending_mcp_server_trust_requests() const;
+    /// Every Upstream MCP Server tool published into this session's callable
+    /// tool surface (issue #842), name-ordered by Qualified Tool Name. This is
+    /// the reverse mapping the display surface reads: the name the model calls
+    /// beside the Server Id and the Upstream's own tool name the call targets.
+    [[nodiscard]] std::vector<McpPublishedTool> mcp_published_tools() const;
     /// Ask one server's first-enable prompt; an accepted answer enables and
     /// connects that server, which is the only way a first upstream request
     /// can happen after startup.
@@ -330,6 +336,17 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// Request the MCP Host's deterministic two-phase close (ADR 0011) as
     /// part of session close.
     void request_mcp_host_close() noexcept;
+    /// Register every tool the MCP Host has staged and append the matching
+    /// `toolsAdded` transcript system message (ADR 0060), returning whether
+    /// anything was registered. Runs on the Agent's own serialized domain at
+    /// a turn boundary, which is the only window in which the registry may be
+    /// mutated (the turn machine reads it at the top of every turn).
+    ///
+    /// On resume the callable objects are re-bound this way rather than the
+    /// names alone: the tools a resumed transcript names are absent from the
+    /// registry until their catalog is discovered again, and the drain is what
+    /// makes them callable once more.
+    [[nodiscard]] bool apply_staged_mcp_tools();
     [[nodiscard]] const std::string& session_id() const { return session_.metadata.session_id; }
     [[nodiscard]] const std::string& provider() const { return session_.metadata.provider; }
     [[nodiscard]] const std::string& model() const { return session_.metadata.model; }
@@ -588,7 +605,8 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     std::vector<std::shared_ptr<SessionSubscriber>> session_event_observers_;
     /// Next session-event subscriber id.
     std::size_t next_session_subscriber_id_{1};
-    /// Bounded, redacted diagnostics for session-event observer failures (the
+    /// Bounded, redacted diagnostics for session-event observer failures and
+    /// for an Upstream MCP Server tool that could not be registered (the
     /// session-assembly mirror of the Agent's weak-observer diagnostics,
     /// ADR 0017). Exposed through `AgentSessionSnapshot::session_event_diagnostics`.
     std::vector<support::Error> session_event_diagnostics_;

@@ -201,16 +201,58 @@ struct McpSessionHost::State : std::enable_shared_from_this<McpSessionHost::Stat
     /// "startup never blocks on MCP" (spec #833 story 7). Its outcome reaches
     /// the status surface through the connection's own sink, which is where
     /// health is derived from.
+    ///
+    /// A connection that answers is then asked for its catalog, on the same
+    /// domain and still without waiting: discovery is a second step of the
+    /// same non-blocking path, so an Upstream that takes its catalog slowly
+    /// delays its tools and nothing else.
     void connect(const std::shared_ptr<mcp::UpstreamConnection>& connection) {
         auto self = shared_from_this();
         auto token = lifetime.get_token();
         auto operation = support::detail::make_async_result_on(
-                options.executor,
-                [self, connection, token]() -> boost::asio::awaitable<support::Expected<void>> {
-                    (void)co_await support::detail::await_async_result(connection->connect(token));
+                options.executor, [self, connection, token]() -> boost::asio::awaitable<support::Expected<void>> {
+                    auto connected = co_await support::detail::await_async_result(connection->connect(token));
+                    if (connected) {
+                        co_await self->discover_tools(connection, token);
+                    }
                     co_return support::Expected<void>{};
                 });
         operation.start([](std::expected<void, support::Error>) noexcept {});
+    }
+
+    /// Walk one connected server's catalog and stage every tool it advertised
+    /// as a callable `cch::agent::Tool` (issue #842).
+    ///
+    /// Only a server configured with `activation: "eager"` is walked: a `lazy`
+    /// server's tools stay dormant, which is exactly the interim semantics the
+    /// setting documents, and issue #847 is what turns them on.
+    ///
+    /// A catalog that fails to walk publishes nothing and fails nothing: the
+    /// server's status row already carries the connection's own diagnostic, and
+    /// a hostile or slow Upstream degrades to tools that are absent rather than
+    /// to a session that cannot be used (ADR 0008). A tool the binding refuses
+    /// — the only reachable refusal is a Qualified Tool Name already held by a
+    /// different Upstream tool — is dropped rather than merged onto that tool.
+    [[nodiscard]] boost::asio::awaitable<support::Expected<void>> discover_tools(
+            const std::shared_ptr<mcp::UpstreamConnection>& connection, std::stop_token token) {
+        const auto binding = options.tool_binding;
+        if (binding == nullptr) {
+            co_return support::Expected<void>{};
+        }
+        const auto server_id = connection->server_id();
+        const auto configured = std::ranges::find_if(options.servers,
+                [&server_id](const UserMcpServerSettings& entry) { return entry.server_id == server_id; });
+        if (configured == options.servers.end() || configured->activation_policy() != McpServerActivation::Eager) {
+            co_return support::Expected<void>{};
+        }
+        auto catalog = co_await support::detail::await_async_result(connection->list_tools(token));
+        if (!catalog) {
+            co_return support::Expected<void>{};
+        }
+        for (const auto& descriptor : catalog->tools) {
+            (void)binding->publish(connection, descriptor);
+        }
+        co_return support::Expected<void>{};
     }
 
     /// The one path on which a first upstream request can happen after

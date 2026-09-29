@@ -1588,6 +1588,7 @@ struct PreparedAssemblyTarget final {
     // namespace (#838) is written by the same discipline as a provider
     // credential and neither handle can observe a partial write.
     std::shared_ptr<McpSessionHost> mcp_host;
+    std::shared_ptr<McpToolBinding> mcp_tool_binding;
     if (plan.execution_runtime_target && !snapshot.manager.mcp_servers().empty()) {
         McpSessionHostOptions mcp_options;
         mcp_options.servers = snapshot.manager.mcp_servers();
@@ -1597,6 +1598,13 @@ struct PreparedAssemblyTarget final {
         mcp_options.executor = plan.execution_runtime_target->executor();
         mcp_options.transport = std::move(plan.mcp_transport);
         mcp_options.delay = std::move(plan.mcp_delay);
+        // The Upstream-tool binding (issue #842) is the session's callable-tool
+        // seam for the MCP Host. It is created here, beside the host that fills
+        // it, and handed on to the session that drains it, so no window exists
+        // in which a discovery could complete with nowhere to land.
+        mcp_tool_binding = std::make_shared<McpToolBinding>();
+        mcp_tool_binding->set_servers(mcp_options.servers);
+        mcp_options.tool_binding = mcp_tool_binding;
         mcp_host = McpSessionHost::start(std::move(mcp_options));
     }
 
@@ -1796,6 +1804,7 @@ struct PreparedAssemblyTarget final {
     }
     services.bash_session_environment = std::move(bash_session_environment);
     services.mcp_host = std::move(mcp_host);
+    services.mcp_tool_binding = std::move(mcp_tool_binding);
     services.tools = std::move(tools);
 
     const auto session_path = open.store->path();

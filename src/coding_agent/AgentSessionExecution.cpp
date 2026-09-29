@@ -5,12 +5,15 @@
 
 #include "agent/AgentMessageAccess.hpp"
 #include "agent/AgentPromptAccess.hpp"
+#include "agent/AgentToolAccess.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include <cch/ai/InferenceFailure.hpp>
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/prompt/PromptExpansion.hpp"
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 #include "coding_agent/runtime/AuthGuidanceStream.hpp"
+#include "coding_agent/runtime/McpToolApprovalPolicy.hpp"
+#include "coding_agent/runtime/McpToolBinding.hpp"
 #include "coding_agent/runtime/SessionEventCommitment.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
 
@@ -245,9 +248,41 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
         return support::detail::make_async_result(
                 [this, turn = std::move(turn)]() mutable
                         -> boost::asio::awaitable<support::Expected<std::optional<agent::AgentLoopTurnUpdate>>> {
-                    co_return co_await compact_before_next_assistant_response(std::move(turn));
+                    // Registration first: the hook is the one point inside a run
+                    // where the turn machine is between turns, and a tool bound
+                    // here must be in the registry before the next turn reads
+                    // it. Compaction may then return its own replacement, whose
+                    // message list is read after the registration above and so
+                    // already carries the new system message.
+                    const bool published = apply_staged_mcp_tools();
+                    auto update = co_await compact_before_next_assistant_response(std::move(turn));
+                    if (!published || update) {
+                        co_return std::move(update);
+                    }
+                    // A registration with no compaction replacement still has
+                    // to reach the next request: live history is not the
+                    // model-facing context once a replacement exists, so the
+                    // rebuilt list is handed over explicitly.
+                    const auto live_state = agent_->state();
+                    co_return std::optional<agent::AgentLoopTurnUpdate>{agent::AgentLoopTurnUpdate{
+                            .context =
+                                    agent::AgentLoopContextReplacement{
+                                            .system_prompt = std::move(live_state.system_prompt),
+                                            .messages = std::move(live_state.messages),
+                                    },
+                    }};
                 });
     };
+
+    // The MCP Host's call-approval policy (issue #842). The hook is
+    // name-driven, so it treats a tool published after this Agent was
+    // constructed exactly like a built-in one, and it allows every call that
+    // is not a call to an `approval: "ask"` Upstream MCP Server. An `ask` call
+    // is refused until the prompt lands in issue #843, which is fail-closed
+    // rather than silently allowed.
+    if (services_.mcp_tool_binding) {
+        options.before_tool_call = runtime::McpToolApprovalPolicy{services_.mcp_tool_binding}.make_hook();
+    }
 
     // Resumed history is transferred exactly once into the authoritative Agent
     // state. AgentSession retains product metadata and durable storage only.
@@ -283,6 +318,59 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
             sub) {
         agent_event_subscription_.emplace(std::move(*sub));
     }
+}
+
+bool AgentSession::Impl::apply_staged_mcp_tools() {
+    if (!services_.mcp_tool_binding || !agent_) {
+        return false;
+    }
+    auto staged = services_.mcp_tool_binding->take_pending();
+    if (staged.empty()) {
+        return false;
+    }
+    // A tool the Agent already holds is a rebind of a live tool, which is a
+    // no-op rather than a failure worth surfacing; anything else is recorded
+    // in the session's bounded, redacted diagnostics channel and skipped, so
+    // one unregisterable tool never takes the session down (ADR 0008).
+    const auto record_diagnostic = [this](support::Error failure) {
+        detail::record_session_observer_diagnostic(session_event_diagnostics_, std::move(failure));
+        update_projection();
+    };
+    std::vector<ai::Tool> added;
+    added.reserve(staged.size());
+    for (auto& publication : staged) {
+        auto definition = publication.binding.definition;
+        if (auto registered = agent::detail::AgentToolAccess::add_tool(*agent_, std::move(publication.binding));
+                !registered) {
+            if (registered.error().code != support::ErrorCode::Validation) {
+                record_diagnostic(std::move(registered.error()));
+            }
+            continue;
+        }
+        added.push_back(std::move(definition));
+    }
+    if (added.empty()) {
+        return false;
+    }
+    // ADR 0060: the transcript records the complete definitions of the tools
+    // that became callable, so a resumed session can rebuild the same active
+    // loadout. The live state is appended the same way `/reload` appends its
+    // section diff, and the store commit precedes the live replacement.
+    ai::SystemMessage tools_added;
+    tools_added.tools_added = std::move(added);
+    ai::MessageVariant message{std::move(tools_added)};
+    if (session_.store) {
+        if (auto committed = session_.store->append(message); !committed) {
+            record_diagnostic(std::move(committed.error()));
+            return true;
+        }
+    }
+    auto messages = agent_->state().messages;
+    messages.push_back(message);
+    if (auto replaced = agent::detail::AgentMessageAccess::replace_messages(*agent_, std::move(messages)); !replaced) {
+        record_diagnostic(std::move(replaced.error()));
+    }
+    return true;
 }
 
 boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::persist_initial_system_message() {
@@ -506,6 +594,11 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
         // starts; the pre-prompt check above still observes the previous
         // attempt's state.
         overflow_recovery_attempted_ = false;
+        // The first turn of a run reads the tool registry at its top, so
+        // everything the MCP Host staged while the session sat idle belongs in
+        // the surface before that read happens. No context replacement is
+        // needed here: the turn machine re-reads the registry itself.
+        (void)apply_staged_mcp_tools();
         result = co_await run_agent_loop(std::move(user_message), *active_stop_source_);
     }
 

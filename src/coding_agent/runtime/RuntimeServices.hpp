@@ -7,6 +7,7 @@
 #include <cch/agent/tools/ToolFactories.hpp>
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 #include "coding_agent/runtime/McpSessionHost.hpp"
+#include "coding_agent/runtime/McpToolBinding.hpp"
 
 #include <filesystem>
 #include <memory>
@@ -61,6 +62,12 @@ struct RuntimeServices {
     /// Upstream MCP Server connections this session owns, closed with the
     /// session. Null for a session with no configured `mcpServers`.
     std::shared_ptr<McpSessionHost> mcp_host;
+    /// The session's Upstream-tool binding (issue #842): where the MCP Host
+    /// stages the `cch::agent::Tool` values it builds out of a discovered
+    /// catalog, and where the session drains them from. Shared with the host
+    /// so a catalog that completes after the Agent was constructed still
+    /// reaches the tool surface. Null for a session that publishes no tools.
+    std::shared_ptr<McpToolBinding> mcp_tool_binding;
     agent::ToolRegistry tools;
 };
 

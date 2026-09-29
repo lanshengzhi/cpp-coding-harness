@@ -6,6 +6,7 @@
 #include "mcp/JsonRpc.hpp"
 #include "support/Json.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <functional>
@@ -81,6 +82,43 @@ public:
         script(method, [policy](const support::JsonValue&) { return ScriptedMcpAnswer{.hold = policy}; });
     }
 
+    /// Answer every request for `method` that a `hold` is still withholding,
+    /// exactly as if the Upstream had replied all along. The scripted answer
+    /// for `method` is re-read at release time, so a test may hold, replace
+    /// the script, then release.
+    ///
+    /// A hold on its own is a server that *never* answers, which is the other
+    /// case entirely; this is what "the catalog response was withheld until
+    /// later" needs. A released request completes once, and a request already
+    /// answered by cancellation is left alone.
+    void release(std::string_view method) {
+        const std::string name{method};
+        for (auto& record : held_) {
+            if (record->method != name || !record->completion) {
+                continue;
+            }
+            auto response = build_answer(record->request);
+            // The registration is dropped before the completion is invoked: a
+            // stop that raced the release must not answer the same operation
+            // twice.
+            record->registration.reset();
+            auto completion = std::move(record->completion);
+            record->completion = support::AsyncCompletion<mcp::McpResponse, support::Error>{};
+            if (!response || response->hold.has_value()) {
+                completion(std::unexpected(response ? support::make_error(support::ErrorCode::Validation,
+                                                              "the released request is still scripted to be held")
+                                                    : response.error()));
+                continue;
+            }
+            completion(mcp::McpResponse{
+                    .status_code = response->status_code,
+                    .headers = {},
+                    .body = response->raw_body.value_or(response->body),
+            });
+        }
+        std::erase_if(held_, [](const auto& record) { return !record->completion; });
+    }
+
     [[nodiscard]] const std::vector<mcp::McpRequest>& requests() const noexcept { return requests_; }
 
     [[nodiscard]] std::size_t request_count() const noexcept { return requests_.size(); }
@@ -129,7 +167,12 @@ public:
                     std::expected<mcp::McpResponse, support::Error>{std::unexpected(answer.error())});
         }
         if (answer->hold.has_value()) {
-            return hold_request(std::move(request), *answer->hold);
+            const auto method = recorded_method(index);
+            if (!method) {
+                return cch::support::AsyncResult<mcp::McpResponse>(
+                        std::expected<mcp::McpResponse, support::Error>{std::unexpected(method.error())});
+            }
+            return hold_request(std::move(request), *method, *answer->hold);
         }
         return cch::support::AsyncResult<mcp::McpResponse>(
                 std::expected<mcp::McpResponse, support::Error>{mcp::McpResponse{
@@ -161,6 +204,13 @@ private:
             }
         };
 
+        /// The method this request was held for, so `release` answers exactly
+        /// the ones a test asked to withhold.
+        std::string method;
+        /// The request itself, so a released hold is answered with the same
+        /// bytes an inline answer would have produced: a response echoes the
+        /// request's own id.
+        mcp::McpRequest request;
         support::AsyncCompletion<mcp::McpResponse, support::Error> completion;
         std::optional<std::stop_callback<Cancel>> registration;
     };
@@ -172,7 +222,8 @@ private:
         std::optional<McpHold> hold{};
     };
 
-    [[nodiscard]] cch::support::AsyncResult<mcp::McpResponse> hold_request(mcp::McpRequest request, McpHold policy) {
+    [[nodiscard]] cch::support::AsyncResult<mcp::McpResponse> hold_request(
+            mcp::McpRequest request, std::string method, McpHold policy) {
         using Result = cch::support::AsyncResult<mcp::McpResponse>;
         if (policy == McpHold::Ignored) {
             // Nothing owns the completion, so the operation is abandoned when
@@ -182,12 +233,14 @@ private:
                     [](cch::support::AsyncCompletion<mcp::McpResponse, support::Error>) noexcept {}));
         }
         return Result(typename Result::producer_type(
-                [this, token = request.stop_token, policy](
+                [this, method = std::move(method), request, token = request.stop_token](
                         cch::support::AsyncCompletion<mcp::McpResponse, support::Error> completion) mutable noexcept {
                     if (!token.stop_possible()) {
                         return;
                     }
                     auto record = std::make_shared<HeldRequest>();
+                    record->method = method;
+                    record->request = request;
                     record->completion = std::move(completion);
                     record->registration.emplace(token, HeldRequest::Cancel{.held = record});
                     held_.push_back(std::move(record));

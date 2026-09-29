@@ -20,6 +20,8 @@
 #include <string_view>
 #include <vector>
 
+#include "coding_agent/runtime/McpToolBinding.hpp"
+
 namespace cch::coding_agent::runtime {
 
 /// What the session wires the MCP Host with (issue #841). Every field is a
@@ -60,21 +62,29 @@ struct McpSessionHostOptions {
     /// the session and nothing is persisted.
     McpServerTrustPrompter trust_prompter{};
     /// The per-Upstream tool-catalog cache every connection in this session
-    /// reads and fills (spec #833 story 17; issue #848). Null gives each
-    /// session its own cache, which is correct within the session and worth
-    /// nothing across sessions.
+    /// reads and fills (spec #833 story 17; issue #848). Null means every
+    /// connection walks `tools/list` and caches nothing, which is the
+    /// behaviour the host had before the cache existed.
     ///
-    /// **This is a seam the production caller must fill, and the production
-    /// owner of the instance is still undecided.** The value itself is
-    /// `cch_mcp`'s; what is open is which long-lived object holds one across
-    /// the sessions a pike process runs — the same question the shared
-    /// `ModelRuntime` answers for the models runtime, and the same reason it
-    /// is not answered here with a process-global: a process-scope mutable
-    /// owner in this package would be a new architecture pattern, and it
-    /// belongs to the tool-publication ticket (#842), which is the first
-    /// production caller that lists a catalog at all. Hand it the cache of
-    /// the session that ran before.
+    /// **Injected by the caller; production leaves it null for now, so a
+    /// production session walks its own catalog and nothing is reused across
+    /// sessions.** The value itself is `cch_mcp`'s; what is still open is
+    /// which long-lived object holds one across the sessions a pike process
+    /// runs. A process-scope mutable owner in this package would be the
+    /// repository's first such state, and sharing across sessions requires a
+    /// `process`-scoped instance — both architecture decisions rather than
+    /// code-level inferences (ADR 0053), so neither is answered here. The
+    /// "Cross-session reuse" note in `docs/runtime-capacities.md` records the
+    /// open decision as owed an ADR. A caller that wants cross-session reuse
+    /// hands this the cache of the session that ran before.
     std::shared_ptr<mcp::UpstreamCatalogCache> catalog_cache{nullptr};
+    /// The session's Upstream-tool binding (issue #842). A connected server
+    /// configured with `activation: "eager"` has its catalog turned into
+    /// `cch::agent::Tool` values under their Qualified Tool Names and staged
+    /// here; the session drains them onto its Agent at a turn boundary. Null
+    /// is a session that publishes no tools, which is the ordinary session
+    /// with no `activation: "eager"` server.
+    std::shared_ptr<McpToolBinding> tool_binding{nullptr};
 };
 
 /// The session's MCP Host wiring (issue #841, ADR 0065): the trust-gated set

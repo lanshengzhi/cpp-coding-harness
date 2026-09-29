@@ -10,6 +10,7 @@
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/McpServerTrust.hpp>
+#include <cch/coding_agent/McpToolBinding.hpp>
 #include <cch/coding_agent/McpUpstreamStatus.hpp>
 #include <cch/coding_agent/ProjectionStream.hpp>
 #include <cch/coding_agent/ModelResolver.hpp>
@@ -540,6 +541,14 @@ public:
     /// The configured servers still awaiting the user's first-enable
     /// consent. A server listed here has made no upstream request.
     [[nodiscard]] std::vector<McpServerTrustPromptRequest> pending_mcp_server_trust_requests() const;
+
+    /// Every Upstream MCP Server tool this session has published into its
+    /// callable tool surface (issue #842), name-ordered by Qualified Tool
+    /// Name. This is the reverse mapping the display surface reads — the name
+    /// the model calls beside the Server Id and the Upstream's own tool name
+    /// the call actually targets — so schema, execution target, and display
+    /// target cannot drift. Empty for a session with no published tool.
+    [[nodiscard]] std::vector<McpPublishedTool> mcp_published_tools() const;
 
     /// Ask one server's first-enable prompt and record the answer. An
     /// accepted answer enables and connects that server; a declined, a
