@@ -87,6 +87,22 @@ Separate from the `RuntimeRoot` admission limits above, the Headless Core's Proj
 - **Bounded retention.** A subscriber that stops draining keeps at most 64 messages; overflow discards the backlog and the Core enqueues a fresh Base (ADR 0052: a slow subscriber silently degrades to snapshot consumption), so no queue grows without bound and publication never blocks the Core's serialized domain.
 - **Regression property.** `Projection mailbox overflow resynchronizes with a fresh Base and never blocks the Core` (`[coding_agent][projection][issue617]`) pins the bound: more than 64 publications with no drain still complete the prompt, leave a bounded mailbox, and resynchronize with a fresh Base that converges with the Core snapshot.
 
+## MCP Host defensive limits (ADR 0064, spec #833 story 24, issue #836)
+
+Separate from the Runtime admission limits above, `cch_mcp` bounds what one Upstream MCP Server can cost a session. The chosen values live in the one private constants point `src/mcp/Protocol.hpp` and are not caller-tunable: a cap the configuration could raise would not be a containment limit.
+
+- **`kMaxToolsPerUpstream = 5000` tools.** A `tools/list` walk that would push the accumulated catalog past this cap fails with `ResourceLimit` instead of admitting it. 5,000 is roughly two orders of magnitude above any tool catalog a real Upstream advertises, so an ordinary server never notices the bound, while a hostile or buggy one cannot force the session to hold an unbounded descriptor set.
+- **`kMaxListPagesPerUpstream = 1000` pages.** A pagination walk that has consumed 1,000 pages and still carries a `nextCursor` fails with `ResourceLimit`. Together with duplicate tool names and repeated-cursor rejection — both `Validation` failures that stop the walk immediately — this is what keeps a cursor loop or a cursor generator from running unbounded.
+- **`kMaxDiagnosticBytes = 1024`.** Every Upstream-supplied diagnostic is redacted before it is truncated (CODING_STANDARDS.md §10.2), and an `Error::context` is never carried into a diagnostic because a JSON parse failure puts the whole untrusted response body there.
+
+These are containment bounds, not throughput policy: the walk they bound is bounded in-memory value work over a scripted or TLS transport, so there is no queue to tune and no fairness property to measure. The regression properties below pin them.
+
+### Regression properties (tests)
+
+- `a catalog at the per-server tool cap is admitted whole` and `a catalog past the per-server tool cap is rejected` — `[mcp][catalog][limits][issue836]`: the 5,000-tool boundary is exact on both sides.
+- `a pagination walk at the cursor cap is admitted and one page past it is rejected` — `[mcp][catalog][limits][issue836]`: a 1,000-page walk succeeds, and the exchange that asks for page 1,001 is refused without being sent.
+- `a duplicate tool name across pages is rejected` and `a pagination cursor the Upstream already returned is rejected instead of followed` — `[mcp][catalog][limits][issue836]`: pins both loop rejections, and the second also pins the exchange count, so a rejection can never be "retried" into a loop.
+
 ## Update procedure
 
 A limit changes only through the same evidence path: record the representative workload and environment, repeated samples and variance, the selection rule, the chosen value, and the regression property that protects it. When a limit changes, update this table, the `harness::RuntimeLimits` defaults, and — if the production value is no longer the default — the explicit set in `src/coding_agent/cli/AsyncCliRuntime.cpp`. The regression tests above must pass at the new values before the change is accepted.

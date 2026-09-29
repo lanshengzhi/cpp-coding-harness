@@ -1,12 +1,14 @@
 // Package translation-unit anchor for the MCP Host Capability Owner Package
-// (ADR 0065). The package ships its Owner Interface
-// (`<cch/mcp/...>`) and its Parity Architecture Gate evidence; the wire layer,
-// transport, and connection machinery land in the follow-up slices, so this
-// translation unit defines nothing yet.
+// (ADR 0065). The package ships its Owner Interface (`<cch/mcp/...>`) and its
+// Parity Architecture Gate evidence, and this anchor gives the Gate a declared
+// `cch_mcp` source whose direct-include evidence proves the canonical
+// `<cch/mcp/...>` spelling resolves from inside the package.
 //
-// Including the Owner Interface here is deliberate: it gives the Gate a
-// declared `cch_mcp` source whose direct-include evidence proves the
-// canonical `<cch/mcp/...>` spelling resolves from inside the package, and it
-// gives the Owner Interface standalone-compile evidence a real consumer.
+// The wire layer, the era seam, the defensive catalog rules, and the injected
+// transport seam live in their own translation units; this one defines nothing.
 
+#include <cch/mcp/McpTransport.hpp>
+#include <cch/mcp/UpstreamClient.hpp>
+#include <cch/mcp/UpstreamServer.hpp>
 #include <cch/mcp/UpstreamTool.hpp>
+#include <cch/mcp/UpstreamToolCall.hpp>

@@ -12,6 +12,7 @@ include_guard(GLOBAL)
             cch_tests_ai_async_bridge
             cch_tests_agent
             cch_tests_harness_tools
+            cch_tests_mcp
             cch_tests_coding_agent
             cch_tests_coding_agent_interactive
             cch_tests_cli_arch
