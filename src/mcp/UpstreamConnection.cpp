@@ -24,9 +24,14 @@ using support::ErrorCode;
 using support::Expected;
 using support::make_error;
 
-[[nodiscard]] Error closed_error(const std::string& server_id) {
-    return make_error(
-            ErrorCode::Cancelled, "the Upstream MCP Server connection is closed", "Server Id \"" + server_id + "\"");
+/// Why one request was not admitted at all. A connection that is closing or
+/// closed reports the close; one the user turned off reports that instead,
+/// because the two call for different things from the owner and neither is an
+/// Upstream failure.
+[[nodiscard]] Error not_admitted_error(const std::string& server_id, bool disabled) {
+    return make_error(ErrorCode::Cancelled,
+            disabled ? "the Upstream MCP Server is disabled" : "the Upstream MCP Server connection is closed",
+            "Server Id \"" + server_id + "\"");
 }
 
 [[nodiscard]] Error not_connected_error(const std::string& server_id) {
@@ -235,7 +240,8 @@ struct UpstreamConnection::Impl : std::enable_shared_from_this<UpstreamConnectio
                 [self = shared_from_this(), caller_token, issue = std::move(issue)](
                         AsyncCompletion<T, Error> completion) mutable noexcept {
                     if (self->settled()) {
-                        completion(std::unexpected(closed_error(self->server_id)));
+                        completion(std::unexpected(not_admitted_error(
+                                self->server_id, self->status == UpstreamConnectionStatus::Disabled)));
                         return;
                     }
                     auto call = std::make_shared<Call>();
@@ -298,14 +304,17 @@ struct UpstreamConnection::Impl : std::enable_shared_from_this<UpstreamConnectio
             return;
         }
         if (!options.delay) {
-            finish_close(UpstreamCloseOutcome{.within_bound = true, .abandoned_operations = in_flight});
+            // Nothing can be waited for, so the connection is released with
+            // whatever is still outstanding rather than kept alive for it.
+            finish_close(UpstreamCloseOutcome{.within_bound = false, .abandoned_operations = in_flight});
             return;
         }
         cleanup_timer.emplace();
         options.delay(protocol::kConnectionCleanupBound, cleanup_timer->get_token())
                 .start([self = shared_from_this()](std::expected<void, Error>) noexcept {
                     self->finish_close(UpstreamCloseOutcome{
-                            .within_bound = true, .abandoned_operations = self->in_flight,
+                            .within_bound = false,
+                            .abandoned_operations = self->in_flight,
                     });
                 });
     }

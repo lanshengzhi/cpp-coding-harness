@@ -74,16 +74,18 @@ struct UpstreamConnectionOptions {
     /// Optional status surface. Absent, the connection keeps its state and
     /// publishes nothing.
     std::optional<UpstreamStatusSink> status_sink{};
-    /// The connection's timer. Every connection needs one: without it a
-    /// failed connection never reconnects and a close cannot wait out its
-    /// cleanup bound.
+    /// The connection's timer. Every connection needs one: without it a failed
+    /// connection never reconnects, and a close with work still in flight
+    /// abandons that work instead of bounding the wait for it.
     UpstreamDelay delay{};
 };
 
 /// How a two-phase close ended (ADR 0011).
 struct UpstreamCloseOutcome {
-    /// The cleanup bound expired before every operation reached a terminal
-    /// outcome, so the operations below were abandoned rather than awaited.
+    /// Every operation reached a terminal outcome before the cleanup bound
+    /// expired, or the connection had no timer to bound the wait with. When
+    /// this is false the bound expired, or could not be waited on, and the
+    /// operations below were abandoned rather than awaited.
     bool within_bound{true};
     /// Operations still in flight when the bound expired. Zero is the normal
     /// outcome: cancellation reaches a conforming transport, which answers a

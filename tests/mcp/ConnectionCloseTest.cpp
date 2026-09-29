@@ -210,7 +210,7 @@ TEST_CASE("a call that ignores cancellation is released at the cleanup bound",
     CHECK(fixture.clock.elapse_oldest());
 
     REQUIRE(outcome.has_value());
-    CHECK(outcome->within_bound);
+    CHECK_FALSE(outcome->within_bound);
     CHECK(outcome->abandoned_operations == 1);
     CHECK_FALSE(call_completed);
     CHECK(fixture.clock.waiting() == 0);
