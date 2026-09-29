@@ -274,14 +274,17 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
                 });
     };
 
-    // The MCP Host's call-approval policy (issue #842). The hook is
-    // name-driven, so it treats a tool published after this Agent was
+    // The MCP Host's call-approval policy (issue #843, built on #842). The
+    // hook is name-driven, so it treats a tool published after this Agent was
     // constructed exactly like a built-in one, and it allows every call that
-    // is not a call to an `approval: "ask"` Upstream MCP Server. An `ask` call
-    // is refused until the prompt lands in issue #843, which is fail-closed
-    // rather than silently allowed.
+    // is not a call to an `approval: "ask"` Upstream MCP Server — inline, with
+    // no suspension. An `ask` call pauses for the frontend's prompt; a
+    // session with no prompt, a decline, and a dismissal are each one refused
+    // call rather than a session failure (ADR 0008).
     if (services_.mcp_tool_binding) {
-        options.before_tool_call = runtime::McpToolApprovalPolicy{services_.mcp_tool_binding}.make_hook();
+        options.before_tool_call = runtime::McpToolApprovalPolicy{services_.mcp_tool_binding,
+                std::move(services_.mcp_tool_approval_prompter)}
+                                           .make_hook();
     }
 
     // Resumed history is transferred exactly once into the authoritative Agent

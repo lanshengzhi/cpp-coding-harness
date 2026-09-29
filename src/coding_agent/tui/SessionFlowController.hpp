@@ -5,6 +5,7 @@
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/tui/ModalPresenter.hpp"
 
+#include <cch/coding_agent/McpToolApproval.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
@@ -146,6 +147,22 @@ public:
             std::filesystem::path workspace, std::optional<bool> trust_override);
     [[nodiscard]] boost::asio::awaitable<support::Expected<bool>> resolve_boot_trust(
             std::filesystem::path workspace, std::optional<bool> trust_override);
+
+    /// The Native TUI's call-approval prompt for one `approval: "ask"` Upstream
+    /// MCP Server call (issue #843).
+    ///
+    /// Called from the Agent's serialized domain, on any thread: the question
+    /// is presented in the prompt slot on the host executor, and the operation
+    /// completes when the user answers. Choosing *allow* answers that one call
+    /// and nothing else — there is no remembered decision, so the next call to
+    /// the same server asks again. Escape, and the host resolving the prompt on
+    /// close, are a dismissal: the call is refused and nothing is recorded.
+    ///
+    /// A host that is not live cannot obtain consent, and the operation fails
+    /// rather than approving; the call-approval policy turns that failure into
+    /// one refused tool call.
+    [[nodiscard]] support::AsyncResult<coding_agent::McpToolApprovalAnswer> ask_mcp_tool_approval(
+            coding_agent::McpToolApprovalRequest request, std::stop_token stop_token = {});
 
 private:
     [[nodiscard]] boost::asio::awaitable<void> handle_resume_session(

@@ -681,7 +681,7 @@ TEST_CASE("a flooding tool result is bounded and redacted before it is truncated
     CHECK(results.back().text.find("sk-live-must-never-survive") == std::string::npos);
 }
 
-TEST_CASE("an approval: ask call is refused rather than run until the prompt lands", "[mcp][issue842][spec]") {
+TEST_CASE("an approval: ask call with no prompt to ask is refused rather than run", "[mcp][issue842][spec]") {
     PublicationFixture fixture;
     fixture.write_settings(
             R"({"mcpServers": {"executor": {"url": "https://mcp.example/mcp", "activation": "eager", "approval": "ask"}}})");
@@ -697,7 +697,9 @@ TEST_CASE("an approval: ask call is refused rather than run until the prompt lan
     fixture.client->responses.push_back(ai::assistant_text_message("done"));
     REQUIRE(fixture.prompt(session, "search please").has_value());
 
-    // Fail-closed, and one failed call — not a session failure.
+    // Fail-closed, and one failed call — not a session failure. The prompt
+    // itself is issue #843's; this case pins the refusal a session with no
+    // prompt to ask still gets.
     CHECK(fixture.transport->request_count("tools/call") == 0);
     const auto results = tool_results(*fixture.client);
     REQUIRE_FALSE(results.empty());

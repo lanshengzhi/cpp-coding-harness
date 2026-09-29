@@ -6,6 +6,7 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
+#include <cch/coding_agent/McpToolApproval.hpp>
 #include <cch/mcp/McpTransport.hpp>
 #include <cch/mcp/UpstreamConnection.hpp>
 #include "coding_agent/SessionTarget.hpp"
@@ -166,6 +167,13 @@ struct AgentSessionCreationRequest {
     /// timer — and a test injects `tests::ScriptedMcpDelay` so the bounded
     /// reconnect ladder and the cleanup bound run without a wall clock.
     cch::mcp::UpstreamDelay mcp_delay;
+    /// The frontend's call-approval prompt for an `approval: "ask"` Upstream
+    /// MCP Server (issue #843). The Native TUI sets it to its prompt slot, so
+    /// such a call pauses for the user's confirmation showing the Qualified
+    /// Tool Name and the call's arguments; a headless caller leaves it empty
+    /// and the call is refused rather than run unasked. One consent answers
+    /// exactly one call: nothing here is remembered.
+    coding_agent::McpToolApprovalPrompter mcp_tool_approval_prompter;
 };
 
 } // namespace cch::coding_agent::runtime

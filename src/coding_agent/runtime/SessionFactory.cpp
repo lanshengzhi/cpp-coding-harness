@@ -203,6 +203,10 @@ struct AssemblyPlan {
     /// neither and gets the Streamable HTTP transport on the Runtime timer.
     std::shared_ptr<mcp::McpTransport> mcp_transport;
     mcp::UpstreamDelay mcp_delay;
+    /// The frontend's call-approval prompt for an `approval: "ask"` Upstream
+    /// MCP Server (issue #843). Production passes the Native TUI's prompt; a
+    /// headless host passes none and such a call is refused rather than run.
+    coding_agent::McpToolApprovalPrompter mcp_tool_approval_prompter;
     std::vector<std::string> prompt_template_paths;
     std::vector<std::string> skill_paths;
     std::optional<DefaultProjectTrust> default_project_trust;
@@ -806,6 +810,7 @@ struct SessionTargetNormalizationOptions {
     }
     plan.mcp_transport = std::move(request.mcp_transport);
     plan.mcp_delay = std::move(request.mcp_delay);
+    plan.mcp_tool_approval_prompter = std::move(request.mcp_tool_approval_prompter);
     plan.cli_selection = AssemblyPlan::CliModelSelection{
             .provider = std::move(request.session_facts.provider),
             .model = std::move(request.session_facts.model),
@@ -1805,6 +1810,11 @@ struct PreparedAssemblyTarget final {
     services.bash_session_environment = std::move(bash_session_environment);
     services.mcp_host = std::move(mcp_host);
     services.mcp_tool_binding = std::move(mcp_tool_binding);
+    // The frontend's call-approval prompt (issue #843) reaches the session's
+    // before-tool-call hook through the same assembly point that owns the tool
+    // binding, so there is no window in which an `ask` call could run before a
+    // prompter was in reach.
+    services.mcp_tool_approval_prompter = std::move(plan.mcp_tool_approval_prompter);
     services.tools = std::move(tools);
 
     const auto session_path = open.store->path();

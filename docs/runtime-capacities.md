@@ -120,6 +120,21 @@ There is no fairness property to measure here: the work being bounded is in-memo
 - `invalid arguments make no upstream request` — `[mcp][issue842][spec]`: ADR 0007 validation of the Upstream's own schema rejects the call before the request exists, so a malformed call costs no round trip.
 - `a closed tool binding refuses a late publication and drains nothing` and `late discovery after session close registers nothing and resurrects no connection` — `[mcp][issue842][spec]`: pins that a catalog completing after Close re-registers nothing and knocks no further.
 
+## MCP Host call-approval bounds (ADR 0064, ADR 0018, spec #833 story 22, issue #843)
+
+The call-time authorization of an `approval: "ask"` Upstream MCP Server is bounded where the policy applies it, in `src/coding_agent/runtime/McpToolApprovalPolicy.cpp`. These are containment bounds on third-party text a prompt renders, not a user-tunable policy: there is no per-call approval limit, only these.
+
+- **`kMaxArgumentsBytes = 64 KiB`** on the argument rendering an approval prompt carries. The prompt is about the exact call, so the arguments are shown in full up to this bound; a call whose prepared arguments render larger is still answered, with the rendering cut and marked rather than refused. 64 KiB is well above any argument object a real tool call carries and well below the product's 50 KiB tool *result* limit's neighborhood, so a hostile server's payload cannot turn the prompt into a wall of text.
+- **`kMaxReasonBytes = 1024`** on each refusal a non-consent outcome produces. One template, one bounded, redacted interpolation, and the interpolated name is the session's own registered Qualified Tool Name rather than Upstream-supplied text — so the bound is habit here, and it is what keeps it true if the sentence ever grows a detail.
+
+A refused call is a *bounded* cost in another sense too: one refusal is one failed tool call (ADR 0008), and the model may retry, but every retry is a fresh question with the same bound — the hook never re-asks a call it already answered, so a refusal cannot become a prompt storm.
+
+### Regression properties (tests)
+
+- `an ask call is put to the prompt once, with the tool name and its arguments` — `[mcp][issue843][spec]`: the prompt carries the Qualified Tool Name, the Server Id, the Upstream's own tool name, and the call's arguments, and asking it once produces exactly one question.
+- `a call that is not an ask call is never put to the prompt` — `[mcp][issue843][spec]`: a built-in tool name and an `allow` server both answer without the prompt being consulted at all.
+- `a session with no prompt refuses the ask call rather than running it`, `a prompt that fails refuses the ask call rather than running it`, and `a headless session refuses the ask call and never reaches the Upstream` — `[mcp][issue843][spec]`: the three ways consent cannot be obtained, each one zero upstream requests and one failed tool call.
+
 ## MCP Host connection bounds (ADR 0064, ADR 0011, spec #833 stories 9 and 10, issue #839)
 
 The same private constants point bounds what one Upstream connection costs while it is trying, failing, and being torn down. These are not throughput policy either: the work they bound is one probe of one endpoint, so there is no queue to tune. They are containment plus liveness.

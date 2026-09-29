@@ -114,6 +114,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/LoadedResources.cpp
         src/coding_agent/tui/LoginDialog.cpp
         src/coding_agent/tui/LoginPresentation.cpp
+        src/coding_agent/tui/McpToolApprovalPrompt.cpp
         src/coding_agent/tui/ModelFlowController.cpp
         src/coding_agent/tui/ModelSelector.cpp
         src/coding_agent/tui/OAuthSelector.cpp
@@ -121,6 +122,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/ReloadBox.cpp
         src/coding_agent/tui/ScopedModelsSelector.cpp
         src/coding_agent/tui/SessionFlowController.cpp
+        src/coding_agent/tui/SessionFlowControllerApproval.cpp
         src/coding_agent/tui/SessionFlowControllerTrust.cpp
         src/coding_agent/tui/SessionSelector.cpp
         src/coding_agent/tui/SessionSelectorSearch.cpp

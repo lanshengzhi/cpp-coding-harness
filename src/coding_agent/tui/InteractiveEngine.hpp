@@ -31,6 +31,7 @@
 #include "coding_agent/tui/ModalPresenter.hpp"
 #include "coding_agent/tui/SlashCommandRouter.hpp"
 
+#include <cch/coding_agent/McpToolApproval.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/tui/Tui.hpp>
@@ -411,6 +412,15 @@ private:
     /// The configured clipboard writer (pi `copyToClipboard` platform-tools
     /// path; tests inject a recorder).
     [[nodiscard]] bool write_clipboard_text_sink(std::string text);
+
+    /// The Native TUI's call-approval prompt for an `approval: "ask"` Upstream
+    /// MCP Server (issue #843), handed to every session this engine creates:
+    /// a call that needs consent pauses in the prompt slot and shows the
+    /// Qualified Tool Name and the call's arguments. The question is presented
+    /// on the host executor, so the seam is safe to call from the Agent's
+    /// serialized domain. With no live host there is nobody to ask, and the
+    /// operation fails so the call is refused rather than run unasked.
+    [[nodiscard]] coding_agent::McpToolApprovalPrompter make_mcp_tool_approval_prompter() const;
 
     /// Build one in-session session creation request from the CLI-owned facts
     /// (pi `createRuntime` re-resolves the CLI options against the target

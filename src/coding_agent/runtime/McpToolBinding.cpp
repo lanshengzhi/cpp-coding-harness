@@ -346,6 +346,15 @@ std::optional<std::string> McpToolBinding::server_id_for(std::string_view qualif
     return found->second.server_id;
 }
 
+std::optional<McpPublishedTool> McpToolBinding::publication_for(std::string_view qualified_name) const {
+    const std::scoped_lock lock(mutex_);
+    const auto found = published_.find(qualified_name);
+    if (found == published_.end()) {
+        return std::nullopt;
+    }
+    return found->second;
+}
+
 McpServerApproval McpToolBinding::approval_for(std::string_view server_id) const {
     const std::scoped_lock lock(mutex_);
     const auto found = approvals_.find(server_id);

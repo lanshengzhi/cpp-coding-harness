@@ -5,6 +5,7 @@
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/agent/harness/FileSystem.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
+#include <cch/coding_agent/McpToolApproval.hpp>
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 #include "coding_agent/runtime/McpSessionHost.hpp"
 #include "coding_agent/runtime/McpToolBinding.hpp"
@@ -68,6 +69,11 @@ struct RuntimeServices {
     /// so a catalog that completes after the Agent was constructed still
     /// reaches the tool surface. Null for a session that publishes no tools.
     std::shared_ptr<McpToolBinding> mcp_tool_binding;
+    /// The frontend's call-approval prompt for an `approval: "ask"` Upstream
+    /// MCP Server (issue #843), the seam the Agent's before-tool-call hook asks
+    /// before such a call runs. Empty for a non-interactive session, where the
+    /// policy refuses the call instead of running it unasked.
+    coding_agent::McpToolApprovalPrompter mcp_tool_approval_prompter;
     agent::ToolRegistry tools;
 };
 

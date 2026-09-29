@@ -73,6 +73,12 @@ public:
     /// name is told apart from an MCP one.
     [[nodiscard]] std::optional<std::string> server_id_for(std::string_view qualified_name) const;
 
+    /// The reverse-mapping row for one published tool, or `std::nullopt` for a
+    /// name this binding never published. The call-approval prompt reads it to
+    /// show the Upstream's own tool name beside the Qualified Tool Name
+    /// (issue #843).
+    [[nodiscard]] std::optional<McpPublishedTool> publication_for(std::string_view qualified_name) const;
+
     /// The call-approval policy configured for one Server Id, `allow` when the
     /// Server Id is not configured.
     [[nodiscard]] McpServerApproval approval_for(std::string_view server_id) const;

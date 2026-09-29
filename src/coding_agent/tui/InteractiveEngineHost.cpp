@@ -150,11 +150,28 @@ bool InteractiveEngine::write_clipboard_text_sink(std::string text) {
     return wrote != nullptr && *wrote;
 }
 
+coding_agent::McpToolApprovalPrompter InteractiveEngine::make_mcp_tool_approval_prompter() const {
+    const auto weak = weak_from_this();
+    return [weak](coding_agent::McpToolApprovalRequest request, std::stop_token stop_token) {
+        if (const auto self = weak.lock(); self != nullptr && self->session_flows_ != nullptr) {
+            return self->session_flows_->ask_mcp_tool_approval(std::move(request), stop_token);
+        }
+        return support::AsyncResult<coding_agent::McpToolApprovalAnswer>{
+                std::unexpected(support::make_error(support::ErrorCode::Cancelled,
+                        "Call approval prompt is not available",
+                        "the Native TUI is no longer running"))};
+    };
+}
+
 runtime::AgentSessionCreationRequest InteractiveEngine::make_session_request(
     std::filesystem::path workspace,
     SessionTarget target) const {
     runtime::AgentSessionCreationRequest request;
     request.provide_user_shell = true;
+    // The call-approval prompt for `approval: "ask"` Upstream MCP Servers
+    // (issue #843). The session is the only holder of the seam; every session
+    // this engine creates gets the same prompt.
+    request.mcp_tool_approval_prompter = make_mcp_tool_approval_prompter();
     // pi `projectTrustByCwd`: the CLI override wins; otherwise the boot
     // decision applies to the boot workspace (a session-only trust
     // choice leaves no store entry and must survive in-session
