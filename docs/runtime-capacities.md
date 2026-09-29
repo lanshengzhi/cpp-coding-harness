@@ -123,6 +123,25 @@ Storm protection is the property the ladder exists for, and it is a coalescing r
 - `startup never waits for an Upstream that never answers` — `[mcp][connection][startup][issue839]`: the connection attempt is handed back while the Upstream is still silent, the connection reads `pending` with one operation in flight, and a tool call against it fails immediately instead of waiting.
 - `a tool call is bounded by the per-call deadline and capped at the containment bound` — `[mcp][connection][limits][issue839]`: every request the connection framed carries the 30 s default, and a caller that asked for ten minutes got the 300 s cap on the wire.
 
+## MCP Host catalog-cache bounds (ADR 0064, spec #833 story 17, issue #848)
+
+The tool-catalog cache is the one MCP Host resource that outlives a session: an Upstream's own `ttlMs`/`cacheScope` hints let one connection's `tools/list` walk answer the next one. It is therefore bounded in entries and in how long an Upstream's own hint can keep an entry alive. The values live in the same private constants point `src/mcp/Protocol.hpp` and are not caller-tunable: a bound the Upstream or the configuration could raise would not be a bound.
+
+- **`kMaxCachedCatalogs = 64` entries.** At the bound the oldest-held entry is dropped, not the newest one refused. 64 is roughly an order of magnitude above any `mcpServers` configuration a user writes, and the eviction direction matters: refusing the newest entry would silently disable caching for a server the user still has, which is a worse failure than forgetting an old one. Admitting a Server Id that already has an entry replaces it rather than growing the cache.
+- **`kMaxCatalogFreshness = 24 h`.** The longest an Upstream's `ttlMs` hint can keep an entry alive; a longer hint is clamped to it. A server that declares an effectively infinite freshness would otherwise pin a descriptor set for the life of the process, which hands the Upstream the decision of when the host may forget something. The hint is clamped *before* the integral conversion, so a value large enough to overflow the type is bounded rather than undefined.
+
+One more rule is a bound on work rather than on memory, and is exact rather than approximate: **at most one background catalog refresh runs per Upstream at a time.** A stale entry is served immediately and one refresh is admitted behind it; a second listing while that refresh is in flight serves the same entry and starts nothing. Without the rule, an Upstream declaring `ttlMs: 0` would turn every listing into a second `tools/list` walk.
+
+The cache is a shortcut and never a source of failure, so a miss degrades to the same `tools/list` walk that ran before the cache existed, and a catalog the cache refuses to admit is still returned to the caller from the walk that produced it.
+
+### Regression properties (tests)
+
+- `a warm cache answers a second listing without asking the Upstream again` — `[mcp][catalog][cache][issue848]`: the boundary of `kMaxCachedCatalogs` is nowhere near here, but the entry count is asserted alongside the request count so a cache that stopped holding anything could not pass.
+- `the cache is bounded in entries and drops the oldest one at the bound` — `[mcp][catalog][cache][limits][issue848]`: 64 entries admitted, the 65th admitted, `server-0` dropped and `server-64` held — the eviction direction, not just the count.
+- `a freshness hint longer than the host admits is clamped rather than refused` — `[mcp][catalog][cache][limits][issue848]`: a `ttlMs` of 1e12 arrives on the wire and comes back as exactly 24 h, with the catalog still usable.
+- `an Upstream that expires its catalog on every hint costs one refresh at a time` — `[mcp][catalog][cache][refresh][issue848]`: the `ttlMs: 0` case above. Ten listings against a refresh that never lands cost exactly two walks.
+- `a refresh re-applies the defensive catalog limits and leaves the cached entry alone` — `[mcp][catalog][cache][limits][issue848]`: a refresh is a real walk, so the 5,000-tool cap fails it exactly as it fails a cold fetch, and the entry the caller already holds survives the failure.
+
 ## Update procedure
 
 A limit changes only through the same evidence path: record the representative workload and environment, repeated samples and variance, the selection rule, the chosen value, and the regression property that protects it. When a limit changes, update this table, the `harness::RuntimeLimits` defaults, and — if the production value is no longer the default — the explicit set in `src/coding_agent/cli/AsyncCliRuntime.cpp`. The regression tests above must pass at the new values before the change is accepted.
