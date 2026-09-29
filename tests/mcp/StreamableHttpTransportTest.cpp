@@ -23,7 +23,10 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <boost/system/error_code.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -34,6 +37,7 @@
 #include <iterator>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -407,6 +411,11 @@ TEST_CASE("a broken MCP response stream loses the in-flight request and is not r
     REQUIRE_FALSE(broken.has_value());
     CHECK(broken.error().code == support::ErrorCode::Network);
     CHECK(broken.error().message.find("broke") != std::string::npos);
+    // The failure names the class the retry policy read it as, which is what
+    // tells a caller the exchange is lost rather than merely unsuccessful.
+    CHECK(broken.error().detail.find(
+                  std::string{mcp::transport::describe(mcp::transport::McpFailureClass::RequestDelivered)}) !=
+            std::string::npos);
     const auto after_broken = server.requests();
     REQUIRE(after_broken.size() == 2);
     const auto abandoned_id = recorded_id(after_broken.back());
@@ -498,6 +507,57 @@ TEST_CASE("an MCP output flood is bounded and leaves the next call and the conne
 #endif
 }
 
+TEST_CASE("the Streamable HTTP transport stops an in-flight exchange when the call is cancelled",
+        "[mcp][transport][cancellation][issue837][spec]") {
+    // A flooding reply is also a request that never finishes, which is what a
+    // cancellation needs to interrupt; the fixture keeps the connection open
+    // writing, so the exchange is in flight for as long as the case lets it be.
+    tests::LocalMcpHttpServer server(script([](std::string_view method, const tests::RecordedHttpRequest& request)
+                                                     -> std::optional<tests::McpServerReply> {
+        if (method != mcp::protocol::kMethodCallTool || call_note(request) != "cancel me") {
+            return std::nullopt;
+        }
+        return tests::McpServerReply{
+                .content_type = "text/event-stream",
+                .as_event_stream = true,
+                .event_payloads = {std::string(1024, 'a')},
+                .flood_bytes = 64u * 1024u * 1024u,
+        };
+    }));
+    REQUIRE(server.ready());
+
+    asio::io_context io;
+    mcp::UpstreamClient client("local",
+            trusted_transport(io),
+            mcp::UpstreamClientOptions{.url = server.url(), .request_timeout = kExchangeBound});
+
+    std::stop_source cancelled;
+    auto pending = client.call_tool(mcp::UpstreamToolCall{
+            .tool = post_message_tool(),
+            .arguments = JsonValue::object_t{{"note", JsonValue("cancel me")}},
+    },
+            cancelled.get_token());
+    // The cancellation is requested on the connection's own execution domain,
+    // which is where the exchange runs, so the request is bound before it can
+    // be stopped.
+    asio::steady_timer cancel_at(io);
+    cancel_at.expires_after(std::chrono::milliseconds{100});
+    asio::co_spawn(io,
+            [&cancel_at, &cancelled]() -> asio::awaitable<void> {
+                boost::system::error_code error;
+                co_await cancel_at.async_wait(asio::redirect_error(asio::use_awaitable, error));
+                cancelled.request_stop();
+            },
+            asio::detached);
+
+    auto outcome = drive_on(io, std::move(pending));
+    REQUIRE_FALSE(outcome.has_value());
+    CHECK(outcome.error().code == support::ErrorCode::Cancelled);
+    // Cancellation is the caller's decision, so it is never re-attempted: the
+    // Upstream saw the request exactly once.
+    CHECK(server.requests().size() == 2);
+}
+
 TEST_CASE("the MCP retry policy re-attempts only a request that was never delivered",
         "[mcp][transport][retry][issue837][spec]") {
     using mcp::transport::McpFailureClass;
@@ -518,4 +578,11 @@ TEST_CASE("the MCP retry policy re-attempts only a request that was never delive
     CHECK(mcp::transport::classify_failure(support::ErrorCode::ResourceLimit, true) == McpFailureClass::ResponseFlooded);
     CHECK(mcp::transport::classify_failure(support::ErrorCode::Cancelled, true) == McpFailureClass::Cancelled);
     CHECK(mcp::transport::classify_failure(support::ErrorCode::Validation, false) == McpFailureClass::Rejected);
+
+    // Each class has its own declared sentence, so a failure can report the
+    // class the policy read it as rather than only a code.
+    CHECK(mcp::transport::describe(McpFailureClass::RequestNotDelivered) !=
+          mcp::transport::describe(McpFailureClass::RequestDelivered));
+    CHECK(mcp::transport::describe(McpFailureClass::Cancelled) !=
+          mcp::transport::describe(McpFailureClass::ResponseFlooded));
 }

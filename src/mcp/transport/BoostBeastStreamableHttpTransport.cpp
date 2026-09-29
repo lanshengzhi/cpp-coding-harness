@@ -86,6 +86,18 @@ template <typename Body>
             "the response is terminated rather than drained; the partial body is released with the connection");
 }
 
+/// The failure the transport gives up with, carrying the class the retry
+/// policy read it as. The class is part of the answer, not an internal detail:
+/// `RequestDelivered` is what tells a caller that the exchange is lost and
+/// must not be replayed, and it is the difference between a re-attempt this
+/// transport makes and one it deliberately declines to.
+[[nodiscard]] Error classified(Error error, McpFailureClass failure_class) {
+    return support::make_error(error.code,
+            std::move(error.message),
+            error.detail.empty() ? std::string{describe(failure_class)}
+                                  : std::move(error.detail) + " (" + std::string{describe(failure_class)} + ")");
+}
+
 /// The header set every Streamable HTTP POST carries, plus the values the
 /// client stack resolved. No `Mcp-Session-Id` and no `Last-Event-ID` appear
 /// here or anywhere else: the 2026-07-28 revision removed both (ADR 0064).
@@ -305,7 +317,7 @@ template <typename Body>
         }
         const auto failure_class = classify_failure(outcome.result.error().code, outcome.request_delivered);
         if (!is_retryable(failure_class) || attempt + 1 == attempts) {
-            co_return std::unexpected(outcome.result.error());
+            co_return std::unexpected(classified(outcome.result.error(), failure_class));
         }
     }
     co_return std::unexpected(support::make_error(

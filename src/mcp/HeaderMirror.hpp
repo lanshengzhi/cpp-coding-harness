@@ -32,12 +32,6 @@ namespace cch::mcp::headers {
 /// mirrored: absence is expressed by omitting the header, which is why the
 /// contract is one-way and never decodes an arbitrary value back. Each
 /// mirrored value reaches the wire through `to_header_value`.
-///
-/// A value whose bytes are all printable US-ASCII and which does not begin
-/// with the `base64:` sentinel is sent verbatim. Anything else — a control
-/// byte, a non-ASCII byte, or a value that would otherwise be mistaken for
-/// the sentinel — is sent as `base64:<payload>` so the encoding stays
-/// unambiguous for the server (SEP-2243).
 [[nodiscard]] cch::support::Expected<std::map<std::string, std::string>> mirror_parameter_headers(
         const cch::mcp::UpstreamToolDescriptor& tool, const cch::support::JsonValue& arguments);
 
