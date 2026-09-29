@@ -268,7 +268,7 @@ The single user-level root for durable harness state shared across workspaces, f
 _Avoid_: Config home, user profile directory, shared pi user root
 
 **User Settings**:
-User-level preferences following pi's two-scope `settings.json` contract: a global file in the Agent Config Directory deep-merged with a project file that loads only under Project Trust. Settings never carry secrets or secret references; model selection defaults use pi's `defaultProvider`/`defaultModel` vocabulary.
+User-level preferences following pi's two-scope `settings.json` contract: a global file in the Agent Config Directory deep-merged with a project file that loads only under Project Trust. Settings never carry secrets: credential material enters configuration only as a reference the runtime resolves later, such as the `bearer-env:<VAR>` environment-variable reference an `mcpServers` entry declares. Model selection defaults use pi's `defaultProvider`/`defaultModel` vocabulary.
 _Avoid_: User config, config file, credential storage
 
 **Settings Scope**:

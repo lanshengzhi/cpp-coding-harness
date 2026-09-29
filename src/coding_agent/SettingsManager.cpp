@@ -3,6 +3,7 @@
 #include "PrettyJson.hpp"
 #include "support/Json.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -22,6 +23,18 @@ namespace {
 using JsonObject = support::JsonValue::object_t;
 
 constexpr std::string_view kProjectConfigDir = ".pi";
+
+// Upstream MCP Server configuration (issue #835, spec #833 stories 1, 2, 3, 5,
+// 6). The Server Id is the map key and the sole stable identity for
+// namespacing, credentials, trust, and status: `[A-Za-z0-9_-]`, at most 48
+// characters, enforced here at config validation.
+constexpr std::size_t kMcpServerIdMaxLength = 48;
+/// The only credential form configuration accepts: an environment-variable
+/// reference, never a literal value.
+constexpr std::string_view kBearerEnvPrefix = "bearer-env:";
+/// The only request header configuration accepts, and only as a
+/// `bearer-env:<VAR>` reference.
+constexpr std::string_view kMcpAuthorizationHeader = "Authorization";
 
 // proper-lockfile-compatible lock parameters (pi FileSettingsStorage): 10
 // attempts, 20 ms between attempts, stale lock reclaimed after 30 s.
@@ -148,6 +161,263 @@ void migrate_settings(JsonObject& settings) {
     return value == "off" || value == "minimal" || value == "low" ||
            value == "medium" || value == "high" || value == "xhigh" ||
            value == "max";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `mcpServers` parsing and fail-closed validation (issue #835)
+//
+// Every diagnostic below names the offending field and, for a Server Id that
+// passed validation, the Server Id itself. A value the validator rejects — an
+// inline secret above all — never reaches a diagnostic: the rejected text is
+// the thing being reported about, so echoing it would leak the very secret the
+// rule exists to keep out of the config. A Server Id that failed validation is
+// not echoed either, for the same reason: an unvalidated key is arbitrary
+// text. Invalid Server Ids are located by their position in the map instead.
+// ─────────────────────────────────────────────────────────────────────────────
+
+[[nodiscard]] bool is_mcp_server_id_char(char character) {
+    return (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z') ||
+           (character >= '0' && character <= '9') || character == '_' || character == '-';
+}
+
+[[nodiscard]] bool is_valid_mcp_server_id(std::string_view server_id) {
+    if (server_id.empty() || server_id.size() > kMcpServerIdMaxLength) {
+        return false;
+    }
+    for (const auto character : server_id) {
+        if (!is_mcp_server_id_char(character)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool is_environment_variable_name(std::string_view name) {
+    if (name.empty()) {
+        return false;
+    }
+    for (std::size_t index = 0; index < name.size(); ++index) {
+        const auto character = name[index];
+        const bool leading =
+                (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z') || character == '_';
+        const bool trailing = leading || (character >= '0' && character <= '9');
+        if (!(index == 0 ? leading : trailing)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool is_ascii_equal_ignore_case(std::string_view left, std::string_view right) {
+    if (left.size() != right.size()) {
+        return false;
+    }
+    for (std::size_t index = 0; index < left.size(); ++index) {
+        auto left_character = left[index];
+        auto right_character = right[index];
+        if (left_character >= 'A' && left_character <= 'Z') {
+            left_character = static_cast<char>(left_character - 'A' + 'a');
+        }
+        if (right_character >= 'A' && right_character <= 'Z') {
+            right_character = static_cast<char>(right_character - 'A' + 'a');
+        }
+        if (left_character != right_character) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] support::Error mcp_servers_error(std::string message, std::string detail) {
+    return settings_file_error(std::move(message), {}, std::move(detail));
+}
+
+/// Validate a `bearer-env:<VAR>` credential reference and return the variable
+/// name. Anything else — a literal token, a bare variable name, an empty
+/// prefix — is rejected, and the rejected value is never echoed.
+[[nodiscard]] support::Expected<std::string> parse_bearer_env_reference(
+        const std::string& field, const std::string& value) {
+    if (!value.starts_with(kBearerEnvPrefix)) {
+        return std::unexpected(mcp_servers_error("invalid mcpServers credential",
+                field + " must be an environment-variable reference of the form bearer-env:<VAR>; "
+                        "inline secrets are rejected and the value is not shown"));
+    }
+    const auto name = std::string_view{value}.substr(kBearerEnvPrefix.size());
+    if (!is_environment_variable_name(name)) {
+        return std::unexpected(mcp_servers_error("invalid mcpServers credential",
+                field + " must name an environment variable as bearer-env:<VAR>, "
+                        "where <VAR> matches [A-Za-z_][A-Za-z0-9_]*"));
+    }
+    return std::string{name};
+}
+
+/// Reject a URL that carries credential material inline. A `user:password@`
+/// userinfo section is a literal secret, so the whole entry is refused; the
+/// credential belongs in a `bearer-env:<VAR>` reference.
+[[nodiscard]] bool mcp_url_carries_userinfo(std::string_view url) {
+    const auto authority_start = url.find("://");
+    if (authority_start == std::string_view::npos) {
+        return false;
+    }
+    const auto authority = url.substr(authority_start + 3);
+    const auto path_start = authority.find_first_of("/?#");
+    return authority.substr(0, path_start).find('@') != std::string_view::npos;
+}
+
+[[nodiscard]] support::Expected<UserMcpServerSettings> parse_mcp_server_settings(
+        const std::string& server_id, const support::JsonValue& value) {
+    const auto* object = value.get_if<JsonObject>();
+    if (object == nullptr) {
+        return std::unexpected(
+                mcp_servers_error("invalid mcpServers entry", "mcpServers." + server_id + " must be an object"));
+    }
+    const std::string prefix = "mcpServers." + server_id + ".";
+
+    // stdio is pre-cut but not implemented (ADR 0064): the fields parse, then
+    // validation refuses the entry. Nothing is spawned on this path — the
+    // entry never reaches an assembled server.
+    static constexpr std::string_view kStdioFields[] = {"command", "args", "env"};
+    for (const auto field : kStdioFields) {
+        if (object->contains(std::string{field})) {
+            return std::unexpected(mcp_servers_error("unsupported mcpServers transport",
+                    prefix + std::string{field} +
+                            " is a Deferred Capability: the stdio transport and "
+                            "the Legacy Era adapter are not supported yet, so no process is started"));
+        }
+    }
+
+    const auto url_field = string_field(*object, "url");
+    if (url_field == nullptr || url_field->empty()) {
+        return std::unexpected(mcp_servers_error(
+                "invalid mcpServers entry", prefix + "url is required and must be a non-empty string"));
+    }
+    const std::string_view url{*url_field};
+    if (!url.starts_with("http://") && !url.starts_with("https://")) {
+        return std::unexpected(mcp_servers_error(
+                "invalid mcpServers entry", prefix + "url must be an http:// or https:// Streamable HTTP endpoint"));
+    }
+    if (mcp_url_carries_userinfo(url)) {
+        return std::unexpected(mcp_servers_error("invalid mcpServers credential",
+                prefix + "url must not carry userinfo; declare the credential as "
+                         "bearer-env:<VAR> instead, and the value is not shown"));
+    }
+
+    UserMcpServerSettings server;
+    server.server_id = server_id;
+    server.url = *url_field;
+
+    // `auth` and `headers.Authorization` are two spellings of one credential
+    // reference; declaring both is ambiguous, so it is refused rather than
+    // resolved by precedence.
+    // A mistyped `auth` is refused rather than read as "no credential
+    // configured": a field this validator cannot read is not a field it may
+    // silently drop.
+    const auto auth_entry = object->find("auth");
+    const auto* auth_field = auth_entry == object->end() ? nullptr : auth_entry->second.get_if<std::string>();
+    if (auth_entry != object->end() && auth_field == nullptr) {
+        return std::unexpected(mcp_servers_error(
+                "invalid mcpServers credential", prefix + "auth must be a string; the value is not shown"));
+    }
+    const auto headers_field = object->find("headers");
+    const JsonObject* headers = headers_field == object->end() ? nullptr : headers_field->second.get_if<JsonObject>();
+    if (headers_field != object->end() && headers == nullptr) {
+        return std::unexpected(mcp_servers_error("invalid mcpServers entry", prefix + "headers must be an object"));
+    }
+    if (auth_field != nullptr && headers != nullptr) {
+        return std::unexpected(mcp_servers_error("invalid mcpServers credential",
+                prefix + "declares both auth and headers; declare the credential reference once"));
+    }
+    if (auth_field != nullptr) {
+        auto reference = parse_bearer_env_reference(prefix + "auth", *auth_field);
+        if (!reference) {
+            return std::unexpected(reference.error());
+        }
+        server.bearer_env_var = std::move(*reference);
+    }
+    if (headers != nullptr) {
+        for (const auto& [name, header_value] : *headers) {
+            if (!is_ascii_equal_ignore_case(name, kMcpAuthorizationHeader)) {
+                return std::unexpected(mcp_servers_error("invalid mcpServers headers",
+                        prefix + "headers." + name +
+                                " is not supported; the only header configuration "
+                                "accepts is " +
+                                std::string{kMcpAuthorizationHeader} + ": bearer-env:<VAR>"));
+            }
+            const auto* reference = header_value.get_if<std::string>();
+            if (reference == nullptr) {
+                return std::unexpected(mcp_servers_error("invalid mcpServers credential",
+                        prefix + "headers.Authorization must be a string; the value is not shown"));
+            }
+            auto parsed = parse_bearer_env_reference(prefix + "headers.Authorization", *reference);
+            if (!parsed) {
+                return std::unexpected(parsed.error());
+            }
+            server.bearer_env_var = std::move(*parsed);
+        }
+    }
+
+    if (const auto found = object->find("activation"); found != object->end()) {
+        const auto* value_text = found->second.get_if<std::string>();
+        if (value_text == nullptr) {
+            return std::unexpected(mcp_servers_error(
+                    "invalid mcpServers activation", prefix + "activation must be a string: lazy or eager"));
+        }
+        if (*value_text == "lazy") {
+            server.activation = McpServerActivation::Lazy;
+        } else if (*value_text == "eager") {
+            server.activation = McpServerActivation::Eager;
+        } else {
+            return std::unexpected(mcp_servers_error(
+                    "invalid mcpServers activation", prefix + "activation must be one of: lazy, eager"));
+        }
+    }
+    if (const auto found = object->find("approval"); found != object->end()) {
+        const auto* value_text = found->second.get_if<std::string>();
+        if (value_text == nullptr) {
+            return std::unexpected(mcp_servers_error(
+                    "invalid mcpServers approval", prefix + "approval must be a string: allow or ask"));
+        }
+        if (*value_text == "allow") {
+            server.approval = McpServerApproval::Allow;
+        } else if (*value_text == "ask") {
+            server.approval = McpServerApproval::Ask;
+        } else {
+            return std::unexpected(
+                    mcp_servers_error("invalid mcpServers approval", prefix + "approval must be one of: allow, ask"));
+        }
+    }
+    return server;
+}
+
+/// Parse the `mcpServers` map. Validation is fail-closed: one invalid entry
+/// fails the whole scope, matching how an invalid `defaultThinkingLevel`
+/// behaves, so a rejected configuration never reaches the runtime in part.
+[[nodiscard]] support::Expected<std::vector<UserMcpServerSettings>> parse_mcp_servers(const support::JsonValue& value) {
+    const auto* object = value.get_if<JsonObject>();
+    if (object == nullptr) {
+        return std::unexpected(
+                mcp_servers_error("invalid mcpServers", "mcpServers must be an object keyed by Server Id"));
+    }
+    std::vector<UserMcpServerSettings> servers;
+    servers.reserve(object->size());
+    std::size_t position = 0;
+    for (const auto& [server_id, entry] : *object) {
+        // An unvalidated key is arbitrary text, so it is reported by position
+        // and by rule, never echoed.
+        if (!is_valid_mcp_server_id(server_id)) {
+            return std::unexpected(mcp_servers_error("invalid mcpServers Server Id",
+                    "mcpServers entry " + std::to_string(position) +
+                            " has a Server Id that must be 1-48 "
+                            "characters of [A-Za-z0-9_-]; the key is not shown"));
+        }
+        auto parsed = parse_mcp_server_settings(server_id, entry);
+        if (!parsed) {
+            return std::unexpected(parsed.error());
+        }
+        servers.push_back(std::move(*parsed));
+        ++position;
+    }
+    return servers;
 }
 
 /// Parse pi's nested `compaction` object (`{enabled, reserveTokens,
@@ -324,6 +594,13 @@ void migrate_settings(JsonObject& settings) {
         if (const auto* parsed = found->second.get_if<bool>()) {
             settings.enable_skill_commands = *parsed;
         }
+    }
+    if (const auto found = object.find("mcpServers"); found != object.end()) {
+        auto parsed = parse_mcp_servers(found->second);
+        if (!parsed) {
+            return std::unexpected(parsed.error());
+        }
+        settings.mcp_servers = std::move(*parsed);
     }
     return settings;
 }
@@ -580,6 +857,7 @@ struct SettingsManager::Impl {
     UserSettings global_settings;
     UserSettings project_settings;
     UserSettings merged_settings;
+    std::vector<UserMcpServerSettings> merged_mcp_servers;
     std::vector<SettingsError> errors;
     bool global_load_failed{false};
     bool project_load_failed{false};
@@ -636,6 +914,33 @@ struct SettingsManager::Impl {
         if (project.enable_skill_commands) {
             merged.enable_skill_commands = project.enable_skill_commands;
         }
+        if (project.mcp_servers) {
+            // Per-Server-Id deep merge, matching the nested `compaction`
+            // rule: a project entry overrides the global entry carrying the
+            // same Server Id field by field, and project-only Server Ids are
+            // appended in Server Id order. Each entry is self-contained (a
+            // `url` is validated per scope), so an omitted field means
+            // "inherit", never "clear". The Server Id is the identity and
+            // never merges.
+            auto merged_servers = merged.mcp_servers.value_or(std::vector<UserMcpServerSettings>{});
+            for (const auto& project_server : *project.mcp_servers) {
+                const auto existing =
+                        std::ranges::find_if(merged_servers, [&project_server](const UserMcpServerSettings& candidate) {
+                            return candidate.server_id == project_server.server_id;
+                        });
+                if (existing == merged_servers.end()) {
+                    merged_servers.push_back(project_server);
+                    continue;
+                }
+                if (!project_server.url.empty()) existing->url = project_server.url;
+                if (project_server.bearer_env_var) {
+                    existing->bearer_env_var = project_server.bearer_env_var;
+                }
+                if (project_server.activation) existing->activation = project_server.activation;
+                if (project_server.approval) existing->approval = project_server.approval;
+            }
+            merged.mcp_servers = std::move(merged_servers);
+        }
         return merged;
     }
 
@@ -673,6 +978,7 @@ struct SettingsManager::Impl {
 
     void recompute_merged() {
         merged_settings = merge(global_settings, project_settings);
+        merged_mcp_servers = merged_settings.mcp_servers.value_or(std::vector<UserMcpServerSettings>{});
     }
 };
 
@@ -953,6 +1259,10 @@ support::ExpectedVoid SettingsManager::set_output_pad(std::size_t padding) {
 bool SettingsManager::get_enable_skill_commands() const noexcept {
     // pi `getEnableSkillCommands`: `this.settings.enableSkillCommands ?? true`.
     return impl_->merged_settings.enable_skill_commands.value_or(true);
+}
+
+const std::vector<UserMcpServerSettings>& SettingsManager::mcp_servers() const noexcept {
+    return impl_->merged_mcp_servers;
 }
 
 support::ExpectedVoid SettingsManager::set_enable_skill_commands(bool enabled) {

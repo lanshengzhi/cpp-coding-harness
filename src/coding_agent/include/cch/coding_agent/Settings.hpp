@@ -36,10 +36,63 @@ struct UserRetrySettings {
     std::optional<std::uint64_t> base_delay_ms{std::nullopt};
 };
 
+/// Tool-activation policy for one configured Upstream MCP Server (issue #835,
+/// spec #833 story 5). Wire names are `lazy` and `eager`; the default is
+/// `lazy`. Interim semantics, until Lazy Tool Activation ships: a `lazy`
+/// server's tools stay dormant after connect — nothing is injected into the
+/// tool surface and no activation path exists yet — and a `lazy` server is
+/// never silently treated as `eager`.
+enum class McpServerActivation { Lazy, Eager };
+
+/// Call-authorization policy for one configured Upstream MCP Server (issue
+/// #835, spec #833 story 5). Wire names are `allow` and `ask`; the default is
+/// `allow`. `ask` routes every upstream tool call through the session's
+/// before-tool-call policy hook (spec #833 story 22).
+enum class McpServerApproval { Allow, Ask };
+
+/// One configured Upstream MCP Server entry from the `mcpServers` map, keyed
+/// by its Server Id (issue #835, spec #833 stories 1, 2, 3, 5, 6).
+///
+/// `settings.json` carries no credential material: `bearer_env_var` holds the
+/// *name* of an environment variable, extracted from a `bearer-env:<VAR>`
+/// reference in `auth` or in `headers.Authorization`, and the value itself is
+/// resolved from the environment at use time. Validation is fail-closed, so an
+/// entry that reaches this type carries an `http`/`https` `url` with no
+/// userinfo, an environment-variable reference instead of a secret, and no
+/// stdio `command`/`args`/`env` (stdio is a Deferred Capability that fails
+/// validation, ADR 0064).
+struct UserMcpServerSettings {
+    /// Server Id — the map key, constrained to `[A-Za-z0-9_-]`, at most 48
+    /// characters (spec #833 naming decision). It is the sole stable identity
+    /// used for namespacing, credentials, trust, and status.
+    std::string server_id;
+    /// Streamable HTTP endpoint of the Upstream MCP Server.
+    std::string url;
+    /// Environment-variable name holding the bearer token, from a
+    /// `bearer-env:<VAR>` reference. `std::nullopt` means the server is
+    /// declared without an `auth` reference.
+    std::optional<std::string> bearer_env_var{std::nullopt};
+    /// Wire value of `activation`; resolved by `activation_policy()`.
+    std::optional<McpServerActivation> activation{std::nullopt};
+    /// Wire value of `approval`; resolved by `approval_policy()`.
+    std::optional<McpServerApproval> approval{std::nullopt};
+
+    /// Defaulted activation: `Lazy` when the config omits the field.
+    [[nodiscard]] McpServerActivation activation_policy() const noexcept {
+        return activation.value_or(McpServerActivation::Lazy);
+    }
+    /// Defaulted approval: `Allow` when the config omits the field.
+    [[nodiscard]] McpServerApproval approval_policy() const noexcept {
+        return approval.value_or(McpServerApproval::Allow);
+    }
+};
+
 /// User settings following pi's two-scope `settings.json` contract (ADR 0031).
 /// All fields are optional — CLI flags and built-in defaults fill any gaps.
-/// Settings never carry secrets or secret references; `apiKey` appears only in
-/// `models.json`.
+/// Settings never carry secrets: credential material enters configuration only
+/// as an environment-variable reference (`bearer-env:<VAR>` on `mcpServers`
+/// entries, `$VAR` templates in `models.json`), never as a literal value, and
+/// `apiKey` appears only in `models.json`.
 struct UserSettings {
     /// pi `defaultProvider` — default provider name (e.g. `openai-codex`).
     std::optional<std::string> default_provider{std::nullopt};
@@ -86,6 +139,15 @@ struct UserSettings {
     /// (default true). Graduated into the settings subset with decision 24
     /// of the G4 record; gates `/skill:` registration and autocomplete.
     std::optional<bool> enable_skill_commands{std::nullopt};
+    /// `mcpServers` — Upstream MCP Servers the MCP Host is configured to
+    /// aggregate, keyed by Server Id and listed in Server Id order. The first
+    /// harness-specific `settings.json` field (issue #835, ADR 0031 addendum);
+    /// project-scope entries load only while the project is trusted, and the
+    /// two scopes deep-merge per Server Id with the project scope winning.
+    /// Each scope's entry is self-contained — a `url` is required wherever a
+    /// Server Id is declared — and a field the project entry omits keeps the
+    /// global value.
+    std::optional<std::vector<UserMcpServerSettings>> mcp_servers{std::nullopt};
 };
 
 /// One `settings.json` scope (pi `SettingsScope`).
@@ -179,6 +241,15 @@ public:
     /// Resolved pi `enableSkillCommands` over the merged view (default true;
     /// pi `SettingsManager.getEnableSkillCommands`).
     [[nodiscard]] bool get_enable_skill_commands() const noexcept;
+
+    /// Merged `mcpServers` over the two-scope view: the global scope's entries
+    /// in Server Id order, then the project scope's project-only entries in
+    /// Server Id order, with a project entry's set fields winning
+    /// field-by-field. Empty when neither scope declares a server.
+    /// Project-scope entries are absent while the project is untrusted, and a
+    /// scope whose `mcpServers` failed validation contributes nothing at
+    /// all.
+    [[nodiscard]] const std::vector<UserMcpServerSettings>& mcp_servers() const noexcept;
 
     /// Surgical field-level write of the pi `enableSkillCommands` field in
     /// the global scope (pi `SettingsManager.setEnableSkillCommands`, which

@@ -3,9 +3,14 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <string_view>
+#include <ranges>
+#include <utility>
+#include <vector>
 
 using namespace cch;
 
@@ -832,4 +837,390 @@ TEST_CASE("SettingsManager enableSkillCommands write is a no-op when unchanged",
     const auto before = dirs.workspace.read("agent/settings.json");
     REQUIRE(manager.set_enable_skill_commands(true));
     CHECK(dirs.workspace.read("agent/settings.json") == before);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Upstream MCP Server configuration (issue #835, spec #833 stories 1, 2, 3, 5, 6)
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST_CASE("SettingsManager loads mcpServers from the settings entry point",
+        "[settings][two-scope][mcp][issue835][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({
+        "defaultModel": "gpt-5.5",
+        "mcpServers": {
+            "executor-local": {
+                "url": "https://mcp.example.com/mcp",
+                "auth": "bearer-env:MCP_EXECUTOR_TOKEN",
+                "activation": "eager",
+                "approval": "ask"
+            },
+            "docs": {
+                "url": "https://docs.example.com/mcp",
+                "headers": {"Authorization": "bearer-env:MCP_DOCS_TOKEN"},
+                "futureKnob": {"anything": true}
+            }
+        }
+    })");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    // Entries are listed in Server Id order, so the list is stable across
+    // sessions and independent of the order the file happens to be written in.
+    REQUIRE(manager.mcp_servers().size() == 2);
+    const auto& docs = manager.mcp_servers().front();
+    const auto& executor = manager.mcp_servers().back();
+    CHECK(docs.server_id == "docs");
+    CHECK(executor.server_id == "executor-local");
+    CHECK(executor.url == "https://mcp.example.com/mcp");
+    REQUIRE(executor.bearer_env_var.has_value());
+    CHECK(*executor.bearer_env_var == "MCP_EXECUTOR_TOKEN");
+    CHECK(executor.activation_policy() == coding_agent::McpServerActivation::Eager);
+    CHECK(executor.approval_policy() == coding_agent::McpServerApproval::Ask);
+
+    REQUIRE(docs.bearer_env_var.has_value());
+    CHECK(*docs.bearer_env_var == "MCP_DOCS_TOKEN");
+    // The rest of the scope still loads alongside a valid mcpServers block.
+    CHECK(manager.settings().default_model == "gpt-5.5");
+}
+
+TEST_CASE("SettingsManager defaults mcpServers activation to lazy and approval to allow",
+        "[settings][two-scope][mcp][issue835][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"mcpServers": {"executor": {"url": "https://mcp.example.com/mcp"}}})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    REQUIRE(manager.mcp_servers().size() == 1);
+    const auto& server = manager.mcp_servers().front();
+    CHECK_FALSE(server.activation.has_value());
+    CHECK_FALSE(server.approval.has_value());
+    CHECK(server.activation_policy() == coding_agent::McpServerActivation::Lazy);
+    CHECK(server.approval_policy() == coding_agent::McpServerApproval::Allow);
+    // No auth reference means no credential resolution is configured.
+    CHECK_FALSE(server.bearer_env_var.has_value());
+}
+
+TEST_CASE("SettingsManager accepts a 48-character mcpServers Server Id and rejects 49",
+        "[settings][two-scope][mcp][issue835][spec]") {
+    const std::string boundary_id(48, 'a');
+    const std::string over_id(49, 'a');
+    // A realistic mixed-charset id at the boundary: [A-Za-z0-9_-] only.
+    const std::string charset_id = "A-Z_a-z0-9" + std::string(38, '-');
+
+    SettingsDirs ok_dirs;
+    ok_dirs.write_global(std::string{R"({"mcpServers": {")"} + boundary_id +
+                         R"(": {"url": "https://a.example.com/mcp"}, ")" + charset_id +
+                         R"(": {"url": "https://b.example.com/mcp"}}})");
+    auto ok_manager = coding_agent::SettingsManager::create(ok_dirs.cwd, ok_dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(ok_manager.errors().empty());
+    REQUIRE(ok_manager.mcp_servers().size() == 2);
+    const auto& ids = std::views::transform(ok_manager.mcp_servers(),
+            [](const coding_agent::UserMcpServerSettings& server) { return server.server_id; });
+    const std::vector<std::string> loaded_ids{ids.begin(), ids.end()};
+    CHECK(loaded_ids.size() == 2);
+    CHECK(std::find(loaded_ids.begin(), loaded_ids.end(), boundary_id) != loaded_ids.end());
+    CHECK(std::find(loaded_ids.begin(), loaded_ids.end(), charset_id) != loaded_ids.end());
+
+    SettingsDirs over_dirs;
+    over_dirs.write_global(
+            std::string{R"({"mcpServers": {")"} + over_id + R"(": {"url": "https://a.example.com/mcp"}}})");
+    auto over_manager =
+            coding_agent::SettingsManager::create(over_dirs.cwd, over_dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(over_manager.errors().size() == 1);
+    CHECK(over_manager.errors().front().message.find("Server Id") != std::string::npos);
+    CHECK(over_manager.mcp_servers().empty());
+}
+
+TEST_CASE("SettingsManager rejects mcpServers Server Ids outside [A-Za-z0-9_-] without echoing the key",
+        "[settings][two-scope][mcp][issue835][spec]") {
+    SettingsDirs dirs;
+    // A key that would be legal as a value but is not a Server Id; it is also
+    // the case a bare existence/length check would let through.
+    dirs.write_global(R"({"mcpServers": {"executor.local": {"url": "https://a.example.com/mcp"}}})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().size() == 1);
+    const auto& message = manager.errors().front().message;
+    CHECK(message.find("[A-Za-z0-9_-]") != std::string::npos);
+    CHECK(message.find("executor.local") == std::string::npos);
+    CHECK(manager.mcp_servers().empty());
+}
+
+TEST_CASE("SettingsManager rejects inline mcpServers secrets without echoing the rejected value",
+        "[settings][two-scope][mcp][secret][issue835][spec]") {
+    constexpr std::string_view kSecret = "sk-live-DO-NOT-ECHO-0123456789";
+    const auto with_secret = [kSecret](std::string_view prefix, std::string_view suffix) {
+        return std::string{prefix} + std::string{kSecret} + std::string{suffix};
+    };
+
+    const std::vector<std::string> configs = {
+            // A literal token in `auth`.
+            with_secret(R"({"mcpServers": {"executor": {"url": "https://a.example.com/mcp", "auth": ")", R"("}}}})"),
+            // A literal Authorization header value.
+            with_secret(
+                    R"({"mcpServers": {"executor": {"url": "https://a.example.com/mcp", "headers": {"Authorization": "Bearer )",
+                    R"("}}}})"),
+            // The token smuggled through URL userinfo.
+            with_secret(R"({"mcpServers": {"executor": {"url": "https://user:)", R"(@a.example.com/mcp"}}})"),
+            // A bare variable name is not a reference; the reference is the only
+            // accepted form, so an un-prefixed value is refused too.
+            std::string{R"({"mcpServers": {"executor": {"url": "https://a.example.com/mcp", "auth": "MCP_TOKEN"}}})"},
+    };
+
+    for (const auto& config : configs) {
+        SettingsDirs dirs;
+        dirs.write_global(config);
+
+        auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+        REQUIRE(manager.errors().size() == 1);
+        const auto& message = manager.errors().front().message;
+        // The diagnostic names the rule and the field, never the secret.
+        CHECK(message.find("bearer-env:<VAR>") != std::string::npos);
+        CHECK(message.find(kSecret) == std::string::npos);
+        // Fail-closed: the rejected entry is not partially loaded.
+        CHECK(manager.mcp_servers().empty());
+    }
+}
+
+TEST_CASE("SettingsManager rejects an mcpServers credential reference that names no environment variable",
+        "[settings][two-scope][mcp][secret][issue835][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"mcpServers": {"executor": {"url": "https://a.example.com/mcp", "auth": "bearer-env:"}}})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().size() == 1);
+    CHECK(manager.errors().front().message.find("[A-Za-z_][A-Za-z0-9_]*") != std::string::npos);
+    CHECK(manager.mcp_servers().empty());
+}
+
+TEST_CASE("SettingsManager rejects mcpServers headers other than Authorization",
+        "[settings][two-scope][mcp][secret][issue835][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"mcpServers": {"executor": {
+        "url": "https://a.example.com/mcp", "headers": {"X-Api-Key": "bearer-env:TOKEN"}}}})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().size() == 1);
+    CHECK(manager.errors().front().message.find("X-Api-Key") != std::string::npos);
+    CHECK(manager.mcp_servers().empty());
+}
+
+TEST_CASE("SettingsManager accepts a lowercase mcpServers authorization header spelling",
+        "[settings][two-scope][mcp][issue835][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"mcpServers": {"executor": {
+        "url": "https://a.example.com/mcp", "headers": {"authorization": "bearer-env:MCP_TOKEN"}}}})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    REQUIRE(manager.mcp_servers().size() == 1);
+    REQUIRE(manager.mcp_servers().front().bearer_env_var.has_value());
+    CHECK(*manager.mcp_servers().front().bearer_env_var == "MCP_TOKEN");
+}
+
+TEST_CASE("SettingsManager rejects stdio mcpServers config as a deferred capability and spawns nothing",
+        "[settings][two-scope][mcp][issue835][spec]") {
+    SettingsDirs dirs;
+    // A command that would leave a sentinel file if it were ever spawned.
+    const auto sentinel = (dirs.cwd / "stdio-was-spawned").string();
+    dirs.write_global(std::string{R"({"mcpServers": {"executor": {
+        "url": "https://a.example.com/mcp",
+        "command": "/bin/sh",
+        "args": ["-c", "touch )"} +
+                      sentinel + R"("],
+        "env": {"TOKEN": "bearer-env:MCP_TOKEN"}}}})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    // The stdio fields parse, then validation refuses the entry as a Deferred
+    // Capability: Legacy Era plus stdio arrives with the ecosystem bridge.
+    REQUIRE(manager.errors().size() == 1);
+    const auto& message = manager.errors().front().message;
+    CHECK(message.find("Deferred Capability") != std::string::npos);
+    CHECK(message.find("no process is started") != std::string::npos);
+    CHECK(manager.mcp_servers().empty());
+    // Nothing ran, and the declared environment value is not echoed.
+    CHECK_FALSE(std::filesystem::exists(sentinel));
+    CHECK(message.find("MCP_TOKEN") == std::string::npos);
+}
+
+TEST_CASE("SettingsManager rejects stdio-only mcpServers config that has no url",
+        "[settings][two-scope][mcp][issue835][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"mcpServers": {"executor": {"command": "npx", "args": ["-y", "server"]}}})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    // The deferred-capability verdict takes precedence over the missing url,
+    // so the diagnostic names the real reason the entry is refused.
+    REQUIRE(manager.errors().size() == 1);
+    CHECK(manager.errors().front().message.find("Deferred Capability") != std::string::npos);
+    CHECK(manager.errors().front().message.find("npx") == std::string::npos);
+    CHECK(manager.mcp_servers().empty());
+}
+
+TEST_CASE("SettingsManager rejects invalid mcpServers url, activation, and approval values",
+        "[settings][two-scope][mcp][issue835][spec]") {
+    const std::pair<const char*, const char*> rejected[] = {
+            {R"({"url": "ftp://a.example.com/mcp"})", "http:// or https://"},
+            {R"({"url": "a.example.com/mcp"})", "http:// or https://"},
+            {R"({"url": 7})", "url is required"},
+            {R"({"url": "https://a.example.com/mcp", "activation": "always"})", "lazy, eager"},
+            {R"({"url": "https://a.example.com/mcp", "activation": 1})", "activation must be a string"},
+            {R"({"url": "https://a.example.com/mcp", "approval": "always"})", "allow, ask"},
+            {R"({"url": "https://a.example.com/mcp", "approval": true})", "approval must be a string"},
+    };
+
+    for (const auto& [body, expected] : rejected) {
+        SettingsDirs dirs;
+        dirs.write_global(std::string{R"({"mcpServers": {"executor": )"} + body + "}}");
+
+        auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+        REQUIRE(manager.errors().size() == 1);
+        CHECK(manager.errors().front().message.find(expected) != std::string::npos);
+        CHECK(manager.mcp_servers().empty());
+    }
+}
+
+TEST_CASE("SettingsManager rejects a malformed mcpServers map", "[settings][two-scope][mcp][issue835][spec]") {
+    const char* rejected[] = {
+            R"({"mcpServers": []})",
+            R"({"mcpServers": {"executor": "https://a.example.com/mcp"}})",
+            R"({"mcpServers": {"executor": {"url": "https://a.example.com/mcp", "headers": 3}}})",
+            R"({"mcpServers": {"executor": {"url": "https://a.example.com/mcp", "auth": "bearer-env:A", "headers": {"Authorization": "bearer-env:B"}}}})",
+            R"({"mcpServers": {"executor": {"url": "https://a.example.com/mcp", "headers": {"Authorization": 7}}}})",
+            R"({"mcpServers": {"executor": {"url": "https://a.example.com/mcp", "auth": 7}}})",
+            R"({"mcpServers": {"executor": {"url": "https://a.example.com/mcp", "auth": "bearer-env:MCP_TOKEN", "headers": {}}}})",
+    };
+
+    for (const auto* config : rejected) {
+        SettingsDirs dirs;
+        dirs.write_global(config);
+
+        auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+        REQUIRE(manager.errors().size() == 1);
+        CHECK(manager.mcp_servers().empty());
+    }
+}
+
+TEST_CASE("SettingsManager deep-merges mcpServers per Server Id with the project scope winning",
+        "[settings][two-scope][mcp][issue835][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"mcpServers": {
+        "executor": {"url": "https://global.example.com/mcp", "activation": "eager", "approval": "ask",
+                     "auth": "bearer-env:GLOBAL_TOKEN"},
+        "global-only": {"url": "https://global-only.example.com/mcp"}}})");
+    dirs.write_project(R"({"mcpServers": {
+        "executor": {"url": "https://global.example.com/mcp", "approval": "allow"},
+        "project-only": {"url": "https://project.example.com/mcp"}}})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    REQUIRE(manager.mcp_servers().size() == 3);
+    const auto& executor = manager.mcp_servers().front();
+    CHECK(executor.server_id == "executor");
+    CHECK(executor.url == "https://global.example.com/mcp");
+    // The project scope sets only `approval`; the global activation and the
+    // global credential reference survive field by field.
+    CHECK(executor.activation_policy() == coding_agent::McpServerActivation::Eager);
+    CHECK(executor.approval_policy() == coding_agent::McpServerApproval::Allow);
+    REQUIRE(executor.bearer_env_var.has_value());
+    CHECK(*executor.bearer_env_var == "GLOBAL_TOKEN");
+    CHECK(manager.mcp_servers()[1].server_id == "global-only");
+    CHECK(manager.mcp_servers()[2].server_id == "project-only");
+}
+
+TEST_CASE("SettingsManager lets a project mcpServers entry replace the global endpoint",
+        "[settings][two-scope][mcp][issue835][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"mcpServers": {
+        "executor": {"url": "https://global.example.com/mcp", "auth": "bearer-env:GLOBAL_TOKEN"}}})");
+    dirs.write_project(R"({"mcpServers": {
+        "executor": {"url": "https://project.example.com/mcp", "auth": "bearer-env:PROJECT_TOKEN"}}})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    REQUIRE(manager.mcp_servers().size() == 1);
+    CHECK(manager.mcp_servers().front().url == "https://project.example.com/mcp");
+    REQUIRE(manager.mcp_servers().front().bearer_env_var.has_value());
+    CHECK(*manager.mcp_servers().front().bearer_env_var == "PROJECT_TOKEN");
+}
+
+TEST_CASE("SettingsManager loads no project mcpServers while the project is untrusted",
+        "[settings][two-scope][mcp][trust][issue835][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"mcpServers": {"executor": {"url": "https://global.example.com/mcp"}}})");
+    dirs.write_project(R"({"mcpServers": {"project-only": {"url": "https://project.example.com/mcp"}}})");
+
+    auto untrusted = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ false);
+    REQUIRE(untrusted.errors().empty());
+    REQUIRE(untrusted.mcp_servers().size() == 1);
+    CHECK(untrusted.mcp_servers().front().server_id == "executor");
+
+    // Trusting later loads the project scope; untrusting again drops it.
+    REQUIRE(untrusted.set_project_trusted(true));
+    CHECK(untrusted.mcp_servers().size() == 2);
+    REQUIRE(untrusted.set_project_trusted(false));
+    CHECK(untrusted.mcp_servers().size() == 1);
+}
+
+TEST_CASE("SettingsManager keeps a failed mcpServers scope out of the merged view",
+        "[settings][two-scope][mcp][issue835][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"defaultModel": "gpt-5.5", "mcpServers": {
+        "executor": {"url": "https://global.example.com/mcp", "auth": "sk-inline-secret"}}})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    // Fail-closed: the whole global scope resolves empty rather than
+    // half-loading, so no unvalidated mcpServers entry reaches the runtime.
+    REQUIRE(manager.errors().size() == 1);
+    CHECK(manager.errors().front().scope == coding_agent::SettingsScope::Global);
+    CHECK(manager.mcp_servers().empty());
+    CHECK_FALSE(manager.settings().default_model.has_value());
+    CHECK(manager.errors().front().message.find("sk-inline-secret") == std::string::npos);
+}
+
+TEST_CASE("SettingsManager preserves mcpServers across a surgical settings write",
+        "[settings][two-scope][mcp][write][issue835][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"mcpServers": {"executor": {
+        "url": "https://a.example.com/mcp", "auth": "bearer-env:MCP_TOKEN", "approval": "ask"}}})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.set_theme(coding_agent::SettingsScope::Global, "dark"));
+
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("mcpServers") != std::string::npos);
+    CHECK(content.find("\"theme\": \"dark\"") != std::string::npos);
+
+    auto reloaded = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(reloaded.errors().empty());
+    REQUIRE(reloaded.mcp_servers().size() == 1);
+    REQUIRE(reloaded.mcp_servers().front().bearer_env_var.has_value());
+    CHECK(*reloaded.mcp_servers().front().bearer_env_var == "MCP_TOKEN");
+    CHECK(reloaded.mcp_servers().front().approval_policy() == coding_agent::McpServerApproval::Ask);
+}
+
+TEST_CASE("SettingsManager reports an empty mcpServers list when no scope declares a server",
+        "[settings][two-scope][mcp][issue835][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"defaultModel": "gpt-5.5"})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    CHECK(manager.mcp_servers().empty());
 }
