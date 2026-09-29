@@ -53,8 +53,7 @@ enum class McpFailureClass {
 /// the conservative record the transport keeps: it becomes true as soon as the
 /// transport starts writing the request, because a partial write may still have
 /// reached the Upstream.
-[[nodiscard]] McpFailureClass classify_failure(
-        cch::support::ErrorCode code, bool request_delivered) noexcept;
+[[nodiscard]] McpFailureClass classify_failure(cch::support::ErrorCode code, bool request_delivered) noexcept;
 
 [[nodiscard]] std::string_view describe(McpFailureClass failure_class) noexcept;
 

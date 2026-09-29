@@ -120,8 +120,7 @@ Expected<std::map<std::string, std::string>> mirror_parameter_headers(
         if (!rendered) {
             return std::unexpected(std::move(rendered).error());
         }
-        mirrored.emplace(
-                std::string(protocol::kHeaderParamPrefix) + parameter.header_name, to_header_value(*rendered));
+        mirrored.emplace(std::string(protocol::kHeaderParamPrefix) + parameter.header_name, to_header_value(*rendered));
     }
     return mirrored;
 }

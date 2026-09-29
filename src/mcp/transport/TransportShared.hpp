@@ -104,8 +104,8 @@ struct ParsedUrl {
     boost::system::error_code error;
     context.set_default_verify_paths(error);
     if (error) {
-        return std::unexpected(cch::support::make_error(
-                cch::support::ErrorCode::Network, "CA loading failure", error.message()));
+        return std::unexpected(
+                cch::support::make_error(cch::support::ErrorCode::Network, "CA loading failure", error.message()));
     }
     if (trusted_ca_certificate_pem) {
         if (context.add_certificate_authority(boost::asio::buffer(*trusted_ca_certificate_pem), error); error) {

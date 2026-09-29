@@ -98,7 +98,7 @@ struct ServerState {
         co_return std::nullopt;
     }
     if (consumed < raw.size()) {
-        (void) parser.put(asio::buffer(raw.data() + consumed, raw.size() - consumed), error);
+        (void)parser.put(asio::buffer(raw.data() + consumed, raw.size() - consumed), error);
         if (error && error != http::error::need_more) {
             co_return std::nullopt;
         }
@@ -109,7 +109,7 @@ struct ServerState {
         if (error) {
             co_return std::nullopt;
         }
-        (void) parser.put(asio::buffer(chunk, received), error);
+        (void)parser.put(asio::buffer(chunk, received), error);
         if (error && error != http::error::need_more) {
             co_return std::nullopt;
         }
@@ -149,8 +149,8 @@ struct ServerState {
 [[nodiscard]] std::string response_head(int status_code, std::string_view content_type, std::string_view framing) {
     const auto status = http::status(status_code);
     return std::string("HTTP/1.1 ") + std::to_string(status_code) + " " + std::string(http::obsolete_reason(status)) +
-           "\r\nContent-Type: " + std::string(content_type) + "\r\nCache-Control: no-store\r\n" +
-           std::string(framing) + "\r\n\r\n";
+           "\r\nContent-Type: " + std::string(content_type) + "\r\nCache-Control: no-store\r\n" + std::string(framing) +
+           "\r\n\r\n";
 }
 
 /// Write raw body bytes into a response whose length already declares them.
@@ -303,7 +303,7 @@ struct LocalMcpHttpServer::Impl {
             co_await write_filler(stream, reply.flood_bytes, true);
             co_return; // a flooding stream never ends, by definition
         }
-        (void) co_await write_chunk(stream, {});
+        (void)co_await write_chunk(stream, {});
     }
 
     /// Keep the connection busy past the point the client stops reading. The
@@ -316,8 +316,8 @@ struct LocalMcpHttpServer::Impl {
             if (state->stopping.load()) {
                 co_return;
             }
-            const bool written_ok = chunked ? co_await write_chunk(stream, payload)
-                                            : co_await write_bytes(stream, payload);
+            const bool written_ok =
+                    chunked ? co_await write_chunk(stream, payload) : co_await write_bytes(stream, payload);
             if (!written_ok) {
                 co_return;
             }

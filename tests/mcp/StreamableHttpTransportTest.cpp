@@ -123,8 +123,7 @@ using McpReplyScript = std::function<std::optional<tests::McpServerReply>(const 
                 shaped) {
     return [shaped = std::move(shaped)](const tests::RecordedHttpRequest& request) {
         const auto message = decode(request);
-        const auto reply =
-                shaped(message ? std::string_view{message->method} : std::string_view{}, request);
+        const auto reply = shaped(message ? std::string_view{message->method} : std::string_view{}, request);
         return reply.has_value() ? *reply : ordinary_reply(request);
     };
 }
@@ -220,7 +219,8 @@ template <typename T>
     auto pending = std::make_shared<support::AsyncResult<T>>(std::move(operation));
     // The move-only operation reaches the coroutine through a shared owner,
     // because `co_spawn` copies the closure it is given.
-    asio::co_spawn(io,
+    asio::co_spawn(
+            io,
             [pending = std::move(pending), outcome]() -> asio::awaitable<void> {
                 *outcome = co_await support::detail::await_async_result(std::move(*pending));
             },
@@ -272,24 +272,24 @@ TEST_CASE("the Streamable HTTP transport completes a JSON round trip against a l
 TEST_CASE("the Streamable HTTP transport assembles an event stream into the response the client stack reads",
         "[mcp][transport][sse][issue837][spec]") {
     const std::string progress = support::write_json(JsonValue::object_t{
-                                     {"jsonrpc", JsonValue("2.0")},
-                                     {"method", JsonValue("notifications/progress")},
-                             })
-                                             .value_or("{}");
-    tests::LocalMcpHttpServer server(script([&progress](std::string_view method,
-                                             const tests::RecordedHttpRequest& request)
-                                                     -> std::optional<tests::McpServerReply> {
-        if (method != mcp::protocol::kMethodCallTool) {
-            return std::nullopt;
-        }
-        // The notification arrives ahead of the response the call is waiting
-        // for, exactly as an Upstream reports progress.
-        return tests::McpServerReply{
-                .content_type = "text/event-stream",
-                .as_event_stream = true,
-                .event_payloads = {progress, framed(request, tests::tool_call_result(JsonValue::array_t{}))},
-        };
-    }));
+                                                             {"jsonrpc", JsonValue("2.0")},
+                                                             {"method", JsonValue("notifications/progress")},
+                                                     })
+                                         .value_or("{}");
+    tests::LocalMcpHttpServer server(
+            script([&progress](std::string_view method,
+                           const tests::RecordedHttpRequest& request) -> std::optional<tests::McpServerReply> {
+                if (method != mcp::protocol::kMethodCallTool) {
+                    return std::nullopt;
+                }
+                // The notification arrives ahead of the response the call is waiting
+                // for, exactly as an Upstream reports progress.
+                return tests::McpServerReply{
+                        .content_type = "text/event-stream",
+                        .as_event_stream = true,
+                        .event_payloads = {progress, framed(request, tests::tool_call_result(JsonValue::array_t{}))},
+                };
+            }));
     REQUIRE(server.ready());
 
     asio::io_context io;
@@ -297,10 +297,11 @@ TEST_CASE("the Streamable HTTP transport assembles an event stream into the resp
             trusted_transport(io),
             mcp::UpstreamClientOptions{.url = server.url(), .request_timeout = kExchangeBound});
 
-    auto outcome = drive_on(io, client.call_tool(mcp::UpstreamToolCall{
-            .tool = post_message_tool(),
-            .arguments = JsonValue::object_t{{"note", JsonValue("hello")}},
-    }));
+    auto outcome = drive_on(io,
+            client.call_tool(mcp::UpstreamToolCall{
+                    .tool = post_message_tool(),
+                    .arguments = JsonValue::object_t{{"note", JsonValue("hello")}},
+            }));
     REQUIRE(outcome.has_value());
     CHECK_FALSE(outcome->is_error);
     CHECK(outcome->diagnostic.empty());
@@ -322,10 +323,11 @@ TEST_CASE("the Streamable HTTP transport writes the required MCP headers and mir
 
     // The mirrored value is not header-safe, so it reaches the wire under the
     // base64 sentinel (SEP-2243) whatever the transport is handed.
-    auto outcome = drive_on(io, client.call_tool(mcp::UpstreamToolCall{
-            .tool = catalog->tools.front(),
-            .arguments = JsonValue::object_t{{"note", JsonValue(std::string("a\nb"))}},
-    }));
+    auto outcome = drive_on(io,
+            client.call_tool(mcp::UpstreamToolCall{
+                    .tool = catalog->tools.front(),
+                    .arguments = JsonValue::object_t{{"note", JsonValue(std::string("a\nb"))}},
+            }));
     REQUIRE(outcome.has_value());
 
     const auto recorded = server.requests();
@@ -385,18 +387,19 @@ TEST_CASE("a broken MCP response stream loses the in-flight request and is not r
     // A response whose last event-stream frame never gets its blank-line
     // terminator: the stream ends mid-frame, and the 2026-07-28 revision has
     // nothing to resume it with.
-    tests::LocalMcpHttpServer server(script([](std::string_view method, const tests::RecordedHttpRequest& request)
-                                                     -> std::optional<tests::McpServerReply> {
-        if (method != mcp::protocol::kMethodCallTool || call_note(request) != "break this stream") {
-            return std::nullopt;
-        }
-        return tests::McpServerReply{
-                .content_type = "text/event-stream",
-                .as_event_stream = true,
-                .event_payloads = {framed(request, tests::tool_call_result(JsonValue::array_t{}))},
-                .end_stream_mid_frame = true,
-        };
-    }));
+    tests::LocalMcpHttpServer server(
+            script([](std::string_view method,
+                           const tests::RecordedHttpRequest& request) -> std::optional<tests::McpServerReply> {
+                if (method != mcp::protocol::kMethodCallTool || call_note(request) != "break this stream") {
+                    return std::nullopt;
+                }
+                return tests::McpServerReply{
+                        .content_type = "text/event-stream",
+                        .as_event_stream = true,
+                        .event_payloads = {framed(request, tests::tool_call_result(JsonValue::array_t{}))},
+                        .end_stream_mid_frame = true,
+                };
+            }));
     REQUIRE(server.ready());
 
     asio::io_context io;
@@ -404,18 +407,18 @@ TEST_CASE("a broken MCP response stream loses the in-flight request and is not r
             trusted_transport(io),
             mcp::UpstreamClientOptions{.url = server.url(), .request_timeout = kExchangeBound});
 
-    auto broken = drive_on(io, client.call_tool(mcp::UpstreamToolCall{
-            .tool = post_message_tool(),
-            .arguments = JsonValue::object_t{{"note", JsonValue("break this stream")}},
-    }));
+    auto broken = drive_on(io,
+            client.call_tool(mcp::UpstreamToolCall{
+                    .tool = post_message_tool(),
+                    .arguments = JsonValue::object_t{{"note", JsonValue("break this stream")}},
+            }));
     REQUIRE_FALSE(broken.has_value());
     CHECK(broken.error().code == support::ErrorCode::Network);
     CHECK(broken.error().message.find("broke") != std::string::npos);
     // The failure names the class the retry policy read it as, which is what
     // tells a caller the exchange is lost rather than merely unsuccessful.
-    CHECK(broken.error().detail.find(
-                  std::string{mcp::transport::describe(mcp::transport::McpFailureClass::RequestDelivered)}) !=
-            std::string::npos);
+    CHECK(broken.error().detail.find(std::string{
+                  mcp::transport::describe(mcp::transport::McpFailureClass::RequestDelivered)}) != std::string::npos);
     const auto after_broken = server.requests();
     REQUIRE(after_broken.size() == 2);
     const auto abandoned_id = recorded_id(after_broken.back());
@@ -423,10 +426,11 @@ TEST_CASE("a broken MCP response stream loses the in-flight request and is not r
 
     // The abandoned exchange is not replayed behind the caller's back, and the
     // caller's own retry is a new exchange carrying a new JSON-RPC id.
-    auto retried = drive_on(io, client.call_tool(mcp::UpstreamToolCall{
-            .tool = post_message_tool(),
-            .arguments = JsonValue::object_t{{"note", JsonValue("and again")}},
-    }));
+    auto retried = drive_on(io,
+            client.call_tool(mcp::UpstreamToolCall{
+                    .tool = post_message_tool(),
+                    .arguments = JsonValue::object_t{{"note", JsonValue("and again")}},
+            }));
     REQUIRE(retried.has_value());
     const auto after_retry = server.requests();
     REQUIRE(after_retry.size() == 3);
@@ -437,9 +441,10 @@ TEST_CASE("a broken MCP response stream loses the in-flight request and is not r
 
 TEST_CASE("the Streamable HTTP transport re-attempts a request the Upstream never received",
         "[mcp][transport][retry][issue837][spec]") {
-    tests::LocalMcpHttpServer server(conforming_upstream(), tests::LocalMcpHttpServerOptions{
-            .abort_first_handshake = true,
-    });
+    tests::LocalMcpHttpServer server(conforming_upstream(),
+            tests::LocalMcpHttpServerOptions{
+                    .abort_first_handshake = true,
+            });
     REQUIRE(server.ready());
 
     asio::io_context io;
@@ -459,18 +464,19 @@ TEST_CASE("an MCP output flood is bounded and leaves the next call and the conne
         "[mcp][transport][limits][issue837][spec]") {
     // Comfortably past the retention bound, so the flood is unambiguous.
     constexpr std::size_t kFloodBytes{64u * 1024u * 1024u};
-    tests::LocalMcpHttpServer server(script([](std::string_view method, const tests::RecordedHttpRequest& request)
-                                                     -> std::optional<tests::McpServerReply> {
-        if (method != mcp::protocol::kMethodCallTool || call_note(request) != "flood") {
-            return std::nullopt;
-        }
-        return tests::McpServerReply{
-                .content_type = "text/event-stream",
-                .as_event_stream = true,
-                .event_payloads = {std::string(1024, 'a')},
-                .flood_bytes = kFloodBytes,
-        };
-    }));
+    tests::LocalMcpHttpServer server(
+            script([](std::string_view method,
+                           const tests::RecordedHttpRequest& request) -> std::optional<tests::McpServerReply> {
+                if (method != mcp::protocol::kMethodCallTool || call_note(request) != "flood") {
+                    return std::nullopt;
+                }
+                return tests::McpServerReply{
+                        .content_type = "text/event-stream",
+                        .as_event_stream = true,
+                        .event_payloads = {std::string(1024, 'a')},
+                        .flood_bytes = kFloodBytes,
+                };
+            }));
     REQUIRE(server.ready());
 
     asio::io_context io;
@@ -479,19 +485,21 @@ TEST_CASE("an MCP output flood is bounded and leaves the next call and the conne
         mcp::UpstreamClient client("local",
                 trusted_transport(io),
                 mcp::UpstreamClientOptions{.url = server.url(), .request_timeout = kExchangeBound});
-        auto flooded = drive_on(io, client.call_tool(mcp::UpstreamToolCall{
-                .tool = post_message_tool(),
-                .arguments = JsonValue::object_t{{"note", JsonValue("flood")}},
-        }));
+        auto flooded = drive_on(io,
+                client.call_tool(mcp::UpstreamToolCall{
+                        .tool = post_message_tool(),
+                        .arguments = JsonValue::object_t{{"note", JsonValue("flood")}},
+                }));
         REQUIRE_FALSE(flooded.has_value());
         CHECK(flooded.error().code == support::ErrorCode::ResourceLimit);
 
         // The flooding Upstream owns nothing between two calls, so the next
         // ordinary call on the same connection still succeeds.
-        auto afterwards = drive_on(io, client.call_tool(mcp::UpstreamToolCall{
-                .tool = post_message_tool(),
-                .arguments = JsonValue::object_t{{"note", JsonValue("hello again")}},
-        }));
+        auto afterwards = drive_on(io,
+                client.call_tool(mcp::UpstreamToolCall{
+                        .tool = post_message_tool(),
+                        .arguments = JsonValue::object_t{{"note", JsonValue("hello again")}},
+                }));
         REQUIRE(afterwards.has_value());
         CHECK_FALSE(afterwards->is_error);
     }
@@ -501,7 +509,7 @@ TEST_CASE("an MCP output flood is bounded and leaves the next call and the conne
     io.restart();
     CHECK(io.run() == 0);
 #if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
-    (void) elapsed;
+    (void)elapsed;
 #else
     CHECK(elapsed < kExchangeBound);
 #endif
@@ -512,18 +520,19 @@ TEST_CASE("the Streamable HTTP transport stops an in-flight exchange when the ca
     // A flooding reply is also a request that never finishes, which is what a
     // cancellation needs to interrupt; the fixture keeps the connection open
     // writing, so the exchange is in flight for as long as the case lets it be.
-    tests::LocalMcpHttpServer server(script([](std::string_view method, const tests::RecordedHttpRequest& request)
-                                                     -> std::optional<tests::McpServerReply> {
-        if (method != mcp::protocol::kMethodCallTool || call_note(request) != "cancel me") {
-            return std::nullopt;
-        }
-        return tests::McpServerReply{
-                .content_type = "text/event-stream",
-                .as_event_stream = true,
-                .event_payloads = {std::string(1024, 'a')},
-                .flood_bytes = 64u * 1024u * 1024u,
-        };
-    }));
+    tests::LocalMcpHttpServer server(
+            script([](std::string_view method,
+                           const tests::RecordedHttpRequest& request) -> std::optional<tests::McpServerReply> {
+                if (method != mcp::protocol::kMethodCallTool || call_note(request) != "cancel me") {
+                    return std::nullopt;
+                }
+                return tests::McpServerReply{
+                        .content_type = "text/event-stream",
+                        .as_event_stream = true,
+                        .event_payloads = {std::string(1024, 'a')},
+                        .flood_bytes = 64u * 1024u * 1024u,
+                };
+            }));
     REQUIRE(server.ready());
 
     asio::io_context io;
@@ -532,17 +541,19 @@ TEST_CASE("the Streamable HTTP transport stops an in-flight exchange when the ca
             mcp::UpstreamClientOptions{.url = server.url(), .request_timeout = kExchangeBound});
 
     std::stop_source cancelled;
-    auto pending = client.call_tool(mcp::UpstreamToolCall{
-            .tool = post_message_tool(),
-            .arguments = JsonValue::object_t{{"note", JsonValue("cancel me")}},
-    },
+    auto pending = client.call_tool(
+            mcp::UpstreamToolCall{
+                    .tool = post_message_tool(),
+                    .arguments = JsonValue::object_t{{"note", JsonValue("cancel me")}},
+            },
             cancelled.get_token());
     // The cancellation is requested on the connection's own execution domain,
     // which is where the exchange runs, so the request is bound before it can
     // be stopped.
     asio::steady_timer cancel_at(io);
     cancel_at.expires_after(std::chrono::milliseconds{100});
-    asio::co_spawn(io,
+    asio::co_spawn(
+            io,
             [&cancel_at, &cancelled]() -> asio::awaitable<void> {
                 boost::system::error_code error;
                 co_await cancel_at.async_wait(asio::redirect_error(asio::use_awaitable, error));
@@ -571,18 +582,18 @@ TEST_CASE("the MCP retry policy re-attempts only a request that was never delive
     // The record the transport keeps is conservative: once it starts writing, a
     // network failure or a timeout is a delivered request, because a partial
     // write may still have been acted on.
-    CHECK(mcp::transport::classify_failure(support::ErrorCode::Network, false) ==
-          McpFailureClass::RequestNotDelivered);
+    CHECK(mcp::transport::classify_failure(support::ErrorCode::Network, false) == McpFailureClass::RequestNotDelivered);
     CHECK(mcp::transport::classify_failure(support::ErrorCode::Network, true) == McpFailureClass::RequestDelivered);
     CHECK(mcp::transport::classify_failure(support::ErrorCode::Timeout, true) == McpFailureClass::RequestDelivered);
-    CHECK(mcp::transport::classify_failure(support::ErrorCode::ResourceLimit, true) == McpFailureClass::ResponseFlooded);
+    CHECK(mcp::transport::classify_failure(support::ErrorCode::ResourceLimit, true) ==
+            McpFailureClass::ResponseFlooded);
     CHECK(mcp::transport::classify_failure(support::ErrorCode::Cancelled, true) == McpFailureClass::Cancelled);
     CHECK(mcp::transport::classify_failure(support::ErrorCode::Validation, false) == McpFailureClass::Rejected);
 
     // Each class has its own declared sentence, so a failure can report the
     // class the policy read it as rather than only a code.
     CHECK(mcp::transport::describe(McpFailureClass::RequestNotDelivered) !=
-          mcp::transport::describe(McpFailureClass::RequestDelivered));
+            mcp::transport::describe(McpFailureClass::RequestDelivered));
     CHECK(mcp::transport::describe(McpFailureClass::Cancelled) !=
-          mcp::transport::describe(McpFailureClass::ResponseFlooded));
+            mcp::transport::describe(McpFailureClass::ResponseFlooded));
 }

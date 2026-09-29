@@ -47,8 +47,8 @@ public:
     /// as the `McpTransport` contract requires. Every exchange is driven
     /// there, so the transport never starts a thread and never synchronizes
     /// itself.
-    explicit BoostBeastStreamableHttpTransport(boost::asio::any_io_executor executor,
-            StreamableHttpTransportOptions options = {});
+    explicit BoostBeastStreamableHttpTransport(
+            boost::asio::any_io_executor executor, StreamableHttpTransportOptions options = {});
 
     /// One POST of the framed JSON-RPC request, answered either as a whole
     /// response body or as a `text/event-stream` whose frames are assembled

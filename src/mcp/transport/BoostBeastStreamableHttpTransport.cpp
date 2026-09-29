@@ -71,8 +71,7 @@ template <typename Body>
     return found == response.base().end() ? std::string_view{} : std::string_view{found->value()};
 }
 
-template <typename Body>
-[[nodiscard]] bool is_event_stream(const http::message<false, Body>& response) {
+template <typename Body> [[nodiscard]] bool is_event_stream(const http::message<false, Body>& response) {
     const auto content_type = header_value(response, "Content-Type");
     return content_type.substr(0, protocol::kContentTypeEventStream.size()) == protocol::kContentTypeEventStream;
 }
@@ -95,7 +94,7 @@ template <typename Body>
     return support::make_error(error.code,
             std::move(error.message),
             error.detail.empty() ? std::string{describe(failure_class)}
-                                  : std::move(error.detail) + " (" + std::string{describe(failure_class)} + ")");
+                                 : std::move(error.detail) + " (" + std::string{describe(failure_class)} + ")");
 }
 
 /// The header set every Streamable HTTP POST carries, plus the values the
@@ -142,9 +141,8 @@ template <typename Body>
         co_return outcome;
     }
     CancellationBridge cancellation(request.stop_token, executor);
-    const auto cancellable = [&cancellation](auto completion_token) {
-        return cancellation.bind(std::move(completion_token));
-    };
+    const auto cancellable = [&cancellation](
+                                     auto completion_token) { return cancellation.bind(std::move(completion_token)); };
 
     // The request timeout governs setup, dispatch, the response headers, and
     // the wait for the first response byte. Past the first byte the response
@@ -175,22 +173,20 @@ template <typename Body>
     }
 
     boost::system::error_code setup_error_code;
-    auto results = co_await resolver.async_resolve(parsed.host,
-            parsed.port,
-            asio::redirect_error(cancellable(asio::use_awaitable), setup_error_code));
+    auto results = co_await resolver.async_resolve(
+            parsed.host, parsed.port, asio::redirect_error(cancellable(asio::use_awaitable), setup_error_code));
     if (setup_error_code) {
         outcome.result = std::unexpected(phase_error(*timed_out, "MCP connection setup failure", setup_error_code));
         co_return outcome;
     }
     co_await beast::get_lowest_layer(stream).async_connect(
-            results,
-            asio::redirect_error(cancellable(asio::use_awaitable), setup_error_code));
+            results, asio::redirect_error(cancellable(asio::use_awaitable), setup_error_code));
     if (setup_error_code) {
         outcome.result = std::unexpected(phase_error(*timed_out, "MCP connection setup failure", setup_error_code));
         co_return outcome;
     }
-    co_await stream.async_handshake(ssl::stream_base::client,
-            asio::redirect_error(cancellable(asio::use_awaitable), setup_error_code));
+    co_await stream.async_handshake(
+            ssl::stream_base::client, asio::redirect_error(cancellable(asio::use_awaitable), setup_error_code));
     if (setup_error_code) {
         outcome.result = std::unexpected(
                 phase_error(*timed_out, "the Upstream MCP Server TLS handshake failed", setup_error_code));
@@ -205,8 +201,8 @@ template <typename Body>
     co_await http::async_write(
             stream, framed, asio::redirect_error(cancellable(asio::use_awaitable), setup_error_code));
     if (setup_error_code) {
-        outcome.result = std::unexpected(
-                phase_error(*timed_out, "the MCP request could not be dispatched", setup_error_code));
+        outcome.result =
+                std::unexpected(phase_error(*timed_out, "the MCP request could not be dispatched", setup_error_code));
         co_return outcome;
     }
 
@@ -255,14 +251,14 @@ template <typename Body>
     deadline.cancel();
 
     boost::system::error_code read_error;
-    co_await http::async_read(stream, buffer, parser, asio::redirect_error(cancellable(asio::use_awaitable), read_error));
+    co_await http::async_read(
+            stream, buffer, parser, asio::redirect_error(cancellable(asio::use_awaitable), read_error));
     if (read_error == http::error::body_limit) {
         outcome.result = std::unexpected(flooded_error());
         co_return outcome;
     }
     if (read_error) {
-        outcome.result =
-                std::unexpected(network_error("the Upstream MCP Server response stream broke", read_error));
+        outcome.result = std::unexpected(network_error("the Upstream MCP Server response stream broke", read_error));
         co_return outcome;
     }
 
@@ -331,8 +327,8 @@ BoostBeastStreamableHttpTransport::BoostBeastStreamableHttpTransport(
     : executor_(std::move(executor)), options_(std::move(options)) {}
 
 AsyncResult<McpResponse> BoostBeastStreamableHttpTransport::send(McpRequest request) {
-    return support::detail::make_async_result_on(executor_,
-            [request = std::move(request), options = options_]() -> asio::awaitable<Expected<McpResponse>> {
+    return support::detail::make_async_result_on(
+            executor_, [request = std::move(request), options = options_]() -> asio::awaitable<Expected<McpResponse>> {
                 co_return co_await run_exchange(std::move(request), options);
             });
 }
