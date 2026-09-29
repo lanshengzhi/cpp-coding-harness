@@ -174,6 +174,24 @@ The fairness property worth stating is the one that is *not* throughput: a suspe
 - `an undeclared input-request type fails one call and never asks the user` — `[mcp][issue845][spec]`: the user is never asked, one call fails, and the next ordinary call on the same connection still succeeds with no re-probe and no re-list.
 - `an unanswered elicitation that reaches its bound fails the one call and sends nothing` — `[mcp][coding_agent][issue845][spec]`: the same property through the production session door, on the session's own timer, with the question withdrawn when the wait ends.
 
+## MCP form-dialog bounds (ADR 0064, ADR 0008, spec #833 story 26, issue #846)
+
+A form-mode Pending Elicitation is a schema an Upstream MCP Server wrote, and this build renders whatever the schema says. The Multi Round-Trip bounds above say how long the user may be asked; these say how much of a server's document the layout can carry. They are in `mcp_form_bound`, `src/coding_agent/tui/McpElicitationForm.hpp`, and they are the whole of the containment: past any of them the form is not drawn, the dialog says so on screen, and the answer carries no fields. A partial form shown as though it were the whole question is the one failure a user cannot see coming, so the notice is not optional.
+
+- **`kMaxSchemaBytes = 64 KiB` of schema text.** The wire already caps one response at `kMaxResponseBytes = 8 MiB`, which is far more text than a dialog can usefully draw. A larger schema is not parsed.
+- **`kMaxNesting = 32` levels of object/array nesting.** This is the liveness bound, not a tidiness bound: the JSON reader is recursive descent, so a schema nested deeper than the stack can hold is a **crash**, and a crash is not a disposition of a question. The check is a textual pre-scan for unclosed brackets outside strings, run before the reader, and it is deliberately one-sided — it may report nesting that is not there, which renders no form, and never reports less nesting than is there.
+- **`kMaxFields = 16` fields per form.** A user cannot meaningfully fill in an unbounded pile, and each field is a row of the dialog. The dialog names how many of how many the Upstream asked for.
+- **`kMaxLabelColumns = 80` and `kMaxDescriptionColumns = 240`** of schema-declared text per label and per description, and **`kMaxEnumValues = 16`** choices per field. A field named with a megabyte of text is still one field; truncating the label keeps the row a row. The bound is in columns because columns are what the composed render path enforces.
+
+Two more things are bounded by not being this build's to raise. The **field count the answer carries** is the field count the schema declared, minus the fields past `kMaxFields`, and the notice says so. The **value** the user types is not bounded: it is the user's own text, not a server's document, and the answer it becomes is bounded by the request-size machinery it already goes out through.
+
+### Regression properties (tests)
+
+- `a schema this build will not read is reported on screen and answers nothing` — `[coding_agent][tui][mcp][issue846][spec]`: a schema that is not JSON, is not an object, is nested past the depth bound, is larger than the size bound, and declares more fields than a dialog can carry. Each is reported on screen, and the form still has three answers.
+- `the form dialog renders within the width it is handed` — `[coding_agent][tui][mcp][issue846][spec]`: a schema with a 200-column title, a 600-column description, a 300-column field label, a 400-column field description, sixteen 70-column enum choices, and a 300-character value, swept across every narrow overlay width.
+- `invalid input is rejected in the dialog and never sent` and `every schema constraint is enforced before an answer is produced` — `[coding_agent][tui][mcp][issue846][spec]`: `minLength`, `maxLength`, `minimum`, `maximum`, `integer` wholeness, `boolean` spelling, `enum` membership, and `required`, each producing an inline error and no answer.
+- `form values are typed on the way out` — `[coding_agent][tui][mcp][issue846][spec]`: a field the schema declared `integer` leaves as a JSON number and not as the quoted text the user typed, and an optional field left empty is absent from the answer rather than an empty string.
+
 ## MCP Host connection bounds (ADR 0064, ADR 0011, spec #833 stories 9 and 10, issue #839)
 
 The same private constants point bounds what one Upstream connection costs while it is trying, failing, and being torn down. These are not throughput policy either: the work they bound is one probe of one endpoint, so there is no queue to tune. They are containment plus liveness.
