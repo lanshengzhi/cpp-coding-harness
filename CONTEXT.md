@@ -448,3 +448,43 @@ _Avoid_: Whole-document reparsing, stateless full rerender
 **Client-Side Prediction**:
 The local transient input engine that manages the user prompt editing buffer and cursor with immediate, sub-millisecond local echo on the terminal, isolated from Headless Core execution until an explicit command submission.
 _Avoid_: Server-roundtrip keystroke echo, blocking input loop
+
+**MCP Host**:
+The only Model Context Protocol role pike plays: a client that holds connections to Upstream MCP Servers and aggregates their tools into the Agent Session. Pike never exposes an MCP endpoint and never runs as an MCP server or daemon.
+_Avoid_: MCP gateway, MCP proxy, MCP server
+
+**Upstream MCP Server**:
+One external MCP server the MCP Host connects to, identified in product language by its configured server id — never by the self-reported `serverInfo` name, which is display-only.
+_Avoid_: Remote server, MCP service, gateway target
+
+**Modern Era (MCP)**:
+MCP protocol revisions that carry version, identity, and capabilities as per-request `_meta` metadata (2026-07-28 and later): no initialize handshake, and server input requests arrive only as Multi Round-Trip `input_required` results. The only era pike supports.
+_Avoid_: Handshake MCP, session-based MCP
+
+**Legacy Era (MCP)**:
+MCP protocol revisions that establish a session with an `initialize` handshake (2025-11-25 and earlier). A Deferred Capability with a pre-cut seam: if adopted, its scope is limited to initialize plus tools, declaring no client capabilities.
+_Avoid_: Old MCP, MCP v1
+
+**In-Process Aggregation**:
+The MCP Host holds every Upstream connection inside the one Pike Runtime process; aggregation is a Tool-surface and policy matter, never a network proxy or a separate process.
+_Avoid_: Gateway, sidecar, MCP daemon
+
+**Lazy Tool Activation**:
+Upstream tools are discovered at connect time but enter the model context only when activated mid-session; activation is recorded on the transcript (toolsAdded) and sticks for the rest of the session.
+_Avoid_: Eager tool injection, dynamic tool registration
+
+**Pending Elicitation**:
+A server request for user input — form or URL mode — that suspends one tool call until the user accepts, declines, or cancels; on the Modern Era it arrives as a Multi Round-Trip `input_required` result, never as a server-initiated request.
+_Avoid_: Server callback, reverse request
+
+**Upstream Connection Status**:
+The per-Upstream state machine with exactly five states: pending, connected, failed, needs_auth, disabled.
+_Avoid_: Ad-hoc connection booleans, SDK-specific status names
+
+**Server Id**:
+The configuration key naming one Upstream MCP Server, constrained to `[A-Za-z0-9_-]`; it is the sole stable identity used for namespacing, credentials, trust, and status — never the server's self-reported name.
+_Avoid_: Display name as identity, URL as identity
+
+**Qualified Tool Name**:
+The model-visible name of an upstream tool inside pike: `mcp__<Server Id>__<tool>`, sanitized to `[a-zA-Z0-9_-]` and truncated with a deterministic hash suffix at 64 characters. The TUI keeps the mapping back to the original server and tool names.
+_Avoid_: Bare tool name, per-provider renaming
