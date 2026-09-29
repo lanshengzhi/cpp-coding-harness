@@ -187,6 +187,7 @@ struct McpSessionHost::State : std::enable_shared_from_this<McpSessionHost::Stat
                     self->record(snapshot);
                 },
                 .delay = std::move(delay),
+                .catalog_cache = options.catalog_cache,
         };
         auto connection = std::make_shared<mcp::UpstreamConnection>(server.server_id,
                 options.transport ? options.transport : mcp::make_streamable_http_transport(),

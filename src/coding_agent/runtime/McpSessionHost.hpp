@@ -5,6 +5,7 @@
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/mcp/McpTransport.hpp>
 #include <cch/mcp/UpstreamAuth.hpp>
+#include <cch/mcp/UpstreamCatalogCache.hpp>
 #include <cch/mcp/UpstreamConnection.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
@@ -58,6 +59,22 @@ struct McpSessionHostOptions {
     /// non-interactive session, where an undecided server is declined for
     /// the session and nothing is persisted.
     McpServerTrustPrompter trust_prompter{};
+    /// The per-Upstream tool-catalog cache every connection in this session
+    /// reads and fills (spec #833 story 17; issue #848). Null gives each
+    /// session its own cache, which is correct within the session and worth
+    /// nothing across sessions.
+    ///
+    /// **This is a seam the production caller must fill, and the production
+    /// owner of the instance is still undecided.** The value itself is
+    /// `cch_mcp`'s; what is open is which long-lived object holds one across
+    /// the sessions a pike process runs — the same question the shared
+    /// `ModelRuntime` answers for the models runtime, and the same reason it
+    /// is not answered here with a process-global: a process-scope mutable
+    /// owner in this package would be a new architecture pattern, and it
+    /// belongs to the tool-publication ticket (#842), which is the first
+    /// production caller that lists a catalog at all. Hand it the cache of
+    /// the session that ran before.
+    std::shared_ptr<mcp::UpstreamCatalogCache> catalog_cache{nullptr};
 };
 
 /// The session's MCP Host wiring (issue #841, ADR 0065): the trust-gated set
@@ -70,6 +87,12 @@ struct McpSessionHostOptions {
 /// check somebody can forget. The first-enable prompt is a separate,
 /// caller-driven step: until the user answers it the server stays disabled,
 /// and the answer is what enables it (and only then connects it).
+///
+/// A host with `catalog_cache` set shares that one cache with every session
+/// that is handed it, which is what lets a repeated session skip a
+/// `tools/list` walk its predecessor already paid for. The cache is consulted
+/// on `list_tools` only, and a warm entry never makes anything wait
+/// (issue #848).
 ///
 /// The host is a passive owner of values plus the connections themselves. It
 /// holds no event loop of its own: everything runs on the caller's serialized
