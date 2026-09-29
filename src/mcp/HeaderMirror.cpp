@@ -19,9 +19,9 @@ using support::make_error;
 
 constexpr std::string_view kBase64Alphabet{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"};
 
-/// Standard base64 with padding. The client only ever encodes: a mirrored
-/// value is the server's to decode.
-[[nodiscard]] std::string encode_base64(std::string_view bytes) {
+/// Standard base64 with padding, before it becomes a public translation unit
+/// member below.
+[[nodiscard]] std::string encode_base64_impl(std::string_view bytes) {
     std::string encoded;
     encoded.reserve(((bytes.size() + 2) / 3) * 4);
     std::size_t index = 0;
@@ -82,14 +82,18 @@ constexpr std::string_view kBase64Alphabet{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij
             "a mirrored argument must be a string, number, boolean, object, or array"));
 }
 
-[[nodiscard]] std::string apply_sentinel(std::string value) {
-    if (is_printable_ascii(value) && !value.starts_with(protocol::kHeaderValueBase64Sentinel)) {
-        return value;
+[[nodiscard]] std::string apply_sentinel(std::string_view value) {
+    if (value.starts_with(protocol::kHeaderValueBase64Sentinel) || !is_printable_ascii(value)) {
+        return std::string(protocol::kHeaderValueBase64Sentinel) + encode_base64_impl(value);
     }
-    return std::string(protocol::kHeaderValueBase64Sentinel) + encode_base64(value);
+    return std::string(value);
 }
 
 } // namespace
+
+std::string encode_base64(std::string_view bytes) { return encode_base64_impl(bytes); }
+
+std::string to_header_value(std::string_view value) { return apply_sentinel(value); }
 
 Expected<std::map<std::string, std::string>> mirror_parameter_headers(
         const UpstreamToolDescriptor& tool, const JsonValue& arguments) {
@@ -116,8 +120,8 @@ Expected<std::map<std::string, std::string>> mirror_parameter_headers(
         if (!rendered) {
             return std::unexpected(std::move(rendered).error());
         }
-        mirrored.emplace(std::string(protocol::kHeaderParamPrefix) + parameter.header_name,
-                apply_sentinel(std::move(*rendered)));
+        mirrored.emplace(
+                std::string(protocol::kHeaderParamPrefix) + parameter.header_name, to_header_value(*rendered));
     }
     return mirrored;
 }

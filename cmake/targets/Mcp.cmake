@@ -12,8 +12,10 @@ include_guard(GLOBAL)
 # Boost.Asio/Beast type and never an exception type (ADR 0042, ADR 0046). The
 # protocol-version string and the reserved `io.modelcontextprotocol/*` `_meta`
 # keys live behind the one private constants point `src/mcp/Protocol.hpp`
-# (issue #836). No source here opens a socket: the Streamable HTTP transport
-# arrives in its own slice above the injected `McpTransport` seam.
+# (issue #836). The package's only network source is the Streamable HTTP
+# transport in `src/mcp/transport/`, a TLS-only Beast client over the same
+# concrete-executor discipline as the `cch_ai` client transports (ADR 0054);
+# it depends on no code in `cch_ai` (ADR 0065).
 cch_parity_declare_target(
     TARGET cch_mcp
     ROLE owner
@@ -23,10 +25,16 @@ cch_parity_declare_target(
         src/mcp/HeaderMirror.cpp
         src/mcp/JsonRpc.cpp
         src/mcp/McpHost.cpp
+        src/mcp/SseResponseStream.cpp
         src/mcp/UpstreamClient.cpp
         src/mcp/WireDto.cpp
+        src/mcp/transport/BoostBeastStreamableHttpTransport.cpp
+        src/mcp/transport/RetryPolicy.cpp
     DEPENDS
         cch_support
+        Boost::headers@boost
+        OpenSSL::SSL@openssl
+        OpenSSL::Crypto@openssl
     INTERFACE_DEPENDS
         cch_support
 )

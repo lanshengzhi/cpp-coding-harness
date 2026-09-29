@@ -94,4 +94,17 @@ inline constexpr std::size_t kMaxListPagesPerUpstream{1000};
 /// are redacted before they are truncated (CODING_STANDARDS.md §10.2).
 inline constexpr std::size_t kMaxDiagnosticBytes{1024};
 
+/// The `Content-Type` an Upstream answers a Streamable HTTP POST with when it
+/// streams progress and server notifications ahead of the response the request
+/// is waiting for. A reply with any other content type is a whole response
+/// body, read once.
+inline constexpr std::string_view kContentTypeEventStream{"text/event-stream"};
+
+/// The bound on the response bytes one exchange retains, whether they arrive
+/// as one JSON body or as the assembled payload of an event stream
+/// (spec #833 story 24). It is the flood bound: a response that passes it is
+/// terminated rather than drained, so a flooding Upstream cannot hold the
+/// connection open or stall another call. Not caller-tunable.
+inline constexpr std::size_t kMaxResponseBytes{8 * 1024 * 1024};
+
 } // namespace cch::mcp::protocol
