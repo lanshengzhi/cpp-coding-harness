@@ -6,6 +6,7 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
+#include <cch/coding_agent/McpOAuth.hpp>
 #include <cch/coding_agent/McpToolApproval.hpp>
 #include <cch/mcp/McpTransport.hpp>
 #include <cch/mcp/UpstreamConnection.hpp>
@@ -181,6 +182,15 @@ struct AgentSessionCreationRequest {
     /// clock. It is the same timer seam as `mcp_delay` handed to a different
     /// consumer, not a new seam (ADR 0040).
     cch::mcp::UpstreamDelay mcp_elicitation_delay;
+    /// How a browser authorization for an Upstream MCP Server presents its URL
+    /// and learns that the user is done (issue #849). The Native TUI sets
+    /// both; a headless caller leaves them empty and `/mcp auth` then fails
+    /// closed rather than waiting for a browser nobody is watching. The two
+    /// sinks are the whole of the frontend's part in the flow: the discovery,
+    /// the loopback callback, and the token exchange are the MCP Host's
+    /// (ADR 0065).
+    std::optional<coding_agent::McpOAuthPromptSink> mcp_oauth_prompt;
+    std::optional<coding_agent::McpOAuthFinishSink> mcp_oauth_finish;
 };
 
 } // namespace cch::coding_agent::runtime

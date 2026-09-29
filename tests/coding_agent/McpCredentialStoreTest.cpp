@@ -196,3 +196,100 @@ TEST_CASE("the MCP credential store replaces the bearer a Server Id already hold
     CHECK(*other == "other-token");
     CHECK(read_text(path).find("first-token") == std::string::npos);
 }
+
+// ── the OAuth credential (issue #849) ────────────────────────────────────────
+//
+// The OAuth record is not an `ai::Credential`: it carries an issuer and a
+// dynamically registered client id, which the typed provider credential cannot
+// express. It is stored through the same `auth.json`, under the same
+// `mcp.<server-id>` key, and the issuer is the key a lookup matches.
+
+TEST_CASE("an OAuth credential round-trips through the shared auth.json under its Server Id",
+        "[coding_agent][credentials][mcp][auth][issue849][spec]") {
+    cch::tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "auth.json";
+    auto storage = open(path);
+    cch::coding_agent::McpCredentialStore store(storage);
+
+    cch::mcp::UpstreamOAuthCredential written{
+            .issuer = "https://auth.example.com",
+            .client_id = "client-abc",
+            .access_token = "pike-mcp-access-token-0123456789",
+            .refresh_token = "pike-mcp-refresh-token-0123456789",
+            .expires_at = 1893456000,
+            .scopes = {"mcp:tools", "mcp:resources"},
+    };
+    REQUIRE(run_async<cch::support::Expected<void>>([&]() { return store.write_oauth("executor", written); }));
+
+    const auto resolved = run_async<cch::support::Expected<std::optional<cch::mcp::UpstreamOAuthCredential>>>(
+            [&]() { return store.read_oauth("executor", "https://auth.example.com"); });
+    REQUIRE(resolved);
+    REQUIRE(resolved->has_value());
+    const cch::mcp::UpstreamOAuthCredential& read_back = **resolved;
+    CHECK(read_back.issuer == written.issuer);
+    CHECK(read_back.client_id == written.client_id);
+    CHECK(read_back.access_token == written.access_token);
+    CHECK(read_back.refresh_token == written.refresh_token);
+    CHECK(read_back.expires_at == written.expires_at);
+    CHECK(read_back.scopes == written.scopes);
+
+    // The record lands under the same `mcp.<server-id>` key the bearer path
+    // uses, so the flat key map stays a provider-id map.
+    const auto text = read_text(path);
+    CHECK(text.find("\"mcp.executor\"") != std::string::npos);
+    CHECK(text.find("\"iss\"") != std::string::npos);
+}
+
+TEST_CASE("a credential issued by another issuer is not a credential for this one",
+        "[coding_agent][credentials][mcp][auth][issue849][spec]") {
+    cch::tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "auth.json";
+    auto storage = open(path);
+    cch::coding_agent::McpCredentialStore store(storage);
+
+    REQUIRE(run_async<cch::support::Expected<void>>([&]() {
+        return store.write_oauth("executor",
+                cch::mcp::UpstreamOAuthCredential{
+                        .issuer = "https://auth.example.com",
+                        .client_id = "client-abc",
+                        .access_token = "pike-mcp-access-token-0123456789",
+                });
+    }));
+
+    // Issuers never cross-use one another's credentials: the lookup is keyed
+    // by the issuer the request went to, and a mismatch reads as nothing
+    // rather than as a token the connection would present to the wrong
+    // authorization server.
+    const auto other = run_async<cch::support::Expected<std::optional<cch::mcp::UpstreamOAuthCredential>>>(
+            [&]() { return store.read_oauth("executor", "https://other.example.com"); });
+    REQUIRE(other);
+    CHECK_FALSE(other->has_value());
+
+    // Another Server Id's credential is not this one's either.
+    const auto other_server = run_async<cch::support::Expected<std::optional<cch::mcp::UpstreamOAuthCredential>>>(
+            [&]() { return store.read_oauth("docs", "https://auth.example.com"); });
+    REQUIRE(other_server);
+    CHECK_FALSE(other_server->has_value());
+}
+
+TEST_CASE("a record that is not an OAuth credential is never read as one",
+        "[coding_agent][credentials][mcp][auth][issue849][spec]") {
+    cch::tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "auth.json";
+    auto storage = open(path);
+    cch::coding_agent::McpCredentialStore store(storage);
+
+    // A bearer under the same key is a record of another type, and this path
+    // neither reads it as OAuth nor overwrites it.
+    REQUIRE(run_async<cch::support::Expected<void>>([&]() { return store.write_bearer("executor", "bearer-token"); }));
+    const auto resolved = run_async<cch::support::Expected<std::optional<cch::mcp::UpstreamOAuthCredential>>>(
+            [&]() { return store.read_oauth("executor", "https://auth.example.com"); });
+    REQUIRE(resolved);
+    CHECK_FALSE(resolved->has_value());
+
+    const auto bearer = run_async<cch::support::Expected<std::optional<std::string>>>(
+            [&]() { return store.read_bearer("executor"); });
+    REQUIRE(bearer);
+    REQUIRE(bearer->has_value());
+    CHECK(*bearer == "bearer-token");
+}

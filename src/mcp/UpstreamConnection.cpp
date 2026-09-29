@@ -298,6 +298,14 @@ struct UpstreamConnection::Impl : std::enable_shared_from_this<UpstreamConnectio
                         .bearer_env_var = options.bearer_env_var,
                         .credentials = options.credentials,
                         .elicitation = options.elicitation,
+                        .oauth_issuer = oauth_issuer,
+                        // The challenge the Upstream answered is remembered
+                        // here, on the connection that saw it, so the browser
+                        // authorization starts from what was actually asked
+                        // for rather than from a guess (issue #849).
+                        .auth_challenge_sink =
+                                [self = shared_from_this()](
+                                        const AuthorizationChallenge& challenge) { self->challenge = challenge; },
                 });
         report(); // an attempt started: the reading is `pending` even when it was before
         return client->probe_era(token);
@@ -425,6 +433,13 @@ struct UpstreamConnection::Impl : std::enable_shared_from_this<UpstreamConnectio
         }
     }
 
+    /// The issuer this connection authorizes against, learned from the
+    /// authorization the owner ran (issue #849).
+    std::optional<std::string> oauth_issuer{std::nullopt};
+    /// The last authorization requirement any exchange on this connection
+    /// parsed.
+    std::optional<AuthorizationChallenge> challenge{std::nullopt};
+
     /// Whether nothing may start or change any more: the connection is closing
     /// or closed, or the owner turned this Upstream off.
     [[nodiscard]] bool settled() const noexcept {
@@ -496,6 +511,17 @@ UpstreamConnection& UpstreamConnection::operator=(UpstreamConnection&&) noexcept
 const std::string& UpstreamConnection::server_id() const noexcept { return impl_->server_id; }
 
 UpstreamConnectionStatus UpstreamConnection::status() const noexcept { return impl_->status; }
+
+void UpstreamConnection::set_oauth_issuer(std::string issuer) {
+    if (impl_->settled() || impl_->oauth_issuer == issuer || issuer.empty()) {
+        return;
+    }
+    impl_->oauth_issuer = std::move(issuer);
+}
+
+std::optional<AuthorizationChallenge> UpstreamConnection::authorization_challenge() const { return impl_->challenge; }
+
+const std::string& UpstreamConnection::configured_url() const noexcept { return impl_->options.url; }
 
 UpstreamConnectionSnapshot UpstreamConnection::snapshot() const { return impl_->snapshot(); }
 

@@ -611,6 +611,31 @@ struct AuthStorage::Impl {
         co_return std::move(next);
     }
 
+    [[nodiscard]] std::optional<support::JsonValue> read_record(std::string_view provider_id) const {
+        std::scoped_lock lock(snapshot_mutex_);
+        const auto found = snapshot_.find(std::string{provider_id});
+        return found == snapshot_.end() ? std::nullopt : std::optional<support::JsonValue>{found->second};
+    }
+
+    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> write_record_awaitable(
+            std::string provider_id, support::JsonValue record) {
+        CCH_TRY_VOID(ensure_storage_path(auth_path_));
+        CCH_TRY(lease, co_await acquire_lock_async(auth_path_));
+        CCH_TRY(current_data, read_current_data(auth_path_));
+
+        current_data[provider_id] = std::move(record);
+        CCH_TRY(serialized, detail::serialize_pretty_json(support::JsonValue{current_data}, false));
+        if (!lease->valid()) {
+            co_return std::unexpected(storage_error("auth file lock was compromised", auth_path_));
+        }
+        CCH_TRY_VOID(write_file(auth_path_, serialized));
+        if (!lease->valid()) {
+            co_return std::unexpected(storage_error("auth file lock was compromised", auth_path_));
+        }
+        set_snapshot(std::move(current_data));
+        co_return support::ExpectedVoid{};
+    }
+
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> remove_awaitable(std::string provider_id) {
         CCH_TRY_VOID(ensure_storage_path(auth_path_));
         CCH_TRY(lease, co_await acquire_lock_async(auth_path_));
@@ -685,6 +710,22 @@ cch::support::AsyncResult<std::optional<ai::Credential>> AuthStorage::modify(
             [impl, provider_id = std::move(provider_id), modifier = std::move(modifier)]() mutable
                     -> boost::asio::awaitable<support::Expected<std::optional<ai::Credential>>> {
                 co_return co_await impl->modify_awaitable(std::move(provider_id), std::move(modifier));
+            });
+}
+
+cch::support::AsyncResult<std::optional<cch::support::JsonValue>> AuthStorage::read_record(std::string provider_id) {
+    return cch::support::AsyncResult<std::optional<cch::support::JsonValue>>(
+            std::expected<std::optional<cch::support::JsonValue>, cch::support::Error>{
+                    impl_->read_record(provider_id)});
+}
+
+cch::support::AsyncResult<void> AuthStorage::write_record(std::string provider_id, cch::support::JsonValue record) {
+    Impl* impl = impl_.get();
+    return cch::support::detail::make_async_result_on(impl->io_.get_executor(),
+            [impl,
+                    provider_id = std::move(provider_id),
+                    record = std::move(record)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                co_return co_await impl->write_record_awaitable(std::move(provider_id), std::move(record));
             });
 }
 

@@ -32,6 +32,7 @@
 #include "coding_agent/tui/ModalPresenter.hpp"
 #include "coding_agent/tui/SlashCommandRouter.hpp"
 
+#include <cch/coding_agent/McpOAuth.hpp>
 #include <cch/coding_agent/McpToolApproval.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Settings.hpp>
@@ -431,6 +432,18 @@ private:
     /// serialized domain. With no live host there is nobody to ask, and the
     /// operation fails so the call is refused rather than run unasked.
     [[nodiscard]] coding_agent::McpToolApprovalPrompter make_mcp_tool_approval_prompter() const;
+
+    /// The Native TUI's half of one `/mcp auth <server>` authorization
+    /// (issue #849), handed to every session this engine creates: the
+    /// authorization URL is shown in the prompt slot and a browser is asked to
+    /// open it. With no live host there is nobody to show it, and the flow
+    /// fails rather than waiting.
+    [[nodiscard]] coding_agent::McpOAuthPromptSink make_mcp_oauth_prompt() const;
+
+    /// Where one authorization's outcome is reported, so the user reads it
+    /// where they read everything else. It reports only success; a cancelled
+    /// or failed flow is already visible from the flow that ran it.
+    [[nodiscard]] coding_agent::McpOAuthFinishSink make_mcp_oauth_finish() const;
 
     /// Build one in-session session creation request from the CLI-owned facts
     /// (pi `createRuntime` re-resolves the CLI options against the target

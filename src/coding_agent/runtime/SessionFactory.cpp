@@ -208,6 +208,11 @@ struct AssemblyPlan {
     /// headless host passes none and such a call is refused rather than run.
     coding_agent::McpToolApprovalPrompter mcp_tool_approval_prompter;
     mcp::UpstreamDelay mcp_elicitation_delay;
+    /// The frontend's browser-authorization prompt and its terminal report
+    /// (issue #849). Production passes the Native TUI's; a headless host passes
+    /// neither and `/mcp auth` then fails closed.
+    std::optional<coding_agent::McpOAuthPromptSink> mcp_oauth_prompt;
+    std::optional<coding_agent::McpOAuthFinishSink> mcp_oauth_finish;
     std::vector<std::string> prompt_template_paths;
     std::vector<std::string> skill_paths;
     std::optional<DefaultProjectTrust> default_project_trust;
@@ -813,6 +818,8 @@ struct SessionTargetNormalizationOptions {
     plan.mcp_delay = std::move(request.mcp_delay);
     plan.mcp_tool_approval_prompter = std::move(request.mcp_tool_approval_prompter);
     plan.mcp_elicitation_delay = std::move(request.mcp_elicitation_delay);
+    plan.mcp_oauth_prompt = std::move(request.mcp_oauth_prompt);
+    plan.mcp_oauth_finish = std::move(request.mcp_oauth_finish);
     plan.cli_selection = AssemblyPlan::CliModelSelection{
             .provider = std::move(request.session_facts.provider),
             .model = std::move(request.session_facts.model),
@@ -1606,6 +1613,11 @@ struct PreparedAssemblyTarget final {
         mcp_options.executor = plan.execution_runtime_target->executor();
         mcp_options.transport = std::move(plan.mcp_transport);
         mcp_options.delay = std::move(plan.mcp_delay);
+        // The frontend's half of the browser authorization (issue #849). A
+        // host that installed neither sink has no way to show a URL, and
+        // `/mcp auth` then fails rather than waiting for one.
+        mcp_options.oauth_prompt = std::move(plan.mcp_oauth_prompt);
+        mcp_options.oauth_finish = std::move(plan.mcp_oauth_finish);
         // The Upstream-tool binding (issue #842) is the session's callable-tool
         // seam for the MCP Host. It is created here, beside the host that fills
         // it, and handed on to the session that drains it, so no window exists

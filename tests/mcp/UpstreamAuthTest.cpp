@@ -119,6 +119,23 @@ public:
         return cch::support::AsyncResult<void>(std::expected<void, support::Error>{});
     }
 
+    /// This store is about the bearer path; the OAuth half of the interface is
+    /// exercised where the flow that uses it is (issue #849), so an OAuth
+    /// read here is simply an absent credential and an OAuth write is refused
+    /// rather than silently accepted.
+    [[nodiscard]] cch::support::AsyncResult<std::optional<mcp::UpstreamOAuthCredential>> read_oauth(
+            std::string, std::string) override {
+        return cch::support::AsyncResult<std::optional<mcp::UpstreamOAuthCredential>>(
+                std::expected<std::optional<mcp::UpstreamOAuthCredential>, support::Error>{
+                        std::optional<mcp::UpstreamOAuthCredential>{}});
+    }
+
+    [[nodiscard]] cch::support::AsyncResult<void> write_oauth(
+            std::string, const mcp::UpstreamOAuthCredential&) override {
+        return cch::support::AsyncResult<void>(std::expected<void, support::Error>{std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "this store records bearers, not OAuth credentials"))});
+    }
+
 private:
     std::map<std::string, std::string> stored_{};
 };

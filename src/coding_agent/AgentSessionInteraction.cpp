@@ -1478,6 +1478,15 @@ support::ExpectedVoid AgentSession::Impl::answer_mcp_elicitation(McpElicitationA
     return services_.mcp_elicitation_bridge->answer(std::move(answer));
 }
 
+support::AsyncResult<McpOAuthOutcome> AgentSession::Impl::mcp_authorize(
+        std::string_view server_id, std::stop_token stop_token) {
+    if (services_.mcp_host == nullptr) {
+        return support::AsyncResult<McpOAuthOutcome>(std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "this session has no configured MCP Host")));
+    }
+    return services_.mcp_host->authorize(server_id, stop_token);
+}
+
 void AgentSession::Impl::request_mcp_host_close() noexcept {
     // Every question this session is blocked on ends as cancelled before the
     // host closes, so session Close leaves no waiter and no suspended call

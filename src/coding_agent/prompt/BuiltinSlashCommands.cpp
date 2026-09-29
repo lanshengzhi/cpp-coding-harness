@@ -37,7 +37,7 @@ const std::vector<BuiltinSlashCommand>& builtin_slash_commands() {
             // Pike's own entry (no pi counterpart, spec #833 story 8): the
             // Upstream Connection Status overview, taken from the session's
             // projection rather than from the MCP Host package (ADR 0065).
-            {"mcp", "Show Upstream MCP Server status", {}},
+            {"mcp", "Show Upstream MCP Server status, or authorize one", {"<status|auth> <server>"}},
     };
     return kCommands;
 }

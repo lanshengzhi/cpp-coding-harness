@@ -29,92 +29,91 @@ struct SlashCommandDefinition {
 };
 
 constexpr std::array<SlashCommandDefinition, 20> kCommandDefinitions{{
-    {.command = SlashCommandId::Clear,
-     .canonical_name = "clear",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = true},
-    {.command = SlashCommandId::Quit,
-     .canonical_name = "quit",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = true},
-    {.command = SlashCommandId::Copy,
-     .canonical_name = "copy",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = true},
-    {.command = SlashCommandId::Session,
-     .canonical_name = "session",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = true},
-    {.command = SlashCommandId::Hotkeys,
-     .canonical_name = "hotkeys",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = true},
-    {.command = SlashCommandId::Settings,
-     .canonical_name = "settings",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = true},
-    {.command = SlashCommandId::Help,
-     .canonical_name = "help",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = true},
-    {.command = SlashCommandId::Model,
-     .canonical_name = "model",
-     .argument_mode = SlashArgumentMode::Optional,
-     .immediate = false},
-    {.command = SlashCommandId::Models,
-     .canonical_name = "models",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = false},
-    {.command = SlashCommandId::Thinking,
-     .canonical_name = "thinking",
-     .argument_mode = SlashArgumentMode::Optional,
-     .immediate = false},
-    {.command = SlashCommandId::Login,
-     .canonical_name = "login",
-     .argument_mode = SlashArgumentMode::Optional,
-     .immediate = false},
-    {.command = SlashCommandId::Logout,
-     .canonical_name = "logout",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = false},
-    {.command = SlashCommandId::Resume,
-     .canonical_name = "resume",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = false},
-    {.command = SlashCommandId::Fork,
-     .canonical_name = "fork",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = false},
-    {.command = SlashCommandId::Tree,
-     .canonical_name = "tree",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = false},
-    {.command = SlashCommandId::Reload,
-     .canonical_name = "reload",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = false},
-    {.command = SlashCommandId::Compact,
-     .canonical_name = "compact",
-     .argument_mode = SlashArgumentMode::Optional,
-     .immediate = false},
-    {.command = SlashCommandId::Name,
-     .canonical_name = "name",
-     .argument_mode = SlashArgumentMode::Optional,
-     .immediate = true},
-    {.command = SlashCommandId::Trust,
-     .canonical_name = "trust",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = false},
-    // The `/mcp` Upstream Connection Status overview (issue #841). It is a
-    // read-only chat block like `/session` and `/hotkeys`: it renders the
-    // session's status projection and takes no argument. The sub-commands
-    // the spec reserves for it (`/mcp auth <server>`, #849) arrive with
-    // their own surface rather than as an argument this command cannot yet
-    // validate.
-    {.command = SlashCommandId::Mcp,
-     .canonical_name = "mcp",
-     .argument_mode = SlashArgumentMode::None,
-     .immediate = true},
+        {.command = SlashCommandId::Clear,
+                .canonical_name = "clear",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = true},
+        {.command = SlashCommandId::Quit,
+                .canonical_name = "quit",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = true},
+        {.command = SlashCommandId::Copy,
+                .canonical_name = "copy",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = true},
+        {.command = SlashCommandId::Session,
+                .canonical_name = "session",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = true},
+        {.command = SlashCommandId::Hotkeys,
+                .canonical_name = "hotkeys",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = true},
+        {.command = SlashCommandId::Settings,
+                .canonical_name = "settings",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = true},
+        {.command = SlashCommandId::Help,
+                .canonical_name = "help",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = true},
+        {.command = SlashCommandId::Model,
+                .canonical_name = "model",
+                .argument_mode = SlashArgumentMode::Optional,
+                .immediate = false},
+        {.command = SlashCommandId::Models,
+                .canonical_name = "models",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = false},
+        {.command = SlashCommandId::Thinking,
+                .canonical_name = "thinking",
+                .argument_mode = SlashArgumentMode::Optional,
+                .immediate = false},
+        {.command = SlashCommandId::Login,
+                .canonical_name = "login",
+                .argument_mode = SlashArgumentMode::Optional,
+                .immediate = false},
+        {.command = SlashCommandId::Logout,
+                .canonical_name = "logout",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = false},
+        {.command = SlashCommandId::Resume,
+                .canonical_name = "resume",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = false},
+        {.command = SlashCommandId::Fork,
+                .canonical_name = "fork",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = false},
+        {.command = SlashCommandId::Tree,
+                .canonical_name = "tree",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = false},
+        {.command = SlashCommandId::Reload,
+                .canonical_name = "reload",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = false},
+        {.command = SlashCommandId::Compact,
+                .canonical_name = "compact",
+                .argument_mode = SlashArgumentMode::Optional,
+                .immediate = false},
+        {.command = SlashCommandId::Name,
+                .canonical_name = "name",
+                .argument_mode = SlashArgumentMode::Optional,
+                .immediate = true},
+        {.command = SlashCommandId::Trust,
+                .canonical_name = "trust",
+                .argument_mode = SlashArgumentMode::None,
+                .immediate = false},
+        // The `/mcp` Upstream Connection Status overview (issue #841) and its
+        // browser authorization (issue #849). It is a read-only chat block like
+        // `/session` and `/hotkeys` when given no argument, so the argument is
+        // optional; what the argument may be is decided in `parse`, which is
+        // where a two-level command's sub-token and its Server Id are validated.
+        {.command = SlashCommandId::Mcp,
+                .canonical_name = "mcp",
+                .argument_mode = SlashArgumentMode::Optional,
+                .immediate = true},
 }};
 
 constexpr std::array<SlashCommandSpelling, 25> kCommandSpellings{{
@@ -199,6 +198,18 @@ struct SlashCommandParts {
     return ai::parse_model_thinking_level(level).has_value();
 }
 
+/// Split a two-level command's argument into its sub-token and the rest. The
+/// router splits a submission on the first whitespace run only, so the
+/// sub-token is separated here rather than by a second pass over the text.
+[[nodiscard]] SlashCommandParts split_sub_command(std::string_view argument) noexcept {
+    const auto separator = argument.find_first_of(" \t\n\r\f\v");
+    return SlashCommandParts{
+            .spelling = argument.substr(0, separator),
+            .argument = separator == std::string_view::npos ? std::string_view{}
+                                                            : trim_ascii(argument.substr(separator + 1)),
+    };
+}
+
 [[nodiscard]] SlashCommandRouteError unknown_command_error(
     std::string_view spelling) {
     return SlashCommandRouteError{
@@ -214,6 +225,20 @@ struct SlashCommandParts {
             "Slash command '/{}' does not accept arguments",
             spelling),
         .kind = SlashCommandRouteErrorKind::Invalid,
+    };
+}
+
+[[nodiscard]] SlashCommandRouteError unknown_subcommand_error(std::string_view subcommand) {
+    return SlashCommandRouteError{
+            .message = std::format("Unknown /mcp sub-command '{}' (expected: auth <server>)", subcommand),
+            .kind = SlashCommandRouteErrorKind::Invalid,
+    };
+}
+
+[[nodiscard]] SlashCommandRouteError missing_server_id_error() {
+    return SlashCommandRouteError{
+            .message = std::format("Usage: /mcp auth <server> (a Server Id of [A-Za-z0-9_-])"),
+            .kind = SlashCommandRouteErrorKind::Invalid,
     };
 }
 
@@ -250,6 +275,14 @@ std::string_view slash_command_name(SlashCommandId command) noexcept {
 }
 
 std::span<const SlashCommandSpelling> slash_command_spellings() noexcept { return kCommandSpellings; }
+
+bool is_valid_mcp_server_id(std::string_view server_id) noexcept {
+    if (server_id.empty()) {
+        return false;
+    }
+    return std::ranges::all_of(
+            server_id, [](unsigned char byte) { return std::isalnum(byte) != 0 || byte == '_' || byte == '-'; });
+}
 
 bool is_immediate_slash_command(SlashCommandId command) noexcept {
     const auto* definition = find_definition(command);
@@ -289,10 +322,27 @@ SlashCommandParseResultVariant SlashCommandRouter::parse(std::string_view text) 
         !parts.argument.empty() && !is_valid_thinking_level(parts.argument)) {
         return invalid_thinking_level_error(parts.argument);
     }
+    if (alias->command == SlashCommandId::Mcp && !parts.argument.empty()) {
+        const auto sub = split_sub_command(parts.argument);
+        if (sub.spelling != "auth") {
+            return unknown_subcommand_error(sub.spelling);
+        }
+        if (!is_valid_mcp_server_id(sub.argument)) {
+            return missing_server_id_error();
+        }
+        return SlashCommandInvocation{
+                .command = alias->command,
+                .argument = {},
+                .sub = SlashCommandSub::McpAuth,
+                .sub_argument = std::string{sub.argument},
+        };
+    }
 
     return SlashCommandInvocation{
-        .command = alias->command,
-        .argument = std::string{parts.argument},
+            .command = alias->command,
+            .argument = std::string{parts.argument},
+            .sub = SlashCommandSub::None,
+            .sub_argument = {},
     };
 }
 

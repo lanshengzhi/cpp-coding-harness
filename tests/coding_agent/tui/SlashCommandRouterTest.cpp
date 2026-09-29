@@ -201,3 +201,89 @@ TEST_CASE("Slash command routing reports immediate execution failures as user-vi
     REQUIRE(error != nullptr);
     CHECK(error->message == "Could not execute /copy: clipboard unavailable");
 }
+
+// ── the two-level `/mcp` command (issue #849) ─────────────────────────────────
+//
+// `/mcp` alone is the read-only Upstream Connection Status overview, and
+// `/mcp auth <server>` is the browser authorization behind it. The shape is
+// decided here, in the parser, so a bad sub-command or a bad Server Id is a
+// visible error rather than an effect nobody can reach.
+
+TEST_CASE("Slash command parsing splits the /mcp sub-command and its Server Id",
+        "[coding_agent][tui][commands][mcp][issue849][spec]") {
+    using namespace coding_agent::tui;
+
+    auto overview = SlashCommandRouter::parse("/mcp");
+    const auto* plain = parsed_invocation(overview);
+    REQUIRE(plain != nullptr);
+    CHECK(plain->command == SlashCommandId::Mcp);
+    CHECK(plain->sub == SlashCommandSub::None);
+    CHECK(plain->sub_argument.empty());
+
+    struct Case {
+        std::string_view text;
+        std::string_view server_id;
+    };
+    const std::vector<Case> cases{
+            {.text = "/mcp auth executor", .server_id = "executor"},
+            {.text = "/mcp   auth   docs  ", .server_id = "docs"},
+            {.text = "/mcp auth my-server_2", .server_id = "my-server_2"},
+    };
+    for (const auto& test : cases) {
+        auto parsed = SlashCommandRouter::parse(test.text);
+        const auto* invocation = parsed_invocation(parsed);
+        REQUIRE(invocation != nullptr);
+        CHECK(invocation->command == SlashCommandId::Mcp);
+        CHECK(invocation->sub == SlashCommandSub::McpAuth);
+        CHECK(invocation->sub_argument == test.server_id);
+    }
+}
+
+TEST_CASE("Slash command parsing rejects a /mcp sub-command it does not know and a Server Id it cannot address",
+        "[coding_agent][tui][commands][mcp][issue849][spec]") {
+    using namespace coding_agent::tui;
+
+    auto unknown = SlashCommandRouter::parse("/mcp nonsense");
+    const auto* unknown_error = std::get_if<SlashCommandRouteError>(&unknown);
+    REQUIRE(unknown_error != nullptr);
+    CHECK(unknown_error->kind == SlashCommandRouteErrorKind::Invalid);
+    CHECK(unknown_error->message.find("nonsense") != std::string::npos);
+
+    // `/mcp auth` with no Server Id, and a Server Id outside the grammar the
+    // credential key depends on, are both visible errors.
+    for (const auto* text : {"/mcp auth", "/mcp auth exec utor", "/mcp auth exec.tor"}) {
+        auto rejected = SlashCommandRouter::parse(text);
+        const auto* error = std::get_if<SlashCommandRouteError>(&rejected);
+        INFO("text: " << text);
+        REQUIRE(error != nullptr);
+        CHECK(error->kind == SlashCommandRouteErrorKind::Invalid);
+    }
+}
+
+TEST_CASE("Slash command routing carries the /mcp auth Server Id to its immediate effect",
+        "[coding_agent][tui][commands][mcp][issue849][spec]") {
+    using namespace coding_agent::tui;
+
+    SlashCommandRouter router;
+    std::vector<SlashCommandInvocation> executed;
+    SlashCommandExecutionContext context;
+    context.execute_immediate = [&executed](const SlashCommandInvocation& invocation) -> cch::support::ExpectedVoid {
+        executed.push_back(invocation);
+        return {};
+    };
+
+    auto overview = router.route("/mcp", context);
+    REQUIRE(std::holds_alternative<SlashCommandImmediateResult>(overview));
+    auto authorized = router.route("/mcp auth executor", context);
+    REQUIRE(std::holds_alternative<SlashCommandImmediateResult>(authorized));
+    REQUIRE(executed.size() == 2);
+    CHECK(executed[0].sub == SlashCommandSub::None);
+    CHECK(executed[1].sub == SlashCommandSub::McpAuth);
+    CHECK(executed[1].sub_argument == "executor");
+
+    // A rejected sub-command never reaches the effect.
+    auto rejected = router.route("/mcp auth", context);
+    const auto* error = route_error(rejected);
+    REQUIRE(error != nullptr);
+    CHECK(executed.size() == 2);
+}

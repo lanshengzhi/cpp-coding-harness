@@ -35,10 +35,11 @@ struct HotkeyHelpRow;
 /// pi `/help` chat text: the available built-in commands and keybindings
 /// list rendered as one frontend message.
 inline constexpr std::string_view kHelpCommandText =
-    "Available commands:\n"
-    "/clear /new /quit /exit /q /copy /session /hotkeys /settings\n"
-    "/help /commands /name /model /models /scoped-models /thinking\n"
-    "/login /logout /resume /fork /tree /reload /compact /trust /mcp";
+        "Available commands:\n"
+        "/clear /new /quit /exit /q /copy /session /hotkeys /settings\n"
+        "/help /commands /name /model /models /scoped-models /thinking\n"
+        "/login /logout /resume /fork /tree /reload /compact /trust /mcp\n"
+        "/mcp auth <server> opens a browser to authorize one Upstream MCP Server";
 
 /// `/mcp`: the Upstream Connection Status overview (issue #841, spec #833
 /// story 8). One row per configured Server Id, in `mcpServers` order, each

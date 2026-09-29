@@ -5,6 +5,7 @@
 #include <cch/mcp/UpstreamCatalogCache.hpp>
 #include <cch/mcp/UpstreamDelay.hpp>
 #include <cch/mcp/UpstreamElicitation.hpp>
+#include <cch/mcp/UpstreamOAuth.hpp>
 #include <cch/mcp/UpstreamServer.hpp>
 #include <cch/mcp/UpstreamToolCall.hpp>
 #include <cch/support/AsyncResult.hpp>
@@ -76,6 +77,12 @@ struct UpstreamConnectionOptions {
     /// request.
     std::optional<std::string> bearer_env_var{std::nullopt};
     std::shared_ptr<UpstreamCredentialStore> credentials{nullptr};
+    /// The issuer this connection authorizes against, set by the owner once
+    /// `/mcp auth` has stored a credential for it (issue #849). Absent until
+    /// then, which is what a connection that has never been authorized looks
+    /// like: it authenticates nothing and its Upstream answers `401`, and the
+    /// answer moves it to `needs_auth`.
+    std::optional<std::string> oauth_issuer{std::nullopt};
     /// Optional status surface. Absent, the connection keeps its state and
     /// publishes nothing.
     std::optional<UpstreamStatusSink> status_sink{};
@@ -163,6 +170,27 @@ public:
     /// operation stays pending, the connection reads `pending`, and everything
     /// else about the session continues.
     [[nodiscard]] cch::support::AsyncResult<UpstreamServerInfo> connect(std::stop_token stop_token = {});
+
+    /// The issuer this connection authenticates against, and adopt one. An
+    /// owner that has just stored a credential for `issuer` sets it here, and
+    /// every later request on this connection authenticates from that
+    /// credential — resolved per request, so a refreshed token takes effect
+    /// without another reconnect (issue #849).
+    ///
+    /// Setting an issuer this connection already has is a no-op, so a repeated
+    /// authorization does not restart a connection the user is using.
+    void set_oauth_issuer(std::string issuer);
+
+    /// The last `WWW-Authenticate` challenge any exchange on this connection
+    /// parsed, or `std::nullopt` when the Upstream has not asked for
+    /// authorization or asked with something this build cannot act on. It is
+    /// the entry point the browser authorization starts from: its
+    /// `resource_metadata` URL is where discovery begins (issue #849).
+    [[nodiscard]] std::optional<AuthorizationChallenge> authorization_challenge() const;
+
+    /// The Server Id whose Upstream this connection speaks to, for the flows
+    /// that address a connection by its identity.
+    [[nodiscard]] const std::string& configured_url() const noexcept;
 
     /// Re-enable a connection the owner turned off and attempt it again. A
     /// connection that is not disabled is left alone.

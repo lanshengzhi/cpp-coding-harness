@@ -150,6 +150,33 @@ bool InteractiveEngine::write_clipboard_text_sink(std::string text) {
     return wrote != nullptr && *wrote;
 }
 
+coding_agent::McpOAuthPromptSink InteractiveEngine::make_mcp_oauth_prompt() const {
+    const auto weak = weak_from_this();
+    return [weak](coding_agent::McpOAuthRequest request, std::stop_token stop_token) {
+        if (const auto self = weak.lock(); self != nullptr && self->session_flows_ != nullptr) {
+            return self->session_flows_->ask_mcp_oauth_prompt(std::move(request), stop_token);
+        }
+        return support::AsyncResult<void>{std::unexpected(support::make_error(support::ErrorCode::Cancelled,
+                "The Upstream MCP Server authorization prompt is not available",
+                "the Native TUI is no longer running"))};
+    };
+}
+
+coding_agent::McpOAuthFinishSink InteractiveEngine::make_mcp_oauth_finish() const {
+    const auto weak = weak_from_this();
+    return [weak](coding_agent::McpOAuthOutcome outcome) {
+        const auto self = weak.lock();
+        if (self == nullptr || self->session_flows_ == nullptr) {
+            return;
+        }
+        // The dialog closes itself when its prompt resolves; this only
+        // reports the outcome where the user reads it.
+        if (outcome.status == coding_agent::McpOAuthStatus::Authorized) {
+            self->session_flows_->report_mcp_auth_outcome(outcome);
+        }
+    };
+}
+
 coding_agent::McpToolApprovalPrompter InteractiveEngine::make_mcp_tool_approval_prompter() const {
     const auto weak = weak_from_this();
     return [weak](coding_agent::McpToolApprovalRequest request, std::stop_token stop_token) {
@@ -172,6 +199,12 @@ runtime::AgentSessionCreationRequest InteractiveEngine::make_session_request(
     // (issue #843). The session is the only holder of the seam; every session
     // this engine creates gets the same prompt.
     request.mcp_tool_approval_prompter = make_mcp_tool_approval_prompter();
+    // The browser authorization for `/mcp auth <server>` (issue #849). Both
+    // sinks are installed together: a session with neither has no way to show
+    // an authorization URL, and `/mcp auth` then fails closed rather than
+    // waiting for a browser.
+    request.mcp_oauth_prompt = make_mcp_oauth_prompt();
+    request.mcp_oauth_finish = make_mcp_oauth_finish();
     // pi `projectTrustByCwd`: the CLI override wins; otherwise the boot
     // decision applies to the boot workspace (a session-only trust
     // choice leaves no store entry and must survive in-session
@@ -343,6 +376,14 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(
             return std::unexpected(support::make_error(
                 support::ErrorCode::Session,
                 "No active session for /mcp"));
+        }
+        // `/mcp` is the read-only overview and `/mcp auth <server>` is the
+        // browser authorization; the router has already rejected anything else
+        // and checked the Server Id, so this only chooses between the two
+        // effects (issue #849).
+        if (invocation.sub == SlashCommandSub::McpAuth) {
+            session_flows_->open_mcp_auth(std::move(invocation.sub_argument));
+            return {};
         }
         handle_mcp_command();
         return {};

@@ -3,8 +3,10 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "coding_agent/tui/LoginDialog.hpp"
 #include "coding_agent/tui/ModalPresenter.hpp"
 
+#include <cch/coding_agent/McpOAuth.hpp>
 #include <cch/coding_agent/McpToolApproval.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/support/AsyncResult.hpp>
@@ -93,6 +95,12 @@ struct SessionFlowHostHooks {
     /// re-register themes, re-apply settings, rebuild autocomplete, refresh
     /// loaded resources, and surface the models.json diagnostic.
     std::move_only_function<support::ExpectedVoid(AgentSessionReloadResult)> apply_reload_result{nullptr};
+    /// Ask the composition host to open a URL in the user's browser, for the
+    /// authorization dialog of `/mcp auth <server>` (issue #849). The
+    /// generation is carried exactly as every other host action carries it, so
+    /// a dialog admitted before a session replacement cannot open a browser
+    /// against the replacement.
+    std::move_only_function<void(std::size_t, std::string)> open_browser{nullptr};
     /// Mark the manual compaction as admitted or completed so host shutdown
     /// waits for it exactly like prompt/User Bash work.
     std::move_only_function<void(bool)> set_compaction_active{nullptr};
@@ -135,6 +143,12 @@ public:
     void open_compact(std::string custom_instructions);
     void open_reload();
     void open_trust();
+    /// Run one browser authorization for `server_id` (issue #849): the effect
+    /// of `/mcp auth <server>`. The flow itself belongs to the MCP Host; this
+    /// is the frontend's half — showing the URL, waiting for the user, and
+    /// reporting how it ended. A server this session has never configured is
+    /// reported as such rather than authorized.
+    void open_mcp_auth(std::string server_id);
 
     /// Cancel admitted selector/flow work before the host restores its
     /// terminal. Executor-confined like the presenter.
@@ -164,6 +178,21 @@ public:
     [[nodiscard]] support::AsyncResult<coding_agent::McpToolApprovalAnswer> ask_mcp_tool_approval(
             coding_agent::McpToolApprovalRequest request, std::stop_token stop_token = {});
 
+    /// The Native TUI's half of one `/mcp auth <server>` authorization (issue
+    /// #849). The URL is shown in the prompt slot and a browser is asked to
+    /// open it; the operation completes when the user closes the prompt, which
+    /// cancels the flow and persists nothing.
+    ///
+    /// A host that cannot present anything fails rather than waiting, so a
+    /// non-interactive session fails closed instead of hanging on a browser.
+    [[nodiscard]] support::AsyncResult<void> ask_mcp_oauth_prompt(
+            coding_agent::McpOAuthRequest request, std::stop_token stop_token = {});
+
+    /// Report one authorization's success to the chat scrollback, once the
+    /// dialog it was showing has closed. A cancelled or failed authorization
+    /// is not reported here: the flow that ran it already said so.
+    void report_mcp_auth_outcome(const coding_agent::McpOAuthOutcome& outcome);
+
 private:
     [[nodiscard]] boost::asio::awaitable<void> handle_resume_session(
         std::string session_path);
@@ -183,6 +212,7 @@ private:
     [[nodiscard]] boost::asio::awaitable<void> handle_compact_command(
         std::string custom_instructions);
     [[nodiscard]] boost::asio::awaitable<void> handle_reload();
+    [[nodiscard]] boost::asio::awaitable<void> handle_mcp_auth(std::string server_id);
     void show_trust_selector();
     [[nodiscard]] boost::asio::awaitable<std::optional<ProjectTrustOption>>
     show_boot_trust_prompt(const std::filesystem::path& workspace);
@@ -216,6 +246,10 @@ private:
     /// trust prompts), tracked so host Close resolves each admitted flow's
     /// slot and finish() can await quiescence. Executor-confined.
     std::vector<std::shared_ptr<PromptSlot>> active_prompt_slots_;
+    /// Every live `/mcp auth` authorization dialog, tracked for the same
+    /// reason: host Close cancels each one so its flow reaches a terminal
+    /// outcome instead of waiting for a browser (issue #849).
+    std::vector<std::shared_ptr<LoginDialogComponent>> active_oauth_dialogs_;
     std::optional<std::filesystem::path> auto_trust_on_reload_cwd_;
     std::optional<std::filesystem::path> boot_detection_workspace_;
     std::optional<ProjectResourceDetectionResult> boot_detection_;
@@ -231,6 +265,8 @@ private:
 
     void track_prompt_slot(std::shared_ptr<PromptSlot> slot);
     void untrack_prompt_slot(const std::shared_ptr<PromptSlot>& slot);
+    void track_oauth_dialog(std::shared_ptr<LoginDialogComponent> dialog);
+    void untrack_oauth_dialog(const std::shared_ptr<LoginDialogComponent>& dialog);
 };
 
 } // namespace cch::coding_agent::tui

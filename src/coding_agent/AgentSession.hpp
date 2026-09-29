@@ -12,6 +12,7 @@
 #include <cch/coding_agent/McpElicitation.hpp>
 #include <cch/coding_agent/McpServerTrust.hpp>
 #include <cch/coding_agent/McpToolBinding.hpp>
+#include <cch/coding_agent/McpOAuth.hpp>
 #include <cch/coding_agent/McpUpstreamStatus.hpp>
 #include <cch/coding_agent/ProjectionStream.hpp>
 #include <cch/coding_agent/ModelResolver.hpp>
@@ -573,6 +574,19 @@ public:
     /// dismissed, and an unanswerable one leave it disabled. The returned
     /// operation must not outlive the session.
     [[nodiscard]] support::AsyncResult<McpServerTrustResolution> ask_mcp_server_trust(
+            std::string_view server_id, std::stop_token stop_token = {});
+
+    /// Run one browser authorization for a configured Upstream MCP Server
+    /// (issue #849, spec #833 stories 34 and 35) — the operation behind
+    /// `/mcp auth <server>`. The authorization response's issuer is validated
+    /// against the issuer the request went to, and a credential is stored only
+    /// under the issuer that issued it.
+    ///
+    /// A session with no configured MCP Host, and a session with no frontend
+    /// able to present the URL, both fail: the second is the non-interactive
+    /// case, and failing closed is what keeps a headless run from waiting for
+    /// a browser. The returned operation must not outlive the session.
+    [[nodiscard]] support::AsyncResult<McpOAuthOutcome> mcp_authorize(
             std::string_view server_id, std::stop_token stop_token = {});
 
     /// Session identifier.

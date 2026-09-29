@@ -345,6 +345,12 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// answer for a settled question is dropped rather than completing a call
     /// twice.
     [[nodiscard]] support::ExpectedVoid answer_mcp_elicitation(McpElicitationAnswer answer);
+    /// Run one browser authorization for a configured Upstream MCP Server
+    /// (issue #849, spec #833 stories 34 and 35). A success stores the
+    /// credential under `(server_id, issuer)` and attempts the connection
+    /// again; every other outcome persists nothing.
+    [[nodiscard]] support::AsyncResult<McpOAuthOutcome> mcp_authorize(
+            std::string_view server_id, std::stop_token stop_token = {});
     /// Request the MCP Host's deterministic two-phase close (ADR 0011) as
     /// part of session close.
     void request_mcp_host_close() noexcept;

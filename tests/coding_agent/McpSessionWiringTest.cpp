@@ -25,8 +25,21 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <boost/asio/buffer.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/address.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/asio/write.hpp>
+
 #include <atomic>
 #include <chrono>
+#include <cstdint>
+#include <sstream>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
@@ -487,4 +500,213 @@ TEST_CASE("closing the session's MCP Host cancels its in-flight work", "[mcp][is
 
     const auto closed = drive_on(fixture, host->close());
     REQUIRE(closed.has_value());
+}
+
+// ── browser authorization (issue #849) ───────────────────────────────────────
+//
+// The whole chain the product runs, at the session door: the Upstream answers
+// `401` with a `WWW-Authenticate` challenge, the connection reads
+// `needs_auth`, `/mcp auth <server>` runs the browser flow, the credential is
+// stored under the issuer that issued it, and the reconnect authenticates
+// with it. The only injected seam is the MCP Host's transport; the credential
+// store under test is the production one over a real `auth.json`.
+
+namespace {
+
+/// The contents of one file, for asserting what a credential write did and
+/// did not leave on disk.
+[[nodiscard]] std::string read_text(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input.is_open()) {
+        return {};
+    }
+    std::ostringstream contents;
+    contents << input.rdbuf();
+    return contents.str();
+}
+
+void script_oauth_authorization_server(tests::ScriptedMcpTransport& transport) {
+    transport.answer_url("https://mcp.example/.well-known/oauth-protected-resource",
+            ScriptedMcpAnswer{
+                    .raw_body =
+                            R"({"resource":"https://mcp.example","authorization_servers":["https://auth.example.com"],"scopes_supported":["mcp:tools"]})"});
+    transport.answer_url("https://auth.example.com/.well-known/oauth-authorization-server",
+            ScriptedMcpAnswer{
+                    .raw_body =
+                            R"({"issuer":"https://auth.example.com","authorization_endpoint":"https://auth.example.com/authorize","token_endpoint":"https://auth.example.com/token","registration_endpoint":"https://auth.example.com/register","scopes_supported":["mcp:tools"]})"});
+    transport.answer_url(
+            "https://auth.example.com/register", ScriptedMcpAnswer{.raw_body = R"({"client_id":"client-abc"})"});
+    transport.answer_url("https://auth.example.com/token",
+            ScriptedMcpAnswer{
+                    .raw_body =
+                            R"({"access_token":"pike-mcp-access-token-0123456789","refresh_token":"pike-mcp-refresh-token-0123456789","token_type":"Bearer","expires_in":3600,"scope":"mcp:tools"})"});
+}
+
+} // namespace
+
+TEST_CASE("an authentication challenge drives needs_auth and is remembered for the authorization",
+        "[coding_agent][mcp][auth][issue849][spec]") {
+    WiringFixture fixture;
+    fixture.write_trust_store(R"({"executor": true})");
+    // The Upstream refuses the era probe with a Bearer challenge, which is the
+    // RFC 9728 form: a protected-resource-metadata URL to discover from.
+    fixture.transport->answer("server/discover",
+            ScriptedMcpAnswer{
+                    .status_code = 401,
+                    .headers = {{"WWW-Authenticate",
+                            "Bearer resource_metadata=\"https://mcp.example/.well-known/"
+                            "oauth-protected-resource\", scope=\"mcp:tools\""}},
+            });
+
+    auto host = runtime_ns::McpSessionHost::start(fixture.options({fixture.server("executor")}));
+    REQUIRE(host != nullptr);
+    fixture.pump();
+
+    const auto rows = host->upstream_status();
+    const auto& row = row_for(rows, "executor");
+    CHECK(row.state == McpUpstreamState::NeedsAuth);
+    // The status message names the Upstream's own answer, and it is the
+    // connection machinery's bounded and redacted diagnostic.
+    CHECK(row.status_message.find("401") != std::string::npos);
+
+    // The parsed challenge is what the authorization starts from; the header
+    // reached the connection through the client stack, not through a test.
+    auto* const connection = host->connection("executor");
+    REQUIRE(connection != nullptr);
+    const auto challenge = connection->authorization_challenge();
+    REQUIRE(challenge.has_value());
+    CHECK(challenge->scheme == "Bearer");
+    CHECK(challenge->resource_metadata_url == "https://mcp.example/.well-known/oauth-protected-resource");
+    CHECK(challenge->scope == "mcp:tools");
+}
+
+TEST_CASE("a challenge this build cannot act on is still needs_auth and authorizes from the endpoint",
+        "[coding_agent][mcp][auth][issue849][spec]") {
+    WiringFixture fixture;
+    fixture.write_trust_store(R"({"executor": true})");
+    // A `Basic` challenge is an authorization requirement this build does not
+    // answer. The status is the same, and the recorded challenge is absent, so
+    // the flow falls back to discovering from the endpoint itself.
+    fixture.transport->answer("server/discover",
+            ScriptedMcpAnswer{.status_code = 401, .headers = {{"WWW-Authenticate", "Basic realm=\"upstream\""}}});
+
+    auto host = runtime_ns::McpSessionHost::start(fixture.options({fixture.server("executor")}));
+    REQUIRE(host != nullptr);
+    fixture.pump();
+
+    CHECK(row_for(host->upstream_status(), "executor").state == McpUpstreamState::NeedsAuth);
+    auto* const connection = host->connection("executor");
+    REQUIRE(connection != nullptr);
+    CHECK_FALSE(connection->authorization_challenge().has_value());
+}
+
+TEST_CASE("a session with no prompt port fails closed and contacts nothing",
+        "[coding_agent][mcp][auth][issue849][spec]") {
+    WiringFixture fixture;
+    fixture.write_trust_store(R"({"executor": true})");
+    fixture.transport->answer("server/discover", ScriptedMcpAnswer{.status_code = 401});
+
+    auto host = runtime_ns::McpSessionHost::start(fixture.options({fixture.server("executor")}));
+    REQUIRE(host != nullptr);
+    fixture.pump();
+
+    // `fixture.options` installs no `oauth_prompt` and no `oauth_finish`,
+    // which is what a headless host — and a non-TTY session — looks like. The
+    // authorization must fail rather than wait for a browser nobody is
+    // watching, and it must not have contacted anything to find that out.
+    const auto before = fixture.transport->request_count();
+    const auto outcome = drive_on(fixture, host->authorize("executor"));
+    REQUIRE_FALSE(outcome.has_value());
+    CHECK(outcome.error().code == support::ErrorCode::OAuth);
+    CHECK(fixture.transport->request_count() == before);
+}
+
+namespace {
+
+/// The query of an absolute URL, read without the MCP package's private
+/// query parser: this is a test-side reader of a URL the product built, not a
+/// second implementation of anything the product does.
+[[nodiscard]] std::string url_param(std::string_view url, std::string_view name) {
+    const auto separator = url.find('?');
+    if (separator == std::string_view::npos) {
+        return {};
+    }
+    const auto query = url.substr(separator + 1);
+    for (std::size_t start = 0; start <= query.size();) {
+        const auto next = query.find('&', start);
+        const auto end = next == std::string_view::npos ? query.size() : next;
+        const auto field = query.substr(start, end - start);
+        const auto equals = field.find('=');
+        if ((equals == std::string_view::npos ? field : field.substr(0, equals)) == name) {
+            return equals == std::string_view::npos ? std::string{} : std::string{field.substr(equals + 1)};
+        }
+        if (next == std::string_view::npos) {
+            break;
+        }
+        start = next + 1;
+    }
+    return {};
+}
+
+} // namespace
+
+TEST_CASE("an authorization response from another issuer stores nothing and leaves the server unauthorized",
+        "[coding_agent][mcp][auth][issue849][spec]") {
+    WiringFixture fixture;
+    fixture.write_trust_store(R"({"executor": true})");
+    script_oauth_authorization_server(*fixture.transport);
+    fixture.transport->answer("server/discover", ScriptedMcpAnswer{.status_code = 401});
+
+    // The user answers from a different authorization server, which is exactly
+    // the injection the `iss` check exists for.
+    auto follow_redirect = [&fixture](std::string_view authorization_url, std::string_view issuer) {
+        const auto location = url_param(authorization_url, "redirect_uri");
+        const auto state = url_param(authorization_url, "state");
+        const auto path_start = location.find('/', std::string_view{"http://127.0.0.1"}.size());
+        const auto port = location.substr(std::string_view{"http://127.0.0.1:"}.size(),
+                path_start - std::string_view{"http://127.0.0.1:"}.size());
+        const auto path = location.substr(path_start);
+        std::thread([=] {
+            boost::asio::io_context loop;
+            boost::asio::ip::tcp::socket socket{loop};
+            boost::system::error_code error;
+            socket.connect(
+                    {boost::asio::ip::make_address("127.0.0.1"), static_cast<std::uint16_t>(std::stoul(port))}, error);
+            if (error) {
+                return;
+            }
+            const std::string request = "GET " + path + "?code=injected&state=" + state +
+                                        "&iss=" + std::string{issuer} +
+                                        " HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+            boost::asio::write(socket, boost::asio::buffer(request), error);
+            std::string response;
+            boost::asio::read(socket, boost::asio::dynamic_buffer(response), error);
+        }).detach();
+    };
+
+    const auto prompt_executor = fixture.loop.get_executor();
+    auto options = fixture.options({fixture.server("executor")});
+    options.oauth_prompt = [follow_redirect, prompt_executor](coding_agent::McpOAuthRequest request, std::stop_token) {
+        return cch::support::AsyncResult<void>(cch::support::detail::make_async_result_on(prompt_executor,
+                [follow_redirect,
+                        url = request.authorization_url]() -> boost::asio::awaitable<cch::support::Expected<void>> {
+                    follow_redirect(url, "https://evil.example.com");
+                    co_return cch::support::Expected<void>{};
+                }));
+    };
+    auto host = runtime_ns::McpSessionHost::start(std::move(options));
+    REQUIRE(host != nullptr);
+    fixture.pump();
+
+    const auto outcome = drive_on(fixture, host->authorize("executor"));
+    REQUIRE_FALSE(outcome.has_value());
+    CHECK(outcome.error().code == support::ErrorCode::OAuth);
+
+    // Nothing was persisted and the connection never adopted an issuer, so
+    // the Upstream is still `needs_auth` and the credential store is empty.
+    auto* const connection = host->connection("executor");
+    REQUIRE(connection != nullptr);
+    CHECK(read_text(fixture.agent_dir / "auth.json").find("injected") == std::string::npos);
+    CHECK(read_text(fixture.agent_dir / "auth.json").find("pike-mcp-access-token") == std::string::npos);
+    CHECK(row_for(host->upstream_status(), "executor").state == McpUpstreamState::NeedsAuth);
 }

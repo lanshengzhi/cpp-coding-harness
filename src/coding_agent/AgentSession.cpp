@@ -539,6 +539,15 @@ support::AsyncResult<McpServerTrustResolution> AgentSession::ask_mcp_server_trus
     return impl_->ask_mcp_server_trust(server_id, stop_token);
 }
 
+support::AsyncResult<McpOAuthOutcome> AgentSession::mcp_authorize(
+        std::string_view server_id, std::stop_token stop_token) {
+    if (impl_ == nullptr) {
+        return support::AsyncResult<McpOAuthOutcome>(std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "this session has no configured MCP Host")));
+    }
+    return impl_->mcp_authorize(server_id, stop_token);
+}
+
 const std::string& AgentSession::session_id() const {
     static const std::string empty;
     return impl_ ? impl_->session_id() : empty;

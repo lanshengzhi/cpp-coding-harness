@@ -6,6 +6,7 @@
 #include "mcp/JsonRpc.hpp"
 #include "mcp/Protocol.hpp"
 #include "mcp/Redaction.hpp"
+#include "mcp/WwwAuthenticate.hpp"
 #include "mcp/WireDto.hpp"
 #include "support/Json.hpp"
 
@@ -214,13 +215,39 @@ struct ProgressObserver {
     }
 };
 
+/// The value of one response header, matched case-insensitively: HTTP field
+/// names are case-insensitive, and an Upstream that spells its
+/// `WWW-Authenticate` header differently still made an authorization
+/// requirement of this client.
+[[nodiscard]] std::string_view header_value(const McpResponse& response, std::string_view field) {
+    for (const auto& [name, value] : response.headers) {
+        if (name.size() != field.size()) {
+            continue;
+        }
+        bool same = true;
+        for (std::size_t index = 0; index < name.size(); ++index) {
+            if (std::tolower(static_cast<unsigned char>(name[index])) !=
+                    std::tolower(static_cast<unsigned char>(field[index]))) {
+                same = false;
+                break;
+            }
+        }
+        if (same) {
+            return std::string_view{value};
+        }
+    }
+    return {};
+}
+
 /// Read the one response that belongs to `id` out of a transport answer.
 /// Notifications ahead of it — including `tools/list_changed` — are safely
 /// ignored: pike does not subscribe to `subscriptions/listen`, so the
 /// notification neither reconnects the connection nor refreshes the catalog.
-[[nodiscard]] ExchangeOutcome read_exchange_outcome(
-        double id, const std::expected<McpResponse, Error>& answer, std::string_view secret,
-        const ProgressObserver& progress) {
+[[nodiscard]] ExchangeOutcome read_exchange_outcome(double id,
+        const std::expected<McpResponse, Error>& answer,
+        std::string_view secret,
+        const ProgressObserver& progress,
+        const std::function<void(const AuthorizationChallenge&)>* challenge_sink) {
     if (!answer) {
         return answer.error();
     }
@@ -229,6 +256,25 @@ struct ProgressObserver {
         // An authentication challenge is not a protocol violation: it is the
         // Upstream refusing to serve the call until the user has authorized
         // it, and the connection reads it as health evidence (ADR 0064).
+        //
+        // The `WWW-Authenticate` field is parsed here, once, and reduced to
+        // what the authorization flow needs. A field this build cannot act on
+        // — a scheme that is not OAuth, or a malformed value — changes
+        // nothing the user sees: the status is `needs_auth` either way, and a
+        // header this build cannot honour is not a header it reports.
+        //
+        // Nothing the header *carries* is put in this error. The `needs_auth`
+        // publish is the one status path that has no resolved credential to
+        // redact with (issue #838), so a server-derived value — an OAuth
+        // `error`, let alone an `error_description` — reaching it would be
+        // server text the package cannot erase before it reaches a status
+        // surface (CODING_STANDARDS.md §10.7). The parsed challenge travels
+        // to the authorization flow through `challenge_sink` instead, which
+        // stores it and never reports it.
+        const auto challenge = www_authenticate::first_bearer_challenge(header_value(response, "WWW-Authenticate"));
+        if (challenge.has_value() && challenge_sink != nullptr && static_cast<bool>(*challenge_sink)) {
+            (*challenge_sink)(*challenge);
+        }
         return make_error(ErrorCode::Auth,
                 "the Upstream MCP Server requires authentication",
                 "the Upstream answered with HTTP status " + std::to_string(response.status_code));
@@ -461,10 +507,22 @@ private:
     /// write — see `notify`.
     void resolve_auth(std::stop_token token, std::move_only_function<void(Expected<UpstreamAuth>)> on_ready) {
         const auto& connection = connection_;
-        auto resolution = resolve_upstream_auth(connection->server_id,
-                connection->options.bearer_env_var,
-                connection->options.credentials,
-                token);
+        // A declared environment reference is authoritative (issue #838); an
+        // OAuth issuer is what `/mcp auth` established instead (issue #849).
+        // Exactly one of them resolves, so a request is never authenticated
+        // twice from two different credentials.
+        auto resolution =
+                connection->options.bearer_env_var.has_value() ? resolve_upstream_auth(connection->server_id,
+                                                                         connection->options.bearer_env_var,
+                                                                         connection->options.credentials,
+                                                                         token)
+                : connection->options.oauth_issuer.has_value()
+                        ? resolve_oauth_bearer(connection->server_id,
+                                  *connection->options.oauth_issuer,
+                                  connection->options.credentials,
+                                  token)
+                        : resolve_upstream_auth(
+                                  connection->server_id, std::nullopt, connection->options.credentials, token);
         resolution.start([self = Operation::shared_from_this(), on_ready = std::move(on_ready)](
                                  std::expected<UpstreamAuth, Error> auth) mutable noexcept {
             self->queue_.post(
@@ -534,12 +592,16 @@ private:
         apply_upstream_auth(request, *auth);
 
         auto pending = connection->transport->send(std::move(request));
-        pending.start([self = Operation::shared_from_this(), id, on_outcome = std::move(on_outcome)](
+        pending.start([self = Operation::shared_from_this(), connection, id, on_outcome = std::move(on_outcome)](
                               std::expected<McpResponse, Error> answer) mutable noexcept {
             const auto secret = self->secret();
-            auto outcome = read_exchange_outcome(id, answer, secret,
+            auto outcome = read_exchange_outcome(id,
+                    answer,
+                    secret,
                     ProgressObserver{.sink = self->progress_sink_ ? &*self->progress_sink_ : nullptr,
-                            .token = self->progress_token_});
+                            .token = self->progress_token_},
+                    connection->options.auth_challenge_sink.has_value() ? &*connection->options.auth_challenge_sink
+                                                                        : nullptr);
             self->queue_.post([on_outcome = std::move(on_outcome), outcome = std::move(outcome)]() mutable {
                 on_outcome(std::move(outcome));
             });

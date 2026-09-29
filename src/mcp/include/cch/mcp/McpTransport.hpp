@@ -19,6 +19,12 @@ namespace cch::mcp {
 /// message.
 struct McpRequest {
     std::string url{};
+    /// The HTTP method. `POST` is the Streamable HTTP method the client stack
+    /// uses for every JSON-RPC exchange and stays the default. `GET` exists
+    /// for the OAuth discovery documents an authorization server publishes
+    /// (RFC 8414, RFC 9728), which are fetched rather than posted; the
+    /// production transport refuses any other method.
+    std::string method{"POST"};
     std::map<std::string, std::string> headers{};
     std::string body{};
     /// Bounds connection setup, request dispatch, and response headers. The

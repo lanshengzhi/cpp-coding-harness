@@ -189,4 +189,41 @@ void apply_upstream_auth(McpRequest& request, const UpstreamAuth& auth) {
     request.headers.emplace(std::string{protocol::kHeaderAuthorization}, std::string{kBearerScheme} + *auth.bearer);
 }
 
+AsyncResult<UpstreamAuth> resolve_oauth_bearer(std::string server_id,
+        std::string issuer,
+        std::shared_ptr<UpstreamCredentialStore> store,
+        std::stop_token stop_token) {
+    if (stop_token.stop_requested()) {
+        return AsyncResult<UpstreamAuth>(std::unexpected(
+                make_error(ErrorCode::Cancelled, "the Upstream MCP Server credential resolution was cancelled", "")));
+    }
+    if (store == nullptr) {
+        return AsyncResult<UpstreamAuth>(std::unexpected(credential_error(ErrorCode::Auth,
+                "the Upstream MCP Server authorizes with OAuth but the MCP Host has no credential store",
+                server_id,
+                {})));
+    }
+    return AsyncResult<UpstreamAuth>(AsyncResult<UpstreamAuth>::producer_type(
+            [server_id = std::move(server_id), issuer = std::move(issuer), store = std::move(store)](
+                    AsyncCompletion<UpstreamAuth, Error> completion) mutable noexcept {
+                store->read_oauth(server_id, issuer)
+                        .start([completion = std::move(completion), server_id, issuer, store](
+                                       std::expected<std::optional<UpstreamOAuthCredential>, Error>
+                                               stored) mutable noexcept {
+                            if (!stored) {
+                                return completion(
+                                        std::unexpected(store_read_failure(stored.error(), server_id, {}, {})));
+                            }
+                            if (!stored->has_value() || (*stored)->access_token.empty()) {
+                                // No credential for *this* issuer is not an error and
+                                // is not a token: the connection has nothing to
+                                // authenticate with, which the caller reports as the
+                                // authentication challenge it already saw.
+                                return completion(Expected<UpstreamAuth>{UpstreamAuth{}});
+                            }
+                            completion(Expected<UpstreamAuth>{UpstreamAuth{.bearer = (*stored)->access_token}});
+                        });
+            }));
+}
+
 } // namespace cch::mcp

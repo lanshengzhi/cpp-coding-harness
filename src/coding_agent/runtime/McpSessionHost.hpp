@@ -1,11 +1,13 @@
 #pragma once
 
+#include <cch/coding_agent/McpOAuth.hpp>
 #include <cch/coding_agent/McpServerTrust.hpp>
 #include <cch/coding_agent/McpUpstreamStatus.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/mcp/McpTransport.hpp>
 #include <cch/mcp/UpstreamAuth.hpp>
 #include <cch/mcp/UpstreamCatalogCache.hpp>
+#include <cch/mcp/UpstreamOAuth.hpp>
 #include <cch/mcp/UpstreamConnection.hpp>
 #include <cch/mcp/UpstreamElicitation.hpp>
 #include <cch/support/AsyncResult.hpp>
@@ -58,6 +60,14 @@ struct McpSessionHostOptions {
     /// `tests::ScriptedMcpDelay` so the bounded reconnect ladder and the
     /// cleanup bound are driven without a wall clock.
     mcp::UpstreamDelay delay{};
+    /// How a browser authorization presents its URL and learns that the user
+    /// is done (issue #849). Both sinks are absent together, and both absent
+    /// is a non-interactive session: an authorization then fails closed rather
+    /// than waiting for a browser nobody is watching. Two function values
+    /// rather than an `cch_mcp` port, so a frontend reaches the flow only
+    /// through this Owner (ADR 0065).
+    std::optional<McpOAuthPromptSink> oauth_prompt{std::nullopt};
+    std::optional<McpOAuthFinishSink> oauth_finish{std::nullopt};
     /// The frontend's first-enable trust prompt (issue #840). Empty is a
     /// non-interactive session, where an undecided server is declined for
     /// the session and nothing is persisted.
@@ -153,6 +163,20 @@ public:
     /// configured but not enabled (or was never configured). The seam the
     /// tool-publication path builds `cch::agent::Tool` values over.
     [[nodiscard]] mcp::UpstreamConnection* connection(std::string_view server_id) const;
+
+    /// Run one browser authorization for a configured Server Id (issue #849,
+    /// spec #833 stories 34 and 35): discover the authorization server from the
+    /// challenge the Upstream answered `401` with, register a client, present
+    /// the URL through the configured sinks, validate the authorization
+    /// response's issuer, exchange the code, and store the credential under
+    /// `(server_id, issuer)`.
+    ///
+    /// A success adopts the issuer on the server's connection and attempts it
+    /// again, so the reconnect authenticates with what was just stored. Every
+    /// other outcome persists nothing and leaves the connection `needs_auth`.
+    /// The host must outlive the returned operation.
+    [[nodiscard]] support::AsyncResult<McpOAuthOutcome> authorize(
+            std::string_view server_id, std::stop_token stop_token = {});
 
     /// The deterministic two-phase close of ADR 0011 across every connection
     /// this host owns: stop admission, request cancellation, and complete

@@ -40,6 +40,22 @@ public:
     /// an OAuth credential (#849) from being replaced by a bearer.
     [[nodiscard]] cch::support::AsyncResult<void> write_bearer(std::string server_id, std::string bearer) override;
 
+    /// The stored OAuth record under `mcp.<server-id>`, but only when it
+    /// declares exactly `issuer`. A record of another type, a record with no
+    /// issuer, and a record issued by a different authorization server all read
+    /// as absent: issuers never cross-use one another's credentials (issue
+    /// #849).
+    [[nodiscard]] cch::support::AsyncResult<std::optional<mcp::UpstreamOAuthCredential>> read_oauth(
+            std::string server_id, std::string issuer) override;
+
+    /// Persist one OAuth record through the store's record write path, which
+    /// is the same whole-file lock and the same owner-only permissions every
+    /// credential write here uses. The record is written whole, so a bearer
+    /// under the same key would be replaced: a Server Id has one credential,
+    /// and the record decides which kind.
+    [[nodiscard]] cch::support::AsyncResult<void> write_oauth(
+            std::string server_id, const mcp::UpstreamOAuthCredential& credential) override;
+
 private:
     std::shared_ptr<AuthStorage> auth_storage_;
 };

@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstddef>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -41,6 +42,10 @@ struct ScriptedMcpAnswer {
     /// free to send a notification before the response it belongs to.
     std::vector<support::JsonValue> leading_messages{};
     int status_code{200};
+    /// Response headers, for a case that must answer with a header rather than
+    /// a body: the `WWW-Authenticate` challenge of an authentication
+    /// requirement has no JSON-RPC framing around it (issue #849).
+    std::map<std::string, std::string> headers{};
     /// Set to fail the exchange at the transport instead of answering, which
     /// is how a cancellation and a network loss reach the client stack.
     std::optional<support::Error> transport_error{};
@@ -90,6 +95,28 @@ public:
         script(method, [policy](const support::JsonValue&) { return ScriptedMcpAnswer{.hold = policy}; });
     }
 
+    /// Answer every request whose `url` is exactly `url`, whatever it carries.
+    /// The JSON-RPC script cannot answer the OAuth exchanges the authorization
+    /// flow makes — a discovery `GET` and a form-encoded `POST` are not framed
+    /// messages — so the same one transport seam is routed by URL for them
+    /// (issue #849). Replaces any answer already scripted for `url`.
+    void answer_url(std::string_view url, ScriptedMcpAnswer value) {
+        answer_url_with(url, [value = std::move(value)](const mcp::McpRequest&) { return value; });
+    }
+
+    /// Answer every request whose `url` is exactly `url` from the request
+    /// itself, for a case that has to react to what was sent.
+    void answer_url_with(std::string_view url, std::function<ScriptedMcpAnswer(const mcp::McpRequest&)> handler) {
+        const std::string name(url);
+        for (auto& [scripted, existing] : url_script_) {
+            if (scripted == name) {
+                existing = std::move(handler);
+                return;
+            }
+        }
+        url_script_.push_back({name, std::move(handler)});
+    }
+
     /// Answer every request for `method` that a `hold` is still withholding,
     /// exactly as if the Upstream had replied all along. The scripted answer
     /// for `method` is re-read at release time, so a test may hold, replace
@@ -120,7 +147,7 @@ public:
             }
             completion(mcp::McpResponse{
                     .status_code = response->status_code,
-                    .headers = {},
+                    .headers = response->headers,
                     .body = response->raw_body.value_or(response->body),
             });
         }
@@ -169,6 +196,9 @@ public:
     [[nodiscard]] cch::support::AsyncResult<mcp::McpResponse> send(mcp::McpRequest request) override {
         const auto index = requests_.size();
         requests_.push_back(request);
+        if (const auto* url_handler = find_url(requests_.at(index).url); url_handler != nullptr) {
+            return answer_url_request(requests_.at(index), *url_handler);
+        }
         const auto answer = build_answer(requests_.at(index));
         if (!answer) {
             return cch::support::AsyncResult<mcp::McpResponse>(
@@ -185,7 +215,7 @@ public:
         return cch::support::AsyncResult<mcp::McpResponse>(
                 std::expected<mcp::McpResponse, support::Error>{mcp::McpResponse{
                         .status_code = answer->status_code,
-                        .headers = {},
+                        .headers = answer->headers,
                         .body = answer->raw_body.value_or(answer->body),
                 }});
     }
@@ -225,6 +255,7 @@ private:
 
     struct ScriptedResponse {
         int status_code{200};
+        std::map<std::string, std::string> headers{};
         std::string body{};
         std::optional<std::string> raw_body{};
         std::optional<McpHold> hold{};
@@ -275,7 +306,16 @@ private:
     }
 
     [[nodiscard]] support::Expected<ScriptedResponse> build_answer(const mcp::McpRequest& request) const {
-        auto decoded = mcp::jsonrpc::decode_message(*support::read_json(request.body));
+        // A body that is not a framed JSON-RPC message has no answer in this
+        // script: a URL-routed exchange is the seam for those, and a body that
+        // is neither is a test asking a question this transport cannot answer.
+        auto body = support::read_json(request.body);
+        if (!body) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "the scripted MCP transport was asked a request that is not framed JSON-RPC",
+                    "no URL route matches \"" + request.url + "\" and the body is not a JSON-RPC message"));
+        }
+        auto decoded = mcp::jsonrpc::decode_message(*body);
         if (!decoded) {
             return std::unexpected(decoded.error());
         }
@@ -299,6 +339,7 @@ private:
         }
         ScriptedResponse response;
         response.status_code = answer.status_code;
+        response.headers = answer.headers;
         response.raw_body = answer.raw_body;
         response.hold = answer.hold;
         if (answer.hold.has_value()) {
@@ -329,6 +370,41 @@ private:
         return body;
     }
 
+    /// One URL-routed answer. The request is passed whole because a
+    /// non-JSON-RPC exchange is answered from what it carried — the path, the
+    /// method, and the body a test is asserting on.
+    using UrlHandler = std::function<ScriptedMcpAnswer(const mcp::McpRequest&)>;
+
+    [[nodiscard]] const UrlHandler* find_url(const std::string& url) const {
+        for (const auto& [name, handler] : url_script_) {
+            if (name == url) {
+                return &handler;
+            }
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] cch::support::AsyncResult<mcp::McpResponse> answer_url_request(
+            const mcp::McpRequest& request, const UrlHandler& handler) {
+        using Result = cch::support::AsyncResult<mcp::McpResponse>;
+        const auto answer = handler(request);
+        if (answer.transport_error.has_value()) {
+            return Result(std::expected<mcp::McpResponse, support::Error>{std::unexpected(*answer.transport_error)});
+        }
+        if (answer.hold.has_value()) {
+            return hold_request(request, request.url, *answer.hold);
+        }
+        return Result(std::expected<mcp::McpResponse, support::Error>{mcp::McpResponse{
+                .status_code = answer.status_code,
+                .headers = answer.headers,
+                // A URL-routed exchange is not a framed JSON-RPC message, so
+                // the answer is the `raw_body` verbatim: there is no result
+                // to frame, and a body this seam cannot express is a body the
+                // test does not send.
+                .body = answer.raw_body.value_or(std::string{}),
+        }});
+    }
+
     using Handler = std::function<ScriptedMcpAnswer(const support::JsonValue& params)>;
 
     [[nodiscard]] const Handler* find(std::string_view method) const {
@@ -341,6 +417,7 @@ private:
     }
 
     std::vector<std::pair<std::string, Handler>> script_{};
+    std::vector<std::pair<std::string, UrlHandler>> url_script_{};
     std::vector<mcp::McpRequest> requests_{};
     std::vector<std::shared_ptr<HeldRequest>> held_{};
 };

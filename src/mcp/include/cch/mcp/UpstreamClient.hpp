@@ -3,11 +3,13 @@
 #include <cch/mcp/McpTransport.hpp>
 #include <cch/mcp/UpstreamAuth.hpp>
 #include <cch/mcp/UpstreamElicitation.hpp>
+#include <cch/mcp/UpstreamOAuth.hpp>
 #include <cch/mcp/UpstreamServer.hpp>
 #include <cch/mcp/UpstreamToolCall.hpp>
 #include <cch/support/AsyncResult.hpp>
 
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -42,6 +44,16 @@ struct UpstreamClientOptions {
     /// hangs. Shared rather than owned so a reconnect re-asks through the same
     /// port; a port holds no per-call state, only the seam.
     std::shared_ptr<UpstreamElicitationPort> elicitation{nullptr};
+    /// The issuer this connection authorizes against once `/mcp auth` has run
+    /// (issue #849), absent until it has. When it is set and no `bearer_env_var`
+    /// is declared, every request authenticates from the OAuth credential that
+    /// issuer issued, resolved per request exactly as a bearer is.
+    std::optional<std::string> oauth_issuer{std::nullopt};
+    /// Where one parsed `WWW-Authenticate` challenge is reported, so the
+    /// connection can remember what the Upstream asked for and the
+    /// authorization flow can start from it. Called on the exchange's own
+    /// domain with the reduced challenge; it carries no secret.
+    std::optional<std::function<void(const AuthorizationChallenge&)>> auth_challenge_sink{std::nullopt};
 };
 
 /// The MCP Host's client stack for one Upstream MCP Server: the era probe, the

@@ -1,5 +1,7 @@
 #include "coding_agent/runtime/McpSessionHost.hpp"
 
+#include <cch/mcp/UpstreamOAuth.hpp>
+
 #include <cch/support/AsyncResult.hpp>
 #include "support/AsyncResultBridge.hpp"
 
@@ -11,6 +13,8 @@
 #include <boost/system/error_code.hpp>
 
 #include <algorithm>
+#include <functional>
+#include <optional>
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -132,6 +136,58 @@ private:
                 });
     };
 }
+
+/// The one `cch_mcp` prompt port, assembled from the session's two function
+/// values. It is the only place the MCP Host's prompt port exists: a frontend
+/// hands over a function, and nothing of `cch_mcp`'s crosses back out.
+class SessionOAuthPrompter final : public mcp::UpstreamOAuthPrompter {
+public:
+    SessionOAuthPrompter(std::optional<McpOAuthPromptSink> prompt, std::optional<McpOAuthFinishSink> finish)
+        : prompt_(std::move(prompt)), finish_(std::move(finish)) {}
+
+    [[nodiscard]] support::AsyncResult<void> present(
+            mcp::UpstreamOAuthPrompt request, std::stop_token stop_token) override {
+        if (!prompt_.has_value()) {
+            return support::AsyncResult<void>(std::unexpected(
+                    support::make_error(support::ErrorCode::Cancelled, "no frontend can show the authorization URL")));
+        }
+        return (*prompt_)(
+                McpOAuthRequest{
+                        .server_id = request.server_id,
+                        .issuer = request.issuer,
+                        .authorization_url = request.authorization_url,
+                },
+                stop_token);
+    }
+
+    void finish(mcp::UpstreamOAuthReport report) override {
+        if (!finish_.has_value()) {
+            return;
+        }
+        McpOAuthStatus status = McpOAuthStatus::Failed;
+        switch (report.outcome) {
+        case mcp::UpstreamOAuthOutcome::Authorized:
+            status = McpOAuthStatus::Authorized;
+            break;
+        case mcp::UpstreamOAuthOutcome::Cancelled:
+            status = McpOAuthStatus::Cancelled;
+            break;
+        case mcp::UpstreamOAuthOutcome::Failed:
+            status = McpOAuthStatus::Failed;
+            break;
+        }
+        (*finish_)(McpOAuthOutcome{
+                .server_id = report.server_id,
+                .issuer = report.issuer,
+                .status = status,
+                .message = std::move(report.message),
+        });
+    }
+
+private:
+    std::optional<McpOAuthPromptSink> prompt_{std::nullopt};
+    std::optional<McpOAuthFinishSink> finish_{std::nullopt};
+};
 
 } // namespace
 
@@ -381,6 +437,82 @@ support::AsyncResult<McpServerTrustResolution> McpSessionHost::ask_trust(
                                 state->enable_and_connect(id);
                             }
                             completion(std::move(outcome));
+                        });
+            });
+}
+
+support::AsyncResult<McpOAuthOutcome> McpSessionHost::authorize(
+        std::string_view server_id, std::stop_token stop_token) {
+    auto state = state_;
+    if (state == nullptr) {
+        return support::AsyncResult<McpOAuthOutcome>(std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "this session has no MCP Host wiring")));
+    }
+    const auto id = std::string{server_id};
+    const auto server = std::ranges::find_if(
+            state->options.servers, [&id](const UserMcpServerSettings& entry) { return entry.server_id == id; });
+    if (server == state->options.servers.end()) {
+        return support::AsyncResult<McpOAuthOutcome>(std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "no such Upstream MCP Server",
+                "Server Id \"" + id + "\" is not a configured Upstream MCP Server")));
+    }
+    auto connection = state->make_connection(*server);
+    if (connection == nullptr) {
+        return support::AsyncResult<McpOAuthOutcome>(std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "the Upstream MCP Server has no connection",
+                "Server Id \"" + id + "\" is not enabled in this session")));
+    }
+    if (!state->options.oauth_prompt.has_value() || !state->options.oauth_finish.has_value()) {
+        // A host that installed no prompt has no way to show the
+        // authorization URL. Decided here, before any discovery: a headless
+        // run must fail rather than reach an authorization server and then
+        // stall on a browser nobody is watching (issue #849).
+        return support::AsyncResult<McpOAuthOutcome>(std::unexpected(support::make_error(support::ErrorCode::OAuth,
+                "this session cannot ask the user to authorize an Upstream MCP Server",
+                "no frontend is installed to present the authorization URL, so the flow cannot start")));
+    }
+    // The authorization starts from what the Upstream actually asked for: the
+    // challenge its own `401` carried is the discovery entry point, and the
+    // endpoint is the fallback when it answered with nothing this build can
+    // act on.
+    auto transport = state->options.transport ? state->options.transport : mcp::make_streamable_http_transport();
+    mcp::UpstreamOAuthRequest request{
+            .server_id = id,
+            .resource_url = connection->configured_url(),
+            .challenge = connection->authorization_challenge(),
+    };
+    auto prompter = std::make_shared<SessionOAuthPrompter>(
+            std::move(state->options.oauth_prompt), std::move(state->options.oauth_finish));
+    return support::AsyncResult<McpOAuthOutcome>(
+            [state, connection, request = std::move(request), transport, prompter, stop_token](
+                    support::AsyncCompletion<McpOAuthOutcome, support::Error> completion) mutable noexcept {
+                mcp::authorize_upstream(
+                        std::move(request), std::move(transport), state->options.credentials, prompter, stop_token)
+                        .start([state, connection, prompter, completion = std::move(completion)](
+                                       std::expected<mcp::UpstreamOAuthGrant, support::Error> grant) mutable noexcept {
+                            if (!grant) {
+                                // The flow already reported its own failure to the
+                                // frontend; this is the session's own answer to the
+                                // caller, and it carries the same bounded text.
+                                return completion(std::unexpected(std::move(grant.error())));
+                            }
+                            // The credential is stored: the connection adopts the
+                            // issuer and is attempted again, and that attempt is the
+                            // evidence the reconnect authenticates.
+                            connection->set_oauth_issuer(grant->issuer);
+                            state->connect(connection);
+                            McpOAuthStatus status = McpOAuthStatus::Authorized;
+                            if (grant->outcome == mcp::UpstreamOAuthOutcome::Cancelled) {
+                                status = McpOAuthStatus::Cancelled;
+                            } else if (grant->outcome == mcp::UpstreamOAuthOutcome::Failed) {
+                                status = McpOAuthStatus::Failed;
+                            }
+                            completion(support::Expected<McpOAuthOutcome>{McpOAuthOutcome{
+                                    .server_id = grant->server_id,
+                                    .issuer = grant->issuer,
+                                    .status = status,
+                                    .message = "the Upstream MCP Server is authorized",
+                            }});
                         });
             });
 }

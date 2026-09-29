@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <expected>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -115,12 +116,34 @@ template <typename Body> [[nodiscard]] bool is_event_stream(const http::message<
     return std::string(value);
 }
 
-[[nodiscard]] http::request<http::string_body> frame_post(const McpRequest& request, const ParsedUrl& parsed) {
-    http::request<http::string_body> framed{http::verb::post, parsed.target, 11};
+/// The one HTTP method the transport frames for a request that names another
+/// than `POST`. The OAuth discovery documents are fetched, not posted; every
+/// other method is refused rather than guessed at, because a verb this build
+/// does not know is a verb whose body and response semantics it does not know
+/// either.
+[[nodiscard]] std::optional<http::verb> request_verb(std::string_view method) {
+    if (method == "POST") {
+        return http::verb::post;
+    }
+    if (method == "GET") {
+        return http::verb::get;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::optional<http::request<http::string_body>> frame_request(
+        const McpRequest& request, const ParsedUrl& parsed) {
+    const auto verb = request_verb(request.method);
+    if (!verb.has_value()) {
+        return std::nullopt;
+    }
+    http::request<http::string_body> framed{*verb, parsed.target, 11};
     framed.set(http::field::host, parsed.host);
     framed.set(http::field::user_agent, "cpp-coding-harness/0.1");
-    framed.set(http::field::content_type, "application/json");
     framed.set(http::field::accept, "application/json, text/event-stream");
+    if (!request.body.empty()) {
+        framed.set(http::field::content_type, "application/json");
+    }
     for (const auto& [name, value] : request.headers) {
         framed.set(name, header_wire_value(value));
     }
@@ -196,10 +219,16 @@ template <typename Body> [[nodiscard]] bool is_event_stream(const http::message<
     // the rest of the governed phase.
     beast::get_lowest_layer(stream).expires_never();
 
-    auto framed = frame_post(request, parsed);
+    auto framed = frame_request(request, parsed);
+    if (!framed.has_value()) {
+        outcome.result = std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "the MCP Host framed an HTTP method this transport does not send",
+                "method \"" + request.method + "\"; this transport sends POST and GET only"));
+        co_return outcome;
+    }
     outcome.request_delivered = true;
     co_await http::async_write(
-            stream, framed, asio::redirect_error(cancellable(asio::use_awaitable), setup_error_code));
+            stream, *framed, asio::redirect_error(cancellable(asio::use_awaitable), setup_error_code));
     if (setup_error_code) {
         outcome.result =
                 std::unexpected(phase_error(*timed_out, "the MCP request could not be dispatched", setup_error_code));

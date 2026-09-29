@@ -123,9 +123,28 @@ void SessionFlowController::open_trust() {
     post([self] { self->show_trust_selector(); });
 }
 
+void SessionFlowController::open_mcp_auth(std::string server_id) {
+    if (closed_ || hooks_.post_on_executor == nullptr || server_id.empty()) return;
+    auto self = shared_from_this();
+    hooks_.post_on_executor([self, server_id = std::move(server_id)]() mutable {
+        self->spawn(
+                [self, server_id = std::move(server_id)]() mutable -> boost::asio::awaitable<void> {
+                    co_await self->handle_mcp_auth(std::move(server_id));
+                },
+                "Native TUI /mcp auth flow failed");
+    });
+}
+
 void SessionFlowController::close() {
     if (closed_.exchange(true)) return;
     stop_source_.request_stop();
+    // Every admitted authorization dialog is cancelled as well, so a flow
+    // waiting on a browser reaches a terminal outcome on close rather than
+    // outliving the host that was showing it (issue #849).
+    for (auto& dialog : active_oauth_dialogs_) {
+        dialog->cancel();
+    }
+    active_oauth_dialogs_.clear();
     (void)replacement_settled_.cancel();
     // Resolve every admitted prompt slot so each detached flow reaches a
     // terminal outcome and finish() can await quiescence (ADR 0040); a
@@ -145,6 +164,14 @@ void SessionFlowController::track_prompt_slot(std::shared_ptr<PromptSlot> slot) 
 
 void SessionFlowController::untrack_prompt_slot(const std::shared_ptr<PromptSlot>& slot) {
     std::erase(active_prompt_slots_, slot);
+}
+
+void SessionFlowController::track_oauth_dialog(std::shared_ptr<LoginDialogComponent> dialog) {
+    active_oauth_dialogs_.push_back(std::move(dialog));
+}
+
+void SessionFlowController::untrack_oauth_dialog(const std::shared_ptr<LoginDialogComponent>& dialog) {
+    std::erase(active_oauth_dialogs_, dialog);
 }
 
 bool SessionFlowController::is_live() {
