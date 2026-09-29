@@ -76,6 +76,13 @@ struct BuildSystemPromptOptions {
 /// blank line, `preamble` first.
 [[nodiscard]] std::string renderSystemPromptSections(const std::vector<SystemPromptSection>& sections);
 
+/// Wrap a section body in its own tag (pi `buildSystemPromptSections`:
+/// `<${name}>\n${content}\n</${name}>`). Public because a section this
+/// product adds after the pi-shaped build — the Upstream MCP Servers' own
+/// `instructions`, spec #833 story 18 — must be wrapped in exactly the tag
+/// shape the transcript replays, rather than in a second rendering of it.
+[[nodiscard]] SystemPromptSection wrapSystemPromptSection(std::string name, std::string content);
+
 /// Replay the ordered section diffs carried by transcript system messages.
 [[nodiscard]] std::vector<SystemPromptSection> replaySystemPromptSections(
         const std::vector<ai::SystemMessage>& messages);

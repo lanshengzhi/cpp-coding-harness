@@ -34,6 +34,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <stop_token>
 #include <string>
 #include <vector>
@@ -342,10 +343,18 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// a turn boundary, which is the only window in which the registry may be
     /// mutated (the turn machine reads it at the top of every turn).
     ///
+    /// The two built-in meta-tools of Lazy Tool Activation are staged through
+    /// the same drain (issue #847), so the whole of "registered only once a
+    /// `lazy` Upstream is connected" is this one function deciding what to
+    /// register, and an activated tool's schema reaches a real request on the
+    /// next turn with no other change.
+    ///
     /// On resume the callable objects are re-bound this way rather than the
     /// names alone: the tools a resumed transcript names are absent from the
     /// registry until their catalog is discovered again, and the drain is what
-    /// makes them callable once more.
+    /// makes them callable once more. The drain also publishes a changed
+    /// `instructions` section, through the same section-diff transcript message
+    /// `/reload` uses.
     [[nodiscard]] bool apply_staged_mcp_tools();
     [[nodiscard]] const std::string& session_id() const { return session_.metadata.session_id; }
     [[nodiscard]] const std::string& provider() const { return session_.metadata.provider; }
@@ -557,6 +566,18 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     std::vector<std::string> prompt_selected_tools_;
     std::map<std::string, std::string> prompt_tool_snippets_;
     std::vector<std::string> prompt_tool_guidelines_;
+    /// The Qualified Tool Names a resumed transcript records as active
+    /// (issue #847). The registry holds none of them at construction, so the
+    /// drain re-registers them once their catalog is discovered again — and
+    /// because the transcript already names them, the drain appends no second
+    /// `toolsAdded` record for a name in this set (ADR 0060, ADR 0066).
+    std::set<std::string> mcp_replayed_activation_;
+    /// The rendered Upstream MCP Servers' own `instructions` section body, or
+    /// empty when no connected server offered any. It is a section rather than
+    /// a tool result so the guidance is present in every real model request
+    /// (spec #833 story 18), and it is rendered from the built sections so
+    /// `/reload` and a replayed transcript keep the same shape.
+    std::string mcp_instructions_section_;
     // Declared after the borrowed client/store owners so it is destroyed first.
     std::optional<agent::Agent> agent_;
 

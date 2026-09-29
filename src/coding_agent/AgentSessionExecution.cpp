@@ -55,19 +55,19 @@ namespace {
     return std::nullopt;
 }
 
-[[nodiscard]] std::vector<std::string> replay_active_tool_names(
-        const std::vector<ai::MessageVariant>& history, std::span<const std::string> available_names) {
+/// Every tool name the transcript records as added and not removed, with no
+/// availability filter: the active loadout the transcript *asks* for. The two
+/// views below are this one replay narrowed two different ways, so the product
+/// has a single restore filter rather than two that could disagree.
+[[nodiscard]] std::vector<std::string> replayed_active_tool_names(const std::vector<ai::MessageVariant>& history) {
     std::vector<std::string> active_names;
-    bool has_system_message = false;
     for (const auto& message : history) {
         const auto* system = std::get_if<ai::SystemMessage>(&message);
         if (system == nullptr) {
             continue;
         }
-        has_system_message = true;
         for (const auto& tool : system->tools_added) {
-            if (std::ranges::find(available_names, tool.name) != available_names.end() &&
-                    std::ranges::find(active_names, tool.name) == active_names.end()) {
+            if (std::ranges::find(active_names, tool.name) == active_names.end()) {
                 active_names.push_back(tool.name);
             }
         }
@@ -75,12 +75,25 @@ namespace {
             std::erase(active_names, tool.name);
         }
     }
+    return active_names;
+}
+
+/// Whether a tool name belongs to an Upstream MCP Server. The qualified prefix
+/// is the only spelling an Upstream tool can take, and no built-in tool name
+/// carries it, so the prefix is the whole test.
+[[nodiscard]] bool is_qualified_tool_name(std::string_view name) noexcept { return name.starts_with("mcp__"); }
+
+[[nodiscard]] std::vector<std::string> replay_active_tool_names(
+        const std::vector<ai::MessageVariant>& history, std::span<const std::string> available_names) {
+    const bool has_system_message = std::ranges::any_of(
+            history, [](const auto& message) { return std::holds_alternative<ai::SystemMessage>(message); });
     if (!has_system_message) {
         return {available_names.begin(), available_names.end()};
     }
+    const std::vector<std::string> recorded = replayed_active_tool_names(history);
     std::vector<std::string> ordered_names;
     for (const auto& name : available_names) {
-        if (std::ranges::find(active_names, name) != active_names.end()) {
+        if (std::ranges::find(recorded, name) != recorded.end()) {
             ordered_names.push_back(name);
         }
     }
@@ -93,6 +106,49 @@ namespace {
 inline constexpr std::string_view kOverflowRecoveryFailedMessage =
         "Context overflow recovery failed after one compact-and-retry attempt. "
         "Try reducing context or switching to a larger-context model.";
+
+/// The System Prompt section the Upstream MCP Servers' own `instructions`
+/// occupy (spec #833 story 18). One section, not one per server: a server's
+/// guidance is not a tool, so it belongs beside the prompt's other prose
+/// rather than in the model-facing tool list.
+inline constexpr std::string_view kMcpInstructionsSectionName{"mcp_upstreams"};
+
+/// The whole-section bound on that guidance. Each server's text is bounded on
+/// its own (the binding's `kMaxInstructionsBytes`); this is the bound on the
+/// section as a whole, so a session with many chatty Upstreams cannot push the
+/// System Prompt without limit. A server that does not fit is named in a
+/// trailing count rather than silently dropped.
+constexpr std::size_t kMaxInstructionsSectionBytes{16 * 1024};
+
+/// The section body: each server's Server Id as a heading and its own text
+/// below, in Server Id order.
+[[nodiscard]] std::string render_mcp_instructions(const std::vector<runtime::McpServerInstructions>& servers) {
+    if (servers.empty()) {
+        return {};
+    }
+    std::string body;
+    std::size_t omitted = 0;
+    for (const auto& server : servers) {
+        if (body.find(server.server_id) != std::string::npos) {
+            continue;
+        }
+        const std::string block = server.server_id + ":\n" + server.text;
+        if (body.size() + block.size() + 2 > kMaxInstructionsSectionBytes) {
+            omitted += 1;
+            continue;
+        }
+        if (!body.empty()) {
+            body += "\n\n";
+        }
+        body += block;
+    }
+    if (omitted != 0) {
+        body += "\n\n[";
+        body += std::to_string(omitted);
+        body += " more Upstream MCP Server(s) provided instructions that did not fit in this prompt]";
+    }
+    return body;
+}
 
 } // namespace
 
@@ -237,6 +293,33 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
         }
         const auto active_names = replay_active_tool_names(session_.history, available_names);
         services_.tools.retain_tools(active_names);
+        // The same replay, narrowed to the Upstream names. Their registry entry
+        // cannot exist yet — no Upstream has answered, and session start never
+        // waits for one — so the filter above left them out on purpose and
+        // the tool binding restores them instead, the moment each catalog
+        // lands. `mcp_replayed_activation_` remembers which names the
+        // transcript already records, so re-registering one adds no second
+        // `toolsAdded` entry (issue #847, ADR 0066).
+        std::vector<std::string> restore_names;
+        for (const auto& name : replayed_active_tool_names(session_.history)) {
+            // The two built-in meta-tools are staged by the binding itself,
+            // when the first lazy Upstream's catalog lands, exactly as they are
+            // in a fresh session. They join the already-recorded set so that
+            // re-registering them adds no second `toolsAdded` entry, and they
+            // are deliberately not restore names: no catalog describes them.
+            if (name == kMcpSearchToolName || name == kMcpActivateToolName) {
+                mcp_replayed_activation_.insert(name);
+                continue;
+            }
+            if (!is_qualified_tool_name(name)) {
+                continue;
+            }
+            mcp_replayed_activation_.insert(name);
+            restore_names.push_back(name);
+        }
+        if (!restore_names.empty() && services_.mcp_tool_binding) {
+            services_.mcp_tool_binding->set_restore_names(std::move(restore_names));
+        }
     }
     // pi `_installAgentNextTurnRefresh`: the between-turn trigger compacts
     // before the next assistant response of the same run, so a long tool loop
@@ -327,8 +410,16 @@ bool AgentSession::Impl::apply_staged_mcp_tools() {
     if (!services_.mcp_tool_binding || !agent_) {
         return false;
     }
+    // Three things reach the model through this one drain, because they share
+    // the one window in which the registry may be mutated: the tools the MCP
+    // Host discovered (issue #842), the two built-in meta-tools of Lazy Tool
+    // Activation (issue #847), and the Upstream servers' own `instructions`
+    // section (spec #833 story 18).
+    auto meta_tools = services_.mcp_tool_binding->take_pending_meta_tools();
     auto staged = services_.mcp_tool_binding->take_pending();
-    if (staged.empty()) {
+    const std::string instructions = render_mcp_instructions(services_.mcp_tool_binding->instructions());
+    const bool instructions_changed = instructions != mcp_instructions_section_;
+    if (staged.empty() && meta_tools.empty() && !instructions_changed) {
         return false;
     }
     // A tool the Agent already holds is a rebind of a live tool, which is a
@@ -339,39 +430,101 @@ bool AgentSession::Impl::apply_staged_mcp_tools() {
         detail::record_session_observer_diagnostic(session_event_diagnostics_, std::move(failure));
         update_projection();
     };
-    std::vector<ai::Tool> added;
-    added.reserve(staged.size());
-    for (auto& publication : staged) {
-        auto definition = publication.binding.definition;
-        if (auto registered = agent::detail::AgentToolAccess::add_tool(*agent_, std::move(publication.binding));
-                !registered) {
+    auto register_one = [this, &record_diagnostic](agent::Tool tool) -> std::optional<ai::Tool> {
+        auto definition = tool.definition;
+        if (auto registered = agent::detail::AgentToolAccess::add_tool(*agent_, std::move(tool)); !registered) {
             if (registered.error().code != support::ErrorCode::Validation) {
                 record_diagnostic(std::move(registered.error()));
             }
+            return std::nullopt;
+        }
+        return std::optional<ai::Tool>{std::move(definition)};
+    };
+    std::vector<ai::Tool> added;
+    added.reserve(staged.size() + meta_tools.size());
+    for (auto& publication : staged) {
+        // A name the resumed transcript already records is re-registered
+        // without a second `toolsAdded` entry: the transcript is the record of
+        // the loadout (ADR 0060), and the drain is only re-binding the callable
+        // object (issue #847).
+        if (mcp_replayed_activation_.contains(publication.tool.qualified_name)) {
+            (void)register_one(std::move(publication.binding));
             continue;
         }
-        added.push_back(std::move(definition));
+        if (auto definition = register_one(std::move(publication.binding))) {
+            added.push_back(std::move(*definition));
+        }
     }
-    if (added.empty()) {
-        return false;
+    // The meta-tools are built-ins, not Upstream tools: they are registered
+    // like any other discovered tool so their schemas reach the next request,
+    // and they are recorded in the transcript under their own names so a
+    // resumed session's replay carries them like every other entry.
+    for (auto& tool : meta_tools) {
+        const bool already_recorded = mcp_replayed_activation_.contains(tool.definition.name);
+        if (auto definition = register_one(std::move(tool)); definition && !already_recorded) {
+            added.push_back(std::move(*definition));
+        }
     }
+
     // ADR 0060: the transcript records the complete definitions of the tools
     // that became callable, so a resumed session can rebuild the same active
     // loadout. The live state is appended the same way `/reload` appends its
     // section diff, and the store commit precedes the live replacement.
-    ai::SystemMessage tools_added;
-    tools_added.tools_added = std::move(added);
-    ai::MessageVariant message{std::move(tools_added)};
-    if (session_.store) {
-        if (auto committed = session_.store->append(message); !committed) {
-            record_diagnostic(std::move(committed.error()));
-            return true;
+    auto messages = agent_->state().messages;
+    bool live_messages_changed = false;
+    if (!added.empty()) {
+        ai::SystemMessage tools_added;
+        tools_added.tools_added = std::move(added);
+        ai::MessageVariant message{std::move(tools_added)};
+        if (session_.store) {
+            if (auto committed = session_.store->append(message); !committed) {
+                record_diagnostic(std::move(committed.error()));
+            } else {
+                messages.push_back(std::move(message));
+                live_messages_changed = true;
+            }
+        } else {
+            messages.push_back(std::move(message));
+            live_messages_changed = true;
         }
     }
-    auto messages = agent_->state().messages;
-    messages.push_back(message);
-    if (auto replaced = agent::detail::AgentMessageAccess::replace_messages(*agent_, std::move(messages)); !replaced) {
-        record_diagnostic(std::move(replaced.error()));
+    if (instructions_changed) {
+        // The servers' own guidance is a System Prompt section, recorded as a
+        // section diff exactly like `/reload` records its own, so a replayed
+        // transcript renders the same prompt the model was sent.
+        mcp_instructions_section_ = instructions;
+        std::vector<ai::SystemMessage> previous_system_messages;
+        for (const auto& message : messages) {
+            if (const auto* system = std::get_if<ai::SystemMessage>(&message)) {
+                previous_system_messages.push_back(*system);
+            }
+        }
+        ai::SystemMessage section_diff{
+                .sections = prompt::diffSystemPromptSections(
+                        prompt::replaySystemPromptSections(previous_system_messages), build_system_prompt_sections())};
+        if (!section_diff.sections.empty()) {
+            ai::MessageVariant message{std::move(section_diff)};
+            if (session_.store) {
+                if (auto committed = session_.store->append(message); !committed) {
+                    record_diagnostic(std::move(committed.error()));
+                } else {
+                    messages.push_back(std::move(message));
+                    live_messages_changed = true;
+                }
+            } else {
+                messages.push_back(std::move(message));
+                live_messages_changed = true;
+            }
+        }
+    }
+    if (live_messages_changed) {
+        if (auto replaced = agent::detail::AgentMessageAccess::replace_messages(*agent_, std::move(messages));
+                !replaced) {
+            record_diagnostic(std::move(replaced.error()));
+        }
+    }
+    if (instructions_changed) {
+        agent_->set_system_prompt(rebuild_system_prompt());
     }
     return true;
 }
@@ -472,7 +625,17 @@ std::vector<prompt::SystemPromptSection> AgentSession::Impl::build_system_prompt
     prompt_options.readmePath = std::string{kSourceDir} + "/README.md";
     prompt_options.docsPath = std::string{kSourceDir} + "/docs";
     prompt_options.examplesPath = std::string{kSourceDir} + "/examples";
-    return buildSystemPromptSections(prompt_options);
+    auto sections = buildSystemPromptSections(prompt_options);
+    // The Upstream MCP Servers' own usage guidance, once a connected server
+    // has offered some (spec #833 story 18, issue #847). It is appended after
+    // the pi-shaped build rather than inside it: this is a pike addition, and
+    // it is wrapped by the same helper pi's own sections use so a replayed
+    // transcript renders exactly what the model was sent.
+    if (!mcp_instructions_section_.empty()) {
+        sections.push_back(
+                prompt::wrapSystemPromptSection(std::string{kMcpInstructionsSectionName}, mcp_instructions_section_));
+    }
+    return sections;
 }
 
 support::ExpectedVoid AgentSession::Impl::reject_if_closed() const {

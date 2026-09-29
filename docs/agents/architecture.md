@@ -84,3 +84,4 @@ Minimal routing set; the full rationale lives in `docs/adr/`.
 | Provider wire specialization | [ADR 0063](../adr/0063-source-wire-protocol-specialization-from-the-model-provider-identity.md) | `cch_ai` wire specializations key on `Model::provider` and typed `compat`, never on `base_url` text |
 | Scoped MCP host capability | [ADR 0064](../adr/0064-own-the-scoped-mcp-host-capability.md) | Client-only MCP Host, Modern Era wire surface, Supported/Deferred/Rejected capability split |
 | Fifth Capability Owner Package | [ADR 0065](../adr/0065-add-cch-mcp-as-the-fifth-capability-owner-package.md) | `cch_mcp` owns the MCP Host capability, depends only on `cch_support`, and publishes passive value contracts only |
+| Mutable active tool loadout | [ADR 0066](../adr/0066-let-the-agent-own-a-mutable-active-tool-loadout.md) | The Agent owns its active tool loadout: one domain-confined activation operation, effective at the next Turn boundary |

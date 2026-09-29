@@ -5,6 +5,7 @@
 #include <cch/support/Error.hpp>
 
 #include <string>
+#include <string_view>
 
 namespace cch::agent::detail {
 
@@ -33,6 +34,20 @@ public:
     /// value with an equivalent one for no reason. Idempotent rebinds are the
     /// caller's business, not a silent success here.
     [[nodiscard]] static support::ExpectedVoid add_tool(Agent& agent, Tool tool);
+
+    /// Retire one active tool by name (the `toolsRemoved` half of the ADR 0060
+    /// contract, ADR 0066). A name the registry does not hold is a successful
+    /// no-op, matching `ToolRegistry::remove` and the unknown-name tolerance of
+    /// `ToolRegistry::retain_tools`.
+    ///
+    /// Admitted in the same window as `add_tool`: a turn boundary, on the
+    /// Agent's own serialized domain, including the between-turn window of a
+    /// live run. There is deliberately no run-state guard, because that
+    /// window is exactly where a discovery or an activation must land; a Tool
+    /// Call Batch is the thing that may not overlap a change of the set, and it
+    /// never does, because the turn machine resolves a whole batch inside one
+    /// turn.
+    [[nodiscard]] static support::ExpectedVoid remove_tool(Agent& agent, std::string_view name);
 };
 
 } // namespace cch::agent::detail

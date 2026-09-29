@@ -71,6 +71,7 @@ include_guard(GLOBAL)
         tests/coding_agent/McpSessionWiringTest.cpp
         tests/coding_agent/McpToolApprovalTest.cpp
         tests/coding_agent/McpToolPublicationTest.cpp
+        tests/coding_agent/McpLazyActivationTest.cpp
         tests/coding_agent/ModelConfigTest.cpp
         tests/coding_agent/ModelCycleTest.cpp
         tests/coding_agent/ModelResolutionTest.cpp

@@ -220,14 +220,18 @@ struct McpSessionHost::State : std::enable_shared_from_this<McpSessionHost::Stat
         operation.start([](std::expected<void, support::Error>) noexcept {});
     }
 
-    /// Walk one connected server's catalog and stage every tool it advertised
-    /// as a callable `cch::agent::Tool` (issue #842).
+    /// Walk one connected server's catalog (issue #842 for the `eager` path,
+    /// issue #847 for the `lazy` one).
     ///
-    /// Only a server configured with `activation: "eager"` is walked: a `lazy`
-    /// server's tools stay dormant, which is exactly the interim semantics the
-    /// setting documents, and issue #847 is what turns them on.
+    /// A `lazy` server's catalog is recorded for search and activation, and
+    /// none of its tools is published: its JSON Schema reaches the model only
+    /// after the model activates it, which is what keeps dozens of Upstreams
+    /// out of the context window (spec #833 story 12). Recording it is also
+    /// what stages the two meta-tools, whose registration condition is "at
+    /// least one connected `lazy` Upstream" and not "at least one configured
+    /// one" — a configured server that never connects registers nothing.
     ///
-    /// A catalog that fails to walk publishes nothing and fails nothing: the
+    /// A catalog that fails to walk records nothing and fails nothing: the
     /// server's status row already carries the connection's own diagnostic, and
     /// a hostile or slow Upstream degrades to tools that are absent rather than
     /// to a session that cannot be used (ADR 0008). A tool the binding refuses
@@ -242,16 +246,20 @@ struct McpSessionHost::State : std::enable_shared_from_this<McpSessionHost::Stat
         const auto server_id = connection->server_id();
         const auto configured = std::ranges::find_if(options.servers,
                 [&server_id](const UserMcpServerSettings& entry) { return entry.server_id == server_id; });
-        if (configured == options.servers.end() || configured->activation_policy() != McpServerActivation::Eager) {
+        if (configured == options.servers.end()) {
             co_return support::Expected<void>{};
         }
         auto catalog = co_await support::detail::await_async_result(connection->list_tools(token));
         if (!catalog) {
             co_return support::Expected<void>{};
         }
-        for (const auto& descriptor : catalog->tools) {
-            (void)binding->publish(connection, descriptor);
+        if (configured->activation_policy() == McpServerActivation::Eager) {
+            for (const auto& descriptor : catalog->tools) {
+                (void)binding->publish(connection, descriptor);
+            }
+            co_return support::Expected<void>{};
         }
+        (void)binding->record_lazy_catalog(connection, std::move(*catalog));
         co_return support::Expected<void>{};
     }
 

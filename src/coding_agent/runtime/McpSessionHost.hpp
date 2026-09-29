@@ -78,12 +78,14 @@ struct McpSessionHostOptions {
     /// open decision as owed an ADR. A caller that wants cross-session reuse
     /// hands this the cache of the session that ran before.
     std::shared_ptr<mcp::UpstreamCatalogCache> catalog_cache{nullptr};
-    /// The session's Upstream-tool binding (issue #842). A connected server
-    /// configured with `activation: "eager"` has its catalog turned into
-    /// `cch::agent::Tool` values under their Qualified Tool Names and staged
-    /// here; the session drains them onto its Agent at a turn boundary. Null
-    /// is a session that publishes no tools, which is the ordinary session
-    /// with no `activation: "eager"` server.
+    /// The session's Upstream-tool binding (issue #842, issue #847). A
+    /// connected server configured with `activation: "eager"` has its catalog
+    /// turned into callable `cch::agent::Tool` values under their Qualified
+    /// Tool Names and staged here; a connected `lazy` server has its catalog
+    /// recorded for the two meta-tools to search and activate, with no tool
+    /// published. Either way the session drains the staged values onto its
+    /// Agent at a turn boundary. Null is a session that publishes no tools,
+    /// which is the ordinary session with no configured MCP server.
     std::shared_ptr<McpToolBinding> tool_binding{nullptr};
 };
 

@@ -163,9 +163,11 @@ constexpr std::string_view kDefaultPreamble =
     return std::nullopt;
 }
 
+} // namespace
+
 /// Wrap a section body in its own tag (pi `buildSystemPromptSections`:
 /// `<${name}>\n${content}\n</${name}>`).
-[[nodiscard]] SystemPromptSection wrap_section(std::string name, std::string content) {
+SystemPromptSection wrapSystemPromptSection(std::string name, std::string content) {
     std::string text;
     text.reserve(name.size() * 2 + content.size() + 5);
     text += "<";
@@ -177,8 +179,6 @@ constexpr std::string_view kDefaultPreamble =
     text += ">";
     return SystemPromptSection{.name = std::move(name), .text = std::move(text)};
 }
-
-} // namespace
 
 std::vector<SystemPromptSection> buildSystemPromptSections(const BuildSystemPromptOptions& options) {
     std::vector<SystemPromptSection> sections;
@@ -194,22 +194,22 @@ std::vector<SystemPromptSection> buildSystemPromptSections(const BuildSystemProm
         sections.push_back(SystemPromptSection{.name = "preamble", .text = *options.customPrompt});
     } else {
         sections.push_back(SystemPromptSection{.name = "preamble", .text = std::string{kDefaultPreamble}});
-        sections.push_back(wrap_section("tools",
+        sections.push_back(wrapSystemPromptSection("tools",
                 build_tools_list(tools, options.toolSnippets) +
                         "\n\nIn addition to the tools above, you may have access to "
                         "other custom tools depending on the project."));
-        sections.push_back(wrap_section("rules", build_rules(tools, options.promptGuidelines)));
-        sections.push_back(wrap_section("docs", build_docs(options)));
+        sections.push_back(wrapSystemPromptSection("rules", build_rules(tools, options.promptGuidelines)));
+        sections.push_back(wrapSystemPromptSection("docs", build_docs(options)));
     }
 
     // pi `appendSystemPrompt ? { addendum } : ...` — an absent or empty
     // append adds no section.
     if (options.appendSystemPrompt && !options.appendSystemPrompt->empty()) {
-        sections.push_back(wrap_section("addendum", *options.appendSystemPrompt));
+        sections.push_back(wrapSystemPromptSection("addendum", *options.appendSystemPrompt));
     }
 
     if (!options.contextFiles.empty()) {
-        sections.push_back(wrap_section("project_context", render_project_context(options.contextFiles)));
+        sections.push_back(wrapSystemPromptSection("project_context", render_project_context(options.contextFiles)));
     }
 
     // pi: the skills section appears only when a read-capable tool is active
@@ -217,11 +217,11 @@ std::vector<SystemPromptSection> buildSystemPromptSections(const BuildSystemProm
     if (const auto read_tool = skill_file_read_tool(tools); read_tool && !options.skills.empty()) {
         const std::string block = trim(formatSkillsForPrompt(options.skills, *read_tool));
         if (!block.empty()) {
-            sections.push_back(wrap_section("skills", block));
+            sections.push_back(wrapSystemPromptSection("skills", block));
         }
     }
 
-    sections.push_back(wrap_section("cwd", posix_normalize_cwd(options.cwd)));
+    sections.push_back(wrapSystemPromptSection("cwd", posix_normalize_cwd(options.cwd)));
     return sections;
 }
 

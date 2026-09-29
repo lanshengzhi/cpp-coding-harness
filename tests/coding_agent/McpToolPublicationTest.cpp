@@ -709,8 +709,8 @@ TEST_CASE("an approval: ask call with no prompt to ask is refused rather than ru
 
 TEST_CASE("a lazy server publishes no tool", "[mcp][issue842][spec]") {
     PublicationFixture fixture;
-    // No `activation` field: the default is `lazy`, whose interim semantics are
-    // that a lazy server's tools stay dormant.
+    // No `activation` field: the default is `lazy`, whose semantics are that a
+    // lazy server's tools reach the model only once the model activates them.
     fixture.write_settings(R"({"mcpServers": {"executor": {"url": "https://mcp.example/mcp"}}})");
     fixture.write_trust_store(kTrustedStore);
     answer_upstream(*fixture.transport, {tests::tool_entry("search", {"query"})});
@@ -719,12 +719,17 @@ TEST_CASE("a lazy server publishes no tool", "[mcp][issue842][spec]") {
     auto& session = fixture.runtime.adopt_session(std::move(owned));
     // Give the host the same window every other case gives it, so this is a
     // real "the eager path did not run" and not "the eager path was too slow".
-    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    REQUIRE(PublicationFixture::wait_until([&fixture] { return fixture.transport->request_count("tools/list") == 1; }));
 
-    // A lazy server is never silently treated as eager, and its catalog is not
-    // even walked until Lazy Tool Activation lands.
+    // A lazy server is never silently treated as eager. Its catalog *is*
+    // discovered — issue #847 makes that the search catalog `mcp_search` reads
+    // — but nothing it advertised is published into the callable tool surface,
+    // which is the whole of the eager publication path.
     CHECK(session.mcp_published_tools().empty());
-    CHECK(fixture.transport->request_count("tools/list") == 0);
+    fixture.client->responses.push_back(ai::assistant_text_message("hello"));
+    REQUIRE(fixture.prompt(session, "hi").has_value());
+    const auto& request = fixture.client->recorded_requests().front();
+    CHECK_FALSE(contains(tool_names_in_request(request), "mcp__executor__search"));
 }
 
 TEST_CASE("a tool catalog that lands between two turns reaches the next request in the same run",

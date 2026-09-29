@@ -135,6 +135,24 @@ A refused call is a *bounded* cost in another sense too: one refusal is one fail
 - `a call that is not an ask call is never put to the prompt` — `[mcp][issue843][spec]`: a built-in tool name and an `allow` server both answer without the prompt being consulted at all.
 - `a session with no prompt refuses the ask call rather than running it`, `a prompt that fails refuses the ask call rather than running it`, and `a headless session refuses the ask call and never reaches the Upstream` — `[mcp][issue843][spec]`: the three ways consent cannot be obtained, each one zero upstream requests and one failed tool call.
 
+## MCP Host Lazy-activation bounds (ADR 0064, ADR 0066, spec #833 stories 12-16 and 18, issue #847)
+
+Lazy Tool Activation keeps a discovered `lazy` Upstream tool's JSON Schema out of the model context until the model activates it, and puts a discovered server's own `instructions` into the System Prompt. Both surfaces are bounded here, in the same private constants point as the rest of the `cch_coding_agent` half of the host (`src/coding_agent/runtime/McpToolBinding.cpp` for the catalog, `src/coding_agent/AgentSessionExecution.cpp` for the prompt section).
+
+- **`kMaxSearchRows = 100` catalog lines per `mcp_search` call.** A search result is a discovery aid, not a context dump: the model narrows with `query` and `server` and activates what it needs, and a result past the cap says how many rows it hid rather than truncating silently. The number of catalogued tools itself is unchanged at the per-server cap of 5,000 from `cch_mcp`.
+- **`kMaxSearchLineBytes = 240` bytes per catalog line's description.** The compact line is a catalog entry, not the tool's documentation; whitespace runs collapse to single spaces and the text is redacted before it is bounded, so a third party's description cannot flood one result.
+- **`kMaxInstructionsBytes = 2 KiB` per server's `instructions`.** The server's own usage guidance is prose for the model, not an interface; a server that writes at length gets the head of it and a truncation mark.
+- **`kMaxInstructionsSectionBytes = 16 KiB` for the whole `mcp_upstreams` System Prompt section.** A session with many chatty Upstreams cannot push the System Prompt without limit, and a server whose guidance did not fit is counted in a trailing line rather than dropped in silence.
+
+There is no fairness property to measure here either: a search reads an already-discovered catalog and an activation edits one map, so neither is a queue. The properties below pin the bounds and the stickiness instead.
+
+### Regression properties (tests)
+
+- `the lazy catalog lists tools without their schemas and activates one on request` — `[mcp][issue847][spec]`: pins that a lazy tool's own JSON Schema is absent from the search result (checked against a property name that exists only inside that schema), that a `lazy` catalog publishes nothing, that the two meta-tools are staged exactly once, and that a second activation of the same tool is a success that changed nothing — the stickiness that keeps provider prompt caches intact.
+- `a lazy server's tools stay out of the tool surface until the model activates one` — `[mcp][issue847][spec]`: the context-economy property, end to end through the production session door: the search call costs no upstream request and no `lazy` schema appears in any request.
+- `an activated tool's schema reaches the next real model request and it can be called` — `[mcp][issue847][spec]`: the activation's effect lands one turn later, with the Upstream's own schema, and the call reaches the Upstream under its own tool name.
+- `a server's own instructions reach the model in a real request` — `[mcp][issue847][spec]`: the guidance is a System Prompt section, so it is in every request the session makes once the server has offered it.
+
 ## MCP Host connection bounds (ADR 0064, ADR 0011, spec #833 stories 9 and 10, issue #839)
 
 The same private constants point bounds what one Upstream connection costs while it is trying, failing, and being torn down. These are not throughput policy either: the work they bound is one probe of one endpoint, so there is no queue to tune. They are containment plus liveness.

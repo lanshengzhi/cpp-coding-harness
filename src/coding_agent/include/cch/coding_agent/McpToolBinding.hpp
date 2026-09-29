@@ -42,4 +42,12 @@ struct McpPublishedTool {
     std::string description{};
 };
 
+/// The two built-in meta-tools of Lazy Tool Activation (spec #833 stories 13
+/// and 14; issue #847). They are registered only once at least one `lazy`
+/// Upstream MCP Server is connected, which is the condition the spec names;
+/// a session with only `eager` Upstreams never sees them, because it has
+/// nothing to search for and nothing to activate.
+inline constexpr std::string_view kMcpSearchToolName{"mcp_search"};
+inline constexpr std::string_view kMcpActivateToolName{"mcp_activate"};
+
 } // namespace cch::coding_agent
