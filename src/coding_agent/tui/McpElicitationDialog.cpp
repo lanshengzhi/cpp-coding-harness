@@ -24,18 +24,6 @@ namespace {
 
 } // namespace
 
-std::string_view McpElicitationDialog::control_key(Control control) noexcept {
-    switch (control) {
-    case Control::Done:
-        return "tui.select.confirm";
-    case Control::Decline:
-        return "d";
-    case Control::Cancel:
-        return "tui.select.cancel";
-    }
-    return "tui.select.cancel";
-}
-
 McpElicitationDialog::McpElicitationDialog(const LiveTheme& theme,
         std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
         McpUrlElicitationView view,
@@ -93,7 +81,8 @@ void McpElicitationDialog::retire(std::optional<McpElicitationAction> action) {
     // The sink runs outside the lock: it answers the session, which posts back
     // into the very loop that took the lock.
     if (sink) {
-        sink(*action, std::move(elicitation_id));
+        // A URL question asks for no data, so the answer carries none.
+        sink(*action, std::move(elicitation_id), McpElicitationFormValues{});
     }
     if (on_invalidate_) {
         on_invalidate_();
@@ -114,15 +103,15 @@ cch::tui::InputAdmissionOutcome McpElicitationDialog::handle_input(const cch::tu
             return cch::tui::InputAdmissionOutcome::Consumed;
         }
     }
-    if (keybindings_->matches(*key, control_key(Control::Done))) {
+    if (mcp_elicitation_control_matched(*key, *keybindings_, McpElicitationControl::Done)) {
         settle(McpElicitationAction::Accept);
         return cch::tui::InputAdmissionOutcome::Consumed;
     }
-    if (keybindings_->matches(*key, control_key(Control::Cancel))) {
+    if (mcp_elicitation_control_matched(*key, *keybindings_, McpElicitationControl::Cancel)) {
         settle(McpElicitationAction::Cancel);
         return cch::tui::InputAdmissionOutcome::Consumed;
     }
-    if (!key->ctrl && !key->alt && !key->shift && key->key == control_key(Control::Decline)) {
+    if (mcp_elicitation_control_matched(*key, *keybindings_, McpElicitationControl::Decline)) {
         settle(McpElicitationAction::Decline);
         return cch::tui::InputAdmissionOutcome::Consumed;
     }
@@ -192,9 +181,13 @@ support::Expected<cch::tui::RenderResult> McpElicitationDialog::render(std::size
     }
     // The three answers are named on screen, not implied by a keybinding the
     // user has to know: Done, Decline, and Cancel are different decisions.
-    const auto controls = key_hint(theme_, *keybindings_, control_key(Control::Done), "done") + "  " +
-                          raw_key_hint(theme_, control_key(Control::Decline), "decline") + "  " +
-                          key_hint(theme_, *keybindings_, control_key(Control::Cancel), "cancel");
+    const auto controls = mcp_elicitation_control_hint(theme_, *keybindings_, McpElicitationControl::Done, "done") +
+                          "  " +
+                          mcp_elicitation_control_hint(
+                                  theme_, *keybindings_, McpElicitationControl::Decline, "decline") +
+                          "  " +
+                          mcp_elicitation_control_hint(
+                                  theme_, *keybindings_, McpElicitationControl::Cancel, "cancel");
     if (auto appended = append_text(controls); !appended) {
         return std::unexpected(appended.error());
     }

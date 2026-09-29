@@ -40,11 +40,10 @@ public:
     /// when the session closes — never on its own, so a suspended call cannot
     /// outlive the session that started it.
     ///
-    /// A mode this build cannot present is refused **before** the wait
-    /// exists: the Upstream learns its call failed, the user is never asked a
-    /// question the session cannot collect an answer to, and nothing is left
-    /// suspended (ADR 0008). That check is the one place form mode is turned
-    /// on (issue #846).
+    /// Both modes are asked. Form mode carries the Upstream's schema into the
+    /// projection for `frontend_tui` to render (issue #846); the wait, the
+    /// bound, and the retry are the shared Multi Round-Trip loop's, so no
+    /// part of this differs between the two.
     [[nodiscard]] cch::support::AsyncResult<mcp::ElicitationAnswer> ask(
             mcp::ElicitationRequest request, std::stop_token stop_token);
 
@@ -89,10 +88,6 @@ private:
     /// End one wait as cancelled, dropping it from the pending set first so
     /// the registration is gone before its callback can fire.
     void abandon(const std::string& elicitation_id);
-
-    /// A question this build cannot render, as the single diagnostic the
-    /// Upstream's call fails with.
-    [[nodiscard]] static support::Error unpresentable(std::string_view server_id);
 
     mutable std::mutex mutex_;
     std::map<std::string, Pending, std::less<>> pending_{};

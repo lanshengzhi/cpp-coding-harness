@@ -44,30 +44,33 @@ void McpFlowController::show_pending_on_host() {
     if (pending.empty()) {
         return;
     }
-    // The first question is the one the user is asked; a form-mode question
-    // is not presented by this build and the session already refused it, so
-    // anything that reaches here is a question it can put on screen.
-    show(pending.front());
+    // The first question is the one the user is asked. Both modes have a
+    // dialog, and the mode travels on the row the session published, so this
+    // is the whole of the choice between them.
+    if (pending.front().mode == McpElicitationMode::Form) {
+        show_form(pending.front());
+        return;
+    }
+    show_url(pending.front());
 }
 
-void McpFlowController::show(const McpPendingElicitation& request) {
+void McpFlowController::show_url(const McpPendingElicitation& request) {
     auto* session = hooks_.current_session ? hooks_.current_session() : nullptr;
     if (session == nullptr || !hooks_.live_theme || !hooks_.action_generation) {
         return;
     }
     const auto generation = hooks_.action_generation();
-    auto self = shared_from_this();
     auto weak = weak_from_this();
     auto dialog = std::make_shared<McpElicitationDialog>(
             hooks_.live_theme(),
             keybindings_ ? keybindings_->get() : nullptr,
             McpUrlElicitationView{.request = request},
-            [weak](McpElicitationAction action, std::string elicitation_id) {
+            [weak](McpElicitationAction action, std::string elicitation_id, McpElicitationFormValues values) {
                 const auto owner = weak.lock();
                 if (owner == nullptr) {
                     return; // a retired host answers nothing
                 }
-                owner->on_answer(action, std::move(elicitation_id));
+                owner->on_answer(action, std::move(elicitation_id), std::move(values));
             },
             [weak, generation](std::string url) {
                 const auto owner = weak.lock();
@@ -80,13 +83,38 @@ void McpFlowController::show(const McpPendingElicitation& request) {
                 owner->hooks_.open_browser(generation, std::move(url));
             },
             [presenter = presenter_]() { presenter->request_render(); });
-    dialog_ = std::move(dialog);
+    dialog_ = dialog;
     showing_ = request.elicitation_id;
-    presenter_->replace_prompt_slot(dialog_);
+    presenter_->replace_prompt_slot(dialog);
     presenter_->request_render();
 }
 
-void McpFlowController::on_answer(McpElicitationAction action, std::string elicitation_id) {
+void McpFlowController::show_form(const McpPendingElicitation& request) {
+    auto* session = hooks_.current_session ? hooks_.current_session() : nullptr;
+    if (session == nullptr || !hooks_.live_theme) {
+        return;
+    }
+    auto weak = weak_from_this();
+    auto dialog = std::make_shared<McpElicitationFormDialog>(
+            hooks_.live_theme(),
+            keybindings_ ? keybindings_->get() : nullptr,
+            request,
+            [weak](McpElicitationAction action, std::string elicitation_id, McpElicitationFormValues values) {
+                const auto owner = weak.lock();
+                if (owner == nullptr) {
+                    return; // a retired host answers nothing
+                }
+                owner->on_answer(action, std::move(elicitation_id), std::move(values));
+            },
+            [presenter = presenter_]() { presenter->request_render(); });
+    dialog_ = dialog;
+    showing_ = request.elicitation_id;
+    presenter_->replace_prompt_slot(dialog);
+    presenter_->request_render();
+}
+
+void McpFlowController::on_answer(
+        McpElicitationAction action, std::string elicitation_id, McpElicitationFormValues values) {
     auto* session = hooks_.current_session ? hooks_.current_session() : nullptr;
     // The dialog is retired before the answer is sent: the session's answer
     // path may complete the suspended call inline, and a dialog still on
@@ -99,6 +127,7 @@ void McpFlowController::on_answer(McpElicitationAction action, std::string elici
     (void)session->answer_mcp_elicitation(McpElicitationAnswer{
             .elicitation_id = std::move(elicitation_id),
             .action = action,
+            .form_values = std::move(values),
     });
     // The next question, if the Upstreams blocked more than one, is asked
     // now rather than at the next frame.

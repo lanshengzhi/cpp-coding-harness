@@ -114,6 +114,9 @@ cch_parity_declare_target(
         src/coding_agent/tui/KeybindingsManager.cpp
         src/coding_agent/tui/LoadedResources.cpp
         src/coding_agent/tui/McpElicitationDialog.cpp
+        src/coding_agent/tui/McpElicitationForm.cpp
+        src/coding_agent/tui/McpElicitationFormDialog.cpp
+        src/coding_agent/tui/McpElicitationPrompt.cpp
         src/coding_agent/tui/McpFlowController.cpp
         src/coding_agent/tui/LoginDialog.cpp
         src/coding_agent/tui/LoginPresentation.cpp

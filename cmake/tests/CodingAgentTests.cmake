@@ -157,6 +157,8 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/LoginDialogTest.cpp
         tests/coding_agent/tui/LoginInteractiveModeTest.cpp
         tests/coding_agent/tui/McpElicitationDialogTest.cpp
+        tests/coding_agent/tui/McpElicitationFormDialogTest.cpp
+        tests/coding_agent/tui/McpFlowControllerTest.cpp
         tests/coding_agent/tui/McpStatusOverviewTest.cpp
         tests/coding_agent/tui/McpToolApprovalPromptTest.cpp
         tests/coding_agent/tui/ModelFlowControllerTest.cpp

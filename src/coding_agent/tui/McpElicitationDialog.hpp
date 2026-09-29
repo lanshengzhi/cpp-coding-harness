@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coding_agent/tui/McpElicitationPrompt.hpp"
+
 #include <cch/coding_agent/McpElicitation.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/tui/Component.hpp>
@@ -10,9 +12,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
-
 namespace cch::coding_agent::tui {
 
 class LiveTheme;
@@ -24,17 +24,6 @@ class LiveTheme;
 struct McpUrlElicitationView {
     McpPendingElicitation request{};
 };
-
-/// The user's disposition of one URL-mode elicitation, delivered once.
-using McpElicitationAnswerSink = std::move_only_function<void(McpElicitationAction action, std::string elicitation_id)>;
-/// Ask the host to open the presented address in the platform browser. The
-/// dialog never launches anything itself: the action travels the host's
-/// generation-checked action seam, so a dialog belonging to a retired session
-/// cannot open a browser.
-using McpElicitationOpenBrowserSink = std::move_only_function<void(std::string url)>;
-/// pi's `ui.requestRender` after component-internal state changed; coalescible
-/// and safe to call from any thread.
-using McpElicitationInvalidateSink = std::move_only_function<void()>;
 
 /// The URL-mode Pending Elicitation dialog (issue #845; spec #833 story 27).
 ///
@@ -49,7 +38,8 @@ using McpElicitationInvalidateSink = std::move_only_function<void()>;
 /// is closed while the dialog is up can withdraw it (ADR 0051/0052).
 class McpElicitationDialog final : public cch::tui::Component,
                                    public cch::tui::InputHandler,
-                                   public cch::tui::Focusable {
+                                   public cch::tui::Focusable,
+                                   public McpElicitationPrompt {
 public:
     McpElicitationDialog(const LiveTheme& theme,
             std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
@@ -78,7 +68,7 @@ public:
     /// a call to answer, so inventing one would be answering a question
     /// nobody asked. The sinks are dropped, a later click is inert, and a
     /// second withdrawal is a no-op.
-    void withdraw();
+    void withdraw() override;
 
     /// Whether the question is still on screen.
     [[nodiscard]] bool live() const;
@@ -89,12 +79,6 @@ public:
     void set_focused(bool focused) override;
     [[nodiscard]] bool focused() const override;
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override;
-
-    /// The three controls the dialog offers, as the hint line names them, in
-    /// the order the keys are listed. Exposed so the render and the test read
-    /// one spelling of the control set.
-    enum class Control { Done, Decline, Cancel };
-    [[nodiscard]] static std::string_view control_key(Control control) noexcept;
 
 private:
     /// Settle the dialog with `action` when it is still live. The first
