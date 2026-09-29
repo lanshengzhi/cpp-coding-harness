@@ -64,12 +64,6 @@ public:
     /// `_rebuildSystemPrompt`). `std::nullopt` for an unknown tool name.
     [[nodiscard]] std::optional<ToolPromptMetadata> prompt_metadata(const std::string& name) const;
 
-    /// Remove one tool by name, reporting whether it was held. An unknown
-    /// name is a `false`, never an error: removal is the retiring half of the
-    /// activation contract (ADR 0066) and mirrors `retain_tools`, which
-    /// ignores unknown names the same way.
-    [[nodiscard]] bool remove(std::string_view name) { return tools_.erase(std::string{name}) != 0; }
-
     /// Retain only the named tools, in the registry's existing storage.
     /// Unknown names are ignored. This is used when a resumed transcript
     /// reconstructs the active tool loadout before the Agent is assembled.

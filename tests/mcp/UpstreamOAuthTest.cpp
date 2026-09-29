@@ -3,6 +3,7 @@
 
 #include "mcp/OAuthCallbackServer.hpp"
 #include "mcp/OAuthSupport.hpp"
+#include "mcp/Protocol.hpp"
 #include "support/ScriptedMcpTransport.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -636,5 +637,105 @@ TEST_CASE("a cancelled wait settles rather than blocking the flow", "[mcp][oauth
     REQUIRE(outcome.has_value());
     REQUIRE_FALSE(outcome->has_value());
     CHECK(outcome->error().code == ErrorCode::Cancelled);
+    listener->close();
+}
+
+TEST_CASE("a loopback issuer is redacted and bounded before it reaches a status surface",
+        "[mcp][oauth][redaction][limits][issue849][spec]") {
+    auto transport = std::make_shared<ScriptedMcpTransport>();
+    script_authorization_server(*transport);
+    auto store = std::make_shared<MemoryMcpStore>();
+    auto prompter = std::make_shared<ManualOAuthPrompter>();
+    std::optional<Expected<UpstreamOAuthGrant>> outcome;
+    std::string state;
+    prompter->on_present = [&state](const UpstreamOAuthPrompt& prompt) {
+        state = param_of(prompt, "state");
+        // `iss` is query text from whoever reached the loopback port. It is
+        // oversized and it echoes this flow's own state, so a detail that
+        // carried it raw would put both an unbounded string and a CSRF value
+        // on a status surface.
+        const std::string issuer = std::string(4000, 'x') + state + std::string(4000, 'y');
+        redirect_with_code(prompt, "code-1", issuer);
+    };
+
+    cch::mcp::authorize_upstream(executor_request(), transport, store, prompter)
+            .start([&outcome](std::expected<UpstreamOAuthGrant, Error> result) mutable noexcept {
+                outcome = std::move(result);
+            });
+
+    wait_until([&outcome] { return outcome.has_value(); });
+    REQUIRE(outcome.has_value());
+    REQUIRE_FALSE(outcome->has_value());
+    CHECK(outcome->error().code == ErrorCode::OAuth);
+    const auto& detail = outcome->error().detail;
+    CHECK(detail.size() <= cch::mcp::protocol::kMaxDiagnosticBytes);
+    CHECK(detail.find(state) == std::string::npos);
+    CHECK(store->writes.empty());
+}
+
+TEST_CASE("the loopback listener bounds the error text a caller supplied",
+        "[mcp][oauth][redaction][limits][issue849][spec]") {
+    auto bound = cch::mcp::oauth::LoopbackCallbackServer::start({});
+    REQUIRE(bound.has_value());
+    auto& listener = *bound;
+    std::optional<Expected<cch::mcp::oauth::CallbackRequest>> outcome;
+    listener->wait({}).start(
+            [&outcome](std::expected<cch::mcp::oauth::CallbackRequest, Error> result) mutable noexcept {
+                outcome = std::move(result);
+            });
+
+    boost::asio::io_context io;
+    boost::asio::ip::tcp::socket socket{io};
+    boost::system::error_code error;
+    socket.connect({boost::asio::ip::make_address("127.0.0.1"), listener->bound_port()}, error);
+    REQUIRE_FALSE(error);
+    // `error` is query text from an unauthenticated caller on the loopback
+    // port, so it is bounded before it can reach a status surface.
+    const std::string request = "GET /callback?error=" + std::string(4000, 'e') +
+                                " HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    boost::asio::write(socket, boost::asio::buffer(request), error);
+    std::string response;
+    boost::asio::read(socket, boost::asio::dynamic_buffer(response), error);
+
+    wait_until([&outcome] { return outcome.has_value(); });
+    REQUIRE(outcome.has_value());
+    REQUIRE_FALSE(outcome->has_value());
+    CHECK(outcome->error().code == ErrorCode::OAuth);
+    CHECK(outcome->error().detail.size() <= cch::mcp::protocol::kMaxDiagnosticBytes);
+    CHECK(response.starts_with("HTTP/1.1 400"));
+    listener->close();
+}
+
+TEST_CASE("the loopback listener refuses a request head over the bound it reads",
+        "[mcp][oauth][limits][issue849][spec]") {
+    auto bound = cch::mcp::oauth::LoopbackCallbackServer::start({});
+    REQUIRE(bound.has_value());
+    auto& listener = *bound;
+    std::optional<Expected<cch::mcp::oauth::CallbackRequest>> outcome;
+    listener->wait({}).start(
+            [&outcome](std::expected<cch::mcp::oauth::CallbackRequest, Error> result) mutable noexcept {
+                outcome = std::move(result);
+            });
+
+    boost::asio::io_context io;
+    boost::asio::ip::tcp::socket socket{io};
+    boost::system::error_code error;
+    socket.connect({boost::asio::ip::make_address("127.0.0.1"), listener->bound_port()}, error);
+    REQUIRE_FALSE(error);
+    // A *complete* request head — blank line included — that is far larger
+    // than the bound the listener reads. An unbounded read would accept it and
+    // hand the flow a callback; a bounded one refuses it, so this caller
+    // cannot decide how much of the flow's memory a callback request occupies.
+    const std::string request = "GET /callback?code=abc HTTP/1.1\r\nX-Pad: " + std::string(16 * 1024, 'p') + "\r\n\r\n";
+    boost::asio::write(socket, boost::asio::buffer(request), error);
+    std::string response;
+    boost::asio::read(socket, boost::asio::dynamic_buffer(response), error);
+
+    wait_until([&outcome] { return outcome.has_value(); });
+    REQUIRE(outcome.has_value());
+    REQUIRE_FALSE(outcome->has_value());
+    CHECK(outcome->error().code == ErrorCode::Network);
+    CHECK(outcome->error().detail.find("larger than") != std::string::npos);
+    CHECK(response.starts_with("HTTP/1.1 503"));
     listener->close();
 }

@@ -1,6 +1,6 @@
 #include "mcp/Redaction.hpp"
 
-#include "mcp/Diagnostics.hpp"
+#include <cch/support/Redactor.hpp>
 
 #include <cstddef>
 #include <string>
@@ -33,16 +33,7 @@ constexpr std::size_t kMinErasableSecretLength{8};
 
 } // namespace
 
-std::string bounded_diagnostic(std::string text) { return diagnostics::bounded(std::move(text)); }
-
 std::string erase_credential(std::string text, std::string_view secret) { return erase_all(std::move(text), secret); }
-
-std::string redacted_text(std::string text, std::string_view secret) {
-    // The credential is erased before the shared rules and before the bound
-    // see the text, so neither a shape rule nor a truncation point can leave
-    // any part of it behind.
-    return bounded_diagnostic(erase_credential(std::move(text), secret));
-}
 
 cch::support::JsonValue redacted_value(cch::support::JsonValue value, std::string_view secret) {
     if (!erasable(secret)) {

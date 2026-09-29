@@ -1,7 +1,7 @@
 #include <cch/mcp/UpstreamAuth.hpp>
 
+#include "mcp/Diagnostics.hpp"
 #include "mcp/Protocol.hpp"
-#include "mcp/Redaction.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -66,7 +66,7 @@ constexpr std::string_view kBearerScheme{"Bearer "};
     if (!env_var.empty()) {
         detail += " declares bearer-env:" + std::string{env_var};
     }
-    return make_error(code, std::move(message), redaction::redacted_text(std::move(detail), secret));
+    return make_error(code, std::move(message), diagnostics::bounded(std::move(detail), secret));
 }
 
 /// A credential-store read failure wrapped in this package's own wording while
@@ -76,7 +76,7 @@ constexpr std::string_view kBearerScheme{"Bearer "};
     auto failure = credential_error(
             cause.code, "the Upstream MCP Server's credential store could not be read", server_id, env_var, secret);
     const std::string reason = cause.detail.empty() ? cause.message : cause.message + ": " + cause.detail;
-    failure.detail += "; " + redaction::redacted_text(reason, secret);
+    failure.detail += "; " + diagnostics::bounded(reason, secret);
     return failure;
 }
 

@@ -191,6 +191,16 @@ private:
 
 } // namespace
 
+std::shared_ptr<mcp::UpstreamCatalogCache> make_host_catalog_cache() {
+    // The widest scope, because this is the cache that outlives a session
+    // (ADR 0067). An Upstream that declares `session` — or nothing at all —
+    // is not admitted here at all, so a session-scoped catalog is never
+    // served to a session that did not fetch it.
+    return std::make_shared<mcp::UpstreamCatalogCache>(mcp::UpstreamCatalogCacheOptions{
+            .scope = std::string{mcp::kProcessCatalogCacheScope},
+    });
+}
+
 /// The shared state: the trust gate, the connections, and the status rows
 /// they publish into. It is shared with the connections' status sinks and
 /// with the connect still in flight, so a status change that arrives after

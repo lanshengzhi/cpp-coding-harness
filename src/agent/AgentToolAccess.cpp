@@ -34,23 +34,4 @@ support::ExpectedVoid AgentToolAccess::add_tool(Agent& agent, Tool tool) {
     return {};
 }
 
-support::ExpectedVoid AgentToolAccess::remove_tool(Agent& agent, std::string_view name) {
-    if (!agent.impl_) {
-        return std::unexpected(
-                support::make_error(support::ErrorCode::Validation, "cannot remove a tool from an empty Agent"));
-    }
-    if (name.empty()) {
-        return std::unexpected(
-                support::make_error(support::ErrorCode::Validation, "cannot remove a tool without a name"));
-    }
-    auto& names = agent.impl_->state.active_tool_names;
-    // A name the registry does not hold is a no-op success, and the reported
-    // loadout is left exactly as it was.
-    if (!agent.impl_->run_policy.registry.remove(name)) {
-        return {};
-    }
-    std::erase(names, name);
-    return {};
-}
-
 } // namespace cch::agent::detail

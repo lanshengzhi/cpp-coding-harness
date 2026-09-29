@@ -45,11 +45,11 @@ UpstreamCatalogCache::UpstreamCatalogCache(UpstreamCatalogCacheOptions options) 
 
 const std::string& UpstreamCatalogCache::scope() const noexcept { return options.scope; }
 
-std::optional<CachedUpstreamCatalog> UpstreamCatalogCache::lookup(std::string_view server_id) const {
+std::optional<CachedUpstreamCatalog> UpstreamCatalogCache::lookup(
+        std::string_view server_id, std::string_view url) const {
     const std::scoped_lock lock(mutex);
-    const auto found = std::ranges::find_if(entries, [server_id](const Entry& entry) {
-        return entry.server_id == server_id;
-    });
+    const auto found = std::ranges::find_if(
+            entries, [server_id, url](const Entry& entry) { return entry.server_id == server_id && entry.url == url; });
     if (found == entries.end()) {
         return std::nullopt;
     }
@@ -59,7 +59,8 @@ std::optional<CachedUpstreamCatalog> UpstreamCatalogCache::lookup(std::string_vi
     };
 }
 
-support::ExpectedVoid UpstreamCatalogCache::admit(std::string_view server_id, const UpstreamCatalog& catalog) {
+support::ExpectedVoid UpstreamCatalogCache::admit(
+        std::string_view server_id, std::string_view url, const UpstreamCatalog& catalog) {
     if (!catalog.freshness.has_value() || catalog.cache_scope != options.scope) {
         return support::ExpectedVoid{};
     }
@@ -70,6 +71,7 @@ support::ExpectedVoid UpstreamCatalogCache::admit(std::string_view server_id, co
     std::erase_if(entries, [server_id](const Entry& entry) { return entry.server_id == server_id; });
     entries.push_back(Entry{
             .server_id = std::string(server_id),
+            .url = std::string(url),
             .catalog = catalog,
             .expires_at = std::chrono::steady_clock::now() + *catalog.freshness,
     });

@@ -233,7 +233,7 @@ struct UpstreamConnection::Impl : std::enable_shared_from_this<UpstreamConnectio
         // An entry the cache cannot admit is simply not cached: the walk
         // already produced a correct catalog, and a cache never changes the
         // answer a caller gets.
-        (void)catalog_cache->admit(server_id, catalog);
+        (void)catalog_cache->admit(server_id, options.url, catalog);
     }
 
     /// Re-list this Upstream's catalog behind the caller's back, at most one
@@ -266,7 +266,7 @@ struct UpstreamConnection::Impl : std::enable_shared_from_this<UpstreamConnectio
         // instead of waiting for the era probe.
         std::optional<CachedUpstreamCatalog> cached;
         if (catalog_cache != nullptr && !settled()) {
-            cached = catalog_cache->lookup(server_id);
+            cached = catalog_cache->lookup(server_id, options.url);
         }
         if (!cached.has_value()) {
             return admit<UpstreamCatalog>(caller_token, [self = shared_from_this()](std::stop_token request_token) {

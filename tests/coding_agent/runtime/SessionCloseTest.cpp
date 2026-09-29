@@ -278,7 +278,7 @@ TEST_CASE("repeated Session Close is idempotent and rejects every work admission
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = std::move(model_runtime), .user_shell = nullptr}));
+                    .model_runtime = std::move(model_runtime), .user_shell = nullptr, .catalog_cache = nullptr}));
     REQUIRE(created.has_value());
     auto& session = fixture.runtime.adopt_session(std::move(created->session));
 
@@ -319,7 +319,7 @@ TEST_CASE("Session Close requested from an event subscriber finalizes after the 
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = std::move(model_runtime), .user_shell = nullptr}));
+                    .model_runtime = std::move(model_runtime), .user_shell = nullptr, .catalog_cache = nullptr}));
     REQUIRE(created.has_value());
     auto* session = &fixture.runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
@@ -383,7 +383,7 @@ TEST_CASE("Session Close waits for an admitted compaction before releasing Sessi
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = std::move(model_runtime), .user_shell = nullptr}));
+                    .model_runtime = std::move(model_runtime), .user_shell = nullptr, .catalog_cache = nullptr}));
     REQUIRE(created.has_value());
     auto& session = fixture.runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
@@ -451,7 +451,7 @@ TEST_CASE("Session Close drains admitted Session Event Commitments under slow pe
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = std::move(model_runtime), .user_shell = nullptr}));
+                    .model_runtime = std::move(model_runtime), .user_shell = nullptr, .catalog_cache = nullptr}));
     REQUIRE(created.has_value());
     auto& session = fixture.runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
@@ -491,7 +491,7 @@ TEST_CASE("subscriptions and late callbacks after Close are suppressed or benign
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = std::move(model_runtime), .user_shell = nullptr}));
+                    .model_runtime = std::move(model_runtime), .user_shell = nullptr, .catalog_cache = nullptr}));
     REQUIRE(created.has_value());
     auto& session = fixture.runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
@@ -550,7 +550,7 @@ TEST_CASE("Session Close during a retry backoff cancels the wait and settles the
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = std::move(model_runtime), .user_shell = nullptr}));
+                    .model_runtime = std::move(model_runtime), .user_shell = nullptr, .catalog_cache = nullptr}));
     REQUIRE(created.has_value());
     auto& session = fixture.runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
@@ -613,7 +613,7 @@ TEST_CASE("Session Close with a latched persistence failure completes and keeps 
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{
-                    .model_runtime = std::move(model_runtime), .user_shell = nullptr}));
+                    .model_runtime = std::move(model_runtime), .user_shell = nullptr, .catalog_cache = nullptr}));
     REQUIRE(created.has_value());
     auto& session = fixture.runtime.adopt_session(std::move(created->session));
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);

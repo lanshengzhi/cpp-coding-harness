@@ -140,6 +140,7 @@ AsyncSessionReplacementSink InteractiveSessionRun::make_async_session_replacemen
                         .model_runtime = state->shared_runtime,
                         .cli_fake = state->model_runtime_cli_fake,
                         .user_shell = nullptr,
+                        .catalog_cache = state->shared_catalog_cache,
                 },
                 stop_token);
     };
@@ -323,6 +324,12 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_project_resourc
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_shared_runtime(
     std::shared_ptr<coding_agent::ModelRuntime> shared_runtime) noexcept {
     state_->shared_runtime = std::move(shared_runtime);
+    return *this;
+}
+
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_shared_catalog_cache(
+        std::shared_ptr<mcp::UpstreamCatalogCache> shared_catalog_cache) noexcept {
+    state_->shared_catalog_cache = std::move(shared_catalog_cache);
     return *this;
 }
 

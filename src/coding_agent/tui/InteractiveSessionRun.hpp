@@ -21,6 +21,10 @@
 #include <utility>
 #include <vector>
 
+namespace cch::mcp {
+class UpstreamCatalogCache;
+}
+
 namespace cch::coding_agent::tui {
 
 class InteractiveSessionRun;
@@ -137,6 +141,11 @@ private:
         std::shared_ptr<harness::RuntimeRoot> runtime_root{nullptr};
         ProjectResourceFileSystems project_resource_filesystems{};
         std::shared_ptr<coding_agent::ModelRuntime> shared_runtime{nullptr};
+        /// The host-owned MCP Host catalog cache every session this host
+        /// creates shares (ADR 0067). Only a `cch_coding_agent` factory builds
+        /// one, so this frontend names the type and never includes `cch_mcp`
+        /// (ADR 0065's `frontend-no-direct-mcp-includes`).
+        std::shared_ptr<mcp::UpstreamCatalogCache> shared_catalog_cache{nullptr};
         bool model_runtime_cli_fake{false};
         std::ostream* error_stream{nullptr}; // borrowed error stream; must outlive run operations when supplied
         bool is_resume_target{false};
@@ -185,6 +194,8 @@ public:
     InteractiveSessionRunBuilder& with_project_resource_filesystems(ProjectResourceFileSystems filesystems) noexcept;
     InteractiveSessionRunBuilder& with_shared_runtime(
         std::shared_ptr<coding_agent::ModelRuntime> shared_runtime) noexcept;
+    InteractiveSessionRunBuilder& with_shared_catalog_cache(
+            std::shared_ptr<mcp::UpstreamCatalogCache> shared_catalog_cache) noexcept;
     InteractiveSessionRunBuilder& with_model_runtime_cli_fake(bool model_runtime_cli_fake) noexcept;
     InteractiveSessionRunBuilder& with_error_stream(
         std::ostream* error_stream) noexcept;

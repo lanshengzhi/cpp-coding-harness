@@ -3,7 +3,9 @@
 #include "coding_agent/AgentSession.hpp"
 
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
+#include "support/AgentRootFixture.hpp"
 #include "support/AsyncResultBridge.hpp"
+#include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
@@ -12,8 +14,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/awaitable.hpp>
 
+#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -143,4 +148,59 @@ TEST_CASE("the model Bash tool is always registered alongside the Session-owned 
     CHECK(included->message.output.find("still-direct") != std::string::npos);
     CHECK_FALSE(included->message.exclude_from_context);
     CHECK(bash_message_count(session.snapshot().agent_state.messages) == 1);
+}
+
+TEST_CASE("a configured bearer-env variable is withheld from every Shell the session owns",
+        "[coding_agent][mcp][credentials][issue833][spec]") {
+    tests::TempWorkspace workspace;
+    // The Agent Config Directory the session resolves is the one under this
+    // HOME, so the settings below are the ones the session actually reads.
+    tests::EnvVarGuard home_guard{"HOME", workspace.path().string()};
+    const auto agent_dir = tests::agent_root_under_home(workspace.path());
+    std::filesystem::create_directories(agent_dir);
+    {
+        std::ofstream settings(agent_dir / "settings.json", std::ios::binary | std::ios::trunc);
+        settings << R"({"mcpServers": {"executor": {"url": "https://mcp.example.com/mcp",)"
+                    R"( "auth": "bearer-env:MCP_EXECUTOR_BEARER"}}})";
+    }
+    // The variable name matches none of the shell filter's secret-shaped
+    // rules on purpose, so the case cannot pass through the heuristic alone:
+    // what withholds it is the configured `bearer-env` reference.
+    tests::EnvVarGuard token_guard{"MCP_EXECUTOR_BEARER", "upstream-credential-value"};
+    tests::EnvVarGuard plain_guard{"MCP_EXECUTOR_PLAIN", "not-a-credential"};
+    tests::RuntimeFixture runtime_fixture;
+    auto created = create_cli_session(runtime_fixture, workspace, true);
+    REQUIRE(created);
+    auto& session = runtime_fixture.adopt_session(std::move(created->session));
+
+    // The `bash` tool call is the product's own path to a child process, and
+    // `printenv NAME...` prints the value of each name that is in the
+    // environment, so an absent name contributes no output at all. Both
+    // values are set in this process's environment, so the difference
+    // between what prints is the filter and nothing else. `printenv` exits
+    // non-zero when a name is missing, which is the expected outcome here, so
+    // the assertions are on the output rather than on the exit status.
+    const auto prompted = run_prompt(runtime_fixture, session, "bash printenv MCP_EXECUTOR_BEARER MCP_EXECUTOR_PLAIN");
+    REQUIRE(prompted);
+    // The snapshot outlives the read: the results are borrowed from it.
+    const auto snapshot = session.snapshot();
+    const auto results = tool_results(snapshot.agent_state.messages);
+    REQUIRE(results.size() == 1);
+    REQUIRE(results.front()->tool_name == "bash");
+    const auto output = ai::text_from_content(results.front()->content);
+    // A configured Upstream credential is withheld, exactly as a provider
+    // credential is (spec #833 story 33, CODING_STANDARDS.md §10.5).
+    CHECK(output.find("upstream-credential-value") == std::string::npos);
+    // A variable that is not a configured MCP credential and matches no
+    // secret-shaped rule is still visible: the filter is extended, never
+    // widened into a deny-all.
+    CHECK(output.find("not-a-credential") != std::string::npos);
+
+    // The User Shell the Native TUI owns filters the same names, so the
+    // interactive path is not a way around the model Bash tool's filter.
+    const auto completion =
+            run_user_bash(runtime_fixture, session, "printenv MCP_EXECUTOR_BEARER MCP_EXECUTOR_PLAIN || true");
+    REQUIRE(completion);
+    CHECK(completion->message.output.find("upstream-credential-value") == std::string::npos);
+    CHECK(completion->message.output.find("not-a-credential") != std::string::npos);
 }

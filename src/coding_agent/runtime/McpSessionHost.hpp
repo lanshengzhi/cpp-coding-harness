@@ -27,6 +27,27 @@
 
 namespace cch::coding_agent::runtime {
 
+/// The MCP Host's cross-session tool-catalog cache, as a host owns it (ADR
+/// 0067, spec #833 story 17, issue #848).
+///
+/// The returned value is a `process`-scoped `cch_mcp::UpstreamCatalogCache`,
+/// which is the only scope in which a catalog may be reused across the
+/// sessions one pike process runs: a `session`-scoped cache shared between
+/// sessions would serve one session's catalog to a session that never fetched
+/// it, which is the contamination `cacheScope` exists to prevent. It is
+/// deliberately shared live state (CODING_STANDARDS §7.4), carried by
+/// `std::shared_ptr`, and every operation takes the cache's own lock.
+///
+/// Ownership is injection, not a process-global: the host that runs the
+/// interactive sessions calls this once and hands the value to every session
+/// it creates, exactly as it hands the Models Runtime (ADR 0029/0030). No
+/// `static` is involved, and the frontends never see a `cch_mcp` type — this
+/// factory is how they name one (ADR 0065's `frontend-no-direct-mcp-includes`).
+///
+/// The lifetime this accepts, and what invalidates an entry, are ADR 0067's
+/// subject; `docs/runtime-capacities.md` records the bounds.
+[[nodiscard]] std::shared_ptr<mcp::UpstreamCatalogCache> make_host_catalog_cache();
+
 /// What the session wires the MCP Host with (issue #841). Every field is a
 /// value the caller already owns: the configured `mcpServers` entries, the
 /// trust store's file, the credential store over `auth.json`, and the
@@ -77,17 +98,12 @@ struct McpSessionHostOptions {
     /// connection walks `tools/list` and caches nothing, which is the
     /// behaviour the host had before the cache existed.
     ///
-    /// **Injected by the caller; production leaves it null for now, so a
-    /// production session walks its own catalog and nothing is reused across
-    /// sessions.** The value itself is `cch_mcp`'s; what is still open is
-    /// which long-lived object holds one across the sessions a pike process
-    /// runs. A process-scope mutable owner in this package would be the
-    /// repository's first such state, and sharing across sessions requires a
-    /// `process`-scoped instance — both architecture decisions rather than
-    /// code-level inferences (ADR 0053), so neither is answered here. The
-    /// "Cross-session reuse" note in `docs/runtime-capacities.md` records the
-    /// open decision as owed an ADR. A caller that wants cross-session reuse
-    /// hands this the cache of the session that ran before.
+    /// **Injected by the host; the interactive host hands every session the
+    /// same instance, so a repeated session does not re-walk `tools/list`
+    /// (spec #833 story 17, issue #848, ADR 0067).** The value itself is
+    /// `cch_mcp`'s and is built by `make_host_catalog_cache()`. A caller that
+    /// runs one session and exits needs no cache at all: null is a session
+    /// that walks its own catalog exactly as it did before the cache existed.
     std::shared_ptr<mcp::UpstreamCatalogCache> catalog_cache{nullptr};
     /// The session's Upstream-tool binding (issue #842, issue #847). A
     /// connected server configured with `activation: "eager"` has its catalog

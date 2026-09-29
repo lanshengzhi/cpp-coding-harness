@@ -182,7 +182,8 @@ struct Running {
         request.execution_runtime_target = runtime_root->make_target();
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .user_shell = nullptr},
+                coding_agent::runtime::AssemblyOverrides{
+                        .model_runtime = nullptr, .user_shell = nullptr, .catalog_cache = nullptr},
                 stop_token);
     };
 
@@ -500,7 +501,8 @@ TEST_CASE("a fresh in-memory session opens the tree on its initial thinking entr
         request.execution_runtime_target = runtime_root->make_target();
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
-                coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .user_shell = nullptr},
+                coding_agent::runtime::AssemblyOverrides{
+                        .model_runtime = nullptr, .user_shell = nullptr, .catalog_cache = nullptr},
                 stop_token);
     };
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}

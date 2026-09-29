@@ -109,12 +109,10 @@ private:
 /// whole untrusted response body — and are redacted by the connection's
 /// resolved credential value as well, so an Upstream that echoes the bearer
 /// back cannot put it in a diagnostic (issue #838). Both the bound and the
-/// shape rules live in the one private diagnostics point the connection
-/// machinery shares (issue #839).
-[[nodiscard]] std::string bounded_diagnostic(std::string text, std::string_view secret) {
-    return diagnostics::bounded(std::move(text), secret);
-}
-
+/// shape rules live in the one private diagnostics point the credential path,
+/// the OAuth flow, and the connection machinery share (issue #839): every
+/// diagnostic below is `diagnostics::bounded(text, secret)`, which erases the
+/// credential and only then bounds.
 [[nodiscard]] std::string diagnostic_of(const Error& error, std::string_view secret) {
     return diagnostics::of(error, secret);
 }
@@ -123,7 +121,8 @@ private:
 /// credential value and bounded before it reaches a status surface or a
 /// session record (issue #838).
 [[nodiscard]] Error redacted_error(const Error& error, std::string_view secret) {
-    return make_error(error.code, bounded_diagnostic(error.message, secret), bounded_diagnostic(error.detail, secret));
+    return make_error(
+            error.code, diagnostics::bounded(error.message, secret), diagnostics::bounded(error.detail, secret));
 }
 
 [[nodiscard]] double next_request_id(const std::shared_ptr<UpstreamClient::Connection>& connection) {
@@ -192,7 +191,7 @@ void attach_progress_token(JsonValue& params, const JsonValue& token) {
         if (const auto* text = message->get_if<std::string>(); text != nullptr) {
             // Upstream-supplied text on its way to a display: redacted before
             // it is bounded, exactly as a diagnostic is (issue #838).
-            read.message = bounded_diagnostic(*text, secret);
+            read.message = diagnostics::bounded(*text, secret);
         }
     }
     return read;
@@ -281,7 +280,7 @@ struct ProgressObserver {
     }
     if (response.status_code < 200 || response.status_code > 299) {
         return ProtocolFailure{
-                .diagnostic = bounded_diagnostic(
+                .diagnostic = diagnostics::bounded(
                         "the Upstream MCP Server answered with HTTP status " + std::to_string(response.status_code),
                         secret),
                 .json_rpc_code = 0,
@@ -312,9 +311,9 @@ struct ProgressObserver {
         }
         if (decoded->is_error) {
             return ProtocolFailure{
-                    .diagnostic = bounded_diagnostic("the Upstream MCP Server returned JSON-RPC error " +
-                                                             std::to_string(decoded->error_code) + ": " +
-                                                             decoded->error_message,
+                    .diagnostic = diagnostics::bounded("the Upstream MCP Server returned JSON-RPC error " +
+                                                               std::to_string(decoded->error_code) + ": " +
+                                                               decoded->error_message,
                             secret),
                     .json_rpc_code = decoded->error_code,
             };
@@ -326,8 +325,8 @@ struct ProgressObserver {
         };
     }
     return ProtocolFailure{
-            .diagnostic = bounded_diagnostic("the Upstream MCP Server sent no JSON-RPC response for request " +
-                                                     std::to_string(static_cast<std::int64_t>(id)),
+            .diagnostic = diagnostics::bounded("the Upstream MCP Server sent no JSON-RPC response for request " +
+                                                       std::to_string(static_cast<std::int64_t>(id)),
                     secret),
             .json_rpc_code = 0,
     };
@@ -969,7 +968,7 @@ private:
                 JsonValue::object_t{
                         {std::string(protocol::kParamRequestId), JsonValue(*request_id_)},
                         {std::string(protocol::kParamReason),
-                                JsonValue(bounded_diagnostic("the MCP Host cancelled the call", secret()))},
+                                JsonValue(diagnostics::bounded("the MCP Host cancelled the call", secret()))},
                 });
     }
 
@@ -1108,7 +1107,7 @@ private:
     /// call on the same connection still succeeds.
     [[nodiscard]] std::string diagnostic_for(const ProtocolFailure& failure) const {
         if (failure.json_rpc_code == protocol::kErrorMissingRequiredClientCapability) {
-            return bounded_diagnostic(
+            return diagnostics::bounded(
                     "the Upstream MCP Server requires a client capability this build does not advertise "
                     "(JSON-RPC -32021 MissingRequiredClientCapability)",
                     secret());

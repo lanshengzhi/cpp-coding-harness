@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/coding_agent/Settings.hpp>
+#include <cch/mcp/UpstreamCatalogCache.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"
@@ -27,12 +28,18 @@ namespace cch::coding_agent::runtime {
 
 /// Private test-support assembly seam carried as one value: an injected
 /// ModelRuntime built from scripted Provider Definitions and/or a Session-
-/// owned User Shell (User Bash overlap/cancellation tests). Production
-/// assembly passes neither override.
+/// owned User Shell (User Bash overlap/cancellation tests), and the host-owned
+/// MCP catalog cache every session this host creates shares. Production
+/// assembly passes no User Shell; the interactive host passes the cache
+/// (ADR 0067) and a single-shot host passes neither.
 struct AssemblyOverrides {
     std::shared_ptr<ModelRuntime> model_runtime;
     bool cli_fake{false};
     std::unique_ptr<AsyncUserShell> user_shell;
+    /// The MCP Host's cross-session tool-catalog cache, built by
+    /// `make_host_catalog_cache()`. Null is a host that runs one session and
+    /// exits, which is exactly the behaviour from before the cache existed.
+    std::shared_ptr<mcp::UpstreamCatalogCache> catalog_cache;
 };
 
 /// Assembles one Agent Session (and its supporting services) from the

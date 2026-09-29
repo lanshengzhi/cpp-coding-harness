@@ -13,6 +13,7 @@
 #include <cch/mcp/UpstreamClient.hpp>
 #include <cch/support/BoundedText.hpp>
 #include <cch/support/Redactor.hpp>
+#include "mcp/Diagnostics.hpp"
 #include "mcp/JsonRpc.hpp"
 #include "mcp/Protocol.hpp"
 #include "mcp/Redaction.hpp"
@@ -450,7 +451,7 @@ TEST_CASE("an oversized MCP diagnostic is redacted before it is truncated",
     assigned.append(4000, 'b');
     REQUIRE(assigned.size() > mcp::protocol::kMaxDiagnosticBytes);
 
-    const auto bounded = mcp::redaction::redacted_text(assigned, token);
+    const auto bounded = mcp::diagnostics::bounded(assigned, token);
     CHECK(bounded.size() <= mcp::protocol::kMaxDiagnosticBytes);
     CHECK(bounded.find(token) == std::string::npos);
     CHECK(bounded.find(support::kRedactionMarker) != std::string::npos);
@@ -465,7 +466,7 @@ TEST_CASE("an oversized MCP diagnostic is redacted before it is truncated",
     echoed.append(4000, 'd');
     REQUIRE(support::bounded_redacted_text(echoed, mcp::protocol::kMaxDiagnosticBytes).find(token) !=
             std::string::npos);
-    const auto erased = mcp::redaction::redacted_text(echoed, token);
+    const auto erased = mcp::diagnostics::bounded(echoed, token);
     CHECK(erased.size() <= mcp::protocol::kMaxDiagnosticBytes);
     CHECK(erased.find(token) == std::string::npos);
     CHECK(erased.find(support::kRedactionMarker) != std::string::npos);

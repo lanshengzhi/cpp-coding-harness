@@ -1,5 +1,6 @@
 #include "mcp/OAuthCallbackServer.hpp"
 
+#include "mcp/Diagnostics.hpp"
 #include "mcp/OAuthSupport.hpp"
 
 #include <boost/asio/buffer.hpp>
@@ -64,6 +65,15 @@ constexpr std::string_view kUnavailablePage =
         "\r\n"
         "<!doctype html><html><head><title>Authorization stopped</title></head>"
         "<body><p>Authorization stopped. You can close this window and return to pike.</p></body></html>";
+
+/// The most a callback's request head may occupy, read to the first blank
+/// line. A browser's redirect carries a few hundred bytes, so the bound is
+/// measured containment rather than tuning: whoever reaches the loopback port
+/// is not authenticated, and an unbounded `read_until` would let one of them
+/// decide how much memory this flow holds (CODING_STANDARDS.md §6.6, ADR 0032).
+/// The value and its regression test are recorded in
+/// `docs/runtime-capacities.md`.
+constexpr std::size_t kMaxCallbackHeadBytes{8 * 1024};
 
 } // namespace
 
@@ -168,14 +178,19 @@ struct LoopbackCallbackServer::State {
             }
             return;
         }
-        boost::asio::streambuf head;
+        // The read is bounded, so an unauthenticated caller cannot make this
+        // flow hold an unbounded request head (CODING_STANDARDS.md §6.6).
+        boost::asio::streambuf head{kMaxCallbackHeadBytes};
         boost::system::error_code read_error;
         const auto transferred = boost::asio::read_until(socket, head, "\r\n\r\n", read_error);
         if (read_error || transferred == 0) {
             answer(socket, kUnavailablePage);
             settle(std::unexpected(make_error(ErrorCode::Network,
                     "the authorization callback could not be read",
-                    read_error ? read_error.message() : "the browser sent no request line")));
+                    read_error == boost::asio::error::not_found
+                            ? "the request head is larger than the " + std::to_string(kMaxCallbackHeadBytes) +
+                                      " bytes this listener reads"
+                            : (read_error ? read_error.message() : "the browser sent no request line"))));
             return;
         }
         const auto begin = boost::asio::buffers_begin(head.data());
@@ -193,9 +208,14 @@ struct LoopbackCallbackServer::State {
         const auto code = query_value(query, "code");
         answer(socket, reported_error.empty() && !code.empty() ? kSuccessPage : kErrorPage);
         if (!reported_error.empty() || code.empty()) {
+            // `error` is query text from whoever reached the loopback port, so
+            // it is redacted and bounded by the package's one diagnostics
+            // point before it can reach a status surface or a session record
+            // (issue #849, CODING_STANDARDS.md §10.2).
             settle(std::unexpected(make_error(ErrorCode::OAuth,
                     "the authorization server refused the authorization request",
-                    reported_error.empty() ? "the callback carried no authorization code" : reported_error)));
+                    diagnostics::bounded(
+                            reported_error.empty() ? "the callback carried no authorization code" : reported_error))));
             return;
         }
         settle(Expected<CallbackRequest>{std::move(*request)});

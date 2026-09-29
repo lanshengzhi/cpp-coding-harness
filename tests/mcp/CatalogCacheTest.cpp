@@ -173,7 +173,7 @@ TEST_CASE("a cached catalog keeps the server's own tools/list order",
     const auto second = tests::drive(fixture.connection.list_tools());
     REQUIRE(second.has_value());
     CHECK(names_of(*second) == declared);
-    const auto stored = fixture.cache->lookup("executor");
+    const auto stored = fixture.cache->lookup("executor", kEndpoint);
     REQUIRE(stored.has_value());
     CHECK(names_of(stored->catalog) == declared);
     CHECK(fixture.listings() == 2);
@@ -210,7 +210,7 @@ TEST_CASE("an expired entry is served immediately and the refresh replaces it",
     CHECK(names_of(*second) == std::vector<std::string>{"stale_one", "stale_two"});
     // That walk's own hint was already expired, so the entry it left behind
     // is stale. The listing that reads it is the one that refreshes.
-    const auto expired = fixture.cache->lookup("executor");
+    const auto expired = fixture.cache->lookup("executor", kEndpoint);
     REQUIRE(expired.has_value());
     CHECK(expired->stale);
 
@@ -220,7 +220,7 @@ TEST_CASE("an expired entry is served immediately and the refresh replaces it",
     const auto refreshed = tests::drive(fixture.connection.list_tools());
     REQUIRE(refreshed.has_value());
     CHECK(names_of(*refreshed) == std::vector<std::string>{"stale_one", "stale_two"});
-    const auto stored = fixture.cache->lookup("executor");
+    const auto stored = fixture.cache->lookup("executor", kEndpoint);
     REQUIRE(stored.has_value());
     CHECK_FALSE(stored->stale);
     CHECK(names_of(stored->catalog) == std::vector<std::string>{"fresh_one", "fresh_two"});
@@ -325,7 +325,7 @@ TEST_CASE("a refresh re-applies the defensive catalog limits and leaves the cach
     // failed refresh replaces nothing. The connection stays `connected` too,
     // because an Upstream that over-reports is a catalog problem and not
     // transport evidence the reconnect ladder may act on.
-    const auto stored = fixture.cache->lookup("executor");
+    const auto stored = fixture.cache->lookup("executor", kEndpoint);
     REQUIRE(stored.has_value());
     CHECK(names_of(stored->catalog) == std::vector<std::string>{"kept"});
     CHECK(fixture.connection.status() == mcp::UpstreamConnectionStatus::Connected);
@@ -377,13 +377,13 @@ TEST_CASE("an entry in one scope is never served to a cache in another",
     auto process_scoped = std::make_shared<mcp::UpstreamCatalogCache>(
             mcp::UpstreamCatalogCacheOptions{.scope = "process"});
 
-    CHECK(session_scoped->lookup("executor") == std::nullopt);
-    REQUIRE(session_scoped->admit("executor", catalog_of({"read_issue"})).has_value());
+    CHECK(session_scoped->lookup("executor", kEndpoint) == std::nullopt);
+    REQUIRE(session_scoped->admit("executor", kEndpoint, catalog_of({"read_issue"})).has_value());
     CHECK(session_scoped->size() == 1);
 
     // The same catalog in the other scope: not this cache's entry, and never
     // served from it.
-    CHECK(process_scoped->lookup("executor") == std::nullopt);
+    CHECK(process_scoped->lookup("executor", kEndpoint) == std::nullopt);
     CHECK(process_scoped->size() == 0);
 }
 
@@ -424,21 +424,20 @@ TEST_CASE("a catalog the cache would not admit is refused rather than held",
         "[mcp][catalog][cache][untrusted][issue848][spec]") {
     mcp::UpstreamCatalogCache cache;
 
-    const auto over_cap = cache.admit("executor",
-            catalog_of(std::vector<std::string>(5001, "read_issue")));
+    const auto over_cap = cache.admit("executor", kEndpoint, catalog_of(std::vector<std::string>(5001, "read_issue")));
     REQUIRE_FALSE(over_cap.has_value());
     CHECK(over_cap.error().code == support::ErrorCode::ResourceLimit);
     CHECK(cache.size() == 0);
 
     // A cached catalog is untrusted whatever produced it, so the walk-shaped
     // rules cannot be re-run against it but the value-shaped ones are.
-    const auto duplicate = cache.admit("executor", catalog_of({"read_issue", "read_issue"}));
+    const auto duplicate = cache.admit("executor", kEndpoint, catalog_of({"read_issue", "read_issue"}));
     REQUIRE_FALSE(duplicate.has_value());
     CHECK(duplicate.error().code == support::ErrorCode::Validation);
     CHECK(duplicate.error().detail.find("read_issue") == std::string::npos);
     CHECK(cache.size() == 0);
 
-    const auto fresh = cache.admit("executor", catalog_of({"read_issue"}));
+    const auto fresh = cache.admit("executor", kEndpoint, catalog_of({"read_issue"}));
     CHECK(fresh.has_value());
     CHECK(cache.size() == 1);
 }
@@ -448,27 +447,50 @@ TEST_CASE("the cache is bounded in entries and drops the oldest one at the bound
     mcp::UpstreamCatalogCache cache;
     for (std::size_t index = 0; index < 64; ++index) {
         const auto server = "server-" + std::to_string(index);
-        REQUIRE(cache.admit(server, catalog_of({"read_issue"})).has_value());
+        REQUIRE(cache.admit(server, kEndpoint, catalog_of({"read_issue"})).has_value());
     }
     CHECK(cache.size() == 64);
-    CHECK(cache.lookup("server-0").has_value());
+    CHECK(cache.lookup("server-0", kEndpoint).has_value());
 
     // The 65th server is admitted — bounding the cache must never silently
     // disable caching for a server the user still has — and the entry that
     // has been held the longest is the one dropped.
-    REQUIRE(cache.admit("server-64", catalog_of({"write_file"})).has_value());
+    REQUIRE(cache.admit("server-64", kEndpoint, catalog_of({"write_file"})).has_value());
     CHECK(cache.size() == 64);
-    CHECK(cache.lookup("server-0") == std::nullopt);
-    CHECK(cache.lookup("server-1").has_value());
-    CHECK(cache.lookup("server-64").has_value());
+    CHECK(cache.lookup("server-0", kEndpoint) == std::nullopt);
+    CHECK(cache.lookup("server-1", kEndpoint).has_value());
+    CHECK(cache.lookup("server-64", kEndpoint).has_value());
 
     // Admitting a server it already holds replaces its entry rather than
     // growing the cache.
-    REQUIRE(cache.admit("server-64", catalog_of({"write_file", "read_file"})).has_value());
+    REQUIRE(cache.admit("server-64", kEndpoint, catalog_of({"write_file", "read_file"})).has_value());
     CHECK(cache.size() == 64);
-    const auto replaced = cache.lookup("server-64");
+    const auto replaced = cache.lookup("server-64", kEndpoint);
     REQUIRE(replaced.has_value());
     CHECK(names_of(replaced->catalog) == (std::vector<std::string>{"write_file", "read_file"}));
+}
+
+TEST_CASE("an entry is served only to the endpoint it was walked from",
+        "[mcp][catalog][cache][identity][issue848][spec]") {
+    mcp::UpstreamCatalogCache cache;
+    REQUIRE(cache.admit("executor", kEndpoint, catalog_of({"read_issue"})).has_value());
+    CHECK(cache.size() == 1);
+
+    // The same Server Id pointed at a different endpoint is a different
+    // Upstream, and a cross-session cache must not hand it the previous one's
+    // catalog (ADR 0067).
+    constexpr std::string_view kOtherEndpoint{"https://other.invalid/mcp"};
+    CHECK(cache.lookup("executor", kOtherEndpoint) == std::nullopt);
+    CHECK(cache.lookup("executor", kEndpoint).has_value());
+
+    // Re-pointing the Server Id replaces its one entry rather than adding to
+    // the cache, and the endpoint it now names is the one that is served.
+    REQUIRE(cache.admit("executor", kOtherEndpoint, catalog_of({"write_file"})).has_value());
+    CHECK(cache.size() == 1);
+    CHECK(cache.lookup("executor", kEndpoint) == std::nullopt);
+    const auto moved = cache.lookup("executor", kOtherEndpoint);
+    REQUIRE(moved.has_value());
+    CHECK(names_of(moved->catalog) == (std::vector<std::string>{"write_file"}));
 }
 
 TEST_CASE("a freshness hint longer than the host admits is clamped rather than refused",

@@ -5,7 +5,6 @@
 #include "mcp/OAuthCallbackServer.hpp"
 #include "mcp/OAuthSupport.hpp"
 #include "mcp/Protocol.hpp"
-#include "mcp/Redaction.hpp"
 #include "mcp/WwwAuthenticate.hpp"
 #include "support/Json.hpp"
 
@@ -59,18 +58,26 @@ constexpr std::string_view kProtectedResourceMetadataPath{"/.well-known/oauth-pr
 /// hold an authorization open indefinitely.
 constexpr std::chrono::milliseconds kExchangeTimeout{std::chrono::seconds{30}};
 
+/// A failure this file composes whole, from its own fixed sentences plus at
+/// most a parameter name, a status code, or an endpoint this flow already
+/// validated. Nothing untrusted reaches this channel, so there is nothing in
+/// it to erase and nothing in it to bound.
 [[nodiscard]] Error oauth_error(std::string message, std::string detail, ErrorCode code = ErrorCode::OAuth) {
     return make_error(code, std::move(message), std::move(detail));
 }
 
-/// Every error this flow reports is redacted and bounded by the package's one
-/// diagnostics point, so a token an authorization server echoed into an error
-/// body cannot reach a status surface or a session record (issue #838,
-/// CODING_STANDARDS.md §10.7).
+/// The other half of the flow's failure channel: any detail carrying text
+/// that came from somewhere else — an authorization server's document or error
+/// body, a credential store's reason, or the query whoever reached the loopback
+/// port sent — is redacted against the known credential value and bounded at
+/// the package's one diagnostics point, so no such text reaches a status
+/// surface or a session record unbounded and unredacted (issue #838, #849,
+/// CODING_STANDARDS.md §10.2, §10.7). An empty `secret` still bounds and still
+/// applies the shape-based rules; it is the right argument before this flow
+/// holds a credential value of its own.
 [[nodiscard]] Error oauth_failure(
         std::string message, std::string detail, std::string_view secret, ErrorCode code = ErrorCode::OAuth) {
-    return make_error(
-            code, std::move(message), diagnostics::bounded(redaction::redacted_text(std::move(detail), secret)));
+    return make_error(code, std::move(message), diagnostics::bounded(std::move(detail), secret));
 }
 
 [[nodiscard]] Error cancelled_error() { return make_error(ErrorCode::Cancelled, "the authorization was cancelled"); }
@@ -284,8 +291,12 @@ void continue_discovery(const FlowPtr& flow,
         // The document is fetched from the issuer's own well-known path, so an
         // issuer that is not the one that was asked for is a redirection this
         // flow does not follow.
-        return std::unexpected(oauth_error("the authorization server metadata declares a different issuer",
-                "the document fetched for \"" + requested_issuer + "\" declares the issuer \"" + *issuer + "\""));
+        // The issuer is text this flow did not write: it came out of a
+        // document the authorization server served, so it is bounded (and
+        // shape-redacted) before it can reach a status surface.
+        return std::unexpected(oauth_failure("the authorization server metadata declares a different issuer",
+                "the document fetched for \"" + requested_issuer + "\" declares the issuer \"" + *issuer + "\"",
+                {}));
     }
     auto authorization_endpoint = oauth::string_member(document, "authorization_endpoint");
     auto token_endpoint = oauth::string_member(document, "token_endpoint");
@@ -486,9 +497,12 @@ void register_new_client(const FlowPtr& flow) {
 /// on the authorization server, so an existing one is always reused.
 void on_stored_credential(const FlowPtr& flow, std::expected<std::optional<UpstreamOAuthCredential>, Error> stored) {
     if (!stored) {
+        // The store's own reason is carried on, and it is bounded here for
+        // the same reason every other carried reason is (issue #849).
         settle(flow,
-                std::unexpected(oauth_error("the stored authorization credential could not be read",
-                        stored.error().message + " " + stored.error().detail)));
+                std::unexpected(oauth_failure("the stored authorization credential could not be read",
+                        stored.error().message + " " + stored.error().detail,
+                        flow->state)));
         return;
     }
     if (stored->has_value() && !(*stored)->client_id.empty()) {
@@ -550,7 +564,12 @@ void on_token_response(const FlowPtr& flow, std::expected<JsonValue, Error> docu
         return;
     }
     if (const auto reported = oauth::error_of(*document); !reported.empty()) {
-        settle(flow, std::unexpected(oauth_error("the authorization server refused the authorization code", reported)));
+        // The authorization server's own error text is carried on, so it is
+        // bounded and redacted against this flow's state before it can reach a
+        // status surface.
+        settle(flow,
+                std::unexpected(oauth_failure(
+                        "the authorization server refused the authorization code", reported, flow->state)));
         return;
     }
     auto access_token = oauth::string_member(*document, "access_token");
@@ -563,8 +582,9 @@ void on_token_response(const FlowPtr& flow, std::expected<JsonValue, Error> docu
     if (const auto token_type = oauth::string_member(*document, "token_type");
             token_type.has_value() && !token_type->empty() && *token_type != "Bearer") {
         settle(flow,
-                std::unexpected(oauth_error("the authorization server issued a token type this build cannot use",
-                        "the token response declares token_type \"" + *token_type + "\"; only Bearer is used")));
+                std::unexpected(oauth_failure("the authorization server issued a token type this build cannot use",
+                        "the token response declares token_type \"" + *token_type + "\"; only Bearer is used",
+                        flow->state)));
         return;
     }
     UpstreamOAuthCredential credential{
@@ -666,9 +686,14 @@ void exchange_code(const FlowPtr& flow, std::string code) {
                 "the response has no \"iss\" parameter, so the authorization server that issued the code is unknown"));
     }
     if (issuer != expected_issuer) {
-        return std::unexpected(oauth_error("the authorization response came from a different authorization server",
+        // The `iss` this client compares is query text from whoever reached
+        // the loopback port, so it is redacted against this flow's state and
+        // bounded before it can reach a status surface or a session record
+        // (issue #849).
+        return std::unexpected(oauth_failure("the authorization response came from a different authorization server",
                 "the response declares the issuer \"" + issuer + "\" but the request was sent to \"" + expected_issuer +
-                        "\""));
+                        "\"",
+                expected_state));
     }
     if (code.empty()) {
         return std::unexpected(oauth_error("the authorization response carried no authorization code",

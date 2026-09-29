@@ -62,13 +62,19 @@ public:
     /// The scope this cache reads and writes.
     [[nodiscard]] const std::string& scope() const noexcept;
 
-    /// The catalog cached for one Server Id under this cache's own scope, or
-    /// `std::nullopt` when this cache holds nothing for it. A lookup never
-    /// changes what the cache holds, so it is safe to read a cache another
-    /// session's connection is filling.
-    [[nodiscard]] std::optional<CachedUpstreamCatalog> lookup(std::string_view server_id) const;
+    /// The catalog cached for one Upstream — its Server Id *and* the endpoint
+    /// the catalog was walked from — or `std::nullopt` when this cache holds
+    /// nothing for it. The endpoint is part of the key because a Server Id
+    /// whose configured URL changed names a different Upstream, and a
+    /// cross-session cache must not serve the previous one's catalog to it
+    /// (ADR 0067). A lookup never changes what the cache holds, so it is safe
+    /// to read a cache another session's connection is filling.
+    [[nodiscard]] std::optional<CachedUpstreamCatalog> lookup(std::string_view server_id, std::string_view url) const;
 
-    /// Offer one catalog to this cache.
+    /// Offer one catalog to this cache, under the Server Id and endpoint it
+    /// was walked from. One Server Id holds at most one entry, so admitting
+    /// for a reconfigured endpoint replaces the previous one's entry rather
+    /// than adding to it.
     ///
     /// A catalog is untrusted input whatever produced it, so the value-shaped
     /// rules a cold `tools/list` walk enforces are re-run here rather than
@@ -83,7 +89,8 @@ public:
     /// where there is correctly nothing to store: an Upstream that offered no
     /// freshness hint asked for no reuse, and an Upstream that declared
     /// another scope has an entry that belongs to a different cache.
-    [[nodiscard]] support::ExpectedVoid admit(std::string_view server_id, const UpstreamCatalog& catalog);
+    [[nodiscard]] support::ExpectedVoid admit(
+            std::string_view server_id, std::string_view url, const UpstreamCatalog& catalog);
 
     /// How many entries this cache holds.
     [[nodiscard]] std::size_t size() const noexcept;
@@ -94,6 +101,10 @@ public:
 private:
     struct Entry {
         std::string server_id{};
+        /// The endpoint this catalog was walked from; part of the key, so a
+        /// reconfigured Server Id is a miss rather than another Upstream's
+        /// catalog (ADR 0067).
+        std::string url{};
         UpstreamCatalog catalog{};
         std::chrono::steady_clock::time_point expires_at{};
     };

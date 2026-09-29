@@ -8,6 +8,7 @@
 #include "coding_agent/cli/StartupTui.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/compat/pi/PiImport.hpp"
+#include "coding_agent/runtime/McpSessionHost.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/SessionCwd.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
@@ -204,6 +205,7 @@ void print_session_diagnostics(
                        .with_defer_boot(std::move(request))
                        .with_runtime_root(runtime_root)
                        .with_shared_runtime(shared_runtime)
+                       .with_shared_catalog_cache(coding_agent::runtime::make_host_catalog_cache())
                        .with_model_runtime_cli_fake(model_runtime_cli_fake)
                        .with_error_stream(&streams.error)
                        .build();
@@ -366,7 +368,10 @@ void print_session_diagnostics(
                 std::nullopt,
                 coding_agent::runtime::AssemblyOverrides{.model_runtime = std::move(model_runtime),
                         .cli_fake = model_runtime_cli_fake,
-                        .user_shell = nullptr});
+                        .user_shell = nullptr,
+                        // This path runs one session and exits, so there is
+                        // nothing to reuse a catalog with (ADR 0067).
+                        .catalog_cache = nullptr});
         auto future = boost::asio::co_spawn(
                 *runtime_io, support::detail::await_async_result(std::move(operation)), boost::asio::use_future);
         while (future.wait_for(std::chrono::milliseconds{0}) != std::future_status::ready) {

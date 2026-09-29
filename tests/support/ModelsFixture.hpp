@@ -185,6 +185,7 @@ private:
             .model_runtime = runtime_from_models(std::move(models)),
             .cli_fake = true,
             .user_shell = std::move(user_shell),
+            .catalog_cache = nullptr,
     };
 }
 

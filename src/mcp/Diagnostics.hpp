@@ -23,14 +23,20 @@ namespace cch::mcp::diagnostics {
     return cch::support::bounded_redacted_text(std::move(text), protocol::kMaxDiagnosticBytes, "...");
 }
 
-/// The same bound for a text a known credential value reached. A value echoed
-/// back by the Upstream carries no key for the shape-based rules to match, so
-/// the value itself is erased — and it is erased *before* the bound, so no
-/// truncation point can leave a part of it behind (issue #838,
-/// CODING_STANDARDS.md §10.7). An absent secret leaves the text exactly as
-/// `bounded` would.
+/// The package's **one** redact-then-bound operation, for a text a known
+/// credential value reached: a value echoed back by the Upstream carries no
+/// key for the shape-based rules to match, so the value itself is erased, and
+/// it is erased *before* the bound, so no truncation point can leave a part of
+/// it behind (issue #838, CODING_STANDARDS.md §10.2, §10.7). An absent secret
+/// leaves the text exactly as the one-argument `bounded` would.
+///
+/// Every redaction point in this package calls this overload — the credential
+/// path (`UpstreamAuth.cpp`), the client stack and connection machinery
+/// (`UpstreamClient.cpp`), the OAuth flow (`UpstreamOAuth.cpp`), and the
+/// loopback callback listener (`OAuthCallbackServer.cpp`) — so "redacted, then
+/// bounded" is one rule rather than one per call site.
 [[nodiscard]] inline std::string bounded(std::string text, std::string_view secret) {
-    return redaction::redacted_text(std::move(text), secret);
+    return bounded(redaction::erase_credential(std::move(text), secret));
 }
 
 /// One error's bounded diagnostic. An `Error::context` is never carried into

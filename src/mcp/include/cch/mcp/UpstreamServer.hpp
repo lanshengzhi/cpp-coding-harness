@@ -38,6 +38,12 @@ struct UpstreamServerInfo {
 /// that fetched it (spec #833 story 17).
 inline constexpr std::string_view kDefaultCatalogCacheScope{"session"};
 
+/// The widest scope the wire vocabulary has: an Upstream that declares
+/// `cacheScope: "process"` has said its catalog may be reused by every session
+/// one host process runs. Only a host-owned cache reads this scope, and the
+/// lifetime that accepts is ADR 0067's decision.
+inline constexpr std::string_view kProcessCatalogCacheScope{"process"};
+
 /// One Upstream MCP Server's tool catalog as the MCP Host holds it, in the
 /// server's own `tools/list` order (servers SHOULD return a deterministic
 /// order, and the catalog cache preserves it).

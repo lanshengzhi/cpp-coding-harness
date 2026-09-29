@@ -38,6 +38,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -203,6 +204,10 @@ struct AssemblyPlan {
     /// neither and gets the Streamable HTTP transport on the Runtime timer.
     std::shared_ptr<mcp::McpTransport> mcp_transport;
     mcp::UpstreamDelay mcp_delay;
+    /// The host-owned catalog cache every session this host creates shares
+    /// (spec #833 story 17, ADR 0067). Null is a host that runs one session
+    /// and exits.
+    std::shared_ptr<mcp::UpstreamCatalogCache> catalog_cache;
     /// The frontend's call-approval prompt for an `approval: "ask"` Upstream
     /// MCP Server (issue #843). Production passes the Native TUI's prompt; a
     /// headless host passes none and such a call is refused rather than run.
@@ -598,6 +603,29 @@ struct CliModelResolution {
         support::ErrorCode::ModelValidation,
         "Unknown model \"" + std::string{cli_model} +
             "\". Use --list-models to see available models."));
+}
+
+/// The environment-variable names the session's Shell must withhold from every
+/// child process: the provider credential names the runtime resolved, plus
+/// every `bearer-env:<VAR>` name a configured Upstream MCP Server declares.
+///
+/// A configured `bearer-env` value is a credential this repository's own
+/// settings point the session at, so it follows the same discipline as a
+/// provider credential: a `bash` tool call must not be able to print it
+/// (spec #833 story 33, CODING_STANDARDS.md §10.5). The filter matches by
+/// name, so a name declared twice is listed once.
+[[nodiscard]] std::vector<std::string> session_secret_environment_names(
+        const ModelRuntime& runtime, std::span<const UserMcpServerSettings> mcp_servers) {
+    auto names = runtime.configured_api_key_env_names();
+    for (const auto& server : mcp_servers) {
+        if (server.bearer_env_var.has_value() && !server.bearer_env_var->empty()) {
+            names.push_back(*server.bearer_env_var);
+        }
+    }
+    std::ranges::sort(names);
+    const auto duplicates = std::ranges::unique(names);
+    names.erase(duplicates.begin(), duplicates.end());
+    return names;
 }
 
 /// Resolve `--models` / settings `enabledModels` patterns into the scoped
@@ -1507,10 +1535,14 @@ struct PreparedAssemblyTarget final {
     // 7. Resolve the Execution Environment: Session Assembly supplies the
     // complete filesystem and Shell capabilities directly to the callers that
     // need them (ADR 0048). Secret environment names come from the runtime's
-    // configured models.json apiKey templates. The session always owns its
-    // local capabilities; the former SDK host-provided environment injection
-    // is gone.
-    std::vector<std::string> secret_environment_names = runtime->configured_api_key_env_names();
+    // configured models.json apiKey templates and from the `bearer-env`
+    // references the configured Upstream MCP Servers declare, so an Upstream
+    // credential follows the same discipline as a provider credential (spec
+    // #833 story 33). The session always owns its local capabilities; the
+    // former SDK host-provided environment injection is gone. The list is kept
+    // for the `LocalUserShell` built below, which filters the same names.
+    const std::vector<std::string> secret_environment_names =
+            session_secret_environment_names(*runtime, snapshot.manager.mcp_servers());
     // All tool paths resolve with pi `resolveToCwd` semantics (ADR 0057):
     // absolute paths are honored anywhere after normalization; there is no
     // workspace containment or skill-root allowlist.
@@ -1518,7 +1550,7 @@ struct PreparedAssemblyTarget final {
     auto shell = std::make_shared<harness::AsyncLocalShell>(plan.execution_runtime_target,
             workspace,
             /* bash_available */ true,
-            std::move(secret_environment_names),
+            secret_environment_names,
             harness::ShellConfig{
                     .shell_path = settings.shell_path,
                     .command_prefix = settings.shell_command_prefix,
@@ -1613,6 +1645,10 @@ struct PreparedAssemblyTarget final {
         mcp_options.executor = plan.execution_runtime_target->executor();
         mcp_options.transport = std::move(plan.mcp_transport);
         mcp_options.delay = std::move(plan.mcp_delay);
+        // The catalog cache the host owns, shared by every session it creates
+        // (spec #833 story 17, ADR 0067): a repeated session reads the entry
+        // the previous one paid for instead of walking `tools/list` again.
+        mcp_options.catalog_cache = std::move(plan.catalog_cache);
         // The frontend's half of the browser authorization (issue #849). A
         // host that installed neither sink has no way to show a URL, and
         // `/mcp auth` then fails rather than waiting for one.
@@ -1824,13 +1860,12 @@ struct PreparedAssemblyTarget final {
     services.runtime_target = plan.execution_runtime_target;
     services.user_shell = std::move(user_shell);
     if (!services.user_shell && plan.provide_user_shell) {
-        services.user_shell = std::make_unique<LocalUserShell>(
-            workspace,
-            services.model_runtime->configured_api_key_env_names(),
-            harness::ShellConfig{
-                .shell_path = shell_path,
-                .command_prefix = shell_command_prefix,
-            });
+        services.user_shell = std::make_unique<LocalUserShell>(workspace,
+                secret_environment_names,
+                harness::ShellConfig{
+                        .shell_path = shell_path,
+                        .command_prefix = shell_command_prefix,
+                });
     }
     services.bash_session_environment = std::move(bash_session_environment);
     services.mcp_host = std::move(mcp_host);
@@ -1954,6 +1989,10 @@ support::AsyncResult<coding_agent::CreateAgentSessionResult> SessionFactory::cre
                 if (session_facts.has_value()) {
                     apply_cli_facts(request, *session_facts);
                 }
+                // The host-owned MCP catalog cache is applied in both assembly
+                // paths below (ADR 0067): it is a host capability like the
+                // Models Runtime, not a property of one request.
+                auto catalog_cache = std::move(overrides.catalog_cache);
                 auto snapshot_result = co_await support::detail::await_async_result(
                         submit_runtime_work<SettingsSnapshot>(request.execution_runtime_target,
                                 request.workspace.string().size() + 1,
@@ -1975,13 +2014,17 @@ support::AsyncResult<coding_agent::CreateAgentSessionResult> SessionFactory::cre
                         plan->model_runtime_owned = false;
                         plan->cli_fake = overrides.cli_fake;
                     }
+                    plan->catalog_cache = std::move(catalog_cache);
                     co_return co_await finish_creation_async(
                             std::move(plan), snapshot, std::move(overrides.user_shell), stop_token);
                 }
-                co_return co_await finish_creation_async(normalize_cli(std::move(request), snapshot.manager),
-                        snapshot,
-                        std::move(overrides.user_shell),
-                        stop_token);
+                auto single_plan = normalize_cli(std::move(request), snapshot.manager);
+                if (!single_plan) {
+                    co_return std::unexpected(with_settings_fallback_context(single_plan.error(), snapshot));
+                }
+                single_plan->catalog_cache = std::move(catalog_cache);
+                co_return co_await finish_creation_async(
+                        std::move(single_plan), snapshot, std::move(overrides.user_shell), stop_token);
             });
 }
 

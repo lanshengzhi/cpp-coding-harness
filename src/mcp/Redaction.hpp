@@ -12,9 +12,9 @@ namespace cch::mcp::redaction {
 /// passes through here, and the package exposes no other redaction path
 /// (CODING_STANDARDS.md §10.1). The diagnostic *bound* is not implemented
 /// here: it lives in the one private diagnostics point, `mcp/Diagnostics.hpp`,
-/// which the client stack and the connection machinery share (issue #839).
-[[nodiscard]] std::string bounded_diagnostic(std::string text);
-
+/// whose `bounded(text, secret)` overload is the package's single
+/// redact-then-bound operation and calls the erasure below (issue #839).
+///
 /// Erase one known credential value from a text, wherever it appears. A token
 /// echoed without its `Authorization` key carries no key for the shape-based
 /// rules to match, so the value itself is what is erased.
@@ -24,12 +24,6 @@ namespace cch::mcp::redaction {
 /// cannot happen (CODING_STANDARDS.md §10.7). A value too short to identify
 /// without destroying the text around it is left to the shape-based rules.
 [[nodiscard]] std::string erase_credential(std::string text, std::string_view secret);
-
-/// `bounded_diagnostic` for a text a known credential value reached: the value
-/// is erased first, so the shape-based redaction and the bound both see a text
-/// that no longer carries the secret, and neither a bound nor a truncation
-/// point can leave a part of it behind (CODING_STANDARDS.md §10.2, §10.7).
-[[nodiscard]] std::string redacted_text(std::string text, std::string_view secret);
 
 /// The same erasure over a JSON value's string leaves, for an Upstream tool
 /// result that echoed a credential back: the value reaches neither the model's

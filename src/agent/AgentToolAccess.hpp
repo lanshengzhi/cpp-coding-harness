@@ -5,7 +5,6 @@
 #include <cch/support/Error.hpp>
 
 #include <string>
-#include <string_view>
 
 namespace cch::agent::detail {
 
@@ -33,21 +32,22 @@ public:
     /// publication of the same tool would otherwise replace a live tool
     /// value with an equivalent one for no reason. Idempotent rebinds are the
     /// caller's business, not a silent success here.
-    [[nodiscard]] static support::ExpectedVoid add_tool(Agent& agent, Tool tool);
-
-    /// Retire one active tool by name (the `toolsRemoved` half of the ADR 0060
-    /// contract, ADR 0066). A name the registry does not hold is a successful
-    /// no-op, matching `ToolRegistry::remove` and the unknown-name tolerance of
-    /// `ToolRegistry::retain_tools`.
     ///
-    /// Admitted in the same window as `add_tool`: a turn boundary, on the
-    /// Agent's own serialized domain, including the between-turn window of a
-    /// live run. There is deliberately no run-state guard, because that
-    /// window is exactly where a discovery or an activation must land; a Tool
-    /// Call Batch is the thing that may not overlap a change of the set, and it
+    /// Admitted on the Agent's own serialized domain, at a turn boundary or
+    /// on an idle Agent — including the between-turn window of a live run.
+    /// There is deliberately no run-state guard, because that window is
+    /// exactly where a discovery or an activation must land; a Tool Call
+    /// Batch is the thing that may not overlap a change of the set, and it
     /// never does, because the turn machine resolves a whole batch inside one
     /// turn.
-    [[nodiscard]] static support::ExpectedVoid remove_tool(Agent& agent, std::string_view name);
+    ///
+    /// This is the **add-only** half of the loadout contract in v1 (ADR
+    /// 0066): nothing removes an active tool, and `toolsRemoved` is a
+    /// transcript shape with no producer in the product. Activation is sticky
+    /// for the session on purpose (spec #833 story 16), and a removal
+    /// operation, when one is ever needed, is a decision that arrives with
+    /// its own caller and its own tests.
+    [[nodiscard]] static support::ExpectedVoid add_tool(Agent& agent, Tool tool);
 };
 
 } // namespace cch::agent::detail
