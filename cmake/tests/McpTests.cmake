@@ -21,6 +21,7 @@ include_guard(GLOBAL)
         tests/mcp/JsonRpcFramingTest.cpp
         tests/mcp/NotificationIgnoreTest.cpp
         tests/mcp/StreamableHttpTransportTest.cpp
+        tests/mcp/UpstreamAuthTest.cpp
         tests/mcp/UpstreamClientStackTest.cpp
         tests/mcp/WireContractTest.cpp
 )
