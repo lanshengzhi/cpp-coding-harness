@@ -15,6 +15,7 @@
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/Settings.hpp>
+#include <cch/mcp/UpstreamTool.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/agent/harness/FileSystem.hpp>
 #include <cch/agent/harness/LocalFileSystem.hpp>
@@ -143,6 +144,11 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_same_v<
                   agent::ToolExecuteResult,
                   cch::support::AsyncResult<agent::AsyncToolExecutionResult>>);
+    // ADR 0065: the MCP Host Owner Interface is a passive value surface over
+    // the pi-neutral support JSON contract, never a wire or transport type.
+    static_assert(std::is_aggregate_v<mcp::UpstreamToolDescriptor>);
+    static_assert(std::is_copy_constructible_v<mcp::UpstreamToolDescriptor>);
+    static_assert(std::is_same_v<decltype(mcp::UpstreamToolDescriptor::parameters), support::JsonValue>);
     // ADR 0040: the Session Store is a closed concrete facade (no virtual
     // extension point) with value semantics between the two alternatives.
     static_assert(!std::is_abstract_v<harness::session::SessionStore>);

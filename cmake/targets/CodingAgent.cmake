@@ -4,7 +4,10 @@ include_guard(GLOBAL)
 
 # Headless Session and Models composition. Frontend-specific sources live in
 # frontend_tui and frontend_cli below, so this library can be built and used
-# without compiling terminal interaction code (ADR 0053).
+# without compiling terminal interaction code (ADR 0053). It is the sole
+# assembly point, and the only target that may reach the MCP Host package
+# directly: the frontends see upstream status and Pending Elicitation through
+# this package's projections (ADR 0065).
 cch_parity_declare_target(
     TARGET cch_coding_agent
     ROLE owner
@@ -49,6 +52,7 @@ cch_parity_declare_target(
     DEPENDS
         cch_agent_core
         cch_ai
+        cch_mcp
         cch_support
         Boost::headers@boost
         Threads::Threads@threads
@@ -56,6 +60,7 @@ cch_parity_declare_target(
     INTERFACE_DEPENDS
         cch_agent_core
         cch_ai
+        cch_mcp
         cch_support
 )
 cch_owner_include_roots(cch_coding_agent src/coding_agent/include)
