@@ -73,11 +73,15 @@ public:
 /// `mcp.<server-id>` credential key when the store does not already hold it,
 /// and the request is authenticated from it. An unset or empty variable falls
 /// back to the stored credential, which is how a credential this package did
-/// not resolve from the environment — an OAuth token (#849) — authenticates a
-/// request. With neither a resolvable environment value nor a stored
-/// credential the request fails as a connection failure and nothing is sent:
-/// a guessed or empty token is never used. A server that declares no
-/// reference and has no store authenticates nothing.
+/// not resolve from the environment authenticates a request. With neither a
+/// resolvable environment value nor a stored credential the request fails as a
+/// connection failure and nothing is sent: a guessed or empty token is never
+/// used.
+///
+/// `store` is required exactly when a reference is declared; a declared
+/// credential with no store is a connection failure, never an unauthenticated
+/// request. A server that declares no reference resolves no credential, is
+/// sent no `Authorization` header, and never touches the store.
 [[nodiscard]] cch::support::AsyncResult<UpstreamAuth> resolve_upstream_auth(std::string server_id,
         std::optional<std::string> bearer_env_var,
         std::shared_ptr<UpstreamCredentialStore> store,
