@@ -6,14 +6,28 @@
 #include "mcp/JsonRpc.hpp"
 #include "support/Json.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 namespace cch::tests {
+
+/// How a scripted request the script never answers can end.
+enum class McpHold {
+    /// Answer a stopped request with a `Cancelled` error, which is what a
+    /// conforming transport does (ADR 0020) and what lets a close reach
+    /// quiescence.
+    UntilStopped,
+    /// Ignore cancellation and never answer, which is the one way an Upstream
+    /// operation can outlive its connection's cleanup bound.
+    Ignored,
+};
 
 /// What a scripted Upstream MCP Server answers one request with.
 struct ScriptedMcpAnswer {
@@ -32,6 +46,9 @@ struct ScriptedMcpAnswer {
     /// A raw body that replaces the framed answer entirely, for a body the
     /// framing rules must reject.
     std::optional<std::string> raw_body{};
+    /// Set to record the request and never answer it, as an Upstream that took
+    /// the call and went silent does.
+    std::optional<McpHold> hold{};
 };
 
 /// The one MCP Host test seam, filled from memory (issue #836). Production
@@ -54,19 +71,36 @@ public:
     /// a test already scripted for that method.
     void answer_with(
             std::string_view method, std::function<ScriptedMcpAnswer(const support::JsonValue& params)> handler) {
-        const std::string name(method);
-        for (auto& [scripted, existing] : script_) {
-            if (scripted == name) {
-                existing = std::move(handler);
-                return;
-            }
-        }
-        script_.push_back({name, std::move(handler)});
+        script(method, std::move(handler));
+    }
+
+    /// Record the request for `method` and never answer it, as an Upstream that
+    /// accepted a call and went silent does. Replaces any answer a test already
+    /// scripted for that method.
+    void hold(std::string_view method, McpHold policy = McpHold::UntilStopped) {
+        script(method, [policy](const support::JsonValue&) { return ScriptedMcpAnswer{.hold = policy}; });
     }
 
     [[nodiscard]] const std::vector<mcp::McpRequest>& requests() const noexcept { return requests_; }
 
     [[nodiscard]] std::size_t request_count() const noexcept { return requests_.size(); }
+
+    /// How many of the recorded requests carry `method`.
+    [[nodiscard]] std::size_t request_count(std::string_view method) const {
+        std::size_t matching = 0;
+        for (std::size_t index = 0; index < requests_.size(); ++index) {
+            const auto recorded = recorded_method(index);
+            if (recorded && *recorded == method) {
+                ++matching;
+            }
+        }
+        return matching;
+    }
+
+    /// The deadline the request at `index` carried, as the transport saw it.
+    [[nodiscard]] std::chrono::milliseconds recorded_timeout(std::size_t index) const {
+        return requests_.at(index).timeout;
+    }
 
     /// The JSON-RPC method the request at `index` carries.
     [[nodiscard]] support::Expected<std::string> recorded_method(std::size_t index) const {
@@ -94,6 +128,9 @@ public:
             return cch::support::AsyncResult<mcp::McpResponse>(
                     std::expected<mcp::McpResponse, support::Error>{std::unexpected(answer.error())});
         }
+        if (answer->hold.has_value()) {
+            return hold_request(std::move(request), *answer->hold);
+        }
         return cch::support::AsyncResult<mcp::McpResponse>(
                 std::expected<mcp::McpResponse, support::Error>{mcp::McpResponse{
                         .status_code = answer->status_code,
@@ -103,11 +140,70 @@ public:
     }
 
 private:
+    /// One request the script never answers. The completion is owned by the
+    /// request's own stop registration, so the transport — not the test —
+    /// decides when the hold ends. The registration refers to the record
+    /// weakly: an inline completion therefore cannot leave the record keeping
+    /// the transport, and the client stack, alive.
+    struct HeldRequest {
+        struct Cancel {
+            std::weak_ptr<HeldRequest> held;
+            void operator()() const noexcept {
+                const auto record = held.lock();
+                if (!record) {
+                    return;
+                }
+                auto completion = std::move(record->completion);
+                if (completion) {
+                    completion(std::unexpected(support::make_error(
+                            support::ErrorCode::Cancelled, "the request was cancelled")));
+                }
+            }
+        };
+
+        support::AsyncCompletion<mcp::McpResponse, support::Error> completion;
+        std::optional<std::stop_callback<Cancel>> registration;
+    };
+
     struct ScriptedResponse {
         int status_code{200};
         std::string body{};
         std::optional<std::string> raw_body{};
+        std::optional<McpHold> hold{};
     };
+
+    [[nodiscard]] cch::support::AsyncResult<mcp::McpResponse> hold_request(mcp::McpRequest request, McpHold policy) {
+        using Result = cch::support::AsyncResult<mcp::McpResponse>;
+        if (policy == McpHold::Ignored) {
+            // Nothing owns the completion, so the operation is abandoned when
+            // the caller's chain is: the one way a call outlives its
+            // connection's cleanup bound.
+            return Result(typename Result::producer_type(
+                    [](cch::support::AsyncCompletion<mcp::McpResponse, support::Error>) noexcept {}));
+        }
+        return Result(typename Result::producer_type(
+                [this, token = request.stop_token, policy](
+                        cch::support::AsyncCompletion<mcp::McpResponse, support::Error> completion) mutable noexcept {
+                    if (!token.stop_possible()) {
+                        return;
+                    }
+                    auto record = std::make_shared<HeldRequest>();
+                    record->completion = std::move(completion);
+                    record->registration.emplace(token, HeldRequest::Cancel{.held = record});
+                    held_.push_back(std::move(record));
+                }));
+    }
+
+    void script(std::string_view method, std::function<ScriptedMcpAnswer(const support::JsonValue&)> handler) {
+        const std::string name(method);
+        for (auto& [scripted, existing] : script_) {
+            if (scripted == name) {
+                existing = std::move(handler);
+                return;
+            }
+        }
+        script_.push_back({name, std::move(handler)});
+    }
 
     [[nodiscard]] support::Expected<mcp::jsonrpc::WireMessage> record(std::size_t index) const {
         auto parsed = support::read_json(requests_.at(index).body);
@@ -135,6 +231,10 @@ private:
         ScriptedResponse response;
         response.status_code = answer.status_code;
         response.raw_body = answer.raw_body;
+        response.hold = answer.hold;
+        if (answer.hold.has_value()) {
+            return response;
+        }
         response.body = answer.leading_messages.empty() ? "" : frame(answer.leading_messages);
         const auto id = decoded->id.value_or(0.0);
         const auto tail =
@@ -170,6 +270,7 @@ private:
 
     std::vector<std::pair<std::string, Handler>> script_{};
     std::vector<mcp::McpRequest> requests_{};
+    std::vector<std::shared_ptr<HeldRequest>> held_{};
 };
 
 /// A well-formed Modern Era `server/discover` result. A test overrides only the
@@ -254,5 +355,81 @@ template <typename T> [[nodiscard]] support::Expected<T> drive(cch::support::Asy
             [&outcome](std::expected<T, support::Error> result) mutable noexcept { outcome = std::move(result); });
     return outcome;
 }
+
+/// A connection's timer, filled from memory (issue #839). Production supplies
+/// the Runtime's timer; this records every delay a connection asks for and
+/// completes them only when the test says so, so the reconnect ladder and the
+/// cleanup bound are exercised without a wall clock and without a sleep.
+class ScriptedMcpDelay final {
+public:
+    cch::support::AsyncResult<void> request(std::chrono::milliseconds delay, std::stop_token stop_token) {
+        const auto index = waits_.size();
+        waits_.push_back(Wait{.delay = delay, .stop_token = stop_token, .completion = {}});
+        return cch::support::AsyncResult<void>([this, index](
+                                                       cch::support::AsyncCompletion<void, support::Error>
+                                                               completion) mutable noexcept {
+            waits_.at(index).completion = std::move(completion);
+        });
+    }
+
+    /// How many delays are waiting to elapse.
+    [[nodiscard]] std::size_t waiting() const noexcept { return waits_.size() - elapsed_; }
+
+    /// The delay the oldest outstanding wait asked for.
+    [[nodiscard]] std::chrono::milliseconds next_delay() const { return waits_.at(elapsed_).delay; }
+
+    /// Every delay the connection has asked for, in order, including the ones
+    /// that already elapsed.
+    [[nodiscard]] std::vector<std::chrono::milliseconds> delays() const {
+        std::vector<std::chrono::milliseconds> requested;
+        requested.reserve(waits_.size());
+        for (const auto& wait : waits_) {
+            requested.push_back(wait.delay);
+        }
+        return requested;
+    }
+
+    /// Let the oldest outstanding wait elapse, reporting the delay it had
+    /// asked for. A wait whose token has already been stopped completes as
+    /// cancelled instead, exactly as a real delay does.
+    bool elapse_oldest() {
+        if (elapsed_ == waits_.size()) {
+            return false;
+        }
+        const auto index = elapsed_++;
+        auto& wait = waits_.at(index);
+        auto completion = std::move(wait.completion);
+        if (!completion) {
+            return false;
+        }
+        if (wait.stop_token.stop_requested()) {
+            completion(std::unexpected(support::make_error(support::ErrorCode::Cancelled, "the delay was cancelled")));
+            return true;
+        }
+        completion(support::ExpectedVoid{});
+        return true;
+    }
+
+    /// Elapse outstanding waits until none is left, so a ladder that keeps
+    /// arming runs to the end of its budget in one call. Bounded by `limit` so
+    /// a ladder that never stops cannot hang a test.
+    std::size_t elapse_all(std::size_t limit = 64) {
+        std::size_t elapsed = 0;
+        while (elapsed < limit && elapse_oldest()) {
+            ++elapsed;
+        }
+        return elapsed;
+    }
+
+private:
+    struct Wait {
+        std::chrono::milliseconds delay{};
+        std::stop_token stop_token{};
+        cch::support::AsyncCompletion<void, support::Error> completion;
+    };
+
+    std::vector<Wait> waits_{};
+    std::size_t elapsed_{0};
+};
 
 } // namespace cch::tests

@@ -1,6 +1,6 @@
 #include <cch/mcp/UpstreamClient.hpp>
 
-#include <cch/support/BoundedText.hpp>
+#include "mcp/Diagnostics.hpp"
 #include "mcp/EraAdapter.hpp"
 #include "mcp/HeaderMirror.hpp"
 #include "mcp/JsonRpc.hpp"
@@ -84,16 +84,13 @@ private:
     bool draining_{false};
 };
 
-/// Diagnostics are redacted before they are truncated (CODING_STANDARDS.md
-/// §10.2) and never carry an `Error::context`, which for a parse failure is
-/// the whole untrusted response body.
-[[nodiscard]] std::string bounded_diagnostic(std::string text) {
-    return support::bounded_redacted_text(std::move(text), protocol::kMaxDiagnosticBytes, "...");
-}
+/// Diagnostics are redacted before they are truncated and never carry an
+/// `Error::context`, which for a parse failure is the whole untrusted response
+/// body; both live in the one private diagnostics point the connection
+/// machinery shares.
+[[nodiscard]] std::string bounded_diagnostic(std::string text) { return diagnostics::bounded(std::move(text)); }
 
-[[nodiscard]] std::string diagnostic_of(const Error& error) {
-    return bounded_diagnostic(error.detail.empty() ? error.message : error.message + ": " + error.detail);
-}
+[[nodiscard]] std::string diagnostic_of(const Error& error) { return diagnostics::of(error); }
 
 [[nodiscard]] double next_request_id(const std::shared_ptr<UpstreamClient::Connection>& connection) {
     return static_cast<double>(connection->last_request_id.fetch_add(1) + 1);
@@ -108,6 +105,14 @@ private:
         return answer.error();
     }
     const auto& response = *answer;
+    if (response.status_code == 401 || response.status_code == 403) {
+        // An authentication challenge is not a protocol violation: it is the
+        // Upstream refusing to serve the call until the user has authorized
+        // it, and the connection reads it as health evidence (ADR 0064).
+        return make_error(ErrorCode::Auth,
+                "the Upstream MCP Server requires authentication",
+                "the Upstream answered with HTTP status " + std::to_string(response.status_code));
+    }
     if (response.status_code < 200 || response.status_code > 299) {
         return ProtocolFailure{
                 .diagnostic = bounded_diagnostic(
