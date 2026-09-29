@@ -489,6 +489,10 @@ _Avoid_: Display name as identity, URL as identity
 The user's first-enable consent for one configured Upstream MCP Server, asked once per Server Id and remembered across restarts; until it is recorded the server stays disabled and no upstream request is attributable to it. A declined, cancelled, or unanswered prompt is a decline, and a session that cannot ask is treated as declined.
 _Avoid_: Per-connection consent, silent enable
 
+**Upstream Credential Namespace**:
+The `mcp.<server-id>` key one Upstream MCP Server's credential occupies in the shared credential store. `settings.json` names the credential as an environment-variable reference and never carries its value; the resolved token lives in the store and in the request's `Authorization` header, and nowhere else.
+_Avoid_: A per-server credential file, a token in configuration
+
 **Qualified Tool Name**:
 The model-visible name of an upstream tool inside pike: `mcp__<Server Id>__<tool>`, sanitized to `[a-zA-Z0-9_-]` and truncated with a deterministic hash suffix at 64 characters. The TUI keeps the mapping back to the original server and tool names.
 _Avoid_: Bare tool name, per-provider renaming

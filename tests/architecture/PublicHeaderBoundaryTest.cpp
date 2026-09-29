@@ -15,6 +15,7 @@
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/Settings.hpp>
+#include <cch/mcp/UpstreamAuth.hpp>
 #include <cch/mcp/UpstreamTool.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/agent/harness/FileSystem.hpp>
@@ -53,6 +54,7 @@
 
 #include <filesystem>
 #include <optional>
+#include <string>
 #include <type_traits>
 #include <variant>
 
@@ -149,6 +151,12 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_aggregate_v<mcp::UpstreamToolDescriptor>);
     static_assert(std::is_copy_constructible_v<mcp::UpstreamToolDescriptor>);
     static_assert(std::is_same_v<decltype(mcp::UpstreamToolDescriptor::parameters), support::JsonValue>);
+    // ADR 0065, issue #838: the Upstream credential carrier is a passive value
+    // too — a secret is a value in the Owner Interface, never a handle onto the
+    // store or the transport that holds it.
+    static_assert(std::is_aggregate_v<mcp::UpstreamAuth>);
+    static_assert(std::is_copy_constructible_v<mcp::UpstreamAuth>);
+    static_assert(std::is_same_v<decltype(mcp::UpstreamAuth::bearer), std::optional<std::string>>);
     // ADR 0040: the Session Store is a closed concrete facade (no virtual
     // extension point) with value semantics between the two alternatives.
     static_assert(!std::is_abstract_v<harness::session::SessionStore>);

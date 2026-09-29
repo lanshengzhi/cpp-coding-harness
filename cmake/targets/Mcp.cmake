@@ -25,7 +25,9 @@ cch_parity_declare_target(
         src/mcp/HeaderMirror.cpp
         src/mcp/JsonRpc.cpp
         src/mcp/McpHost.cpp
+        src/mcp/Redaction.cpp
         src/mcp/SseResponseStream.cpp
+        src/mcp/UpstreamAuth.cpp
         src/mcp/UpstreamClient.cpp
         src/mcp/WireDto.cpp
         src/mcp/transport/BoostBeastStreamableHttpTransport.cpp

@@ -1,10 +1,10 @@
 #include <cch/mcp/UpstreamClient.hpp>
 
-#include <cch/support/BoundedText.hpp>
 #include "mcp/EraAdapter.hpp"
 #include "mcp/HeaderMirror.hpp"
 #include "mcp/JsonRpc.hpp"
 #include "mcp/Protocol.hpp"
+#include "mcp/Redaction.hpp"
 #include "mcp/WireDto.hpp"
 #include "support/Json.hpp"
 
@@ -25,6 +25,7 @@
 namespace cch::mcp {
 
 struct UpstreamClient::Connection {
+    std::string server_id;
     std::shared_ptr<McpTransport> transport;
     UpstreamClientOptions options{};
     /// The era selected for this connection. Null until a probe succeeds; a
@@ -33,6 +34,10 @@ struct UpstreamClient::Connection {
     /// Server-provided usage guidance from the probe, carried onto the catalog
     /// so the model sees it with the tools it belongs to.
     std::string instructions{};
+    /// The bearer the last resolved request authenticated with, kept only so
+    /// the package's own redaction can erase it from anything the Upstream
+    /// hands back. It is never read for any other purpose (issue #838).
+    std::optional<std::string> resolved_bearer{std::nullopt};
     std::atomic<std::uint64_t> last_request_id{0};
 };
 
@@ -85,14 +90,23 @@ private:
 };
 
 /// Diagnostics are redacted before they are truncated (CODING_STANDARDS.md
-/// §10.2) and never carry an `Error::context`, which for a parse failure is
-/// the whole untrusted response body.
-[[nodiscard]] std::string bounded_diagnostic(std::string text) {
-    return support::bounded_redacted_text(std::move(text), protocol::kMaxDiagnosticBytes, "...");
+/// §10.2), never carry an `Error::context` — which for a parse failure is the
+/// whole untrusted response body — and are redacted by the connection's
+/// resolved credential value as well, so an Upstream that echoes the bearer
+/// back cannot put it in a diagnostic (issue #838).
+[[nodiscard]] std::string bounded_diagnostic(std::string text, std::string_view secret) {
+    return redaction::redacted_text(std::move(text), secret);
 }
 
-[[nodiscard]] std::string diagnostic_of(const Error& error) {
-    return bounded_diagnostic(error.detail.empty() ? error.message : error.message + ": " + error.detail);
+[[nodiscard]] std::string diagnostic_of(const Error& error, std::string_view secret) {
+    return bounded_diagnostic(error.detail.empty() ? error.message : error.message + ": " + error.detail, secret);
+}
+
+/// An error leaving this package, redacted by the connection's resolved
+/// credential value and bounded before it reaches a status surface or a
+/// session record (issue #838).
+[[nodiscard]] Error redacted_error(const Error& error, std::string_view secret) {
+    return make_error(error.code, bounded_diagnostic(error.message, secret), bounded_diagnostic(error.detail, secret));
 }
 
 [[nodiscard]] double next_request_id(const std::shared_ptr<UpstreamClient::Connection>& connection) {
@@ -103,7 +117,8 @@ private:
 /// Notifications ahead of it — including `tools/list_changed` — are safely
 /// ignored: pike does not subscribe to `subscriptions/listen`, so the
 /// notification neither reconnects the connection nor refreshes the catalog.
-[[nodiscard]] ExchangeOutcome read_exchange_outcome(double id, const std::expected<McpResponse, Error>& answer) {
+[[nodiscard]] ExchangeOutcome read_exchange_outcome(
+        double id, const std::expected<McpResponse, Error>& answer, std::string_view secret) {
     if (!answer) {
         return answer.error();
     }
@@ -111,18 +126,19 @@ private:
     if (response.status_code < 200 || response.status_code > 299) {
         return ProtocolFailure{
                 .diagnostic = bounded_diagnostic(
-                        "the Upstream MCP Server answered with HTTP status " + std::to_string(response.status_code)),
+                        "the Upstream MCP Server answered with HTTP status " + std::to_string(response.status_code),
+                        secret),
                 .json_rpc_code = 0,
         };
     }
     auto messages = jsonrpc::split_messages(response.body);
     if (!messages) {
-        return ProtocolFailure{.diagnostic = diagnostic_of(messages.error()), .json_rpc_code = 0};
+        return ProtocolFailure{.diagnostic = diagnostic_of(messages.error(), secret), .json_rpc_code = 0};
     }
     for (const auto& raw : *messages) {
         auto decoded = jsonrpc::decode_message(raw);
         if (!decoded) {
-            return ProtocolFailure{.diagnostic = diagnostic_of(decoded.error()), .json_rpc_code = 0};
+            return ProtocolFailure{.diagnostic = diagnostic_of(decoded.error(), secret), .json_rpc_code = 0};
         }
         if (decoded->is_notification()) {
             continue;
@@ -132,9 +148,10 @@ private:
         }
         if (decoded->is_error) {
             return ProtocolFailure{
-                    .diagnostic =
-                            bounded_diagnostic("the Upstream MCP Server returned JSON-RPC error " +
-                                               std::to_string(decoded->error_code) + ": " + decoded->error_message),
+                    .diagnostic = bounded_diagnostic("the Upstream MCP Server returned JSON-RPC error " +
+                                                             std::to_string(decoded->error_code) + ": " +
+                                                             decoded->error_message,
+                            secret),
                     .json_rpc_code = decoded->error_code,
             };
         }
@@ -142,7 +159,8 @@ private:
     }
     return ProtocolFailure{
             .diagnostic = bounded_diagnostic("the Upstream MCP Server sent no JSON-RPC response for request " +
-                                             std::to_string(static_cast<std::int64_t>(id))),
+                                                     std::to_string(static_cast<std::int64_t>(id)),
+                    secret),
             .json_rpc_code = 0,
     };
 }
@@ -174,17 +192,88 @@ protected:
 
     [[nodiscard]] const std::shared_ptr<UpstreamClient::Connection>& connection() const noexcept { return connection_; }
 
+    /// The credential the last resolved request on this connection
+    /// authenticated with, for redacting anything the Upstream hands back. It
+    /// is never returned to a caller.
+    [[nodiscard]] std::string_view secret() const noexcept {
+        const auto& bearer = connection_->resolved_bearer;
+        return bearer.has_value() ? std::string_view{*bearer} : std::string_view{};
+    }
+
     template <typename Self> [[nodiscard]] std::shared_ptr<Self> self() {
         return std::static_pointer_cast<Self>(Operation::shared_from_this());
     }
 
     /// Issue one framed JSON-RPC request and hand its outcome to
     /// `on_outcome`, attributed to the derived operation's own chain.
+    ///
+    /// The credential is resolved before every exchange, not once per
+    /// connection: a token that is rotated in the environment or expired in the
+    /// store takes effect on the next request without a reconnect
+    /// (issue #838, ADR 0032's resolve-before-each-request rule). A credential
+    /// that cannot be resolved fails the exchange as a connection failure and
+    /// no request is written.
     void send(JsonValue params,
             std::string_view name,
             std::map<std::string, std::string> extra_headers,
             ExchangeOutcomeHandler on_outcome) {
         auto connection = connection_;
+        resolve_auth([self = Operation::shared_from_this(),
+                             params = std::move(params),
+                             name = std::string{name},
+                             extra_headers = std::move(extra_headers),
+                             on_outcome = std::move(on_outcome)](Expected<UpstreamAuth> auth) mutable {
+            self->dispatch(std::move(params),
+                    std::move(name),
+                    std::move(extra_headers),
+                    std::move(on_outcome),
+                    std::move(auth));
+        });
+    }
+
+    /// The operation's real work, reached once the era is selected.
+    virtual void on_era_selected() = 0;
+
+    /// A probe this operation needed failed, so the operation has no era to
+    /// run on and completes with the probe's error.
+    virtual void on_probe_failed(Error error) = 0;
+
+private:
+    /// Resolve this connection's live credential and post `on_ready` on the
+    /// operation's own queue, so a store that completes inline cannot nest
+    /// exchanges and one that completes later cannot re-enter the operation.
+    void resolve_auth(std::move_only_function<void(Expected<UpstreamAuth>)> on_ready) {
+        const auto& connection = connection_;
+        auto resolution = resolve_upstream_auth(connection->server_id,
+                connection->options.bearer_env_var,
+                connection->options.credentials,
+                stop_token_);
+        resolution.start([self = Operation::shared_from_this(), on_ready = std::move(on_ready)](
+                                 std::expected<UpstreamAuth, Error> auth) mutable noexcept {
+            self->queue_.post(
+                    [on_ready = std::move(on_ready), auth = std::move(auth)]() mutable { on_ready(std::move(auth)); });
+        });
+    }
+
+    /// Frame and write the exchange `send` was asked for, with the resolved
+    /// credential applied to the request headers. A credential that did not
+    /// resolve fails the exchange through the connection-failure path without
+    /// writing anything.
+    void dispatch(JsonValue params,
+            std::string name,
+            std::map<std::string, std::string> extra_headers,
+            ExchangeOutcomeHandler on_outcome,
+            Expected<UpstreamAuth> auth) {
+        auto connection = connection_;
+        if (!auth) {
+            auto error = auth.error();
+            queue_.post([on_outcome = std::move(on_outcome), error = std::move(error)]() mutable {
+                on_outcome(std::move(error));
+            });
+            return;
+        }
+        connection->resolved_bearer = auth->bearer;
+
         const auto id = next_request_id(connection);
         // The era probe is the one exchange that runs before the connection has
         // selected an adapter, so it frames itself with the Modern Era request
@@ -203,8 +292,8 @@ protected:
         auto body = support::write_json(jsonrpc::encode_request(id, method_, std::move(params)));
         if (!body) {
             auto error = body.error();
-            queue_.post([on_outcome = std::move(on_outcome), error = std::move(error)]() mutable {
-                on_outcome(ProtocolFailure{.diagnostic = diagnostic_of(error), .json_rpc_code = 0});
+            queue_.post([on_outcome = std::move(on_outcome), error = std::move(error), secret = secret()]() mutable {
+                on_outcome(ProtocolFailure{.diagnostic = diagnostic_of(error, secret), .json_rpc_code = 0});
             });
             return;
         }
@@ -215,35 +304,29 @@ protected:
         request.body = std::move(*body);
         request.timeout = connection->options.request_timeout;
         request.stop_token = stop_token_;
+        apply_upstream_auth(request, *auth);
 
         auto pending = connection->transport->send(std::move(request));
         pending.start([self = Operation::shared_from_this(), id, on_outcome = std::move(on_outcome)](
                               std::expected<McpResponse, Error> answer) mutable noexcept {
-            auto outcome = read_exchange_outcome(id, answer);
+            const auto secret = self->secret();
+            auto outcome = read_exchange_outcome(id, answer, secret);
             self->queue_.post([on_outcome = std::move(on_outcome), outcome = std::move(outcome)]() mutable {
                 on_outcome(std::move(outcome));
             });
         });
     }
 
-    /// The operation's real work, reached once the era is selected.
-    virtual void on_era_selected() = 0;
-
-    /// A probe this operation needed failed, so the operation has no era to
-    /// run on and completes with the probe's error.
-    virtual void on_probe_failed(Error error) = 0;
-
-private:
     /// Probe `server/discover` and continue. The probe owns its own
     /// completion: the operation's terminal completion belongs to the
     /// operation, so it is never handed to the probe. Defined below
     /// `ProbeOperation`.
     void run_probe();
 
+    ExchangeQueue queue_;
     std::shared_ptr<UpstreamClient::Connection> connection_;
     std::string method_;
     std::stop_token stop_token_;
-    ExchangeQueue queue_;
 };
 
 /// The era probe: `server/discover` selects this connection's adapter. It
@@ -286,11 +369,11 @@ private:
         const auto& result = std::get<JsonValue>(outcome);
         auto adapter = era::select_era_adapter(result);
         if (!adapter) {
-            return deliver(std::unexpected(adapter.error()));
+            return deliver(std::unexpected(redacted_error(adapter.error(), secret())));
         }
         auto info = (*adapter)->read_probe_result(result);
         if (!info) {
-            return deliver(std::unexpected(info.error()));
+            return deliver(std::unexpected(redacted_error(info.error(), secret())));
         }
         connection()->era = std::move(*adapter);
         connection()->instructions = info->instructions;
@@ -355,7 +438,7 @@ private:
         }
         auto page = dto::read_tool_list_page(std::get<JsonValue>(outcome));
         if (!page) {
-            return complete_with(std::unexpected(page.error()));
+            return complete_with(std::unexpected(redacted_error(page.error(), secret())));
         }
         if (catalog_.tools.size() + page->tools.size() > protocol::kMaxToolsPerUpstream) {
             return complete_with(std::unexpected(make_error(ErrorCode::ResourceLimit,
@@ -446,11 +529,15 @@ private:
         }
         auto result = dto::read_tool_call_result(std::get<JsonValue>(outcome));
         if (!result) {
-            return complete_with(failed(diagnostic_of(result.error())));
+            return complete_with(failed(diagnostic_of(result.error(), secret())));
         }
+        // The Upstream's own content is handed on with the connection's
+        // credential value erased from it, so a tool result that echoed the
+        // bearer back cannot carry it into the model's context or a transcript
+        // (issue #838).
         complete_with(UpstreamToolCallResult{
                 .is_error = result->is_error,
-                .content = std::move(result->content),
+                .content = redaction::redacted_value(std::move(result->content), secret()),
                 .diagnostic = {},
         });
     }
@@ -458,11 +545,12 @@ private:
     /// The defensive matrix, named where each case is mapped (ADR 0064,
     /// ADR 0008). Every case fails exactly one tool call, and a later ordinary
     /// call on the same connection still succeeds.
-    [[nodiscard]] static std::string diagnostic_for(const ProtocolFailure& failure) {
+    [[nodiscard]] std::string diagnostic_for(const ProtocolFailure& failure) const {
         if (failure.json_rpc_code == protocol::kErrorMissingRequiredClientCapability) {
             return bounded_diagnostic(
                     "the Upstream MCP Server requires a client capability this build does not advertise "
-                    "(JSON-RPC -32021 MissingRequiredClientCapability)");
+                    "(JSON-RPC -32021 MissingRequiredClientCapability)",
+                    secret());
         }
         return failure.diagnostic;
     }
@@ -499,6 +587,7 @@ UpstreamClient::UpstreamClient(
         std::string server_id, std::shared_ptr<McpTransport> transport, UpstreamClientOptions options)
     : server_id_(std::move(server_id)) {
     connection_ = std::make_shared<Connection>();
+    connection_->server_id = server_id_;
     connection_->transport = std::move(transport);
     connection_->options = std::move(options);
 }
