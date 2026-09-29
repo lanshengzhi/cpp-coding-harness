@@ -9,6 +9,7 @@
 
 #include <cch/mcp/McpTransport.hpp>
 #include <cch/mcp/UpstreamClient.hpp>
+#include <cch/mcp/UpstreamAuth.hpp>
 #include <cch/mcp/UpstreamServer.hpp>
 #include <cch/mcp/UpstreamTool.hpp>
 #include <cch/mcp/UpstreamToolCall.hpp>

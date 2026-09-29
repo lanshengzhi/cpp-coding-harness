@@ -1,12 +1,14 @@
 #pragma once
 
 #include <cch/mcp/McpTransport.hpp>
+#include <cch/mcp/UpstreamAuth.hpp>
 #include <cch/mcp/UpstreamServer.hpp>
 #include <cch/mcp/UpstreamToolCall.hpp>
 #include <cch/support/AsyncResult.hpp>
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -19,6 +21,18 @@ struct UpstreamClientOptions {
     /// Bounds one exchange: connection setup, request dispatch, and response
     /// headers (spec #833 story 24, 30 s default).
     std::chrono::milliseconds request_timeout{std::chrono::seconds{30}};
+    /// The *name* of the environment variable a `bearer-env:<VAR>` reference
+    /// in `settings.json` declared (issue #835, #838). The variable's value is
+    /// the secret and is resolved per request from the environment, so it is
+    /// never held here, in a diagnostic, or in configuration. `std::nullopt`
+    /// means the server declares no bearer credential and every request
+    /// authenticates nothing.
+    std::optional<std::string> bearer_env_var{std::nullopt};
+    /// The credential store the bearer is persisted under and, when the
+    /// environment variable is unset, resolved from. Required whenever
+    /// `bearer_env_var` is declared: a declared credential with no store is a
+    /// connection failure, never an unauthenticated request.
+    std::shared_ptr<UpstreamCredentialStore> credentials{nullptr};
 };
 
 /// The MCP Host's client stack for one Upstream MCP Server: the era probe, the

@@ -44,6 +44,11 @@ inline constexpr std::string_view kHeaderMethod{"Mcp-Method"};
 inline constexpr std::string_view kHeaderName{"Mcp-Name"};
 inline constexpr std::string_view kHeaderParamPrefix{"Mcp-Param-"};
 
+/// The header a resolved Upstream credential is written to (issue #838). It is
+/// not one of the revision's required headers, so it lives with the rest of
+/// the header vocabulary and is applied by the credential path only.
+inline constexpr std::string_view kHeaderAuthorization{"Authorization"};
+
 /// Marks a base64-encoded header value. A value is sent verbatim only when
 /// every one of its bytes is printable US-ASCII and it does not begin with
 /// this sentinel; anything else is sent as `base64:<payload>` so the sentinel

@@ -22,6 +22,7 @@ cch_parity_declare_target(
         src/coding_agent/compat/pi/PiImport.cpp
         src/coding_agent/GitIgnoreMatcher.cpp
         src/coding_agent/ImageInput.cpp
+        src/coding_agent/McpCredentialStore.cpp
         src/coding_agent/McpServerTrust.cpp
         src/coding_agent/ModelConfig.cpp
         src/coding_agent/ModelResolver.cpp
