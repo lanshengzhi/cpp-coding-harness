@@ -8,7 +8,6 @@
 #include <cch/support/Error.hpp>
 #include <cch/tui/Text.hpp>
 
-#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <string>
