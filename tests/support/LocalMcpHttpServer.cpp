@@ -179,6 +179,11 @@ struct LocalMcpHttpServer::Impl {
     asio::io_context io;
     std::string setup_error{};
     std::uint16_t port{0};
+    /// The lifetime backstop. It is held here rather than kept alive only by
+    /// its own handler so `release()` can cancel it; an armed timer is pending
+    /// work, so an uncancelled one holds the server thread's `io.run()` open
+    /// for the whole backstop after `stop()`.
+    std::shared_ptr<asio::steady_timer> lifetime;
     std::thread thread;
 
     /// Stop accepting and release the live connections. Safe to call from the
@@ -188,6 +193,9 @@ struct LocalMcpHttpServer::Impl {
         boost::system::error_code error;
         if (acceptor) {
             acceptor->close(error);
+        }
+        if (lifetime) {
+            lifetime->cancel();
         }
         std::vector<std::shared_ptr<TlsStream>> live;
         {
@@ -365,8 +373,9 @@ LocalMcpHttpServer::LocalMcpHttpServer(Handler handler, LocalMcpHttpServerOption
         asio::co_spawn(impl->io, impl->accept_loop(), asio::detached);
         // The backstop keeps itself alive through its own handler: a fixture
         // whose case never finishes must not outlive its shard.
-        auto lifetime = std::make_shared<asio::steady_timer>(impl->io, impl->options.lifetime);
-        lifetime->async_wait([impl, lifetime](boost::system::error_code) { impl->release(); });
+        impl->lifetime = std::make_shared<asio::steady_timer>(impl->io, impl->options.lifetime);
+        const auto backstop = impl->lifetime;
+        backstop->async_wait([impl, backstop](boost::system::error_code) { impl->release(); });
         impl->io.run();
     });
 }
