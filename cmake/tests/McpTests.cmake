@@ -2,7 +2,7 @@ include_guard(GLOBAL)
 
 # Orchestration include: top-level CMakeLists.txt only (relies on CMAKE_CURRENT_SOURCE_DIR = repo root).
 
-    # cch_mcp (issues #836, #837, #839, #848)
+    # cch_mcp (issues #836, #837, #839, #844, #848)
     #
     # Every case here drives the full client stack above the one injected
     # transport seam (`tests/support/ScriptedMcpTransport.hpp`), so the shard
@@ -30,6 +30,7 @@ include_guard(GLOBAL)
         tests/mcp/UpstreamClientStackTest.cpp
         tests/mcp/UpstreamConnectionTest.cpp
         tests/mcp/ConnectionCloseTest.cpp
+        tests/mcp/CancellationProgressTest.cpp
         tests/mcp/WireContractTest.cpp
 )
     target_include_directories(cch_tests_mcp PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})

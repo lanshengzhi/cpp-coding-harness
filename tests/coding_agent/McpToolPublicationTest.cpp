@@ -13,6 +13,7 @@
 #include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/McpToolBinding.hpp>
+#include <cch/coding_agent/ProjectionStream.hpp>
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/runtime/McpToolApprovalPolicy.hpp"
 #include "coding_agent/runtime/McpToolBinding.hpp"
@@ -826,4 +827,174 @@ TEST_CASE("a resumed session re-binds the callable object, not just the name", "
     CHECK(session.snapshot().agent_state.active_tool_names ==
             std::vector<std::string>{"bash", "edit", "mcp__executor__search", "read", "write"});
     REQUIRE(called_tool_names(*fixture.transport) == std::vector<std::string>{"search"});
+}
+
+// ── Cancelling a prompt, and the progress an upstream call reports (issue #844;
+// spec #833 stories 30 and 31) ──
+
+/// The `progressToken` a `tools/call` request declared, read off the params a
+/// scripted answer is handed.
+[[nodiscard]] std::optional<std::string> declared_progress_token(const support::JsonValue& params) {
+    const auto* object = params.get_if<support::JsonValue::object_t>();
+    if (object == nullptr) {
+        return std::nullopt;
+    }
+    const auto meta = object->find("_meta");
+    if (meta == object->end()) {
+        return std::nullopt;
+    }
+    const auto* meta_object = meta->second.get_if<support::JsonValue::object_t>();
+    if (meta_object == nullptr) {
+        return std::nullopt;
+    }
+    const auto token = meta_object->find("progressToken");
+    if (token == meta_object->end()) {
+        return std::nullopt;
+    }
+    const auto* text = token->second.get_if<std::string>();
+    return text != nullptr ? std::optional<std::string>{*text} : std::nullopt;
+}
+
+/// Every `notifications/cancelled` the Upstream received, as its decoded
+/// `requestId` values.
+[[nodiscard]] std::vector<double> cancellation_request_ids(const tests::ScriptedMcpTransport& transport) {
+    std::vector<double> ids;
+    for (std::size_t index = 0; index < transport.request_count(); ++index) {
+        const auto method = transport.recorded_method(index);
+        REQUIRE(method.has_value());
+        if (*method != "notifications/cancelled") {
+            continue;
+        }
+        const auto params = transport.recorded_params(index);
+        REQUIRE(params.has_value());
+        const auto* object = params->get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        const auto found = object->find("requestId");
+        REQUIRE(found != object->end());
+        REQUIRE(found->second.holds<double>());
+        ids.push_back(found->second.get<double>());
+    }
+    return ids;
+}
+
+TEST_CASE("a cancelled prompt stops the upstream call and settles as one failed tool call",
+        "[mcp][cancellation][issue844][spec]") {
+    PublicationFixture fixture;
+    fixture.write_settings(kEagerServerSettings);
+    fixture.write_trust_store(kTrustedStore);
+    answer_upstream(*fixture.transport, {required_tool_entry("search", "query")});
+    answer_tool_call(*fixture.transport, support::JsonValue{support::JsonValue::array_t{}});
+
+    auto owned = fixture.create();
+    auto& session = fixture.runtime.adopt_session(std::move(owned));
+    REQUIRE(PublicationFixture::wait_until([&session] { return session.mcp_published_tools().size() == 1; }));
+
+    // The Upstream takes the call and goes silent, so the call is still in
+    // flight when the user cancels the prompt.
+    fixture.transport->hold("tools/call");
+    fixture.client->responses.push_back(tool_call_response("call-1", "mcp__executor__search", R"({"query":"x"})"));
+    fixture.client->responses.push_back(ai::assistant_text_message("done"));
+
+    std::optional<std::expected<void, support::Error>> prompted;
+    std::thread prompt_thread([&fixture, &session, &prompted] {
+        prompted = fixture.prompt(session, "search please");
+    });
+    REQUIRE(PublicationFixture::wait_until([&fixture] { return fixture.transport->request_count("tools/call") == 1; }));
+
+    session.abort();
+    prompt_thread.join();
+    REQUIRE(prompted.has_value());
+
+    // The Upstream was told to stop: the response stream is closed and one
+    // `notifications/cancelled` names the request the call actually issued.
+    // One call, one cancellation — a stop is not a retry.
+    CHECK(fixture.transport->request_count("tools/call") == 1);
+    CHECK(cancellation_request_ids(*fixture.transport).size() == 1);
+
+    // A cancelled call is a failed tool call, never a session failure: the
+    // session is open, and the next prompt runs normally against the same
+    // Upstream.
+    CHECK(session.is_open());
+    fixture.transport->answer("tools/call",
+            ScriptedMcpAnswer{.result = tests::tool_call_result(support::JsonValue{
+                    support::JsonValue::array_t{support::JsonValue::object_t{
+                            {"type", support::JsonValue("text")}, {"text", support::JsonValue("found it")}}}})});
+    fixture.client->responses.push_back(ai::assistant_text_message("still here"));
+    REQUIRE(fixture.prompt(session, "again").has_value());
+    CHECK(session.is_open());
+    REQUIRE(session.last_assistant_text().has_value());
+    CHECK(*session.last_assistant_text() == "still here");
+}
+
+TEST_CASE("progress an upstream call reports reaches the tool execution display and not the model",
+        "[mcp][progress][issue844][spec]") {
+    PublicationFixture fixture;
+    fixture.write_settings(kEagerServerSettings);
+    fixture.write_trust_store(kTrustedStore);
+    answer_upstream(*fixture.transport, {tests::tool_entry("search", {"query"})});
+    // The Upstream streams progress ahead of the response it is waiting for,
+    // echoing the progress token the call declared.
+    fixture.transport->answer_with("tools/call", [](const support::JsonValue& params) {
+        const auto token = declared_progress_token(params);
+        REQUIRE(token.has_value());
+        return ScriptedMcpAnswer{
+                .result = tests::tool_call_result(support::JsonValue{support::JsonValue::array_t{
+                        support::JsonValue::object_t{{"type", support::JsonValue("text")},
+                                {"text", support::JsonValue("found it")}}},
+                }),
+                .leading_messages = {tests::progress_notification(*token, 3.0, 10.0, "compiling"),
+                        tests::progress_notification(*token, 7.0, 10.0, "linking")},
+        };
+    });
+
+    auto owned = fixture.create();
+    auto& session = fixture.runtime.adopt_session(std::move(owned));
+    REQUIRE(PublicationFixture::wait_until([&session] { return session.mcp_published_tools().size() == 1; }));
+
+    // The projection stream is what the tool execution display reads, so a
+    // partial result carrying the progress on it is exactly the claim under
+    // test (ADR 0052, ADR 0061: the generic renderer, no per-server UI).
+    std::vector<std::string> partial_outputs;
+    auto subscription = session.attach_projection([&partial_outputs](
+                                                          const coding_agent::ProjectionStreamMessageVariant& message) {
+        const auto* batch = std::get_if<coding_agent::ProjectionStreamPatchMsg>(&message);
+        if (batch == nullptr) {
+            return;
+        }
+        for (const auto& patch : batch->patches) {
+            if (const auto* partial = std::get_if<coding_agent::ToolPartialPatch>(&patch);
+                    partial != nullptr && !partial->execution.output_tail.empty()) {
+                partial_outputs.push_back(partial->execution.output_tail);
+            }
+        }
+    });
+    REQUIRE(static_cast<bool>(subscription));
+
+    fixture.client->responses.push_back(tool_call_response("call-1", "mcp__executor__search", R"({"query":"x"})"));
+    fixture.client->responses.push_back(ai::assistant_text_message("done"));
+    REQUIRE(fixture.prompt(session, "search please").has_value());
+    (void)subscription.drain();
+
+    // Two publications reached the display, and the second carries both lines
+    // because a partial result is cumulative.
+    REQUIRE(partial_outputs.size() == 2);
+    CHECK(partial_outputs[0] == "3/10 — compiling");
+    CHECK(partial_outputs[1].find("3/10 — compiling") != std::string::npos);
+    CHECK(partial_outputs[1].find("7/10 — linking") != std::string::npos);
+
+    // And the progress is display-only: the model reads the Upstream's own
+    // result and never the progress that described how long it took.
+    const auto results = tool_results(*fixture.client);
+    REQUIRE_FALSE(results.empty());
+    CHECK_FALSE(results.back().is_error);
+    CHECK(results.back().text.find("found it") != std::string::npos);
+    for (const auto& result : results) {
+        CHECK(result.text.find("compiling") == std::string::npos);
+        CHECK(result.text.find("linking") == std::string::npos);
+    }
+    // The tool is settled, not running: the progress left no in-flight block
+    // behind.
+    const auto executions = session.snapshot().tool_executions;
+    REQUIRE_FALSE(executions.empty());
+    CHECK(executions.back().status == coding_agent::ToolExecutionStatus::Succeeded);
 }

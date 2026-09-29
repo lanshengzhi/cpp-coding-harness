@@ -271,6 +271,14 @@ private:
         if (!decoded) {
             return std::unexpected(decoded.error());
         }
+        if (decoded->is_notification()) {
+            // A notification has no id and expects no response, so a script has
+            // nothing to say about it: the exchange is recorded and accepted,
+            // exactly as a conforming Upstream accepts a
+            // `notifications/cancelled`. A test asserts on the recorded
+            // request, never on an answer.
+            return ScriptedResponse{.status_code = 202};
+        }
         const auto* handler = find(decoded->method);
         if (handler == nullptr) {
             return std::unexpected(support::make_error(support::ErrorCode::Validation,
@@ -403,6 +411,33 @@ private:
     return JsonValue::object_t{
             {"jsonrpc", JsonValue("2.0")},
             {"method", JsonValue("notifications/tools/list_changed")},
+    };
+}
+
+/// A `notifications/progress` message, as an Upstream streams one ahead of the
+/// response its request is waiting for. `token` is the request's own declared
+/// `progressToken`, which is what makes the notification attributable to
+/// exactly one in-flight call; a test that wants one to be dropped names a
+/// token no live call declared.
+[[nodiscard]] inline support::JsonValue progress_notification(std::string token,
+        double progress,
+        std::optional<double> total = std::nullopt,
+        std::string message = {}) {
+    using JsonValue = support::JsonValue;
+    JsonValue::object_t params{
+            {"progressToken", JsonValue(std::move(token))},
+            {"progress", JsonValue(progress)},
+    };
+    if (total.has_value()) {
+        params.emplace("total", JsonValue(*total));
+    }
+    if (!message.empty()) {
+        params.emplace("message", JsonValue(std::move(message)));
+    }
+    return JsonValue::object_t{
+            {"jsonrpc", JsonValue("2.0")},
+            {"method", JsonValue("notifications/progress")},
+            {"params", JsonValue(std::move(params))},
     };
 }
 

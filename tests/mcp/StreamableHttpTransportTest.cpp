@@ -571,10 +571,27 @@ TEST_CASE("the Streamable HTTP transport stops an in-flight exchange when the ca
     auto outcome = drive_on(io, std::move(pending));
     REQUIRE_FALSE(outcome.has_value());
     CHECK(outcome.error().code == support::ErrorCode::Cancelled);
-    // Cancellation is the caller's decision, so it is never re-attempted: the
-    // Upstream saw the request exactly once, on top of the era probe and the
+    // Cancellation is the caller's decision, so the call is never re-attempted:
+    // the Upstream saw exactly one `tools/call` on top of the era probe and the
     // catalog walk the case had already made.
-    CHECK(server.requests().size() == probes + 1);
+    //
+    // The stop is not silent, either. Closing the response stream releases the
+    // socket and says nothing to the work behind it, so the client stack also
+    // writes one `notifications/cancelled` naming the request it abandoned
+    // (issue #844) — the 2026-07-28 revision has no resumability, so that
+    // notification is the only signal that reaches the server-side operation.
+    // Counting the two methods separately says precisely what the Upstream saw:
+    // one call, never retried, and one request to stop it.
+    std::size_t calls = 0;
+    std::size_t cancellations = 0;
+    for (const auto& request : server.requests()) {
+        const auto method = request.header("Mcp-Method");
+        calls += method == "tools/call" ? 1 : 0;
+        cancellations += method == "notifications/cancelled" ? 1 : 0;
+    }
+    CHECK(calls == 1);
+    CHECK(cancellations == 1);
+    CHECK(server.requests().size() == probes + 2);
 }
 
 TEST_CASE("the MCP retry policy re-attempts only a request that was never delivered",

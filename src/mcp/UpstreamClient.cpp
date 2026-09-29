@@ -10,6 +10,7 @@
 #include "support/Json.hpp"
 
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <deque>
 #include <expected>
@@ -116,12 +117,98 @@ private:
     return static_cast<double>(connection->last_request_id.fetch_add(1) + 1);
 }
 
+/// The member named `key` of an object value, or `nullptr` when the value is
+/// not an object or carries no such member. `cch::support::JsonValue` has no
+/// `contains()`.
+[[nodiscard]] const JsonValue* member(const JsonValue& value, std::string_view key) {
+    const auto* object = value.get_if<JsonValue::object_t>();
+    if (object == nullptr) {
+        return nullptr;
+    }
+    const auto found = object->find(std::string(key));
+    return found == object->end() ? nullptr : &found->second;
+}
+
+/// Declare `token` under the revision's `progressToken` `_meta` key. Written
+/// after the era's own reserved keys, so a `params` the caller built rides
+/// along untouched and only the progress token is added here.
+void attach_progress_token(JsonValue& params, const JsonValue& token) {
+    auto& object = params.get_object();
+    auto& meta = object["_meta"];
+    if (meta.get_if<JsonValue::object_t>() == nullptr) {
+        meta = JsonValue::object_t{};
+    }
+    meta.get_object()[std::string(protocol::kMetaProgressTokenKey)] = token;
+}
+
+/// One `notifications/progress` notification, or nothing when it is not one
+/// this call can be shown: a missing or malformed `progressToken`, a token
+/// naming another call, or a non-numeric `progress` all yield `std::nullopt`
+/// and the notification is dropped. Dropping is silent by design — a server
+/// that reports progress for a request the host no longer has must not be
+/// able to write into another call's display.
+[[nodiscard]] std::optional<UpstreamToolProgress> read_progress(
+        const JsonValue& params, std::string_view expected_token, std::string_view secret) {
+    const auto* token = member(params, protocol::kParamProgressToken);
+    if (token == nullptr) {
+        return std::nullopt;
+    }
+    // The revision allows a string or a number token; the host mints a string,
+    // and a number is read as the same decimal spelling so an Upstream that
+    // normalizes the token is not silently ignored.
+    if (const auto* text = token->get_if<std::string>(); text != nullptr) {
+        if (*text != expected_token) {
+            return std::nullopt;
+        }
+    } else if (const auto* number = token->get_if<double>(); number == nullptr
+               || !std::isfinite(*number) || std::to_string(static_cast<long long>(*number)) != expected_token) {
+        return std::nullopt;
+    }
+    const auto* progress = member(params, protocol::kParamProgress);
+    const auto* counted = progress != nullptr ? progress->get_if<double>() : nullptr;
+    if (counted == nullptr || !std::isfinite(*counted)) {
+        return std::nullopt;
+    }
+    UpstreamToolProgress read{.progress = *counted};
+    if (const auto* total = member(params, protocol::kParamTotal); total != nullptr) {
+        if (const auto* value = total->get_if<double>(); value != nullptr && std::isfinite(*value)) {
+            read.total = *value;
+        }
+    }
+    if (const auto* message = member(params, protocol::kParamMessage); message != nullptr) {
+        if (const auto* text = message->get_if<std::string>(); text != nullptr) {
+            // Upstream-supplied text on its way to a display: redacted before
+            // it is bounded, exactly as a diagnostic is (issue #838).
+            read.message = bounded_diagnostic(*text, secret);
+        }
+    }
+    return read;
+}
+
+/// The one in-flight call a progress notification may belong to. It is the
+/// operation's own sink and the token that operation minted, so a notification
+/// is delivered only when both match.
+struct ProgressObserver {
+    UpstreamProgressSink* sink{nullptr};
+    std::string token{};
+
+    void observe(const jsonrpc::WireMessage& message, std::string_view secret) const {
+        if (sink == nullptr || token.empty() || message.method != protocol::kNotificationProgress) {
+            return;
+        }
+        if (auto progress = read_progress(message.params, token, secret)) {
+            (*sink)(*progress);
+        }
+    }
+};
+
 /// Read the one response that belongs to `id` out of a transport answer.
 /// Notifications ahead of it — including `tools/list_changed` — are safely
 /// ignored: pike does not subscribe to `subscriptions/listen`, so the
 /// notification neither reconnects the connection nor refreshes the catalog.
 [[nodiscard]] ExchangeOutcome read_exchange_outcome(
-        double id, const std::expected<McpResponse, Error>& answer, std::string_view secret) {
+        double id, const std::expected<McpResponse, Error>& answer, std::string_view secret,
+        const ProgressObserver& progress) {
     if (!answer) {
         return answer.error();
     }
@@ -152,6 +239,10 @@ private:
             return ProtocolFailure{.diagnostic = diagnostic_of(decoded.error(), secret), .json_rpc_code = 0};
         }
         if (decoded->is_notification()) {
+            // `tools/list_changed` is safely ignored wherever it arrives, and a
+            // `notifications/progress` is offered to the one call whose token
+            // it echoes; anything else is not this build's to act on.
+            progress.observe(*decoded, secret);
             continue;
         }
         if (decoded->id != id) {
@@ -215,6 +306,19 @@ protected:
         return std::static_pointer_cast<Self>(Operation::shared_from_this());
     }
 
+    /// One operation's terminal outcome happens exactly once. A transport that
+    /// answers a request and then reports a stop — or answers the same request
+    /// twice — is absorbed here instead of finishing an already-finished call
+    /// a second time, so a late completion can never double-finish a call
+    /// (ADR 0008, spec #833 story 30).
+    [[nodiscard]] bool claim_completion() noexcept {
+        if (completed_) {
+            return false;
+        }
+        completed_ = true;
+        return true;
+    }
+
     /// Issue one framed JSON-RPC request and hand its outcome to
     /// `on_outcome`, attributed to the derived operation's own chain.
     ///
@@ -229,7 +333,7 @@ protected:
             std::map<std::string, std::string> extra_headers,
             ExchangeOutcomeHandler on_outcome) {
         auto connection = connection_;
-        resolve_auth([self = Operation::shared_from_this(),
+        resolve_auth(stop_token_, [self = Operation::shared_from_this(),
                              params = std::move(params),
                              name = std::string{name},
                              extra_headers = std::move(extra_headers),
@@ -249,16 +353,77 @@ protected:
     /// run on and completes with the probe's error.
     virtual void on_probe_failed(Error error) = 0;
 
+    /// The JSON-RPC id of the exchange `dispatch` is about to write. An
+    /// operation that reports progress records the id here, because the id is
+    /// the `progressToken` it declares and the token the Upstream echoes.
+    virtual void on_request_id(double) {}
+
+    /// Report progress for this operation's exchange. A call made without a
+    /// sink declares no progress token, and an Upstream's progress
+    /// notifications for it are dropped with every other unrecognized one.
+    ///
+    /// The sink is *owned* by the operation rather than pointed at: it outlives
+    /// the constructor that received it, and the same value serves every
+    /// notification of the call.
+    void report_progress_through(UpstreamProgressSink sink) {
+        progress_sink_.emplace(std::move(sink));
+        wants_progress_ = true;
+    }
+
+    /// Write one JSON-RPC notification that expects no answer, and discard its
+    /// outcome. The notification carries no caller stop token, because the one
+    /// caller that motivates it has already stopped: `notifications/cancelled`
+    /// is how a stopped call tells the Upstream to stop the work the closed
+    /// response stream abandoned, and a transport that refused to write it for
+    /// that reason would send nothing at all (ADR 0020; spec #833 story 30).
+    /// The write is bounded by the per-call deadline and is best-effort by
+    /// construction — a notification has no response to be late for — so it can
+    /// never hold up the call that is already settling.
+    void notify(std::string method, JsonValue params) {
+        auto connection = connection_;
+        // The notification resolves its credential under *no* caller token.
+        // `resolve_upstream_auth` refuses a token that is already stopped, and
+        // the one caller this exists for has always stopped: refusing here
+        // would mean the notification is exactly the one thing a cancelled
+        // call cannot send.
+        resolve_auth(std::stop_token{},
+                [connection, method = std::move(method), params = std::move(params)](
+                        Expected<UpstreamAuth> auth) mutable noexcept {
+            if (!auth) {
+                return; // a credential that did not resolve stops the write; the call settles either way
+            }
+            McpRequest request;
+            request.url = connection->options.url;
+            request.headers = connection->era ? connection->era->request_headers(method, {})
+                                              : era::modern_request_headers(method, {});
+            auto body = support::write_json(jsonrpc::encode_notification(method, std::move(params)));
+            if (!body) {
+                return;
+            }
+            request.body = std::move(*body);
+            request.timeout = connection->options.request_timeout;
+            apply_upstream_auth(request, *auth);
+            connection->resolved_bearer = auth->bearer;
+            connection->transport->send(std::move(request))
+                    .start([](std::expected<McpResponse, Error>) noexcept {});
+        });
+    }
+
 private:
+    /// The progress token this operation declared, empty when it declared none.
+    [[nodiscard]] const std::string& progress_token() const noexcept { return progress_token_; }
     /// Resolve this connection's live credential and post `on_ready` on the
     /// operation's own queue, so a store that completes inline cannot nest
     /// exchanges and one that completes later cannot re-enter the operation.
-    void resolve_auth(std::move_only_function<void(Expected<UpstreamAuth>)> on_ready) {
+    /// `token` is the cancellation the resolution runs under, which is the
+    /// operation's own token everywhere except the `notifications/cancelled`
+    /// write — see `notify`.
+    void resolve_auth(std::stop_token token, std::move_only_function<void(Expected<UpstreamAuth>)> on_ready) {
         const auto& connection = connection_;
         auto resolution = resolve_upstream_auth(connection->server_id,
                 connection->options.bearer_env_var,
                 connection->options.credentials,
-                stop_token_);
+                token);
         resolution.start([self = Operation::shared_from_this(), on_ready = std::move(on_ready)](
                                  std::expected<UpstreamAuth, Error> auth) mutable noexcept {
             self->queue_.post(
@@ -286,6 +451,7 @@ private:
         connection->resolved_bearer = auth->bearer;
 
         const auto id = next_request_id(connection);
+        on_request_id(id);
         // The era probe is the one exchange that runs before the connection has
         // selected an adapter, so it frames itself with the Modern Era request
         // shape directly. Everything after it frames through the selected
@@ -296,6 +462,14 @@ private:
             connection->era->attach_request_meta(params);
         } else {
             era::attach_modern_request_meta(params);
+        }
+        if (wants_progress_) {
+            // The id is declared as the call's progress token once the era's own
+            // reserved `_meta` keys are in place, so the token on the wire and
+            // the token every `notifications/progress` is matched against are
+            // the same value by construction rather than by agreement.
+            progress_token_ = protocol::progress_token(id).get_string();
+            attach_progress_token(params, JsonValue(progress_token_));
         }
         for (auto& [key, value] : extra_headers) {
             headers.insert_or_assign(std::move(key), std::move(value));
@@ -321,7 +495,9 @@ private:
         pending.start([self = Operation::shared_from_this(), id, on_outcome = std::move(on_outcome)](
                               std::expected<McpResponse, Error> answer) mutable noexcept {
             const auto secret = self->secret();
-            auto outcome = read_exchange_outcome(id, answer, secret);
+            auto outcome = read_exchange_outcome(id, answer, secret,
+                    ProgressObserver{.sink = self->progress_sink_ ? &*self->progress_sink_ : nullptr,
+                            .token = self->progress_token_});
             self->queue_.post([on_outcome = std::move(on_outcome), outcome = std::move(outcome)]() mutable {
                 on_outcome(std::move(outcome));
             });
@@ -338,6 +514,17 @@ private:
     std::shared_ptr<UpstreamClient::Connection> connection_;
     std::string method_;
     std::stop_token stop_token_;
+    /// Whether this operation declares a progress token, and the token it
+    /// declared. Empty for every operation that reports no progress, which is
+    /// every operation but a `tools/call` that was given a sink.
+    bool wants_progress_{false};
+    std::string progress_token_{};
+    /// The caller's progress sink, or none. It is a member rather than a
+    /// borrowed one so that the same sink serves every notification of the call
+    /// and so a notification arriving after the call settled finds the
+    /// operation's own state rather than a dangling reference.
+    std::optional<UpstreamProgressSink> progress_sink_{};
+    bool completed_{false};
 };
 
 /// The era probe: `server/discover` selects this connection's adapter. It
@@ -392,6 +579,9 @@ private:
     }
 
     void deliver(Expected<UpstreamServerInfo> outcome) {
+        if (!claim_completion()) {
+            return;
+        }
         auto on_done = std::move(on_done_);
         on_done(std::move(outcome));
     }
@@ -489,6 +679,9 @@ private:
     }
 
     void complete_with(Expected<UpstreamCatalog> outcome) {
+        if (!claim_completion()) {
+            return;
+        }
         auto completion = std::move(completion_);
         completion(std::move(outcome));
     }
@@ -502,12 +695,21 @@ private:
 };
 
 /// One `tools/call`, including the `Mcp-Param-*` mirroring of the tool's
-/// validated `x-mcp-header` annotation.
+/// validated `x-mcp-header` annotation, the `progressToken` the call declares
+/// so an Upstream's progress is attributable to it, and the
+/// `notifications/cancelled` a cancelled call sends so the Upstream stops the
+/// work behind the closed response stream.
 class CallToolOperation final : public Operation {
 public:
-    CallToolOperation(
-            std::shared_ptr<UpstreamClient::Connection> connection, UpstreamToolCall call, std::stop_token token)
-        : Operation(std::move(connection), protocol::kMethodCallTool, token), call_(std::move(call)) {}
+    CallToolOperation(std::shared_ptr<UpstreamClient::Connection> connection,
+            UpstreamToolCall call,
+            std::stop_token token,
+            UpstreamProgressSink progress_sink)
+        : Operation(std::move(connection), protocol::kMethodCallTool, token), call_(std::move(call)) {
+        if (progress_sink) {
+            report_progress_through(std::move(progress_sink));
+        }
+    }
 
     void start(AsyncCompletion<UpstreamToolCallResult, Error> completion) {
         completion_ = std::move(completion);
@@ -518,6 +720,8 @@ protected:
     void on_era_selected() override { issue_call(); }
 
     void on_probe_failed(Error error) override { complete_with(std::unexpected(std::move(error))); }
+
+    void on_request_id(double id) override { request_id_ = id; }
 
 private:
     void issue_call() {
@@ -538,6 +742,13 @@ private:
 
     void absorb(ExchangeOutcome outcome) {
         if (const auto* error = std::get_if<Error>(&outcome); error != nullptr) {
+            // A cancelled call is the caller's decision, and the Upstream is
+            // told about it: the response stream is already gone, so the one
+            // signal left that reaches the work behind it is written here,
+            // before this call settles (ADR 0020; spec #833 story 30).
+            if (error->code == ErrorCode::Cancelled) {
+                notify_cancelled();
+            }
             return complete_with(std::unexpected(*error)); // transport failure, cancellation included
         }
         if (const auto* failure = std::get_if<ProtocolFailure>(&outcome); failure != nullptr) {
@@ -558,6 +769,24 @@ private:
         });
     }
 
+    /// Tell the Upstream to stop the work this call asked for. Written only for
+    /// a cancellation that happened after the request reached the wire — a call
+    /// cancelled before it was framed has nothing on the Upstream to stop. The
+    /// reason is the one bounded, redacted diagnostic every other explanation
+    /// in this package carries, so a server that logs it logs no more than a
+    /// session record would.
+    void notify_cancelled() {
+        if (!request_id_.has_value()) {
+            return;
+        }
+        notify(std::string(protocol::kMethodCancelled),
+                JsonValue::object_t{
+                        {std::string(protocol::kParamRequestId), JsonValue(*request_id_)},
+                        {std::string(protocol::kParamReason),
+                                JsonValue(bounded_diagnostic("the MCP Host cancelled the call", secret()))},
+                });
+    }
+
     /// The defensive matrix, named where each case is mapped (ADR 0064,
     /// ADR 0008). Every case fails exactly one tool call, and a later ordinary
     /// call on the same connection still succeeds.
@@ -576,12 +805,19 @@ private:
     }
 
     void complete_with(Expected<UpstreamToolCallResult> outcome) {
+        if (!claim_completion()) {
+            return; // a late answer to a call that already settled
+        }
         auto completion = std::move(completion_);
         completion(std::move(outcome));
     }
 
     AsyncCompletion<UpstreamToolCallResult, Error> completion_{};
     UpstreamToolCall call_{};
+    /// The JSON-RPC id of this call's exchange, which is also the request id a
+    /// `notifications/cancelled` names. Absent when the call never reached the
+    /// wire.
+    std::optional<double> request_id_{};
 };
 
 /// Start one operation, owning the connection it runs on for as long as the
@@ -634,13 +870,16 @@ AsyncResult<UpstreamCatalog> UpstreamClient::list_tools(std::stop_token stop_tok
             });
 }
 
-AsyncResult<UpstreamToolCallResult> UpstreamClient::call_tool(UpstreamToolCall call, std::stop_token stop_token) {
+AsyncResult<UpstreamToolCallResult> UpstreamClient::call_tool(
+        UpstreamToolCall call, std::stop_token stop_token, UpstreamProgressSink progress_sink) {
     return start_operation<UpstreamToolCallResult>(connection_,
             stop_token,
-            [call = std::move(call)](auto connection,
+            [call = std::move(call), progress_sink = std::move(progress_sink)](
+                    auto connection,
                     std::stop_token token,
                     AsyncCompletion<UpstreamToolCallResult, Error> completion) mutable noexcept {
-                auto operation = std::make_shared<CallToolOperation>(std::move(connection), std::move(call), token);
+                auto operation = std::make_shared<CallToolOperation>(
+                        std::move(connection), std::move(call), token, std::move(progress_sink));
                 operation->start(std::move(completion));
             });
 }

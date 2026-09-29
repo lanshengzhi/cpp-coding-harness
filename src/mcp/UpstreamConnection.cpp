@@ -539,14 +539,17 @@ AsyncResult<UpstreamCatalog> UpstreamConnection::list_tools(std::stop_token stop
     return impl_->list_catalog(stop_token);
 }
 
-AsyncResult<UpstreamToolCallResult> UpstreamConnection::call_tool(UpstreamToolCall call, std::stop_token stop_token) {
+AsyncResult<UpstreamToolCallResult> UpstreamConnection::call_tool(
+        UpstreamToolCall call, std::stop_token stop_token, UpstreamProgressSink progress_sink) {
     auto self = impl_;
     return impl_->admit<UpstreamToolCallResult>(
-            stop_token, [self, call = std::move(call)](std::stop_token request_token) {
+            stop_token,
+            [self, call = std::move(call), progress_sink = std::move(progress_sink)](
+                    std::stop_token request_token) mutable {
                 if (self->status != UpstreamConnectionStatus::Connected || !self->client.has_value()) {
                     return AsyncResult<UpstreamToolCallResult>(std::unexpected(not_connected_error(self->server_id)));
                 }
-                return self->client->call_tool(std::move(call), request_token);
+                return self->client->call_tool(std::move(call), request_token, std::move(progress_sink));
             });
 }
 

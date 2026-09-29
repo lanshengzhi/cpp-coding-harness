@@ -77,8 +77,22 @@ public:
     /// parameters into request headers. Probes the era first when this
     /// connection has not probed yet. A protocol violation by the Upstream
     /// completes as one failed call rather than as an operation error.
+    ///
+    /// The call declares a progress token, so an Upstream that reports progress
+    /// for it reaches `progress_sink` — and only for this call: a notification
+    /// naming any other token, or no token this connection minted, is dropped
+    /// rather than delivered (spec #833 story 31). The sink is called on this
+    /// operation's own domain, never after the call has settled, and may only
+    /// record or forward the value.
+    ///
+    /// Cancelling `stop_token` closes the response stream the transport is
+    /// reading and makes the Upstream stop the work behind it: the call
+    /// completes as `Cancelled` and one `notifications/cancelled` is written
+    /// for this call's request id (ADR 0020, spec #833 story 30).
     [[nodiscard]] cch::support::AsyncResult<UpstreamToolCallResult> call_tool(
-            UpstreamToolCall call, std::stop_token stop_token = {});
+            UpstreamToolCall call,
+            std::stop_token stop_token = {},
+            UpstreamProgressSink progress_sink = nullptr);
 
 private:
     std::string server_id_;

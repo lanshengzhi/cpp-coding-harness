@@ -7,6 +7,8 @@
 
 #include <boost/asio/awaitable.hpp>
 
+#include <deque>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -24,6 +26,18 @@ constexpr std::size_t kMaxResultLines{2000};
 /// connection machinery's own diagnostic bound (`kMaxDiagnosticBytes`).
 constexpr std::size_t kMaxDiagnosticBytes{1024};
 
+/// What the tool-execution display keeps of a long upstream operation's
+/// progress (spec #833 story 31). The sink publishes a *cumulative* partial
+/// result, so what it publishes is the retained lines rather than only the
+/// newest one, and the retention is bounded twice: a flooding Upstream cannot
+/// make a tool's display grow without limit, and the oldest line is dropped
+/// rather than the newest, because the newest is the one the user is watching.
+constexpr std::size_t kMaxProgressLines{16};
+/// The bound on one Upstream-supplied progress message. `cch_mcp` already
+/// bounded and redacted it (`mcp/Diagnostics.hpp`); this is the display's own
+/// second bound, so a line is short before it is ever laid out.
+constexpr std::size_t kMaxProgressMessageBytes{200};
+
 [[nodiscard]] support::OutputLimit result_output_limit() noexcept {
     return support::OutputLimit{.max_bytes = kMaxResultBytes, .max_lines = kMaxResultLines};
 }
@@ -35,6 +49,55 @@ constexpr std::size_t kMaxDiagnosticBytes{1024};
             .is_error = true,
     };
 }
+
+/// One progress line as the display shows it: the Upstream's own counter, the
+/// total when it declared one, and its message when it sent one. An Upstream
+/// that reports neither a total nor a message still shows movement, because
+/// the counter alone is the movement.
+[[nodiscard]] std::string progress_line(const mcp::UpstreamToolProgress& progress) {
+    std::string line = support::bounded_redacted_text(progress.message, kMaxProgressMessageBytes, "…");
+    std::string counter = std::to_string(static_cast<long long>(progress.progress));
+    if (progress.total.has_value()) {
+        counter += "/" + std::to_string(static_cast<long long>(*progress.total));
+    }
+    if (line.empty()) {
+        return counter;
+    }
+    return counter + " — " + line;
+}
+
+/// The progress one in-flight upstream call has published, and the sink that
+/// re-issues it. It is shared rather than captured by value because both the
+/// move-only `ToolUpdateSink` and the retained lines have to outlive a single
+/// publication: `cch_mcp`'s progress sink is move-only, callable more than
+/// once, and held by an operation that may complete after this coroutine has
+/// resumed, so nothing in it may be a reference into the coroutine frame.
+struct UpstreamProgressDisplay {
+    /// The reverse mapping each partial result carries, copied so the display
+    /// survives this coroutine's own settlement.
+    McpPublishedTool published{};
+    /// The agent's partial-result sink, or null when the caller wants none.
+    agent::ToolUpdateSink sink{nullptr};
+    /// The retained lines, oldest first, bounded by `kMaxProgressLines`.
+    std::deque<std::string> lines{};
+    /// The most recent values, carried into `details` so a Tool Renderer
+    /// (ADR 0061) can draw a counter instead of parsing the lines back out of
+    /// the display text.
+    double progress{0.0};
+    std::optional<double> total{std::nullopt};
+    std::string message{};
+
+    [[nodiscard]] std::string text() const {
+        std::string joined;
+        for (const auto& line : lines) {
+            if (!joined.empty()) {
+                joined += '\n';
+            }
+            joined += line;
+        }
+        return joined;
+    }
+};
 
 /// The details every completed upstream call carries: the reverse mapping the
 /// generic tool renderer has no other way to recover, plus whether the
@@ -51,14 +114,58 @@ constexpr std::size_t kMaxDiagnosticBytes{1024};
     }};
 }
 
+/// The partial result a progress publication re-issues: the same reverse
+/// mapping every settled result carries, plus the progress facts. It is
+/// display-only — a `ToolUpdateSink` result never reaches the model's context
+/// or the transcript (ADR 0052), so progress costs the model nothing and
+/// disappears when the call settles.
+[[nodiscard]] agent::AsyncToolExecutionResult progress_result(
+        const McpPublishedTool& published, const UpstreamProgressDisplay& display) {
+    auto details = call_details(published, false, 0).get_object();
+    details["progress"] = support::JsonValue{support::JsonValue::object_t{
+            {"progress", support::JsonValue(display.progress)},
+            {"total", display.total.has_value() ? support::JsonValue(*display.total) : support::JsonValue{nullptr}},
+            {"message", support::JsonValue(display.message)},
+    }};
+    return agent::AsyncToolExecutionResult{
+            .content = std::vector<ai::Content>{ai::text_content(display.text())},
+            .details = support::JsonValue(std::move(details)),
+            .is_error = false,
+    };
+}
+
 [[nodiscard]] boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> execute_upstream_call(
         std::shared_ptr<mcp::UpstreamConnection> connection,
         McpPublishedTool published,
         mcp::UpstreamToolDescriptor descriptor,
         support::JsonValue arguments,
+        agent::ToolUpdateSink update_sink,
         std::stop_token stop_token) {
+    // The run's stop token reaches `call_tool` unchanged, so a cancelled prompt
+    // closes the upstream response stream and sends `notifications/cancelled`
+    // through the one stop vocabulary the rest of the product already uses
+    // (ADR 0020). Nothing here bridges cancellation itself.
+    auto progress = std::make_shared<UpstreamProgressDisplay>(
+            UpstreamProgressDisplay{.published = published, .sink = std::move(update_sink)});
     auto called = co_await support::detail::await_async_result(connection->call_tool(
-            mcp::UpstreamToolCall{.tool = std::move(descriptor), .arguments = std::move(arguments)}, stop_token));
+            mcp::UpstreamToolCall{.tool = std::move(descriptor), .arguments = std::move(arguments)},
+            stop_token,
+            mcp::UpstreamProgressSink([progress](const mcp::UpstreamToolProgress& reported) {
+                if (!progress->sink) {
+                    return;
+                }
+                progress->lines.push_back(progress_line(reported));
+                while (progress->lines.size() > kMaxProgressLines) {
+                    progress->lines.pop_front();
+                }
+                progress->progress = reported.progress;
+                progress->total = reported.total;
+                progress->message = reported.message;
+                // A refused publication means the display is gone; the call is
+                // not failed for it, because the work is the Upstream's
+                // (ADR 0008).
+                (void)progress->sink(progress_result(progress->published, *progress));
+            })));
     if (!called) {
         // A transport failure, a cancelled run, and a call against a
         // connection that is no longer up are operation errors here. They
@@ -122,16 +229,18 @@ constexpr std::size_t kMaxDiagnosticBytes{1024};
     tool.execute = [connection, published = std::move(published), descriptor = std::move(descriptor)](
                            agent::ToolInvocation invocation,
                            std::stop_token stop_token,
-                           agent::ToolUpdateSink) -> agent::ToolExecuteResult {
+                           agent::ToolUpdateSink update_sink) -> agent::ToolExecuteResult {
         return support::detail::make_async_result([connection,
                                                           published = std::move(published),
                                                           descriptor = std::move(descriptor),
                                                           invocation = std::move(invocation),
-                                                          stop_token]() mutable {
+                                                          stop_token,
+                                                          update_sink = std::move(update_sink)]() mutable {
             return execute_upstream_call(std::move(connection),
                     std::move(published),
                     std::move(descriptor),
                     std::move(invocation.arguments),
+                    std::move(update_sink),
                     stop_token);
         });
     };

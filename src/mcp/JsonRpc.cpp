@@ -128,6 +128,14 @@ JsonValue encode_request(double id, std::string_view method, JsonValue params) {
     });
 }
 
+JsonValue encode_notification(std::string_view method, JsonValue params) {
+    return JsonValue(JsonValue::object_t{
+            {"jsonrpc", JsonValue(std::string(protocol::kJsonRpcVersion))},
+            {"method", JsonValue(std::string(method))},
+            {"params", std::move(params)},
+    });
+}
+
 JsonValue encode_result(double id, JsonValue result) {
     return JsonValue(JsonValue::object_t{
             {"id", JsonValue(id)},

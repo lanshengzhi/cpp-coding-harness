@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <string>
 #include <string_view>
 
 namespace cch::mcp::protocol {
@@ -21,6 +22,17 @@ inline constexpr std::string_view kProtocolVersion{"2026-07-28"};
 /// them: the client stack rewrites both on every request.
 inline constexpr std::string_view kMetaProtocolVersionKey{"io.modelcontextprotocol/protocolVersion"};
 inline constexpr std::string_view kMetaClientCapabilitiesKey{"io.modelcontextprotocol/clientCapabilities"};
+
+/// The token one request declares in its `_meta` so that an Upstream can report
+/// progress for it. It is the request's own JSON-RPC id, spelled as a string,
+/// which is what makes every `notifications/progress` attributable to exactly
+/// one in-flight call: a token that does not name the call being read is
+/// dropped rather than shown against whichever call happens to be running.
+/// Ids are minted integral and below 2^53 (`mcp/JsonRpc.cpp`), so the decimal
+/// spelling is exact.
+[[nodiscard]] inline cch::support::JsonValue progress_token(double request_id) {
+    return cch::support::JsonValue(std::to_string(static_cast<long long>(request_id)));
+}
 
 /// The `server/discover` result member carrying the revision the Upstream
 /// speaks. It is the same value the reserved `_meta` key carries, reached as
@@ -84,6 +96,40 @@ inline constexpr std::string_view kResultCatalogCacheScope{"cacheScope"};
 /// driven by the server-provided `ttlMs` hint instead (ADR 0064, spec #833
 /// story 17).
 inline constexpr std::string_view kNotificationToolsListChanged{"notifications/tools/list_changed"};
+
+/// The method a client sends when it has stopped waiting for a request it
+/// already issued (ADR 0020; spec #833 story 30). Closing the response stream
+/// releases the socket but says nothing to the Upstream about the work behind
+/// it, and the 2026-07-28 revision has neither an `Mcp-Session-Id` nor SSE
+/// resumability to fall back on, so this notification is the whole of "stop
+/// the server-side work" (ADR 0064).
+inline constexpr std::string_view kMethodCancelled{"notifications/cancelled"};
+
+/// The notification an Upstream sends for a request that declared a
+/// `progressToken` in its `_meta` (spec #833 story 31). It carries no
+/// response of its own and belongs to exactly the one in-flight request whose
+/// token it echoes.
+inline constexpr std::string_view kNotificationProgress{"notifications/progress"};
+
+/// The `_meta` key a request declares its progress token under. The token is
+/// the request's own JSON-RPC id, which is what makes every progress
+/// notification attributable to exactly one in-flight call and makes a late or
+/// unknown token droppable rather than attributable to whichever call happens
+/// to be running.
+inline constexpr std::string_view kMetaProgressTokenKey{"progressToken"};
+
+/// The `notifications/cancelled` result members: the request being stopped and
+/// a bounded reason the Upstream may log.
+inline constexpr std::string_view kParamRequestId{"requestId"};
+inline constexpr std::string_view kParamReason{"reason"};
+
+/// The `notifications/progress` result members. `progressToken` and `progress`
+/// are required by the revision; `total` and `message` are optional, and an
+/// Upstream that sends neither still shows movement through `progress`.
+inline constexpr std::string_view kParamProgressToken{"progressToken"};
+inline constexpr std::string_view kParamProgress{"progress"};
+inline constexpr std::string_view kParamTotal{"total"};
+inline constexpr std::string_view kParamMessage{"message"};
 
 /// The JSON-RPC error an Upstream returns when it needs a client capability
 /// this build does not advertise. It fails exactly one tool call.

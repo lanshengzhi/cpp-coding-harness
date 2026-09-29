@@ -37,6 +37,12 @@ struct WireMessage {
 [[nodiscard]] cch::support::JsonValue encode_request(
         double id, std::string_view method, cch::support::JsonValue params);
 
+/// Encode a client notification: a method with no `id`, and therefore no
+/// response. The client stack writes exactly one — `notifications/cancelled` —
+/// so the Upstream is told to stop work the closed response stream abandoned.
+[[nodiscard]] cch::support::JsonValue encode_notification(
+        std::string_view method, cch::support::JsonValue params);
+
 [[nodiscard]] cch::support::JsonValue encode_result(double id, cch::support::JsonValue result);
 
 [[nodiscard]] cch::support::JsonValue encode_error(

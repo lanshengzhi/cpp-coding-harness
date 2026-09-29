@@ -136,6 +136,8 @@ Built-in slash submissions are parsed and validated by the Native TUI router. An
 
 An Upstream MCP Server configured with `"activation": "eager"` publishes its catalog into the model tool surface as soon as it connects, under a Qualified Tool Name `mcp__<server id>__<tool>`. Discovery never blocks session start: a server that withholds its catalog simply has no tools yet, and the next model request is the first that carries them. A `"lazy"` server — the default — publishes nothing, and a call to an `"approval": "ask"` server is refused with an explicit reason until the call-approval prompt lands. `/mcp` shows each server's connection status.
 
+Cancelling a prompt (`Esc` while a turn is running) stops the work an in-flight upstream call asked for: the response stream is closed and the server is sent a `notifications/cancelled` for that call's request, so it need not run the call to its own conclusion. The call itself settles as one failed tool call — the session itself is not affected and the next prompt runs normally. A long upstream operation that reports progress shows that progress in its tool-execution block while it runs; the progress is display-only and costs the model nothing, and the settled result is the Upstream's own output.
+
 ## User Bash
 
 In the Native TUI, a focused-editor submission beginning with `!` runs the remaining text as a shell command in the Session workspace. Its result is saved in Session history and may enter later model context. Use `!!` to save the execution while excluding it from model context.

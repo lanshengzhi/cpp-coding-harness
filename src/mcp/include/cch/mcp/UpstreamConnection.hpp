@@ -192,8 +192,23 @@ public:
 
     /// One upstream tool call, through the connected client, bounded by the
     /// per-call deadline.
-    [[nodiscard]] cch::support::AsyncResult<UpstreamToolCallResult> call_tool(
-            UpstreamToolCall call, std::stop_token stop_token = {});
+    ///
+    /// `stop_token` is the caller's own cancellation — the run the user
+    /// cancelled, or the connection's close, joined to the same token — and it
+    /// is what stops the server work: the transport closes the response stream
+    /// it is reading and the client stack sends `notifications/cancelled` for
+    /// this call's request id, so the Upstream stops the operation behind the
+    /// closed stream rather than running it to its own conclusion (ADR 0020;
+    /// spec #833 story 30). The call then completes as one failed tool call and
+    /// never as a connection failure (ADR 0008).
+    ///
+    /// `progress_sink` receives the Upstream's `notifications/progress` for
+    /// this call and nothing else: a notification naming another request, or
+    /// one the host no longer has in flight, is dropped rather than delivered
+    /// (spec #833 story 31).
+    [[nodiscard]] cch::support::AsyncResult<UpstreamToolCallResult> call_tool(UpstreamToolCall call,
+            std::stop_token stop_token = {},
+            UpstreamProgressSink progress_sink = nullptr);
 
     /// The deterministic two-phase close of ADR 0011. The first phase stops
     /// admission, requests cancellation of the admitted operations, and
