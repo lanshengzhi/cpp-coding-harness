@@ -34,9 +34,6 @@ struct UpstreamAuth {
     /// The bearer token. Absent when the server declares no credential, in
     /// which case the request carries no `Authorization` header.
     std::optional<std::string> bearer{};
-    /// The token was resolved from the declared environment reference and is
-    /// persisted under the `mcp.<server-id>` credential key.
-    bool from_environment{false};
 };
 
 /// The credential-store handoff the MCP Host resolves its bearer through

@@ -69,15 +69,41 @@ constexpr std::string_view kBearerScheme{"Bearer "};
     return make_error(code, std::move(message), redaction::redacted_text(std::move(detail), secret));
 }
 
-/// A credential-store failure wrapped in this package's wording while keeping
-/// the store's own reason, which names a file and never a credential value.
-[[nodiscard]] Error store_failure(
+/// A credential-store read failure wrapped in this package's own wording while
+/// keeping the store's reason, which names a file and never a credential value.
+[[nodiscard]] Error store_read_failure(
         const Error& cause, std::string_view server_id, std::string_view env_var, std::string_view secret) {
     auto failure = credential_error(
             cause.code, "the Upstream MCP Server's credential store could not be read", server_id, env_var, secret);
     const std::string reason = cause.detail.empty() ? cause.message : cause.message + ": " + cause.detail;
     failure.detail += "; " + redaction::redacted_text(reason, secret);
     return failure;
+}
+
+/// The bearer one request is authenticated with, decided from the declared
+/// environment value and what the credential store already holds.
+///
+/// An absent answer is the third case: the environment value is authoritative
+/// and the store does not hold it yet, so it has to be persisted before the
+/// request is written.
+[[nodiscard]] std::optional<Expected<UpstreamAuth>> decide_bearer(std::string from_environment,
+        const std::optional<std::string>& stored,
+        std::string_view server_id,
+        std::string_view env_var) {
+    if (from_environment.empty()) {
+        if (stored.has_value() && !stored->empty()) {
+            return Expected<UpstreamAuth>{UpstreamAuth{.bearer = *stored}};
+        }
+        return Expected<UpstreamAuth>{std::unexpected(credential_error(ErrorCode::Auth,
+                "the Upstream MCP Server has no bearer credential: the environment variable is unset and no "
+                "credential is stored",
+                server_id,
+                env_var))};
+    }
+    if (stored.has_value() && *stored == from_environment) {
+        return Expected<UpstreamAuth>{UpstreamAuth{.bearer = std::move(from_environment)}};
+    }
+    return std::nullopt;
 }
 
 } // namespace
@@ -116,46 +142,34 @@ AsyncResult<UpstreamAuth> resolve_upstream_auth(std::string server_id,
                     env_var = std::move(env_var),
                     from_environment = std::move(from_environment),
                     store = std::move(store)](AsyncCompletion<UpstreamAuth, Error> completion) mutable noexcept {
-                store->read_bearer(server_id).start([completion = std::move(completion),
-                                                            server_id,
-                                                            env_var,
-                                                            from_environment,
-                                                            store](std::expected<std::optional<std::string>, Error>
-                                                                    stored) mutable noexcept {
-                    if (!stored) {
-                        return completion(
-                                std::unexpected(store_failure(stored.error(), server_id, env_var, from_environment)));
-                    }
-                    const auto& held = *stored;
-                    if (from_environment.empty()) {
-                        if (held.has_value() && !held->empty()) {
-                            return completion(
-                                    Expected<UpstreamAuth>{UpstreamAuth{.bearer = *held, .from_environment = false}});
-                        }
-                        return completion(std::unexpected(credential_error(ErrorCode::Auth,
-                                "the Upstream MCP Server has no bearer credential: the environment variable is "
-                                "unset and no credential is stored",
-                                server_id,
-                                env_var)));
-                    }
-                    if (held.has_value() && *held == from_environment) {
-                        return completion(Expected<UpstreamAuth>{
-                                UpstreamAuth{.bearer = from_environment, .from_environment = true}});
-                    }
-                    store->write_bearer(server_id, from_environment)
-                            .start([completion = std::move(completion), server_id, env_var, from_environment](
-                                           std::expected<void, Error> written) mutable noexcept {
-                                if (!written) {
-                                    return completion(std::unexpected(credential_error(written.error().code,
-                                            "the Upstream MCP Server's bearer credential could not be persisted",
-                                            server_id,
-                                            env_var,
-                                            from_environment)));
-                                }
-                                completion(Expected<UpstreamAuth>{
-                                        UpstreamAuth{.bearer = from_environment, .from_environment = true}});
-                            });
-                });
+                store->read_bearer(server_id).start(
+                        [completion = std::move(completion), server_id, env_var, from_environment, store](
+                                std::expected<std::optional<std::string>, Error> stored) mutable noexcept {
+                            if (!stored) {
+                                return completion(std::unexpected(
+                                        store_read_failure(stored.error(), server_id, env_var, from_environment)));
+                            }
+                            auto decided = decide_bearer(from_environment, *stored, server_id, env_var);
+                            if (decided.has_value()) {
+                                return completion(std::move(*decided));
+                            }
+                            store->write_bearer(server_id, from_environment)
+                                    .start([completion = std::move(completion),
+                                                    server_id,
+                                                    env_var,
+                                                    from_environment](
+                                                    std::expected<void, Error> written) mutable noexcept {
+                                        if (!written) {
+                                            return completion(std::unexpected(credential_error(written.error().code,
+                                                    "the Upstream MCP Server's bearer credential could not be persisted",
+                                                    server_id,
+                                                    env_var,
+                                                    from_environment)));
+                                        }
+                                        completion(Expected<UpstreamAuth>{
+                                                UpstreamAuth{.bearer = from_environment}});
+                                    });
+                        });
             }));
 }
 

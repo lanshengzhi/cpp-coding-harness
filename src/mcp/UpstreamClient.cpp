@@ -223,18 +223,11 @@ protected:
                              name = std::string{name},
                              extra_headers = std::move(extra_headers),
                              on_outcome = std::move(on_outcome)](Expected<UpstreamAuth> auth) mutable {
-            self->queue_.post([self = std::move(self),
-                                      params = std::move(params),
-                                      name = std::move(name),
-                                      extra_headers = std::move(extra_headers),
-                                      on_outcome = std::move(on_outcome),
-                                      auth = std::move(auth)]() mutable {
-                self->dispatch(std::move(params),
-                        std::move(name),
-                        std::move(extra_headers),
-                        std::move(on_outcome),
-                        std::move(auth));
-            });
+            self->dispatch(std::move(params),
+                    std::move(name),
+                    std::move(extra_headers),
+                    std::move(on_outcome),
+                    std::move(auth));
         });
     }
 
@@ -246,17 +239,20 @@ protected:
     virtual void on_probe_failed(Error error) = 0;
 
 private:
-    /// Resolve this connection's live credential and hand it to `on_ready`,
-    /// posted through the operation's own queue so a store that completes
-    /// inline cannot nest exchanges.
+    /// Resolve this connection's live credential and post `on_ready` on the
+    /// operation's own queue, so a store that completes inline cannot nest
+    /// exchanges and one that completes later cannot re-enter the operation.
     void resolve_auth(std::move_only_function<void(Expected<UpstreamAuth>)> on_ready) {
         const auto& connection = connection_;
         auto resolution = resolve_upstream_auth(connection->server_id,
                 connection->options.bearer_env_var,
                 connection->options.credentials,
                 stop_token_);
-        resolution.start([on_ready = std::move(on_ready)](std::expected<UpstreamAuth, Error> auth) mutable noexcept {
-            on_ready(std::move(auth));
+        resolution.start([self = Operation::shared_from_this(), on_ready = std::move(on_ready)](
+                                 std::expected<UpstreamAuth, Error> auth) mutable noexcept {
+            self->queue_.post([on_ready = std::move(on_ready), auth = std::move(auth)]() mutable {
+                on_ready(std::move(auth));
+            });
         });
     }
 
