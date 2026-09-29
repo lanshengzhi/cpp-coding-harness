@@ -18,6 +18,7 @@ using support::Error;
 using support::ErrorCode;
 using support::JsonValue;
 using support::make_error;
+using support::write_json;
 
 [[nodiscard]] McpElicitationMode project(mcp::ElicitationMode mode) noexcept {
     switch (mode) {
@@ -43,6 +44,19 @@ using support::make_error;
 
 } // namespace
 
+/// The Upstream's form schema as the projection carries it: text, because
+/// `frontend_tui` reads the fields out of the schema itself and this Owner
+/// does not interpret it. A schema that will not serialize cannot be
+/// rendered, so it projects as empty text and the dialog reports an empty
+/// form rather than the user seeing a parse failure.
+[[nodiscard]] std::string schema_text(const mcp::ElicitationRequest& request) {
+    if (request.form_schema.holds<JsonValue::null_t>()) {
+        return {};
+    }
+    auto serialized = write_json(request.form_schema);
+    return serialized ? *serialized : std::string{};
+}
+
 std::string_view to_string(McpElicitationAction action) noexcept {
     switch (action) {
     case McpElicitationAction::Accept:
@@ -63,24 +77,9 @@ std::shared_ptr<mcp::UpstreamElicitationPort> McpElicitationBridge::port() {
     return port;
 }
 
-Error McpElicitationBridge::unpresentable(std::string_view server_id) {
-    return make_error(ErrorCode::Validation,
-            "the Upstream MCP Server asked a Pending Elicitation question this build cannot present",
-            "Server Id \"" + std::string(server_id) +
-                    "\" asked in a mode the Native UI has no dialog for, so the question was never put in front of "
-                    "the user and the one tool call failed instead");
-}
-
 AsyncResult<mcp::ElicitationAnswer> McpElicitationBridge::ask(
         mcp::ElicitationRequest request, std::stop_token stop_token) {
     using Result = AsyncResult<mcp::ElicitationAnswer>;
-    // A mode this build cannot render is refused before the wait exists: the
-    // Upstream learns its call failed, the user is never asked a question the
-    // session cannot collect an answer to, and nothing is left suspended. This
-    // is the one place form mode is turned on (issue #846).
-    if (request.mode == mcp::ElicitationMode::Form) {
-        return Result(std::unexpected(unpresentable(request.server_id)));
-    }
     auto self = shared_from_this();
     return Result(
             Result::producer_type([self = std::move(self), request = std::move(request), stop_token](
@@ -109,6 +108,7 @@ AsyncResult<mcp::ElicitationAnswer> McpElicitationBridge::ask(
                                                     .request_id = request.request_id,
                                                     .message = request.message,
                                                     .url = request.url,
+                                                    .form_schema = schema_text(request),
                                             },
                                     .waiter = waiter});
                 }
@@ -169,14 +169,22 @@ support::ExpectedVoid McpElicitationBridge::answer(McpElicitationAnswer answer) 
                 "this session has no Pending Elicitation awaiting that answer",
                 "elicitation \"" + answer.elicitation_id + "\" was already settled"));
     }
-    JsonValue content = JsonValue::object_t{};
-    for (const auto& [name, value] : answer.form_values) {
-        content.get_object().emplace(name, JsonValue(value));
+    // Only an accept carries content. A decline or a cancel is the user
+    // refusing, so values alongside it would put on the wire data the user
+    // did not supply, and the field for a form the user filled in only to
+    // then decline is exactly the one that must not travel.
+    JsonValue form_content{};
+    if (answer.action == McpElicitationAction::Accept && !answer.form_values.empty()) {
+        JsonValue content = JsonValue::object_t{};
+        for (const auto& [name, value] : answer.form_values) {
+            content.get_object().emplace(name, value);
+        }
+        form_content = std::move(content);
     }
     auto completion = std::move(waiter->completion);
     completion(mcp::ElicitationAnswer{.action = action_of(answer.action),
             .request_id = answer.elicitation_id,
-            .form_content = answer.form_values.empty() ? JsonValue{} : std::move(content)});
+            .form_content = std::move(form_content)});
     return {};
 }
 

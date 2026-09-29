@@ -96,6 +96,38 @@ constexpr std::chrono::milliseconds kBudget{5000};
     };
 }
 
+/// A `tools/call` result that suspends the call for one form-mode question,
+/// with the JSON Schema the dialog renders its fields from.
+[[nodiscard]] support::JsonValue form_elicitation() {
+    using JsonValue = support::JsonValue;
+    return JsonValue::object_t{
+            {"resultType", JsonValue("input_required")},
+            {"requestState", JsonValue::object_t{{"token", JsonValue("suspension-1")}}},
+            {"inputRequests",
+                    JsonValue::array_t{JsonValue::object_t{
+                            {"id", JsonValue("f1")},
+                            {"type", JsonValue("form")},
+                            {"message", JsonValue("Confirm the deployment")},
+                            {"schema", JsonValue::object_t{
+                                                     {"type", JsonValue("object")},
+                                                     {"title", JsonValue("Confirm the deployment")},
+                                                     {"properties",
+                                                             JsonValue::object_t{
+                                                                     {"target",
+                                                                     JsonValue::object_t{
+                                                                             {"type", JsonValue("string")},
+                                                                             {"title", JsonValue("Target environment")}}},
+                                                                     {"replicas",
+                                                                     JsonValue::object_t{
+                                                                             {"type", JsonValue("integer")},
+                                                                             {"title", JsonValue("Replicas")}}},
+                                                             }},
+                                                     {"required", JsonValue::array_t{JsonValue("target")}},
+                                             }},
+                    }}},
+    };
+}
+
 /// One scripted chat client that serves queued assistant messages in order.
 class ElicitationProvider final : public tests::ScriptedProvider {
 public:
@@ -592,4 +624,163 @@ TEST_CASE("an approved call is consented to once and the Multi Round-Trip retry 
     CHECK_FALSE(results.back().is_error);
     CHECK(results.back().text.find("approved") != std::string::npos);
     CHECK(session.is_open());
+}
+
+TEST_CASE("a form elicitation is answered through the session with its values typed",
+        "[mcp][coding_agent][issue846][issue845][spec]") {
+    // The form-mode half of the shared Multi Round-Trip loop (issue #846 on
+    // top of #845's core). The question is asked through the same port, the
+    // answer comes back through the same broker, and the retry goes out under
+    // the same loop: the only thing form mode adds is the values the user
+    // typed and the schema they were read from.
+    ElicitationFixture fixture;
+    fixture.write_settings(kEagerServerSettings);
+    fixture.write_trust_store(kTrustedStore);
+    fixture.transport->answer("tools/list", ScriptedMcpAnswer{.result = tests::tool_list_result({approvable_tool()})});
+    fixture.answer_calls([](std::size_t round) {
+        if (round == 0) {
+            return ScriptedMcpAnswer{.result = form_elicitation()};
+        }
+        return ScriptedMcpAnswer{
+                .result = tests::tool_call_result(support::JsonValue::array_t{support::JsonValue::object_t{
+                        {"type", support::JsonValue("text")}, {"text", support::JsonValue("deployed")}}})};
+    });
+    auto owned = fixture.create();
+    auto& session = fixture.runtime.adopt_session(std::move(owned));
+    REQUIRE(fixture.wait_until([&session] { return session.mcp_published_tools().size() == 1; }));
+
+    fixture.client->responses.push_back(tool_call_response("call-1", "mcp__executor__approve", "{}"));
+    fixture.client->responses.push_back(ai::assistant_text_message("done"));
+    auto running = fixture.start_prompt(session, "deploy please");
+    REQUIRE(fixture.wait_until([&session] { return session.pending_mcp_elicitations().size() == 1; }));
+    const auto question = session.pending_mcp_elicitations().front();
+    CHECK(question.mode == McpElicitationMode::Form);
+    CHECK(question.server_id == "executor");
+    CHECK(question.tool_name == "approve");
+    CHECK(question.message == "Confirm the deployment");
+    // The schema the Upstream sent reaches the dialog, and it is the Upstream's
+    // own document: the projection does not validate it, normalize it, or
+    // pick fields out of it.
+    const auto schema = support::read_json(question.form_schema);
+    REQUIRE(schema.has_value());
+    CHECK(schema->at("title").get<std::string>() == "Confirm the deployment");
+    CHECK(schema->at("properties").at("target").at("title").get<std::string>() == "Target environment");
+    // The opaque token is still not in the projection: no presentation surface
+    // can read or normalize it.
+    CHECK(question.elicitation_id.find("suspension-1") == std::string::npos);
+    CHECK(question.url.empty());
+
+    REQUIRE(session.answer_mcp_elicitation(coding_agent::McpElicitationAnswer{
+                                           .elicitation_id = question.elicitation_id,
+                                           .action = McpElicitationAction::Accept,
+                                           .form_values =
+                                                   {{"target", support::JsonValue("prod")},
+                                                    {"replicas", support::JsonValue(3.0)}},
+                                   })
+                    .has_value());
+    REQUIRE(fixture.wait_until([&fixture] { return fixture.transport->request_count("tools/call") == 2; }));
+    running.join();
+
+    // The retry carried the answer, the values typed by their declared types,
+    // the token, and a new id — the same wire shape URL mode uses, with the
+    // form's `content` added.
+    const auto bodies = fixture.call_bodies();
+    REQUIRE(bodies.size() == 2);
+    CHECK(bodies[1].find(R"("action":"accept")") != std::string::npos);
+    CHECK(bodies[1].find(R"("id":"f1")") != std::string::npos);
+    CHECK(bodies[1].find(R"("requestState":{"token":"suspension-1"})") != std::string::npos);
+    const auto retried = support::read_json(bodies[1]);
+    REQUIRE(retried.has_value());
+    // The answers ride in `params`, beside the name and arguments the retry
+    // re-sends unchanged.
+    const auto& retried_params = retried->at("params").get<support::JsonValue::object_t>();
+    REQUIRE(retried_params.find("inputResponses") != retried_params.end());
+    const auto& responses = retried_params.at("inputResponses").get<support::JsonValue::array_t>();
+    REQUIRE(responses.size() == 1);
+    const auto& content = responses.front().at("content").get<support::JsonValue::object_t>();
+    CHECK(content.at("target").get<std::string>() == "prod");
+    // The schema declared this one `integer`, so it answers as a number and
+    // not as the quoted text the user typed.
+    CHECK(content.at("replicas").get<double>() == 3.0);
+    const auto first_id = support::read_json(bodies[0])->at("id").get<double>();
+    const auto second_id = retried->at("id").get<double>();
+    CHECK(second_id != first_id);
+    // The original arguments are still the original arguments.
+    CHECK(bodies[1].find(R"("name":"approve")") != std::string::npos);
+
+    // The model sees the completed result, not the suspension, and the session
+    // is still usable afterwards.
+    const auto results = tool_results(*fixture.client);
+    REQUIRE_FALSE(results.empty());
+    CHECK_FALSE(results.back().is_error);
+    CHECK(results.back().text.find("deployed") != std::string::npos);
+    CHECK(session.is_open());
+    CHECK(session.pending_mcp_elicitations().empty());
+}
+
+TEST_CASE("a declined or cancelled form elicitation continues the call with no values",
+        "[mcp][coding_agent][issue846][issue845][spec]") {
+    // A refusal is an answer, not a session failure and not a failed call
+    // (ADR 0008): the retry still goes out, with the disposition the user
+    // chose and **no** content, because what the user had typed is not part
+    // of a refusal.
+    for (const auto& [disposition, wire] :
+         std::vector<std::pair<McpElicitationAction, std::string_view>>{
+                 {McpElicitationAction::Decline, "decline"},
+                 {McpElicitationAction::Cancel, "cancel"}}) {
+        CAPTURE(disposition);
+        ElicitationFixture fixture;
+        fixture.write_settings(kEagerServerSettings);
+        fixture.write_trust_store(kTrustedStore);
+        fixture.transport->answer(
+                "tools/list", ScriptedMcpAnswer{.result = tests::tool_list_result({approvable_tool()})});
+        fixture.answer_calls([](std::size_t round) {
+            if (round == 0) {
+                return ScriptedMcpAnswer{.result = form_elicitation()};
+            }
+            return ScriptedMcpAnswer{
+                    .result = tests::tool_call_result(support::JsonValue::array_t{support::JsonValue::object_t{
+                        {"type", support::JsonValue("text")}, {"text", support::JsonValue("stopped")}}})};
+        });
+        auto owned = fixture.create();
+        auto& session = fixture.runtime.adopt_session(std::move(owned));
+        REQUIRE(fixture.wait_until([&session] { return session.mcp_published_tools().size() == 1; }));
+
+        fixture.client->responses.push_back(tool_call_response("call-1", "mcp__executor__approve", "{}"));
+        fixture.client->responses.push_back(ai::assistant_text_message("done"));
+        auto running = fixture.start_prompt(session, "deploy please");
+        REQUIRE(fixture.wait_until([&session] { return session.pending_mcp_elicitations().size() == 1; }));
+        REQUIRE(session.answer_mcp_elicitation(coding_agent::McpElicitationAnswer{
+                                               .elicitation_id = session.pending_mcp_elicitations().front().elicitation_id,
+                                               .action = disposition,
+                                               // Values a caller sent with a refusal are
+                                               // dropped by the broker, not by luck.
+                                               .form_values = {{"target", support::JsonValue("prod")}},
+                                       })
+                        .has_value());
+        REQUIRE(fixture.wait_until([&fixture] { return fixture.transport->request_count("tools/call") == 2; }));
+        running.join();
+
+        const auto bodies = fixture.call_bodies();
+        REQUIRE(bodies.size() == 2);
+        const auto expected = std::string{"\"action\":\""} + std::string{wire} + "\"";
+        CHECK(bodies[1].find(expected) != std::string::npos);
+        // The refusal carries no content, and the token is still echoed: the
+        // Upstream needs the token to close out its own flow either way.
+        const auto retried = support::read_json(bodies[1]);
+        REQUIRE(retried.has_value());
+        const auto& retried_params = retried->at("params").get<support::JsonValue::object_t>();
+        REQUIRE(retried_params.find("inputResponses") != retried_params.end());
+        const auto& responses = retried_params.at("inputResponses").get<support::JsonValue::array_t>();
+        REQUIRE(responses.size() == 1);
+        // The answer is on the wire and the content is not: a member lookup,
+        // because an absent member is exactly what is being asserted.
+        CHECK(responses.front().get_object().find("content") == responses.front().get_object().end());
+        CHECK(bodies[1].find(R"("requestState":{"token":"suspension-1"})") != std::string::npos);
+        // A refusal is not a session failure.
+        CHECK(session.is_open());
+        const auto results = tool_results(*fixture.client);
+        REQUIRE_FALSE(results.empty());
+        CHECK_FALSE(results.back().is_error);
+    }
 }

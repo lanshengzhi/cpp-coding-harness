@@ -2,6 +2,8 @@
 
 #include "coding_agent/tui/ModalPresenter.hpp"
 #include "coding_agent/tui/McpElicitationDialog.hpp"
+#include "coding_agent/tui/McpElicitationFormDialog.hpp"
+#include "coding_agent/tui/McpElicitationPrompt.hpp"
 
 #include <cch/coding_agent/McpElicitation.hpp>
 #include <cch/support/Error.hpp>
@@ -9,9 +11,10 @@
 #include <boost/asio/any_io_executor.hpp>
 
 #include <cstddef>
-#include <functional>
+#include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace cch::coding_agent {
@@ -80,22 +83,28 @@ public:
 
 private:
     void show_pending_on_host();
-    void show(const McpPendingElicitation& request);
+    /// The URL-mode question: the address, an open-browser action, and the
+    /// three answers.
+    void show_url(const McpPendingElicitation& request);
+    /// The form-mode question: the fields the Upstream's schema declares,
+    /// their validation, and the same three answers (issue #846).
+    void show_form(const McpPendingElicitation& request);
     /// One user answer, delivered through the session's own API. The dialog
     /// is retired first and the next question is asked immediately, so two
     /// Upstreams blocked at once are two questions in sequence rather than one
-    /// dialog that hides the other.
-    void on_answer(McpElicitationAction action, std::string elicitation_id);
+    /// dialog that hides the other. The values are the form mode's half of the
+    /// answer and are empty for URL mode.
+    void on_answer(McpElicitationAction action, std::string elicitation_id, McpElicitationFormValues values);
 
     boost::asio::any_io_executor executor_;
     ModalPresenter* presenter_; // kept alive by host_lifetime_ across flows
     std::weak_ptr<void> host_lifetime_;
     McpFlowHostHooks hooks_;
     std::shared_ptr<SharedKeybindings> keybindings_;
-    /// The live dialog and the question it is asking about, so a second
+    /// The live question in whichever mode asked it, so a second
     /// `show_pending` is a no-op and a question already on screen is not
     /// re-opened. Executor-confined; see close().
-    std::shared_ptr<McpElicitationDialog> dialog_{nullptr};
+    std::shared_ptr<McpElicitationPrompt> dialog_{nullptr};
     std::string showing_{};
 };
 
