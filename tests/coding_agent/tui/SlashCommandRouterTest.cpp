@@ -109,7 +109,7 @@ TEST_CASE("Slash command routing executes every immediate command synchronously"
 
     const std::vector<std::string_view> commands{
         "/clear", "/quit", "/copy", "/session", "/hotkeys", "/settings", "/help",
-        "/name renamed"};
+        "/name renamed", "/mcp"};
     for (const auto& command : commands) {
         auto result = router.route(command, context);
         const auto* immediate = std::get_if<tui::SlashCommandImmediateResult>(&result);
@@ -125,6 +125,7 @@ TEST_CASE("Slash command routing executes every immediate command synchronously"
     CHECK(executed[5] == Settings);
     CHECK(executed[6] == Help);
     CHECK(executed[7] == Name);
+    CHECK(executed[8] == Mcp);
 }
 
 TEST_CASE("Slash command routing returns structured modal requests with arguments",

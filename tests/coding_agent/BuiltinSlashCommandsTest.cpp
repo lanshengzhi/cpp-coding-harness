@@ -12,9 +12,10 @@ TEST_CASE(
     const auto& commands = coding_agent::prompt::builtin_slash_commands();
 
     // The 18 autocomplete entries of pi's 22-command catalog; `thinking` is
-    // pi's own entry (issue #791). Router-only spellings (`/clear`, `/help`,
-    // `/commands`, `/exit`, `/q`, `/models`) come from the router's spelling
-    // table instead of this catalog.
+    // pi's own entry (issue #791), and `mcp` is Pike's own Upstream
+    // Connection Status overview (issue #841). Router-only spellings
+    // (`/clear`, `/help`, `/commands`, `/exit`, `/q`, `/models`) come from the
+    // router's spelling table instead of this catalog.
     const std::vector<std::string_view> expected_names{
             "settings",
             "model",
@@ -34,6 +35,7 @@ TEST_CASE(
             "resume",
             "reload",
             "quit",
+            "mcp",
     };
     REQUIRE(commands.size() == expected_names.size());
     for (std::size_t index = 0; index < expected_names.size(); ++index) {
