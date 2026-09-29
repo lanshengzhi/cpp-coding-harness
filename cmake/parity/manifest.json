@@ -48,6 +48,19 @@
           "ai/",
           "src/ai/"
         ]
+      },
+      {
+        "id": "frontend-no-direct-mcp-includes",
+        "source_prefixes": [
+          "src/coding_agent/tui/",
+          "src/coding_agent/cli/"
+        ],
+        "excluded_source_prefixes": [],
+        "forbidden_include_prefixes": [
+          "cch/mcp/",
+          "mcp/",
+          "src/mcp/"
+        ]
       }
     ],
     "exceptions": []
@@ -81,11 +94,17 @@
       "interface_root": "src/tui/include/cch/tui",
       "legal_owner_dependencies": []
     },
+    "cch_mcp": {
+      "role": "owner",
+      "root": "src/mcp",
+      "interface_root": "src/mcp/include/cch/mcp",
+      "legal_owner_dependencies": []
+    },
     "cch_coding_agent": {
       "role": "owner",
       "root": "src/coding_agent",
       "interface_root": "src/coding_agent/include/cch/coding_agent",
-      "legal_owner_dependencies": ["cch_agent_core", "cch_ai"],
+      "legal_owner_dependencies": ["cch_agent_core", "cch_ai", "cch_mcp"],
       "implementation_owner_dependencies": ["cch_tui"]
     },
     "cch_support": {

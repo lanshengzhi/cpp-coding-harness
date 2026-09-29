@@ -4,7 +4,9 @@ endif()
 
 # End-to-end Parity Architecture Gate fixture cases. Configure a minimal legal
 # fixture (must succeed), an otherwise-equivalent illegal fixture carrying
-# exactly one illegal cross-Owner target edge (PARITY-2001), and a set of
+# exactly one illegal cross-Owner target edge (PARITY-2001), an
+# otherwise-equivalent illegal fixture carrying exactly one illegal include
+# edge into the `cch_mcp` Owner Package (PARITY-4007, issue #834), and a set of
 # poison-source fixtures each carrying exactly one rejected project-header
 # spelling (PARITY-4xxx). After generation, the legal fixture's compile
 # commands are validated and a build-phase Gate is run without depfile
@@ -19,6 +21,7 @@ set(CCH_PARITY_FIXTURE_ROOT "${CCH_SOURCE_DIR}/tests/fixtures/parity-gate")
 set(CCH_PARITY_FIXTURE_SRC "${CCH_PARITY_FIXTURE_ROOT}/src")
 set(CCH_PARITY_LEGAL_FIXTURE "${CCH_PARITY_FIXTURE_ROOT}/legal")
 set(CCH_PARITY_ILLEGAL_FIXTURE "${CCH_PARITY_FIXTURE_ROOT}/illegal")
+set(CCH_PARITY_ILLEGAL_MCP_FIXTURE "${CCH_PARITY_FIXTURE_ROOT}/illegal-mcp")
 set(CCH_PARITY_ILLEGAL_INCLUDE_FIXTURE "${CCH_PARITY_FIXTURE_ROOT}/illegal-include")
 set(CCH_PARITY_POISON_DIR "${CCH_PARITY_FIXTURE_ROOT}/poison")
 set(CCH_PARITY_AI_INTERFACE_ROOT "${CCH_PARITY_FIXTURE_ROOT}/src/ai/include/cch/ai")
@@ -151,6 +154,17 @@ cch_parity_configure_case(
     "PARITY-4008"
     "unresolved"
     "${CCH_PARITY_POISON_DIR}/unresolved.cpp"
+)
+
+# The `cch_mcp` Owner Package boundary (ADR 0065; issue #834): an illegal
+# include edge into it is rejected the same way any other cross-Owner edge is.
+cch_parity_configure_case(
+    "${CCH_PARITY_ILLEGAL_MCP_FIXTURE}"
+    "${CCH_SOURCE_DIR}/build/parity-gate-fixtures/mcp-owner-edge"
+    FALSE
+    "PARITY-4007"
+    "mcp-owner-edge"
+    "${CCH_PARITY_POISON_DIR}/mcp-owner-edge.cpp"
 )
 
 # Post-generation Gate phase for the legal fixture: the generated compile

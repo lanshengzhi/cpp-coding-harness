@@ -18,6 +18,7 @@ include(cmake/targets/Support.cmake)
 include(cmake/targets/Tui.cmake)
 include(cmake/targets/Ai.cmake)
 include(cmake/targets/AgentCore.cmake)
+include(cmake/targets/Mcp.cmake)
 include(cmake/targets/CodingAgent.cmake)
 include(cmake/targets/Runtime.cmake)    # pike Runtime executable
 

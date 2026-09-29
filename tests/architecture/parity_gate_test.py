@@ -71,6 +71,12 @@ VALID_MANIFEST = {
                 "excluded_source_prefixes": [],
                 "forbidden_include_prefixes": ["ai/", "src/ai/"],
             },
+            {
+                "id": "frontend-no-direct-mcp-includes",
+                "source_prefixes": ["src/coding_agent/tui/", "src/coding_agent/cli/"],
+                "excluded_source_prefixes": [],
+                "forbidden_include_prefixes": ["cch/mcp/", "mcp/", "src/mcp/"],
+            },
         ],
         "exceptions": [],
     },
@@ -103,11 +109,17 @@ VALID_MANIFEST = {
             "interface_root": "include/cch/tui",
             "legal_owner_dependencies": [],
         },
+        "cch_mcp": {
+            "role": "owner",
+            "root": "src/mcp",
+            "interface_root": "include/cch/mcp",
+            "legal_owner_dependencies": [],
+        },
         "cch_coding_agent": {
             "role": "owner",
             "root": "src/coding_agent",
             "interface_root": "include/cch/coding_agent",
-            "legal_owner_dependencies": ["cch_agent_core", "cch_ai"],
+            "legal_owner_dependencies": ["cch_agent_core", "cch_ai", "cch_mcp"],
             "implementation_owner_dependencies": ["cch_tui"],
         },
         "cch_support": {
@@ -187,6 +199,13 @@ VALID_INDEX = {
             ],
         },
         {
+            "name": "cch_mcp",
+            "role": "owner",
+            "owner": "cch_mcp",
+            "sources": ["src/mcp/host.cpp"],
+            "dependencies": [{"name": "cch_support", "family": None}],
+        },
+        {
             "name": "cch_coding_agent",
             "role": "owner",
             "owner": "cch_coding_agent",
@@ -194,6 +213,7 @@ VALID_INDEX = {
             "dependencies": [
                 {"name": "cch_agent_core", "family": None},
                 {"name": "cch_ai", "family": None},
+                {"name": "cch_mcp", "family": None},
                 {"name": "cch_support", "family": None},
             ],
         },
@@ -234,12 +254,21 @@ class ManifestSchemaTest(unittest.TestCase):
         manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
         self.assertEqual(
             set(manifest.owners),
-            {"cch_ai", "cch_agent_core", "cch_tui", "cch_coding_agent", "cch_support"},
+            {
+                "cch_ai",
+                "cch_agent_core",
+                "cch_tui",
+                "cch_mcp",
+                "cch_coding_agent",
+                "cch_support",
+            },
         )
         # The headless Owner keeps its own dependencies authoritative and adds
         # the frontend-only one for non-`owner` targets (issue #658).
         coding_agent = manifest.owners["cch_coding_agent"]
-        self.assertEqual(coding_agent.legal_owner_dependencies, ("cch_agent_core", "cch_ai"))
+        self.assertEqual(
+            coding_agent.legal_owner_dependencies, ("cch_agent_core", "cch_ai", "cch_mcp")
+        )
         self.assertEqual(coding_agent.implementation_owner_dependencies, ("cch_tui",))
 
     def test_checked_in_manifest_rejects_ai_private_includes_from_agent_sources(self):
@@ -265,6 +294,35 @@ class ManifestSchemaTest(unittest.TestCase):
                 "agent/harness/session/SessionJournal.hpp",
             ),
         )
+
+    def test_checked_in_manifest_records_the_mcp_host_owner_package(self):
+        manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
+        manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
+        mcp_owner = manifest.owners["cch_mcp"]
+        self.assertEqual(mcp_owner.role, "owner")
+        self.assertEqual(mcp_owner.root, "src/mcp")
+        self.assertEqual(mcp_owner.interface_root, "src/mcp/include/cch/mcp")
+        # The MCP Host depends on the pi-neutral support package only (ADR
+        # 0065); support is not repeated here because every Owner may depend
+        # on it.
+        self.assertEqual(mcp_owner.legal_owner_dependencies, ())
+        self.assertEqual(mcp_owner.implementation_owner_dependencies, ())
+        # The headless owner library reaches the MCP Host; no frontend target
+        # does, so the package stays out of the appended implementation set.
+        self.assertIn("cch_mcp", manifest.owners["cch_coding_agent"].legal_owner_dependencies)
+        self.assertNotIn(
+            "cch_mcp", manifest.owners["cch_coding_agent"].implementation_owner_dependencies
+        )
+
+    def test_checked_in_manifest_closes_frontend_direct_mcp_consumption(self):
+        manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
+        manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
+        rules = {rule.rule_id: rule for rule in manifest.architecture_contract.rules}
+        clause = rules["frontend-no-direct-mcp-includes"]
+        self.assertEqual(
+            clause.source_prefixes, ("src/coding_agent/tui/", "src/coding_agent/cli/")
+        )
+        self.assertEqual(clause.forbidden_include_prefixes, ("cch/mcp/", "mcp/", "src/mcp/"))
 
     def test_provider_capability_is_outside_ai_interface_root(self):
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
@@ -419,7 +477,7 @@ class ManifestSchemaTest(unittest.TestCase):
 class IndexSchemaTest(unittest.TestCase):
     def test_valid_index_parses(self):
         index = valid_index()
-        self.assertEqual(len(index.targets), 6)
+        self.assertEqual(len(index.targets), 7)
 
     def test_malformed_json_fails_closed(self):
         with self.assertRaises(pg.SchemaViolation) as raised:
@@ -628,7 +686,8 @@ class GatePolicyTest(unittest.TestCase):
     def test_unknown_target_role_is_rejected(self):
         manifest = valid_manifest()
         data = deep_copy(VALID_INDEX)
-        data["targets"][4]["role"] = "plugin"
+        target = next(t for t in data["targets"] if t["name"] == "cch_coding_agent")
+        target["role"] = "plugin"
         index = pg.parse_index(data)
         diagnostics = pg.check(manifest, index, VALID_INDEX["manifest_digest"])
         self.assertEqual(rule_ids(diagnostics), [pg.RULE_UNKNOWN_TARGET_ROLE])
@@ -752,6 +811,7 @@ INTERFACE_HEADERS = {
     "cch_tui": "include/cch/tui/Render.hpp",
     "cch_support": "include/cch/support/Value.hpp",
     "cch_coding_agent": "include/cch/coding_agent/Compose.hpp",
+    "cch_mcp": "include/cch/mcp/UpstreamTool.hpp",
 }
 
 
@@ -1501,6 +1561,146 @@ class IncludeRoleOwnershipTest(unittest.TestCase):
         # The exception lifts the source-level contract rule (PARITY-8001)
         # only; the Owner allowlist rejects the edge (PARITY-4007) regardless.
         self.assertEqual(rule_ids(diagnostics), [pg.RULE_ILLEGAL_DIRECT_INCLUDE])
+
+
+class McpOwnerBoundaryTest(unittest.TestCase):
+    """The `cch_mcp` Owner Package boundary (ADR 0065; issue #834).
+
+    The package depends on the pi-neutral support package only, and the
+    frontends reach upstream status and Pending Elicitation through
+    `cch_coding_agent` projections rather than the package itself. These cases
+    cover both directions of that: an illegal edge in and out of the package,
+    and the direct frontend consumption the Product Architecture Contract
+    closes.
+    """
+
+    def test_mcp_owner_package_is_declared_with_no_owner_dependency(self):
+        manifest = valid_manifest()
+        self.assertEqual(manifest.owners["cch_mcp"].legal_owner_dependencies, ())
+
+    def test_illegal_owner_edge_into_cch_mcp_is_rejected(self):
+        # `cch_tui` declares no legal Owner dependency, so a TUI target may
+        # not link or include the MCP Host.
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_tui",
+                "tui/render.cpp",
+                "cch/mcp/UpstreamTool.hpp",
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_ILLEGAL_DIRECT_INCLUDE])
+        self.assertEqual(diagnostics[0].target, "cch_tui")
+        self.assertEqual(diagnostics[0].dependency, "cch_mcp")
+
+    def test_illegal_owner_edge_out_of_cch_mcp_is_rejected(self):
+        # The MCP Host depends on no Capability Owner Package, so its sources
+        # may not reach `cch_ai` either.
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_mcp",
+                "mcp/McpHost.cpp",
+                "cch/ai/Model.hpp",
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_ILLEGAL_DIRECT_INCLUDE])
+        self.assertEqual(diagnostics[0].target, "cch_mcp")
+        self.assertEqual(diagnostics[0].dependency, "cch_ai")
+
+    def test_illegal_target_edge_into_and_out_of_cch_mcp_is_rejected(self):
+        # The same two edges at the link level, keyed on the target declaration
+        # rather than on one include directive.
+        cases = (
+            ("cch_tui", "cch_mcp", "cch_tui"),
+            ("cch_mcp", "cch_ai", "cch_mcp"),
+        )
+        for target_name, dependency_name, from_owner in cases:
+            with self.subTest(target=target_name):
+                data = {
+                    "producer": "cch-parity-constructor",
+                    "schema_version": 1,
+                    "manifest_digest": "d" * 64,
+                    "targets": [
+                        {
+                            "name": target_name,
+                            "role": "owner",
+                            "owner": from_owner,
+                            "sources": [],
+                            "dependencies": [{"name": dependency_name, "family": None}],
+                        },
+                        {
+                            "name": dependency_name,
+                            "role": "owner",
+                            "owner": dependency_name,
+                            "sources": [],
+                            "dependencies": [],
+                        },
+                    ],
+                }
+                diagnostics = pg.check(valid_manifest(), pg.parse_index(data), "d" * 64)
+                self.assertEqual(rule_ids(diagnostics), [pg.RULE_ILLEGAL_CROSS_OWNER_EDGE])
+                self.assertEqual(diagnostics[0].target, from_owner)
+                self.assertEqual(diagnostics[0].dependency, dependency_name)
+
+    def test_headless_owner_library_may_include_the_mcp_owner_interface(self):
+        # The legal direction: `SessionFactory` is the sole assembly point and
+        # adapts upstream tool descriptors into `cch::agent::Tool` values.
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "coding_agent/runtime/SessionFactory.cpp",
+                "cch/mcp/UpstreamTool.hpp",
+            )
+        self.assertEqual(diagnostics, [])
+
+    def test_frontend_targets_may_not_include_the_mcp_owner_interface(self):
+        # The Owner allowlist admits `cch_mcp` for the headless owner library
+        # and therefore for the implementation targets of the same Owner too;
+        # the Product Architecture Contract rule is what closes the frontends,
+        # which reach the MCP Host only through `cch_coding_agent` projections.
+        cases = (
+            ("frontend_tui", "coding_agent/tui/ToolExecutionComponent.cpp"),
+            ("frontend_cli", "coding_agent/cli/PrintMode.cpp"),
+        )
+        for target_name, source_name in cases:
+            with self.subTest(target=target_name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    diagnostics = run_include_case(
+                        tmp,
+                        "cch_coding_agent",
+                        source_name,
+                        "cch/mcp/UpstreamTool.hpp",
+                        declared=DeclaredTarget("implementation", target_name),
+                    )
+                self.assertEqual(rule_ids(diagnostics), [pg.RULE_FRONTEND_DIRECT_MCP_INCLUDE])
+                self.assertIn("frontend-no-direct-mcp-includes", diagnostics[0].message)
+                self.assertEqual(diagnostics[0].dependency, "cch/mcp/UpstreamTool.hpp")
+
+    def test_frontend_private_reach_through_mcp_root_is_rejected(self):
+        # The same rule closes the private-root spelling of the package.
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "coding_agent/tui/ToolExecutionComponent.cpp",
+                "mcp/McpHost.cpp",
+                declared=DeclaredTarget("implementation", "frontend_tui"),
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_FRONTEND_DIRECT_MCP_INCLUDE])
+
+    def test_exception_pointer_in_the_mcp_owner_interface_is_rejected(self):
+        # ADR 0042: `std::exception_ptr` is confined to a private completion
+        # bridge, so it can appear in no Owner Interface — the MCP Host's
+        # included.
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = Path(tmp)
+            leaky_header = project_root / "src" / "mcp" / "include" / "cch" / "mcp" / "Leak.hpp"
+            leaky_header.parent.mkdir(parents=True, exist_ok=True)
+            leaky_header.write_text("#pragma once\n\n#include <exception>\n\nstd::exception_ptr leak;\n")
+            diagnostics = []
+            pg._check_exception_sources(valid_manifest(), str(project_root), diagnostics)
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_EXCEPTION_POINTER_NOT_ALLOWLISTED])
+        self.assertIn("src/mcp/include/cch/mcp/Leak.hpp", diagnostics[0].path)
 
 
 class CompileContextTest(unittest.TestCase):

@@ -43,7 +43,7 @@ include_guard(GLOBAL)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/parity_gate_test.py
     )
     set_tests_properties(cch_parity_gate_unit PROPERTIES
-        LABELS "architecture;parity-gate;issue448;issue449;issue470;issue480;spec")
+        LABELS "architecture;parity-gate;issue448;issue449;issue470;issue480;issue834;spec")
 
     # Include resolution and Owner role ownership at their join point (#658).
     # One <cch/tui/...> header resolves to `cch_tui` everywhere; only the
@@ -75,7 +75,7 @@ include_guard(GLOBAL)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/ParityGateTest.cmake
     )
     set_tests_properties(cch_parity_gate_fixture PROPERTIES
-        LABELS "architecture;parity-gate;issue448;issue449;issue470;issue480;spec")
+        LABELS "architecture;parity-gate;issue448;issue449;issue470;issue480;issue834;spec")
 
     # Production build-phase Gate self-check (ADR 0039; issue #470): run the
     # same fail-closed build-phase Gate against the production evidence
@@ -131,6 +131,10 @@ include_guard(GLOBAL)
     # declared package interface dependencies (own root, support, legal direct
     # Owner dependencies). No third-party or private root is provided, so
     # third-party leakage, private paths, and undeclared Owner edges fail.
+    # The same restriction is asserted from the other side: a fixture header
+    # that leaks Boost.Asio/Beast, an undeclared Owner edge in either
+    # direction, a private root, or an exception type must fail to compile
+    # under the `cch_mcp` package's declared interface dependencies (#834).
     add_test(
         NAME cch_owner_interface_standalone
         COMMAND
@@ -140,7 +144,7 @@ include_guard(GLOBAL)
             --manifest ${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json
             --project-root ${CMAKE_CURRENT_SOURCE_DIR}
     )
-    set_tests_properties(cch_owner_interface_standalone PROPERTIES LABELS "architecture;parity-gate;issue469;spec")
+    set_tests_properties(cch_owner_interface_standalone PROPERTIES LABELS "architecture;parity-gate;issue469;issue834;spec")
 
     # Zero-compiler-warning gate (issue #492): recompiles every project-owned
     # compile command from the generated compile_commands.json with the

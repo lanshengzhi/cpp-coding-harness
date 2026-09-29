@@ -43,6 +43,7 @@ include_guard(GLOBAL)
     set(CCH_FORMAL_TEST_INCLUDE_DIRS
         ${CMAKE_CURRENT_SOURCE_DIR}/src/ai/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/agent/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/tui/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/coding_agent/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/support/include
