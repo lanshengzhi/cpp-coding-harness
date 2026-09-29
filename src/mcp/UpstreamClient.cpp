@@ -467,6 +467,11 @@ private:
         pages_ += 1;
         if (!page->next_cursor.has_value()) {
             catalog_.instructions = connection()->instructions;
+            // The freshness hint and the reuse scope are read from the page
+            // that completes the walk: a hint on a page that still carried a
+            // `nextCursor` describes an incomplete catalog (issue #848).
+            catalog_.freshness = page->freshness;
+            catalog_.cache_scope = page->cache_scope.value_or(std::string{kDefaultCatalogCacheScope});
             return complete_with(std::move(catalog_));
         }
         if (pages_ >= protocol::kMaxListPagesPerUpstream) {

@@ -2,6 +2,7 @@
 
 #include <cch/mcp/McpTransport.hpp>
 #include <cch/mcp/UpstreamAuth.hpp>
+#include <cch/mcp/UpstreamCatalogCache.hpp>
 #include <cch/mcp/UpstreamServer.hpp>
 #include <cch/mcp/UpstreamToolCall.hpp>
 #include <cch/support/AsyncResult.hpp>
@@ -89,6 +90,12 @@ struct UpstreamConnectionOptions {
     /// connection never reconnects, and a close with work still in flight
     /// abandons that work instead of bounding the wait for it.
     UpstreamDelay delay{};
+    /// The per-Upstream tool-catalog cache this connection reads and fills
+    /// (spec #833 story 17; issue #848). Null is a connection that always
+    /// walks `tools/list`, which is the behaviour the host had before the
+    /// cache existed. It is shared rather than owned so that one instance can
+    /// serve every connection of every session the host owns.
+    std::shared_ptr<UpstreamCatalogCache> catalog_cache{nullptr};
 };
 
 /// How a two-phase close ended (ADR 0011).
@@ -169,9 +176,18 @@ public:
     /// a flapping transport cannot storm the Upstream.
     void notify_transport_closed(std::string reason = {});
 
-    /// The Upstream's tool catalog, through the connected client. A call
-    /// against a connection that is not connected fails with `Busy` rather
-    /// than silently connecting, so a tool call never waits on a dead server.
+    /// The Upstream's tool catalog, through the connected client and the
+    /// host's catalog cache. A call against a connection that is not
+    /// connected fails with `Busy` rather than silently connecting, so a tool
+    /// call never waits on a dead server.
+    ///
+    /// The cache is a shortcut the Upstream's own `ttlMs`/`cacheScope` hints
+    /// asked for, and it never makes this call wait: a fresh entry is
+    /// returned without an exchange, a stale one is returned immediately
+    /// while at most one refresh runs behind it, and a cache that holds
+    /// nothing degrades to exactly the `tools/list` walk that ran before it
+    /// existed. A connection the owner has turned off is answered from
+    /// neither.
     [[nodiscard]] cch::support::AsyncResult<UpstreamCatalog> list_tools(std::stop_token stop_token = {});
 
     /// One upstream tool call, through the connected client, bounded by the

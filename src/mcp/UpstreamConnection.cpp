@@ -82,7 +82,8 @@ struct UpstreamConnection::Impl : std::enable_shared_from_this<UpstreamConnectio
 
     Impl(std::string id, std::shared_ptr<McpTransport> shared_transport, UpstreamConnectionOptions connection_options)
         : server_id(std::move(id)), transport(std::move(shared_transport)), options(std::move(connection_options)),
-          request_timeout(bounded_request_timeout(options.request_timeout)) {}
+          request_timeout(bounded_request_timeout(options.request_timeout)),
+          catalog_cache(std::move(options.catalog_cache)) {}
 
     // ---- reading and reporting ----
 
@@ -198,6 +199,84 @@ struct UpstreamConnection::Impl : std::enable_shared_from_this<UpstreamConnectio
         if (retry_timer.has_value()) {
             retry_timer.reset();
         }
+    }
+
+    // ---- the tool-catalog cache (issue #848) ----
+
+    /// One live `tools/list` walk, cached on success. The walk is the client
+    /// stack's own, so every defensive rule from issue #836 — the per-server
+    /// tool cap, the pagination-cursor cap, and duplicate-name and
+    /// cursor-loop rejection — applies to a refresh exactly as it does to a
+    /// cold fetch: a refresh *is* a cold fetch, and the cache only decides
+    /// whether one is needed.
+    [[nodiscard]] AsyncResult<UpstreamCatalog> walk_catalog(std::stop_token request_token) {
+        if (status != UpstreamConnectionStatus::Connected || !client.has_value()) {
+            return AsyncResult<UpstreamCatalog>(std::unexpected(not_connected_error(server_id)));
+        }
+        auto walk = client->list_tools(request_token);
+        return AsyncResult<UpstreamCatalog>([walk = std::move(walk), self = shared_from_this()](
+                                                   AsyncCompletion<UpstreamCatalog, Error> completion) mutable noexcept {
+            walk.start([self, completion = std::move(completion)](
+                               std::expected<UpstreamCatalog, Error> outcome) mutable noexcept {
+                if (outcome) {
+                    self->cache_catalog(*outcome);
+                }
+                completion(std::move(outcome));
+            });
+        });
+    }
+
+    void cache_catalog(const UpstreamCatalog& catalog) {
+        if (catalog_cache == nullptr) {
+            return;
+        }
+        // An entry the cache cannot admit is simply not cached: the walk
+        // already produced a correct catalog, and a cache never changes the
+        // answer a caller gets.
+        (void)catalog_cache->admit(server_id, catalog);
+    }
+
+    /// Re-list this Upstream's catalog behind the caller's back, at most one
+    /// refresh at a time. It is admitted like any other operation, so a close
+    /// cancels it and the cleanup bound covers it, and it takes no caller
+    /// token: the work belongs to the cache, not to whoever happened to read
+    /// the stale entry. The single-refresh rule is what keeps an Upstream that
+    /// declares `ttlMs: 0` from turning every lookup into a second walk.
+    void start_cache_refresh() {
+        if (refresh_in_flight || catalog_cache == nullptr || settled() || !client.has_value() ||
+                status != UpstreamConnectionStatus::Connected) {
+            return;
+        }
+        refresh_in_flight = true;
+        auto refresh = admit<UpstreamCatalog>({}, [self = shared_from_this()](std::stop_token request_token) {
+            return self->walk_catalog(request_token);
+        });
+        refresh.start([self = shared_from_this()](std::expected<UpstreamCatalog, Error>) noexcept {
+            self->refresh_in_flight = false;
+        });
+    }
+
+    /// The catalog the caller gets, without ever making it wait on the
+    /// Upstream because of the cache.
+    [[nodiscard]] AsyncResult<UpstreamCatalog> list_catalog(std::stop_token caller_token) {
+        // A connection the owner turned off is answered from nothing: the
+        // decision to stop talking to an Upstream outranks a warm entry. A
+        // connection that is still `pending` is answered from the cache,
+        // which is what lets a repeated session use a catalog it already has
+        // instead of waiting for the era probe.
+        std::optional<CachedUpstreamCatalog> cached;
+        if (catalog_cache != nullptr && !settled()) {
+            cached = catalog_cache->lookup(server_id);
+        }
+        if (!cached.has_value()) {
+            return admit<UpstreamCatalog>(caller_token, [self = shared_from_this()](std::stop_token request_token) {
+                return self->walk_catalog(request_token);
+            });
+        }
+        if (cached->stale) {
+            start_cache_refresh();
+        }
+        return AsyncResult<UpstreamCatalog>(std::move(cached->catalog));
     }
 
     // ---- one connection lifetime ----
@@ -365,6 +444,12 @@ struct UpstreamConnection::Impl : std::enable_shared_from_this<UpstreamConnectio
     std::shared_ptr<McpTransport> transport;
     UpstreamConnectionOptions options;
     const std::chrono::milliseconds request_timeout;
+    /// The host's shared per-Upstream catalog cache, or none (issue #848).
+    std::shared_ptr<UpstreamCatalogCache> catalog_cache;
+    /// Whether one background catalog refresh is already running. One
+    /// connection serves one Server Id, so a single flag is the whole of the
+    /// at-most-one-refresh rule.
+    bool refresh_in_flight{false};
 
     UpstreamConnectionStatus status{UpstreamConnectionStatus::Pending};
     std::string diagnostic{};
@@ -451,12 +536,7 @@ void UpstreamConnection::notify_transport_closed(std::string reason) {
 
 AsyncResult<UpstreamCatalog> UpstreamConnection::list_tools(std::stop_token stop_token) {
     auto self = impl_;
-    return impl_->admit<UpstreamCatalog>(stop_token, [self](std::stop_token request_token) {
-        if (self->status != UpstreamConnectionStatus::Connected || !self->client.has_value()) {
-            return AsyncResult<UpstreamCatalog>(std::unexpected(not_connected_error(self->server_id)));
-        }
-        return self->client->list_tools(request_token);
-    });
+    return impl_->list_catalog(stop_token);
 }
 
 AsyncResult<UpstreamToolCallResult> UpstreamConnection::call_tool(UpstreamToolCall call, std::stop_token stop_token) {

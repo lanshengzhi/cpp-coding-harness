@@ -289,13 +289,23 @@ private:
     };
 }
 
-/// A `tools/list` result carrying `tools` and an optional `nextCursor`.
-[[nodiscard]] inline support::JsonValue tool_list_result(
-        std::vector<support::JsonValue> tools, std::optional<std::string> next_cursor = std::nullopt) {
+/// A `tools/list` result carrying `tools`, an optional `nextCursor`, and the
+/// optional `ttlMs`/`cacheScope` hints an Upstream uses to say how fresh and
+/// how widely reusable its catalog is (issue #848).
+[[nodiscard]] inline support::JsonValue tool_list_result(std::vector<support::JsonValue> tools,
+        std::optional<std::string> next_cursor = std::nullopt,
+        std::optional<double> ttl_ms = std::nullopt,
+        std::optional<std::string> cache_scope = std::nullopt) {
     using JsonValue = support::JsonValue;
     JsonValue::object_t result{{"tools", JsonValue(std::move(tools))}};
     if (next_cursor.has_value()) {
         result.emplace("nextCursor", JsonValue(*next_cursor));
+    }
+    if (ttl_ms.has_value()) {
+        result.emplace("ttlMs", JsonValue(*ttl_ms));
+    }
+    if (cache_scope.has_value()) {
+        result.emplace("cacheScope", JsonValue(*cache_scope));
     }
     return JsonValue(std::move(result));
 }

@@ -70,6 +70,14 @@ inline constexpr std::string_view kMethodCallTool{"tools/call"};
 inline constexpr std::string_view kResultTypeCallResult{"call_result"};
 inline constexpr std::string_view kResultTypeInputRequired{"input_required"};
 
+/// The `tools/list` result members through which an Upstream says how long
+/// its catalog stays fresh and how widely that catalog may be reused (spec
+/// #833 story 17; issue #848). Both are hints the host honours, and both are
+/// read only from the page that completes the walk: a hint on a page that
+/// still carries a `nextCursor` describes an incomplete catalog.
+inline constexpr std::string_view kResultCatalogFreshness{"ttlMs"};
+inline constexpr std::string_view kResultCatalogCacheScope{"cacheScope"};
+
 /// `tools/list_changed`. pike does not subscribe to `subscriptions/listen`,
 /// so this notification is safely ignored wherever it arrives: it never
 /// reconnects and never triggers a catalog refresh. Catalog freshness is
@@ -95,6 +103,19 @@ inline constexpr std::string_view kServerCapabilityTools{"tools"};
 /// and are not caller-tunable.
 inline constexpr std::size_t kMaxToolsPerUpstream{5000};
 inline constexpr std::size_t kMaxListPagesPerUpstream{1000};
+
+/// The catalog cache is the one MCP Host resource that outlives a session,
+/// so it is bounded twice (spec #833 story 17; issue #848). 64 entries is
+/// far above any `mcpServers` configuration a user writes, and at the bound
+/// the least recently used entry is dropped so that bounding the cache never
+/// silently disables caching for a server the user still has. 24 h is the
+/// longest an Upstream's own `ttlMs` hint can keep an entry alive: a server
+/// that never expires its own catalog would otherwise pin a descriptor set
+/// for the life of the process, which is the Upstream deciding when the host
+/// may forget something. Both are measured policy in
+/// `docs/runtime-capacities.md` and neither is caller-tunable.
+inline constexpr std::size_t kMaxCachedCatalogs{64};
+inline constexpr std::chrono::milliseconds kMaxCatalogFreshness{std::chrono::hours{24}};
 
 /// One `tools/call` exchange is bounded twice: it gets the 30 s default and it
 /// can never be given more than the 300 s cap, whatever a caller asks for. The

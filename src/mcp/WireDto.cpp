@@ -5,7 +5,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -65,6 +67,22 @@ using support::make_error;
 
 [[nodiscard]] Error violation(std::string detail) {
     return make_error(ErrorCode::Validation, "the Upstream MCP Server returned an unusable result", std::move(detail));
+}
+
+/// The freshness hint an Upstream put on a `tools/list` result, as the
+/// `ttlMs` member. A member that is not a finite non-negative number is a
+/// violation like any other typed field: the host does not decode a hint it
+/// cannot read, it ignores it. A hint longer than the host admits is clamped
+/// rather than refused, and it is clamped *before* the integral conversion,
+/// so a hint large enough to overflow the type is bounded and not undefined.
+[[nodiscard]] Expected<std::chrono::milliseconds> read_freshness(const JsonValue& value) {
+    const auto* number = value.get_if<double>();
+    if (number == nullptr || !std::isfinite(*number) || *number < 0.0) {
+        return std::unexpected(violation("a tools/list result has a non-numeric, negative, or non-finite \"" +
+                                         std::string(protocol::kResultCatalogFreshness) + "\""));
+    }
+    const double ceiling = static_cast<double>(protocol::kMaxCatalogFreshness.count());
+    return std::chrono::milliseconds{static_cast<std::int64_t>(std::min(*number, ceiling))};
 }
 
 [[nodiscard]] Expected<std::string> require_string(
@@ -343,6 +361,23 @@ Expected<ToolListPage> read_tool_list_page(const JsonValue& result) {
             return std::unexpected(violation("a tools/list result has a non-string or empty \"nextCursor\""));
         }
         page.next_cursor = *cursor;
+    }
+    if (const auto* raw_freshness = member(result, protocol::kResultCatalogFreshness);
+            raw_freshness != nullptr && !is_json_null(*raw_freshness)) {
+        auto freshness = read_freshness(*raw_freshness);
+        if (!freshness) {
+            return std::unexpected(freshness.error());
+        }
+        page.freshness = *freshness;
+    }
+    if (const auto* raw_scope = member(result, protocol::kResultCatalogCacheScope);
+            raw_scope != nullptr && !is_json_null(*raw_scope)) {
+        const auto scope = as_string(*raw_scope);
+        if (!scope.has_value() || scope->empty()) {
+            return std::unexpected(violation("a tools/list result has a non-string or empty \"" +
+                                             std::string(protocol::kResultCatalogCacheScope) + "\""));
+        }
+        page.cache_scope = std::move(*scope);
     }
     return page;
 }

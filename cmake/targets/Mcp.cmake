@@ -28,6 +28,7 @@ cch_parity_declare_target(
         src/mcp/Redaction.cpp
         src/mcp/SseResponseStream.cpp
         src/mcp/UpstreamAuth.cpp
+        src/mcp/UpstreamCatalogCache.cpp
         src/mcp/UpstreamClient.cpp
         src/mcp/UpstreamConnection.cpp
         src/mcp/WireDto.cpp

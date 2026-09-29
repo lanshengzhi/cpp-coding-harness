@@ -2,7 +2,10 @@
 
 #include <cch/mcp/UpstreamTool.hpp>
 
+#include <chrono>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace cch::mcp {
@@ -28,12 +31,28 @@ struct UpstreamServerInfo {
     std::string instructions{};
 };
 
+/// The scope an Upstream that declares no `cacheScope` of its own belongs to.
+/// `session` is the narrowest one the wire vocabulary has: a catalog is
+/// reusable only by a cache that reads the same scope, so an Upstream that
+/// says nothing about reuse is never reused more widely than the session
+/// that fetched it (spec #833 story 17).
+inline constexpr std::string_view kDefaultCatalogCacheScope{"session"};
+
 /// One Upstream MCP Server's tool catalog as the MCP Host holds it, in the
 /// server's own `tools/list` order (servers SHOULD return a deterministic
 /// order, and the catalog cache preserves it).
 struct UpstreamCatalog {
     std::vector<UpstreamToolDescriptor> tools{};
     std::string instructions{};
+    /// How long the Upstream said this catalog stays fresh, as its `ttlMs`
+    /// hint. Absent means the Upstream offered no hint, and the catalog is
+    /// therefore not reusable at all: a cache is a shortcut the Upstream has
+    /// to ask for, never a default.
+    std::optional<std::chrono::milliseconds> freshness{std::nullopt};
+    /// The scope the Upstream said this catalog may be reused in, as its
+    /// `cacheScope`. An Upstream that declares none is in the narrowest
+    /// scope, never a wider one.
+    std::string cache_scope{kDefaultCatalogCacheScope};
 };
 
 } // namespace cch::mcp

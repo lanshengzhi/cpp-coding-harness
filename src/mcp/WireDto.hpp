@@ -5,6 +5,7 @@
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
+#include <chrono>
 #include <optional>
 #include <string>
 #include <vector>
@@ -25,6 +26,12 @@ struct ToolListEntry {
 struct ToolListPage {
     std::vector<cch::mcp::UpstreamToolDescriptor> tools{};
     std::optional<std::string> next_cursor{};
+    /// The `ttlMs` freshness hint this page carries, absent when the page
+    /// carries none. Read only from the page that completes the walk, so a
+    /// hint describing an incomplete catalog is never read.
+    std::optional<std::chrono::milliseconds> freshness{std::nullopt};
+    /// The `cacheScope` this page carries, absent when the page carries none.
+    std::optional<std::string> cache_scope{std::nullopt};
 };
 
 /// One decoded `tools/call` result carrying the server's own outcome.
