@@ -28,7 +28,7 @@ struct SlashCommandDefinition {
     bool immediate;
 };
 
-constexpr std::array<SlashCommandDefinition, 19> kCommandDefinitions{{
+constexpr std::array<SlashCommandDefinition, 20> kCommandDefinitions{{
     {.command = SlashCommandId::Clear,
      .canonical_name = "clear",
      .argument_mode = SlashArgumentMode::None,
@@ -105,9 +105,19 @@ constexpr std::array<SlashCommandDefinition, 19> kCommandDefinitions{{
      .canonical_name = "trust",
      .argument_mode = SlashArgumentMode::None,
      .immediate = false},
+    // The `/mcp` Upstream Connection Status overview (issue #841). It is a
+    // read-only chat block like `/session` and `/hotkeys`: it renders the
+    // session's status projection and takes no argument. The sub-commands
+    // the spec reserves for it (`/mcp auth <server>`, #849) arrive with
+    // their own surface rather than as an argument this command cannot yet
+    // validate.
+    {.command = SlashCommandId::Mcp,
+     .canonical_name = "mcp",
+     .argument_mode = SlashArgumentMode::None,
+     .immediate = true},
 }};
 
-constexpr std::array<SlashCommandSpelling, 24> kCommandSpellings{{
+constexpr std::array<SlashCommandSpelling, 25> kCommandSpellings{{
         {.spelling = "clear", .command = SlashCommandId::Clear},
         {.spelling = "new", .command = SlashCommandId::Clear},
         {.spelling = "quit", .command = SlashCommandId::Quit},
@@ -132,6 +142,7 @@ constexpr std::array<SlashCommandSpelling, 24> kCommandSpellings{{
         {.spelling = "compact", .command = SlashCommandId::Compact},
         {.spelling = "name", .command = SlashCommandId::Name},
         {.spelling = "trust", .command = SlashCommandId::Trust},
+        {.spelling = "mcp", .command = SlashCommandId::Mcp},
 }};
 
 [[nodiscard]] bool is_ascii_space(char value) noexcept {

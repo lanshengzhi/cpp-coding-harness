@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/mcp/McpTransport.hpp>
+#include <cch/mcp/UpstreamAuth.hpp>
 #include <cch/mcp/UpstreamServer.hpp>
 #include <cch/mcp/UpstreamToolCall.hpp>
 #include <cch/support/AsyncResult.hpp>
@@ -70,6 +71,17 @@ struct UpstreamConnectionOptions {
     /// deadline; a larger value is capped, never honored, because the cap is
     /// containment rather than tuning.
     std::chrono::milliseconds request_timeout{std::chrono::seconds{30}};
+    /// The *name* of the environment variable a `bearer-env:<VAR>` reference
+    /// in `settings.json` declared (issue #835, #838), and the store the
+    /// resolved bearer is persisted under and, when the variable is unset,
+    /// read back from. Both are handed to every `UpstreamClient` this
+    /// connection builds, so a reconnect authenticates exactly as the first
+    /// attempt did. `std::nullopt` means the server declares no credential
+    /// and every request authenticates nothing; a declared reference with no
+    /// `credentials` is a connection failure, never an unauthenticated
+    /// request.
+    std::optional<std::string> bearer_env_var{std::nullopt};
+    std::shared_ptr<UpstreamCredentialStore> credentials{nullptr};
     /// Optional status surface. Absent, the connection keeps its state and
     /// publishes nothing.
     std::optional<UpstreamStatusSink> status_sink{};

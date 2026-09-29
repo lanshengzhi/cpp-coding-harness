@@ -6,6 +6,8 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
+#include <cch/mcp/McpTransport.hpp>
+#include <cch/mcp/UpstreamConnection.hpp>
 #include "coding_agent/SessionTarget.hpp"
 
 #include <cstddef>
@@ -149,6 +151,18 @@ struct AgentSessionCreationRequest {
     /// creates and wires the holder); focused tests capture it to assert the
     /// session refreshes the facts as the model and thinking level change.
     std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
+    /// Private test seam (issue #841): the transport every Upstream MCP
+    /// Server connection in this session uses. Production callers never set
+    /// it — SessionFactory builds the Streamable HTTP transport — and a test
+    /// injects `tests::ScriptedMcpTransport` to observe exactly the requests
+    /// the session made. It is the MCP Host's one transport seam, not a new
+    /// one (ADR 0065).
+    std::shared_ptr<cch::mcp::McpTransport> mcp_transport;
+    /// Private test seam (issue #841): the Upstream connections' timer.
+    /// Production callers never set it — SessionFactory supplies the Runtime
+    /// timer — and a test injects `tests::ScriptedMcpDelay` so the bounded
+    /// reconnect ladder and the cleanup bound run without a wall clock.
+    cch::mcp::UpstreamDelay mcp_delay;
 };
 
 } // namespace cch::coding_agent::runtime

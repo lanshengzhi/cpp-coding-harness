@@ -131,6 +131,14 @@ void InteractiveEngine::handle_session_command() {
     tui_.invalidate();
 }
 
+void InteractiveEngine::handle_mcp_command() {
+    // The overview is read at the moment the user asks for it, so it shows
+    // what the connection machinery has published so far: a server that
+    // connects while the block is on screen shows up on the next `/mcp`.
+    view_->append_frontend_message(format_mcp_status(session_->mcp_upstream_status()));
+    tui_.invalidate();
+}
+
 bool InteractiveEngine::write_clipboard_text_sink(std::string text) {
     auto result = deliver_action(
         action_generation_,
@@ -313,6 +321,14 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(
         }
         handle_session_command();
         return {};
+    case SlashCommandId::Mcp:
+        if (session_ == nullptr) {
+            return std::unexpected(support::make_error(
+                support::ErrorCode::Session,
+                "No active session for /mcp"));
+        }
+        handle_mcp_command();
+        return {};
     case SlashCommandId::Hotkeys:
         open_hotkeys();
         return {};
@@ -423,6 +439,7 @@ void InteractiveEngine::dispatch_modal_slash_command(SlashCommandInvocation invo
     case SlashCommandId::Settings:
     case SlashCommandId::Help:
     case SlashCommandId::Name:
+    case SlashCommandId::Mcp:
         show_error(
             "Immediate slash command was routed as a modal command");
         return;

@@ -1,6 +1,7 @@
 #include "SlashCommandEffects.hpp"
 
 #include "coding_agent/AgentSession.hpp"
+#include <cch/coding_agent/McpUpstreamStatus.hpp>
 #include "coding_agent/tui/KeybindingsManager.hpp"
 
 #include <cch/tui/Keybindings.hpp>
@@ -41,6 +42,35 @@ std::string format_session_info(const coding_agent::AgentSession& session) {
     info += std::format("Output: {}\n", stats.output_tokens);
     info += std::format("Total: {}\n", prompt_tokens + stats.output_tokens);
     return info;
+}
+
+std::string format_mcp_status(std::span<const McpUpstreamStatus> upstreams) {
+    if (upstreams.empty()) {
+        return "No Upstream MCP Servers are configured.\n";
+    }
+    std::string text = "Upstream MCP Servers\n";
+    for (const auto& upstream : upstreams) {
+        // The state is the row's own vocabulary, not a derived one: a server
+        // is shown in exactly one of the five states the glossary names, and
+        // the reconnect detail is what makes a flapping server readable
+        // rather than a bare "failed".
+        text += std::format("{}: {}", upstream.server_id, to_string(upstream.state));
+        if (upstream.consecutive_failures > 0 && upstream.next_reconnect_delay.count() > 0) {
+            // The ladder's length is the connection machinery's own bound,
+            // which this formatter deliberately does not restate: it reports
+            // what the connection published — how many failures so far and
+            // how long until the next attempt.
+            text += std::format(
+                    " ({} failure(s), next attempt in {}ms)",
+                    upstream.consecutive_failures,
+                    upstream.next_reconnect_delay.count());
+        }
+        text += "\n";
+        if (!upstream.status_message.empty()) {
+            text += std::format("  {}\n", upstream.status_message);
+        }
+    }
+    return text;
 }
 
 std::string format_hotkeys_text(std::span<const HotkeyHelpRow> rows) {

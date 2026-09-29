@@ -34,6 +34,10 @@ const std::vector<BuiltinSlashCommand>& builtin_slash_commands() {
             {"reload", "Reload keybindings, skills, prompts, themes, and context files", {}},
             // pi "/quit": `Quit ${APP_NAME}` with the C++ binary's own identity.
             {"quit", "Quit pike", {}},
+            // Pike's own entry (no pi counterpart, spec #833 story 8): the
+            // Upstream Connection Status overview, taken from the session's
+            // projection rather than from the MCP Host package (ADR 0065).
+            {"mcp", "Show Upstream MCP Server status", {}},
     };
     return kCommands;
 }

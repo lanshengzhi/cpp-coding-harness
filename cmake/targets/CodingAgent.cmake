@@ -24,6 +24,7 @@ cch_parity_declare_target(
         src/coding_agent/ImageInput.cpp
         src/coding_agent/McpCredentialStore.cpp
         src/coding_agent/McpServerTrust.cpp
+        src/coding_agent/McpUpstreamStatus.cpp
         src/coding_agent/ModelConfig.cpp
         src/coding_agent/ModelResolver.cpp
         src/coding_agent/ModelRuntime.cpp
@@ -46,6 +47,7 @@ cch_parity_declare_target(
         src/coding_agent/prompt/SystemPromptBuilder.cpp
         src/coding_agent/runtime/AuthGuidanceStream.cpp
         src/coding_agent/runtime/LocalUserShell.cpp
+        src/coding_agent/runtime/McpSessionHost.cpp
         src/coding_agent/runtime/SessionEventCommitment.cpp
         src/coding_agent/runtime/SessionFactory.cpp
         src/coding_agent/runtime/SessionFork.cpp

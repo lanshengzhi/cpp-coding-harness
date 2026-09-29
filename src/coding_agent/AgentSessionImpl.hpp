@@ -13,6 +13,8 @@
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 
 #include <cch/agent/Agent.hpp>
+#include <cch/coding_agent/McpServerTrust.hpp>
+#include <cch/coding_agent/McpUpstreamStatus.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/SessionPersistence.hpp"
@@ -313,6 +315,21 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// pi `getSessionStats` subset: per-role message counts and usage/token
     /// totals for the `/session` command.
     [[nodiscard]] runtime::SessionStats session_stats() const;
+
+    /// Upstream Connection Status for every configured Upstream MCP Server
+    /// (issue #841), in `mcpServers` order. The whole read model `/mcp`
+    /// renders; empty for a session with no configured server.
+    [[nodiscard]] std::vector<McpUpstreamStatus> mcp_upstream_status() const;
+    /// The configured servers still awaiting the user's first-enable consent.
+    [[nodiscard]] std::vector<McpServerTrustPromptRequest> pending_mcp_server_trust_requests() const;
+    /// Ask one server's first-enable prompt; an accepted answer enables and
+    /// connects that server, which is the only way a first upstream request
+    /// can happen after startup.
+    [[nodiscard]] support::AsyncResult<McpServerTrustResolution> ask_mcp_server_trust(
+            std::string_view server_id, std::stop_token stop_token = {});
+    /// Request the MCP Host's deterministic two-phase close (ADR 0011) as
+    /// part of session close.
+    void request_mcp_host_close() noexcept;
     [[nodiscard]] const std::string& session_id() const { return session_.metadata.session_id; }
     [[nodiscard]] const std::string& provider() const { return session_.metadata.provider; }
     [[nodiscard]] const std::string& model() const { return session_.metadata.model; }

@@ -6,6 +6,7 @@
 #include <cch/agent/harness/FileSystem.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
 #include "coding_agent/runtime/AsyncUserShell.hpp"
+#include "coding_agent/runtime/McpSessionHost.hpp"
 
 #include <filesystem>
 #include <memory>
@@ -56,6 +57,10 @@ struct RuntimeServices {
     /// the model and thinking level change; null only when the model Bash
     /// Tool is absent or env-exposure-disabled.
     std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
+    /// The session's MCP Host wiring (issue #841): the trust-gated set of
+    /// Upstream MCP Server connections this session owns, closed with the
+    /// session. Null for a session with no configured `mcpServers`.
+    std::shared_ptr<McpSessionHost> mcp_host;
     agent::ToolRegistry tools;
 };
 

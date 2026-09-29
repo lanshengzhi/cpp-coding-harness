@@ -817,6 +817,11 @@ void AgentSession::Impl::close() noexcept {
     if (reload_active_) {
         (void)reload_stop_source_.request_stop();
     }
+    // No Upstream MCP Server socket or reconnect timer outlives the session
+    // (spec #833 story 10): the MCP Host's two-phase close is requested with
+    // the rest of the session's cancellation, before any resource is
+    // released below.
+    request_mcp_host_close();
     if (!prompt_active_ && !user_bash_active_ && !compaction_active_ && !reload_active_) {
         finalize_close();
     }
@@ -834,6 +839,7 @@ std::shared_ptr<harness::AsyncFileSystem> AgentSession::Impl::release_close_reso
     skills_.clear();
     templates_.clear();
     session_.store.reset();
+    services_.mcp_host.reset();
     services_.user_shell.reset();
     if (services_.model_runtime_owned) {
         services_.model_runtime.reset();

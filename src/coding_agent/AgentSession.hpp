@@ -9,6 +9,8 @@
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
+#include <cch/coding_agent/McpServerTrust.hpp>
+#include <cch/coding_agent/McpUpstreamStatus.hpp>
 #include <cch/coding_agent/ProjectionStream.hpp>
 #include <cch/coding_agent/ModelResolver.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
@@ -523,6 +525,28 @@ public:
     /// totals for the `/session` command (persisted sessions aggregate over
     /// the file's entries so compacted-away history still counts, like pi).
     [[nodiscard]] runtime::SessionStats session_stats() const;
+
+    // ── MCP Host (issue #841) ────────────────────────────────────────────
+    //
+    // The session's only surface on the Upstream MCP Host (ADR 0065): the
+    // frontend reads Upstream Connection Status from this projection and
+    // never from the MCP package itself.
+
+    /// One row per configured Upstream MCP Server, in `mcpServers` order,
+    /// each in exactly one of the five Upstream Connection Status states.
+    /// Empty for a session with no configured server.
+    [[nodiscard]] std::vector<McpUpstreamStatus> mcp_upstream_status() const;
+
+    /// The configured servers still awaiting the user's first-enable
+    /// consent. A server listed here has made no upstream request.
+    [[nodiscard]] std::vector<McpServerTrustPromptRequest> pending_mcp_server_trust_requests() const;
+
+    /// Ask one server's first-enable prompt and record the answer. An
+    /// accepted answer enables and connects that server; a declined, a
+    /// dismissed, and an unanswerable one leave it disabled. The returned
+    /// operation must not outlive the session.
+    [[nodiscard]] support::AsyncResult<McpServerTrustResolution> ask_mcp_server_trust(
+            std::string_view server_id, std::stop_token stop_token = {});
 
     /// Session identifier.
     [[nodiscard]] const std::string& session_id() const;

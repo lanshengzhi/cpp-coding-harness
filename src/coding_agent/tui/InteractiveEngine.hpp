@@ -275,6 +275,10 @@ private:
 
     /// pi `handleSessionCommand`: render the Session Info chat block.
     void handle_session_command();
+
+    /// `/mcp`: the per-server Upstream Connection Status overview rendered as
+    /// one read-only chat block (issue #841).
+    void handle_mcp_command();
     /// pi `handleNameCommand`: `/name <name>` sanitizes and persists the
     /// `session_info` entry and reports pi's statuses; a bare `/name` shows
     /// the current name or the usage warning.

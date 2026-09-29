@@ -326,11 +326,33 @@ BoostBeastStreamableHttpTransport::BoostBeastStreamableHttpTransport(
         boost::asio::any_io_executor executor, StreamableHttpTransportOptions options)
     : executor_(std::move(executor)), options_(std::move(options)) {}
 
+BoostBeastStreamableHttpTransport::BoostBeastStreamableHttpTransport(StreamableHttpTransportOptions options)
+    : options_(std::move(options)) {}
+
 AsyncResult<McpResponse> BoostBeastStreamableHttpTransport::send(McpRequest request) {
+    if (!executor_.has_value()) {
+        // A late-bound transport takes the domain of the exchange that
+        // initiates it (the `McpTransport` executor contract), and keeps it:
+        // one connection's operations share one serialized executor.
+        executor_ = support::detail::t_initiating_executor;
+    }
+    if (!executor_.has_value() || !*executor_) {
+        return AsyncResult<McpResponse>(std::unexpected(make_error(ErrorCode::Busy,
+                "the MCP Streamable HTTP transport was not driven from a serialized execution domain",
+                "an unbound transport needs a caller that initiates its exchanges on one domain")));
+    }
     return support::detail::make_async_result_on(
-            executor_, [request = std::move(request), options = options_]() -> asio::awaitable<Expected<McpResponse>> {
+            *executor_, [request = std::move(request), options = options_]() -> asio::awaitable<Expected<McpResponse>> {
                 co_return co_await run_exchange(std::move(request), options);
             });
 }
 
 } // namespace cch::mcp::transport
+
+namespace cch::mcp {
+
+std::shared_ptr<McpTransport> make_streamable_http_transport() {
+    return std::make_shared<transport::BoostBeastStreamableHttpTransport>(transport::StreamableHttpTransportOptions{});
+}
+
+} // namespace cch::mcp

@@ -211,8 +211,14 @@ struct UpstreamConnection::Impl : std::enable_shared_from_this<UpstreamConnectio
         if (fresh_budget) {
             consecutive_failures = 0;
         }
-        client.emplace(
-                server_id, transport, UpstreamClientOptions{.url = options.url, .request_timeout = request_timeout});
+        client.emplace(server_id,
+                transport,
+                UpstreamClientOptions{
+                        .url = options.url,
+                        .request_timeout = request_timeout,
+                        .bearer_env_var = options.bearer_env_var,
+                        .credentials = options.credentials,
+                });
         report(); // an attempt started: the reading is `pending` even when it was before
         return client->probe_era(token);
     }

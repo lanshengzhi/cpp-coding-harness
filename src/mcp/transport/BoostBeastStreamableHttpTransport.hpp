@@ -50,6 +50,18 @@ public:
     explicit BoostBeastStreamableHttpTransport(
             boost::asio::any_io_executor executor, StreamableHttpTransportOptions options = {});
 
+    /// Bind to the serialized execution domain of the first exchange instead
+    /// of naming it here. The `McpTransport` contract already says the
+    /// transport is driven by the caller's execution domain, so this is the
+    /// construction an Owner that may not name an Asio type takes (ADR
+    /// 0065): the domain is the one that initiates the first exchange, and
+    /// every later exchange on the same transport reuses it, which is the
+    /// "one connection's operations on one serialized executor" rule the seam
+    /// already states. A transport that has never been bound and is handed a
+    /// request outside any serialized domain fails the exchange instead of
+    /// guessing one.
+    explicit BoostBeastStreamableHttpTransport(StreamableHttpTransportOptions options);
+
     /// One POST of the framed JSON-RPC request, answered either as a whole
     /// response body or as a `text/event-stream` whose frames are assembled
     /// into that body. The request's `timeout` bounds connection setup,
@@ -60,7 +72,10 @@ public:
     [[nodiscard]] cch::support::AsyncResult<McpResponse> send(McpRequest request) override;
 
 private:
-    boost::asio::any_io_executor executor_;
+    /// The domain this transport's exchanges run on: bound at construction,
+    /// or by the first exchange for a late-bound transport and reused by
+    /// every exchange after it.
+    std::optional<boost::asio::any_io_executor> executor_{};
     StreamableHttpTransportOptions options_;
 };
 

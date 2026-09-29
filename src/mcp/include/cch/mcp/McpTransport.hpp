@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <map>
+#include <memory>
 #include <stop_token>
 #include <string>
 
@@ -58,5 +59,18 @@ public:
 
     [[nodiscard]] virtual cch::support::AsyncResult<McpResponse> send(McpRequest request) = 0;
 };
+
+/// The MCP Host's production transport — Streamable HTTP over TLS — for the
+/// owners that may not name an Asio type (ADR 0065). The returned transport
+/// binds to the serialized execution domain that drives its first exchange
+/// and reuses it afterwards, which is exactly the `McpTransport` executor
+/// contract; no test seam is added, because tests inject a `McpTransport`
+/// implementation directly (`tests/support/ScriptedMcpTransport.hpp`) and
+/// this factory is the production answer only.
+///
+/// The transport is stateless between exchanges (ADR 0064: the 2026-07-28
+/// revision has no `Mcp-Session-Id` and no SSE resumability), so one instance
+/// serves every configured Upstream MCP Server in a session.
+[[nodiscard]] std::shared_ptr<McpTransport> make_streamable_http_transport();
 
 } // namespace cch::mcp

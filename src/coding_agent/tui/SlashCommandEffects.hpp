@@ -9,6 +9,7 @@
 // Repository-private `cch_coding_agent` implementation header: not part of
 // an Owner Interface, not installed, never exported.
 
+#include <cch/coding_agent/McpUpstreamStatus.hpp>
 #include <span>
 #include <string>
 #include <string_view>
@@ -37,7 +38,19 @@ inline constexpr std::string_view kHelpCommandText =
     "Available commands:\n"
     "/clear /new /quit /exit /q /copy /session /hotkeys /settings\n"
     "/help /commands /name /model /models /scoped-models /thinking\n"
-    "/login /logout /resume /fork /tree /reload /compact /trust";
+    "/login /logout /resume /fork /tree /reload /compact /trust /mcp";
+
+/// `/mcp`: the Upstream Connection Status overview (issue #841, spec #833
+/// story 8). One row per configured Server Id, in `mcpServers` order, each
+/// in exactly one of the five states, with the connection's own bounded and
+/// redacted diagnostic under a failure or an authentication challenge and
+/// the bounded reconnect ladder under a flapping server.
+///
+/// The formatter consumes the session's projection, never an `cch_mcp` type:
+/// the frontends reach the MCP Host only through `cch_coding_agent`
+/// (ADR 0065). A session with no configured server renders the empty-state
+/// line rather than an empty block.
+[[nodiscard]] std::string format_mcp_status(std::span<const coding_agent::McpUpstreamStatus> upstreams);
 
 /// pi `handleHotkeysCommand`: the Keyboard Shortcuts chat block over the
 /// effective registry. Navigation/Editing/Other rows come from registry

@@ -16,6 +16,7 @@ struct BuiltinSlashCommand {
 
 /// The app layer's Supported built-in slash commands for autocomplete: the
 /// 18 Supported entries of pi's 24-command `BUILTIN_SLASH_COMMANDS` catalog
+/// plus Pike's own `/mcp` (issue #841),
 /// (`pi:packages/coding-agent/src/core/slash-commands.ts` at `f07218c4`; it
 /// held 22 entries at the `83114817` baseline ADR 0036 G4 recorded, and
 /// gained `thinking` — ported here in #791 — and `bug` since) with pi's

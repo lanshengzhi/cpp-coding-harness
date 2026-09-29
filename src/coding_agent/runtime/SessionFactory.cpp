@@ -3,6 +3,7 @@
 #include <cch/agent/AgentContext.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AuthGuidance.hpp>
+#include <cch/coding_agent/AuthStorage.hpp>
 #include <cch/coding_agent/ModelResolver.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
@@ -15,12 +16,14 @@
 #include "agent/harness/RuntimeRoot.hpp"
 #include <cch/support/Error.hpp>
 #include "support/AsyncResultBridge.hpp"
+#include "coding_agent/McpCredentialStore.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/SessionCwd.hpp"
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/LocalUserShell.hpp"
+#include "coding_agent/runtime/McpSessionHost.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
@@ -195,6 +198,11 @@ struct AssemblyPlan {
     /// Private test seam: the shared live PI_* facts holder wired into the
     /// model Bash Tool (live-refresh tests).
     std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
+    /// Private test seam (issue #841): the transport and the timer the
+    /// session's Upstream MCP Server connections run on. Production passes
+    /// neither and gets the Streamable HTTP transport on the Runtime timer.
+    std::shared_ptr<mcp::McpTransport> mcp_transport;
+    mcp::UpstreamDelay mcp_delay;
     std::vector<std::string> prompt_template_paths;
     std::vector<std::string> skill_paths;
     std::optional<DefaultProjectTrust> default_project_trust;
@@ -796,6 +804,8 @@ struct SessionTargetNormalizationOptions {
     if (plan.model_runtime) {
         plan.model_runtime_owned = false;
     }
+    plan.mcp_transport = std::move(request.mcp_transport);
+    plan.mcp_delay = std::move(request.mcp_delay);
     plan.cli_selection = AssemblyPlan::CliModelSelection{
             .provider = std::move(request.session_facts.provider),
             .model = std::move(request.session_facts.model),
@@ -1563,6 +1573,33 @@ struct PreparedAssemblyTarget final {
         }
     }
 
+    // 8b. Wire the MCP Host (issue #841): every configured Upstream MCP
+    // Server the trust gate enables is connected here, on the session's own
+    // serialized Runtime domain, and none of them is awaited. A slow or dead
+    // server therefore cannot delay the prompt below, which is the whole of
+    // spec #833 story 7. A server the gate does not enable is not connected
+    // at all: `enabled_server_ids()` is the entire enable surface, so an
+    // undecided, declined, or unaskable server makes no upstream request by
+    // construction rather than by a check somebody can forget.
+    //
+    // The credential store is the same `auth.json` the Models Runtime holds,
+    // reached through a second handle: `AuthStorage` serializes every write
+    // through the store's own whole-file lock, so the `mcp.<server-id>`
+    // namespace (#838) is written by the same discipline as a provider
+    // credential and neither handle can observe a partial write.
+    std::shared_ptr<McpSessionHost> mcp_host;
+    if (plan.execution_runtime_target && !snapshot.manager.mcp_servers().empty()) {
+        McpSessionHostOptions mcp_options;
+        mcp_options.servers = snapshot.manager.mcp_servers();
+        mcp_options.trust_store_path = coding_agent::mcp_server_trust_file_path();
+        mcp_options.credentials = std::make_shared<coding_agent::McpCredentialStore>(
+                std::make_shared<coding_agent::AuthStorage>(runtime->agent_dir() / "auth.json"));
+        mcp_options.executor = plan.execution_runtime_target->executor();
+        mcp_options.transport = std::move(plan.mcp_transport);
+        mcp_options.delay = std::move(plan.mcp_delay);
+        mcp_host = McpSessionHost::start(std::move(mcp_options));
+    }
+
     // pi buildSessionOptions/main.ts: an explicit `--thinking` overrides a
     // `:thinking` suffix on `--model`; either overrides resumed, branch, scoped,
     // and settings defaults. The Agent clamps the request at construction
@@ -1758,6 +1795,7 @@ struct PreparedAssemblyTarget final {
             });
     }
     services.bash_session_environment = std::move(bash_session_environment);
+    services.mcp_host = std::move(mcp_host);
     services.tools = std::move(tools);
 
     const auto session_path = open.store->path();

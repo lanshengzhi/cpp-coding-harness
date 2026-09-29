@@ -506,6 +506,23 @@ runtime::SessionStats AgentSession::session_stats() const {
     return impl_ ? impl_->session_stats() : runtime::SessionStats{};
 }
 
+std::vector<McpUpstreamStatus> AgentSession::mcp_upstream_status() const {
+    return impl_ ? impl_->mcp_upstream_status() : std::vector<McpUpstreamStatus>{};
+}
+
+std::vector<McpServerTrustPromptRequest> AgentSession::pending_mcp_server_trust_requests() const {
+    return impl_ ? impl_->pending_mcp_server_trust_requests() : std::vector<McpServerTrustPromptRequest>{};
+}
+
+support::AsyncResult<McpServerTrustResolution> AgentSession::ask_mcp_server_trust(
+        std::string_view server_id, std::stop_token stop_token) {
+    if (impl_ == nullptr) {
+        return support::AsyncResult<McpServerTrustResolution>(std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "this session has no configured MCP Host")));
+    }
+    return impl_->ask_mcp_server_trust(server_id, stop_token);
+}
+
 const std::string& AgentSession::session_id() const {
     static const std::string empty;
     return impl_ ? impl_->session_id() : empty;

@@ -15,6 +15,7 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
+#include "coding_agent/runtime/McpSessionHost.hpp"
 #include "coding_agent/runtime/UserBashOutputAccumulator.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -1430,6 +1431,42 @@ support::Expected<std::optional<std::string>> AgentSession::Impl::set_session_na
     }
     update_projection();
     return sanitized;
+}
+
+std::vector<McpUpstreamStatus> AgentSession::Impl::mcp_upstream_status() const {
+    if (services_.mcp_host == nullptr) {
+        return {};
+    }
+    return services_.mcp_host->upstream_status();
+}
+
+std::vector<McpServerTrustPromptRequest> AgentSession::Impl::pending_mcp_server_trust_requests() const {
+    if (services_.mcp_host == nullptr) {
+        return {};
+    }
+    return services_.mcp_host->pending_trust_requests();
+}
+
+support::AsyncResult<McpServerTrustResolution> AgentSession::Impl::ask_mcp_server_trust(
+        std::string_view server_id, std::stop_token stop_token) {
+    if (services_.mcp_host == nullptr) {
+        return support::AsyncResult<McpServerTrustResolution>(std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "this session has no configured MCP Host")));
+    }
+    return services_.mcp_host->ask_trust(server_id, stop_token);
+}
+
+void AgentSession::Impl::request_mcp_host_close() noexcept {
+    if (services_.mcp_host == nullptr) {
+        return;
+    }
+    // Session close is a synchronous request, not an await (ADR 0011): the
+    // two-phase close is started here and completes on the Runtime loop
+    // within the connection cleanup bound. Its outcome is deliberately not
+    // awaited by Close, which has no terminal channel for it; the connection
+    // machinery still reports an abandoned operation to whoever awaits the
+    // host's own `close()`.
+    services_.mcp_host->close().start([](std::expected<void, support::Error>) noexcept {});
 }
 
 runtime::SessionStats AgentSession::Impl::session_stats() const {
