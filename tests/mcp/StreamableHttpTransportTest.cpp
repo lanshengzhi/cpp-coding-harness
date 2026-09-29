@@ -540,6 +540,13 @@ TEST_CASE("the Streamable HTTP transport stops an in-flight exchange when the ca
             trusted_transport(io),
             mcp::UpstreamClientOptions{.url = server.url(), .request_timeout = kExchangeBound});
 
+    // The era is probed before the case starts, so the cancellation below
+    // lands on the `tools/call` exchange the case is about rather than on
+    // whichever of the two the local server happened to be slower on.
+    auto catalog = drive_on(io, client.list_tools());
+    REQUIRE(catalog.has_value());
+    const auto probes = server.requests().size();
+
     std::stop_source cancelled;
     auto pending = client.call_tool(
             mcp::UpstreamToolCall{
@@ -565,8 +572,9 @@ TEST_CASE("the Streamable HTTP transport stops an in-flight exchange when the ca
     REQUIRE_FALSE(outcome.has_value());
     CHECK(outcome.error().code == support::ErrorCode::Cancelled);
     // Cancellation is the caller's decision, so it is never re-attempted: the
-    // Upstream saw the request exactly once.
-    CHECK(server.requests().size() == 2);
+    // Upstream saw the request exactly once, on top of the era probe and the
+    // catalog walk the case had already made.
+    CHECK(server.requests().size() == probes + 1);
 }
 
 TEST_CASE("the MCP retry policy re-attempts only a request that was never delivered",
