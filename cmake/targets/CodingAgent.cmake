@@ -22,6 +22,7 @@ cch_parity_declare_target(
         src/coding_agent/compat/pi/PiImport.cpp
         src/coding_agent/GitIgnoreMatcher.cpp
         src/coding_agent/ImageInput.cpp
+        src/coding_agent/McpServerTrust.cpp
         src/coding_agent/ModelConfig.cpp
         src/coding_agent/ModelResolver.cpp
         src/coding_agent/ModelRuntime.cpp
@@ -37,6 +38,7 @@ cch_parity_declare_target(
         src/coding_agent/SkillFormatting.cpp
         src/coding_agent/SkillFrontmatterParser.cpp
         src/coding_agent/SkillLoader.cpp
+        src/coding_agent/TrustStoreFile.cpp
         src/coding_agent/prompt/BuiltinSlashCommands.cpp
         src/coding_agent/prompt/PromptExpansion.cpp
         src/coding_agent/prompt/PromptTemplateExpander.cpp
