@@ -87,6 +87,12 @@ struct UserMcpServerSettings {
     }
 };
 
+/// Whether `server_id` is a well-formed Server Id: non-empty, at most 48
+/// characters, and drawn from `[A-Za-z0-9_-]` (spec #833 naming decision).
+/// `mcpServers` validation applies it to every configured entry, and the
+/// Upstream MCP Server trust store applies it to every key it persists.
+[[nodiscard]] bool is_valid_mcp_server_id(std::string_view server_id);
+
 /// User settings following pi's two-scope `settings.json` contract (ADR 0031).
 /// All fields are optional — CLI flags and built-in defaults fill any gaps.
 /// Settings never carry secrets: credential material enters configuration only

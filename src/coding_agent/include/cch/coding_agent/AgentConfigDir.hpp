@@ -45,4 +45,10 @@ namespace cch::coding_agent {
 /// (pi: `ProjectTrustStore` rooted at the agent config directory).
 [[nodiscard]] std::filesystem::path trust_store_file_path();
 
+/// `agent_config_dir()/mcp-trust.json` — persisted first-enable trust
+/// decisions for configured Upstream MCP Servers, keyed by Server Id. It is a
+/// separate file from `trust.json` so the pi-shaped project-trust map keeps
+/// its flat path-to-boolean meaning (issue #840).
+[[nodiscard]] std::filesystem::path mcp_server_trust_file_path();
+
 } // namespace cch::coding_agent

@@ -180,18 +180,6 @@ void migrate_settings(JsonObject& settings) {
            (character >= '0' && character <= '9') || character == '_' || character == '-';
 }
 
-[[nodiscard]] bool is_valid_mcp_server_id(std::string_view server_id) {
-    if (server_id.empty() || server_id.size() > kMcpServerIdMaxLength) {
-        return false;
-    }
-    for (const auto character : server_id) {
-        if (!is_mcp_server_id_char(character)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 [[nodiscard]] bool is_environment_variable_name(std::string_view name) {
     if (name.empty()) {
         return false;
@@ -847,6 +835,18 @@ private:
 }
 
 } // namespace
+
+bool is_valid_mcp_server_id(std::string_view server_id) {
+    if (server_id.empty() || server_id.size() > kMcpServerIdMaxLength) {
+        return false;
+    }
+    for (const auto character : server_id) {
+        if (!is_mcp_server_id_char(character)) {
+            return false;
+        }
+    }
+    return true;
+}
 
 struct SettingsManager::Impl {
     std::filesystem::path cwd;

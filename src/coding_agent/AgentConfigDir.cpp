@@ -54,4 +54,6 @@ std::filesystem::path trust_store_file_path() {
     return in_agent_config_dir("trust.json");
 }
 
+std::filesystem::path mcp_server_trust_file_path() { return in_agent_config_dir("mcp-trust.json"); }
+
 } // namespace cch::coding_agent

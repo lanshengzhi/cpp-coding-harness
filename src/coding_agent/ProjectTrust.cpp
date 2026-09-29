@@ -1,28 +1,21 @@
 #include <cch/coding_agent/ProjectTrust.hpp>
 
-#include "support/Json.hpp"
+#include "coding_agent/TrustStoreFile.hpp"
 
 #include <algorithm>
-#include <cerrno>
 #include <filesystem>
 #include <format>
-#include <fstream>
 #include <map>
-#include <sstream>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <system_error>
-
-#include <sys/stat.h>
 
 namespace cch::coding_agent {
 namespace {
 
-[[nodiscard]] support::Error trust_error(std::string message, std::string detail = {}) {
-    return support::make_error(
-        support::ErrorCode::Validation,
-        std::move(message),
-        detail.empty() ? message : std::move(detail));
-}
+/// The project-trust store's name in its own file diagnostics.
+constexpr std::string_view kTrustStoreName = "trust store";
 
 [[nodiscard]] std::filesystem::path canonicalize(const std::filesystem::path& path) {
     std::error_code ec;
@@ -37,123 +30,8 @@ namespace {
     return path.lexically_normal();
 }
 
-using TrustMap = std::map<std::string, std::optional<bool>>;
-
-[[nodiscard]] support::Expected<TrustMap> read_trust_map(const std::filesystem::path& path) {
-    TrustMap data;
-    if (path.empty()) {
-        return std::unexpected(trust_error("trust store path is empty"));
-    }
-
-    std::error_code ec;
-    auto status = std::filesystem::symlink_status(path, ec);
-    if (ec) {
-        if (ec.default_error_condition() == std::errc::no_such_file_or_directory ||
-            ec.default_error_condition() == std::errc::not_a_directory) {
-            return data;
-        }
-        return std::unexpected(trust_error("could not inspect trust store", ec.message()));
-    }
-    if (!std::filesystem::exists(status)) {
-        return data;
-    }
-    if (std::filesystem::is_symlink(status)) {
-        return std::unexpected(trust_error("refusing to read symlinked trust store", path.string()));
-    }
-    if (!std::filesystem::is_regular_file(status)) {
-        return std::unexpected(trust_error("trust store is not a regular file", path.string()));
-    }
-
-    struct stat st {};
-    if (::lstat(path.c_str(), &st) == 0) {
-        if ((st.st_mode & S_IWGRP) != 0 || (st.st_mode & S_IWOTH) != 0) {
-            return std::unexpected(trust_error("trust store is writable by group or others", path.string()));
-        }
-    }
-
-    std::ifstream input(path, std::ios::binary);
-    if (!input) {
-        return std::unexpected(trust_error("could not open trust store", path.string()));
-    }
-    std::stringstream buffer;
-    buffer << input.rdbuf();
-    auto parsed = support::read_json(buffer.str());
-    if (!parsed) {
-        return std::unexpected(trust_error("failed to parse trust store", parsed.error().detail));
-    }
-    if (!parsed->holds<support::JsonValue::object_t>()) {
-        return std::unexpected(trust_error("invalid trust store: expected object", path.string()));
-    }
-
-    for (const auto& [key, value] : parsed->get_object()) {
-        if (const auto* flag = value.get_if<bool>()) {
-            data[key] = *flag;
-        } else if (value.holds<support::JsonValue::null_t>()) {
-            data[key] = std::nullopt;
-        } else {
-            return std::unexpected(trust_error("invalid trust store value for path: " + key, path.string()));
-        }
-    }
-    return data;
-}
-
-[[nodiscard]] support::ExpectedVoid write_trust_map(const std::filesystem::path& path, const TrustMap& data) {
-    if (path.empty()) {
-        return std::unexpected(trust_error("trust store path is empty"));
-    }
-    std::error_code ec;
-    auto parent = path.parent_path();
-    if (!parent.empty()) {
-        std::filesystem::create_directories(parent, ec);
-        if (ec) {
-            return std::unexpected(trust_error("could not create trust store directory", ec.message()));
-        }
-        (void)::chmod(parent.c_str(), 0700);
-    }
-
-    auto status = std::filesystem::symlink_status(path, ec);
-    if (!ec && std::filesystem::is_symlink(status)) {
-        return std::unexpected(trust_error("refusing to write symlinked trust store", path.string()));
-    }
-
-    support::JsonValue::object_t object;
-    for (const auto& [key, value] : data) {
-        if (!value.has_value()) {
-            continue;
-        }
-        object.emplace(key, support::JsonValue{*value});
-    }
-    auto serialized = support::write_json(support::JsonValue{std::move(object)});
-    if (!serialized) {
-        return std::unexpected(serialized.error());
-    }
-    serialized->push_back('\n');
-
-    auto tmp = path;
-    tmp += ".tmp";
-    {
-        std::ofstream output(tmp, std::ios::binary | std::ios::trunc);
-        if (!output) {
-            return std::unexpected(trust_error("could not open temporary trust store", tmp.string()));
-        }
-        output << *serialized;
-        if (!output) {
-            return std::unexpected(trust_error("could not write temporary trust store", tmp.string()));
-        }
-    }
-    (void)::chmod(tmp.c_str(), 0600);
-    std::filesystem::rename(tmp, path, ec);
-    if (ec) {
-        std::filesystem::remove(tmp, ec);
-        return std::unexpected(trust_error("could not replace trust store", ec.message()));
-    }
-    (void)::chmod(path.c_str(), 0600);
-    return {};
-}
-
 [[nodiscard]] std::optional<ProjectTrustStoreEntry> find_nearest(
-    const TrustMap& data,
-    const std::filesystem::path& cwd) {
+        const TrustStoreMap& data, const std::filesystem::path& cwd) {
     auto current = canonicalize(cwd);
     while (true) {
         const auto key = current.string();
@@ -178,7 +56,7 @@ ProjectTrustStore::ProjectTrustStore(std::filesystem::path trust_path)
 
 support::Expected<std::optional<ProjectTrustStoreEntry>> ProjectTrustStore::getEntry(
     const std::filesystem::path& cwd) const {
-    auto data = read_trust_map(trust_path_);
+    auto data = read_trust_store_map(trust_path_, kTrustStoreName);
     if (!data) {
         return std::unexpected(data.error());
     }
@@ -186,7 +64,7 @@ support::Expected<std::optional<ProjectTrustStoreEntry>> ProjectTrustStore::getE
 }
 
 support::ExpectedVoid ProjectTrustStore::setMany(const std::vector<ProjectTrustUpdate>& updates) const {
-    auto data = read_trust_map(trust_path_);
+    auto data = read_trust_store_map(trust_path_, kTrustStoreName);
     if (!data) {
         return std::unexpected(data.error());
     }
@@ -198,7 +76,7 @@ support::ExpectedVoid ProjectTrustStore::setMany(const std::vector<ProjectTrustU
             (*data)[key] = update.decision == ProjectTrustDecision::Trusted;
         }
     }
-    return write_trust_map(trust_path_, *data);
+    return write_trust_store_map(trust_path_, *data, kTrustStoreName);
 }
 
 std::string to_string(ProjectTrustDecision decision) {
