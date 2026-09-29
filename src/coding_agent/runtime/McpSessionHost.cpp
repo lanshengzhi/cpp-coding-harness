@@ -225,6 +225,9 @@ struct McpSessionHost::State : std::enable_shared_from_this<McpSessionHost::Stat
         if (connection == nullptr) {
             return;
         }
+        // A connection the user turned off is re-enabled first, and `enable()`
+        // is what attempts it; a connection that was never turned off is
+        // simply attempted.
         if (connection->status() == mcp::UpstreamConnectionStatus::Disabled) {
             connection->enable();
             return;

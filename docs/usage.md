@@ -116,6 +116,7 @@ Project settings in `.pi/settings.json` load only after Project Trust and overri
 | `/copy` | Copy the last agent message. |
 | `/name <name>` | Name the session. |
 | `/session` | Show session information and statistics. |
+| `/mcp` | Show Upstream MCP Server connection status. |
 | `/hotkeys` | Show effective bindings. |
 | `/fork` | Fork at a selected user message. |
 | `/tree` | Navigate the session tree. |
