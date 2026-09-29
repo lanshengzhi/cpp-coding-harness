@@ -47,6 +47,14 @@ struct ScriptedMcpAnswer {
     /// A raw body that replaces the framed answer entirely, for a body the
     /// framing rules must reject.
     std::optional<std::string> raw_body{};
+    /// The `result` value's **source text**, spliced into the framed response
+    /// in place of a serialized value. It exists so a case can put bytes on
+    /// the wire that a value tree could not produce — members in an order a
+    /// `std::map` would sort out, a number a double would reformat — which is
+    /// what makes "the MCP Host echoed the opaque `requestState` byte-for-byte"
+    /// an assertion rather than a tautology (issue #845). The response's `id`
+    /// is still the request's own, so the framing rules apply as usual.
+    std::optional<std::string> raw_result{};
     /// Set to record the request and never answer it, as an Upstream that took
     /// the call and went silent does.
     std::optional<McpHold> hold{};
@@ -298,11 +306,14 @@ private:
         }
         response.body = answer.leading_messages.empty() ? "" : frame(answer.leading_messages);
         const auto id = decoded->id.value_or(0.0);
-        const auto tail =
-                answer.error_code == 0
-                        ? frame(std::vector<support::JsonValue>{mcp::jsonrpc::encode_result(id, answer.result)})
-                        : frame(std::vector<support::JsonValue>{mcp::jsonrpc::encode_error(
-                                  id, answer.error_code, answer.error_message, support::JsonValue{})});
+        const auto tail = answer.error_code == 0
+                                  ? (answer.raw_result.has_value()
+                                                    ? R"({"id":)" + std::to_string(static_cast<long long>(id)) +
+                                                              R"(,"jsonrpc":"2.0","result":)" + *answer.raw_result + "}"
+                                                    : frame(std::vector<support::JsonValue>{
+                                                              mcp::jsonrpc::encode_result(id, answer.result)}))
+                                  : frame(std::vector<support::JsonValue>{mcp::jsonrpc::encode_error(
+                                            id, answer.error_code, answer.error_message, support::JsonValue{})});
         response.body += tail;
         return response;
     }

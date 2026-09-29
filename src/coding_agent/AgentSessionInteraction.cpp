@@ -1463,7 +1463,29 @@ support::AsyncResult<McpServerTrustResolution> AgentSession::Impl::ask_mcp_serve
     return services_.mcp_host->ask_trust(server_id, stop_token);
 }
 
+std::vector<McpPendingElicitation> AgentSession::Impl::pending_mcp_elicitations() const {
+    if (services_.mcp_elicitation_bridge == nullptr) {
+        return {};
+    }
+    return services_.mcp_elicitation_bridge->pending();
+}
+
+support::ExpectedVoid AgentSession::Impl::answer_mcp_elicitation(McpElicitationAnswer answer) {
+    if (services_.mcp_elicitation_bridge == nullptr) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Session, "this session has no Pending Elicitation surface"));
+    }
+    return services_.mcp_elicitation_bridge->answer(std::move(answer));
+}
+
 void AgentSession::Impl::request_mcp_host_close() noexcept {
+    // Every question this session is blocked on ends as cancelled before the
+    // host closes, so session Close leaves no waiter and no suspended call
+    // behind it: a dialog whose session is gone must not be able to answer a
+    // call that is being torn down.
+    if (services_.mcp_elicitation_bridge != nullptr) {
+        services_.mcp_elicitation_bridge->close();
+    }
     if (services_.mcp_host == nullptr) {
         return;
     }

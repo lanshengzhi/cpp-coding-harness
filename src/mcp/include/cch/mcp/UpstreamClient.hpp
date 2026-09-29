@@ -2,6 +2,7 @@
 
 #include <cch/mcp/McpTransport.hpp>
 #include <cch/mcp/UpstreamAuth.hpp>
+#include <cch/mcp/UpstreamElicitation.hpp>
 #include <cch/mcp/UpstreamServer.hpp>
 #include <cch/mcp/UpstreamToolCall.hpp>
 #include <cch/support/AsyncResult.hpp>
@@ -33,6 +34,14 @@ struct UpstreamClientOptions {
     /// `bearer_env_var` is declared: a declared credential with no store is a
     /// connection failure, never an unauthenticated request.
     std::shared_ptr<UpstreamCredentialStore> credentials{nullptr};
+    /// How a `tools/call` this client issues asks the user a Pending
+    /// Elicitation question (issue #845). Null is a client with no user to
+    /// ask, and an `input_required` result then fails exactly one tool call —
+    /// the behaviour issue #836 shipped before the loop existed, kept as the
+    /// default so a caller that has not wired the port degrades rather than
+    /// hangs. Shared rather than owned so a reconnect re-asks through the same
+    /// port; a port holds no per-call state, only the seam.
+    std::shared_ptr<UpstreamElicitationPort> elicitation{nullptr};
 };
 
 /// The MCP Host's client stack for one Upstream MCP Server: the era probe, the
@@ -89,6 +98,18 @@ public:
     /// reading and makes the Upstream stop the work behind it: the call
     /// completes as `Cancelled` and one `notifications/cancelled` is written
     /// for this call's request id (ADR 0020, spec #833 story 30).
+    ///
+    /// A result the Upstream suspends for client input runs the Multi
+    /// Round-Trip loop when an elicitation port is configured: the operation
+    /// stays pending while the user answers, then the **original** `name` and
+    /// `arguments` are re-sent under a **new** JSON-RPC id together with the
+    /// opaque `requestState` echoed verbatim and the user's answer. Without a
+    /// port the suspension fails one call, which is the defensive matrix.
+    ///
+    /// A stopped wait inside the Multi Round-Trip loop is the same stop: the
+    /// pending question is withdrawn from the port, the call completes as
+    /// `Cancelled`, and **nothing is re-sent** — the user never answered, so
+    /// nothing goes out in their name.
     [[nodiscard]] cch::support::AsyncResult<UpstreamToolCallResult> call_tool(
             UpstreamToolCall call,
             std::stop_token stop_token = {},

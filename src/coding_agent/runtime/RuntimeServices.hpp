@@ -7,6 +7,7 @@
 #include <cch/agent/tools/ToolFactories.hpp>
 #include <cch/coding_agent/McpToolApproval.hpp>
 #include "coding_agent/runtime/AsyncUserShell.hpp"
+#include "coding_agent/runtime/McpElicitationBridge.hpp"
 #include "coding_agent/runtime/McpSessionHost.hpp"
 #include "coding_agent/runtime/McpToolBinding.hpp"
 
@@ -74,6 +75,11 @@ struct RuntimeServices {
     /// before such a call runs. Empty for a non-interactive session, where the
     /// policy refuses the call instead of running it unasked.
     coding_agent::McpToolApprovalPrompter mcp_tool_approval_prompter;
+    /// The session's Pending Elicitation broker (issue #845): the value the
+    /// MCP Host asks through and the frontend answers through, closed with
+    /// the session so no suspended call outlives it. Null for a session with
+    /// no MCP Host.
+    std::shared_ptr<McpElicitationBridge> mcp_elicitation_bridge;
     agent::ToolRegistry tools;
 };
 

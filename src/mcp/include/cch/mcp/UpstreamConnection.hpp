@@ -3,6 +3,8 @@
 #include <cch/mcp/McpTransport.hpp>
 #include <cch/mcp/UpstreamAuth.hpp>
 #include <cch/mcp/UpstreamCatalogCache.hpp>
+#include <cch/mcp/UpstreamDelay.hpp>
+#include <cch/mcp/UpstreamElicitation.hpp>
 #include <cch/mcp/UpstreamServer.hpp>
 #include <cch/mcp/UpstreamToolCall.hpp>
 #include <cch/support/AsyncResult.hpp>
@@ -56,15 +58,6 @@ struct UpstreamConnectionSnapshot {
 /// connection it observes.
 using UpstreamStatusSink = std::move_only_function<void(const UpstreamConnectionSnapshot&)>;
 
-/// One delay on the connection's own timer, supplied by the owner of the
-/// connection's execution domain: `cch_mcp` owns no event loop, and timer
-/// state stays local to the operation that needs it (ADR 0040). The operation
-/// completes when the delay elapses and fails with `Cancelled` when
-/// `stop_token` fires first, so the connection can both wait out the
-/// reconnect ladder and bound its own cleanup.
-using UpstreamDelay = std::move_only_function<cch::support::AsyncResult<void>(
-        std::chrono::milliseconds delay, std::stop_token stop_token)>;
-
 struct UpstreamConnectionOptions {
     /// The Upstream MCP Server's Streamable HTTP endpoint.
     std::string url{};
@@ -96,6 +89,19 @@ struct UpstreamConnectionOptions {
     /// cache existed. It is shared rather than owned so that one instance can
     /// serve every connection of every session the host owns.
     std::shared_ptr<UpstreamCatalogCache> catalog_cache{nullptr};
+    /// How this connection asks the user a Pending Elicitation question
+    /// (issue #845, spec #833 stories 27-29). Null is a session with no user
+    /// to ask — a headless run, or a caller that has not wired the port — and
+    /// an `input_required` result then fails exactly one tool call with a
+    /// diagnostic, which is the defensive-matrix behaviour issue #836
+    /// established before the loop existed. A port that is present but cannot
+    /// ask (a null prompter, or a null timer) is likewise a single failed
+    /// call: a suspended tool call never waits forever.
+    ///
+    /// It is shared rather than owned so that one port serves every connection
+    /// of every session the host owns, and so a reconnect re-asks through the
+    /// same port — a port holds no per-call state, only the seam.
+    std::shared_ptr<UpstreamElicitationPort> elicitation{nullptr};
 };
 
 /// How a two-phase close ended (ADR 0011).
@@ -200,12 +206,21 @@ public:
     /// this call's request id, so the Upstream stops the operation behind the
     /// closed stream rather than running it to its own conclusion (ADR 0020;
     /// spec #833 story 30). The call then completes as one failed tool call and
-    /// never as a connection failure (ADR 0008).
+    /// never as a connection failure (ADR 0008). The same token stops a
+    /// Pending Elicitation wait, so cancelling during a suspended question
+    /// withdraws that question and settles the call with nothing re-sent.
     ///
     /// `progress_sink` receives the Upstream's `notifications/progress` for
     /// this call and nothing else: a notification naming another request, or
     /// one the host no longer has in flight, is dropped rather than delivered
     /// (spec #833 story 31).
+    ///
+    /// A result the Upstream suspends for client input runs the Multi
+    /// Round-Trip loop: the call is held while the user answers, and the
+    /// retried request carries the original `name` and `arguments`, the
+    /// opaque `requestState` echoed verbatim, and a new JSON-RPC id. The wait
+    /// is bounded by the connection's elicitation port and cancellable through
+    /// this call's `stop_token`, which the two-phase close also stops.
     [[nodiscard]] cch::support::AsyncResult<UpstreamToolCallResult> call_tool(UpstreamToolCall call,
             std::stop_token stop_token = {},
             UpstreamProgressSink progress_sink = nullptr);

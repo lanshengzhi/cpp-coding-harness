@@ -183,11 +183,11 @@ struct McpSessionHost::State : std::enable_shared_from_this<McpSessionHost::Stat
                 .url = server.url,
                 .bearer_env_var = server.bearer_env_var,
                 .credentials = options.credentials,
-                .status_sink = [self = shared_from_this()](const mcp::UpstreamConnectionSnapshot& snapshot) {
-                    self->record(snapshot);
-                },
+                .status_sink = [self = shared_from_this()](
+                                       const mcp::UpstreamConnectionSnapshot& snapshot) { self->record(snapshot); },
                 .delay = std::move(delay),
                 .catalog_cache = options.catalog_cache,
+                .elicitation = options.elicitation,
         };
         auto connection = std::make_shared<mcp::UpstreamConnection>(server.server_id,
                 options.transport ? options.transport : mcp::make_streamable_http_transport(),
@@ -333,6 +333,13 @@ struct McpSessionHost::State : std::enable_shared_from_this<McpSessionHost::Stat
 std::shared_ptr<McpSessionHost> McpSessionHost::start(McpSessionHostOptions options) {
     if (options.servers.empty() || !options.executor) {
         return nullptr;
+    }
+    // A Pending Elicitation wait is bounded on the same timer as the
+    // connection's own waits, so a session has exactly one clock for "wait,
+    // but not forever, and stop on request". A caller that supplied a timer
+    // keeps it: the test seam drives both waits through one scripted clock.
+    if (options.elicitation && !options.elicitation->delay) {
+        options.elicitation->delay = make_runtime_delay(options.executor);
     }
     auto state = std::make_shared<State>(std::move(options));
     state->start_enabled_connections();

@@ -1,5 +1,7 @@
 #include "mcp/WireDto.hpp"
 
+#include "mcp/Diagnostics.hpp"
+#include "mcp/JsonRpc.hpp"
 #include "mcp/Protocol.hpp"
 #include "support/Json.hpp"
 
@@ -382,6 +384,15 @@ Expected<ToolListPage> read_tool_list_page(const JsonValue& result) {
     return page;
 }
 
+bool is_input_required(const JsonValue& result) {
+    const auto* raw_result_type = member(result, "resultType");
+    if (raw_result_type == nullptr) {
+        return false;
+    }
+    const auto result_type = as_string(*raw_result_type);
+    return result_type.has_value() && *result_type == protocol::kResultTypeInputRequired;
+}
+
 Expected<ToolCallOutcome> read_tool_call_result(const JsonValue& result) {
     if (as_object(result) == nullptr) {
         return std::unexpected(violation("a tools/call result is not a JSON object"));
@@ -396,9 +407,8 @@ Expected<ToolCallOutcome> read_tool_call_result(const JsonValue& result) {
     }
     if (*result_type == protocol::kResultTypeInputRequired) {
         return std::unexpected(make_error(ErrorCode::Validation,
-                "an unexpected Multi Round-Trip \"input_required\" tool result",
-                "the Upstream MCP Server asked for client input on a call this build drives without a Multi "
-                "Round-Trip loop"));
+                "a Multi Round-Trip \"input_required\" tool result is not a completed call",
+                "read it with read_input_required_result; a completed call carries no content"));
     }
     if (*result_type != protocol::kResultTypeCallResult) {
         return std::unexpected(
@@ -416,6 +426,100 @@ Expected<ToolCallOutcome> read_tool_call_result(const JsonValue& result) {
         outcome.is_error = *is_error;
     }
     return outcome;
+}
+
+Expected<ToolCallInputRequest> read_input_required_result(const JsonValue& result, std::string_view raw_result) {
+    if (as_object(result) == nullptr) {
+        return std::unexpected(violation("a tools/call result is not a JSON object"));
+    }
+    if (!is_input_required(result)) {
+        return std::unexpected(violation("a tools/call result is not an \"input_required\" result"));
+    }
+
+    // The continuation token is opaque: it is read as the source text the
+    // Upstream sent and re-emitted as that same text on the retry. It is
+    // never parsed, normalized, defaulted, or reconstructed.
+    const auto raw_state = jsonrpc::object_member_source(raw_result, std::string{protocol::kResultRequestState});
+    const auto* decoded_state = member(result, protocol::kResultRequestState);
+    if (decoded_state != nullptr && !raw_state.has_value()) {
+        return std::unexpected(
+                violation("the \"requestState\" member is present but its source text could not be recovered, so the "
+                          "MCP Host cannot echo it verbatim"));
+    }
+    if (raw_state.has_value() && raw_state->size() > protocol::kMaxRequestStateBytes) {
+        return std::unexpected(make_error(ErrorCode::ResourceLimit,
+                "the Upstream MCP Server sent a Pending Elicitation continuation token that is too long to echo",
+                "the " + std::to_string(protocol::kMaxRequestStateBytes) +
+                        "-byte opaque-token bound is exceeded; the token is refused rather than truncated, because "
+                        "a truncated token is a different token"));
+    }
+
+    ToolCallInputRequest decoded;
+    if (raw_state.has_value()) {
+        decoded.request_state.assign(raw_state->begin(), raw_state->end());
+    }
+    if (decoded_state == nullptr) {
+        // A server that suspends a call without a continuation token is asking
+        // a question it cannot correlate; the retry would be unanswerable.
+        return std::unexpected(violation(
+                "an \"input_required\" tool result carries no \"requestState\", so the MCP Host cannot continue the "
+                "exchange"));
+    }
+
+    const auto* raw_requests = member(result, protocol::kResultInputRequests);
+    const auto* request_array = raw_requests == nullptr ? nullptr : as_array(*raw_requests);
+    if (request_array == nullptr || request_array->empty()) {
+        return std::unexpected(violation(
+                "an \"input_required\" tool result has no non-empty \"inputRequests\" array, so it asks for nothing"));
+    }
+    for (const auto& entry : *request_array) {
+        if (as_object(entry) == nullptr) {
+            return std::unexpected(violation("an \"inputRequests\" entry is not a JSON object"));
+        }
+        InputRequest request;
+        if (const auto* raw_id = member(entry, protocol::kInputRequestId); raw_id != nullptr) {
+            const auto id = as_string(*raw_id);
+            if (!id.has_value() || id->empty()) {
+                return std::unexpected(violation("an \"inputRequests\" entry has a non-string or empty \"id\""));
+            }
+            request.id = *id;
+        }
+        const auto* raw_type = member(entry, protocol::kInputRequestType);
+        const auto type = raw_type == nullptr ? std::optional<std::string>{} : as_string(*raw_type);
+        if (!type.has_value()) {
+            return std::unexpected(violation(
+                    "an \"inputRequests\" entry has no string \"type\", so the MCP Host cannot tell which answer it "
+                    "would need"));
+        }
+        if (*type == protocol::kInputRequestTypeUrl) {
+            request.type = InputRequestType::Url;
+            const auto* raw_url = member(entry, protocol::kInputRequestUrl);
+            const auto url = raw_url == nullptr ? std::optional<std::string>{} : as_string(*raw_url);
+            if (!url.has_value() || url->empty()) {
+                return std::unexpected(violation(
+                        "a URL-mode input request has no non-empty string \"url\", so the dialog would show the user "
+                        "nothing to visit"));
+            }
+            request.url = *url;
+        } else if (*type == protocol::kInputRequestTypeForm) {
+            request.type = InputRequestType::Form;
+            if (const auto* raw_schema = member(entry, protocol::kInputRequestSchema); raw_schema != nullptr) {
+                // Carried uninterpreted: the MRTR loop never validates against
+                // it, so an undeclared schema shape is the presentation
+                // layer's problem and not this decode's.
+                request.form_schema = *raw_schema;
+            }
+        } else {
+            request.type = InputRequestType::Undeclared;
+        }
+        if (const auto* raw_message = member(entry, protocol::kInputRequestMessage); raw_message != nullptr) {
+            if (const auto message = as_string(*raw_message); message.has_value()) {
+                request.message = diagnostics::bounded(*message);
+            }
+        }
+        decoded.requests.push_back(std::move(request));
+    }
+    return decoded;
 }
 
 } // namespace cch::mcp::dto

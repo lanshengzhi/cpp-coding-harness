@@ -518,6 +518,18 @@ std::vector<McpPublishedTool> AgentSession::mcp_published_tools() const {
     return impl_ ? impl_->mcp_published_tools() : std::vector<McpPublishedTool>{};
 }
 
+std::vector<McpPendingElicitation> AgentSession::pending_mcp_elicitations() const {
+    return impl_ ? impl_->pending_mcp_elicitations() : std::vector<McpPendingElicitation>{};
+}
+
+support::ExpectedVoid AgentSession::answer_mcp_elicitation(McpElicitationAnswer answer) {
+    if (!impl_) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Session, "this session has no Pending Elicitation surface"));
+    }
+    return impl_->answer_mcp_elicitation(std::move(answer));
+}
+
 support::AsyncResult<McpServerTrustResolution> AgentSession::ask_mcp_server_trust(
         std::string_view server_id, std::stop_token stop_token) {
     if (impl_ == nullptr) {

@@ -28,6 +28,7 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/InteractiveStartup.hpp"
 #include "coding_agent/tui/InteractiveViewActions.hpp"
+#include "coding_agent/tui/McpFlowController.hpp"
 #include "coding_agent/tui/ModalPresenter.hpp"
 #include "coding_agent/tui/SlashCommandRouter.hpp"
 
@@ -388,6 +389,15 @@ private:
 
     [[nodiscard]] std::shared_ptr<ModelFlowController> make_model_flow_controller();
     [[nodiscard]] std::shared_ptr<AuthFlowController> make_auth_flow_controller();
+    /// The Pending Elicitation flow (issue #845): the URL-mode dialog an
+    /// Upstream's suspended `tools/call` puts in front of the user. It reads
+    /// the session's `cch_coding_agent` projection and answers through the
+    /// session's own API, so the frontend names no MCP type.
+    [[nodiscard]] std::shared_ptr<McpFlowController> make_mcp_flow_controller();
+    /// Show the next Pending Elicitation the session is blocked on, if any.
+    /// Called from the host's observation points, because a suspension
+    /// arrives mid-run rather than at a command.
+    void show_pending_mcp_elicitation();
     [[nodiscard]] std::shared_ptr<SessionFlowController> make_session_flow_controller();
     [[nodiscard]] std::shared_ptr<SessionUiBinding> make_session_ui_binding();
     [[nodiscard]] std::shared_ptr<SettingsFlowController> make_settings_flow_controller();
@@ -557,6 +567,7 @@ private:
     /// keybindings) exist.
     std::shared_ptr<ModelFlowController> model_flows_;
     std::shared_ptr<AuthFlowController> auth_flows_;
+    std::shared_ptr<McpFlowController> mcp_flows_;
     std::shared_ptr<SessionFlowController> session_flows_;
     /// The settings selector + thinking/render-settings flows (#506).
     std::shared_ptr<SettingsFlowController> settings_flows_;

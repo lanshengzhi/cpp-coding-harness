@@ -207,6 +207,7 @@ struct AssemblyPlan {
     /// MCP Server (issue #843). Production passes the Native TUI's prompt; a
     /// headless host passes none and such a call is refused rather than run.
     coding_agent::McpToolApprovalPrompter mcp_tool_approval_prompter;
+    mcp::UpstreamDelay mcp_elicitation_delay;
     std::vector<std::string> prompt_template_paths;
     std::vector<std::string> skill_paths;
     std::optional<DefaultProjectTrust> default_project_trust;
@@ -811,6 +812,7 @@ struct SessionTargetNormalizationOptions {
     plan.mcp_transport = std::move(request.mcp_transport);
     plan.mcp_delay = std::move(request.mcp_delay);
     plan.mcp_tool_approval_prompter = std::move(request.mcp_tool_approval_prompter);
+    plan.mcp_elicitation_delay = std::move(request.mcp_elicitation_delay);
     plan.cli_selection = AssemblyPlan::CliModelSelection{
             .provider = std::move(request.session_facts.provider),
             .model = std::move(request.session_facts.model),
@@ -1594,6 +1596,7 @@ struct PreparedAssemblyTarget final {
     // credential and neither handle can observe a partial write.
     std::shared_ptr<McpSessionHost> mcp_host;
     std::shared_ptr<McpToolBinding> mcp_tool_binding;
+    std::shared_ptr<McpElicitationBridge> mcp_elicitation_bridge;
     if (plan.execution_runtime_target && !snapshot.manager.mcp_servers().empty()) {
         McpSessionHostOptions mcp_options;
         mcp_options.servers = snapshot.manager.mcp_servers();
@@ -1610,6 +1613,16 @@ struct PreparedAssemblyTarget final {
         mcp_tool_binding = std::make_shared<McpToolBinding>();
         mcp_tool_binding->set_servers(mcp_options.servers);
         mcp_options.tool_binding = mcp_tool_binding;
+        // The Pending Elicitation broker (issue #845) is the session's seam
+        // for a Mid-Round-Trip question: the MCP Host asks through its port
+        // and the frontend answers through the session's projection, so the
+        // two never name each other. It is created here, beside the host that
+        // installs its port, and closed with the session.
+        mcp_elicitation_bridge = std::make_shared<McpElicitationBridge>();
+        mcp_options.elicitation = mcp_elicitation_bridge->port();
+        if (plan.mcp_elicitation_delay) {
+            mcp_options.elicitation->delay = std::move(plan.mcp_elicitation_delay);
+        }
         mcp_host = McpSessionHost::start(std::move(mcp_options));
     }
 
@@ -1815,6 +1828,7 @@ struct PreparedAssemblyTarget final {
     // binding, so there is no window in which an `ask` call could run before a
     // prompter was in reach.
     services.mcp_tool_approval_prompter = std::move(plan.mcp_tool_approval_prompter);
+    services.mcp_elicitation_bridge = std::move(mcp_elicitation_bridge);
     services.tools = std::move(tools);
 
     const auto session_path = open.store->path();

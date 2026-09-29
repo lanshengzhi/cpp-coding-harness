@@ -117,6 +117,7 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     // before view composition).
     model_flows_ = make_model_flow_controller();
     auth_flows_ = make_auth_flow_controller();
+    mcp_flows_ = make_mcp_flow_controller();
     session_flows_ = make_session_flow_controller();
     session_ui_ = make_session_ui_binding();
     settings_flows_ = make_settings_flow_controller();
@@ -305,6 +306,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     // their host-lifetime captures then let their coroutines quiesce
     // without touching a stopped presenter.
     if (auth_flows_) auth_flows_->close();
+    if (mcp_flows_) mcp_flows_->close();
     if (session_flows_) session_flows_->close();
     running_ = false;
     // Retire the action generation so late deliveries from captured
@@ -826,6 +828,11 @@ void InteractiveEngine::on_frame_tick() {
     // Mailbox draining (ADR 0052): apply the queued stream messages to the
     // composed snapshot; the ticker's counted frame consumes the flag.
     const bool core_dirty = session_ui_ != nullptr && session_ui_->drain_composed_snapshot();
+    // A Pending Elicitation arrives mid-run: an Upstream suspended a tool
+    // call, and nothing else announces it, so the frame ticker is where the
+    // question is noticed. The controller is a no-op when the session has
+    // nothing pending and when a question is already on screen.
+    show_pending_mcp_elicitation();
     const bool dock_dirty = local_dock_dirty_.load(std::memory_order_acquire);
     const bool frame_due = core_dirty || (counted_due && !preview);
     bool snapshot_applied = !frame_due;

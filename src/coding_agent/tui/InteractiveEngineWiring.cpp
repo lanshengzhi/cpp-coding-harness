@@ -159,6 +159,40 @@ std::shared_ptr<AuthFlowController> InteractiveEngine::make_auth_flow_controller
         keybindings_);
 }
 
+std::shared_ptr<McpFlowController> InteractiveEngine::make_mcp_flow_controller() {
+    const auto weak = weak_from_this();
+    McpFlowHostHooks hooks;
+    hooks.post_on_executor = [weak](std::move_only_function<void()> action) mutable {
+        if (const auto self = weak.lock()) {
+            self->post_from_view([action = std::move(action)](InteractiveEngine&) mutable { action(); });
+        }
+    };
+    hooks.current_session = [weak]() -> AgentSession* {
+        const auto self = weak.lock();
+        return self != nullptr ? self->session_ : nullptr;
+    };
+    hooks.live_theme = [theme = &*theme_controller_]() -> const LiveTheme& { return theme->live_theme(); };
+    hooks.action_generation = [weak] {
+        const auto self = weak.lock();
+        return self != nullptr ? self->action_generation_ : 0;
+    };
+    // The same generation-checked action the login flow uses, so a dialog
+    // belonging to a retired session cannot launch a browser.
+    hooks.open_browser = [weak](std::size_t generation, std::string url) {
+        if (const auto self = weak.lock()) {
+            (void)self->deliver_action(generation, TuiActionVariant{OpenBrowserAction{std::move(url)}});
+        }
+    };
+    return std::make_shared<McpFlowController>(
+            executor_, *this, std::weak_ptr<void>{weak_from_this()}, std::move(hooks), keybindings_);
+}
+
+void InteractiveEngine::show_pending_mcp_elicitation() {
+    if (mcp_flows_ != nullptr && running_ && view_ != nullptr) {
+        mcp_flows_->show_pending();
+    }
+}
+
 std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_controller() {
     const auto weak = weak_from_this();
     SessionFlowHostHooks hooks;

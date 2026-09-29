@@ -21,6 +21,7 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_mcp
     SOURCES
+        src/mcp/Elicitation.cpp
         src/mcp/EraAdapter.cpp
         src/mcp/HeaderMirror.cpp
         src/mcp/JsonRpc.cpp

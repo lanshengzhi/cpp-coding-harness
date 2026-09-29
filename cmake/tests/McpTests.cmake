@@ -23,6 +23,7 @@ include_guard(GLOBAL)
         tests/mcp/CatalogDefenseTest.cpp
         tests/mcp/DefensiveMatrixTest.cpp
         tests/mcp/JsonRpcFramingTest.cpp
+        tests/mcp/MrtrElicitationTest.cpp
         tests/mcp/NotificationIgnoreTest.cpp
         tests/mcp/StreamableHttpTransportTest.cpp
         tests/mcp/TransportFactoryTest.cpp

@@ -82,6 +82,68 @@ inline constexpr std::string_view kMethodCallTool{"tools/call"};
 inline constexpr std::string_view kResultTypeCallResult{"call_result"};
 inline constexpr std::string_view kResultTypeInputRequired{"input_required"};
 
+/// The `input_required` result members (issue #845; spec #833 stories 26-29).
+/// `requestState` is the Upstream's own continuation token: the host carries
+/// it across a retry **verbatim** and never interprets it, so it is read as
+/// its raw JSON text and re-emitted as the same text rather than being parsed
+/// into a value and re-serialized. `inputRequests` lists the input requests
+/// the Upstream is blocked on; each carries a `type` naming one of the two
+/// elicitation modes this build advertises.
+inline constexpr std::string_view kResultRequestState{"requestState"};
+inline constexpr std::string_view kResultInputRequests{"inputRequests"};
+inline constexpr std::string_view kInputRequestType{"type"};
+inline constexpr std::string_view kInputRequestId{"id"};
+inline constexpr std::string_view kInputRequestMessage{"message"};
+inline constexpr std::string_view kInputRequestUrl{"url"};
+inline constexpr std::string_view kInputRequestSchema{"schema"};
+
+/// The input-request types this build can express an answer for. They are
+/// exactly the two modes in `client_capabilities()`. Any other `type` is an
+/// **undeclared** input-request type: the host fails that one tool call with a
+/// diagnostic and never asks the user (ADR 0064's defensive matrix).
+inline constexpr std::string_view kInputRequestTypeUrl{"url"};
+inline constexpr std::string_view kInputRequestTypeForm{"form"};
+
+/// The members a **retried** `tools/call` carries alongside the original
+/// `name` and `arguments` (spec #833 story 28). The retry is a whole new
+/// request with a new JSON-RPC id; the `requestState` is the Upstream's own
+/// text, spliced in unchanged.
+inline constexpr std::string_view kCallRequestState{"requestState"};
+inline constexpr std::string_view kCallInputResponses{"inputResponses"};
+inline constexpr std::string_view kInputResponseId{"id"};
+inline constexpr std::string_view kInputResponseAction{"action"};
+inline constexpr std::string_view kInputResponseContent{"content"};
+
+/// The three answers to one input request. All three are echoed to the
+/// Upstream on the retried request: a user who cancels is telling the
+/// Upstream something, and only a **stopped wait** (the session's stop token
+/// or the elicitation bound) suppresses the retry.
+inline constexpr std::string_view kInputResponseAccept{"accept"};
+inline constexpr std::string_view kInputResponseDecline{"decline"};
+inline constexpr std::string_view kInputResponseCancel{"cancel"};
+
+/// A Multi Round-Trip exchange is bounded in rounds as well as in time
+/// (spec #833 story 29, ADR 0064's defensive limits). A server that keeps
+/// asking costs a bounded amount of user attention rather than an unbounded
+/// dialog queue; past the bound the single tool call fails with a diagnostic.
+/// Not caller-tunable: containment, not tuning.
+inline constexpr std::size_t kMaxElicitationRounds{8};
+
+/// The bound on the opaque `requestState` a server may ask this host to carry
+/// back verbatim. The token is echoed unchanged, so the only safe bound is one
+/// that refuses: a truncated token is a *different* token and would be rejected
+/// by the server as though the user had answered a different question. 64 KiB
+/// is far above any continuation token a real server issues and bounds what one
+/// hostile response can pin. Not caller-tunable.
+inline constexpr std::size_t kMaxRequestStateBytes{64 * 1024};
+
+/// The bound on one Pending Elicitation wait. The default is generous
+/// because the wait is on a *human* completing an out-of-band approval, and
+/// the cap is containment so a caller cannot ask for an unbounded dialog.
+/// Both are measured policy recorded in `docs/runtime-capacities.md`.
+inline constexpr std::chrono::milliseconds kDefaultElicitationTimeout{std::chrono::minutes{5}};
+inline constexpr std::chrono::milliseconds kMaxElicitationTimeout{std::chrono::minutes{30}};
+
 /// The `tools/list` result members through which an Upstream says how long
 /// its catalog stays fresh and how widely that catalog may be reused (spec
 /// #833 story 17; issue #848). Both are hints the host honours, and both are

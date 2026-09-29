@@ -13,6 +13,7 @@
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 
 #include <cch/agent/Agent.hpp>
+#include <cch/coding_agent/McpElicitation.hpp>
 #include <cch/coding_agent/McpServerTrust.hpp>
 #include <cch/coding_agent/McpToolBinding.hpp>
 #include <cch/coding_agent/McpUpstreamStatus.hpp>
@@ -334,6 +335,16 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// can happen after startup.
     [[nodiscard]] support::AsyncResult<McpServerTrustResolution> ask_mcp_server_trust(
             std::string_view server_id, std::stop_token stop_token = {});
+    /// The Pending Elicitations this session is currently blocked on (issue
+    /// #845), in the order the Upstreams asked them. The whole read model a
+    /// presentation surface renders; empty for a session whose calls are not
+    /// suspended.
+    [[nodiscard]] std::vector<McpPendingElicitation> pending_mcp_elicitations() const;
+    /// Answer one Pending Elicitation and let the suspended tool call
+    /// continue. An elicitation that is not pending is refused, so a second
+    /// answer for a settled question is dropped rather than completing a call
+    /// twice.
+    [[nodiscard]] support::ExpectedVoid answer_mcp_elicitation(McpElicitationAnswer answer);
     /// Request the MCP Host's deterministic two-phase close (ADR 0011) as
     /// part of session close.
     void request_mcp_host_close() noexcept;

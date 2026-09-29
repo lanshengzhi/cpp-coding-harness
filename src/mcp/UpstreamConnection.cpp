@@ -297,6 +297,7 @@ struct UpstreamConnection::Impl : std::enable_shared_from_this<UpstreamConnectio
                         .request_timeout = request_timeout,
                         .bearer_env_var = options.bearer_env_var,
                         .credentials = options.credentials,
+                        .elicitation = options.elicitation,
                 });
         report(); // an attempt started: the reading is `pending` even when it was before
         return client->probe_era(token);

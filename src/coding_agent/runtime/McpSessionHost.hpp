@@ -7,6 +7,7 @@
 #include <cch/mcp/UpstreamAuth.hpp>
 #include <cch/mcp/UpstreamCatalogCache.hpp>
 #include <cch/mcp/UpstreamConnection.hpp>
+#include <cch/mcp/UpstreamElicitation.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 
@@ -87,6 +88,13 @@ struct McpSessionHostOptions {
     /// Agent at a turn boundary. Null is a session that publishes no tools,
     /// which is the ordinary session with no configured MCP server.
     std::shared_ptr<McpToolBinding> tool_binding{nullptr};
+    /// How this session's Upstreams ask the user a Pending Elicitation
+    /// question (issue #845; spec #833 stories 27-29). Every connection the
+    /// host owns asks through it, so two Upstreams blocked at once are two
+    /// questions the session can see. Null is a session that cannot ask, and
+    /// an `input_required` result then fails exactly one tool call rather
+    /// than suspending a call nobody can answer (ADR 0008).
+    std::shared_ptr<mcp::UpstreamElicitationPort> elicitation{nullptr};
 };
 
 /// The session's MCP Host wiring (issue #841, ADR 0065): the trust-gated set

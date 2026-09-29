@@ -174,6 +174,13 @@ struct AgentSessionCreationRequest {
     /// and the call is refused rather than run unasked. One consent answers
     /// exactly one call: nothing here is remembered.
     coding_agent::McpToolApprovalPrompter mcp_tool_approval_prompter;
+    /// Private test seam (issue #845): the timer that bounds one Pending
+    /// Elicitation wait. Production callers never set it — the session's
+    /// broker port gets the Runtime timer — and a test injects a second
+    /// `tests::ScriptedMcpDelay` so the elicitation bound runs without a wall
+    /// clock. It is the same timer seam as `mcp_delay` handed to a different
+    /// consumer, not a new seam (ADR 0040).
+    cch::mcp::UpstreamDelay mcp_elicitation_delay;
 };
 
 } // namespace cch::coding_agent::runtime

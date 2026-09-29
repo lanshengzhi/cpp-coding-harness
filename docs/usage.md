@@ -142,6 +142,8 @@ A server configured with `"approval": "ask"` (the default is `"allow"`) asks bef
 
 Cancelling a prompt (`Esc` while a turn is running) stops the work an in-flight upstream call asked for: the response stream is closed and the server is sent a `notifications/cancelled` for that call's request, so it need not run the call to its own conclusion. The call itself settles as one failed tool call — the session itself is not affected and the next prompt runs normally. A long upstream operation that reports progress shows that progress in its tool-execution block while it runs; the progress is display-only and costs the model nothing, and the settled result is the Upstream's own output.
 
+If an Upstream suspends a tool call to ask for user input, pike shows a Pending Elicitation instead of failing the call. In **URL mode** the dialog names the Upstream and the tool, shows the address to visit, offers an open-browser action, and waits for you to press **Done**, **Decline**, or **Cancel** — opening the browser is not an answer, so the dialog stays up and the question stays open until you decide. Accept and Decline continue the original call; Cancel tells the Upstream you dismissed it. The wait is bounded and stops with the session, so a suspended call never hangs forever, and a server that asks a type pike does not support fails just that one call.
+
 ## User Bash
 
 In the Native TUI, a focused-editor submission beginning with `!` runs the remaining text as a shell command in the Session workspace. Its result is saved in Session history and may enter later model context. Use `!!` to save the execution while excluding it from model context.

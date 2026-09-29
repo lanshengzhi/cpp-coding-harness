@@ -48,6 +48,7 @@ cch_parity_declare_target(
         src/coding_agent/prompt/SystemPromptBuilder.cpp
         src/coding_agent/runtime/AuthGuidanceStream.cpp
         src/coding_agent/runtime/LocalUserShell.cpp
+        src/coding_agent/runtime/McpElicitationBridge.cpp
         src/coding_agent/runtime/McpSessionHost.cpp
         src/coding_agent/runtime/McpToolApprovalPolicy.cpp
         src/coding_agent/runtime/McpToolBinding.cpp
@@ -112,6 +113,8 @@ cch_parity_declare_target(
         src/coding_agent/tui/KeybindingHints.cpp
         src/coding_agent/tui/KeybindingsManager.cpp
         src/coding_agent/tui/LoadedResources.cpp
+        src/coding_agent/tui/McpElicitationDialog.cpp
+        src/coding_agent/tui/McpFlowController.cpp
         src/coding_agent/tui/LoginDialog.cpp
         src/coding_agent/tui/LoginPresentation.cpp
         src/coding_agent/tui/McpToolApprovalPrompt.cpp

@@ -9,6 +9,7 @@
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
+#include <cch/coding_agent/McpElicitation.hpp>
 #include <cch/coding_agent/McpServerTrust.hpp>
 #include <cch/coding_agent/McpToolBinding.hpp>
 #include <cch/coding_agent/McpUpstreamStatus.hpp>
@@ -549,6 +550,23 @@ public:
     /// the call actually targets — so schema, execution target, and display
     /// target cannot drift. Empty for a session with no published tool.
     [[nodiscard]] std::vector<McpPublishedTool> mcp_published_tools() const;
+
+    /// The Pending Elicitations this session's Upstreams are blocked on
+    /// (issue #845; spec #833 stories 26-29), in the order they were asked.
+    /// One row is one question a suspended `tools/call` is waiting on; the
+    /// call continues when `answer_mcp_elicitation` settles it. Empty for a
+    /// session whose calls are not suspended.
+    ///
+    /// The Upstream's opaque continuation token is deliberately not in the
+    /// row: the host echoes it unchanged and no presentation surface can read
+    /// or normalize it by not holding it.
+    [[nodiscard]] std::vector<McpPendingElicitation> pending_mcp_elicitations() const;
+
+    /// Answer one Pending Elicitation, which lets the suspended `tools/call`
+    /// continue with a new JSON-RPC id. Accept, Decline, and Cancel are all
+    /// answers the Upstream is told about; only a stopped wait sends nothing.
+    /// An elicitation that is not pending is refused. Safe from any thread.
+    [[nodiscard]] support::ExpectedVoid answer_mcp_elicitation(McpElicitationAnswer answer);
 
     /// Ask one server's first-enable prompt and record the answer. An
     /// accepted answer enables and connects that server; a declined, a

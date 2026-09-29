@@ -61,9 +61,21 @@ struct ProtocolFailure {
     int json_rpc_code{0};
 };
 
-/// The decoded `result` of a JSON-RPC exchange, the Upstream's protocol
-/// violation, or the transport's own failure.
-using ExchangeOutcome = std::variant<JsonValue, ProtocolFailure, Error>;
+/// The decoded `result` of a JSON-RPC exchange together with the **source
+/// text** of that result member, the Upstream's protocol violation, or the
+/// transport's own failure.
+///
+/// The raw text is what makes the opaque `requestState` echoable byte-for-byte
+/// (issue #845): a value parsed into `JsonValue` and re-serialized is
+/// normalized, and a normalized continuation token is a different token.
+struct ExchangeResult {
+    JsonValue value{};
+    /// The `result` member's source text; empty when the message carried no
+    /// recoverable `result` member text.
+    std::string raw{};
+};
+
+using ExchangeOutcome = std::variant<ExchangeResult, ProtocolFailure, Error>;
 using ExchangeOutcomeHandler = std::move_only_function<void(ExchangeOutcome)>;
 
 /// Drives one operation's request chain to quiescence without nesting: a
@@ -229,12 +241,16 @@ struct ProgressObserver {
                 .json_rpc_code = 0,
         };
     }
-    auto messages = jsonrpc::split_messages(response.body);
-    if (!messages) {
-        return ProtocolFailure{.diagnostic = diagnostic_of(messages.error(), secret), .json_rpc_code = 0};
+    auto slices = jsonrpc::split_message_slices(response.body);
+    if (!slices) {
+        return ProtocolFailure{.diagnostic = diagnostic_of(slices.error(), secret), .json_rpc_code = 0};
     }
-    for (const auto& raw : *messages) {
-        auto decoded = jsonrpc::decode_message(raw);
+    for (const auto& slice : *slices) {
+        auto parsed = support::read_json(slice);
+        if (!parsed) {
+            return ProtocolFailure{.diagnostic = diagnostic_of(parsed.error(), secret), .json_rpc_code = 0};
+        }
+        auto decoded = jsonrpc::decode_message(*parsed);
         if (!decoded) {
             return ProtocolFailure{.diagnostic = diagnostic_of(decoded.error(), secret), .json_rpc_code = 0};
         }
@@ -257,7 +273,11 @@ struct ProgressObserver {
                     .json_rpc_code = decoded->error_code,
             };
         }
-        return decoded->result;
+        const auto raw_result = jsonrpc::object_member_source(slice, "result");
+        return ExchangeResult{
+                .value = decoded->result,
+                .raw = raw_result.has_value() ? std::string(*raw_result) : std::string{},
+        };
     }
     return ProtocolFailure{
             .diagnostic = bounded_diagnostic("the Upstream MCP Server sent no JSON-RPC response for request " +
@@ -294,6 +314,17 @@ protected:
 
     [[nodiscard]] const std::shared_ptr<UpstreamClient::Connection>& connection() const noexcept { return connection_; }
 
+    /// The caller's cancellation token, which the two-phase close stops too
+    /// (ADR 0020). A Pending Elicitation wait joins it, so a close during a
+    /// suspended call reaches the dialog as well as the transport.
+    [[nodiscard]] std::stop_token stop_token() const noexcept { return stop_token_; }
+
+    /// The elicitation port this operation may use, or `nullptr` when the
+    /// caller wired none.
+    [[nodiscard]] UpstreamElicitationPort* elicitation_port() const noexcept {
+        return connection_->options.elicitation.get();
+    }
+
     /// The credential the last resolved request on this connection
     /// authenticated with, for redacting anything the Upstream hands back. It
     /// is never returned to a caller.
@@ -322,6 +353,12 @@ protected:
     /// Issue one framed JSON-RPC request and hand its outcome to
     /// `on_outcome`, attributed to the derived operation's own chain.
     ///
+    /// `raw_params` are members written to the wire as already-serialized JSON
+    /// text rather than through the value tree. They exist for the opaque
+    /// `requestState` of a Multi Round-Trip retry, which must reach the server
+    /// byte-for-byte (issue #845); an empty list makes the framed body
+    /// byte-identical to the value-only encoding.
+    ///
     /// The credential is resolved before every exchange, not once per
     /// connection: a token that is rotated in the environment or expired in the
     /// store takes effect on the next request without a reconnect
@@ -331,19 +368,23 @@ protected:
     void send(JsonValue params,
             std::string_view name,
             std::map<std::string, std::string> extra_headers,
-            ExchangeOutcomeHandler on_outcome) {
+            ExchangeOutcomeHandler on_outcome,
+            std::vector<jsonrpc::RawJsonMember> raw_params = {}) {
         auto connection = connection_;
-        resolve_auth(stop_token_, [self = Operation::shared_from_this(),
-                             params = std::move(params),
-                             name = std::string{name},
-                             extra_headers = std::move(extra_headers),
-                             on_outcome = std::move(on_outcome)](Expected<UpstreamAuth> auth) mutable {
-            self->dispatch(std::move(params),
-                    std::move(name),
-                    std::move(extra_headers),
-                    std::move(on_outcome),
-                    std::move(auth));
-        });
+        resolve_auth(stop_token_,
+                [self = Operation::shared_from_this(),
+                        params = std::move(params),
+                        name = std::string{name},
+                        extra_headers = std::move(extra_headers),
+                        on_outcome = std::move(on_outcome),
+                        raw_params = std::move(raw_params)](Expected<UpstreamAuth> auth) mutable {
+                    self->dispatch(std::move(params),
+                            std::move(name),
+                            std::move(extra_headers),
+                            std::move(on_outcome),
+                            std::move(raw_params),
+                            std::move(auth));
+                });
     }
 
     /// The operation's real work, reached once the era is selected.
@@ -439,6 +480,7 @@ private:
             std::string name,
             std::map<std::string, std::string> extra_headers,
             ExchangeOutcomeHandler on_outcome,
+            std::vector<jsonrpc::RawJsonMember> raw_params,
             Expected<UpstreamAuth> auth) {
         auto connection = connection_;
         if (!auth) {
@@ -474,7 +516,7 @@ private:
         for (auto& [key, value] : extra_headers) {
             headers.insert_or_assign(std::move(key), std::move(value));
         }
-        auto body = support::write_json(jsonrpc::encode_request(id, method_, std::move(params)));
+        auto body = jsonrpc::encode_request_body(id, method_, params, raw_params);
         if (!body) {
             auto error = body.error();
             queue_.post([on_outcome = std::move(on_outcome), error = std::move(error), secret = secret()]() mutable {
@@ -564,7 +606,7 @@ private:
             return deliver(std::unexpected(make_error(
                     ErrorCode::Validation, "the Upstream MCP Server era probe failed", failure->diagnostic)));
         }
-        const auto& result = std::get<JsonValue>(outcome);
+        const auto& result = std::get<ExchangeResult>(outcome).value;
         auto adapter = era::select_era_adapter(result);
         if (!adapter) {
             return deliver(std::unexpected(redacted_error(adapter.error(), secret())));
@@ -637,7 +679,7 @@ private:
             return complete_with(std::unexpected(make_error(
                     ErrorCode::Validation, "the Upstream MCP Server tools/list request failed", failure->diagnostic)));
         }
-        auto page = dto::read_tool_list_page(std::get<JsonValue>(outcome));
+        auto page = dto::read_tool_list_page(std::get<ExchangeResult>(outcome).value);
         if (!page) {
             return complete_with(std::unexpected(redacted_error(page.error(), secret())));
         }
@@ -696,9 +738,16 @@ private:
 
 /// One `tools/call`, including the `Mcp-Param-*` mirroring of the tool's
 /// validated `x-mcp-header` annotation, the `progressToken` the call declares
-/// so an Upstream's progress is attributable to it, and the
+/// so an Upstream's progress is attributable to it, the
 /// `notifications/cancelled` a cancelled call sends so the Upstream stops the
-/// work behind the closed response stream.
+/// work behind the closed response stream, and the Multi Round-Trip loop
+/// (issue #845, spec #833 stories 26-29).
+///
+/// The loop is the whole of the MRTR contract and it is **mode-agnostic**:
+/// a suspended result is asked of the port, the answers are collected, and the
+/// original `name` and `arguments` go back out under a **new** JSON-RPC id
+/// with the opaque `requestState` echoed verbatim. Adding form mode therefore
+/// changes the port and the rendering, never this loop.
 class CallToolOperation final : public Operation {
 public:
     CallToolOperation(std::shared_ptr<UpstreamClient::Connection> connection,
@@ -717,27 +766,91 @@ public:
     }
 
 protected:
-    void on_era_selected() override { issue_call(); }
+    void on_era_selected() override { issue_call({}); }
 
     void on_probe_failed(Error error) override { complete_with(std::unexpected(std::move(error))); }
 
     void on_request_id(double id) override { request_id_ = id; }
 
 private:
-    void issue_call() {
+    /// One answer the user gave, ready to be echoed on the retried request.
+    struct PendingAnswer {
+        std::string request_id{};
+        ElicitationAction action{ElicitationAction::Accept};
+        JsonValue content{};
+    };
+
+    /// Everything a retry contributes that the original call did not.
+    struct RetryCarry {
+        /// The Upstream's opaque continuation token, exactly as it arrived.
+        std::string request_state{};
+        std::vector<PendingAnswer> answers{};
+    };
+
+    /// One question of a suspended result, held across the wait so the answer
+    /// arrives with the question it belongs to. The loop must not recurse
+    /// through a wait: a chain that suspends per question would grow a stack
+    /// with the number of questions a server asked.
+    struct AskState {
+        dto::ToolCallInputRequest suspended{};
+        RetryCarry carry{};
+        std::size_t index{0};
+    };
+
+    /// The wait's own cancellation, which the call's stop token drives and the
+    /// loop stops when it stops waiting.
+    struct WaitControl {
+        struct Forward {
+            std::shared_ptr<WaitControl> control;
+            void operator()() const noexcept { control->source.request_stop(); }
+        };
+
+        std::stop_source source{};
+        std::optional<std::stop_callback<Forward>> join{};
+    };
+
+    /// Issue the call, carrying `carry` on the wire when this is a retry.
+    void issue_call(const RetryCarry& carry) {
         auto mirrored = headers::mirror_parameter_headers(call_.tool, call_.arguments);
         if (!mirrored) {
             return complete_with(std::unexpected(mirrored.error()));
         }
+        // The original `name` and `arguments` are re-sent unchanged on every
+        // round: a retry that changed them would be a different call, and the
+        // Upstream correlates the exchange by the token, not by the arguments.
         JsonValue params = JsonValue::object_t{
                 {"name", JsonValue(call_.tool.name)},
                 {"arguments", call_.arguments},
         };
-        send(std::move(params),
+        std::vector<jsonrpc::RawJsonMember> raw_params;
+        if (!carry.answers.empty()) {
+            JsonValue::array_t responses;
+            responses.reserve(carry.answers.size());
+            for (const auto& answer : carry.answers) {
+                JsonValue::object_t entry{
+                        {"action", JsonValue(std::string(to_string(answer.action)))},
+                };
+                if (!answer.request_id.empty()) {
+                    entry.emplace(protocol::kInputResponseId, JsonValue(answer.request_id));
+                }
+                if (!answer.content.holds<JsonValue::null_t>()) {
+                    entry.emplace(protocol::kInputResponseContent, answer.content);
+                }
+                responses.emplace_back(std::move(entry));
+            }
+            params.get_object().emplace(protocol::kCallInputResponses, JsonValue(std::move(responses)));
+            // The continuation token is written as the text the Upstream sent,
+            // so a server that compares it byte-for-byte sees the same token.
+            raw_params.push_back(jsonrpc::RawJsonMember{
+                    .key = std::string{protocol::kCallRequestState}, .json_text = carry.request_state});
+        }
+        send(
+                std::move(params),
                 call_.tool.name,
                 std::move(*mirrored),
                 [self = self<CallToolOperation>()](
-                        ExchangeOutcome outcome) mutable { self->absorb(std::move(outcome)); });
+                        ExchangeOutcome outcome) mutable { self->absorb(std::move(outcome)); },
+                std::move(raw_params));
     }
 
     void absorb(ExchangeOutcome outcome) {
@@ -752,19 +865,30 @@ private:
             return complete_with(std::unexpected(*error)); // transport failure, cancellation included
         }
         if (const auto* failure = std::get_if<ProtocolFailure>(&outcome); failure != nullptr) {
+            request_id_.reset();
             return complete_with(failed(diagnostic_for(*failure)));
         }
-        auto result = dto::read_tool_call_result(std::get<JsonValue>(outcome));
-        if (!result) {
-            return complete_with(failed(diagnostic_of(result.error(), secret())));
+        auto result = std::get<ExchangeResult>(outcome);
+        // The exchange this id named has now answered, so nothing is
+        // outstanding: a stop that lands during a later Multi Round-Trip wait,
+        // before the next round is framed, must not make `notify_cancelled`
+        // name a request the Upstream already completed. The next round stamps
+        // a fresh id in `on_request_id`, which is the one a cancellation names.
+        request_id_.reset();
+        if (dto::is_input_required(result.value)) {
+            return suspend(std::move(result));
+        }
+        auto completed = dto::read_tool_call_result(std::move(result.value));
+        if (!completed) {
+            return complete_with(failed(diagnostic_of(completed.error(), secret())));
         }
         // The Upstream's own content is handed on with the connection's
         // credential value erased from it, so a tool result that echoed the
         // bearer back cannot carry it into the model's context or a transcript
         // (issue #838).
         complete_with(UpstreamToolCallResult{
-                .is_error = result->is_error,
-                .content = redaction::redacted_value(std::move(result->content), secret()),
+                .is_error = completed->is_error,
+                .content = redaction::redacted_value(std::move(completed->content), secret()),
                 .diagnostic = {},
         });
     }
@@ -785,6 +909,136 @@ private:
                         {std::string(protocol::kParamReason),
                                 JsonValue(bounded_diagnostic("the MCP Host cancelled the call", secret()))},
                 });
+    }
+
+    /// An `input_required` result suspended the call. The defensive matrix
+    /// decides first whether this build can answer at all, so a non-conformant
+    /// server fails one call rather than a session (ADR 0008, story 32).
+    void suspend(ExchangeResult result) {
+        auto* port = elicitation_port();
+        if (port == nullptr || !port->prompter) {
+            return complete_with(failed(diagnostics::bounded(
+                    "the Upstream MCP Server suspended the call for client input with an \"input_required\" result, "
+                    "but this session has no Pending Elicitation surface to ask",
+                    secret())));
+        }
+        if (rounds_ >= protocol::kMaxElicitationRounds) {
+            return complete_with(failed(diagnostics::bounded(
+                    "the Upstream MCP Server suspended the call for client input past the MCP Host's Multi "
+                    "Round-Trip bound",
+                    secret())));
+        }
+        auto suspended = dto::read_input_required_result(result.value, result.raw);
+        if (!suspended) {
+            return complete_with(failed(diagnostic_of(suspended.error(), secret())));
+        }
+        for (const auto& request : suspended->requests) {
+            if (request.type == dto::InputRequestType::Undeclared) {
+                // An undeclared input-request type is not a mode this build
+                // guesses at: one failed call, and the session is untouched.
+                return complete_with(failed(diagnostics::bounded(
+                        "the Upstream MCP Server asked for an input request of a type this build does not declare",
+                        secret())));
+            }
+        }
+        ++rounds_;
+        RetryCarry carry;
+        carry.request_state = std::move(suspended->request_state);
+        ask(std::move(*suspended), std::move(carry), 0);
+    }
+
+    /// Ask the port for the answers to the suspended result's requests, one at
+    /// a time and in order. A request is asked only after the previous one is
+    /// answered, so a server that asks several questions costs the user a
+    /// sequence of decisions rather than an unreadable pile.
+    ///
+    /// The wait is **bounded**: the port's timer races the prompter, and the
+    /// first of the two to complete ends the wait. A wait that reaches its
+    /// bound produces no re-send, so a user who walks away costs one failed
+    /// tool call and never a suspended call that never returns (story 29).
+    void ask(dto::ToolCallInputRequest suspended, RetryCarry carry, std::size_t index) {
+        const auto& request = suspended.requests[index];
+        auto presented = ElicitationRequest{
+                .server_id = connection()->server_id,
+                .tool_name = call_.tool.name,
+                .mode = request.type == dto::InputRequestType::Form ? ElicitationMode::Form : ElicitationMode::Url,
+                .request_id = request.id,
+                .message = request.message,
+                .url = request.url,
+                .form_schema = request.form_schema,
+        };
+        auto* port = elicitation_port();
+        auto operation = self<CallToolOperation>();
+        // The wait's own stop source is what the port is asked under, and it
+        // is stopped whenever the loop stops waiting. That is how an
+        // abandoned question is withdrawn: the port learns the call is over
+        // and stops showing a question nobody can answer any more, which is
+        // the difference between a bounded wait and a stale dialog.
+        auto wait = std::make_shared<WaitControl>();
+        wait->join.emplace(stop_token(), WaitControl::Forward{wait});
+        auto asked = port->prompter(std::move(presented), wait->source.get_token());
+        // Both completions are guarded by one flag, so a timer that fires
+        // after the prompter already answered — or an answer that arrives after
+        // the bound — is discarded rather than completing the call twice.
+        auto settled = std::make_shared<std::atomic<bool>>(false);
+        auto held = std::make_shared<AskState>(AskState{
+                .suspended = std::move(suspended),
+                .carry = std::move(carry),
+                .index = index,
+        });
+        asked.start([operation, settled, held](std::expected<ElicitationAnswer, Error> answer) mutable noexcept {
+            if (settled->exchange(true, std::memory_order_acq_rel)) {
+                return;
+            }
+            operation->answered(std::move(answer), std::move(*held));
+        });
+        if (!port->delay) {
+            return; // the wait is bounded only by the caller's stop token
+        }
+        const auto bound = std::min(
+                port->timeout <= std::chrono::milliseconds{0} ? protocol::kDefaultElicitationTimeout : port->timeout,
+                protocol::kMaxElicitationTimeout);
+        auto elapsed_wait = port->delay(bound, stop_token());
+        elapsed_wait.start([operation, settled, bound, wait](std::expected<void, Error> elapsed) mutable noexcept {
+            if (settled->exchange(true, std::memory_order_acq_rel)) {
+                return;
+            }
+            wait->source.request_stop();
+            if (!elapsed) {
+                // A cancelled timer is the session stopping the wait, which
+                // ends the call the same way an unanswered bound does.
+                operation->abandon_wait(elapsed.error());
+                return;
+            }
+            operation->abandon_wait(make_error(ErrorCode::Timeout,
+                    "the Pending Elicitation was not answered within the MCP Host's bound",
+                    "the wait for the user's answer reached the " + std::to_string(bound.count()) +
+                            "ms elicitation bound; the suspended call was not re-sent"));
+        });
+    }
+
+    /// The wait ended without an answer, so the suspended call is over and
+    /// nothing is re-sent in the user's name.
+    void abandon_wait(Error error) { complete_with(failed(diagnostic_of(error, secret()))); }
+
+    void answered(std::expected<ElicitationAnswer, Error> answer, AskState state) {
+        if (!answer) {
+            // A wait that failed — cancelled, or a port that could not ask —
+            // ends the call. There is no re-send: the user never answered, so
+            // anything sent in their name would be a fabrication.
+            return complete_with(failed(diagnostic_of(answer.error(), secret())));
+        }
+        state.carry.answers.push_back(PendingAnswer{
+                .request_id = state.suspended.requests[state.index].id,
+                .action = answer->action,
+                .content = answer->form_content,
+        });
+        const auto next = state.index + 1;
+        if (next < state.suspended.requests.size()) {
+            state.index = next;
+            return ask(std::move(state.suspended), std::move(state.carry), next);
+        }
+        issue_call(std::move(state.carry));
     }
 
     /// The defensive matrix, named where each case is mapped (ADR 0064,
@@ -814,10 +1068,17 @@ private:
 
     AsyncCompletion<UpstreamToolCallResult, Error> completion_{};
     UpstreamToolCall call_{};
-    /// The JSON-RPC id of this call's exchange, which is also the request id a
-    /// `notifications/cancelled` names. Absent when the call never reached the
-    /// wire.
+    /// The JSON-RPC id of this call's **current** exchange, which is also the
+    /// request id a `notifications/cancelled` names. Absent when the call
+    /// never reached the wire. It is re-stamped on every MRTR round, because
+    /// each retried `tools/call` goes out under a fresh JSON-RPC id (spec
+    /// #833 story 28) and the notification must name the id that is actually
+    /// outstanding.
     std::optional<double> request_id_{};
+    /// How many `input_required` results this call has already been suspended
+    /// by. Bounded by `kMaxElicitationRounds`, so a server that keeps asking
+    /// costs a bounded amount of the user's attention.
+    std::size_t rounds_{0};
 };
 
 /// Start one operation, owning the connection it runs on for as long as the

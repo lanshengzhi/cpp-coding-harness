@@ -11,6 +11,7 @@
 // are all covered on the wire rather than in memory.
 
 #include <cch/mcp/UpstreamClient.hpp>
+#include <cch/mcp/UpstreamElicitation.hpp>
 #include "mcp/JsonRpc.hpp"
 #include "mcp/Protocol.hpp"
 #include "mcp/transport/BoostBeastStreamableHttpTransport.hpp"
@@ -18,6 +19,7 @@
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
 #include "support/LocalMcpHttpServer.hpp"
+#include "support/ScriptedMcpElicitation.hpp"
 #include "support/ScriptedMcpTransport.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -621,4 +623,89 @@ TEST_CASE("the MCP retry policy re-attempts only a request that was never delive
             mcp::transport::describe(McpFailureClass::RequestDelivered));
     CHECK(mcp::transport::describe(McpFailureClass::Cancelled) !=
             mcp::transport::describe(McpFailureClass::ResponseFlooded));
+}
+
+TEST_CASE("a URL elicitation round-trips over a real socket and the original call continues",
+        "[mcp][transport][tls][issue845][spec]") {
+    // The one transport seam from the other side: the production Beast TLS
+    // client against the test-only local MCP server, so the Multi Round-Trip
+    // loop is proven on the wire rather than in memory (issue #845).
+    //
+    // The continuation token is written by hand into the response body, with
+    // members in an order a value tree would sort out and a number a double
+    // would reformat. The client must echo exactly these bytes.
+    const std::string token = R"({ "z" : 1 , "a" : [ 1.50 , 1e2 ] })";
+    std::size_t calls = 0;
+    tests::LocalMcpHttpServer server(
+            script([&token, &calls](std::string_view method,
+                           const tests::RecordedHttpRequest& request) -> std::optional<tests::McpServerReply> {
+                if (method != mcp::protocol::kMethodCallTool) {
+                    return std::nullopt;
+                }
+                const auto message = decode(request);
+                if (!message) {
+                    return std::nullopt;
+                }
+                if (calls++ == 0) {
+                    return tests::McpServerReply{
+                            .body = R"({"id":)" + std::to_string(static_cast<long long>(message->id.value_or(0.0))) +
+                                    R"(,"jsonrpc":"2.0","result":{"resultType":"input_required",)"
+                                    R"("requestState":)" +
+                                    token +
+                                    R"(,"inputRequests":[{"id":"r1","type":"url",)"
+                                    R"("message":"Approve this action",)"
+                                    R"("url":"https://executor.invalid/mcp/approve/abc"}]}})"};
+                }
+                return tests::McpServerReply{
+                        .body = framed(request,
+                                tests::tool_call_result(JsonValue::array_t{JsonValue::object_t{
+                                        {"type", JsonValue("text")}, {"text", JsonValue("approved")}}}))};
+            }));
+    REQUIRE(server.ready());
+
+    tests::ScriptedMcpElicitation elicitation;
+    elicitation.answer(mcp::ElicitationAction::Accept);
+    auto port = elicitation.port(kExchangeBound);
+
+    asio::io_context io;
+    mcp::UpstreamClient client("local",
+            trusted_transport(io),
+            mcp::UpstreamClientOptions{
+                    .url = server.url(), .request_timeout = kExchangeBound, .elicitation = std::move(port)});
+
+    const auto called = drive_on(io,
+            client.call_tool(mcp::UpstreamToolCall{
+                    .tool = post_message_tool(),
+                    .arguments = JsonValue::object_t{{"channel", JsonValue("ops")}},
+            }));
+    REQUIRE(called.has_value());
+    CHECK_FALSE(called->is_error);
+    CHECK(support::write_json(called->content).value_or("").find("approved") != std::string::npos);
+
+    // The user was asked the URL-mode question the server declared, over the
+    // loop the socket drove.
+    REQUIRE(elicitation.question_count() == 1);
+    CHECK(elicitation.asked().front().request.url == "https://executor.invalid/mcp/approve/abc");
+    CHECK(elicitation.asked().front().request.message == "Approve this action");
+
+    const auto recorded = server.requests();
+    std::vector<const tests::RecordedHttpRequest*> call_requests;
+    for (const auto& request : recorded) {
+        if (request.header("Mcp-Method") == "tools/call") {
+            call_requests.push_back(&request);
+        }
+    }
+    REQUIRE(call_requests.size() == 2);
+    // A fresh JSON-RPC id per round, and the original arguments on both.
+    const auto first_id = recorded_id(*call_requests.front());
+    const auto second_id = recorded_id(*call_requests[1]);
+    REQUIRE(first_id.has_value());
+    REQUIRE(second_id.has_value());
+    CHECK(*first_id != *second_id);
+    CHECK(call_requests[0]->body.find(R"("channel":"ops")") != std::string::npos);
+    CHECK(call_requests[1]->body.find(R"("channel":"ops")") != std::string::npos);
+    // The answer, and the token in exactly the bytes the server sent.
+    CHECK(call_requests[1]->body.find(R"("action":"accept")") != std::string::npos);
+    CHECK(call_requests[1]->body.find(R"("id":"r1")") != std::string::npos);
+    CHECK(call_requests[1]->body.find("\"requestState\":" + token) != std::string::npos);
 }

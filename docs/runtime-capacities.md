@@ -153,6 +153,27 @@ There is no fairness property to measure here either: a search reads an already-
 - `an activated tool's schema reaches the next real model request and it can be called` — `[mcp][issue847][spec]`: the activation's effect lands one turn later, with the Upstream's own schema, and the call reaches the Upstream under its own tool name.
 - `a server's own instructions reach the model in a real request` — `[mcp][issue847][spec]`: the guidance is a System Prompt section, so it is in every request the session makes once the server has offered it.
 
+## MCP Host Multi Round-Trip bounds (ADR 0064, ADR 0008, spec #833 stories 27-29 and 32, issue #845)
+
+A `tools/call` an Upstream suspends for client input costs the session two things the connection bounds do not: the user's attention, and a second exchange. Both are bounded, in `src/mcp/Protocol.hpp`, and neither is caller-tunable — a bound the configuration could raise would not be a containment bound.
+
+- **`kMaxElicitationRounds = 8` suspensions per call.** A server that keeps asking costs a bounded sequence of decisions rather than a dialog that never ends; past the bound the single tool call fails with a diagnostic and the connection is untouched.
+- **`kDefaultElicitationTimeout = 5 min`, capped by `kMaxElicitationTimeout = 30 min`.** The wait is on a *human* completing an out-of-band approval, so the default is generous where the per-request deadline is not, and the cap is containment rather than tuning. The bound races the answer, not the other way round: whichever arrives first ends the wait, and a late reply is discarded rather than completing a call twice.
+- **`kMaxRequestStateBytes = 64 KiB` of opaque continuation token.** The token is echoed **verbatim**, so the only safe bound is one that refuses: a truncated token is a *different* token, and the server would reject it as though the user had answered a different question. 64 KiB is far above any token a real server issues and bounds what one hostile response can pin.
+
+Two bounds are not constants because they are not the host's to choose. The **stop token** is the caller's, and the two-phase close stops it too, so a session that ends ends the wait. The **undeclared input-request type** is a refusal: an input request whose `type` is neither `url` nor `form` — the two modes `client_capabilities()` advertises — fails exactly one tool call without asking the user anything, which is the story-32 defensive matrix and ADR 0008's isolation rule.
+
+The fairness property worth stating is the one that is *not* throughput: a suspension that is never answered produces **no re-send**. The user never answered, so nothing is sent in their name, and the call ends as one failed tool call. The regression properties below pin that alongside the numeric bounds.
+
+### Regression properties (tests)
+
+- `a URL elicitation is asked, answered, and the original call continues` — `[mcp][issue845][spec]`: the question the user is shown, a fresh JSON-RPC id on the retry, the original name and arguments, and the answer keyed by the request the Upstream named.
+- `the opaque requestState is echoed byte-for-byte on every retry` — `[mcp][issue845][spec]`: the fixture writes the result's source text by hand, with members out of the order a value tree sorts them into and numbers a double would reformat, so a retry built by re-serializing the token would carry different bytes. Two rounds, a fresh id each, arguments intact.
+- `a server that keeps suspending is bounded in rounds` — `[mcp][issue845][spec]`: exactly the declared cap of suspensions, then one failed call.
+- `an unanswered elicitation reaches its bound, fails one call, and re-sends nothing`, `stopping the call during an elicitation leaves no suspended call and no re-send`, and `a continuation token past the host's bound is refused, not truncated` — `[mcp][issue845][spec]`: the bound, the session's stop token, the close-during-a-wait race with a late answer discarded, and the token refusal.
+- `an undeclared input-request type fails one call and never asks the user` — `[mcp][issue845][spec]`: the user is never asked, one call fails, and the next ordinary call on the same connection still succeeds with no re-probe and no re-list.
+- `an unanswered elicitation that reaches its bound fails the one call and sends nothing` — `[mcp][coding_agent][issue845][spec]`: the same property through the production session door, on the session's own timer, with the question withdrawn when the wait ends.
+
 ## MCP Host connection bounds (ADR 0064, ADR 0011, spec #833 stories 9 and 10, issue #839)
 
 The same private constants point bounds what one Upstream connection costs while it is trying, failing, and being torn down. These are not throughput policy either: the work they bound is one probe of one endpoint, so there is no queue to tune. They are containment plus liveness.
