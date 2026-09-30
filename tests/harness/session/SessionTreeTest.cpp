@@ -115,16 +115,14 @@ TEST_CASE("SessionTree getChildren returns correct children", "[harness][session
     }
 }
 
-TEST_CASE("SessionTree empty tree (header only)", "[harness][session][tree][spec]") {
+TEST_CASE("SessionTree is empty for a header-only session", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
-    auto path = workspace.path() / "header-only.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
-    REQUIRE(store);
-    // Don't append any messages
-
-    auto loaded = harness::session::JsonlSessionStore::load(path);
-    REQUIRE(loaded);
-    harness::session::SessionTree tree(std::move(*loaded));
+    // A header-only session no longer exists on disk (ADR 0064 defers the
+    // file to the first user or assistant message); the header-only tree is
+    // the in-memory shape a pre-flush session holds.
+    harness::session::LoadedSession loaded;
+    loaded.metadata = test_metadata(workspace);
+    harness::session::SessionTree tree(std::move(loaded));
 
     CHECK(tree.empty());
     CHECK(tree.size() == 0);
@@ -276,13 +274,9 @@ TEST_CASE("SessionTree root returns root entry", "[harness][session][tree][spec]
 
 TEST_CASE("SessionTree root returns nullptr for empty tree", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
-    auto path = workspace.path() / "empty-root.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
-    REQUIRE(store);
-
-    auto loaded = harness::session::JsonlSessionStore::load(path);
-    REQUIRE(loaded);
-    harness::session::SessionTree tree(std::move(*loaded));
+    harness::session::LoadedSession loaded;
+    loaded.metadata = test_metadata(workspace);
+    harness::session::SessionTree tree(std::move(loaded));
 
     CHECK(tree.root() == nullptr);
     CHECK(tree.leaf_entry() == nullptr);
@@ -732,13 +726,9 @@ TEST_CASE("buildSessionContext reads known entry meaning from typed values", "[h
 
 TEST_CASE("buildSessionContext empty tree returns empty context", "[harness][session][tree][spec]") {
     tests::TempWorkspace workspace;
-    auto path = workspace.path() / "ctx-empty.jsonl";
-    auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
-    REQUIRE(store);
-
-    auto loaded = harness::session::JsonlSessionStore::load(path);
-    REQUIRE(loaded);
-    harness::session::SessionTree tree(std::move(*loaded));
+    harness::session::LoadedSession loaded;
+    loaded.metadata = test_metadata(workspace);
+    harness::session::SessionTree tree(std::move(loaded));
 
     auto ctx = tree.buildSessionContext();
     CHECK(ctx.messages.empty());

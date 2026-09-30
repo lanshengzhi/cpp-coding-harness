@@ -1,6 +1,7 @@
 #include "coding_agent/AgentSessionImpl.hpp"
 
 #include <cch/ai/Content.hpp>
+#include <cch/ai/Timestamps.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/Settings.hpp>
@@ -45,11 +46,6 @@ constexpr std::size_t kMaxArtifactReferenceBytes = 1024;
         }
     }
     return std::nullopt;
-}
-
-[[nodiscard]] ai::TimestampMs completion_timestamp_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
-            .count();
 }
 
 [[nodiscard]] std::string serialize_projection_tool_arguments(const support::JsonValue& arguments) {
@@ -263,6 +259,9 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
         const auto previous_sections = prompt::replaySystemPromptSections(previous_system_messages);
         ai::SystemMessage section_diff{
                 .sections = prompt::diffSystemPromptSections(previous_sections, current_sections)};
+        // Same mint-time stamp as the initial transcript system message (pi
+        // `_preparePromptAndToolLoadout`'s `timestamp: Date.now()`).
+        section_diff.timestamp = ai::current_timestamp_ms();
         if (!section_diff.sections.empty()) {
             ai::MessageVariant message{section_diff};
             if (session_.store) {
@@ -405,7 +404,7 @@ boost::asio::awaitable<support::Expected<runtime::UserBashCompletion>> AgentSess
 
     const auto artifact_error = output.artifact_error();
     auto message = make_bash_execution_message(
-            *shell_result, output, recorded_command, exclude_from_context, completion_timestamp_ms());
+            *shell_result, output, recorded_command, exclude_from_context, ai::current_timestamp_ms());
 
     runtime::UserBashCompletion completion{
             .message = std::move(message),
@@ -925,6 +924,20 @@ support::Expected<SessionTreeTopology> AgentSession::Impl::session_tree() const 
     };
 }
 
+support::Expected<std::vector<harness::session::SessionEntry>> AgentSession::Impl::session_entries() const {
+    if (auto rejected = reject_if_closed(); !rejected) {
+        return std::unexpected(rejected.error());
+    }
+    if (!session_.store) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "session store is unavailable"));
+    }
+    // The store's live tree answers from memory for both persistence
+    // alternatives; entries buffered ahead of the deferred first flush (ADR
+    // 0064) are visible here exactly as pi's in-memory SessionManager
+    // entries are before its delayed first flush.
+    return session_.store->entries();
+}
+
 support::Expected<TreeNavigationResult> AgentSession::Impl::navigate_tree(std::string_view target_id) {
     if (auto rejected = reject_if_closed(); !rejected) {
         return std::unexpected(rejected.error());
@@ -1204,7 +1217,7 @@ void AgentSession::Impl::update_projection(const AgentSessionEvent& event) {
         run_state_.phase = RunPhase::Retrying;
         recovery_state_.retry_count = retry->attempt > 0 ? static_cast<std::size_t>(retry->attempt) : 0;
         recovery_state_.max_retry_count = retry->max_attempts > 0 ? static_cast<std::size_t>(retry->max_attempts) : 0;
-        recovery_state_.next_retry_at_ms = completion_timestamp_ms() + retry->delay_ms;
+        recovery_state_.next_retry_at_ms = ai::current_timestamp_ms() + retry->delay_ms;
         recovery_state_.retry_error = bounded_redacted_presentation(retry->error_message);
     } else if (const auto* retry = std::get_if<AutoRetryEndEvent>(&event)) {
         recovery_state_.next_retry_at_ms.reset();

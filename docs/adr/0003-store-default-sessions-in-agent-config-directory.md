@@ -9,6 +9,8 @@ Default persisted Agent Session histories are user-level agent state associated 
 > The concrete directory root referenced here is superseded by [ADR 0030](0030-share-pi-agent-config-directory-and-credential-store.md): the Agent Config Directory is pi's own `~/.pi/agent`. The session-storage ownership and workspace-keyed layout decisions below are unchanged.
 >
 > The session-directory override variable `CCH_CODING_AGENT_SESSION_DIR` is superseded by [ADR 0031](0031-align-settings-shared-file-cli-and-resume-configuration-with-pi.md): pi's `PI_CODING_AGENT_SESSION_DIR` applies, removed without fallback. The precedence chain and resolution rules below are unchanged.
+>
+> The eager publication of the session file at creation is superseded by [ADR 0064](0064-defer-the-session-file-to-the-first-user-or-assistant-message.md): publication still validates and reserves the path privately, but the file appears only with the first user or assistant message.
 
 ## Considered options
 
@@ -23,6 +25,6 @@ Default persisted Agent Session histories are user-level agent state associated 
 - SDK session creation uses one variant target for default persistence, explicit creation, resume, or in-memory operation. Session paths are optional values because in-memory sessions have no file. CLI exposes an explicit `--no-session` mode.
 - Explicit create and resume paths may remain outside the default root. Old project-local files are neither scanned nor migrated, but an explicitly supplied valid path remains usable.
 - On POSIX, default-created session directories are owner-only (`0700`) and every new session file remains owner-readable/writable (`0600`), including files in explicit custom directories. Existing custom directories are not chmodded. Other platforms provide the closest supported protection. An unavailable or insufficiently private default store fails with the target path and reason; it never falls back to the workspace or silently becomes in-memory.
-- Path computation is side-effect free. Directory and file creation happen only when the session is published, through a narrow Session Store capability used uniformly by JSONL and in-memory sessions.
-- C++ intentionally retains its existing incremental durability semantics: failed assembly leaves no session file, while a successfully assembled session creates its header and persists completed user history even if a later provider step fails. pi's delayed first flush is not adopted.
+- Path computation is side-effect free. Directory creation and path validation happen when the session is published, through a narrow Session Store capability used uniformly by JSONL and in-memory sessions; the session file itself is deferred to the first user or assistant message by [ADR 0064](0064-defer-the-session-file-to-the-first-user-or-assistant-message.md).
+- C++ intentionally retains its existing incremental durability semantics: a successfully assembled session persists completed user history even if a later provider step fails. pi's v0.87.1 assistant-triggered delayed first flush is superseded by the user-or-assistant-triggered flush in [ADR 0064](0064-defer-the-session-file-to-the-first-user-or-assistant-message.md) — pi v0.99.1's own trigger (#10000) — which keeps the same durability guarantee while ensuring an empty session never produces a file.
 - Session browsing, lookup by ID, selection, and deletion remain separate parity decisions. This decision does not implement those interfaces.

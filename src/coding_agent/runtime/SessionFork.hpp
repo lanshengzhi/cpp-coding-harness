@@ -82,7 +82,7 @@ struct ForkSource {
 ///
 /// Verbatim pi errors: "Invalid entry ID for forking" (unknown entry, or a
 /// non-user entry with position "before"), "This session has not been saved
-/// yet. Wait for the first assistant response before cloning or forking it."
+/// yet. Send a message before cloning or forking it."
 /// (persisted source whose file is missing), and "Failed to create forked
 /// session" (branch file load/write failures).
 [[nodiscard]] support::Expected<ForkPreparation> prepare_fork(

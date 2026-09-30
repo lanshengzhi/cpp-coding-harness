@@ -267,6 +267,11 @@ TEST_CASE("session selector cancels on Escape and the current session is marked"
     Fixture fixture;
     fixture.write_session(
         fixture.workspace.path() / "other.jsonl", {"hello from other"});
+    // ADR 0064: a session file exists only once the session has a user
+    // message, so the boot session resumes a seeded transcript; the selector
+    // marks its row as the current session.
+    fixture.write_session(
+        fixture.session_file, {"boot session seed"}, std::nullopt, "boot-session");
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
     auto session = boot(fixture, running, actions);
@@ -274,8 +279,8 @@ TEST_CASE("session selector cancels on Escape and the current session is marked"
     REQUIRE(running.terminal.inject_input("\x1b[17~"));
     drain_ready(running.io);
     auto screen = visible_screen(running.terminal);
-    // The boot session row shows its (no messages) placeholder.
-    CHECK(screen.find("(no messages)") != std::string::npos);
+    // The boot session row is listed with its seeded first message.
+    CHECK(screen.find("boot session seed") != std::string::npos);
 
     REQUIRE(running.terminal.inject_input("\x1b"));
     drain_ready(running.io);

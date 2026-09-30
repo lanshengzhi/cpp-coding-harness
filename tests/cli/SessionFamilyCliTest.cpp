@@ -5,6 +5,7 @@
 #include "support/TempWorkspace.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "support/Json.hpp"
+#include "support/ModelsFixture.hpp"
 #include "support/AgentRootFixture.hpp"
 
 #include <algorithm>
@@ -85,21 +86,53 @@ std::string header_session_id(const std::filesystem::path& path) {
     return object.at("id").get<std::string>();
 }
 
-std::string session_entry_field(
-        const std::filesystem::path& path, std::string_view entry_type, std::string_view field) {
+/// The first parsed session entry line whose JSON object satisfies `match`.
+template <typename Match>
+std::optional<cch::support::JsonValue> find_session_entry(
+        const std::filesystem::path& path, Match&& match) {
     std::ifstream input(path, std::ios::binary);
     std::string line;
     while (std::getline(input, line)) {
         auto parsed = cch::support::read_json(line);
         if (!parsed) continue;
         const auto* object = parsed->get_if<cch::support::JsonValue::object_t>();
-        if (object == nullptr) continue;
-        const auto type = object->find("type");
-        if (type == object->end() || type->second.get<std::string>() != entry_type) continue;
-        return object->at(std::string{field}).get<std::string>();
+        if (object != nullptr && match(*object)) {
+            return std::optional<cch::support::JsonValue>{std::move(*parsed)};
+        }
     }
-    FAIL("session entry not found: " + std::string{entry_type});
-    return {};
+    return std::nullopt;
+}
+
+std::string session_entry_field(
+        const std::filesystem::path& path, std::string_view entry_type, std::string_view field) {
+    const auto entry = find_session_entry(path, [&](const cch::support::JsonValue::object_t& object) {
+        const auto type = object.find("type");
+        return type != object.end() && type->second.get<std::string>() == entry_type;
+    });
+    if (!entry) {
+        FAIL("session entry not found: " + std::string{entry_type});
+        return {};
+    }
+    return entry->get_object().at(std::string{field}).get<std::string>();
+}
+
+/// The inner message timestamp (epoch millis) of the first persisted system
+/// message entry — pi stamps it with `Date.now()` at mint time, so a real
+/// session never persists `0`.
+double first_system_message_timestamp(const std::filesystem::path& path) {
+    const auto entry = find_session_entry(path, [](const cch::support::JsonValue::object_t& object) {
+        const auto type = object.find("type");
+        if (type == object.end() || type->second.get<std::string>() != "message") {
+            return false;
+        }
+        const auto& message = object.at("message").get_object();
+        return message.at("role").get<std::string>() == "system";
+    });
+    if (!entry) {
+        FAIL("no persisted system message entry");
+        return 0;
+    }
+    return entry->get_object().at("message").get_object().at("timestamp").get_number();
 }
 
 /// The `parentSession` field from a session file's header, when present.
@@ -210,15 +243,11 @@ TEST_CASE("CLI model thinking suffix reaches the persisted session state", "[cli
             {cch::ai::ModelThinkingLevel::Max, "max"},
     };
     std::vector<cch::coding_agent::ModelRuntimeTestProvider> providers;
-    providers.push_back(cch::coding_agent::ModelRuntimeTestProvider{
-            .definition =
-                    cch::ai::ProviderDefinition{
-                            .id = "alpha",
-                            .name = "alpha",
-                            .models = {std::move(model)},
-                            .auth = cch::tests::detail::fixture_auth(),
-                    },
-    });
+    providers.push_back(cch::tests::make_test_provider_definition(
+            cch::tests::make_scripted_fake_provider("alpha"),
+            "alpha",
+            {std::move(model)},
+            cch::tests::detail::fixture_auth()));
     auto runtime = cch::coding_agent::create_model_runtime_for_testing(
             cch::coding_agent::ModelRuntimeOptions{
                     .models_path = std::filesystem::path{},
@@ -230,7 +259,7 @@ TEST_CASE("CLI model thinking suffix reaches the persisted session state", "[cli
     REQUIRE(runtime);
 
     cch::tests::CliRunOptions options{
-            .args = {"--session", session.string(), "--model", "alpha/k3-256k:low"},
+            .args = {"--session", session.string(), "--model", "alpha/k3-256k:low", "seed"},
             .cwd = fixture.workspace.path(),
             .env = fixture.env,
             .stdin_text = {},
@@ -240,11 +269,17 @@ TEST_CASE("CLI model thinking suffix reaches the persisted session state", "[cli
     };
     const auto result = cch::tests::run_cli_with_runtime(std::move(options), std::move(*runtime));
 
+    // ADR 0064: the session file lands with the first user or assistant
+    // message, so the persisted entries are observed after one prompted turn.
     REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_text == "fake: seed\n");
     CHECK(session_entry_field(session, "session", "provider") == "alpha");
     CHECK(session_entry_field(session, "session", "model") == "k3-256k");
     CHECK(session_entry_field(session, "model_change", "modelId") == "k3-256k");
     CHECK(session_entry_field(session, "thinking_level_change", "thinkingLevel") == "low");
+    // ADR 0064: the initial system message carries a real epoch-millis
+    // timestamp (pi `_preparePromptAndToolLoadout`'s `Date.now()`), not 0.
+    CHECK(first_system_message_timestamp(session) > 1'000'000'000'000);
 }
 
 TEST_CASE("session-family: --session initializes an existing empty file as a new session",

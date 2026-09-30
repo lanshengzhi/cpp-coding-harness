@@ -293,8 +293,8 @@ TEST_CASE("fork errors match pi verbatim strings", "[coding_agent][runtime][sess
     REQUIRE_FALSE(unsaved.has_value());
     CHECK(
         unsaved.error().message ==
-        "This session has not been saved yet. Wait for the first assistant "
-        "response before cloning or forking it.");
+        "This session has not been saved yet. Send a message before cloning "
+        "or forking it.");
 
     // An empty source file and a header-less source file carry the G3
     // verbatim "Cannot fork: ..." strings.

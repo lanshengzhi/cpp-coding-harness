@@ -207,6 +207,10 @@ TEST_CASE("resume replays the recorded tool loadout and ignores unavailable impo
     auto created = runtime.run(coding_agent::create_agent_session_async(
             std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
+    // ADR 0064: the session file exists only once the first user or
+    // assistant message flushes it, so the recorded loadout needs one prompt
+    // on disk.
+    REQUIRE(tests::run_awaitable(runtime, created->session->prompt("seed")).has_value());
     created->session->close();
 
     auto store = harness::session::SessionStore::open_existing(paths.session_file);

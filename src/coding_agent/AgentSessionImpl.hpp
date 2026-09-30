@@ -196,6 +196,12 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     /// SessionManager keeps, so no tree surface synthesizes topology from
     /// the live context.
     [[nodiscard]] support::Expected<SessionTreeTopology> session_tree() const;
+    /// pi `SessionManager.getEntries()` over the store's live tree: the
+    /// recorded entries in append order, including entries still buffered
+    /// ahead of the deferred first flush (ADR 0064). Entries minted in
+    /// memory carry no `raw_line`; only entries parsed back from the file
+    /// do.
+    [[nodiscard]] support::Expected<std::vector<harness::session::SessionEntry>> session_entries() const;
 
     /// pi `AgentSession.navigateTree` subset (G2 decision 13): switch the
     /// active path to `target_id` with the leaf/active-path semantics of the

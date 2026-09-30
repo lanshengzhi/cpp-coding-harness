@@ -85,6 +85,11 @@ TEST_CASE("Session Store metadata returns the construction header for both alter
     CHECK(created->metadata().session_id == "session-store-test");
     CHECK(created->metadata().model == "fake-model");
 
+    // The deferred first flush (ADR 0064) lands the header with the first
+    // user message; only then can an opened store report the persisted
+    // header.
+    REQUIRE(created->append(user_message("seed")).has_value());
+
     // An opened store reports the persisted header.
     auto opened = harness::session::SessionStore::open_existing(path);
     REQUIRE(opened.has_value());
@@ -190,11 +195,14 @@ TEST_CASE("the in-memory alternative keeps entries the JSONL alternative refuses
     // unreadable assistant is absent and the summary reached the file
     // redacted. A regression that stopped redacting at the persistence
     // boundary fails here even though every in-memory assertion above holds.
+    // The deferred first flush (ADR 0064) lands the buffered compaction with
+    // this user message.
+    REQUIRE(persisted->append(user_message("flush")).has_value());
     const auto reloaded = harness::session::SessionStore::load(path);
     REQUIRE(reloaded);
-    REQUIRE(reloaded->entries.size() == 2);
-    REQUIRE(reloaded->entries.back().kind == harness::session::SessionEntryKind::Compaction);
-    const auto& stored = std::get<harness::session::CompactionEntryValue>(reloaded->entries.back().value);
+    REQUIRE(reloaded->entries.size() == 3);
+    REQUIRE(reloaded->entries[1].kind == harness::session::SessionEntryKind::Compaction);
+    const auto& stored = std::get<harness::session::CompactionEntryValue>(reloaded->entries[1].value);
     CHECK(stored.summary.find("sk-live-value") == std::string::npos);
     CHECK(stored.summary != memory_compaction.summary);
 }
@@ -229,12 +237,14 @@ TEST_CASE("an engaged but empty compaction tail is dropped by both persistence a
     // The live tree above is only a mirror. Re-read the file, because a
     // regression that dropped the tail from the mirror while the wire line
     // still carried an engaged empty tail would satisfy every check above and
-    // still diverge from a reloaded session.
+    // still diverge from a reloaded session. The deferred first flush (ADR
+    // 0064) lands the buffered compaction with this user message.
+    REQUIRE(persisted->append(user_message("flush")).has_value());
     const auto reloaded = harness::session::SessionStore::load(path);
     REQUIRE(reloaded);
-    REQUIRE(reloaded->entries.size() == 2);
-    REQUIRE(reloaded->entries.back().kind == harness::session::SessionEntryKind::Compaction);
-    const auto& reloaded_compaction = std::get<harness::session::CompactionEntryValue>(reloaded->entries.back().value);
+    REQUIRE(reloaded->entries.size() == 3);
+    REQUIRE(reloaded->entries[1].kind == harness::session::SessionEntryKind::Compaction);
+    const auto& reloaded_compaction = std::get<harness::session::CompactionEntryValue>(reloaded->entries[1].value);
     CHECK_FALSE(reloaded_compaction.retained_tail.has_value());
 }
 

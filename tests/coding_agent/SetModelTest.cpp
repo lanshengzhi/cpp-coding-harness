@@ -15,6 +15,7 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
 #include "support/RuntimeFixture.hpp"
+#include "support/SessionEntries.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -143,17 +144,6 @@ constexpr std::string_view kTwoReasoningProviders = R"({
   }
 })";
 
-[[nodiscard]] const harness::session::SessionEntry* find_thinking_entry(
-    const harness::session::LoadedSession& loaded) {
-    const harness::session::SessionEntry* found = nullptr;
-    for (const auto& entry : loaded.entries) {
-        if (entry.kind == harness::session::SessionEntryKind::ThinkingLevelChange) {
-            found = &entry;
-        }
-    }
-    return found;
-}
-
 [[nodiscard]] coding_agent::runtime::AgentSessionCreationRequest cli_request(
     const Fixture& fixture) {
     coding_agent::runtime::AgentSessionCreationRequest request;
@@ -164,17 +154,6 @@ constexpr std::string_view kTwoReasoningProviders = R"({
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
     request.execution_runtime_target = fixture.runtime.make_target();
     return request;
-}
-
-[[nodiscard]] const harness::session::SessionEntry* find_model_change_entry(
-    const harness::session::LoadedSession& loaded) {
-    const harness::session::SessionEntry* found = nullptr;
-    for (const auto& entry : loaded.entries) {
-        if (entry.kind == harness::session::SessionEntryKind::ModelChange) {
-            found = &entry;
-        }
-    }
-    return found;
 }
 
 [[nodiscard]] support::JsonValue settings_object(const Fixture& fixture) {
@@ -200,13 +179,16 @@ TEST_CASE("set_model rejects a switch to a provider with no configured auth",
     REQUIRE_FALSE(switched.has_value());
     CHECK(switched.error().message == "No API key for beta/beta-1");
 
-    // The live model is unchanged and no model_change entry was persisted.
+    // The live model is unchanged and no model_change entry was recorded.
+    // ADR 0064 defers the session file to the first user or assistant
+    // message, so the recorded entries are observed on the live tree (pi
+    // `SessionManager.getEntries()`).
     CHECK(result->session->snapshot().agent_state.model.id == "alpha-1");
+    const auto recorded = result->session->session_entries();
+    REQUIRE(recorded.has_value());
     result->session->close();
 
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
-    const auto* entry = find_model_change_entry(*loaded);
+    const auto* entry = tests::find_last_model_change(*recorded);
     REQUIRE(entry != nullptr);
     const auto& value = std::get<harness::session::ModelChangeValue>(entry->value);
     CHECK(value.provider == "alpha");
@@ -231,12 +213,11 @@ TEST_CASE("set_model switches the live model and persists the model_change entry
     const auto snapshot = result->session->snapshot();
     CHECK(snapshot.agent_state.model.provider == "beta");
     CHECK(snapshot.agent_state.model.id == "beta-1");
+    // The session records the new `model_change` entry.
+    const auto recorded = result->session->session_entries();
+    REQUIRE(recorded.has_value());
     result->session->close();
-
-    // The durable session file carries the new `model_change` entry.
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
-    const auto* entry = find_model_change_entry(*loaded);
+    const auto* entry = tests::find_last_model_change(*recorded);
     REQUIRE(entry != nullptr);
     const auto& value = std::get<harness::session::ModelChangeValue>(entry->value);
     CHECK(value.provider == "beta");
@@ -424,11 +405,11 @@ TEST_CASE("set_model to a non-thinking model re-clamps the level and persists th
     // The kept level clamps against the non-reasoning model (pi setModel →
     // setThinkingLevel).
     CHECK(result->session->snapshot().agent_state.thinking_level == "off");
+    const auto recorded = result->session->session_entries();
+    REQUIRE(recorded.has_value());
     result->session->close();
 
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
-    const auto* entry = find_thinking_entry(*loaded);
+    const auto* entry = tests::find_last_thinking_level_change(*recorded);
     REQUIRE(entry != nullptr);
     const auto& value =
         std::get<harness::session::ThinkingLevelChangeValue>(entry->value);
@@ -495,11 +476,11 @@ TEST_CASE("set_model re-clamps the level and never rewrites the global thinking 
     // rewrite the global thinking default"), so the earlier "high" write
     // stays untouched.
     CHECK(result->session->snapshot().agent_state.thinking_level == "off");
+    const auto recorded = result->session->session_entries();
+    REQUIRE(recorded.has_value());
     result->session->close();
 
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
-    const auto* entry = find_thinking_entry(*loaded);
+    const auto* entry = tests::find_last_thinking_level_change(*recorded);
     REQUIRE(entry != nullptr);
     const auto& value = std::get<harness::session::ThinkingLevelChangeValue>(entry->value);
     CHECK(value.thinking_level == "off");
@@ -538,11 +519,11 @@ TEST_CASE("set_model from a non-thinking model restores the settings default thi
     // thinking, so the merged settings default wins and clamps against the
     // new reasoning model.
     CHECK(result->session->snapshot().agent_state.thinking_level == "high");
+    const auto recorded = result->session->session_entries();
+    REQUIRE(recorded.has_value());
     result->session->close();
 
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
-    const auto* entry = find_thinking_entry(*loaded);
+    const auto* entry = tests::find_last_thinking_level_change(*recorded);
     REQUIRE(entry != nullptr);
     const auto& value =
         std::get<harness::session::ThinkingLevelChangeValue>(entry->value);
@@ -609,11 +590,11 @@ TEST_CASE("set_model resets the thinking level to the global default when one ex
     // The settings default — not the drifted live level — clamps onto the
     // new reasoning model, and the effective change records the entry.
     CHECK(result->session->snapshot().agent_state.thinking_level == "low");
+    const auto recorded = result->session->session_entries();
+    REQUIRE(recorded.has_value());
     result->session->close();
 
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
-    const auto* entry = find_thinking_entry(*loaded);
+    const auto* entry = tests::find_last_thinking_level_change(*recorded);
     REQUIRE(entry != nullptr);
     const auto& value = std::get<harness::session::ThinkingLevelChangeValue>(entry->value);
     CHECK(value.thinking_level == "low");
@@ -639,16 +620,16 @@ TEST_CASE("set_model keeps the live level and records no thinking entry when no 
     // lands after the `model_change` (the session-model-switch parity). The
     // creation-time initial entry stays the only thinking entry.
     CHECK(result->session->snapshot().agent_state.thinking_level == "medium");
+    const auto recorded = result->session->session_entries();
+    REQUIRE(recorded.has_value());
     result->session->close();
 
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
     const auto thinking_entries = std::count_if(
-            loaded->entries.begin(), loaded->entries.end(), [](const harness::session::SessionEntry& entry) {
+            recorded->begin(), recorded->end(), [](const harness::session::SessionEntry& entry) {
                 return entry.kind == harness::session::SessionEntryKind::ThinkingLevelChange;
             });
     CHECK(thinking_entries == 1);
-    const auto* model_entry = find_model_change_entry(*loaded);
+    const auto* model_entry = tests::find_last_model_change(*recorded);
     REQUIRE(model_entry != nullptr);
     const auto& model_value = std::get<harness::session::ModelChangeValue>(model_entry->value);
     CHECK(model_value.provider == "beta");

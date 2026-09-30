@@ -252,16 +252,22 @@ std::vector<std::thread::id> recorded_append_threads_for_test(
 
 } // namespace testing
 
-support::Expected<SessionJournal> SessionJournal::create_new(
-    const std::filesystem::path& path, std::string_view header_line) {
-    auto validation = validate_session_path_for_open(path, false);
-    if (!validation) {
+support::ExpectedVoid SessionJournal::validate_new_session_path(
+    const std::filesystem::path& path) {
+    if (auto validation = validate_session_path_for_open(path, false); !validation) {
         return std::unexpected(validation.error());
     }
-
     std::error_code ec;
     if (std::filesystem::exists(path, ec)) {
         return std::unexpected(session_error("session file already exists", "use --resume to append"));
+    }
+    return {};
+}
+
+support::Expected<SessionJournal> SessionJournal::create_new(
+    const std::filesystem::path& path, std::string_view header_line) {
+    if (auto validation = validate_new_session_path(path); !validation) {
+        return std::unexpected(validation.error());
     }
 
     auto content = std::string{header_line} + '\n';
@@ -277,6 +283,61 @@ support::Expected<SessionJournal> SessionJournal::create_new(
     SessionJournal journal;
     journal.path_ = path;
     return journal;
+}
+
+support::Expected<SessionJournal> SessionJournal::create_deferred(
+    const std::filesystem::path& path) {
+    if (auto validation = validate_new_session_path(path); !validation) {
+        return std::unexpected(validation.error());
+    }
+
+    // The parent chain keeps create_new's timing: directories are created and
+    // the symlink walk rejects a redirected parent at publication, not at the
+    // deferred first flush.
+    auto parent = open_parent_directory(path, true);
+    if (!parent) {
+        return std::unexpected(parent.error());
+    }
+
+    SessionJournal journal;
+    journal.path_ = path;
+    journal.deferred_ = true;
+    return journal;
+}
+
+support::ExpectedVoid SessionJournal::flush_new(
+    std::string_view header_line, const std::vector<std::string>& lines) {
+    if (!deferred_) {
+        return std::unexpected(session_error(
+            "session journal is not deferred", "flush_new applies only before the first write"));
+    }
+
+    apply_append_test_hooks(path_);
+
+    std::string content{header_line};
+    content += '\n';
+    for (const auto& line : lines) {
+        content += line;
+    }
+    if (auto written = write_new_file_exclusive(path_, content); !written) {
+        return std::unexpected(written.error());
+    }
+
+    // The injected failure lands after the exclusive create so failure tests
+    // exercise the same partial-file removal as a post-write failure.
+    if (consume_injected_append_failure(path_)) {
+        remove_session_file(path_);
+        return std::unexpected(session_error(
+            "could not persist session entry", "injected append failure"));
+    }
+
+    if (auto perms = ensure_private_permissions(path_, false); !perms) {
+        remove_session_file(path_);
+        return std::unexpected(perms.error());
+    }
+
+    deferred_ = false;
+    return {};
 }
 
 support::Expected<SessionJournal> SessionJournal::open_existing(const std::filesystem::path& path) {
@@ -295,6 +356,10 @@ support::Expected<SessionJournal> SessionJournal::open_existing(const std::files
 }
 
 support::ExpectedVoid SessionJournal::append_line(std::string_view line) const {
+    if (deferred_) {
+        return std::unexpected(session_error(
+            "could not append to session file", "session journal awaits its first flush"));
+    }
     apply_append_test_hooks(path_);
     if (consume_injected_append_failure(path_)) {
         return std::unexpected(session_error(

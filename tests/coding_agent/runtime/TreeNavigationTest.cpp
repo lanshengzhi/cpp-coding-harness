@@ -21,6 +21,7 @@
 
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/agent/harness/session/SessionTree.hpp>
+#include "support/SessionSeeding.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -32,6 +33,7 @@
 #include <chrono>
 #include <deque>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -735,9 +737,14 @@ TEST_CASE("persisted navigation then prompt appends to the navigated leaf",
 TEST_CASE("session_tree exposes the topology for an empty persisted session",
         "[coding_agent][runtime][tree-navigation][issue410][spec]") {
     Fixture fixture;
-    auto created = harness::session::SessionStore::create_new(
-        fixture.session_file, test_metadata(fixture));
-    REQUIRE(created.has_value());
+    // A header-only transcript: ADR 0064 never writes one through the store,
+    // but imported or interrupted sessions can still be one, and the resume
+    // chain must carry it. Write the header the way the store would have.
+    {
+        std::ofstream out(fixture.session_file, std::ios::binary);
+        out << tests::session_header_line(test_metadata(fixture)) << '\n';
+    }
+    tests::make_session_file_private(fixture.session_file);
     auto session = open_session(fixture);
 
     // The resumed header-only session carries the restored thinking entry

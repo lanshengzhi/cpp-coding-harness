@@ -26,6 +26,7 @@
 #include "support/AsyncResultBridge.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
+#include "support/SessionSeeding.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/Json.hpp"
 
@@ -947,17 +948,26 @@ TEST_CASE("compaction persistence and rebuild goldens match pi's CompactionEntry
     const auto* result = std::get_if<harness::session::CompactionResult>(&*outcome);
     REQUIRE(result != nullptr);
 
-    // Persist into a real JsonlSessionStore file (pi appendCompaction).
+    // Persist into a real JsonlSessionStore file (pi appendCompaction). ADR
+    // 0064 defers new-session files to the first user or assistant message,
+    // so this
+    // writes the header directly — a header-only session, as imports or
+    // pre-0064 files can still be — and opens it eagerly; the compaction
+    // stays the root entry and the pi golden remains byte-identical.
     cch::tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "golden-session.jsonl";
-    auto jsonl = harness::session::JsonlSessionStore::create_new(session_path,
-            harness::session::SessionMetadata{
+    {
+        std::ofstream out(session_path, std::ios::binary);
+        out << cch::tests::session_header_line(harness::session::SessionMetadata{
                     .session_id = "compaction-golden",
                     .created_at = "2026-08-05T00:00:00Z",
                     .workspace = workspace.path(),
                     .provider = "fake",
                     .model = "gpt-test",
-            });
+            }) << '\n';
+    }
+    cch::tests::make_session_file_private(session_path);
+    auto jsonl = harness::session::JsonlSessionStore::open_existing(session_path);
     REQUIRE(jsonl.has_value());
     REQUIRE(jsonl->append_compaction(std::nullopt,
                          harness::session::CompactionEntryValue{

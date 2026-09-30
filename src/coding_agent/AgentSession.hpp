@@ -398,8 +398,8 @@ public:
     /// into the source session's directory; in-memory sessions produce the
     /// branch seed for a newly created in-memory session. Verbatim pi
     /// errors: "Invalid entry ID for forking", "This session has not been
-    /// saved yet. Wait for the first assistant response before cloning or
-    /// forking it.", "Failed to create forked session", and the G3 "Cannot
+    /// saved yet. Send a message before cloning or forking it.", "Failed to
+    /// create forked session", and the G3 "Cannot
     /// fork: ..." source-file strings.
     [[nodiscard]] support::Expected<runtime::ForkPreparation> prepare_fork(
         std::string_view entry_id,
@@ -419,6 +419,14 @@ public:
     /// labels and the current active leaf. Both persistence alternatives
     /// answer from the store's live tree.
     [[nodiscard]] support::Expected<SessionTreeTopology> session_tree() const;
+
+    /// pi `SessionManager.getEntries()`: the session's recorded entries in
+    /// append order, answered from the store's live tree. Buffered entries
+    /// appear here before the deferred first flush (ADR 0064) lands them on
+    /// disk, so this is the observation seam for the transcript of a session
+    /// that has not published its file yet. Entries minted in memory carry
+    /// no `raw_line`; only entries parsed back from the file do.
+    [[nodiscard]] support::Expected<std::vector<harness::session::SessionEntry>> session_entries() const;
 
     /// pi `AgentSession.navigateTree` subset: switch the active path to
     /// `target_id` with the leaf/active-path semantics of the pi v3 Session

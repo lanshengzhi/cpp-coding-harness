@@ -3,7 +3,7 @@
 #include "AnthropicEvents.hpp"
 #include "AnthropicShared.hpp"
 #include "ai/Headers.hpp"
-#include "ai/Timestamps.hpp"
+#include <cch/ai/Timestamps.hpp>
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/StreamExecutionEngine.hpp"
 #include "support/ExpectedMacros.hpp"

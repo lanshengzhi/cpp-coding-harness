@@ -256,6 +256,9 @@ TEST_CASE("reload re-reads skills, templates, context files, and SYSTEM/APPEND a
     CHECK(section_diff->sections[2].text->find("reloaded skill description.") != std::string::npos);
     CHECK(section_diff->sections[3].name == "project_context");
     CHECK_FALSE(section_diff->sections[3].text.has_value());
+    // ADR 0064: every transcript system message, including a section-diff,
+    // is minted with a real epoch-millis stamp (pi `_preparePromptAndToolLoadout`).
+    CHECK(section_diff->timestamp > 1'000'000'000'000);
     CHECK(reloaded_prompt.find("reloaded skill description.") != std::string::npos);
     CHECK(reloaded_prompt.find("initial skill description.") == std::string::npos);
     CHECK(reloaded_prompt.find("reloaded system prompt from SYSTEM.md") != std::string::npos);

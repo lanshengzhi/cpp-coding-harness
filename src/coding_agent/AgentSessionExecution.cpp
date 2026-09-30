@@ -2,6 +2,7 @@
 
 #include <cch/coding_agent/AuthGuidance.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/ai/Timestamps.hpp>
 
 #include "agent/AgentMessageAccess.hpp"
 #include "agent/AgentPromptAccess.hpp"
@@ -204,6 +205,10 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     }
     auto sections = build_system_prompt_sections();
     ai::SystemMessage system_message;
+    // pi `_preparePromptAndToolLoadout` stamps `timestamp: Date.now()` when
+    // the transcript system message is minted; an unset timestamp would
+    // persist as `"timestamp":0`.
+    system_message.timestamp = ai::current_timestamp_ms();
     system_message.sections.reserve(sections.size());
     for (const auto& section : sections) {
         system_message.sections.push_back(ai::SystemMessageSection{

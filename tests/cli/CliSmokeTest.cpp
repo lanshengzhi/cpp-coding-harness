@@ -8,8 +8,11 @@
 #include "support/TextHelpers.hpp"
 
 #include "coding_agent/cli/AsyncCliRuntime.hpp"
+#include "coding_agent/SessionPathPolicy.hpp"
 #include "support/Json.hpp"
 #include "support/AgentRootFixture.hpp"
+#include "support/SessionSeeding.hpp"
+#include <cch/agent/harness/session/SessionStore.hpp>
 
 #include <algorithm>
 #include <array>
@@ -78,6 +81,28 @@ SplitCommandResult run_command_split(const std::string& command) {
 }
 
 std::string bin() { return shell_quote(PIKE_EXECUTABLE); }
+
+/// Seed one persisted session file with a single user message. ADR 0064: a
+/// session file exists only once a user message flushes it, so CLI tests
+/// that need an existing session write it through the store directly
+/// instead of a no-prompt run (which no longer creates anything).
+void seed_session_file(
+        const std::filesystem::path& path,
+        const std::filesystem::path& workspace,
+        std::string_view provider,
+        std::string_view model,
+        std::string_view user_text) {
+    cch::tests::seed_prior_session_file(
+        path,
+        cch::harness::session::SessionMetadata{
+                .session_id = "seeded-session",
+                .created_at = "2026-07-05T00:00:00Z",
+                .workspace = workspace,
+                .provider = std::string{provider},
+                .model = std::string{model},
+        },
+        user_text);
+}
 
 void write_tiny_gif(const std::filesystem::path& path) {
     const auto bytes = cch::tests::decode_base64(cch::tests::kTinyGifBase64);
@@ -588,10 +613,16 @@ TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd",
     const auto session = storage.path() / "vanished.jsonl";
 
     // Seed a session whose header cwd (`original`) then vanishes while the
-    // file survives (pi `getMissingSessionCwdIssue`).
-    auto seeded = run_command_split("cd " + shell_quote(original.path()) + " && HOME=" + shell_quote(home.path()) +
-                                    " " + bin() + " --session " + shell_quote(session) + " --model deepseek-v4-flash");
-    REQUIRE(seeded.exit_code == 0);
+    // file survives (pi `getMissingSessionCwdIssue`). ADR 0064: the file
+    // exists only once a user message flushes it, so seed it through the
+    // store directly, with the model_change a `--model deepseek-v4-flash`
+    // run would have recorded.
+    seed_session_file(session, original.path(), "deepseek", "deepseek-v4-flash", "seed");
+    {
+        auto seeded_store = cch::harness::session::SessionStore::open_existing(session);
+        REQUIRE(seeded_store.has_value());
+        REQUIRE(seeded_store->append_model_change(std::nullopt, "deepseek", "deepseek-v4-flash").has_value());
+    }
     std::error_code ec;
     REQUIRE(std::filesystem::remove_all(original.path(), ec) > 0);
     REQUIRE_FALSE(ec);
@@ -663,12 +694,14 @@ TEST_CASE("CLI --resume opens the startup-TUI picker on a real terminal",
       }
     })");
 
-    // Seed an automatic session with no prompt (no network): a no-prompt
-    // print run still creates the session (pi). The picker's current-folder
-    // scope lists it.
-    auto seeded = run_command_split("cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) +
-                                    " " + bin() + " --model deepseek-v4-flash");
-    REQUIRE(seeded.exit_code == 0);
+    // Seed an automatic session in the default store so the picker's
+    // current-folder scope lists it. ADR 0064: the file exists only once a
+    // user message flushes it, so seed it through the store directly (a
+    // no-prompt run creates nothing — same as pi's deferred first flush).
+    const auto seeded_dir = cch::tests::agent_root_under_home(home.path()) / "sessions" /
+                            cch::coding_agent::session_paths::encode_workspace_key(workspace.path());
+    seed_session_file(seeded_dir / "2026-07-05T00-00-00-000Z_seeded-session.jsonl",
+            workspace.path(), "deepseek", "deepseek-v4-flash", "seeded picker row");
 
     auto pty = cch::tests::open_pseudo_terminal(100, 40);
     REQUIRE(pty);
@@ -760,12 +793,13 @@ TEST_CASE("CLI print mode with no prompt prints nothing and exits 0", "[cli][sel
             .stdin_text = {},
     });
 
-    // pi: no prompt-required guard; the session is still created, nothing is
-    // printed, and the run exits 0.
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text.empty());
     CHECK(result.stderr_text.empty());
-    CHECK(std::filesystem::exists(session));
+    // ADR 0064: the session is created in memory, but the file appears only
+    // with the first user or assistant message — pi's deferred first flush
+    // behaves the same, so a no-prompt run leaves no file.
+    CHECK_FALSE(std::filesystem::exists(session));
 }
 
 TEST_CASE("CLI --session opens-or-creates at the target path", "[cli][u6][spec]") {
@@ -824,7 +858,10 @@ TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through API-key guidance",
     CHECK(result.output.find("loop failed: No API key found for kimi-coding") != std::string::npos);
     CHECK(result.output.find("Use /login to log into a provider via API key.") != std::string::npos);
     CHECK(result.output.find("OAuth") == std::string::npos);
-    CHECK(std::filesystem::exists(session));
+    // ADR 0064: the prompt fails the auth preflight before any user message
+    // is recorded, so the deferred first flush never happens and no session
+    // file exists — pi's delayed first flush behaves the same.
+    CHECK_FALSE(std::filesystem::exists(session));
 }
 
 TEST_CASE("CLI terminal auth failure after malformed settings keeps the warning visible",

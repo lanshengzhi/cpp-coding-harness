@@ -638,6 +638,11 @@ support::Expected<SessionTreeTopology> AgentSession::session_tree() const {
     return impl_->session_tree();
 }
 
+support::Expected<std::vector<harness::session::SessionEntry>> AgentSession::session_entries() const {
+    if (!impl_) return std::unexpected(detail::session_not_initialized_error());
+    return impl_->session_entries();
+}
+
 support::Expected<TreeNavigationResult> AgentSession::navigate_tree(
     std::string_view target_id) {
     if (!impl_) return std::unexpected(detail::session_not_initialized_error());

@@ -102,8 +102,8 @@ namespace {
 [[nodiscard]] support::Error unsaved_session_error() {
     return support::make_error(
         support::ErrorCode::Session,
-        "This session has not been saved yet. Wait for the first assistant "
-        "response before cloning or forking it.");
+        "This session has not been saved yet. Send a message before cloning "
+        "or forking it.");
 }
 
 /// Fresh 8-char hex entry id (pi `generateId`, the C++ store's id scheme).
@@ -444,11 +444,12 @@ support::Expected<ForkPreparation> prepare_fork(
         persisted != nullptr && !persisted->session_path.empty()) {
         const auto& session_path = persisted->session_path;
         // pi fork: a persisted session whose file has not been written yet
-        // (or was removed) cannot be branched. The C++ publishes session
-        // files at creation (the #331 new-session initial-entries contract),
-        // so the unsaved state only occurs for a removed file; pi's
-        // entry-before-file precedence is unreachable here for the same
-        // reason (pi reads live manager entries, the C++ re-reads the file).
+        // (or was removed) cannot be branched. ADR 0064 defers the file to
+        // the first user or assistant message, so the unsaved state is the
+        // normal shape of a session that has not conversed yet; pi's
+        // entry-before-file
+        // precedence is unreachable here (pi reads live manager entries,
+        // the C++ re-reads the file).
         std::error_code exists_ec;
         if (!std::filesystem::exists(session_path, exists_ec)) {
             return std::unexpected(unsaved_session_error());

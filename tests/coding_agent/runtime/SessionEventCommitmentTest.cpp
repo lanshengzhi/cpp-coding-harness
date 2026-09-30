@@ -106,6 +106,10 @@ struct CommitmentChannel {
     }
 
     [[nodiscard]] std::vector<std::string> persisted_user_texts() const {
+        // Strict on purpose: a missing file means the deferred first flush
+        // (ADR 0064) never landed, which must fail a positive expectation
+        // rather than read as an empty transcript. Tests that expect nothing
+        // persisted assert the missing file explicitly.
         auto loaded = harness::session::SessionStore::load(session_path);
         REQUIRE(loaded);
         std::vector<std::string> texts;
@@ -156,7 +160,8 @@ TEST_CASE("Session Event Commitment returns the first persistence failure unwrap
     REQUIRE_FALSE(verdict.has_value());
     CHECK(verdict.error().code == support::ErrorCode::Session);
     CHECK(verdict.error().message == "could not persist session entry");
-    CHECK(channel.persisted_user_texts().empty());
+    // The failed flush removes the partial file (ADR 0064).
+    CHECK_FALSE(std::filesystem::exists(channel.session_path));
 }
 
 TEST_CASE("Session Event Commitment fails fast once a persistence failure is latched",
@@ -243,7 +248,8 @@ TEST_CASE("Session Event Commitment vetoes the run with a typed Busy when admiss
     auto concluded = channel.conclude(commitment, support::ExpectedVoid{});
     REQUIRE_FALSE(concluded.has_value());
     CHECK(concluded.error().code == support::ErrorCode::Busy);
-    CHECK(channel.persisted_user_texts().empty());
+    // The rejected admission never reached the store: no file at all.
+    CHECK_FALSE(std::filesystem::exists(channel.session_path));
 }
 
 TEST_CASE("Session Event Commitment without a persistence channel is a successful no-op",
@@ -254,7 +260,8 @@ TEST_CASE("Session Event Commitment without a persistence channel is a successfu
 
     REQUIRE(sink(agent::MessageEndEvent{user_msg("hello")}).has_value());
     CHECK(channel.conclude(commitment, support::ExpectedVoid{}).has_value());
-    CHECK(channel.persisted_user_texts().empty());
+    // No persistence channel: nothing was ever flushed (ADR 0064).
+    CHECK_FALSE(std::filesystem::exists(channel.session_path));
 }
 
 TEST_CASE("Session Event Commitment appends completed messages to an in-memory store's live tree",

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ai/Timestamps.hpp"
+#include <cch/ai/Timestamps.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include <cch/support/BoundedText.hpp>
 

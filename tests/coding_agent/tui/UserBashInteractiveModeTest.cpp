@@ -67,6 +67,10 @@ public:
                 -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
         requests.push_back(tests::RecordedProviderRequest{model, context, options});
         auto response = ai::assistant_text_message("provider reply");
+        // The session wire validation rejects an assistant message without a
+        // real epoch-millis timestamp (EntrySerializer append-time check), so
+        // the scripted reply stamps one; ADR 0064 persists it verbatim.
+        response.timestamp = 1'700'000'000'000;
         response.api = "fake";
         response.provider = "fake";
         response.model = model.id;
@@ -562,6 +566,23 @@ TEST_CASE("User Bash sanitizes and bounds retained output and spills the complet
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
+
+    // ADR 0064: the session file appears only with the first user or
+    // assistant message, so seed one before the bash run whose raw output
+    // the test re-reads from disk (a bash-only session never persists — pi
+    // behaves the same).
+    std::optional<support::ExpectedVoid> seed_result;
+    boost::asio::co_spawn(
+        io,
+        created->session->prompt("seed"),
+        [&](std::exception_ptr exception, support::ExpectedVoid result) {
+            REQUIRE(exception == nullptr);
+            seed_result.emplace(std::move(result));
+        });
+    drain_ready(io);
+    REQUIRE(seed_result);
+    REQUIRE(*seed_result);
+    const auto pre_bash_lifecycle_events = lifecycle_events;
     std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
         io,
@@ -579,12 +600,12 @@ TEST_CASE("User Bash sanitizes and bounds retained output and spills the complet
     drain_ready(io);
     REQUIRE(shell_pointer->commands.size() == 1);
     CHECK(shell_pointer->commands[0] == raw_command);
-    CHECK(lifecycle_events == 0);
+    CHECK(lifecycle_events == pre_bash_lifecycle_events);
 
     const auto snapshot = created->session->snapshot();
-    REQUIRE(snapshot.agent_state.messages.size() == 2);
+    REQUIRE(snapshot.agent_state.messages.size() == 4);
     CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
-    const auto* bash = std::get_if<ai::BashExecutionMessage>(&snapshot.agent_state.messages[1]);
+    const auto* bash = std::get_if<ai::BashExecutionMessage>(&snapshot.agent_state.messages[3]);
     REQUIRE(bash != nullptr);
     CHECK(bash->command == raw_command);
     // ADR 0028: output follows pi's recipe — no redaction; a secret-bearing
@@ -630,9 +651,9 @@ TEST_CASE("User Bash sanitizes and bounds retained output and spills the complet
     CHECK(persisted_text.find(secret) != std::string::npos);
     auto resumed = harness::session::resume_session(session_path);
     REQUIRE(resumed);
-    REQUIRE(resumed->history.size() == 2);
+    REQUIRE(resumed->history.size() == 4);
     CHECK(std::holds_alternative<ai::SystemMessage>(resumed->history[0]));
-    const auto* resumed_bash = std::get_if<ai::BashExecutionMessage>(&resumed->history[1]);
+    const auto* resumed_bash = std::get_if<ai::BashExecutionMessage>(&resumed->history[3]);
     REQUIRE(resumed_bash != nullptr);
     CHECK(resumed_bash->command == bash->command);
     CHECK(resumed_bash->full_output_path == bash->full_output_path);

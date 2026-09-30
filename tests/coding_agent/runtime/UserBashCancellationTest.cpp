@@ -259,6 +259,12 @@ TEST_CASE("idle User Bash cancellation retains partial output and commits one ca
     REQUIRE(created);
     auto& session = runtime.adopt_session(std::move(created->session));
 
+    // ADR 0064: the session file appears only with the first user or
+    // assistant message, so seed one before the bash scenario whose
+    // cancelled message the test re-reads from disk.
+    auto seed_prompt = run_prompt(runtime, session, "seed");
+    REQUIRE(seed_prompt);
+
     std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> bash_result;
     const auto scenario = run_on_runtime(runtime, [&]() -> boost::asio::awaitable<support::ExpectedVoid> {
         const auto executor = co_await boost::asio::this_coro::executor;
@@ -310,7 +316,7 @@ TEST_CASE("idle User Bash cancellation retains partial output and commits one ca
 
     auto prompt_result = run_prompt(runtime, session, "ordinary prompt");
     REQUIRE(prompt_result);
-    CHECK(client_pointer->requests.size() == 1);
+    CHECK(client_pointer->requests.size() == 2);
 }
 
 TEST_CASE("repeated User Bash cancellation coalesces and a later command gets a fresh stop source",
@@ -532,6 +538,12 @@ TEST_CASE("Session Close rejects new work, cancels User Bash, and finalizes afte
     // Close releases the shell after quiescence; observe it through the
     // shared counters rather than the released fake.
     const auto shell_counters = shell_pointer->counters();
+
+    // ADR 0064: the session file appears only with the first user or
+    // assistant message, so seed one before the close scenario whose
+    // cancelled bash message the test re-reads from disk.
+    auto seed_prompt = run_prompt(runtime, session, "seed");
+    REQUIRE(seed_prompt);
 
     std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> bash_result;
     std::optional<support::ExpectedVoid> rejected_prompt;

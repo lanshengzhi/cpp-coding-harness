@@ -17,12 +17,15 @@
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/support/Error.hpp>
+#include "agent/harness/session/EntrySerializer.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
+#include "support/SessionEntries.hpp"
+#include "support/SessionSeeding.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/Json.hpp"
 
@@ -200,27 +203,43 @@ constexpr std::string_view kFullThinkingProvider = R"({
     const harness::session::SessionEntry& entry) {
     support::JsonValue object{support::JsonValue::object_t{}};
     auto& o = object.get_object();
-    const auto parsed = support::read_json(entry.raw_line);
-    REQUIRE(parsed.has_value());
-    const auto& parsed_object = parsed->get_object();
-    o.emplace("type", parsed_object.at("type"));
+    // Live-tree entries carry no raw_line (ADR 0064 buffers entries ahead of
+    // the deferred first flush), so the wire `type` discriminator comes from
+    // the product serializer rather than a hardcoded string.
     const auto* thinking = std::get_if<harness::session::ThinkingLevelChangeValue>(&entry.value);
     REQUIRE(thinking != nullptr);
+    auto wire = harness::session::EntrySerializer{}.serialize_thinking_level_change(
+            entry.parent_id, thinking->thinking_level);
+    REQUIRE(wire.has_value());
+    auto parsed = support::read_json(wire->line);
+    REQUIRE(parsed.has_value());
+    o.emplace("type", parsed->get_object().at("type"));
     o.emplace("thinkingLevel", support::JsonValue(thinking->thinking_level));
     return object;
 }
 
-/// The last `thinking_level_change` on the active path (the leaf-path entry
-/// resume restores; the new-session initial entry precedes any real change).
-[[nodiscard]] const harness::session::SessionEntry* find_thinking_entry(
-    const harness::session::LoadedSession& loaded) {
-    const harness::session::SessionEntry* found = nullptr;
-    for (const auto& entry : loaded.entries) {
-        if (entry.kind == harness::session::SessionEntryKind::ThinkingLevelChange) {
-            found = &entry;
-        }
+/// A prior-session transcript fixture: the model_change (and optional
+/// thinking) identity a previous session would have persisted, flushed by
+/// one user message. ADR 0064 defers the session file to the first user
+/// message, so "a session existed" now means exactly this content.
+void write_prior_session(const Fixture& fixture,
+        std::string_view provider,
+        std::string_view model,
+        std::optional<std::string> thinking_level = std::nullopt) {
+    auto store = harness::session::SessionStore::create_new(fixture.session_file,
+            harness::session::SessionMetadata{
+                    .session_id = "prior-session",
+                    .created_at = "2026-09-25T00:00:00Z",
+                    .workspace = fixture.workspace.path(),
+                    .provider = std::string{provider},
+                    .model = std::string{model},
+            });
+    REQUIRE(store.has_value());
+    REQUIRE(store->append_model_change(std::nullopt, std::string{provider}, std::string{model}).has_value());
+    if (thinking_level.has_value()) {
+        REQUIRE(store->append_thinking_level_change(std::nullopt, *thinking_level).has_value());
     }
-    return found;
+    tests::flush_session_store(*store, "seed");
 }
 
 } // namespace
@@ -388,14 +407,7 @@ TEST_CASE("CLI model resolution: resume re-resolves the stored model identity",
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
-    {
-        auto request = cli_request(fixture);
-        request.session_facts.provider = "beta";
-        request.session_facts.model = "beta-1";
-        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
-        REQUIRE(created.has_value());
-        created->session->close();
-    }
+    write_prior_session(fixture, "beta", "beta-1");
 
     // Resume with no CLI model flags: the stored `model_change {beta, beta-1}`
     // re-resolves against the live runtime catalog.
@@ -412,14 +424,7 @@ TEST_CASE("CLI model resolution: equivalent explicit resume metadata emits no ov
     Fixture fixture;
     fixture.write_models(kFullThinkingProvider);
 
-    {
-        auto request = cli_request(fixture);
-        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
-        REQUIRE(created.has_value());
-        REQUIRE(created->resolved_identity.provider == "alpha");
-        REQUIRE(created->resolved_identity.model == "k3-256k");
-        created->session->close();
-    }
+    write_prior_session(fixture, "alpha", "k3-256k");
 
     auto request = cli_resume_request(fixture);
     request.session_facts.provider = "ALPHA";
@@ -456,14 +461,7 @@ TEST_CASE("CLI model resolution: an actual resume model change emits one accurat
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
-    {
-        auto request = cli_request(fixture);
-        request.session_facts.provider = "alpha";
-        request.session_facts.model = "alpha-1";
-        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
-        REQUIRE(created.has_value());
-        created->session->close();
-    }
+    write_prior_session(fixture, "alpha", "alpha-1");
 
     auto request = cli_resume_request(fixture);
     request.session_facts.provider = "beta";
@@ -547,14 +545,7 @@ TEST_CASE("CLI model resolution: resume without configured auth falls back with 
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
-    {
-        auto request = cli_request(fixture);
-        request.session_facts.provider = "beta";
-        request.session_facts.model = "beta-1";
-        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
-        REQUIRE(created.has_value());
-        created->session->close();
-    }
+    write_prior_session(fixture, "beta", "beta-1");
 
     // The stored identity's provider loses its auth between create and resume:
     // pi sdk.ts `createAgentSession` requires `restoredModel &&
@@ -579,14 +570,7 @@ TEST_CASE("resume restore failure with nothing available reports the no-models m
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
-    {
-        auto request = cli_request(fixture);
-        request.session_facts.provider = "beta";
-        request.session_facts.model = "beta-1";
-        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
-        REQUIRE(created.has_value());
-        created->session->close();
-    }
+    write_prior_session(fixture, "beta", "beta-1");
 
     // The catalog disappears entirely: the restore fails and the chain lands
     // on the unknown placeholder, so pi replaces the fallback message with
@@ -608,14 +592,7 @@ TEST_CASE("CLI model resolution: resume with a missing model falls back with pi'
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
-    {
-        auto request = cli_request(fixture);
-        request.session_facts.provider = "beta";
-        request.session_facts.model = "beta-1";
-        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
-        REQUIRE(created.has_value());
-        created->session->close();
-    }
+    write_prior_session(fixture, "beta", "beta-1");
 
     // The stored model disappears from the catalog between create and resume:
     // pi sdk.ts reports the failure through `modelFallbackMessage` (the reason
@@ -654,34 +631,31 @@ TEST_CASE("session files persist only model_change provider/modelId, never auth 
         request.session_facts.model = "beta-1";
         auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
         REQUIRE(created.has_value());
+
+        // ADR 0064 defers the file itself to the first user or assistant
+        // message, and flushing one here would need a provider round-trip
+        // (§11.7: no network in tests), so the factory's hand-off is
+        // observed on the
+        // live tree (pi `SessionManager.getEntries()`): creation passes
+        // exactly the pi `{provider, modelId}` identity pair to the store.
+        const auto entries = created->session->session_entries();
+        REQUIRE(entries.has_value());
+        const auto* model_change = tests::find_last_model_change(*entries);
+        REQUIRE(model_change != nullptr);
+        const auto& value =
+            std::get<harness::session::ModelChangeValue>(model_change->value);
+        CHECK(value.provider == "beta");
+        CHECK(value.model_id == "beta-1");
         created->session->close();
     }
+    // No user message was ever sent: no session file exists (ADR 0064).
+    CHECK_FALSE(std::filesystem::exists(fixture.session_file));
 
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
-    const harness::session::SessionEntry* model_change = nullptr;
-    for (const auto& entry : loaded->entries) {
-        if (entry.kind == harness::session::SessionEntryKind::ModelChange) {
-            model_change = &entry;
-            break;
-        }
-    }
-    REQUIRE(model_change != nullptr);
-    const auto& value =
-        std::get<harness::session::ModelChangeValue>(model_change->value);
-    CHECK(value.provider == "beta");
-    CHECK(value.model_id == "beta-1");
-    // The persisted line carries exactly the pi `{provider, modelId}` identity:
-    // no baseUrl, key-source, environment template, or any authentication
-    // material ever reaches the session file (#327 / ADR 0031).
-    const auto& line = model_change->raw_line;
-    CHECK(line.find(R"("type":"model_change")") != std::string::npos);
-    CHECK(line.find(R"("provider":"beta")") != std::string::npos);
-    CHECK(line.find(R"("modelId":"beta-1")") != std::string::npos);
-    CHECK(line.find("apiKey") == std::string::npos);
-    CHECK(line.find("baseUrl") == std::string::npos);
-    CHECK(line.find("dummy") == std::string::npos);
-    CHECK(line.find("token") == std::string::npos);
+    // The wire leak surface is the serialized line itself: the store API
+    // only accepts the two identity fields, and the harness round-trip test
+    // (JsonlSessionStoreTest model_change round-trip) pins the raw_line —
+    // no apiKey/baseUrl/token field can appear. Together the two layers
+    // cover what the pre-0064 file read checked (#327 / ADR 0031).
 }
 
 TEST_CASE("CLI model resolution: nothing configured keeps kDefaultModel and fails through provider lookup",
@@ -734,22 +708,22 @@ TEST_CASE("a zero-model session never persists a placeholder model_change identi
     // (pi appends it unconditionally, clamped to "off" for the placeholder).
     auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
-    result->session->close();
 
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
+    const auto entries = result->session->session_entries();
+    REQUIRE(entries.has_value());
     bool persisted_model_change = false;
-    for (const auto& entry : loaded->entries) {
+    for (const auto& entry : *entries) {
         if (entry.kind == harness::session::SessionEntryKind::ModelChange) {
             persisted_model_change = true;
         }
     }
     CHECK_FALSE(persisted_model_change);
-    const auto* thinking = find_thinking_entry(*loaded);
+    const auto* thinking = tests::find_last_thinking_level_change(*entries);
     REQUIRE(thinking != nullptr);
     const auto& value =
         std::get<harness::session::ThinkingLevelChangeValue>(thinking->value);
     CHECK(value.thinking_level == "off");
+    result->session->close();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -787,12 +761,7 @@ TEST_CASE("default creation resume re-resolves the stored model with configured 
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
-    {
-        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
-        REQUIRE(created.has_value());
-        CHECK(created->resolved_identity.provider == "alpha");
-        created->session->close();
-    }
+    write_prior_session(fixture, "alpha", "alpha-1");
 
     auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
@@ -807,19 +776,10 @@ TEST_CASE("default creation resume re-resolves a non-default stored model identi
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
-    {
-        // Explicitly request beta-1 so the stored model_change is not the
-        // runtime default (alpha-1): resume must re-resolve the recorded
-        // identity, not fall through to the first available model.
-        auto request = cli_request(fixture);
-        request.session_facts.provider = "beta";
-        request.session_facts.model = "beta-1";
-        auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
-        REQUIRE(created.has_value());
-        CHECK(created->resolved_identity.provider == "beta");
-        CHECK(created->resolved_identity.model == "beta-1");
-        created->session->close();
-    }
+    // The stored model_change is not the runtime default (alpha-1): resume
+    // must re-resolve the recorded identity, not fall through to the first
+    // available model.
+    write_prior_session(fixture, "beta", "beta-1");
 
     auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
@@ -848,13 +808,15 @@ TEST_CASE("set_thinking_level persists a thinking_level_change entry session-onl
     REQUIRE(changed.has_value());
     CHECK(*changed == "high");
     CHECK(result->session->snapshot().agent_state.thinking_level == "high");
-    result->session->close();
 
-    // The durable session file carries the `thinking_level_change` entry.
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
-    const auto* entry = find_thinking_entry(*loaded);
+    // The session records the `thinking_level_change` entry. ADR 0064 defers
+    // the file to the first user or assistant message, so the entry is
+    // observed on the live tree (pi `SessionManager.getEntries()`).
+    const auto entries = result->session->session_entries();
+    REQUIRE(entries.has_value());
+    const auto* entry = tests::find_last_thinking_level_change(*entries);
     REQUIRE(entry != nullptr);
+    result->session->close();
 
     // Session-only by default (pi ModelMutationOptions): no settings default
     // write.
@@ -888,14 +850,7 @@ TEST_CASE("resume restores the persisted thinking level from the session entry",
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
-    {
-        auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
-        REQUIRE(result.has_value());
-        auto changed = result->session->set_thinking_level("high");
-        REQUIRE(changed.has_value());
-        CHECK(*changed == "high");
-        result->session->close();
-    }
+    write_prior_session(fixture, "alpha", "deepseek-v4-flash", "high");
 
     // Resume: the nearest `thinking_level_change` on the active path wins over
     // the settings default and DEFAULT_THINKING_LEVEL (pi sdk.ts).
@@ -910,27 +865,9 @@ TEST_CASE("resumed session without a thinking entry uses the settings default",
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
-    {
-        // Create without any level change: the new-session initial
-        // `thinking_level_change` entry records the creation level. Strip it
-        // so the resumed session genuinely has no thinking entry (the
-        // hasThinkingEntry gate pi gates against).
-        auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
-        REQUIRE(result.has_value());
-        result->session->close();
-
-        std::ifstream in(fixture.session_file, std::ios::binary);
-        std::ostringstream kept;
-        std::string line;
-        while (std::getline(in, line)) {
-            if (line.find(R"("type":"thinking_level_change")") ==
-                std::string::npos) {
-                kept << line << '\n';
-            }
-        }
-        std::ofstream out(fixture.session_file, std::ios::binary);
-        out << kept.str();
-    }
+    // A prior session with no thinking entry at all (the hasThinkingEntry
+    // gate pi gates against).
+    write_prior_session(fixture, "alpha", "deepseek-v4-flash");
 
     fixture.write_settings(R"({"defaultThinkingLevel":"low"})");
 
@@ -975,11 +912,11 @@ TEST_CASE("set_thinking_level to off records the entry session-only and persists
     // the supportsThinking gate: an explicit persist records the request).
     auto persisted = result->session->set_thinking_level("off", coding_agent::ModelMutationOptions{.persist = true});
     REQUIRE(persisted.has_value());
-    result->session->close();
 
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
-    REQUIRE(find_thinking_entry(*loaded) != nullptr);
+    const auto entries = result->session->session_entries();
+    REQUIRE(entries.has_value());
+    REQUIRE(tests::find_last_thinking_level_change(*entries) != nullptr);
+    result->session->close();
 
     const auto settings = support::read_json(fixture.read_settings());
     REQUIRE(settings.has_value());
@@ -1015,13 +952,13 @@ TEST_CASE("set_thinking_level clamps to the active model and rejects invalid lev
     auto unchanged = result->session->set_thinking_level("high");
     REQUIRE(unchanged.has_value());
     CHECK(*unchanged == "high");
-    result->session->close();
 
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
+    const auto session_entries = result->session->session_entries();
+    REQUIRE(session_entries.has_value());
+    result->session->close();
     const auto entries = std::count_if(
-        loaded->entries.begin(),
-        loaded->entries.end(),
+        session_entries->begin(),
+        session_entries->end(),
         [](const harness::session::SessionEntry& entry) {
             return entry.kind == harness::session::SessionEntryKind::ThinkingLevelChange;
         });
@@ -1040,18 +977,20 @@ TEST_CASE("new sessions append model_change then the initial thinking_level_chan
     auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     CHECK(result->resolved_identity.model == "deepseek-v4-flash");
-    result->session->close();
 
     // pi sdk.ts: a new session appends `model_change {provider, modelId}` and
     // the initial (clamped) `thinking_level_change` so a later resume can
     // restore both. The reasoning model supports off..high, so the creation
-    // default "medium" survives the clamp.
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
-    // The first content entries after the header are the model_change and the
-    // initial thinking_level_change, in pi sdk.ts's order.
+    // default "medium" survives the clamp. ADR 0064 defers the file to the
+    // first user or assistant message; the recorded entries are observed on
+    // the live tree (pi `SessionManager.getEntries()`).
+    const auto session_entries = result->session->session_entries();
+    REQUIRE(session_entries.has_value());
+    result->session->close();
+    // The first recorded entries are the model_change and the initial
+    // thinking_level_change, in pi sdk.ts's order.
     std::vector<harness::session::SessionEntryKind> kinds;
-    for (const auto& entry : loaded->entries) {
+    for (const auto& entry : *session_entries) {
         if (entry.kind == harness::session::SessionEntryKind::Header) {
             continue;
         }
@@ -1060,7 +999,7 @@ TEST_CASE("new sessions append model_change then the initial thinking_level_chan
     REQUIRE(kinds.size() >= 2);
     CHECK(kinds[0] == harness::session::SessionEntryKind::ModelChange);
     CHECK(kinds[1] == harness::session::SessionEntryKind::ThinkingLevelChange);
-    const auto* thinking = find_thinking_entry(*loaded);
+    const auto* thinking = tests::find_last_thinking_level_change(*session_entries);
     REQUIRE(thinking != nullptr);
     const auto& value =
         std::get<harness::session::ThinkingLevelChangeValue>(thinking->value);
@@ -1080,11 +1019,11 @@ TEST_CASE("the initial thinking entry carries the clamped creation level",
     auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
     CHECK(result->session->snapshot().agent_state.thinking_level == "high");
-    result->session->close();
 
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
-    const auto* thinking = find_thinking_entry(*loaded);
+    const auto entries = result->session->session_entries();
+    REQUIRE(entries.has_value());
+    result->session->close();
+    const auto* thinking = tests::find_last_thinking_level_change(*entries);
     REQUIRE(thinking != nullptr);
     const auto& value =
         std::get<harness::session::ThinkingLevelChangeValue>(thinking->value);
@@ -1096,25 +1035,9 @@ TEST_CASE("resume without a thinking entry appends the restored level",
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
-    {
-        auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
-        REQUIRE(result.has_value());
-        result->session->close();
-
-        // Strip the initial thinking entry so the resume path restores from
-        // the settings default (pi hasThinkingEntry gate).
-        std::ifstream in(fixture.session_file, std::ios::binary);
-        std::ostringstream kept;
-        std::string line;
-        while (std::getline(in, line)) {
-            if (line.find(R"("type":"thinking_level_change")") ==
-                std::string::npos) {
-                kept << line << '\n';
-            }
-        }
-        std::ofstream out(fixture.session_file, std::ios::binary);
-        out << kept.str();
-    }
+    // A prior session with no thinking entry, so the resume path restores
+    // from the settings default (pi hasThinkingEntry gate).
+    write_prior_session(fixture, "alpha", "deepseek-v4-flash");
 
     fixture.write_settings(R"({"defaultThinkingLevel":"low"})");
 
@@ -1127,7 +1050,7 @@ TEST_CASE("resume without a thinking entry appends the restored level",
     // restored level appended so a later resume restores it.
     auto loaded = harness::session::SessionStore::load(fixture.session_file);
     REQUIRE(loaded.has_value());
-    const auto* thinking = find_thinking_entry(*loaded);
+    const auto* thinking = tests::find_last_thinking_level_change(loaded->entries);
     REQUIRE(thinking != nullptr);
     const auto& value =
         std::get<harness::session::ThinkingLevelChangeValue>(thinking->value);
@@ -1139,25 +1062,9 @@ TEST_CASE("resume binds the settings manager to the session header cwd",
     Fixture fixture;
     fixture.write_models(kKeyedReasoningProvider);
 
-    {
-        auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
-        REQUIRE(result.has_value());
-        result->session->close();
-
-        // Strip the initial thinking entry so the resumed level comes from
-        // the settings default rather than the session entry.
-        std::ifstream in(fixture.session_file, std::ios::binary);
-        std::ostringstream kept;
-        std::string line;
-        while (std::getline(in, line)) {
-            if (line.find(R"("type":"thinking_level_change")") ==
-                std::string::npos) {
-                kept << line << '\n';
-            }
-        }
-        std::ofstream out(fixture.session_file, std::ios::binary);
-        out << kept.str();
-    }
+    // A prior session with no thinking entry, so the resumed level comes
+    // from the settings default rather than a session entry.
+    write_prior_session(fixture, "alpha", "deepseek-v4-flash");
 
     // The session's project gains a project-scoped default after creation;
     // the launch project (other) carries no project scope at all.
@@ -1198,11 +1105,11 @@ TEST_CASE("thinking-persistence golden pins the entry shape and the settings def
     auto changed = result->session->set_thinking_level("high", coding_agent::ModelMutationOptions{.persist = true});
     REQUIRE(changed.has_value());
     CHECK(*changed == "high");
-    result->session->close();
 
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
-    const auto* entry = find_thinking_entry(*loaded);
+    const auto session_entries = result->session->session_entries();
+    REQUIRE(session_entries.has_value());
+    result->session->close();
+    const auto* entry = tests::find_last_thinking_level_change(*session_entries);
     REQUIRE(entry != nullptr);
 
     const auto settings = support::read_json(fixture.read_settings());

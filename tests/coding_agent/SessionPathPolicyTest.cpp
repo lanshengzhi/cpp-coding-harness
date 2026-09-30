@@ -3,6 +3,7 @@
 
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include "support/EnvVarGuard.hpp"
+#include "support/SessionSeeding.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -159,6 +160,11 @@ TEST_CASE("automatic session publication correlates path header and identity",
     CHECK(published->metadata.workspace == workspace);
     CHECK(published->store->path() == session_path);
 
+    // ADR 0064: publication validates and reserves the path privately, but
+    // the file appears only with the first user or assistant message.
+    CHECK_FALSE(std::filesystem::exists(session_path));
+    tests::flush_session_store(*published->store);
+
     auto loaded = harness::session::SessionStore::load(session_path);
     REQUIRE(loaded);
     CHECK(loaded->metadata.session_id == published->metadata.session_id);
@@ -193,6 +199,9 @@ TEST_CASE("automatic publication makes default directories and file private",
     REQUIRE(published->store->path());
     CHECK(permission_bits(sessions_root) == 0700);
     CHECK(permission_bits(workspace_directory) == 0700);
+    // The deferred first flush (ADR 0064) creates the file privately.
+    CHECK_FALSE(std::filesystem::exists(*published->store->path()));
+    tests::flush_session_store(*published->store);
     CHECK(permission_bits(*published->store->path()) == 0600);
 }
 
@@ -242,6 +251,8 @@ TEST_CASE("custom automatic publication creates a missing override directory pri
     CHECK(published->store->path()->parent_path() == directory);
     CHECK(published->metadata.workspace == workspace);
     CHECK(permission_bits(directory) == 0700);
+    CHECK_FALSE(std::filesystem::exists(*published->store->path()));
+    tests::flush_session_store(*published->store);
     CHECK(permission_bits(*published->store->path()) == 0600);
     auto loaded = harness::session::SessionStore::load(*published->store->path());
     REQUIRE(loaded);
@@ -269,6 +280,8 @@ TEST_CASE("custom automatic publication preserves an existing override directory
     REQUIRE(published);
     REQUIRE(published->store->path());
     CHECK(permission_bits(directory) == 0755);
+    CHECK_FALSE(std::filesystem::exists(*published->store->path()));
+    tests::flush_session_store(*published->store);
     CHECK(permission_bits(*published->store->path()) == 0600);
 }
 
@@ -356,6 +369,8 @@ TEST_CASE("explicit publication preserves custom directory mode while making fil
 
     REQUIRE(published);
     CHECK(permission_bits(custom_directory) == 0755);
+    CHECK_FALSE(std::filesystem::exists(path));
+    tests::flush_session_store(*published->store);
     CHECK(permission_bits(path) == 0600);
 }
 

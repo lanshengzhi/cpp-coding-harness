@@ -15,6 +15,7 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
 #include "support/RuntimeFixture.hpp"
+#include "support/SessionEntries.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -165,17 +166,6 @@ constexpr std::string_view kNonReasoningProvider = R"({
     return request;
 }
 
-[[nodiscard]] const harness::session::SessionEntry* find_model_change_entry(
-    const harness::session::LoadedSession& loaded) {
-    const harness::session::SessionEntry* found = nullptr;
-    for (const auto& entry : loaded.entries) {
-        if (entry.kind == harness::session::SessionEntryKind::ModelChange) {
-            found = &entry;
-        }
-    }
-    return found;
-}
-
 } // namespace
 
 TEST_CASE("cycle_model cycles forward and backward through the available models",
@@ -209,11 +199,14 @@ TEST_CASE("cycle_model cycles forward and backward through the available models"
     REQUIRE(backward->has_value());
     CHECK(backward->value().model.id == "beta-1");
 
-    // The model_change entries persist each cycle (pi appendModelChange).
+    // The model_change entries record each cycle (pi appendModelChange).
+    // ADR 0064 defers the session file to the first user or assistant
+    // message, so the recorded entries are observed on the live tree (pi
+    // `SessionManager.getEntries()`).
+    const auto entries = result->session->session_entries();
+    REQUIRE(entries.has_value());
     result->session->close();
-    auto loaded = harness::session::SessionStore::load(fixture.session_file);
-    REQUIRE(loaded.has_value());
-    const auto* entry = find_model_change_entry(*loaded);
+    const auto* entry = tests::find_last_model_change(*entries);
     REQUIRE(entry != nullptr);
     const auto& value = std::get<harness::session::ModelChangeValue>(entry->value);
     CHECK(value.provider == "beta");
