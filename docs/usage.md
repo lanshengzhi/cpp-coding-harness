@@ -25,7 +25,7 @@ Provider-bound images at most 2000×2000 with base64 payloads below 4.5 MiB are 
 
 ## Sessions
 
-Without a session-family flag, each run persists a session under the workspace-keyed user directory in `~/.pike/agent/sessions/`.
+Without a session-family flag, session storage uses the workspace-keyed `sessions/` directory under the [Agent Config Directory](#agent-configuration). A new session's file is deferred until its first user or assistant message; assembly bookkeeping and User Bash alone do not create it. Forks and resumes retain their existing eager storage behavior ([ADR 0064](adr/0064-defer-the-session-file-to-the-first-user-or-assistant-message.md)).
 
 ```bash
 $BIN --no-session                              # in-memory Native TUI
@@ -39,7 +39,7 @@ $BIN --fork PATH_OR_ID                         # copy history into a new session
 `--session-dir DIR` redirects automatic storage. Its precedence is:
 
 1. `--session-dir`;
-2. `sessionDir` in `$XDG_CONFIG_HOME/pike/agent/settings.json`;
+2. `sessionDir` in the Agent Config Directory's `settings.json`;
 3. the workspace-keyed default.
 
 ```bash
@@ -48,18 +48,18 @@ $BIN --session-dir /data/sessions --print "hello"
 
 `--no-session` leaves no transcript and takes precedence over create/resume/continue inputs; it cannot be combined with `--fork`. Session files remain sensitive even though persisted message content is redacted.
 
-To migrate an existing pi installation once, use the explicit importer. It reads the old tree and refuses to overwrite an existing Pike tree:
+To migrate an existing pi installation once, use the explicit importer. It copies the old tree into the fixed Agent Config Directory and refuses to overwrite an existing Pike tree ([ADR 0058](adr/0058-fix-the-product-state-root-under-xdg-in-pi-json-shapes.md)):
 
 ```bash
-$BIN import                         # ~/.pi/agent -> ~/.pike/agent
-$BIN import --from /backup/pi-agent --to ~/.pike/agent
+$BIN import                         # import from ~/.pi/agent
+$BIN import --from /backup/pi-agent
 ```
 
 Normal Pike startup never consults the old pi directory or its environment overrides.
 
 ## Models and authentication
 
-Built-in and custom models are composed from the runtime catalog and `~/.pike/agent/models.json`. Select with `--model`, optionally qualified as `provider/model`; use `--provider` to narrow an unqualified model pattern.
+Built-in and custom models are composed from the runtime catalog and the Agent Config Directory's `models.json`. Select with `--model`, optionally qualified as `provider/model`; use `--provider` to narrow an unqualified model pattern.
 
 A custom `models.json` provider key also selects that provider's wire protocol behavior. Name the entry after the service it fronts — `openrouter`, `deepseek`, `openai` — whatever `baseUrl` points at, so a gateway or relay in front of a vendor keeps that vendor's request fields; an entry named something else is treated as a plain OpenAI-compatible endpoint. `baseUrl` selects where the request goes, never what it contains.
 
@@ -76,7 +76,7 @@ environment variable:
 /login openrouter
 ```
 
-Credentials can instead be stored in `~/.pike/agent/auth.json`:
+Credentials can instead be stored in the Agent Config Directory's `auth.json`:
 
 ```json
 {
@@ -91,7 +91,7 @@ Kimi's `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY` examples target Anthropic-sh
 
 ## Agent configuration
 
-User state lives under `$XDG_CONFIG_HOME/pike/agent/` (defaulting to `~/.config/pike/agent/`); no environment variable relocates it.
+The **Agent Config Directory** is `$XDG_CONFIG_HOME/pike/agent/`, defaulting to `~/.config/pike/agent/`. Only the XDG base determines this root; Pike and pi directory-override variables are not read. Session-storage overrides do not relocate it ([ADR 0058](adr/0058-fix-the-product-state-root-under-xdg-in-pi-json-shapes.md)).
 
 | Path | Purpose |
 | --- | --- |
