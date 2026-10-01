@@ -5,11 +5,23 @@
 #include "Theme.hpp"
 #include "coding_agent/tui/ThinkingLevelDescription.hpp"
 
+#include <cch/tui/Container.hpp>
 #include <cch/tui/Text.hpp>
 
 #include <cch/support/Error.hpp>
 
 namespace cch::coding_agent::tui {
+
+namespace {
+
+// pi `THINKING_SELECT_LIST_LAYOUT`: the level rows keep a narrow primary
+// column (the longest level name plus the column gap) bounded by this
+// range, so the descriptions start right after it instead of at the
+// toolkit default column.
+constexpr std::size_t kThinkingSelectMinPrimaryColumnWidth = 12;
+constexpr std::size_t kThinkingSelectMaxPrimaryColumnWidth = 32;
+
+} // namespace
 
 ThinkingSelectorComponent::ThinkingSelectorComponent(const LiveTheme& theme,
         std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
@@ -29,6 +41,11 @@ ThinkingSelectorComponent::ThinkingSelectorComponent(const LiveTheme& theme,
               cch::tui::SelectListOptions{
                       .max_visible = 10,
                       .theme = theme_.select_list_theme(),
+                      .layout =
+                              cch::tui::SelectListLayoutOptions{
+                                      .min_primary_column_width = kThinkingSelectMinPrimaryColumnWidth,
+                                      .max_primary_column_width = kThinkingSelectMaxPrimaryColumnWidth,
+                              },
                       .on_select = [this](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
                           if (on_select_) on_select_(item.value);
                           return {};
@@ -81,20 +98,19 @@ support::Expected<cch::tui::RenderResult> ThinkingSelectorComponent::render(std:
     // hint / spacer / list chrome / spacer / save hint / border. The list
     // block (search input, rows, scroll info) renders from the shared
     // SelectList.
+    //
+    // pi's blank rows come from `Spacer(1)`, which renders one empty row;
+    // `cch::tui::Text` with empty text renders no row at all, so the shared
+    // `Spacer` is this component's blank-row component.
+    cch::tui::Spacer blank_row(1);
     DynamicBorder top_border(theme_.foreground_hook(ThemeToken::Border));
     if (auto appended = append(top_border); !appended) return std::unexpected(appended.error());
-    {
-        cch::tui::Text spacer("", 1, 0);
-        if (auto appended = append(spacer); !appended) return std::unexpected(appended.error());
-    }
+    if (auto appended = append(blank_row); !appended) return std::unexpected(appended.error());
     {
         cch::tui::Text title("Thinking Level", 0, 0);
         if (auto appended = append(title); !appended) return std::unexpected(appended.error());
     }
-    {
-        cch::tui::Text spacer("", 1, 0);
-        if (auto appended = append(spacer); !appended) return std::unexpected(appended.error());
-    }
+    if (auto appended = append(blank_row); !appended) return std::unexpected(appended.error());
     {
         cch::tui::Text cycle_hint(format_key_text(keybindings_->key_text("app.thinking.cycle"), true) +
                                           " cycles thinking levels in-session",
@@ -102,10 +118,7 @@ support::Expected<cch::tui::RenderResult> ThinkingSelectorComponent::render(std:
                 0);
         if (auto appended = append(cycle_hint); !appended) return std::unexpected(appended.error());
     }
-    {
-        cch::tui::Text spacer("", 1, 0);
-        if (auto appended = append(spacer); !appended) return std::unexpected(appended.error());
-    }
+    if (auto appended = append(blank_row); !appended) return std::unexpected(appended.error());
 
     cursor_row_offset_ = result.lines.size();
     {
@@ -114,16 +127,14 @@ support::Expected<cch::tui::RenderResult> ThinkingSelectorComponent::render(std:
         for (auto& line : rendered->lines)
             result.lines.push_back(std::move(line));
     }
-    {
-        cch::tui::Text spacer("", 1, 0);
-        if (auto appended = append(spacer); !appended) return std::unexpected(appended.error());
-    }
-    // pi's dim hint line: the save-as-default affordance renders only when
-    // the sink exists (`  Enter to select · Ctrl+S to set as default ·
-    // Escape/Ctrl+C to cancel` through pi's `keyDisplayText`).
+    if (auto appended = append(blank_row); !appended) return std::unexpected(appended.error());
+    // pi's dim hint line (`theme.fg("dim", ...)`): the save-as-default
+    // affordance renders only when the sink exists (`  Enter to select ·
+    // Ctrl+S to set as default · Escape/Ctrl+C to cancel` through pi's
+    // `keyDisplayText`).
     if (on_select_as_default_) {
         cch::tui::Text save_hint(
-                theme_.foreground(ThemeToken::Muted,
+                theme_.foreground(ThemeToken::Dim,
                         "  " + format_key_text(keybindings_->key_text("tui.select.confirm"), true) + " to select · " +
                                 format_key_text(keybindings_->key_text("app.thinking.save"), true) +
                                 " to set as default · " +
