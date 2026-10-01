@@ -748,9 +748,23 @@ function normalizeCapture(capture: Record<string, unknown>, scenario: Scenario, 
 // debt: replace this text projection with typed footer evidence when the product exposes one.
 function projectDiagnosticFooterRows(rows: string[], scenario: Pick<Scenario, "id">): string[] {
 	if (!usageProfileScenarios.has(scenario.id)) return rows;
-	return rows.map((line) =>
-		line.replace(/^(\s*)(?:[↑↓]\S+\s+)*\d+(?:\.\d+)?%\/128k \(auto\)/, "$1<footer-stats>"),
-	);
+	// The status row is right-aligned: usage stats on the left, model and
+	// thinking state on the right edge. pi prefixes the stats with a token-usage
+	// reading this projection drops, and the row is laid out around the length
+	// of the whole stats token, so the padding that follows it is the width of
+	// content the projection has already removed. Replacing only the token
+	// leaves that padding behind and the projected row still reads as a
+	// difference this profile declared out of scope (issue #800, footer
+	// cluster). Collapsing the run that follows the token re-anchors the row
+	// the same way the blank-row handling re-anchors the vertical axis, and it
+	// still compares the right-aligned remainder exactly: a model name or
+	// thinking-state difference is unaffected.
+	return rows.map((line) => {
+		const projected = line.replace(/^(\s*)(?:[↑↓]\S+\s+)*\d+(?:\.\d+)?%\/128k \(auto\)\s*/, "$1<footer-stats> ");
+		// A row that held nothing but the stats token has no right-aligned
+		// remainder, so it keeps no separator.
+		return projected.replace(/<footer-stats> $/, "<footer-stats>");
+	});
 }
 
 function stableProjection(capture: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
@@ -1041,6 +1055,31 @@ function verifyProjectionPolicy(): void {
 	assert.equal(replaceFixturePaths("/repository (main) suffix", "/tmp/workspace", "/repository"), "<repository-root> (<branch>) suffix");
 	assert.deepEqual(projectDiagnosticFooterRows(["0.0%/128k (auto) <model>", "kept"], { id: "user-message" }), ["<footer-stats> <model>", "kept"]);
 	assert.deepEqual(projectDiagnosticFooterRows(["0.0%/128k (auto) <model>"], { id: "boot-72" }), ["0.0%/128k (auto) <model>"]);
+	// A row that is nothing but the stats token has no right-aligned remainder,
+	// so the collapsed padding must not leave a trailing separator behind.
+	assert.deepEqual(projectDiagnosticFooterRows(["0.0%/128k (auto)"], { id: "user-message" }), ["<footer-stats>"]);
+	// The case the token-only replacement let through: pi prefixes the stats
+	// with a token-usage reading, which lengthens the token and shortens the
+	// right-aligned padding by the same amount. Two rows that differ only in
+	// the content this projection removes must project to one row, or the
+	// footer cluster reports a difference the profile already scoped out.
+	const pikeFooterRow = "0.0%/128k (auto)".padEnd(37) + "<model> • thinking off";
+	const piFooterRow = "↑1.4k ↓8 1.1%/128k (auto)".padEnd(37) + "<model> • thinking off";
+	assert.notEqual(pikeFooterRow, piFooterRow);
+	const projectedPikeFooter = projectDiagnosticFooterRows([pikeFooterRow], { id: "user-message" });
+	const projectedPiFooter = projectDiagnosticFooterRows([piFooterRow], { id: "user-message" });
+	assert.deepEqual(projectedPikeFooter, ["<footer-stats> <model> • thinking off"]);
+	assert.deepEqual(projectedPiFooter, projectedPikeFooter);
+	// Re-anchoring the padding must not swallow the right-aligned remainder:
+	// a model or thinking-state difference is a real difference and has to
+	// survive the projection. This is the case a padding-collapsing stand-in
+	// would let through.
+	const piFooterThinkingOn = "↑1.4k ↓8 1.1%/128k (auto)".padEnd(37) + "<model> • thinking on";
+	assert.notDeepEqual(projectDiagnosticFooterRows([piFooterThinkingOn], { id: "user-message" }), projectedPikeFooter);
+	// Outside the usage scenarios the projection is a no-op, so the same two
+	// rows stay byte-different: the collapse is scoped to the footer usage
+	// projection and never absorbs a stats difference elsewhere.
+	assert.deepEqual(projectDiagnosticFooterRows([pikeFooterRow, piFooterRow], { id: "boot-72" }), [pikeFooterRow, piFooterRow]);
 
 	const retainedSnapshot = (retained: string[], visible: string[]) => ({ snapshots: [{ scrollback: retained, visible }] });
 	const sharedViewport = ["third", "fourth"];
