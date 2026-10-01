@@ -9,11 +9,21 @@ A change is accepted for the property, not for the check that stands in for it. 
 1. **A text or existence check is not acceptance of a property.** A predicate that matches an include spelling, searches for a string, asserts that a file or symbol exists, or compares a projection of a value can be satisfied by a respelling, a moved file, or a field added on one side while the property it is named for is violated; the clause-4 `agent-no-ai-private-includes` rule and the two session goldens are the measured cases. Run such a check when it is cheap and catches the ordinary case, but report its pass as a check, never as acceptance of the property.
 2. **Acceptance includes a case the property separates and the check does not.** For each acceptance criterion, name one case the check passes while the property is violated, and make it part of the delivery: a test where automation reaches it, manual evidence where it does not. One question finds it — *if this stand-in were broken, which case would it let through?* — and that case then gets built. A criterion with no such case is not yet accepted.
 
+## Validation tiers
+
+This document owns the engineering validation vocabulary and procedures. Dependencies use the pinned vcpkg manifest; system packages are unsupported.
+
+| Tier | Scope |
+| --- | --- |
+| **Focused Validation** | During implementation: build the owning test shard and run the smallest targeted test selection that can fail. Architecture-sensitive changes also run the architecture selection. |
+| **Full Validation** | Once before code delivery: an incremental build followed by the complete unfiltered offline test suite, including every architecture gate test. |
+| **Fresh Validation** | Environment-level validation from host precheck through a fresh configure, build, and full test run; reserved for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit user request. |
+
+For documentation-only changes, use the [documentation checks](#documentation-only-changes) instead of a C++ build.
+
 ## Implementation
 
 Before editing, read the related code and tests plus the relevant build declarations. Follow `CODING_STANDARDS.md`.
-
-The validation tiers are defined in `GLOSSARY.md`: Focused Validation, Full Validation, and Fresh Validation.
 
 During implementation, run the smallest focused test that can fail: build the owning shard incrementally on the default Debug preset, then select with native CTest arguments (CTest names and labels are the sole selection authority, ADR 0039):
 
@@ -34,7 +44,7 @@ Parallel builds share one host budget. On the measured host in [build-performanc
 
 The `vcpkg` test preset treats an empty selection as an error (`noTests: error`), and a regex that matches other cases passes silently. Measured on this repository: `-R 'message conversion'` selects no case, `-R 'thinking level'` selects 13 of the wrong ones, and `-R 'session'` selects 207. Verify the match set before trusting it — `ctest --preset vcpkg -N -R '<regex>'` prints the case names and the count — and prefer a label (`-L <label>`) or the owning shard. Report the selected count with the result.
 
-Full Validation is mandatory once before delivery, as required by `/implement`: an incremental build followed by the complete unfiltered offline CTest suite on the default Debug preset, including every architecture gate test:
+Run Full Validation once before code delivery on the default Debug preset, as required by `/implement`:
 
 ```bash
 cmake --build --preset vcpkg
@@ -47,7 +57,7 @@ Added or modified lines must conform to `.clang-format`. `scripts/format-check.s
 
 Report the CI form — `scripts/format-check.sh <merge-base>` — before delivery. The no-argument form sees only uncommitted changes, so it reports clean on work that is already committed. A rename gates the file as if new: every line it carries becomes a modified line, including lines this branch never touched. Reformat a moved file in the same commit as the move.
 
-Fresh Validation is the environment-level tier: `scripts/bootstrap.sh` (host precheck plus pinned vcpkg), then `export VCPKG_ROOT="$PWD/.deps/vcpkg"`, `cmake --preset vcpkg --fresh`, `cmake --build --preset vcpkg`, and `ctest --preset vcpkg`. Reserve it for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit user request. Do not run it for ordinary code edits. Its unconditional vcpkg pin and `--fresh` configure are the reproducibility contract (ADR 0038, ADR 0039), not the per-change default.
+For Fresh Validation, run `scripts/bootstrap.sh` (host precheck plus pinned vcpkg), then `export VCPKG_ROOT="$PWD/.deps/vcpkg"`, `cmake --preset vcpkg --fresh`, `cmake --build --preset vcpkg`, and `ctest --preset vcpkg`. Its unconditional vcpkg pin and `--fresh` configure are the reproducibility contract (ADR 0038, ADR 0039). Ordinary code edits use Focused and Full Validation instead.
 
 ### Sanitizer timing checks
 
