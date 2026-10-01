@@ -33,4 +33,4 @@ The tracker uses the canonical triage labels. See `docs/agents/triage-labels.md`
 
 ### Domain docs
 
-This is a single-context repository. See `docs/agents/domain.md` for how to consume `CONTEXT.md` and `docs/adr/`.
+**Domain language or behavior contracts:** read [domain docs](docs/agents/domain.md) for this single context's `GLOSSARY.md`, topic-specific contract references, and ADR conflict rules.
