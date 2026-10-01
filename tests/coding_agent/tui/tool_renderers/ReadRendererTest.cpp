@@ -168,6 +168,58 @@ TEST_CASE("a collapsed successful read renders the title line and nothing else",
     CHECK(all.find("more lines") == std::string::npos);
 }
 
+TEST_CASE("a collapsed successful read keeps the bold tool name pi bolds in a colour-capable terminal",
+        "[coding_agent][tui][tool-renderers][read-renderer][issue812][spec]") {
+    const PlainCapabilities plain;
+    auto keybindings = tests::tool_render_keybindings();
+    auto theme = tests::tool_render_theme();
+    ReadBlock block(keybindings, R"({"path":"notes.txt"})");
+    block.succeed("alpha\nbeta\ngamma");
+
+    const auto screen = block.screen();
+    REQUIRE(screen.raw.size() == 3);
+
+    // pi `read.ts:36` composes the title as
+    // `theme.fg("toolTitle", theme.bold("read"))`, so on a colour-capable
+    // terminal the tool name carries SGR bold inside the `toolTitle` run. The
+    // visible rows above cannot see that: `read notes.txt` is byte-identical
+    // with and without the emphasis, so the row assertion in the collapsed-read
+    // case passes for a title whose bold was silently dropped. Comparing the
+    // emitted run is what separates the two — a plain
+    // `theme.foreground(ToolTitle, "read")` spelling renders the same text in
+    // the same colour and fails only here.
+    //
+    // This pins the product, not the differential capture. pi's `Theme.bold`
+    // is `chalk.bold`, and the harness runs the pi child with stdout as a pipe
+    // where `chalk.level` is 0, so the captured pi cell resolves to
+    // bold=false. That is the capture environment measuring itself rather than
+    // pi: on a real terminal pi emits exactly this bold. Dropping it to match
+    // the captured cell would satisfy the harness and diverge from pi for every
+    // real user, which is the acceptance-discipline trap this case exists to
+    // prevent (#812).
+    CHECK(row_body(screen.raw[1]) ==
+            coding_agent::tui::bold_foreground(theme, coding_agent::tui::ThemeToken::ToolTitle, "read") + " " +
+                    theme.foreground(coding_agent::tui::ThemeToken::Accent, "notes.txt"));
+
+    // The emphasis is specifically the SGR bold pair pi writes, not some other
+    // attribute that happens to satisfy the run comparison above: a styled run
+    // carrying the wrong attribute, or the pair wrapping the path instead of
+    // the tool name, still renders `read notes.txt`.
+    const auto body = row_body(screen.raw[1]);
+    const auto bold_open = body.find("\x1b[1m");
+    const auto bold_close = body.find("\x1b[22m", bold_open);
+    REQUIRE(bold_open != std::string::npos);
+    REQUIRE(bold_close != std::string::npos);
+    CHECK(body.substr(bold_open + 4, bold_close - bold_open - 4) == "read");
+
+    // The result half stays absent: this is the successful collapsed read, so
+    // pi `read.ts:111-115` returns the empty string and the title line remains
+    // the whole block. Asserted on the emitted rows so a body line cannot
+    // satisfy the title check above by appearing after it.
+    CHECK(row_body(screen.raw[0]).empty());
+    CHECK(row_body(screen.raw[2]).empty());
+}
+
 TEST_CASE("an expanded successful read renders the whole file body",
         "[coding_agent][tui][tool-renderers][read-renderer][issue825][spec]") {
     const PlainCapabilities plain;
