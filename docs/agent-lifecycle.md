@@ -1,6 +1,6 @@
 # Agent Lifecycle
 
-This document is the human-readable map of the Agent lifecycle. The canonical definitions are in [CONTEXT.md](../CONTEXT.md); this document explains how those terms nest. The detailed lifecycle and recovery decisions remain authoritative in [ADR 0014](adr/0014-follow-pi-agent-turn-lifecycle-order.md), [ADR 0027](adr/0027-keep-prompt-cancellation-with-the-admission-owner.md), and [ADR 0034](adr/0034-own-the-scoped-pi-agent-core-agent-and-agent-turn-capabilities.md).
+This document is the human-readable map of the Agent lifecycle. The canonical definitions are in [GLOSSARY.md](../GLOSSARY.md); this document explains how those terms nest. The detailed lifecycle and recovery decisions remain authoritative in [ADR 0014](adr/0014-follow-pi-agent-turn-lifecycle-order.md), [ADR 0027](adr/0027-keep-prompt-cancellation-with-the-admission-owner.md), and [ADR 0034](adr/0034-own-the-scoped-pi-agent-core-agent-and-agent-turn-capabilities.md).
 
 ## Boundary
 

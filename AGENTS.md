@@ -11,7 +11,7 @@ This is an experimental C++23 coding-agent Runtime that preserves selected pi se
 
 ## Validation entry points
 
-Dependencies use the pinned vcpkg manifest; system packages are unsupported. Three tiers (see `CONTEXT.md`):
+Dependencies use the pinned vcpkg manifest; system packages are unsupported. Three tiers (see `GLOSSARY.md`):
 
 - **Focused Validation** — during implementation: `cmake --build --preset vcpkg --target <owning-shard>` to narrow the build, followed by `ctest --preset vcpkg -LE architecture -R '<name>'` (or `-L '<label>'`) for the smallest CTest selection that can fail. Architecture-sensitive changes additionally run `ctest --preset vcpkg -L architecture`.
 - **Full Validation** — once before delivery: incremental `cmake --build --preset vcpkg` followed by the complete unfiltered `ctest --preset vcpkg` (see [README.md](README.md)).
@@ -26,18 +26,18 @@ Do not run Fresh Validation for ordinary code edits.
 - **Architecture, Owner packages, module structure, capability seams, or security boundaries:** read [architecture](docs/agents/architecture.md), [pi parity](docs/agents/pi-parity.md), and the relevant accepted ADRs.
 - **pi-ai catalog or upstream baseline sync:** read `fixtures/pi-ai/README.md` and the module's accepted ADR.
 - **Running or E2E-testing the product:** read [usage](docs/usage.md); the TUI seams and their fixed-width conventions live in `tests/coding_agent/tui/`.
-- **Domain language:** read [domain docs](docs/agents/domain.md), `CONTEXT.md`, and relevant accepted ADRs.
+- **Domain language:** read [domain docs](docs/agents/domain.md), `GLOSSARY.md`, and relevant accepted ADRs.
 
 ## Agent skills
 
 ### Issue tracker
 
-Issues and specs live in GitHub Issues. See `docs/agents/issue-tracker.md`.
+Issues and specs for this repo live as GitHub issues. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-The tracker uses the canonical triage labels. See `docs/agents/triage-labels.md`.
+The canonical triage roles map to the label strings in `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-This is a single-context repository. See `docs/agents/domain.md` for how to consume `CONTEXT.md` and `docs/adr/`.
+This is a single-context repo. See `docs/agents/domain.md`.

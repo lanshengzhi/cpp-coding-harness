@@ -13,7 +13,7 @@ A change is accepted for the property, not for the check that stands in for it. 
 
 Before editing, read the related code and tests plus the relevant build declarations. Follow `CODING_STANDARDS.md`.
 
-The validation tiers are defined in `CONTEXT.md`: Focused Validation, Full Validation, and Fresh Validation.
+The validation tiers are defined in `GLOSSARY.md`: Focused Validation, Full Validation, and Fresh Validation.
 
 During implementation, run the smallest focused test that can fail: build the owning shard incrementally on the default Debug preset, then select with native CTest arguments (CTest names and labels are the sole selection authority, ADR 0039):
 

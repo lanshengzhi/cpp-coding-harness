@@ -6,7 +6,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 1.1. This file is the single source of truth for code-level conventions: mechanical style, naming, error handling, async, ownership, function structure and local state, tests, CMake.
 
-1.2. Architecture guardrails live in `docs/agents/architecture.md`, domain language in `CONTEXT.md`, and decision rationale in `docs/adr/`. This file records their checkable code-level consequences and governs implementation choices within those boundaries. Report a conflict with an authoritative contract rather than using a code convention to override it.
+1.2. Architecture guardrails live in `docs/agents/architecture.md`, domain language in `GLOSSARY.md`, and decision rationale in `docs/adr/`. This file records their checkable code-level consequences and governs implementation choices within those boundaries. Report a conflict with an authoritative contract rather than using a code convention to override it.
 
 1.3. In review, a documented rule here overrides generic style baselines (such as the Fowler smell baseline used by `/skill:code-review`): where this file endorses something a baseline would flag, the baseline yields.
 

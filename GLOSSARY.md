@@ -1,0 +1,450 @@
+# C++ Coding Agent Harness
+
+This glossary names the concepts used to describe the harness as a product. It is a glossary, not an implementation or interface specification.
+
+## Language
+
+**Supported Capability**:
+A capability that this harness explicitly claims to provide as an intentional product decision.
+_Avoid_: Implemented feature, partial placeholder
+
+**Deferred Capability**:
+A pi capability that this harness does not currently claim to provide; its absence is not contract drift and creates no placeholder contract.
+_Avoid_: Missing contract, unsupported stub
+
+**Native TUI**:
+The harness-owned interactive terminal product surface, combining reusable terminal UI capabilities with coding-agent-specific interaction. A non-interactive programmatic frontend is not the Native TUI.
+_Avoid_: Text REPL, RPC frontend
+
+**Pike Runtime**:
+The only released product: the native Linux executable that composes the CLI, Agent Session, Runtime Root, and Native TUI for one invocation.
+_Avoid_: `cpp_harness`, Owner library, SDK
+
+**Interactive Session Run**:
+One Native TUI execution from boot through exit: the assembled CLI-owned facts, session intent (bind an existing Agent Session or defer creation to the boot trust prompt), and host capabilities, packed once by the CLI adapter so the Native TUI consumes run intent and outcome rather than individual fields.
+_Avoid_: TUI config bag, boot options
+
+**Supported Platform**:
+Linux on x86-64 with glibc, the only platform on which this harness accepts build, runtime, and Semantic Parity obligations for Supported Capabilities. Ubuntu 24.04 is the reproducible baseline and blocking CI environment; Arch Linux is a formally supported development environment validated from a pinned snapshot. Windows, macOS, Linux on other architectures, and musl-based systems carry no best-effort or placeholder product surface.
+_Avoid_: Development host, portable source, rolling latest, best-effort platform
+
+**Semantic Parity**:
+For a capability aligned with pi, preservation of its externally observable meanings and state transitions while allowing an idiomatic C++ API shape.
+_Avoid_: API-shape parity, mechanical translation
+
+**Configured Package Graph**:
+The per-configuration direct target dependencies, interface visibility, project-header inclusion, and source ownership produced by CMake and classified by owner and role, checked against the Product Architecture Contract rather than inferred from CMake source formatting or a transitive build graph.
+_Avoid_: CMakeLists layout, build-order graph
+
+**Product Architecture Contract**:
+The machine-readable boundary set enforced by the architecture gate since ADR 0053, succeeding pi parity as the authority. It enforces dependency and include boundaries between owners (e.g. keeping the Headless Core independent of frontends and restricting private owner reach-throughs) without asserting internal module definitions. It evolves by ADR.
+_Avoid_: pi parity, ad-hoc dependency review
+
+**Compat Layer**:
+The edge layer holding pi's session format, config format, and data shapes, consumed only by the one-time import command. Never a runtime fallback, never a dual-format load path, never a design basis for the internal domain model.
+_Avoid_: Runtime dual-read, deprecation shims, shared default directories
+
+**Capability Owner Package**:
+The authoritative C++ package presenting the supported interface for one pi package owner; private implementation targets and headers may deepen it without becoming cross-owner dependencies.
+_Avoid_: Facade target, named module, source directory
+
+**C++ Support Package**:
+The pi-neutral package for shared C++ mechanics that owns no Supported Capability and depends on no Capability Owner Package. Its existence never adds another product owner.
+_Avoid_: Product package, capability owner, general-purpose runtime
+
+**Owner Interface**:
+The repository-internal header contract of a Capability Owner Package, living under the Owner-local header root with one canonical `<cch/...>` spelling and containing only standard-library, support, and legal downstream Owner types. It is never installed, exported, or ABI-promised.
+_Avoid_: Public SDK header, installed consumer surface, umbrella header
+
+**Parity Architecture Manifest**:
+The machine-readable authority for the Capability Owner Packages, role classification rules, and architectural boundary definitions. It defines the policy grammar rather than duplicating the configured target inventory; build validation consumes this one policy source.
+_Avoid_: CMake comment, target allowlist, duplicated policy
+
+**Parity Architecture Gate**:
+The required fail-closed validation that every configured production target, source, dependency, interface exposure, and project-header inclusion conforms to the Product Architecture Contract in every supported configuration on the Supported Platform. It remains mandatory independently of optional test builds.
+_Avoid_: Advisory architecture test, source-format style check, optional CI job
+
+**Focused Validation**:
+The during-implementation validation tier: after a code edit, build the owning test shard and run the smallest targeted test selection that can fail.
+_Avoid_: Full suite after every edit, bootstrap run, default validation
+
+**Full Validation**:
+The pre-delivery validation tier: an incremental build followed by the complete unfiltered offline test suite, including every architecture gate test.
+_Avoid_: Fresh bootstrap, per-edit validation, release qualification
+
+**Fresh Validation**:
+The environment-level validation tier: a clean host precheck and from-scratch bootstrap, reserved for clean checkouts, baseline/toolchain changes, or explicit request.
+_Avoid_: Daily check, default development loop, standard test run
+
+**Runtime Root**:
+The one concrete coding-agent-owned Runtime object per CLI invocation. It owns the private event loop, the bounded worker pool, and the bounded FIFO mailboxes of the state-owning runtime objects, and it survives Agent Session replacement until final application Close.
+_Avoid_: Singleton scheduler, executor hierarchy, event bus, one thread or loop per Owner Package
+
+**Serialized Execution Domain**:
+The rule that a state-owning runtime object (Agent, Models Runtime, Agent Session) changes its state only on its own serialized path: cross-Owner events and worker results enter through the object's bounded FIFO mailbox, and workers never mutate that state directly.
+_Avoid_: Broad locking, direct cross-thread mutation, unbounded queue
+
+**Intentional Divergence**:
+A documented departure from Semantic Parity that demonstrably improves the C++ caller contract and cannot be hidden behind a private adapter without losing that benefit.
+_Avoid_: Implementation shortcut, accidental drift
+
+**Provider Message**:
+A model-facing conversation value directly accepted or produced at a chat-provider boundary.
+_Avoid_: Agent Message, Session Entry
+
+**Agent Message**:
+A conversation value retained and processed by the agent; product-specific forms are converted to Provider Messages before a model request.
+_Avoid_: Provider Message, Session Entry
+
+**Model**:
+A passive, credential-free value that completely names one model — its provider, id, and API identities, capabilities, limits, and cost. Every model request carries a concrete Model; a missing selection means the pi-aligned "unknown" placeholder Model, never an absent one.
+_Avoid_: Model name string, client configuration, optional model
+
+**Provider**:
+The long-lived runtime capability that owns one provider identity's model catalog, authentication, and stream execution, delegating wire protocol work to the API the requested Model names.
+_Avoid_: Provider factory, per-request client, hard-coded provider list
+
+**Provider Definition**:
+The complete pre-runtime description of one Provider: its identity, display name, final model catalog, and authentication behavior. Built-in definitions originate with the AI capability; Models Runtime applies user model configuration and submits a complete definition for runtime ownership.
+_Avoid_: Provider factory options, adapter config bag, transport config
+
+**Provider Info**:
+The passive, queryable description of an installed Provider exposed to hosts and the Native TUI: identity, display name, and authentication-method summary. It carries no authentication hooks, transport, or stream capability.
+_Avoid_: Provider handle, runtime provider pointer, auth snapshot
+
+**Models Runtime**:
+The canonical model/authentication runtime for one Agent Config Directory: it composes built-in and configured providers, resolves live authentication, and delegates model requests to the owning Provider. It is shared across Agent Sessions and refreshed as a whole rather than reconstructed per session.
+_Avoid_: Provider registry, session-scoped client, configuration snapshot
+
+**Credential**:
+A stored per-provider authentication value in api-key or OAuth shape. An OAuth-shaped record may
+carry an exchanged API key when a provider reuses that storage contract; the shape does not imply
+refresh or subscription semantics. Secrets inside a Credential never enter passive values, session
+history, frontend status, diagnostics, or logs.
+_Avoid_: Provider config field, session metadata
+
+**Request Authentication**:
+The resolution of a provider's effective credential immediately before each model request — explicit key, then stored Credential, then ambient environment only when nothing is stored — including OAuth refresh. Failures surface through the request's normal error outcome and never silently fall back to a lower-precedence source.
+_Avoid_: Login-time snapshot, startup authentication
+
+**Execution Environment**:
+The complete workspace file-system and shell capability bundle made available to an Agent Session; unavailable operations are excluded by assembly policy rather than hidden behind placeholder methods.
+_Avoid_: Tool adapter, partial capability
+
+**Tool Argument Contract**:
+The JSON Schema value that defines and validates one tool's accepted arguments before policy hooks and execution.
+_Avoid_: Parameter hint, provider DTO
+
+**Tool Call Outcome**:
+The final per-call result produced after argument validation, policy hooks, and execution; its failure is isolated from unrelated calls and the Agent Session unless termination is explicitly requested.
+_Avoid_: Agent failure, intermediate tool response
+
+**Agent**:
+The live stateful capability that owns model-driven conversation execution, including its messages, model, tools, queues, and active-run state.
+_Avoid_: Agent Session, agent loop
+
+**Agent Session**:
+One ongoing coding-agent conversation, including its current interaction state and durable history.
+_Avoid_: Conversation handle, runtime session
+
+**Agent Prompt**:
+A user input admitted to the Agent for model-driven work rather than handled as a Slash Command or User Bash; it starts a Prompt Run.
+_Avoid_: Raw user input, Slash Command, User Bash
+
+**Prompt Run**:
+The complete lifecycle of one admitted Agent Prompt from acceptance through its terminal response or outcome and return of the Agent Session to idle; it includes every Agent Run used for tool use, Auto-Retry, or compaction recovery.
+_Avoid_: Agent Run, Agent Turn, raw input, agent loop
+
+**Agent Run**:
+One contiguous execution of the Agent's turn machine inside a Prompt Run; it may contain one or more Agent Turns, while each Auto-Retry or compaction continuation starts another Agent Run.
+_Avoid_: Prompt Run, Agent Turn, agent loop
+
+**Agent Turn**:
+One ordered Agent lifecycle step from one model request through its assistant outcome and any Tool Call Batch and Tool Executions it produces to the decision whether another turn is needed.
+_Avoid_: Provider request, Prompt Run, agent loop
+
+**Tool Call Batch**:
+The group of one or more tool calls emitted by one assistant outcome and handled as one turn-level tool decision; a batch is not a sequence of Agent Turns.
+_Avoid_: Tool Execution, multiple Agent Turns
+
+**Tool Execution**:
+The execution lifecycle of one tool call from admission through its Tool Call Outcome.
+_Avoid_: Tool Call Batch, Tool Call Outcome
+
+**Tool Renderer**:
+The application-layer presentation of one tool's call and result on the terminal: a render-call/render-result pair keyed by tool name in the interactive TUI, never a property of the headless Tool definition.
+_Avoid_: Tool Execution, tool-name if-else inside the tool-execution component
+
+**Agent Stream Flow**:
+The Agent's consumption of one model stream within an Agent Turn: the per-turn stream request options, the single terminal outcome contract (success or classified error with assistant stop state), and structured error delivery back to the turn machine.
+_Avoid_: Provider request, per-adapter option struct, second exception hierarchy
+
+**Thinking Level**:
+The model-facing reasoning preference with pi's seven levels (off, minimal, low, medium, high, xhigh, max), defaulting to medium and clamped to the active model's supported set at session creation and on model switch; per turn it becomes the stream's reasoning option, with off meaning no reasoning is requested.
+_Avoid_: Free-form effort string, provider-specific knob
+
+**System Prompt**:
+The model-facing instruction text constructed for an Agent Session in pi's shape: the default or custom opening, the available-tools list with one-line snippets, guidelines from the tool contract, the Project Context File section, the skills section, and the current working directory line. It is built at session construction and rebuilt on Resource Reload.
+_Avoid_: Hard-coded prompt, provider request text
+
+**Project Context File**:
+An AGENTS.md or CLAUDE.md (with case variants) discovered in the Agent Config Directory or in the working directory's ancestor chain and rendered into the System Prompt's project-context section; discovery is not gated by Project Trust.
+_Avoid_: Repo instructions file, project readme
+
+**Live Session State**:
+The current in-process view of an Agent Session, which may be newer than its durable history.
+_Avoid_: Persisted state, session file
+
+**Session Entry**:
+One durable record in an Agent Session history.
+_Avoid_: Wire payload, JSON line
+
+**pi v3 Session Format**:
+The interoperable wire format for supported Session Entry alternatives, including pi's field, null, ordering, and active-path meanings.
+_Avoid_: pi-style JSONL, C++ session schema
+
+**Session Event Commitment**:
+The ordered policy that commits one agent lifecycle event to an Agent Session by advancing Live Session State, notifying weak subscribers, and appending Session Entries. Subscriber failures are diagnostic observations and do not veto commitment.
+_Avoid_: Event handler, callback chain
+
+**Session Resume**:
+Reopening an Agent Session from its durable history at the selected active point.
+_Avoid_: Reload, replay
+
+**Session Assembly**:
+The one authoritative act that turns an Agent Session creation request into an assembled Agent Session — request validation, Provider/Model resolution against the live Models Runtime, resource loading, and Session Publication — consumed by CLI boot, in-session session replacement, and tests through one boundary.
+_Avoid_: session factory, creation wrapper
+
+**Session Publication**:
+The single mutation point that makes an assembled Agent Session's storage real — creating required directories under their privacy policy and writing the session header after all fallible prerequisites have succeeded.
+_Avoid_: Save, file write, flush
+
+**Session Close**:
+An idempotent request that rejects new work and releases Agent Session resources only after active lifecycle callbacks and operations have safely quiesced.
+_Avoid_: Immediate teardown, abort
+
+**Session Abort**:
+An idempotent request to cancel the active prompt and produce its normal aborted lifecycle while leaving the Agent Session available for later work.
+_Avoid_: Session Close, process kill
+
+**Session Topology**:
+The shape of an Agent Session history, such as linear, branched, or compacted.
+_Avoid_: Completion state
+
+**Session Selection**:
+The user-facing flow of choosing which Agent Session to open — at boot through the resume picker or a session-family flag, or in-session through the session selector.
+_Avoid_: Session picker, resume chooser
+
+**Session Fork**:
+A new Agent Session created from an existing session's history at a chosen point, carrying a parent-session pointer and the target working directory.
+_Avoid_: Session clone, history copy
+
+**Session Tree Navigation**:
+The in-session flow of moving the active point through a session's tree topology: the tree overlay (opened by pi's default double-Escape trigger) lists the session tree with filters and label editing, and switching the active path follows the leaf/active-path semantics of the pi v3 Session Format. Branch summarization generation is not part of it.
+_Avoid_: Tree view, fork picker, history browser
+
+**Compaction**:
+The context-summarization capability that replaces compacted session history with a summary entry while retaining a recent tail, triggered on context overflow (compact and retry once), on threshold, or manually; summarization requests are isolated with cache retention "none" and a fresh session id.
+_Avoid_: Truncation, deletion, raw history replay
+
+**Project Resource**:
+A project-associated skill or prompt template that may be made available to an Agent Session after policy checks.
+_Avoid_: Runtime service, project file
+
+**Skill**:
+A user- or project-authored instruction set discovered as a SKILL.md file (frontmatter name, description, and disable-model-invocation), listed to the model in the System Prompt's skills section and invocable as a `/skill:name` command while the Skill Commands setting is enabled; the file body is read at invocation time.
+_Avoid_: Plugin, add-on
+
+**Prompt Template**:
+A user- or project-authored markdown file whose content substitutes for a matching `/name` slash invocation, with bash-style argument parsing and positional, `$@`, and default-value substitution.
+_Avoid_: Macro, canned prompt, system prompt
+
+**Project Trust**:
+The user-controlled authorization decision governing whether project-authored resources may be loaded.
+_Avoid_: Workspace configuration, project self-approval
+
+**Agent Config Directory**:
+The single user-level root for durable harness state shared across workspaces, fixed at `$XDG_CONFIG_HOME/pike/agent` (`~/.config/pike/agent` by default) and never relocated by the environment; project-level `.pi/` resources stay separate.
+_Avoid_: Config home, user profile directory, shared pi user root
+
+**User Settings**:
+User-level preferences following pi's two-scope `settings.json` contract: a global file in the Agent Config Directory deep-merged with a project file that loads only under Project Trust. Settings never carry secrets or secret references; model selection defaults use pi's `defaultProvider`/`defaultModel` vocabulary.
+_Avoid_: User config, config file, credential storage
+
+**Settings Scope**:
+One of the two `settings.json` layers — global or project — with project winning on deep merge and Project Trust gating project-scope reads and writes.
+_Avoid_: Profile, level
+
+**Runtime API Key Override**:
+A process-lifetime API key supplied via the host or CLI `--api-key`, never persisted, taking the highest precedence in Request Authentication.
+_Avoid_: Saved key, default key
+
+**Configured API Key**:
+A `models.json` provider `apiKey` value — literal, `$VAR`/`${VAR}` environment template, or `!command` shell execution — resolving as the lowest Request Authentication precedence for config-only providers.
+_Avoid_: Stored credential, hardcoded key
+
+**Resume Model Resolution**:
+Re-resolving a resumed session's persisted `model_change {provider, modelId}` against the live Models Runtime catalog, with base URL and authentication drawn from current composition rather than any session snapshot.
+_Avoid_: Session restore, auth snapshot
+
+**Auth Interaction**:
+The host-supplied, cancellable interaction object through which an OAuth login flow exchanges prompts and events. The ai layer owns the content — what is asked and what is shown — while the host owns the presentation and cancellation, so provider implementations never render product UI and hosts never hardcode provider interaction policy.
+_Avoid_: Login callback, rendered dialog, provider UI
+
+**OAuth Login**:
+An explicit, user-invoked login flow that produces a Credential through provider-owned steps
+(browser callback or device code) and persists it in the credential store. The current OAuth
+providers are OpenAI Codex and OpenRouter; Kimi is API-key-only. Never triggered by Session
+creation or ordinary requests.
+_Avoid_: Auto-login, implicit authentication, login snapshot
+
+**Login Cancellation**:
+A user-initiated abort of an in-flight OAuth Login through the Auth Interaction's stop source, normalizing to a stable cancelled error (message "Login cancelled") so the frontend suppresses failure UI.
+_Avoid_: Failed login, error dialog
+
+**Credential Refresh**:
+Request-time renewal of a stored OAuth Credential whose expiry is within five minutes, serialized
+under the store lock with the rotated credential persisted before use; not cancellable in the
+request path, matching pi. This applies only to a provider with a refresh hook (currently Codex);
+OpenRouter's OAuth-shaped API-key record has no refresh-token or request-time refresh-exchange
+semantics. Failure preserves the stored credential for retry and never falls back to a
+lower-precedence source.
+_Avoid_: Background refresh, proactive expiry notification
+
+**Re-auth Guidance**:
+The two user-facing guidance outcomes produced when a request has no usable credential: the no-key message directing to login for the provider, and the expired-OAuth message directing to re-run login. Both surface at prompt preflight and at request time and are never silently skipped.
+_Avoid_: Generic auth failure, silent credential fallback
+
+**Auto-Retry**:
+The session policy that starts another Agent Run with exponential backoff after a retryable terminal error classified from the structured `InferenceFailure` / `InferenceFailureKind` vocabulary (transient provider and network patterns), excluding quota/billing and context-overflow errors; the failed assistant message is removed from live state but retained in session history, and the backoff wait is cancellable.
+_Avoid_: Infinite retry, silent retry, adapter-level retry
+
+**OAuth Callback Server**:
+The local loopback HTTP server used by the Codex and OpenRouter browser login flows to receive an authorization-code redirect, raced against manual code entry.
+_Avoid_: Webhook, remote endpoint
+
+**Adapter**:
+The private protocol executor that converts a Provider request into one wire API's format and
+consumes its stream back into the shared event model — one per supported API surface
+(`openai-codex-responses`, `openai-responses`, `openai-completions`, `anthropic-messages`). An
+adapter is selected by the Model's `api`, is never publicly registrable, and its existence alone
+never makes a Provider supported.
+_Avoid_: API client, generic OpenAI client, public registry
+
+**Compat Field**:
+A per-API typed compatibility value on the Model that carries the behavior-bearing switches a
+built-in catalog model populates for the adapter. Current shipped shapes include the Anthropic
+fields (`forceAdaptiveThinking`, `allowEmptySignature`, and `supportsTemperature`), the
+OpenAI Completions fields, and the Responses fields `sessionAffinityFormat`, `supportsStrictMode`
+(ordinary-tool `strict:false` wire behavior), and `supportsExplicitPromptCacheMode`.
+`supportsMaxOutputTokens` is not represented in the current surface. Only typed shapes exist; a
+generic JSON compatibility bag is never carried, and models.json carries no compat surface.
+_Avoid_: Capability flag bag, models.json compat override
+
+**Transport**:
+The channel over which a provider's wire API delivers streamed events — WebSocket-first with narrow SSE fallback for Codex, SSE for the other scoped paths. Transport choice is fixed per adapter at pi's frozen defaults; it is never a per-request caller option in the C++ surface.
+_Avoid_: Request option, transport override
+
+**Session Affinity**:
+The protocol feature that lets a provider correlate requests from one session — Codex via `previous_response_id` continuation and session-keyed socket reuse, DeepSeek via silently-ignored affinity headers. Where the provider is stateless or the continuation key is absent, full-context stateless replay is used instead.
+_Avoid_: Session metadata, resume state
+
+**Print Mode**:
+The one-shot non-interactive text frontend for piped or scripted runs: it subscribes to no interactive events, prints the final assistant text blocks to stdout, routes errors and cancellation to stderr with appropriate exit status, and merges piped input, referenced files, and CLI arguments into the initial prompt.
+_Avoid_: Event stream, JSON event print, one-shot slash dispatch
+
+**User Bash**:
+A Native TUI operation that runs a user-entered shell command without treating it as an Agent Prompt. Its completed execution belongs to Agent Session history and is either included in or excluded from later model context according to the user's invocation.
+_Avoid_: Bash tool, prompt processing
+
+**Slash Command**:
+A user input beginning with `/` that the Native TUI routes before the Agent Prompt path: a builtin command, a Prompt Template invocation, or a Skill invocation. Built-in names and arguments are validated; text naming no builtin becomes an ordinary Agent Prompt, as in pi.
+_Avoid_: Command registry, dispatch table
+
+**Resource Reload**:
+The `/reload` command's re-read of User Settings, keybindings, skills, Prompt Templates, themes, and Project Context Files, followed by System Prompt rebuild and a refreshed loaded-resources presentation; refused while the Agent is streaming or compacting.
+_Avoid_: Restart, hot swap
+
+**Loaded Resources**:
+The startup presentation listing the Project Context Files, skills, and Prompt Templates (and themes) in effect, grouped by source scope and carrying load diagnostics.
+_Avoid_: Startup banner, resource log
+
+**Interrupt Admission**:
+The Native TUI decision of how an interrupt request applies to current activity: which channel it targets (the active Agent run, running User Bash, or a pending submission) and whether the request is stale relative to the active prompt generation.
+_Avoid_: Escape handling, keybinding dispatch
+
+**Generic Selector**:
+The reusable string-list selection overlay used by interactive selection prompts (such as auth-type selection, interactive auth prompts, and boot-time project trust prompts).
+_Avoid_: Extension selector, provider-specific dialog
+
+**TUI Toolkit**:
+The reusable terminal UI capability module (`cch_tui`) that owns the terminal seam, input protocol decoding, keybindings, the editor stack, autocomplete, fuzzy matching, layout-free components, markdown rendering, and terminal image capability, depending on no coding-agent types. The Native TUI's interactive mode is assembled from it; interactive-mode application components (model selection, login presentation, footer/status, chat UX) are not toolkit capabilities.
+_Avoid_: UI library, widget set, interactive frontend
+
+**Decoded Input Event**:
+The TUI Toolkit's single decode of raw terminal escape sequences into typed KeyEvent/PasteEvent values at the terminal edge, with action matching against pi's `modifier+key` identifier grammar and full keyboard-protocol coverage (legacy, modifyOtherKeys, Kitty CSI-u with event types and alternate keys). An Intentional Divergence from pi's raw-string matching that preserves the observable sequence-to-action contract; paste input remains size-bounded.
+_Avoid_: Raw string matching, per-consumer escape parsing
+
+**Resolved Keybinding Registry**:
+The immutable, resolution-time keybinding table consumed by dispatch, help, and hints alike: maps assembled TUI actions to their configured key combinations, populated from default keys and user `keybindings.json` overrides.
+_Avoid_: Mutable global manager, no-op bindings, per-consumer key tables
+
+**Theme**:
+A theme asset defining visual styling: a document naming the theme, optional color variables, and a color map over the supported semantic token set with validation and circular-reference rejection.
+_Avoid_: Theme catalog, custom theme format, palette
+
+**Theme Setting**:
+The `theme` user-settings scalar naming the active theme. A slash-containing value — the automatic `light/dark` pair — resolves as unset and the environment default applies, matching pi's own read semantics; the automatic pair itself is not supported.
+_Avoid_: Auto theme, light/dark mode, terminal sync
+
+**Theme Submenu**:
+The `/settings` submenu listing the available themes (builtins, custom directory, registered) with in-memory preview on selection, a global-scope settings commit on confirm, and no revert on cancel — pi's preview/commit/cancel-does-not-revert behavior.
+_Avoid_: Standalone theme overlay, theme picker dialog
+
+**Terminal-Owned Image Placement**:
+The TUI Toolkit's inline-image model in which components emit protocol-neutral image regions alongside their rendered lines and the Terminal owns physical placement and removal in absolute cell regions, including protocol selection (Kitty/iTerm2), cell-size math, animation-id reuse, and fallback text. An Intentional Divergence from pi's escape-sequences-in-lines with identical placement, sizing, and fallback outcomes.
+_Avoid_: Escape sequences in render lines, component-owned protocol bytes
+
+**Main-Screen Scrollback Flow**:
+The TUI Toolkit's main-screen rendering model (pi `TuiMainScreen` parity) in which the renderer writes the full composed buffer to the terminal's main screen, lets overflow advance into the terminal's native scrollback, and tracks a viewport top over the buffer instead of clipping to the visible height; the terminal's own scrollback is the history surface, and a resize full-redraw clears screen and scrollback together. Startup content stays visible until the buffer grows past one screen, then scrolls away with it.
+_Avoid_: Viewport-clip redraw, in-place line rewrite, alt-screen scrolling
+
+**Counted Frame**:
+The authoritative Native TUI render: the frame the renderer produces on the frame ticker's schedule. Only counted frames advance pacing and convergence accounting.
+_Avoid_: Immediate frame, per-event render
+
+**Preview Frame**:
+The uncounted, coalesced Native TUI render that paints the newest view state when a view change arrives between ticker frames: at most one preview frame is in flight at a time, and it consumes neither the ticker's schedule nor the projection stream's pacing. It exists to keep input and streaming latency low between counted frames.
+_Avoid_: Ticker-only pacing, throttled render, synchronous view hook
+
+**Headless Core**:
+The authoritative agent engine, session store, tool runners, and model inference loops, strictly devoid of layout, ANSI escape sequences, terminal geometries, UI components, or presentation threads. It exposes its state only through the Projection Stream.
+_Avoid_: UI-driven runtime, mixed controller-view engine
+
+**Projection**:
+A decoupled, asynchronous, read-only observer that subscribes to the Headless Core's Projection Stream and renders it to a specific surface (Native TUI, Web, GUI, Spectator) without driving or delaying the Headless Core.
+_Avoid_: Synchronous UI hook, view controller, bidirectional display binding
+
+**Projection Stream**:
+The one channel through which the Headless Core delivers all observable state change to a Projection: a Base followed by ordered Patches. It is the only authoritative source of projection-visible state.
+_Avoid_: Dirty edge, version sampling, push sink, event mirror
+
+**Base**:
+A complete immutable snapshot of the Agent Session delivered as the first stream message to a new or resynchronizing Projection; subsequent Patches apply on top of it. A mid-session Projection receives the state as it is now, never a replay from session start.
+_Avoid_: Initial snapshot, full refresh, state dump
+
+**Patch**:
+A value-bearing record of one published state change — which slice changed and its new value — that, applied in order after a Base, reproduces the later snapshot exactly.
+_Avoid_: Delta, diff, change event, op
+
+**Subscription Mailbox**:
+The bounded per-Projection queue into which the Headless Core delivers stream messages; overflow discards the backlog and the next message is a fresh Base, so a slow Projection silently degrades to snapshot consumption.
+_Avoid_: Ring buffer, patch history, subscriber version tracking
+
+**Block Frozen Protocol**:
+The transcript lifecycle where rendered blocks transition through `Active` -> `Finalized` -> `Committed`. Committed blocks permanently freeze their rasterized line cache and are never re-parsed or re-rendered across subsequent streaming chunks.
+_Avoid_: Whole-document reparsing, stateless full rerender
+
+**Client-Side Prediction**:
+The local transient input engine that manages the user prompt editing buffer and cursor with immediate, sub-millisecond local echo on the terminal, isolated from Headless Core execution until an explicit command submission.
+_Avoid_: Server-roundtrip keystroke echo, blocking input loop
