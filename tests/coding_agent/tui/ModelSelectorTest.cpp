@@ -13,6 +13,7 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Utils.hpp>
+#include <cch/tui/VirtualTerminal.hpp>
 
 #include <cch/support/Error.hpp>
 #include "support/AsyncResultBridge.hpp"
@@ -27,6 +28,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using namespace cch;
@@ -97,6 +99,55 @@ constexpr std::string_view kThreeKeyedProviders = R"({
     }
     return text;
 }
+
+/// Replays a rendered component into a virtual terminal so a row's cells and
+/// their resolved colors are observed the way the differential harness
+/// observes them (the selector's rows are what the pi comparison compares).
+class RenderedCells {
+public:
+    RenderedCells(const tui::RenderResult& rendered, std::size_t width) {
+        terminal_ = std::make_unique<tui::VirtualTerminal>(
+                tui::VirtualTerminalOptions{.columns = width, .rows = rendered.lines.size() + 1});
+        const auto started = terminal_->start([](std::string) -> support::ExpectedVoid { return {}; },
+                [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; });
+        if (!started) return;
+        started_ = true;
+        for (std::size_t row = 0; row < rendered.lines.size(); ++row) {
+            if (!terminal_->set_cursor({.column = 0, .row = row}) || !terminal_->write(rendered.lines[row])) {
+                return;
+            }
+        }
+    }
+
+    /// The screen row carrying `needle`, without its trailing padding.
+    [[nodiscard]] std::string row(std::string_view needle) const {
+        for (const auto& line : terminal_->screen()) {
+            if (line.find(needle) == std::string::npos) continue;
+            std::size_t end = line.find_last_not_of(' ');
+            return line.substr(0, end == std::string::npos ? 0 : end + 1);
+        }
+        return {};
+    }
+
+    /// The resolved foreground of the cell `offset` cells into the screen row
+    /// carrying `needle`.
+    [[nodiscard]] std::string color_at(std::string_view needle, std::size_t offset = 0) const {
+        if (!started_) return {};
+        const auto& screen = terminal_->screen();
+        for (std::size_t row = 0; row < screen.size(); ++row) {
+            const auto column = screen[row].find(needle);
+            if (column == std::string::npos) continue;
+            const auto& cells = terminal_->cells()[row];
+            REQUIRE(column + offset < cells.size());
+            return cells[column + offset].style.fg_color;
+        }
+        return {};
+    }
+
+private:
+    std::unique_ptr<tui::VirtualTerminal> terminal_;
+    bool started_{false};
+};
 
 /// A runtime over a temp Agent Config Directory with dummy-only models.json.
 /// Ambient KIMI_API_KEY is unset so the built-in kimi-coding provider never
@@ -226,7 +277,7 @@ TEST_CASE("ModelSelector initially selects the current model inside a scoped lis
 
     const auto rendered = selector->render(70);
     REQUIRE(rendered);
-    CHECK(join_lines(rendered->lines).find("→ beta-1 [beta]") != std::string::npos);
+    CHECK(join_lines(rendered->lines).find("→ ✓ beta-1 [beta]") != std::string::npos);
 
     static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(selected.has_value());
@@ -312,14 +363,16 @@ TEST_CASE(
     {
         const auto rendered = selector->render(70);
         REQUIRE(rendered);
-        CHECK(join_lines(rendered->lines).find("→ alpha-2") != std::string::npos);
+        // pi `updateList`: the cursor cell plus the two-cell marker column,
+        // empty for a row that is not the current model.
+        CHECK(join_lines(rendered->lines).find("→   alpha-2") != std::string::npos);
     }
     static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "up"}));
     static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "up"}));
     {
         const auto rendered = selector->render(70);
         REQUIRE(rendered);
-        CHECK(join_lines(rendered->lines).find("→ beta-1") != std::string::npos);
+        CHECK(join_lines(rendered->lines).find("→   beta-1") != std::string::npos);
     }
 
     static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "escape"}));
@@ -585,4 +638,75 @@ TEST_CASE("ModelSelector selects session-only on Enter and saves the default thr
     REQUIRE(selected.has_value());
     CHECK(selected->id == "alpha-1");
     CHECK_FALSE(saved.has_value());
+}
+
+/// pi `updateList` composes a model row as `cursor` + `currentMarker` + the
+/// model id + the provider badge, so the current marker owns the two-cell
+/// column ahead of the id instead of trailing the row (#808). The provider
+/// hint above the list carries no indent of its own, and the save hint is
+/// drawn in pi's `dim` rather than its `muted` gray.
+TEST_CASE("ModelSelector renders pi's model row marker column, unpadded provider hint, and dim save hint",
+        "[coding_agent][tui][model-selector][issue808][spec]") {
+    RuntimeFixture fixture;
+    boost::asio::io_context io;
+    fixture.prime(io);
+
+    auto theme = test_theme();
+    const auto current = fixture.runtime->model("alpha", "alpha-1");
+    REQUIRE(current.has_value());
+    auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+            theme,
+            test_keybindings(),
+            &*current,
+            fixture.runtime,
+            io.get_executor(),
+            std::vector<cch::coding_agent::ScopedModel>{},
+            [](ai::Model) {},
+            [] {},
+            [&io] { (void)io; },
+            std::nullopt,
+            [](ai::Model) {});
+
+    // The selected row carries both the cursor and the current marker, and
+    // every other row keeps the same two-cell marker column, so the ids stay
+    // aligned. Exact row text is the assertion: a search for the marker alone
+    // passes for a marker in any column, which is the defect this pins.
+    {
+        const auto rendered = selector->render(100);
+        REQUIRE(rendered);
+        const RenderedCells cells(*rendered, 100);
+        CHECK(cells.row("alpha-1 [alpha]") == "→ ✓ alpha-1 [alpha]");
+        CHECK(cells.row("alpha-2 [alpha]") == "    alpha-2 [alpha]");
+        // pi styles the selected row's cursor, marker and id in the accent,
+        // and the provider badge muted; an unselected id keeps the terminal
+        // default foreground.
+        CHECK(cells.color_at("alpha-1 [alpha]") == "38;2;138;190;183");
+        CHECK(cells.color_at("alpha-1 [alpha]", 8) == "38;2;128;128;128");
+        CHECK(cells.color_at("alpha-2 [alpha]").empty());
+        CHECK(cells.color_at("alpha-2 [alpha]", 8) == "38;2;128;128;128");
+        // The provider hint starts in the first column: the leading column
+        // belongs to the model rows' marker, not to this line.
+        CHECK(cells.row("Only showing models") ==
+                "Only showing models from configured providers. Use /login to add providers.");
+        CHECK(cells.color_at("Only showing models") == "38;2;255;255;0");
+        // pi draws the save hint with `theme.fg("dim", ...)`, a different gray
+        // from the `muted` `Model Name:` line under the list.
+        CHECK(cells.row("Enter to select") == "  Enter to select · Ctrl+S to set as default · Escape/Ctrl+C to cancel");
+        CHECK(cells.color_at("Enter to select") == "38;2;102;102;102");
+        CHECK(cells.color_at("Model Name:") == "38;2;128;128;128");
+    }
+
+    // The marker column is a property of the row, not of the selection:
+    // moving off the current model leaves the marker in the same column and
+    // the ids aligned, and the moved-onto row keeps pi's empty marker cells.
+    static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "down"}));
+    {
+        const auto rendered = selector->render(100);
+        REQUIRE(rendered);
+        const RenderedCells cells(*rendered, 100);
+        CHECK(cells.row("alpha-1 [alpha]") == "  ✓ alpha-1 [alpha]");
+        CHECK(cells.row("alpha-2 [alpha]") == "→   alpha-2 [alpha]");
+        CHECK(cells.color_at("alpha-1 [alpha]").empty());
+        CHECK(cells.color_at("alpha-2 [alpha]") == "38;2;138;190;183");
+    }
 }
