@@ -7,8 +7,10 @@
 # runs can trend it.
 #
 # The script never builds anything, never touches the repository's normal
-# build outputs, requires no network, and uses a blanked HOME plus an
-# isolated PIKE_CODING_AGENT_DIR, so no live provider or credential is used.
+# build outputs, and requires no network. Pike runs under a scrubbed
+# environment with a synthetic blank HOME, so the XDG-based Agent Config
+# Directory lands under the benchmark root and no live provider or credential
+# is used.
 # Default binary resolution prefers the LTO release artifact
 # (build/release/pike); a Debug binary is measurable but not comparable.
 #
@@ -112,8 +114,7 @@ fi
 lock_dir="$root/lock"
 results_dir="$root/results"
 fake_home="$root/home"
-agent_dir="$root/agent-dir"
-mkdir -p "$results_dir" "$fake_home" "$agent_dir"
+mkdir -p "$results_dir" "$fake_home"
 
 # ---------------------------------------------------------------------------
 # Lock: reject a second concurrent run against the same benchmark root
@@ -165,7 +166,7 @@ acquire_lock
 # ---------------------------------------------------------------------------
 
 run_sample() {
-	env -i PATH="$scrubbed_path" HOME="$fake_home" PIKE_CODING_AGENT_DIR="$agent_dir" python3 - "$pike" "$@" <<'PYEOF'
+	env -i PATH="$scrubbed_path" HOME="$fake_home" python3 - "$pike" "$@" <<'PYEOF'
 import resource, subprocess, sys, time
 pike, args = sys.argv[1], sys.argv[2:]
 start = time.monotonic()
@@ -229,8 +230,7 @@ sample_scenario() {
 
 echo "pike: $pike"
 echo "samples per scenario: $samples"
-echo "version: $(env -i PATH="$scrubbed_path" HOME="$fake_home" \
-	PIKE_CODING_AGENT_DIR="$agent_dir" "$pike" --version)"
+echo "version: $(env -i PATH="$scrubbed_path" HOME="$fake_home" "$pike" --version)"
 echo
 
 results=()

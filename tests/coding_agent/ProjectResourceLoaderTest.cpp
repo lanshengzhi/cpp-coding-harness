@@ -644,7 +644,7 @@ TEST_CASE("project resource loader rejects legacy .cpp-harness/ markers without 
     CHECK(result.diagnostics.empty());
 }
 
-// ── P16: skill discovery — user ~/.pike/agent/skills, .agents/skills, --skill ──
+// ── P16: skill discovery — user $XDG_CONFIG_HOME/pike/agent/skills, .agents/skills, --skill ──
 
 TEST_CASE("project resource loader loads user skills with pi root-level .md inclusion",
         "[coding_agent][project-resource-loader][issue412][spec]") {
@@ -656,7 +656,7 @@ TEST_CASE("project resource loader loads user skills with pi root-level .md incl
         "description: User skill.\n"
         "---\n"
         "User body.\n");
-    // pi discovery mode: root-level .md files in ~/.pike/agent/skills load.
+    // pi discovery mode: root-level .md files in $XDG_CONFIG_HOME/pike/agent/skills load.
     agent_dir.write("skills/root-skill.md",
         "---\n"
         "name: root-skill\n"

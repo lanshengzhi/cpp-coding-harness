@@ -4,9 +4,10 @@ The Native TUI keybinding format is compatible with pi parity baseline
 `83114817` (re-pinned from `864b35c` by ADR 0035 after the [#332](https://github.com/lanshengzhi/cpp-coding-harness/issues/332)
 toolkit inventory verified the `tui.*` action table and key grammar at the frozen
 baseline). The harness performs one startup read of
-`<Agent Config Directory>/keybindings.json` (normally
-`~/.config/pike/agent/keybindings.json`). No environment variable relocates the
-Agent Config Directory. Discovery reads only that resolved user-level root and
+`<Agent Config Directory>/keybindings.json` — resolved as
+`$XDG_CONFIG_HOME/pike/agent/keybindings.json`, normally
+`~/.config/pike/agent/keybindings.json` ([ADR 0058](adr/0058-fix-the-product-state-root-under-xdg-in-pi-json-shapes.md)).
+No environment variable relocates the Agent Config Directory. Discovery reads only that resolved user-level root and
 never scans a project-local `.pi` directory.
 
 On supported Linux, the production CLI loads this file when interactive

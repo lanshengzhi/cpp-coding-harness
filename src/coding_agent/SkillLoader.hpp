@@ -33,10 +33,10 @@ struct SkillDirSpec {
     /// path for explicit `--skill` inputs (ADR 0057).
     std::string path;
     /// When true, root-level .md files in this directory are loaded as skills
-    /// (pi "pi" discovery mode: user `~/.pike/agent/skills`, project `.pi/skills`,
-    /// and explicit `--skill` paths). When false, only nested SKILL.md files
-    /// within subdirectories are discovered (pi "agents" mode for the
-    /// `.agents/skills` convention).
+    /// (pi "pi" discovery mode: user `$XDG_CONFIG_HOME/pike/agent/skills`,
+    /// project `.pi/skills`, and explicit `--skill` paths). When false, only
+    /// nested SKILL.md files within subdirectories are discovered (pi "agents"
+    /// mode for the `.agents/skills` convention).
     bool include_root_files{false};
     /// The scope and resource-root baseDir recorded into each discovered
     /// skill's `sourceInfo`.
