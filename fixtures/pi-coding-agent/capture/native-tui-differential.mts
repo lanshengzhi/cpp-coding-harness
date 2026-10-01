@@ -36,9 +36,12 @@ const fixtureDir = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(fixtureDir, "../..");
 const differentialDir = path.join(fixtureDir, "differential");
 const reportPath = path.join(differentialDir, "report.json");
-const frozenCommit = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe";
+// ADR 0053 makes pi optional reference material rather than a specification,
+// so the comparison target is the pi checkout this machine actually has
+// instead of a hardcoded revision. The resolved commit and version are still
+// recorded in the report as provenance, and `PI_BASELINE_COMMIT` pins an exact
+// revision for anyone who needs to reproduce a specific comparison.
 const packageName = "@earendil-works/pi-coding-agent";
-const packageVersion = "0.87.1";
 const semanticThemeRoles = Object.freeze([
 	"text",
 	"muted",
@@ -184,9 +187,37 @@ const usageProfileScenarios = new Set(["user-message", "status-footer", "tool-re
 // profile evidence, not Native TUI capability cells, so the diagnostic
 // profile projection removes only these exact forms. The strict projection
 // below remains the classification authority.
-// debt: this is a frozen v0.87.1 row allowlist; update it only when the differential baseline advances.
-const profileCellRowProjections = Object.freeze([
+// debt: these patterns describe pi's startup rows. They are matched by shape
+// (version, wording, block glyphs) rather than by revision, so a newer pi
+// keeps projecting until its startup chrome actually changes; re-check them
+// when it does.
+type ProfileCellRowProjection = { name: string; pattern: RegExp; strip?: boolean };
+
+// pi's startup banner. Through v0.87.1 it was one plain identity row
+// (`pi v0.87.1`). Newer releases draw it in block glyphs, and the banner's
+// second row merges the art with the shared help line, so the row cannot be
+// dropped whole without also deleting chrome both runtimes render. A banner
+// row that carries only the version is dropped; when the art shares its line
+// with shared text the art prefix is stripped and the row is kept.
+const bannerArt = "[\\u2580-\\u259f]";
+/// What pi's banner row leaves behind once its art is removed: nothing, or the
+/// version the banner was drawing. Either way the row named the runtime rather
+/// than a Native TUI capability.
+const bannerVersionRemainder = /^\s*v?\d+\.\d+\.\d+\s*$/;
+const profileCellRowProjections: readonly ProfileCellRowProjection[] = Object.freeze([
 	{ name: "runtime-identity", pattern: /^\s*pi v\d+\.\d+\.\d+\s*$/ },
+	{
+		name: "runtime-identity",
+		pattern: new RegExp(`^\\s*${bannerArt}+(?:\\s+${bannerArt}+)*\\s+v\\d+\\.\\d+\\.\\d+\\s*$`),
+	},
+	{
+		name: "runtime-identity",
+		// Lookbehind keeps the banner block's own indent, which is chrome the
+		// other runtime also renders; the lookahead keeps the following
+		// character, so the strip removes the art and nothing else.
+		pattern: new RegExp(`(?<=^\\s*)(${bannerArt}+(?:\\s+${bannerArt}+)*\\s+)(?=\\S)`),
+		strip: true,
+	},
 	{ name: "workspace-branch", pattern: /<deterministic-workspace>/ },
 	{ name: "startup-documentation", pattern: /^\s*Pi can explain its own features and look up its docs\. Ask it how to(?: use or extend Pi\.)?\s*$/ },
 	{ name: "startup-documentation", pattern: /^\s*use or extend Pi\.\s*$/ },
@@ -223,22 +254,35 @@ function piCheckout(): string {
 	return process.env.PI_CHECKOUT ?? path.resolve(repositoryRootFromEnvironment(), "../pi");
 }
 
-function frozenCheckoutOrSkip(): string {
+interface PiBaseline {
+	checkout: string;
+	commit: string;
+	version: string;
+}
+
+/// Resolve the pi this run compares against. The checkout's own HEAD is the
+/// target; `PI_BASELINE_COMMIT` re-asserts a specific revision and fails loudly
+/// when the checkout is not there, so a reproducible comparison stays available
+/// without making every run depend on a particular historical revision.
+function resolvePiBaseline(): PiBaseline {
 	const checkout = piCheckout();
-	const tsx = path.join(checkout, "node_modules/.bin/tsx");
-	if (!existsSync(checkout) || !existsSync(tsx)) {
-		throw new SkipError(`pi checkout or tsx is unavailable at ${checkout}`);
+	if (!existsSync(checkout)) {
+		throw new SkipError(`pi checkout is unavailable at ${checkout}`);
 	}
+	resolveTsxRunner(checkout);
 	const head = execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-	if (head !== frozenCommit) throw new Error(`pi checkout must be ${frozenCommit}, found ${head}`);
+	const requested = process.env.PI_BASELINE_COMMIT;
+	if (requested !== undefined && requested !== "" && head !== requested) {
+		throw new Error(`PI_BASELINE_COMMIT=${requested} but the pi checkout is at ${head}`);
+	}
 	const packageJson = JSON.parse(readFileSync(path.join(checkout, "packages/coding-agent/package.json"), "utf8")) as {
 		name: string;
 		version: string;
 	};
-	if (packageJson.name !== packageName || packageJson.version !== packageVersion) {
-		throw new Error(`pi checkout must declare ${packageName}@${packageVersion}`);
+	if (packageJson.name !== packageName) {
+		throw new Error(`pi checkout must declare ${packageName}, found ${packageJson.name}`);
 	}
-	return checkout;
+	return { checkout, commit: head, version: packageJson.version };
 }
 
 class SkipError extends Error {}
@@ -258,6 +302,25 @@ function parseResizeSequence(value: string): Array<{ columns: number; rows: numb
 function writeJson(pathname: string, value: unknown, pretty = false): void {
 	const serialized = pretty ? JSON.stringify(value, null, 2) : JSON.stringify(value);
 	writeFileSync(pathname, `${serialized}\n`);
+}
+
+/// Resolve the TypeScript runner used to execute this capture script and the
+/// pi sources it imports. The runner used to be borrowed from the pi checkout,
+/// which only worked while pi declared tsx; pi v0.99 dropped it. An explicit
+/// `CCH_DIFFERENTIAL_TSX` wins, then the checkout, then whatever is on PATH.
+function resolveTsxRunner(checkout: string): string {
+	const candidates = [
+		process.env.CCH_DIFFERENTIAL_TSX,
+		path.join(checkout, "node_modules/.bin/tsx"),
+		"tsx",
+	].filter((candidate): candidate is string => candidate !== undefined && candidate !== "");
+	for (const candidate of candidates) {
+		if (candidate === "tsx") return candidate;
+		if (existsSync(candidate)) return candidate;
+	}
+	throw new SkipError(
+		`no TypeScript runner for the pi capture: set CCH_DIFFERENTIAL_TSX or install tsx (checkout ${checkout})`,
+	);
 }
 
 function captureTsconfig(checkout: string): string {
@@ -344,8 +407,8 @@ function runPike(scenario: Scenario, output: string): Record<string, unknown> {
 
 async function runPi(scenario: Scenario, output: string): Promise<Record<string, unknown>> {
 	resetScenarioRoot(scenario);
-	const checkout = frozenCheckoutOrSkip();
-	const tsx = path.join(checkout, "node_modules/.bin/tsx");
+	const checkout = piCheckout();
+	const tsx = resolveTsxRunner(checkout);
 	const result = execFileSync(tsx, ["--tsconfig", captureTsconfig(checkout), scriptPath, "--runtime", "pi"], {
 		cwd: repositoryRootFromEnvironment(),
 		env: childEnvironment({
@@ -710,14 +773,30 @@ function stableProjection(capture: Record<string, unknown>, scenario: Scenario, 
 
 type ProfileCellProjection = { rows: string[]; removed: Record<string, number> };
 
+/// Whether a styled row opens with pi's block-glyph banner art. The glyph run
+/// is its own styled segment, so this does not depend on the spacing a text
+/// projection would see between segments.
+function startsWithBannerArt(segments: unknown[]): boolean {
+	const head = segments[0] as { text?: string } | undefined;
+	const headText = (head?.text ?? "").trim();
+	return headText.length > 0 && new RegExp(`^${bannerArt}+$`).test(headText);
+}
+
 function projectProfileCellRows(rows: string[]): ProfileCellProjection {
 	const removed: Record<string, number> = {};
 	for (const projection of profileCellRowProjections) removed[projection.name] = 0;
 	const retained = rows.flatMap((line) => {
 		const projection = profileCellRowProjections.find((candidate) => candidate.pattern.test(line));
 		if (projection !== undefined) {
-			removed[projection.name] += 1;
-			return [];
+			// A strip projection removes identity from a row that also carries
+			// shared chrome, so the row survives and counts as no removal: the
+			// scrollback discount must not absorb a row that is still compared.
+			if (projection.strip !== true) {
+				removed[projection.name] += 1;
+				return [];
+			}
+			const stripped = line.replace(projection.pattern, "");
+			return stripped.trim() === "" ? [] : [stripped];
 		}
 		return line.trim() === "" ? [] : [line];
 	});
@@ -800,12 +879,33 @@ function compareScrollbackStructure(
 
 function projectProfileStyledRows(rows: unknown, scenario: Pick<Scenario, "id">): unknown[] {
 	if (!Array.isArray(rows)) return [];
-	return rows.filter((row) => {
+	const retained: unknown[] = [];
+	for (const row of rows) {
 		const text = styledRowText(row);
-		if (text.trim() === "") return false;
-		if (profileCellRowProjections.some((projection) => projection.pattern.test(text))) return false;
-		return !(usageProfileScenarios.has(String(scenario.id)) && text.includes("/128k"));
-	});
+		if (text.trim() === "") continue;
+		if (usageProfileScenarios.has(String(scenario.id)) && text.includes("/128k")) continue;
+		// The styled reconstruction carries no spacing between segments, so a
+		// text pattern cannot see where the banner art ends. The art is styled
+		// apart from the chrome beside it, so it is recognized by segment: drop
+		// leading segments that are only block glyphs, and keep whatever the
+		// row still holds. A row that was nothing but art becomes empty and is
+		// dropped, which is the same verdict the text projection reaches.
+		const segments = Array.isArray(row) ? [...row] : [];
+		if (segments.length > 0 && startsWithBannerArt(segments)) {
+			while (segments.length > 0 && startsWithBannerArt(segments)) segments.shift();
+			// What is left after the art is either nothing or a bare version
+			// token, both of which are runtime identity: the text projection
+			// drops that row through its whole-row pattern, and the styled one
+			// has to reach the same verdict. Anything else is shared chrome that
+			// the art happened to share a line with.
+			if (segments.length === 0 || bannerVersionRemainder.test(styledRowText(segments))) continue;
+			retained.push(segments);
+			continue;
+		}
+		if (profileCellRowProjections.some((projection) => projection.pattern.test(text))) continue;
+		retained.push(row);
+	}
+	return retained;
 }
 
 function profileProjectionForComparison(projection: Record<string, unknown>, scenario: Pick<Scenario, "id">): Record<string, unknown> {
@@ -1036,9 +1136,10 @@ function runLiveManual(): number {
 	const outputDirectory = process.env.CCH_DIFFERENTIAL_LIVE_OUTPUT_DIR ?? "/tmp/cpp-harness-pike-differential-live";
 	mkdirSync(outputDirectory, { recursive: true });
 	const pikeBinary = process.env.CCH_DIFFERENTIAL_LIVE_PIKE ?? path.join(repositoryRootFromEnvironment(), "build/pike");
-	const piCheckoutPath = frozenCheckoutOrSkip();
+	const piCheckoutPath = resolvePiBaseline().checkout;
+	const piEntry = path.join(piCheckoutPath, "packages/coding-agent/src/cli.ts");
 	const quote = (part: string) => `'${part.replaceAll("'", "'\\''")}'`;
-	const piCommand = [path.join(piCheckoutPath, "node_modules/.bin/tsx"), path.join(piCheckoutPath, "packages/coding-agent/src/cli.ts"), ...(process.env.CCH_DIFFERENTIAL_LIVE_PI_ARGS?.split(" ") ?? [])].map(quote).join(" ");
+	const piCommand = [resolveTsxRunner(piCheckoutPath), piEntry, ...(process.env.CCH_DIFFERENTIAL_LIVE_PI_ARGS?.split(" ") ?? [])].map(quote).join(" ");
 	const commands = [
 		{ name: "pike", command: `${quote(pikeBinary)} ${process.env.CCH_DIFFERENTIAL_LIVE_PIKE_ARGS ?? "--no-session --no-skills --no-prompt-templates --no-approve"}` },
 		{ name: "pi", command: piCommand },
@@ -1170,7 +1271,8 @@ function validateStableDigests(report: Record<string, unknown>, repositoryRoot: 
 }
 
 async function runParent(): Promise<number> {
-	const checkout = frozenCheckoutOrSkip();
+	const baseline = resolvePiBaseline();
+	const checkout = baseline.checkout;
 	const repositoryRoot = repositoryRootFromEnvironment();
 	const temporaryDirectory = path.join(differentialDir, `.verify-${process.pid}`);
 	rmSync(temporaryDirectory, { recursive: true, force: true });
@@ -1178,8 +1280,8 @@ async function runParent(): Promise<number> {
 	const report: Record<string, unknown> = {
 		schema: 2,
 		baseline: {
-			piCommit: frozenCommit,
-			artifact: `${packageName}@${packageVersion}`,
+			piCommit: baseline.commit,
+			artifact: `${packageName}@${baseline.version}`,
 		},
 		profile,
 		structuralProjection: {

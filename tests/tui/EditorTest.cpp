@@ -1552,18 +1552,19 @@ TEST_CASE("Editor autocomplete presentation ownership: height allocation, 5-row 
     REQUIRE(cursor_before.has_value());
 
     // With available height = 10 (text is 1 line -> 9 remainder):
-    // 5-row cap applies: exactly 5 menu rows rendered!
+    // 5-row cap applies, and 8 items do not fit in 5 rows, so one row goes to
+    // pi's `scrollInfo` counter: 4 item lines + 1 counter line.
     editor.set_available_height(10);
     auto screen = editor.render(40);
     REQUIRE(screen);
-    // 1 text line + 5 menu lines = 6 lines
+    // 1 text line + 4 item lines + 1 counter line = 6 lines
     REQUIRE(screen->lines.size() == 6);
     CHECK(screen->lines[0].starts_with("/a"));
     CHECK(screen->lines[1] == "> /apple — sweet fruit                  ");
     CHECK(screen->lines[2] == "  /banana — yellow fruit                ");
     CHECK(screen->lines[3] == "  /cherry — red fruit                   ");
     CHECK(screen->lines[4] == "  /date — palm fruit                    ");
-    CHECK(screen->lines[5] == "  /elderberry — dark berry              ");
+    CHECK(screen->lines[5] == "  (1/8)                                 ");
 
     // Cursor location relative to editor block is unchanged
     const auto cursor_after = editor.cursor_location();
@@ -1571,16 +1572,18 @@ TEST_CASE("Editor autocomplete presentation ownership: height allocation, 5-row 
     CHECK(cursor_after->row == cursor_before->row);
     CHECK(cursor_after->column == cursor_before->column);
 
-    // Selected-item visibility scrolling:
+    // Selected-item visibility scrolling: the counter follows the selection
+    // and the window slides to keep the selected row visible.
     // Move down 5 times to select item 5 ("fig")
     for (int i = 0; i < 5; ++i)
         key(editor, "down");
     screen = editor.render(40);
     REQUIRE(screen);
     REQUIRE(screen->lines.size() == 6);
-    // Window scrolled: index 1 ("banana") to 5 ("fig")
-    CHECK(screen->lines[1] == "  /banana — yellow fruit                ");
-    CHECK(screen->lines[5] == "> /fig — ficus fruit                    ");
+    // Window scrolled: index 2 ("cherry") to 5 ("fig")
+    CHECK(screen->lines[1] == "  /cherry — red fruit                   ");
+    CHECK(screen->lines[4] == "> /fig — ficus fruit                    ");
+    CHECK(screen->lines[5] == "  (6/8)                                 ");
 
     // Move down to item 7 ("honeydew", empty description)
     key(editor, "down"); // item 6 ("grape")
@@ -1588,16 +1591,19 @@ TEST_CASE("Editor autocomplete presentation ownership: height allocation, 5-row 
     screen = editor.render(40);
     REQUIRE(screen);
     REQUIRE(screen->lines.size() == 6);
-    CHECK(screen->lines[5] == "> /honeydew                             ");
+    CHECK(screen->lines[4] == "> /honeydew                             ");
+    CHECK(screen->lines[5] == "  (8/8)                                 ");
 
-    // Truncation on narrow width:
+    // Truncation on narrow width: the counter row is bounded too.
     key(editor, "up"); // item 6 ("grape" with very long description)
     screen = editor.render(25);
     REQUIRE(screen);
     REQUIRE(screen->lines.size() == 6);
     // Line width is strictly bounded to 25 columns
+    CHECK(cch::tui::visible_width(screen->lines[4]) <= 25);
+    CHECK(screen->lines[4].starts_with("> /grape — vine fruit "));
     CHECK(cch::tui::visible_width(screen->lines[5]) <= 25);
-    CHECK(screen->lines[5].starts_with("> /grape — vine fruit "));
+    CHECK(screen->lines[5].starts_with("  (7/8)"));
 
     // Text priority & zero-remainder height allocation:
     // Text takes 1 line; if available_height is 1 -> remainder is 0 -> 0 menu rows!
@@ -1624,6 +1630,60 @@ TEST_CASE("Editor autocomplete presentation ownership: height allocation, 5-row 
     // Second cancellation when menu is closed returns Unhandled and leaves text unchanged:
     CHECK(editor.handle_input(cch::tui::KeyEvent{.key = "escape"}) == cch::tui::InputAdmissionOutcome::Unhandled);
     CHECK(editor.text() == "/a");
+}
+
+TEST_CASE("Editor autocomplete scroll counter appears only while the ranked list outgrows the window",
+        "[tui][editor][autocomplete][presentation][spec]") {
+    const auto render_menu = [](const std::vector<cch::tui::AutocompleteItem>& items, std::size_t available_height) {
+        auto provider = std::make_unique<HeldAutocompleteProvider>();
+        provider->response = cch::tui::AutocompleteSuggestions{
+                .items = items,
+                .prefix = "/",
+        };
+        cch::tui::Editor editor;
+        editor.set_focused(true);
+        editor.set_autocomplete_provider(std::move(provider));
+        editor.set_text("/");
+        type(editor, "a");
+        editor.set_available_height(available_height);
+        auto screen = editor.render(40);
+        REQUIRE(screen);
+        for (auto& line : screen->lines) {
+            while (!line.empty() && line.back() == ' ')
+                line.pop_back();
+        }
+        return screen;
+    };
+    const auto item = [](std::string name) {
+        return cch::tui::AutocompleteItem{.value = name, .label = name, .description = "fruit"};
+    };
+
+    // A list that fits the window owes no counter: every row is an item, and
+    // the absence of the row is the observable half of the property.
+    const auto fitting = render_menu({item("apple"), item("banana"), item("cherry")}, 10);
+    REQUIRE(fitting->lines.size() == 4);
+    CHECK(fitting->lines[1] == "> /apple — fruit");
+    CHECK(fitting->lines[3] == "  /cherry — fruit");
+
+    // Exactly at the row cap is still a fit, so still no counter.
+    const auto exact_fit =
+            render_menu({item("apple"), item("banana"), item("cherry"), item("date"), item("elderberry")}, 10);
+    REQUIRE(exact_fit->lines.size() == 6);
+    CHECK(exact_fit->lines[5] == "  /elderberry — fruit");
+
+    // One item past the cap: the counter appears and the item window gives up
+    // a row to pay for it.
+    const auto one_over = render_menu(
+            {item("apple"), item("banana"), item("cherry"), item("date"), item("elderberry"), item("fig")}, 10);
+    REQUIRE(one_over->lines.size() == 6);
+    CHECK(one_over->lines[4] == "  /date — fruit");
+    CHECK(one_over->lines[5] == "  (1/6)");
+
+    // A single available row keeps the selected item and drops the counter,
+    // so the menu never disappears just because the editor is short.
+    const auto cramped = render_menu({item("apple"), item("banana"), item("cherry")}, 2);
+    REQUIRE(cramped->lines.size() == 2);
+    CHECK(cramped->lines[1] == "> /apple — fruit");
 }
 
 TEST_CASE("Editor presentation repaint notifications fire for menu navigation, cancel, and async delivery",

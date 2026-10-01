@@ -400,13 +400,20 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
     // pi's constructor-gated hint line: the save-as-default affordance
     // renders only when the sink exists (`  Enter to select · Ctrl+S to set
     // as default · Escape/Ctrl+C to cancel` through pi's `keyDisplayText`).
+    // The row word-wraps rather than truncating: the cancel affordance is the
+    // last thing on the line, and a bounded `emit` dropped it (`… to ca`) on
+    // every pane narrower than the composed string. ThinkingSelector already
+    // composes this row as a `Text`, which wraps.
     if (on_select_as_default_) {
-        if (auto pushed = emit(theme_.foreground(ThemeToken::Muted,
-                    "  " + format_key_text(keybindings_->key_text("tui.select.confirm"), true) + " to select · " +
-                            format_key_text(keybindings_->key_text("app.models.save"), true) + " to set as default · " +
-                            format_key_text(keybindings_->key_text("tui.select.cancel"), true) + " to cancel"));
-                !pushed)
-            return std::unexpected(pushed.error());
+        cch::tui::Text save_hint(
+                theme_.foreground(ThemeToken::Muted,
+                        "  " + format_key_text(keybindings_->key_text("tui.select.confirm"), true) + " to select · " +
+                                format_key_text(keybindings_->key_text("app.models.save"), true) +
+                                " to set as default · " +
+                                format_key_text(keybindings_->key_text("tui.select.cancel"), true) + " to cancel"),
+                0,
+                0);
+        if (auto appended = append(save_hint); !appended) return std::unexpected(appended.error());
     }
     {
         cch::tui::Text spacer("", 1, 0);

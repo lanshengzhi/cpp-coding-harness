@@ -70,10 +70,20 @@ support::ExpectedVoid append_autocomplete_lines(const EditorCompletionMenuPresen
     const auto remainder_height = available_height > text_lines_count ? available_height - text_lines_count : 0;
     const auto autocomplete_capacity = std::min(kMaxAutocompleteRows, remainder_height);
     if (autocomplete_capacity == 0) return {};
+    // pi select-list `scrollInfo`: a window that cannot show every ranked item
+    // spends one row on a `  (n/total)` counter, so the position and the
+    // hidden remainder stay legible. The reservation is taken before the
+    // window is cut, and the condition does not depend on the reduced
+    // capacity: more items than rows means a counter is owed either way. A
+    // single available row keeps the item and drops the counter, so a cramped
+    // editor never loses the menu outright.
+    const auto counter_owed = autocomplete_capacity >= 2 && menu.items.size() > autocomplete_capacity;
+    const auto item_capacity = autocomplete_capacity - (counter_owed ? 1U : 0U);
+    if (item_capacity == 0) return {};
     const auto selected = menu.selected_index;
-    const auto first_autocomplete = selected < autocomplete_capacity ? 0 : selected - autocomplete_capacity + 1;
+    const auto first_autocomplete = selected < item_capacity ? 0 : selected - item_capacity + 1;
     const auto autocomplete_count =
-            std::min(autocomplete_capacity, menu.items.size() - std::min(first_autocomplete, menu.items.size()));
+            std::min(item_capacity, menu.items.size() - std::min(first_autocomplete, menu.items.size()));
     for (std::size_t offset = 0; offset < autocomplete_count; ++offset) {
         const auto index = first_autocomplete + offset;
         std::string text = index == selected ? "> /" : "  /";
@@ -83,6 +93,21 @@ support::ExpectedVoid append_autocomplete_lines(const EditorCompletionMenuPresen
         }
         TruncatedText item{std::move(text)};
         if (auto rendered = item.render(content_width); !rendered) {
+            return std::unexpected(rendered.error());
+        } else if (!rendered->lines.empty()) {
+            std::string line(padding, ' ');
+            line += rendered->lines.front();
+            line.append(padding, ' ');
+            result.push_back(std::move(line));
+        }
+    }
+    // pi select-list `scrollInfo`: the visible window is a slice of a longer
+    // ranked list, so the row count and the selected position are the only
+    // way to tell how much of the list is hidden. The row is emitted only
+    // when the window does not cover every item, matching pi's condition.
+    if (counter_owed) {
+        TruncatedText counter{std::format("  ({}/{})", selected + 1, menu.items.size())};
+        if (auto rendered = counter.render(content_width); !rendered) {
             return std::unexpected(rendered.error());
         } else if (!rendered->lines.empty()) {
             std::string line(padding, ' ');

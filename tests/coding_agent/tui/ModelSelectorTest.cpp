@@ -414,6 +414,55 @@ TEST_CASE("ModelSelector never emits a line wider than the render width",
     }
 }
 
+TEST_CASE("ModelSelector wraps the save-as-default hint instead of dropping the cancel affordance",
+        "[coding_agent][tui][model-selector][issue426][spec]") {
+    RuntimeFixture fixture;
+    boost::asio::io_context io;
+    fixture.prime(io);
+
+    auto theme = test_theme();
+
+    // The width bound is necessary but not the property: a truncating
+    // renderer also passes it while silently losing "cancel", the last
+    // affordance on the row. Every width below the composed length has to
+    // carry the whole hint across the lines it wraps onto.
+    for (const std::size_t width : {20ul, 40ul, 55ul, 67ul, 68ul, 200ul}) {
+        auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+                theme,
+                test_keybindings(),
+                nullptr,
+                fixture.runtime,
+                io.get_executor(),
+                std::vector<cch::coding_agent::ScopedModel>{},
+                [](ai::Model) -> support::ExpectedVoid { return {}; },
+                [] {},
+                [&io] { (void)io; },
+                std::nullopt,
+                [](ai::Model) -> support::ExpectedVoid { return {}; });
+        const auto rendered = selector->render(width);
+        REQUIRE(rendered);
+        tests::check_all_lines_bounded(*rendered, width);
+        // Rows are padded and wrapped, so the assertion reads the hint as one
+        // whitespace-normalized run of text: a truncating renderer loses the
+        // tail, a wrapping one only redistributes it.
+        std::string joined;
+        for (const auto& line : rendered->lines) {
+            for (const char character : cch::tui::strip_terminal_sequences(line)) {
+                if (character == ' ') {
+                    if (!joined.empty() && joined.back() != ' ') joined.push_back(' ');
+                } else {
+                    joined.push_back(character);
+                }
+            }
+            if (!joined.empty() && joined.back() != ' ') joined.push_back(' ');
+        }
+        while (!joined.empty() && joined.back() == ' ')
+            joined.pop_back();
+        CAPTURE(width, joined);
+        CHECK(joined.find("Enter to select · Ctrl+S to set as default · Escape/Ctrl+C to cancel") != std::string::npos);
+    }
+}
+
 TEST_CASE("ModelSelector delegates search editing to the SelectList and reports its cursor on the search row",
         "[coding_agent][tui][model-selector][issue589][spec]") {
     RuntimeFixture fixture;
