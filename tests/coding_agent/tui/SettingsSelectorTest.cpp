@@ -14,6 +14,8 @@
 
 #include "support/OverlayWidthBound.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -376,4 +378,76 @@ TEST_CASE("SettingsSelector bounds every row at narrow widths",
         REQUIRE(rendered);
         tests::check_all_lines_bounded(*rendered, width);
     }
+}
+
+TEST_CASE("SettingsSelector frames the settings list with pi's full-width dynamic border",
+        "[coding_agent][tui][settings-selector][issue809][spec]") {
+    // pi `settings-selector.ts` composes DynamicBorder / SettingsList /
+    // DynamicBorder, so the block is framed by two full-width rules. A frame
+    // drawn anywhere but the first and last row is not that composition, so
+    // the row count is checked as well as the two edges.
+    auto theme = test_theme();
+    coding_agent::tui::SettingsSelectorComponent selector(theme,
+            test_keybindings(),
+            coding_agent::tui::SettingsSelectorConfig{},
+            coding_agent::tui::SettingsSelectorCallbacks{});
+
+    constexpr std::size_t width = 80;
+    const auto rendered = selector.render(width);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() > 2);
+
+    // U+2500 BOX DRAWINGS LIGHT HORIZONTAL, the glyph pi's dynamic border
+    // repeats once per column.
+    const std::string rule_glyph = "\xe2\x94\x80";
+    std::string rule;
+    for (std::size_t index = 0; index < width; ++index)
+        rule += rule_glyph;
+    CHECK(strip_ansi(rendered->lines.front()) == rule);
+    CHECK(strip_ansi(rendered->lines.back()) == rule);
+    // The rules carry pi's border color, not the default foreground.
+    CHECK(rendered->lines.front() == theme.foreground(coding_agent::tui::ThemeToken::Border, rule));
+    CHECK(rendered->lines.back() == theme.foreground(coding_agent::tui::ThemeToken::Border, rule));
+    const auto rule_rows = static_cast<std::size_t>(std::count_if(rendered->lines.begin(),
+            rendered->lines.end(),
+            [&rule](const std::string& line) { return strip_ansi(line) == rule; }));
+    CHECK(rule_rows == 2);
+
+    // The top border is a rendered row, so the search input's cursor moves
+    // down with it: a cursor left at row 0 would draw inside the rule.
+    selector.set_focused(true);
+    static_cast<void>(selector.render(width));
+    const auto cursor = selector.cursor_location();
+    REQUIRE(cursor);
+    CHECK(cursor->row == 1);
+}
+
+TEST_CASE("SettingsSelector styles the selected row's cursor glyph with the accent",
+        "[coding_agent][tui][settings-selector][issue809][spec]") {
+    // pi `getSettingsListTheme` returns `cursor: theme.fg("accent", "→ ")`, so
+    // the selected row's glyph is accent-styled and carries the trailing space
+    // that separates it from the label. A bare `→` prefix would leave the same
+    // visible text with a different cell presentation, so the assertion is on
+    // the styled prefix, not on the stripped text alone.
+    auto theme = test_theme();
+    coding_agent::tui::SettingsSelectorComponent selector(theme,
+            test_keybindings(),
+            coding_agent::tui::SettingsSelectorConfig{},
+            coding_agent::tui::SettingsSelectorCallbacks{});
+
+    constexpr std::size_t width = 80;
+    const auto rendered = selector.render(width);
+    REQUIRE(rendered);
+
+    const auto selected = std::find_if(rendered->lines.begin(), rendered->lines.end(), [](const std::string& line) {
+        return strip_ansi(line).find("Skill commands") != std::string::npos;
+    });
+    REQUIRE(selected != rendered->lines.end());
+
+    const auto styled_cursor = theme.foreground(coding_agent::tui::ThemeToken::Accent, "→ ");
+    CHECK(selected->rfind(styled_cursor, 0) == 0);
+    // The stripped row still reads as pi's selected row, and the accent
+    // styling of the glyph is not the plain text a respelling could satisfy.
+    CHECK(strip_ansi(*selected).rfind("→ Skill commands", 0) == 0);
+    CHECK(selected->rfind("→ ", 0) != 0);
 }

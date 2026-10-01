@@ -1,5 +1,6 @@
 #include "coding_agent/tui/SettingsSelector.hpp"
 
+#include "DynamicBorder.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/tui/ThinkingLevelDescription.hpp"
 
@@ -304,14 +305,12 @@ private:
 } // namespace
 
 struct SettingsSelectorComponent::Impl {
-    Impl(
-        const LiveTheme& theme,
-        std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
-        SettingsSelectorConfig config,
-        SettingsSelectorCallbacks callbacks)
-        : state(std::make_shared<SettingsSelectorState>(
-              SettingsSelectorState{.callbacks = std::move(callbacks)})),
-          list_(make_items(config), make_options(theme, std::move(keybindings), config, state)) {}
+    Impl(const LiveTheme& theme,
+            std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+            SettingsSelectorConfig config,
+            SettingsSelectorCallbacks callbacks)
+        : state(std::make_shared<SettingsSelectorState>(SettingsSelectorState{.callbacks = std::move(callbacks)})),
+          theme(theme), list_(make_items(config), make_options(theme, std::move(keybindings), config, state)) {}
 
     [[nodiscard]] static cch::tui::SettingsListOptions make_options(
         const LiveTheme& theme,
@@ -389,7 +388,13 @@ struct SettingsSelectorComponent::Impl {
     }
 
     std::shared_ptr<SettingsSelectorState> state;
+    // Must outlive this component, like the theme reference every selector
+    // overlay holds; the border color resolves through it at render time.
+    const LiveTheme& theme;
     cch::tui::SettingsList list_;
+    // The list is framed by a full-width rule above it, so the search input's
+    // cursor row shifts by the top border.
+    std::size_t cursor_row_offset{0};
 };
 
 SettingsSelectorComponent::SettingsSelectorComponent(
@@ -407,7 +412,24 @@ SettingsSelectorComponent::~SettingsSelectorComponent() = default;
 
 support::Expected<cch::tui::RenderResult> SettingsSelectorComponent::render(
     std::size_t width) {
-    return impl_->list_.render(width);
+    cch::tui::RenderResult result;
+    const auto append = [&result, width](cch::tui::Component& component) -> support::ExpectedVoid {
+        auto rendered = component.render(width);
+        if (!rendered) return std::unexpected(rendered.error());
+        for (auto& line : rendered->lines)
+            result.lines.push_back(std::move(line));
+        return {};
+    };
+
+    // pi `settings-selector.ts` composes DynamicBorder / SettingsList /
+    // DynamicBorder, so the settings list is framed by two full-width rules.
+    DynamicBorder top_border(impl_->theme.foreground_hook(ThemeToken::Border));
+    if (auto appended = append(top_border); !appended) return std::unexpected(appended.error());
+    impl_->cursor_row_offset = result.lines.size();
+    if (auto appended = append(impl_->list_); !appended) return std::unexpected(appended.error());
+    DynamicBorder bottom_border(impl_->theme.foreground_hook(ThemeToken::Border));
+    if (auto appended = append(bottom_border); !appended) return std::unexpected(appended.error());
+    return result;
 }
 
 void SettingsSelectorComponent::invalidate() {
@@ -433,7 +455,12 @@ bool SettingsSelectorComponent::focused() const {
 
 std::optional<cch::tui::CursorPosition>
 SettingsSelectorComponent::cursor_location() const {
-    return impl_->list_.cursor_location();
+    const auto cursor = impl_->list_.cursor_location();
+    if (!cursor) return std::nullopt;
+    return cch::tui::CursorPosition{
+            .column = cursor->column,
+            .row = cursor->row + impl_->cursor_row_offset,
+    };
 }
 
 } // namespace cch::coding_agent::tui
