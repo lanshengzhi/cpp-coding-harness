@@ -477,8 +477,10 @@ records `cacheWrite1h` on every `message_start`, defaulting to 0 when the provid
    transport per the repo validation policy. Live smoke (`CCH_LIVE_KIMI=1`) remains optional and
    manual.
 5. **Documentation consistency completed:** ADR 0033, the ADR 0019/0029 refinements, and the
-   CONTEXT.md entries (Adapter, Compat Field, Transport, Session Affinity, Auth Interaction, OAuth
-   Login) verified against the landed surface with no drift. Two README drifts found and fixed in
+   domain and protocol descriptions (Adapter, Compat Field, Transport, Session Affinity, Auth
+   Interaction, OAuth Login) verified against the landed surface with no drift. The current
+   [domain guide](../../docs/agents/domain.md#find-the-contract) locates the glossary terms and
+   their protocol contracts. Two README drifts found and fixed in
    this gate: the session-dir env var is now pi's `PI_CODING_AGENT_SESSION_DIR`
    (`CCH_CODING_AGENT_SESSION_DIR` removed, matching ADR 0031), and the README no longer lists OAuth
    as deferred nor pins the parity baseline at the pre-advance `864b35c`.

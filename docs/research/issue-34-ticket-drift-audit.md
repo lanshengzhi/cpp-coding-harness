@@ -111,5 +111,5 @@ Gaps:
 
 - Reviewed issue bodies/comments for #34–#81 and GitHub dependency/blocked-by metadata.
 - Reviewed commit range `4eb5f443…d95087d4`, including all 28 commit hashes/stats and changed paths.
-- Reviewed current `CONTEXT.md`, `CODING_STANDARDS.md`, `README.md`, `CMakeLists.txt`, accepted ADRs 0005, 0011, 0018, and 0020–0025, parity map #2, the recorded pi Agent/loop sources, `Agent.hpp`, `AgentContext.hpp`, `AgentTool.hpp`, `Sdk.hpp`, `ExecutionEnv.hpp`, `Process.hpp`, Agent Session runtime, and representative architecture/Agent/SDK tests.
+- Reviewed current `GLOSSARY.md`, `CODING_STANDARDS.md`, `README.md`, `CMakeLists.txt`, accepted ADRs 0005, 0011, 0018, and 0020–0025, parity map #2, the recorded pi Agent/loop sources, `Agent.hpp`, `AgentContext.hpp`, `AgentTool.hpp`, `Sdk.hpp`, `ExecutionEnv.hpp`, `Process.hpp`, Agent Session runtime, and representative architecture/Agent/SDK tests.
 - Working-tree status supplied at evidence capture was clean. This report is the only file created by the audit; no source, tests, issue, CONTEXT, or ADR was edited.

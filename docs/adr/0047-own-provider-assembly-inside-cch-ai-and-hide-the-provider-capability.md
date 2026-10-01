@@ -33,7 +33,7 @@ The change refines [ADR 0029](0029-align-models-provider-and-authentication-owne
 - Tests cross the deepened `Models` interface (`apply_provider` / `provider_info` / `stream` / auth operations); the existing auth, stream, terminal, and fallback contract tests survive at that seam; adapter tests build scripted definitions.
 - The Parity Architecture Gate needs updated include-root and interface-header evidence as `Provider.hpp` and `ProviderStreamOptions` leave the `cch_ai` Owner Interface root, and `ProviderComposer` loses its cch_ai private includes.
 - ADR 0046's note that the ProviderComposer composition root is "ADR-0029-sanctioned" is superseded for the mechanism: composition policy stays in Models Runtime, but cross-Owner private include is no longer the delivery mechanism.
-- `CONTEXT.md` gains the **Provider Definition** and **Provider Info** glossary terms.
+- `GLOSSARY.md` gains the **Provider Definition** and **Provider Info** glossary terms.
 
 ## References
 

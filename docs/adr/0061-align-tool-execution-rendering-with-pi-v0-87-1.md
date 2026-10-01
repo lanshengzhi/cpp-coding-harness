@@ -51,7 +51,7 @@ directory the user is working in.
 
 ## The Tool Renderer is an application-layer registry
 
-A **Tool Renderer** (the `CONTEXT.md` entry) is the application-layer presentation of one tool's
+A **Tool Renderer** (the `GLOSSARY.md` entry) is the application-layer presentation of one tool's
 call and result: a render-call / render-result pair keyed by tool name in the interactive TUI,
 never a property of the headless `Tool` definition. The interactive TUI application layer owns a
 registry mapping tool name to that pair, plus one fallback renderer. `ToolExecutionComponent`

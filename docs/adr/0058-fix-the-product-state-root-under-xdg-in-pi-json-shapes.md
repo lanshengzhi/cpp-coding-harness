@@ -61,7 +61,7 @@ state file is machine-written and therefore gains nothing from TOML's human-frie
 
 ## Consequences
 
-- Documents state one root and one file set; `CONTEXT.md`, `docs/usage.md`, and `docs/keybindings.md`
+- Documents state one root and one file set; `GLOSSARY.md`, `docs/usage.md`, and `docs/keybindings.md`
   lose their resolution-order paragraphs.
 - Test isolation uses `HOME` (subprocess) and `agent_dir` injection (in-process); the override test
   cases disappear with the overrides.

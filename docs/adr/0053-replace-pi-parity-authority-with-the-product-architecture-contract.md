@@ -44,7 +44,7 @@ Not everything pi-shaped is a compromise. We keep: the serialized Runtime (ADR 0
 - Issue #2 (parity map) is closed as superseded; `docs/agents/pi-parity.md` is rewritten as the product architecture-contract guide in the re-gate ticket.
 - The de-pi program's first tickets: re-gate the manifest and split `frontend_tui`/`frontend_cli` out of `cch_coding_agent` (split landed — see the addendum); complete the projection Read Model; audit the test suite into `spec` / `compat-pi` / `diverge` labels; structured inference-failure classification; own config namespace with one-time pi import.
 - Every migration chain must end by deleting its old entry — dual state sources and dual execution paths are forbidden as steady states, and manifest exceptions must carry an owner and a removal ticket.
-- Glossary terms recorded in CONTEXT.md: Product Architecture Contract, Compat Layer; Parity Baseline and the Parity map terms are marked historical.
+- Glossary terms recorded in GLOSSARY.md: Product Architecture Contract, Compat Layer; Parity Baseline and the Parity map terms are marked historical.
 
 ## Addendum: the Owner dependency allowlist is keyed on the depending target's role (Issue #658)
 

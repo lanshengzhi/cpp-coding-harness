@@ -39,7 +39,7 @@ The following bullets record the proposal's assumptions at measurement time; the
 - Preserve the then-existing package boundaries and keep Beast/Asio behind the Transport seam.
 - Use fake-provider tests; build-performance validation requires no live provider or network access.
 
-These were build-engineering proposals, not product domain language. They do not change `CONTEXT.md`. ADR 0039 supersedes ADR 0038's CMake 4.0 floor, loose GCC 16+ rule, and best-effort platform range; ADR 0039/0040 also replace the proposal's package, test, and Runtime assumptions.
+These were build-engineering proposals, not product domain language. They do not change `GLOSSARY.md`. ADR 0039 supersedes ADR 0038's CMake 4.0 floor, loose GCC 16+ rule, and best-effort platform range; ADR 0039/0040 also replace the proposal's package, test, and Runtime assumptions.
 
 ## Measurement environment
 

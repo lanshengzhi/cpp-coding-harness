@@ -8,7 +8,7 @@ dummy values (see [Sanitization rules](#sanitization-rules)).
 
 This file completes the pi-agent-core completion gate ([#363], T14): T01 [#350] through T13 [#362] landed
 the capability rows below, and this gate verifies the checklist is complete, every #331-mandated
-golden is committed, and the ADR 0034 / CONTEXT.md documentation is consistent with the landed
+golden is committed, and the ADR 0034 / GLOSSARY.md documentation is consistent with the landed
 surface.
 
 ## Pinned baseline and shard artifact
@@ -451,7 +451,7 @@ matrix, not a fixture), verbatim re-auth guidance (`re-auth-guidance-*.txt`), an
 lifecycle (`auto-retry-lifecycle.json`). Goldens were captured from the frozen pi tests
 (`packages/agent/test/{agent,agent-loop}.test.ts`, `packages/agent/test/harness/*`,
 `packages/coding-agent/test/*`) at baseline `83114817` with the TS sides pinned as snapshots
-in this repository; no node sidecar runs in CI. ADR 0034 and the CONTEXT.md entries (Agent
+in this repository; no node sidecar runs in CI. ADR 0034 and the GLOSSARY.md entries (Agent
 Stream Flow, Thinking Level, Compaction, Auto-Retry, Re-auth Guidance) were re-verified
 against the landed surface at this gate with no drift.
 

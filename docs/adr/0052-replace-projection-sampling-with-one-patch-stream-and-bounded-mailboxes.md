@@ -43,4 +43,4 @@ This supersedes the consumption protocol recorded in ADR 0051 (sampled version â
 - `SessionProjectionSource` is replaced by the subscription seam; `state_version()`, `snapshot()`, and `set_dirty_listener()` are deleted, and the version counter becomes private to the Core.
 - Every projection-relevant fact flows through one channel; the TUI event sinks are demoted to a private fast path and migrate to the stream in the TUI's own follow-up refactor.
 - A Web, GUI, or Spectator projection attaches by calling `attach` and requires no Headless Core modification (spec #597 story 10).
-- Glossary terms recorded in CONTEXT.md: Projection Stream, Base, Patch, Subscription Mailbox.
+- Glossary terms recorded in GLOSSARY.md: Projection Stream, Base, Patch, Subscription Mailbox.
