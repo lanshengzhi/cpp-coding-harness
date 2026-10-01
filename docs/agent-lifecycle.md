@@ -110,6 +110,8 @@ Agent Turn
 
 `AgentStartEvent` and `AgentEndEvent` delimit an Agent Run. `TurnStartEvent` and `TurnEndEvent` delimit an Agent Turn. `AgentEndEvent` ends that Agent Run, but the surrounding Prompt Run may still perform recovery, persistence, or settlement work before the Agent Session becomes idle.
 
+Auto-Retry eligibility comes from the structured `InferenceFailure` / `InferenceFailureKind` contract in [`InferenceFailure.hpp`](../src/ai/include/cch/ai/InferenceFailure.hpp), not diagnostic wording. For retry exclusions, history retention, cancellable backoff, and Compaction's triggers and summarization-request isolation, read [ADR 0034](adr/0034-own-the-scoped-pi-agent-core-agent-and-agent-turn-capabilities.md#consequences).
+
 ## Everyday examples
 
 These are representative traces, not fixed Provider transcripts. A Provider may choose a different valid tool sequence; the lifecycle boundaries remain the same.

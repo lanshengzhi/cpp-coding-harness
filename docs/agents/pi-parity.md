@@ -52,6 +52,12 @@ When a user-visible behavior is intentionally retained because it is useful —
 for example familiar TUI keybindings or slash commands — record it as a product
 choice. Do not turn that retained behavior into an architecture dependency.
 
+For a capability with an explicit Semantic Parity claim, an Intentional Divergence
+must demonstrably improve the C++ caller contract and be impossible to hide behind
+a private adapter without losing that benefit. Record the affected claim and its
+rationale; an implementation shortcut or accidental drift does not qualify. This
+criterion does not extend Semantic Parity to capabilities with no such claim.
+
 ## Change workflow
 
 1. Describe the boundary change and its non-goals in an issue or ADR.

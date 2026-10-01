@@ -42,6 +42,10 @@ One line per package. Headers are the stable pointers; class lists are not enume
 - `cch_coding_agent`: repository-private headless core (Agent Session, Models Runtime); the product frontends are its implementation targets — `frontend_tui` (Native TUI, `src/coding_agent/tui/`) and `frontend_cli` (CLI, `src/coding_agent/cli/`) — and `pike` composes only the latter; the Models Runtime privately holds `ai::Models` and exposes passive catalog/status values plus an AI-owned `ModelStreamFactory`, while `SessionFactory` remains the sole assembly point.
 - `cch_support`: pi-neutral C++ values and mechanics only (`<cch/support/...>`); owns no Supported Capability, depends on no Capability Owner Package. Publishes the bounded/redacted text mechanics and the pi output limiter (`BoundedText.hpp`, `Redactor.hpp`, `OutputLimiter.hpp`, ADR 0062); the Boost.Asio completion bridge stays private (ADR 0046).
 
+### Interactive run boundary
+
+The CLI adapter packs an Interactive Session Run once, combining CLI-owned facts, host capabilities, and the intent to bind an existing Agent Session or defer creation until the boot trust prompt. The Native TUI consumes that run intent and its outcomes rather than an independent configuration-field bundle. The seam and its ownership rules live in [`InteractiveSessionRun.hpp`](../../src/coding_agent/tui/InteractiveSessionRun.hpp); production assembly is in [`AsyncCliRuntime.cpp`](../../src/coding_agent/cli/AsyncCliRuntime.cpp).
+
 ## Passive value contracts
 
 Data crossing Owner Interfaces is passive value state. Use aggregate-friendly `struct`, `std::variant`, `std::expected`, and `cch::support::JsonValue` values.
