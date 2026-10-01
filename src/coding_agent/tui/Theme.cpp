@@ -622,19 +622,21 @@ cch::tui::SelectListTheme LiveTheme::select_list_theme() const {
 cch::tui::SettingsListTheme LiveTheme::settings_list_theme() const {
     const auto state = impl_;
     return {
-        .label = [state](std::string text, bool selected) {
-            return selected ? apply_style(state, ThemeToken::Accent, std::move(text), false) : text;
-        },
-        .value = [state](std::string text, bool selected) {
-            return apply_style(
-                state,
-                selected ? ThemeToken::Accent : ThemeToken::Muted,
-                std::move(text),
-                false);
-        },
-        .description = foreground_hook(ThemeToken::Dim),
-        .cursor = "→ ",
-        .hint = foreground_hook(ThemeToken::Dim),
+            .label =
+                    [state](std::string text, bool selected) {
+                        return selected ? apply_style(state, ThemeToken::Accent, std::move(text), false) : text;
+                    },
+            .value =
+                    [state](std::string text, bool selected) {
+                        return apply_style(
+                                state, selected ? ThemeToken::Accent : ThemeToken::Muted, std::move(text), false);
+                    },
+            .description = foreground_hook(ThemeToken::Dim),
+            // pi `getSettingsListTheme`: `cursor: theme.fg("accent", "→ ")`. The
+            // glyph is accent-styled, so it shares a styled run with the selected
+            // label instead of rendering as an unstyled prefix.
+            .cursor = apply_style(state, ThemeToken::Accent, "→ ", false),
+            .hint = foreground_hook(ThemeToken::Dim),
     };
 }
 

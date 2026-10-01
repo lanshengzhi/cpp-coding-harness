@@ -38,6 +38,12 @@ constexpr std::array<std::string_view, 4> kSettingsListActions = {
         "tui.select.cancel",
 };
 
+/// The prefix pi gives every row the cursor is not on.
+[[nodiscard]] const std::string& unselected_prefix() {
+    static const std::string prefix = "  ";
+    return prefix;
+}
+
 } // namespace
 
 struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Impl> {
@@ -257,46 +263,44 @@ support::Expected<RenderResult> SettingsList::render(std::size_t width) {
         for (const auto& item : impl->items) {
             max_label_width = std::max(max_label_width, visible_width(item.label));
         }
-        max_label_width = std::min<std::size_t>(30, max_label_width);
+        // pi `settings-list.ts`: `Math.min(36, max(label widths))`. The cap
+        // is the value column's budget, so it is pi's number, not a local one.
+        max_label_width = std::min<std::size_t>(36, max_label_width);
         for (std::size_t index = range.begin; index < range.end; ++index) {
             const auto& item = impl->items[displayed[index]];
             const auto selected = index == impl->selected_index;
-            auto prefix = selected ? impl->theme.cursor : std::string("  ");
-            auto bounded_prefix = truncate_text(prefix, width, "");
-            if (!bounded_prefix) return std::unexpected(bounded_prefix.error());
-            prefix = std::move(*bounded_prefix);
-            const auto prefix_width = visible_width(prefix);
-            const auto label_limit = width > prefix_width ? std::min(max_label_width, width - prefix_width) : 0;
-            auto label = truncate_text(item.label, label_limit, "", true);
-            if (!label) return std::unexpected(label.error());
-            auto styled_label = detail::apply_selection_style(
-                impl->theme.label,
-                std::move(*label),
-                selected,
-                "SettingsList label");
+            // pi `settings-list.ts`: the selected row's prefix is the theme
+            // cursor and every other row's is two spaces. Neither is bounded
+            // on its own; the row's final truncation is the only bound pi
+            // applies.
+            const std::string& prefix = selected ? impl->theme.cursor : unselected_prefix();
+            // pi pads the label to the value column instead of truncating
+            // it, so a label wider than the column keeps its text.
+            const auto label_width = visible_width(item.label);
+            const std::string label = label_width < max_label_width
+                                              ? item.label + std::string(max_label_width - label_width, ' ')
+                                              : item.label;
+            auto styled_label = detail::apply_selection_style(impl->theme.label, label, selected, "SettingsList label");
             if (!styled_label) return std::unexpected(styled_label.error());
-            std::string line = prefix + *styled_label;
-            if (visible_width(line) + 2 < width) {
-                line += "  ";
-                const auto value_width = width - visible_width(line);
-                auto value = truncate_text(item.current_value, value_width, "");
-                if (!value) return std::unexpected(value.error());
-                auto styled_value = detail::apply_selection_style(
-                    impl->theme.value,
-                    std::move(*value),
-                    selected,
-                    "SettingsList value");
-                if (!styled_value) return std::unexpected(styled_value.error());
-                line += *styled_value;
-            }
-            auto bounded = truncate_text(line, width, "");
+            // pi's value column starts after the prefix, the padded label,
+            // and the two-column separator, and the value is truncated to
+            // what remains two columns short of the row's right edge.
+            const auto value_column = visible_width(prefix) + max_label_width + 2;
+            const auto value_width = width > value_column + 2 ? width - value_column - 2 : 0;
+            auto value = truncate_text(item.current_value, value_width, "");
+            if (!value) return std::unexpected(value.error());
+            auto styled_value =
+                    detail::apply_selection_style(impl->theme.value, std::move(*value), selected, "SettingsList value");
+            if (!styled_value) return std::unexpected(styled_value.error());
+            auto bounded = truncate_text(prefix + *styled_label + "  " + *styled_value, width, "");
             if (!bounded) return std::unexpected(bounded.error());
             lines.push_back(std::move(*bounded));
         }
         if (range.begin > 0 || range.end < displayed.size()) {
+            // pi truncates the scroll indicator to `width - 2`, keeping it
+            // one column inside the row the list bounds every other line by.
             auto scroll = impl->hint_line(
-                std::format("  ({}/{})", impl->selected_index + 1, displayed.size()),
-                width);
+                    std::format("  ({}/{})", impl->selected_index + 1, displayed.size()), width > 2 ? width - 2 : 1);
             if (!scroll) return std::unexpected(scroll.error());
             lines.push_back(std::move(*scroll));
         }

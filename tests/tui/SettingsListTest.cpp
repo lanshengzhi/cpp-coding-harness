@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -365,4 +366,43 @@ TEST_CASE(
     });
     static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "escape"}));
     CHECK(cancellations == 1);
+}
+
+TEST_CASE("SettingsList lays the value column out the way pi does", "[tui][settings-list][issue809][spec]") {
+    // pi `settings-list.ts`: the label column is `min(36, widest label)`, a
+    // label wider than that column keeps its text instead of being truncated,
+    // and the value is truncated to what remains two columns short of the
+    // row's right edge. A value that reached the edge, or a label cut at the
+    // column, renders different cells while looking near-identical, so the
+    // assertions are on whole rows rather than on substrings.
+    const std::string wide_label(40, 'W');
+    const std::string wide_value(40, 'v');
+    cch::tui::SettingsList list(
+            {
+                    {.id = "wide", .label = wide_label, .current_value = "on"},
+                    {.id = "alpha", .label = "Alpha", .current_value = wide_value},
+            },
+            cch::tui::SettingsListOptions{});
+
+    const std::size_t width = 60;
+    const auto rendered = list.render(width);
+    REQUIRE(rendered);
+
+    const auto row = [&rendered](const std::string& label) -> std::string {
+        for (const auto& line : rendered->lines) {
+            const auto text = cch::tui::strip_terminal_sequences(line);
+            if (text.find(label) != std::string::npos) return text;
+        }
+        return {};
+    };
+
+    // The 40-column label is not cut at the 36-column value column; the first
+    // row is the selected one, so it carries the theme cursor prefix.
+    CHECK(row(wide_label) == "\xe2\x86\x92 " + wide_label + "  on");
+    // The short label is padded to the column, and the 40-character value is
+    // cut to the 18 columns pi leaves it (60 - 2 - 36 - 2 - 2).
+    CHECK(row("Alpha") == "  Alpha" + std::string(31, ' ') + "  " + wide_value.substr(0, 18));
+    for (const auto& line : rendered->lines) {
+        CHECK(cch::tui::visible_width(line) <= width);
+    }
 }
