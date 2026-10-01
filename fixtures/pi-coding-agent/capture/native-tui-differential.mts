@@ -11,7 +11,10 @@
  * evidence only, so the harness makes no full raw-ANSI or SGR-cadence parity
  * claim. Theme parity compares the canonical semantic role mapping (exact RGB
  * is retained as evidence); a palette difference that preserves the role
- * partition is not a regression (issue #797).
+ * partition is not a regression (issue #797). The styled-cell presentation
+ * comparison resolves each cell color to the same semantic role on the
+ * runtime that emitted it, so the palette and the cells stay on one contract:
+ * only an exact-RGB difference inside the same role compares equal.
  *
  * `--runtime pi` is an internal per-scenario child mode. It exists so each pi
  * capture gets a fresh session, terminal, and faux Provider; the parent still
@@ -684,20 +687,152 @@ function verifyAnsiBoundary(): void {
 	assert.equal((restyled.projection as Record<string, unknown>).visibleCellPresentationEqual, false);
 }
 
+// canonicalStyledStyle's slot order. The presentation comparison resolves only
+// the two color slots to a semantic role; every flag slot stays exact, so bold,
+// dim, italic, underline, blink, inverse, hidden, and strikethrough keep
+// comparing by value.
+const canonicalStyledStyleSlots: readonly string[] = Object.freeze([
+	"bold",
+	"dim",
+	"italic",
+	"underline",
+	"blink",
+	"inverse",
+	"hidden",
+	"strikethrough",
+	"foreground",
+	"background",
+]);
+const canonicalStyledColorSlots: readonly string[] = Object.freeze(["foreground", "background"]);
+
+// The styled-cell presentation comparison is a semantic role comparison, not an
+// exact-RGB one and not an ignore-colors one: the role mapping themeParity
+// already accepts (issue #797) is the same mapping the cells are compared
+// through. Every case below is one the check must admit or still separate.
+function verifyStyledRolePresentation(): void {
+	const pikePalette = Object.fromEntries([
+		["text", "#d4d4d4"],
+		["muted", "#808080"],
+		["border", "#5f87ff"],
+		["accent", "#8abeb7"],
+		["success", "#b5bd68"],
+		["warning", "#ffff00"],
+		["error", "#cc6666"],
+		["selectedBg", "#3a3a4a"],
+	]);
+	// pi v0.99.2 moved every semantic role and preserved the partition.
+	const piPalette = Object.fromEntries([
+		["text", "#dee0e1"],
+		["muted", "#9da5a9"],
+		["border", "#5fa8cc"],
+		["accent", "#9d8fe0"],
+		["success", "#71c3b0"],
+		["warning", "#f2e05c"],
+		["error", "#dd7f6c"],
+		["selectedBg", "#2f4568"],
+	]);
+	// The comparison sees the canonical style the report carries, not a raw
+	// style object, so the fixture canonicalizes the way normalizeStyledRows does.
+	const styledRun = (text: string, style: Record<string, unknown>) => ({ text, style: canonicalStyledStyle(style) });
+	const styledCapture = (themeColors: Record<string, string>, style: Record<string, unknown>) => ({
+		themeColors,
+		snapshots: [{ styledVisible: [[styledRun("row", style)]], styledScrollback: [] }],
+	});
+	const styled = (foreground: string, extra: Record<string, unknown> = {}): Record<string, unknown> => ({ foreground, ...extra });
+	// The same role carrying a different exact RGB is the palette difference
+	// themeParity classifies as acceptable, so it is not a cell difference.
+	assert.equal(styledPresentationEqual(styledCapture(pikePalette, styled("#d4d4d4")), styledCapture(piPalette, styled("#dee0e1"))), true);
+	assert.equal(styledPresentationEqual(
+		styledCapture(pikePalette, styled("#d4d4d4", { background: "#3a3a4a" })),
+		styledCapture(piPalette, styled("#dee0e1", { background: "#2f4568" })),
+	), true);
+	// A different role stays unequal even when both colors are plausible
+	// palette entries: the case an ignore-colors stand-in would let through.
+	assert.equal(styledPresentationEqual(styledCapture(pikePalette, styled("#d4d4d4")), styledCapture(piPalette, styled("#9da5a9"))), false);
+	// A color that resolves to no role on the cell's own runtime stays exact,
+	// so a surface-specific or unknown color is never resolved into agreement.
+	assert.equal(styledPresentationEqual(styledCapture(pikePalette, styled("#d4d4d4")), styledCapture(piPalette, styled("#123456"))), false);
+	// A palette whose partition collapsed cannot be resolved into a match: muted
+	// now shares text's color, so the shared color stays ambiguous and exact.
+	assert.equal(styledPresentationEqual(styledCapture(pikePalette, styled("#808080")), styledCapture({ ...piPalette, muted: piPalette.text }, styled("#dee0e1"))), false);
+	// Flags compare by value whatever the colors resolve to.
+	for (const flag of ["bold", "italic", "underline", "inverse"] as const) {
+		assert.equal(styledPresentationEqual(
+			styledCapture(pikePalette, styled("#d4d4d4", { [flag]: false })),
+			styledCapture(piPalette, styled("#dee0e1", { [flag]: true })),
+		), false);
+	}
+	// The default foreground carries no color token and never becomes a role.
+	assert.equal(styledPresentationEqual(styledCapture(pikePalette, { foreground: "" }), styledCapture(piPalette, styled("#dee0e1"))), false);
+	// Without theme evidence on either side the comparison falls back to exact
+	// RGB instead of admitting a difference it cannot classify.
+	const themeLessCapture = (foreground: string) => ({
+		snapshots: [{ styledVisible: [[styledRun("row", styled(foreground))]], styledScrollback: [] }],
+	});
+	assert.equal(styledPresentationEqual(themeLessCapture("#d4d4d4"), themeLessCapture("#d4d4d4")), true);
+	assert.equal(styledPresentationEqual(themeLessCapture("#d4d4d4"), themeLessCapture("#dee0e1")), false);
+}
+
 function canonicalStyledStyle(value: unknown): unknown[] {
 	const style = value !== null && typeof value === "object" ? value as Record<string, unknown> : {};
+	const flagSlots = canonicalStyledStyleSlots.filter((slot) => !canonicalStyledColorSlots.includes(slot));
 	return [
-		Boolean(style.bold),
-		Boolean(style.dim),
-		Boolean(style.italic),
-		Boolean(style.underline),
-		Boolean(style.blink),
-		Boolean(style.inverse),
-		Boolean(style.hidden),
-		Boolean(style.strikethrough),
-		String(style.foreground ?? ""),
-		String(style.background ?? ""),
+		...flagSlots.map((slot) => Boolean(style[slot])),
+		...canonicalStyledColorSlots.map((slot) => String(style[slot] ?? "")),
 	];
+}
+
+function styledColorSlotIndex(slot: string): number {
+	const index = canonicalStyledStyleSlots.indexOf(slot);
+	if (index < 0) throw new Error(`canonical styled style has no ${slot} slot`);
+	return index;
+}
+
+// A styled cell's color is compared as the semantic role it plays on the
+// runtime that emitted it, reusing the role mapping themeParity compares
+// (issue #797): a palette difference that preserves the role partition is
+// evidence, not a presentation difference. A color two roles share is
+// ambiguous and stays exact, and a color no single role resolves stays exact,
+// so a broken role mapping can never be resolved away by this projection.
+function semanticRoleToken(color: string, colors: Record<string, string> | undefined): string {
+	if (colors === undefined || color === "") return color;
+	const roles = semanticThemeRoles.filter((role) => colors[role] === color);
+	return roles.length === 1 ? `role:${roles[0]}` : color;
+}
+
+function semanticStyledRows(rows: unknown, colors: Record<string, string> | undefined): unknown[] {
+	if (!Array.isArray(rows)) return [];
+	if (colors === undefined) return rows;
+	return rows.map((row) => {
+		if (!Array.isArray(row)) return [];
+		return row.map((run) => {
+			const style = (run as Record<string, unknown>).style;
+			if (!Array.isArray(style) || style.length !== canonicalStyledStyleSlots.length) return run;
+			const resolved = [...style] as unknown[];
+			for (const slot of canonicalStyledColorSlots) {
+				const index = styledColorSlotIndex(slot);
+				resolved[index] = semanticRoleToken(String(style[index] ?? ""), colors);
+			}
+			return { ...run, style: resolved };
+		});
+	});
+}
+
+function projectionThemeColors(projection: Record<string, unknown>): Record<string, string> | undefined {
+	const colors = projection.themeColors;
+	if (colors === null || typeof colors !== "object") return undefined;
+	return colors as Record<string, string>;
+}
+
+/// The styled-cell presentation as compared: colors resolved to semantic roles.
+/// Exact RGB stays in the report as evidence.
+function semanticStyledProjection(projection: Record<string, unknown>): unknown[] {
+	const colors = projectionThemeColors(projection);
+	const snapshots = Array.isArray(projection.snapshots) ? projection.snapshots as Record<string, unknown>[] : [];
+	return snapshots.map((snapshot) => ({
+		visible: semanticStyledRows(snapshot.styledVisible, colors),
+		scrollback: semanticStyledRows(snapshot.styledScrollback, colors),
+	}));
 }
 
 function normalizeStyledRows(value: unknown, workspace: string, repositoryRoot: string, scenario: Scenario): unknown[] {
@@ -933,7 +1068,7 @@ function compareProfileProjection(pike: Record<string, unknown>, pi: Record<stri
 		visibleCellPresentationEqual: styledPresentationEqual(pikeProjected, piProjected),
 		scrollbackStructureEqual: scrollback.equal,
 		scrollbackLengthCompensation: scrollback.lengthCompensation,
-		scrollbackCellPresentationEqual: JSON.stringify(pikeSnapshots.map((item) => item.styledScrollback)) === JSON.stringify(piSnapshots.map((item) => item.styledScrollback)),
+		scrollbackCellPresentationEqual: styledRowsEqual(pikeProjected, piProjected, "scrollback"),
 		footerStatsProjected: usageProfileScenarios.has(String(pike.scenario)),
 		removedCellRows: {
 			pike: (pike.snapshots as Record<string, unknown>[]).map((snapshot) => projectProfileCellRows(projectDiagnosticFooterRows(snapshot.visible as string[], scenario)).removed),
@@ -973,14 +1108,14 @@ function omissionTextEqual(left: Record<string, unknown>, right: Record<string, 
 	return JSON.stringify(leftSnapshots.map(text)) === JSON.stringify(rightSnapshots.map(text));
 }
 
+function styledRowsEqual(left: Record<string, unknown>, right: Record<string, unknown>, region: "visible" | "scrollback"): boolean {
+	const leftRows = semanticStyledProjection(left).map((snapshot) => (snapshot as Record<string, unknown>)[region]);
+	const rightRows = semanticStyledProjection(right).map((snapshot) => (snapshot as Record<string, unknown>)[region]);
+	return JSON.stringify(leftRows) === JSON.stringify(rightRows);
+}
+
 function styledPresentationEqual(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
-	const leftSnapshots = left.snapshots as Record<string, unknown>[];
-	const rightSnapshots = right.snapshots as Record<string, unknown>[];
-	const presentation = (snapshot: Record<string, unknown>) => ({
-		visible: snapshot.styledVisible,
-		scrollback: snapshot.styledScrollback,
-	});
-	return JSON.stringify(leftSnapshots.map(presentation)) === JSON.stringify(rightSnapshots.map(presentation));
+	return styledRowsEqual(left, right, "visible") && styledRowsEqual(left, right, "scrollback");
 }
 
 function omissionSgrEqual(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
@@ -1076,15 +1211,25 @@ function verifyProjectionPolicy(): void {
 }
 
 function compare(pike: Record<string, unknown>, pi: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
-	const pikeProjection = stableProjection(pike, scenario, repositoryRoot);
-	const piProjection = stableProjection(pi, scenario, repositoryRoot);
+	// The styled-cell comparison resolves a cell color through the theme the
+	// capture carries. The colors ride on the comparison projection instead of
+	// inside stableProjection so the stable digest stays the cell projection it
+	// has always been; validateThemeParity owns the theme evidence itself.
+	const pikeProjection: Record<string, unknown> = {
+		...stableProjection(pike, scenario, repositoryRoot),
+		themeColors: normalizeThemeEvidence(pike.theme, `Pike/${scenario.id}`).colors,
+	};
+	const piProjection: Record<string, unknown> = {
+		...stableProjection(pi, scenario, repositoryRoot),
+		themeColors: normalizeThemeEvidence(pi.theme, `pi/${scenario.id}`).colors,
+	};
 	const pikeSnapshots = pikeProjection.snapshots as Record<string, unknown>[];
 	const piSnapshots = piProjection.snapshots as Record<string, unknown>[];
 	const workspaceEqual = pikeProjection.workspace === piProjection.workspace;
 	const visibleEqual = JSON.stringify(pikeSnapshots.map((item) => item.visible)) === JSON.stringify(piSnapshots.map((item) => item.visible));
 	const scrollbackEqual = JSON.stringify(pikeSnapshots.map((item) => item.scrollback)) === JSON.stringify(piSnapshots.map((item) => item.scrollback));
-	const visiblePresentationEqual = JSON.stringify(pikeSnapshots.map((item) => item.styledVisible)) === JSON.stringify(piSnapshots.map((item) => item.styledVisible));
-	const scrollbackPresentationEqual = JSON.stringify(pikeSnapshots.map((item) => item.styledScrollback)) === JSON.stringify(piSnapshots.map((item) => item.styledScrollback));
+	const visiblePresentationEqual = styledRowsEqual(pikeProjection, piProjection, "visible");
+	const scrollbackPresentationEqual = styledRowsEqual(pikeProjection, piProjection, "scrollback");
 	const presentationEqual = visiblePresentationEqual && scrollbackPresentationEqual;
 	const sgrEqual = JSON.stringify(pikeSnapshots.map((item) => item.sgr)) === JSON.stringify(piSnapshots.map((item) => item.sgr));
 	const pikeResolved = profileProjectionForComparison(pikeProjection, scenario);
@@ -1287,7 +1432,7 @@ async function runParent(): Promise<number> {
 		structuralProjection: {
 			cellText: "trimmed visible cells with fixture paths, model ids, model prose, and the deterministic workspace/branch projection applied",
 			ansi: "raw ANSI retained as captured evidence only; verification compares resolved cell presentation, never raw ANSI byte parity",
-			sgr: "ordered SGR tokens are retained as diagnostic evidence; resolved cell style is the comparison authority, while truecolor values remain exact",
+			sgr: "ordered SGR tokens are retained as diagnostic evidence; resolved cell style is the comparison authority, compared as the semantic theme role each color resolves to on its own runtime palette (issue #797), while a color no single semantic role resolves stays at its exact truecolor value",
 			screenshot: "themeParity.renderedScreenshots retains the rendered terminal cell rows as text screenshots",
 			scrollback: "scrollback cell rows are compared separately from the visible viewport; the profileProjection comparison is length-compensated, discounting a height surplus only up to the profile rows one runtime removed from its viewport, and records the per-barrier discount as scrollbackLengthCompensation",
 			profile: "resolved projection removes exact pi runtime-identity/startup-documentation rows and isolates provider usage for user-message, status-footer, tool-result, and scrollback",
@@ -1740,6 +1885,7 @@ async function main(): Promise<number> {
 		verifyProjectionPolicy();
 		verifyThemeParityPolicy();
 		verifyAnsiBoundary();
+		verifyStyledRolePresentation();
 		return await runParent();
 	} catch (error) {
 		if (error instanceof SkipError) {
