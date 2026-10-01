@@ -197,14 +197,16 @@ std::vector<cch::tui::SelectItem> ModelSelectorComponent::build_select_items() c
     items.reserve(active_models_.size());
     for (const auto& item : active_models_) {
         const bool current = is_current(item.model);
-        // The row text mirrors the pre-migration hand-rolled rows exactly
-        // (`id [provider]`, with the current marker appended), including the
-        // muted provider badge and success marker styling: SelectList renders
-        // styled rows with the same byte footprint the TUI pads to a full
-        // line width, so the composed screen stays cell-identical to the
-        // legacy presentation.
-        std::string label = item.id + " " + theme_.foreground(ThemeToken::Muted, "[" + item.provider + "]");
-        if (current) label += theme_.foreground(ThemeToken::Success, " ✓");
+        // pi `updateList`: the row is `cursor` (two cells, drawn by SelectList)
+        // + `currentMarker` (the accent `✓ ` for the current model, two spaces
+        // otherwise) + the model id + the muted provider badge. The marker is
+        // unstyled text inside the label because SelectList styles the selected
+        // row as one run: a styled marker would reset the row's own color for
+        // the id behind it, while on the selected row marker and id resolve to
+        // the same accent cell run (ThinkingSelector composes its marker the
+        // same way).
+        std::string label{current ? "✓ " : "  "};
+        label += item.id + " " + theme_.foreground(ThemeToken::Muted, "[" + item.provider + "]");
         items.push_back(cch::tui::SelectItem{
                 .value = item.provider + "/" + item.id,
                 .label = std::move(label),
@@ -332,11 +334,12 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
         if (auto appended = append(spacer); !appended) return std::unexpected(appended.error());
     }
     if (scoped_model_items_.empty()) {
-        cch::tui::Text hint(
-            theme_.foreground(
-                ThemeToken::Warning,
-                "Only showing models from configured providers. Use /login to add providers."),
-            1, 0);
+        // pi adds the provider hint unpadded: the leading column belongs to
+        // the model rows' own marker, not to this line.
+        cch::tui::Text hint(theme_.foreground(ThemeToken::Warning,
+                                    "Only showing models from configured providers. Use /login to add providers."),
+                0,
+                0);
         if (auto appended = append(hint); !appended) return std::unexpected(appended.error());
     } else {
         cch::tui::Text scope(scope_text(), 1, 0);
@@ -406,7 +409,7 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
     // composes this row as a `Text`, which wraps.
     if (on_select_as_default_) {
         cch::tui::Text save_hint(
-                theme_.foreground(ThemeToken::Muted,
+                theme_.foreground(ThemeToken::Dim,
                         "  " + format_key_text(keybindings_->key_text("tui.select.confirm"), true) + " to select · " +
                                 format_key_text(keybindings_->key_text("app.models.save"), true) +
                                 " to set as default · " +

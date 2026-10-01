@@ -157,7 +157,7 @@ TEST_CASE("Ctrl+L opens the model selector and Enter selects a model with the Mo
     drain_ready(running.io);
     auto screen = visible_screen(running.terminal);
     CHECK(screen.find("Only showing models from configured providers.") != std::string::npos);
-    CHECK(screen.find("alpha-1 [alpha] ✓") != std::string::npos);
+    CHECK(screen.find("✓ alpha-1 [alpha]") != std::string::npos);
     CHECK(screen.find("beta-1 [beta]") != std::string::npos);
 
     // Down + Enter selects beta-1: the selector closes, the session model

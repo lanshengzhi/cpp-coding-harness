@@ -107,8 +107,8 @@ private:
     void close();
     void set_scope(bool scoped);
     /// The current scope's models as SelectList items: value is the unique
-    /// `provider/id` reference, the label is the `id [provider]` row with the
-    /// current-model marker, and the search text is the pi
+    /// `provider/id` reference, the label is the `✓ id [provider]` row whose
+    /// current-model marker leads the label, and the search text is the pi
     /// `getModelSelectorSearchText` text so ranking matches the hand-rolled
     /// fuzzy filter it replaces. Callers hold the mutex (or run in the ctor).
     [[nodiscard]] std::vector<cch::tui::SelectItem> build_select_items() const;
