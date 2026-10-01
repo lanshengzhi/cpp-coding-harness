@@ -31,9 +31,12 @@ using ThinkingSelectorCancelSink = std::move_only_function<void()>;
 /// (#774); Shift+Tab keeps cycling in-session outside this selector.
 ///
 /// The list rows and the search input are delegated to the shared
-/// `cch::tui::SelectList` (search enabled); the component owns the chrome
-/// around it (border, title, cycle hint, save hint) because the save hint
-/// renders only when the save-as-default sink exists.
+/// `cch::tui::SelectList` (search enabled) with pi's
+/// `THINKING_SELECT_LIST_LAYOUT` column bounds, so the level rows describe
+/// themselves right after a narrow label column; the component owns the
+/// chrome around it (border, pi's `Spacer(1)` blank rows, title, cycle hint,
+/// save hint) because the save hint renders only when the save-as-default
+/// sink exists.
 ///
 /// Threading: constructed and driven on the TUI thread; the SelectList (and
 /// its embedded search Input) is only touched from the TUI thread.
