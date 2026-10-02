@@ -207,8 +207,10 @@ Issue [#797](https://github.com/lanshengzhi/cpp-coding-harness/issues/797) adds 
 parity evidence to the deterministic comparison seam introduced by
 [#800](https://github.com/lanshengzhi/cpp-coding-harness/issues/800), beside the existing C++-side
 goldens. `capture/native-tui-differential.mts` runs
-Pike's Native TUI VirtualTerminal and pi v0.87.1's Native TUI VirtualTerminal through the same
-scenario records and input byte sequences. The checked-in `differential/report.json` retains
+Pike's Native TUI VirtualTerminal and the pi checkout recorded in
+`differential/report.json` through the same scenario records and input byte sequences. The current
+baseline is pi v0.99.2 at commit `005af57d88ee23b33778f343a9595b32e67ff788`; the report records
+the exact pi revision used for its captures. The checked-in `differential/report.json` retains
 visible cell rows, scrollback rows, raw ANSI output, and the SGR-token projection for both
 runtimes. It is not an opaque whole-session screenshot: each scenario and transition remains
 addressable as structured rows.
@@ -265,8 +267,8 @@ discounted — so a genuine viewport-top or ordering difference still reports un
 and ordered SGR tokens are retained as diagnostic evidence only, because frame timing and SGR
 cadence are not the product acceptance boundary. The report records one explicit triage
 classification per scenario and links confirmed product differences to focused child issues. A
-missing optional frozen pi checkout is an explicit skip; a checkout at the wrong commit is an
-error.
+missing optional pi checkout is an explicit skip; a checkout at a different commit from the
+report's recorded baseline is an error with remedies.
 
 A row's `triage.classification` is its single final review classification. The
 `observedClassification` and projection fields retain the raw structural evidence. The
