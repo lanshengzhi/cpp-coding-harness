@@ -34,3 +34,13 @@ The tracker uses the canonical triage labels. See `docs/agents/triage-labels.md`
 ### Domain docs
 
 **Domain language or behavior contracts:** read [domain docs](docs/agents/domain.md) for this single context's `GLOSSARY.md`, topic-specific contract references, and ADR conflict rules.
+
+## Cursor Cloud specific instructions
+
+Day-to-day commands stay the Debug `vcpkg` preset from the README: `scripts/bootstrap.sh`, `cmake --preset vcpkg`, `cmake --build --preset vcpkg`, and `ctest --preset vcpkg`. Default tests are offline and use fake providers.
+
+This VM has no swap. Keep port builds at `VCPKG_MAX_CONCURRENCY=2` and pass `--parallel 2` to `cmake --build`. The environment install script exports that cap and a binary cache at `/var/cache/vcpkg-archives`.
+
+GCC 16.0.1 is the `gcc` and `g++` on PATH (PPA package `16-20260315-1ubuntu1~24~ppa1`). CMake 4.4.2 and Ninja 1.13.2 are `/usr/local/bin/cmake` and `/usr/local/bin/ninja`. Keep the `cc` and `c++` alternatives on those GCC 16 drivers. vcpkg port builds follow `CC` and `CXX`, which the install script sets to `gcc-16` and `g++-16`.
+
+A product smoke check is `build/pike --version`, `build/pike --help`, and `build/pike --print ping` with an empty environment. The print command exits non-zero and prints `Unknown provider: unknown`.
