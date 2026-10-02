@@ -31,9 +31,7 @@ namespace cch::tests {
     replace_once(
         "\"name\": \"dark\"",
         std::string{"\"name\": \""} + std::string(name) + "\"");
-    replace_once(
-        "\"accent\": \"accent\"",
-        std::string{"\"accent\": \""} + std::string(accent) + "\"");
+    replace_once("\"accent\": \"violet\"", std::string{"\"accent\": \""} + std::string(accent) + "\"");
     return json;
 }
 

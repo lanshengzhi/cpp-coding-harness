@@ -680,20 +680,20 @@ TEST_CASE("ModelSelector renders pi's model row marker column, unpadded provider
         // pi styles the selected row's cursor, marker and id in the accent,
         // and the provider badge muted; an unselected id keeps the terminal
         // default foreground.
-        CHECK(cells.color_at("alpha-1 [alpha]") == "38;2;138;190;183");
-        CHECK(cells.color_at("alpha-1 [alpha]", 8) == "38;2;128;128;128");
+        CHECK(cells.color_at("alpha-1 [alpha]") == "38;2;167;152;215");
+        CHECK(cells.color_at("alpha-1 [alpha]", 8) == "38;2;157;165;169");
         CHECK(cells.color_at("alpha-2 [alpha]").empty());
-        CHECK(cells.color_at("alpha-2 [alpha]", 8) == "38;2;128;128;128");
+        CHECK(cells.color_at("alpha-2 [alpha]", 8) == "38;2;157;165;169");
         // The provider hint starts in the first column: the leading column
         // belongs to the model rows' marker, not to this line.
         CHECK(cells.row("Only showing models") ==
                 "Only showing models from configured providers. Use /login to add providers.");
-        CHECK(cells.color_at("Only showing models") == "38;2;255;255;0");
+        CHECK(cells.color_at("Only showing models") == "38;2;205;154;34");
         // pi draws the save hint with `theme.fg("dim", ...)`, a different gray
         // from the `muted` `Model Name:` line under the list.
         CHECK(cells.row("Enter to select") == "  Enter to select · Ctrl+S to set as default · Escape/Ctrl+C to cancel");
-        CHECK(cells.color_at("Enter to select") == "38;2;102;102;102");
-        CHECK(cells.color_at("Model Name:") == "38;2;128;128;128");
+        CHECK(cells.color_at("Enter to select") == "38;2;126;136;142");
+        CHECK(cells.color_at("Model Name:") == "38;2;157;165;169");
     }
 
     // The marker column is a property of the row, not of the selection:
@@ -707,6 +707,6 @@ TEST_CASE("ModelSelector renders pi's model row marker column, unpadded provider
         CHECK(cells.row("alpha-1 [alpha]") == "  ✓ alpha-1 [alpha]");
         CHECK(cells.row("alpha-2 [alpha]") == "→   alpha-2 [alpha]");
         CHECK(cells.color_at("alpha-1 [alpha]").empty());
-        CHECK(cells.color_at("alpha-2 [alpha]") == "38;2;138;190;183");
+        CHECK(cells.color_at("alpha-2 [alpha]") == "38;2;167;152;215");
     }
 }

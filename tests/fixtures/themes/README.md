@@ -1,10 +1,11 @@
 # Theme compatibility fixtures
 
-`dark.json` and `light.json` are byte-identical transcriptions of pi's builtin themes at the frozen
-baseline `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (re-pinned from `864b35c` by the pi-coding-agent phase
-audit, ADR 0036; the only baseline delta is the added optional `scrollbarThumb: "selectedBg"` color
-entry). Tests load only these repository files and never read pi configuration or source directories
-at runtime.
+`dark.json` is a transcription of pi v0.99.2's builtin dark theme at commit
+`005af57d88ee23b33778f343a9595b32e67ff788`. `light.json` remains a transcription of pi's builtin
+themes at the frozen baseline `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (re-pinned from `864b35c`
+by the pi-coding-agent phase audit, ADR 0036; that baseline added the optional
+`scrollbarThumb: "selectedBg"` color entry). Tests load only these repository files and never read pi
+configuration or source directories at runtime.
 
 `goldens/` pins pi's theme validation diagnostics verbatim (byte-for-byte, no trailing newline,
 derived from the TypeBox `theme-schema.json` runtime validation in `theme.ts` at the same baseline):

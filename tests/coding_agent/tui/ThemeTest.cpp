@@ -64,19 +64,17 @@ void replace_once(std::string& text, std::string_view old_text, std::string_view
 [[nodiscard]] std::string valid_custom_theme() {
     auto json = read_fixture("dark.json");
     replace_once(json, "\"name\": \"dark\"", "\"name\": \"custom\"");
-    replace_once(
-        json,
-        "\"customMsgBg\": \"#2d2838\"",
-        "\"customMsgBg\": \"#2d2838\",\n\t\t\"fallbackA\": \"fallbackB\",\n\t\t\"fallbackB\": 17");
-    replace_once(json, "\"accent\": \"accent\"", "\"accent\": \"#010203\"");
+    replace_once(json,
+            "\"blueBg\": \"#213b49\"",
+            "\"blueBg\": \"#213b49\",\n\t\t\"fallbackA\": \"fallbackB\",\n\t\t\"fallbackB\": 17");
+    replace_once(json, "\"accent\": \"violet\"", "\"accent\": \"#010203\"");
     replace_once(json, "\"text\": \"text\"", "\"text\": \"\"");
-    replace_once(json, "\"selectedBg\": \"selectedBg\"", "\"selectedBg\": 255");
-    replace_once(json, "\"toolPendingBg\": \"toolPendingBg\"", "\"toolPendingBg\": \"\"");
-    replace_once(json, "\t\t\"scrollbarThumb\": \"selectedBg\",\n", "");
-    replace_once(
-        json,
-        "\"thinkingXhigh\": \"#d183e8\",\n\t\t\"thinkingMax\": \"#ff5fff\"",
-        "\"thinkingXhigh\": \"fallbackA\"");
+    replace_once(json, "\"selectedBg\": \"blueBg\"", "\"selectedBg\": 255");
+    replace_once(json, "\"toolPendingBg\": \"#34383a\"", "\"toolPendingBg\": \"\"");
+    replace_once(json, "\t\t\"scrollbarThumb\": \"#97a0a5\",\n", "");
+    replace_once(json,
+            "\"thinkingXhigh\": \"#de54c1\",\n\t\t\"thinkingMax\": \"#fe5462\"",
+            "\"thinkingXhigh\": \"fallbackA\"");
     return json;
 }
 
@@ -144,11 +142,17 @@ TEST_CASE("Built-in themes match baseline fixtures and resolve every semantic to
     for (const auto token : coding_agent::tui::all_theme_tokens()) {
         CHECK_FALSE(coding_agent::tui::theme_token_name(token).empty());
     }
-    // The baseline builtins carry the explicit scrollbarThumb var reference;
-    // it must resolve exactly like selectedBg.
+    // pi v0.99.2 assigns the dark scrollbar thumb its own palette color; the
+    // earlier light baseline continues to use selectedBg for that role.
+    CHECK(coding_agent::tui::color_for(
+                  coding_agent::tui::builtin_dark_theme(), coding_agent::tui::ThemeToken::ScrollbarThumb) !=
+            coding_agent::tui::color_for(
+                    coding_agent::tui::builtin_dark_theme(), coding_agent::tui::ThemeToken::SelectedBg));
+    CHECK(coding_agent::tui::color_for(
+                  coding_agent::tui::builtin_light_theme(), coding_agent::tui::ThemeToken::ScrollbarThumb) ==
+            coding_agent::tui::color_for(
+                    coding_agent::tui::builtin_light_theme(), coding_agent::tui::ThemeToken::SelectedBg));
     for (const auto& theme : {coding_agent::tui::builtin_dark_theme(), coding_agent::tui::builtin_light_theme()}) {
-        CHECK(coding_agent::tui::color_for(theme, coding_agent::tui::ThemeToken::ScrollbarThumb) ==
-            coding_agent::tui::color_for(theme, coding_agent::tui::ThemeToken::SelectedBg));
         CHECK(theme.export_colors.pageBg);
         CHECK(theme.export_colors.cardBg);
         CHECK(theme.export_colors.infoBg);
@@ -234,7 +238,7 @@ TEST_CASE("Theme parsing accepts empty names and rejects names containing a slas
 
 TEST_CASE("Theme parsing reports missing required tokens with pi's wording", "[coding_agent][theme][issue400][spec]") {
     auto missing = valid_custom_theme();
-    replace_once(missing, "\t\t\"accent\": \"#010203\",\n\t\t\"border\": \"blue\",\n", "");
+    replace_once(missing, "\t\t\"accent\": \"#010203\",\n\t\t\"border\": \"#5fa8cc\",\n", "");
     const auto required = coding_agent::tui::parse_theme_json("missing-colors", missing);
     REQUIRE_FALSE(required);
     check_parse_error_golden("missing-colors.txt", required.error());
@@ -243,7 +247,7 @@ TEST_CASE("Theme parsing reports missing required tokens with pi's wording", "[c
     // schema order (dim/success appear out of schema order in the list).
     auto unsorted = valid_custom_theme();
     replace_once(unsorted, "\t\t\"success\": \"green\",\n", "");
-    replace_once(unsorted, "\t\t\"dim\": \"dimGray\",\n", "");
+    replace_once(unsorted, "\t\t\"dim\": \"#7e888e\",\n", "");
     const auto sorted = coding_agent::tui::parse_theme_json("sorted fixture", unsorted);
     REQUIRE_FALSE(sorted);
     const auto dim_position = sorted.error().message.find("  - dim");
@@ -332,13 +336,12 @@ TEST_CASE("Theme parsing accepts unknown schema members like pi", "[coding_agent
     REQUIRE(color);
 
     auto export_json = valid_custom_theme();
-    replace_once(
-        export_json,
-        "\"pageBg\": \"#18181e\",",
-        "\"pageBg\": \"#18181e\",\n\t\t\"unknownExport\": {\"nested\": true},");
+    replace_once(export_json,
+            "\"pageBg\": \"#21252c\",",
+            "\"pageBg\": \"#21252c\",\n\t\t\"unknownExport\": {\"nested\": true},");
     const auto exported = coding_agent::tui::parse_theme_json("export fixture", export_json);
     REQUIRE(exported);
-    CHECK(std::get<std::string>(*exported->export_colors.pageBg) == "#18181e");
+    CHECK(std::get<std::string>(*exported->export_colors.pageBg) == "#21252c");
 
     // Unknown color tokens still resolve like pi: a valid reference loads,
     // an unresolvable reference fails the load.
@@ -376,10 +379,10 @@ TEST_CASE("Theme diagnostics redact secret-shaped user keys", "[coding_agent][th
 
 TEST_CASE("Theme export section is validated and retained as passive data", "[coding_agent][theme][issue400][spec]") {
     auto no_export = valid_custom_theme();
-    replace_once(
-        no_export,
-        "\t},\n\t\"export\": {\n\t\t\"pageBg\": \"#18181e\",\n\t\t\"cardBg\": \"#1e1e24\",\n\t\t\"infoBg\": \"#3c3728\"\n\t}\n",
-        "\t}\n");
+    replace_once(no_export,
+            "\t},\n\t\"export\": {\n\t\t\"pageBg\": \"#21252c\",\n\t\t\"cardBg\": \"#282c34\",\n\t\t\"infoBg\": "
+            "\"#4e2f1b\"\n\t}\n",
+            "\t}\n");
     const auto without = coding_agent::tui::parse_theme_json("no export fixture", no_export);
     REQUIRE(without);
     CHECK_FALSE(without->export_colors.pageBg);
@@ -387,10 +390,10 @@ TEST_CASE("Theme export section is validated and retained as passive data", "[co
     CHECK_FALSE(without->export_colors.infoBg);
 
     auto empty_export = valid_custom_theme();
-    replace_once(
-        empty_export,
-        "\t\"export\": {\n\t\t\"pageBg\": \"#18181e\",\n\t\t\"cardBg\": \"#1e1e24\",\n\t\t\"infoBg\": \"#3c3728\"\n\t}",
-        "\t\"export\": {}");
+    replace_once(empty_export,
+            "\t\"export\": {\n\t\t\"pageBg\": \"#21252c\",\n\t\t\"cardBg\": \"#282c34\",\n\t\t\"infoBg\": "
+            "\"#4e2f1b\"\n\t}",
+            "\t\"export\": {}");
     const auto empty = coding_agent::tui::parse_theme_json("empty export fixture", empty_export);
     REQUIRE(empty);
     CHECK_FALSE(empty->export_colors.pageBg);
@@ -400,10 +403,10 @@ TEST_CASE("Theme export section is validated and retained as passive data", "[co
     // Raw values are retained verbatim: hex, var references (unresolved),
     // xterm indices, and the terminal-default empty string.
     auto raw_export = valid_custom_theme();
-    replace_once(
-        raw_export,
-        "\t\"export\": {\n\t\t\"pageBg\": \"#18181e\",\n\t\t\"cardBg\": \"#1e1e24\",\n\t\t\"infoBg\": \"#3c3728\"\n\t}",
-        "\t\"export\": {\n\t\t\"pageBg\": \"accent\",\n\t\t\"cardBg\": 24,\n\t\t\"infoBg\": \"\"\n\t}");
+    replace_once(raw_export,
+            "\t\"export\": {\n\t\t\"pageBg\": \"#21252c\",\n\t\t\"cardBg\": \"#282c34\",\n\t\t\"infoBg\": "
+            "\"#4e2f1b\"\n\t}",
+            "\t\"export\": {\n\t\t\"pageBg\": \"accent\",\n\t\t\"cardBg\": 24,\n\t\t\"infoBg\": \"\"\n\t}");
     const auto raw = coding_agent::tui::parse_theme_json("raw export fixture", raw_export);
     REQUIRE(raw);
     CHECK(std::get<std::string>(*raw->export_colors.pageBg) == "accent");
@@ -412,16 +415,16 @@ TEST_CASE("Theme export section is validated and retained as passive data", "[co
 
     // Schema validation failures use pi's verbatim wording.
     auto not_object = valid_custom_theme();
-    replace_once(
-        not_object,
-        "\t\"export\": {\n\t\t\"pageBg\": \"#18181e\",\n\t\t\"cardBg\": \"#1e1e24\",\n\t\t\"infoBg\": \"#3c3728\"\n\t}",
-        "\t\"export\": 42");
+    replace_once(not_object,
+            "\t\"export\": {\n\t\t\"pageBg\": \"#21252c\",\n\t\t\"cardBg\": \"#282c34\",\n\t\t\"infoBg\": "
+            "\"#4e2f1b\"\n\t}",
+            "\t\"export\": 42");
     const auto invalid_object = coding_agent::tui::parse_theme_json("export-not-object", not_object);
     REQUIRE_FALSE(invalid_object);
     check_parse_error_golden("export-not-object.txt", invalid_object.error());
 
     auto bad_value = valid_custom_theme();
-    replace_once(bad_value, "\"pageBg\": \"#18181e\"", "\"pageBg\": true");
+    replace_once(bad_value, "\"pageBg\": \"#21252c\"", "\"pageBg\": true");
     const auto invalid_value = coding_agent::tui::parse_theme_json("export-bad-value", bad_value);
     REQUIRE_FALSE(invalid_value);
     check_parse_error_golden("export-bad-value.txt", invalid_value.error());
@@ -527,7 +530,7 @@ TEST_CASE("Theme adapters resolve the current palette at callback time", "[codin
     write_render_result(dark_terminal, *dark_markdown);
     CHECK(light_markdown->lines != dark_markdown->lines);
     CHECK(color_at_text(dark_terminal, "plain").empty());
-    CHECK(color_at_text(dark_terminal, "heading") == "38;2;240;198;116");
-    CHECK(color_at_text(dark_terminal, "label") == "38;2;129;162;190");
-    CHECK(color_at_text(dark_terminal, "https://example.com") == "38;2;102;102;102");
+    CHECK(color_at_text(dark_terminal, "heading") == "38;2;205;154;34");
+    CHECK(color_at_text(dark_terminal, "label") == "38;2;105;173;208");
+    CHECK(color_at_text(dark_terminal, "https://example.com") == "38;2;157;165;169");
 }

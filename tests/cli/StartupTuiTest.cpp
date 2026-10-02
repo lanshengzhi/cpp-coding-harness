@@ -518,7 +518,7 @@ TEST_CASE("startup TUI: theme init does not register resource themes", "[cli][st
         });
     drain_ready(running.io);
     // Dark fallback accent (the registered name never resolves).
-    CHECK(color_at_text(running.terminal, "Continue") == "38;2;138;190;183");
+    CHECK(color_at_text(running.terminal, "Continue") == "38;2;167;152;215");
     REQUIRE(running.terminal.inject_input("\x1b"));
     REQUIRE(running.terminal.flush_input());
     drain_ready(running.io);
