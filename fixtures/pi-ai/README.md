@@ -411,6 +411,18 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
   (`thinkingBudgetTokens`); strict-schema generation; session-affinity format overrides; zstd SSE
   compression (pi's plain-JSON branch).
 - Codex catalog flags `supportsOpenAIGrammarTools`/`supportsToolSearch` (no scoped producer).
+- Image/classifier model infrastructure: `ModelType` (`chat`/`image`/`classifier`), `AnyModel`,
+  `getAllModels`/`getModelsOfType`, catalog flattening across providers, and classifier APIs
+  (B-5, `a328aa89a`/`a7d17e39a`/`89a5c7bda`/`04efdfc38`). Out of ADR 0059 chat-only scope.
+- Extension observability and agent-side types: `onProviderStreamEvent`, codemode
+  `NestedToolCallRecord`/`toolResult.nestedCalls`, virtual-model types, and
+  `AssistantMessage.thinkingLevel` (B-6, `002fc8385`/`8562bcf66`/`540e174c7`). Out of scope;
+  extension and coding-agent surfaces are not this gate.
+- Anthropic workload identity federation: `ANTHROPIC_FEDERATION_RULE_ID` / `ORGANIZATION_ID` /
+  `IDENTITY_TOKEN_FILE` (plus optional `SERVICE_ACCOUNT_ID` / `WORKSPACE_ID`) env vars with the
+  SDK-managed identity-token exchange (B-2, `a9424cd43`). The bundled set has no `anthropic`
+  provider; the generic `anthropic-messages` adapter stays API-key/OAuth only. No scoped producer
+  can reach the federation path.
 - Interactive login presentation (LoginDialog/OAuthSelector rendering, `/login` `/logout` commands,
   browser opening) — owned by the later pi-coding-agent gate, not by `cch_ai` (ADR 0032).
 - End-to-end agent-harness-through-`streamSimple`, TUI, and CLI full-chain acceptance — explicitly
