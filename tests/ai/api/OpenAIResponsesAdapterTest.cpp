@@ -502,6 +502,31 @@ TEST_CASE("DeepSeek Responses partials start pending and flip to stop at final_a
     CHECK(partial_stop_reasons(run.events) == expected_partials);
 }
 
+TEST_CASE("DeepSeek Responses incomplete retains the composite raw stop reason (B-4)",
+        "[ai][provider][responses][issue864][compat-pi]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    transport->attempts.push_back(TransportAttempt{.chunks = {
+        terminal_sse(
+            "response.incomplete",
+            "incomplete",
+            ",\"incomplete_details\":{\"reason\":\"content_filter\"}"),
+    }});
+    const auto model = deepseek_model();
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy-key";
+
+    auto run = run_models(*models, model, {}, std::move(options));
+
+    REQUIRE(run.result);
+    // B-4: pi's finalizeResponse records "<status>.<reason>" so truncation and
+    // filtering stay distinguishable in the raw stop reason.
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.result->raw_stop_reason);
+    CHECK(*run.result->raw_stop_reason == "incomplete.content_filter");
+}
+
 TEST_CASE("DeepSeek Responses stream ending without a terminal event is a terminal error",
         "[ai][provider][responses][issue374][issue375][issue536][compat-pi]") {
     auto transport = std::make_shared<ScriptedTransport>();
@@ -562,7 +587,20 @@ TEST_CASE("DeepSeek Responses termination matrix does not treat DONE as terminal
     const std::vector<Case> cases{
         {terminal_sse("response.completed", "completed"), ai::AssistantStopReason::Stop},
         {terminal_sse("response.done", "completed"), ai::AssistantStopReason::Stop},
-        {terminal_sse("response.incomplete", "incomplete"), ai::AssistantStopReason::Length},
+        // B-4: incomplete without a provider reason is an error, not a length.
+        {terminal_sse("response.incomplete", "incomplete"), ai::AssistantStopReason::Error},
+        // incomplete with max_output_tokens stays a length truncation.
+        {terminal_sse(
+             "response.incomplete",
+             "incomplete",
+             ",\"incomplete_details\":{\"reason\":\"max_output_tokens\"}"),
+         ai::AssistantStopReason::Length},
+        // incomplete with a content-filter reason is an error.
+        {terminal_sse(
+             "response.incomplete",
+             "incomplete",
+             ",\"incomplete_details\":{\"reason\":\"content_filter\"}"),
+         ai::AssistantStopReason::Error},
         {terminal_sse(
              "response.failed",
              "failed",

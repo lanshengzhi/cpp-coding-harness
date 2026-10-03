@@ -44,8 +44,15 @@ TEST_CASE(
     const auto& responses = fixture->at("responses").get_object();
     for (const auto& [terminal, expected] : responses) {
         const bool has_tool_call = terminal == "completed_with_tool_call";
-        const auto wire_terminal = has_tool_call ? "completed" : terminal == "missing" ? "" : terminal;
-        const auto mapped = ai::api::map_responses_termination(wire_terminal, has_tool_call);
+        auto wire_terminal = has_tool_call ? "completed" : terminal == "missing" ? "" : terminal;
+        // B-4: the refined matrix rows carry the provider's incomplete reason
+        // as "<status>.<reason>"; mapStopReason splits on it.
+        std::optional<std::string_view> incomplete_reason;
+        if (const auto dot = terminal.find('.'); dot != std::string::npos) {
+            incomplete_reason = std::string_view{terminal}.substr(dot + 1);
+            wire_terminal = std::string_view{terminal}.substr(0, dot);
+        }
+        const auto mapped = ai::api::map_responses_termination(wire_terminal, has_tool_call, incomplete_reason);
         REQUIRE(mapped);
         CHECK(stop_reason_name(mapped->reason) == expected.get_string());
     }

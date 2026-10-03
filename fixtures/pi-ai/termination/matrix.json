@@ -3,7 +3,9 @@
     "completed": "stop",
     "completed_with_tool_call": "toolUse",
     "done": "stop",
-    "incomplete": "length",
+    "incomplete": "error",
+    "incomplete.max_output_tokens": "length",
+    "incomplete.content_filter": "error",
     "failed": "error",
     "missing": "error"
   },

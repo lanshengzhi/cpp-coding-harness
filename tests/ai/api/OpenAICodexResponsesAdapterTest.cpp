@@ -952,7 +952,12 @@ TEST_CASE("Codex WebSocket termination matrix maps statuses", "[ai][provider][co
     const std::vector<Case> cases{
         {terminal_frame("response.completed", "completed"), ai::AssistantStopReason::Stop},
         {terminal_frame("response.done", "completed"), ai::AssistantStopReason::Stop},
-        {terminal_frame("response.incomplete", "incomplete"), ai::AssistantStopReason::Length},
+        {terminal_frame("response.incomplete", "incomplete"), ai::AssistantStopReason::Error},
+        {terminal_frame(
+             "response.incomplete",
+             "incomplete",
+             {{"incomplete_details", support::JsonValue{support::JsonValue::object_t{{"reason", "max_output_tokens"}}}}}),
+         ai::AssistantStopReason::Length},
         {terminal_frame("response.completed", "failed"), ai::AssistantStopReason::Error},
         {terminal_frame("response.completed", "queued"), ai::AssistantStopReason::Stop},
         {"{\"type\":\"response.completed\"}", ai::AssistantStopReason::Stop},
@@ -1330,6 +1335,12 @@ TEST_CASE("Codex SSE terminal matrix maps statuses and treats DONE as non-termin
         {"data: " + terminal_frame("response.completed", "completed") + "\n\n",
          ai::AssistantStopReason::Stop},
         {"data: " + terminal_frame("response.incomplete", "incomplete") + "\n\n",
+         ai::AssistantStopReason::Error},
+        {"data: " + terminal_frame(
+             "response.incomplete",
+             "incomplete",
+             {{"incomplete_details", support::JsonValue{support::JsonValue::object_t{{"reason", "max_output_tokens"}}}}}) +
+             "\n\n",
          ai::AssistantStopReason::Length},
         {"data: " + terminal_frame("response.completed", "failed") + "\n\n",
          ai::AssistantStopReason::Error},

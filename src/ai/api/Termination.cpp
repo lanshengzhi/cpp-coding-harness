@@ -48,8 +48,9 @@ constexpr TerminationMapping kAnthropicMappings[] = {
 } // namespace
 
 support::Expected<TerminationResult> map_responses_termination(
-    std::string_view terminal,
-    bool has_tool_call) {
+std::string_view terminal,
+bool has_tool_call,
+std::optional<std::string_view> incomplete_reason) {
     const std::string_view key = terminal.empty() ? "missing" : terminal;
     const auto* mapping = find_mapping(std::begin(kResponsesMappings), std::end(kResponsesMappings), key);
     if (!mapping) {
@@ -59,6 +60,16 @@ support::Expected<TerminationResult> map_responses_termination(
     TerminationResult result{.reason = mapping->reason};
     if (mapping->upgrade_to_tool_use && has_tool_call) {
         result.reason = AssistantStopReason::ToolUse;
+    }
+    // pi mapStopReason splits incomplete: max_output_tokens truncations stay
+    // length; any other provider reason (or none) is an error so content
+    // filtering and similar terminations stay distinct from token limits.
+    if (key == "incomplete" && (!incomplete_reason || *incomplete_reason != "max_output_tokens")) {
+        result.reason = AssistantStopReason::Error;
+        result.error_message = incomplete_reason
+            ? "Response incomplete: " + std::string{*incomplete_reason}
+            : "Response incomplete without a provider reason";
+        return result;
     }
     if (mapping->reason == AssistantStopReason::Error) {
         result.error_message = std::string{mapping->error};

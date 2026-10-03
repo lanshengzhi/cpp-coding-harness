@@ -125,6 +125,18 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
 
     const auto status = json_string_member(*response, "status").value_or(event_type == "response.done" ? "done" : "");
     std::string_view normalized = status;
+    // pi finalizeResponse retains the provider's incomplete reason inside the
+    // raw stop reason ("<status>.<reason>") and forwards it to the stop-reason
+    // split, so max_output truncation and content filtering stay distinct.
+    std::optional<std::string_view> incomplete_reason;
+    if (const auto* details = json_object_member(*response, "incomplete_details")) {
+        if (const auto reason = json_string_member(*details, "reason"); reason && !reason->empty()) {
+            incomplete_reason = reason;
+        }
+    }
+    if (incomplete_reason) {
+        assistant.raw_stop_reason = std::string{status} + "." + std::string{*incomplete_reason};
+    }
     if (dialect == ResponsesDialect::Codex) {
         normalized = "done";
         if (status == "completed" || status == "incomplete" || status == "failed" || status == "cancelled" ||
@@ -139,7 +151,8 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
     }
     auto termination = map_responses_termination(normalized,
             std::ranges::any_of(assistant.content,
-                    [](const AssistantContent& block) { return std::holds_alternative<ToolCallContent>(block); }));
+                    [](const AssistantContent& block) { return std::holds_alternative<ToolCallContent>(block); }),
+            incomplete_reason);
     if (!termination) {
         return std::unexpected(termination.error());
     }
