@@ -26,6 +26,7 @@ The two red GAPs and the blue clusters below are the entire actionable drift out
 - **C++:** `src/ai/api/ResponsesEventProcessor.cpp:284-290`. `finish()` checks only `saw_terminal`; nothing inspects tool-call slot scratch at end of stream. A truncated or non-compliant server response would hand unfinished calls to the agent, exactly what the upstream fix prevents.
 - **Class:** UPSTREAM-DRIFT-induced GAP on an in-scope surface (ADR 0059 lists `openai-responses-shared.ts` as a scoped reference).
 - **Disposition:** port the guard into `ResponsesEventProcessor::finish()` and pin it with a frozen golden (upstream test `openai-responses-terminal-event.test.ts` has a `createUnfinishedToolCallEvents` scenario to capture against).
+- **Status (2026-10-03): PORTED.** Guard landed in `ResponsesEventProcessor::finish()` (commit `105eae3ec`, no tracking issue); repro test plus frozen wire fixture `fixtures/pi-ai/wire/openai-responses-deepseek-unfinished-tool-call.sse` pin it. The C++ pre-port `finish()` at `ResponsesEventProcessor.cpp:284-290` checked only `saw_terminal`, as cited above.
 
 ### GAP-2: Codex WS omits `session-id` / `x-client-request-id` when no session is set
 
@@ -33,6 +34,7 @@ The two red GAPs and the blue clusters below are the entire actionable drift out
 - **C++:** `src/ai/api/OpenAICodexResponsesAdapter.cpp:278-285`. Both headers are added only `if (options.session_id)`; otherwise omitted entirely.
 - **Class:** pre-existing GAP, present identically at `f07218c4` (not v0.99.2 drift). Unrecorded in `fixtures/pi-ai/README.md` residual notes.
 - **Disposition:** decide whether to mirror pi (always send, uuidv7 fallback on WS; empty-string on SSE) or record a divergence. Wire-byte visible; either way needs a golden update. Note the SSE nuance: pi sends the headers with an *empty-string* value when no session; C++ omits the header entirely — these are different bytes and the choice must be deliberate.
+- **Status (2026-10-03): PORTED (issue #863).** WebSocket now always sends `session-id`/`x-client-request-id`, falling back to a fresh RFC 4122 v4 UUID when no session is set (uuidv4 chosen over uuidv7 because the value is opaque to the backend and the repo has no v7 generator). The SSE path keeps the conditional shape: `clampOpenAIPromptCacheKey(undefined)` returns `undefined`, so `buildSSEHeaders`' `if (sessionId)` skips both headers at the empty set, and the C++ mirrors that. Golden tests `Codex always sends session-id and x-client-request-id on the WebSocket handshake` and `Codex omits session-id and x-client-request-id on SSE when no session is set` pin both shapes.
 
 ---
 
@@ -105,6 +107,6 @@ A sample of high-risk ALIGNED rows was re-opened and verified:
 
 ## What pike's maintainer should do next
 
-1. Decide GAP-1 (port the unfinished-tool-call guard — recommended, it is a real agent-safety fix) and GAP-2 (mirror pi's always-send-headers or record a divergence).
-2. Decide B-1 through B-6 as a batch. B-1 is the only one with an ADR-level consequence (ADR 0032 `Models::login` signature). B-5/B-6 are quick Deferred-list confirmations.
-3. If the pi-ai gate re-baselines from `f07218c4` to v0.99.2, every blue row must be resolved first; the fixtures README's "no partial placeholders" classification requires each to land as either a new Supported row with evidence or a Deferred entry.
+1. ~~Decide GAP-1~~ **Done (2026-10-03):** ported as commit `105eae3ec`. ~~GAP-2~~ **Done (2026-10-03):** ported as issue #863, WS always sends with uuidv4 fallback, SSE keeps the conditional empty-set shape.
+2. ~~Decide B-1 through B-6 as a batch~~ **Partially done (2026-10-03):** B-1 and B-3 ported together as commit `3493fc8a9` (issue #862, ADR 0032 amended). Remaining: B-2 (Anthropic federation, low urgency), B-4 (incomplete stop-reason split, needs fixture re-baseline), B-5/B-6 (quick Deferred-list confirmations).
+3. If the pi-ai gate re-baselines from `f07218c4` to v0.99.2, every remaining blue row (B-2, B-4, B-5, B-6) must be resolved first; both GAPs are now ported (GAP-1 `105eae3ec`, GAP-2 issue #863). The fixtures README's "no partial placeholders" classification requires each blue row to land as either a new Supported row with evidence or a Deferred entry.

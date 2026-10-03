@@ -340,9 +340,70 @@ TEST_CASE("Codex adapter exposes affinity defaults to header transformation and 
     CHECK(saw_session_headers);
     REQUIRE(ws->requests.size() == 1);
     const auto& headers = ws->requests.front().headers;
-    CHECK(headers.at("session-id") == "custom-session");
-    CHECK_FALSE(headers.contains("x-client-request-id"));
+    // pi sets session-id/x-client-request-id on the WS handshake after user
+    // header transforms (buildWebSocketHeaders), so a transform override is
+    // replaced by the affinity id, and a transform deletion is re-added.
+    CHECK(headers.at("session-id") == clamped_session_id);
+    CHECK(headers.at("x-client-request-id") == clamped_session_id);
     CHECK(http->requests.empty());
+}
+
+TEST_CASE("Codex always sends session-id and x-client-request-id on the WebSocket handshake",
+        "[ai][provider][codex][issue863][compat-pi]") {
+    auto harness = make_codex_harness(codex_model());
+    auto session = std::make_shared<ScriptedWebSocket::Session>();
+    session->on_send = [](ScriptedWebSocket& socket, std::string_view) {
+        socket.session()->frames.push_back(simple_terminal());
+    };
+    harness.ws->connect_scripts.push_back(ScriptedWebSocketTransport::ConnectScript{.session = session});
+
+    ai::SimpleStreamOptions options;
+    options.api_key = std::string{kCodexToken};
+    options.timeout_ms = 4321;
+    auto run = run_models(*harness.models, codex_model(), user_context("Say hello"), std::move(options));
+
+    REQUIRE(run.result);
+    REQUIRE(harness.ws->requests.size() == 1);
+    const auto& connect = harness.ws->requests.front();
+    // No Codex session set: pi falls back to a fresh request id
+    // (openai-codex-responses.ts:282). The harness sends an RFC 4122 v4 UUID;
+    // the value is opaque to the backend.
+    const auto& session_id = connect.headers.at("session-id");
+    const auto& request_id = connect.headers.at("x-client-request-id");
+    REQUIRE(session_id == request_id);
+    REQUIRE(session_id.size() == 36);
+    CHECK(session_id[8] == '-');
+    CHECK(session_id[13] == '-');
+    CHECK(session_id[18] == '-');
+    CHECK(session_id[23] == '-');
+    CHECK((session_id[14] == '4'));
+    CHECK((session_id[19] == '8' || session_id[19] == '9' || session_id[19] == 'a' || session_id[19] == 'b'));
+    CHECK(harness.http->requests.empty());
+}
+
+TEST_CASE("Codex omits session-id and x-client-request-id on SSE when no session is set",
+        "[ai][provider][codex][issue863][compat-pi]") {
+    auto harness = make_codex_harness(codex_model());
+    harness.ws->connect_scripts.push_back(ScriptedWebSocketTransport::ConnectScript{
+            .failure = support::make_error(
+                support::ErrorCode::Network,
+                "connect refused")});
+    const auto sse = read_fixture_text("wire/openai-codex-responses.sse");
+    harness.http->attempts.push_back(TransportAttempt{.chunks = {sse}});
+
+    ai::SimpleStreamOptions options;
+    options.api_key = std::string{kCodexToken};
+    options.timeout_ms = 4321;
+    auto run = run_models(*harness.models, codex_model(), user_context("Say hello"), std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(harness.ws->requests.size() == 1);
+    REQUIRE(harness.http->requests.size() == 1);
+    const auto& request = harness.http->requests.front();
+    // pi's buildSSEHeaders sets both headers only when a session id exists
+    // (openai-codex-responses.ts:1673-1676), so the empty set omits them.
+    CHECK_FALSE(request.headers.contains("session-id"));
+    CHECK_FALSE(request.headers.contains("x-client-request-id"));
 }
 
 TEST_CASE("Codex emits a string user message as one input_text and omits an empty block array (WS)",

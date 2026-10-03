@@ -17,13 +17,17 @@
 #include "support/Json.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
+#include <iomanip>
 #include <map>
 #include <memory>
 #include <optional>
+#include <random>
 #include <ranges>
 #include <set>
+#include <sstream>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -265,6 +269,32 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
     return false;
 }
 
+/// pi falls back to uuidv7 for the WebSocket request id when no Codex session
+/// is set (openai-codex-responses.ts websocketRequestId). The value is opaque
+/// to the backend, so the harness generates an RFC 4122 v4 UUID instead; the
+/// repo has no uuidv7 generator and adding a v7 dependency for one opaque
+/// header is not justified.
+[[nodiscard]] std::string new_request_id() {
+    std::array<std::uint8_t, 16> bytes{};
+    std::random_device random;
+    std::uniform_int_distribution<unsigned int> byte_distribution(0, 255);
+    for (auto& byte : bytes) {
+        byte = static_cast<std::uint8_t>(byte_distribution(random));
+    }
+    bytes[6] = static_cast<std::uint8_t>((bytes[6] & 0x0fU) | 0x40U);
+    bytes[8] = static_cast<std::uint8_t>((bytes[8] & 0x3fU) | 0x80U);
+
+    std::ostringstream output;
+    output << std::hex << std::nouppercase << std::setfill('0');
+    for (std::size_t index = 0; index < bytes.size(); ++index) {
+        if (index == 4 || index == 6 || index == 8 || index == 10) {
+            output << '-';
+        }
+        output << std::setw(2) << static_cast<unsigned int>(bytes[index]);
+    }
+    return output.str();
+}
+
 } // namespace
 
 namespace {
@@ -274,6 +304,7 @@ struct CodexStreamRequests {
     std::string body_json{};
     providers::WebSocketConnectRequest websocket{};
     providers::StreamRequest sse{};
+    std::string websocket_request_id{};
 };
 
 [[nodiscard]] support::Expected<CodexStreamRequests> build_stream_request(
@@ -301,10 +332,22 @@ struct CodexStreamRequests {
             .body_json = std::move(*body_json),
     };
     const auto codex_url = resolve_codex_url(model.base_url);
-    const auto ws_headers = codex_headers(options, account_id, true);
+    // pi always sends session-id/x-client-request-id on the WebSocket
+    // handshake (openai-codex-responses.ts:282), falling back to a fresh
+    // request id when no Codex session is set. The SSE path keeps pi's
+    // conditional shape (buildSSEHeaders:1673-1676): both headers only when a
+    // session id exists, omitted on the empty set.
+    requests.websocket_request_id = options.session_id
+        ? cch::ai::detail::clamp_openai_prompt_cache_key(*options.session_id)
+        : new_request_id();
+    {
+        auto ws_headers = codex_headers(options, account_id, true);
+        set_header(ws_headers, "session-id", requests.websocket_request_id);
+        set_header(ws_headers, "x-client-request-id", requests.websocket_request_id);
+        requests.websocket.headers = std::move(ws_headers);
+    }
     const auto sse_headers = codex_headers(options, account_id, false);
     requests.websocket.url = resolve_codex_websocket_url(model.base_url);
-    requests.websocket.headers = ws_headers;
     requests.websocket.connect_timeout = kDefaultWebSocketConnectTimeout;
     if (options.timeout_ms) {
         requests.websocket.idle_timeout = std::chrono::milliseconds{*options.timeout_ms};
