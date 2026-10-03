@@ -167,7 +167,7 @@ struct LoginHarness {
                 [http = http, options = options, interaction = std::move(interaction)]() mutable
                         -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
                     auto auth = ai::auth::make_openrouter_oauth_auth(std::move(http), std::move(options));
-                    co_return co_await support::detail::await_async_result(auth.login(std::move(interaction)));
+                    co_return co_await support::detail::await_async_result(auth.login(std::move(interaction), std::nullopt));
                 },
                 boost::asio::use_future);
 

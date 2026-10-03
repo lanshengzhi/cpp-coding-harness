@@ -7,7 +7,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <optional>
+#include <random>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -16,12 +18,37 @@
 
 #include <sys/stat.h>
 
+#include <array>
+
 namespace cch::coding_agent {
 namespace {
 
 using JsonObject = support::JsonValue::object_t;
 
 constexpr std::string_view kProjectConfigDir = ".pi";
+
+/// RFC 4122 version 4 UUID (lowercase, hyphenated), matching pi's
+/// `randomUUID` output used for `SettingsManager.deviceId`.
+[[nodiscard]] std::string new_device_id() {
+    std::array<std::uint8_t, 16> bytes{};
+    std::random_device random;
+    std::uniform_int_distribution<unsigned int> byte_distribution(0, 255);
+    for (auto& byte : bytes) {
+        byte = static_cast<std::uint8_t>(byte_distribution(random));
+    }
+    bytes[6] = static_cast<std::uint8_t>((bytes[6] & 0x0fU) | 0x40U);
+    bytes[8] = static_cast<std::uint8_t>((bytes[8] & 0x3fU) | 0x80U);
+
+    std::ostringstream output;
+    output << std::hex << std::nouppercase << std::setfill('0');
+    for (std::size_t index = 0; index < bytes.size(); ++index) {
+        if (index == 4 || index == 6 || index == 8 || index == 10) {
+            output << '-';
+        }
+        output << std::setw(2) << static_cast<unsigned int>(bytes[index]);
+    }
+    return output.str();
+}
 
 // proper-lockfile-compatible lock parameters (pi FileSettingsStorage): 10
 // attempts, 20 ms between attempts, stale lock reclaimed after 30 s.
@@ -324,6 +351,9 @@ void migrate_settings(JsonObject& settings) {
         if (const auto* parsed = found->second.get_if<bool>()) {
             settings.enable_skill_commands = *parsed;
         }
+    }
+    if (const auto* value = string_field(object, "deviceId")) {
+        settings.device_id = *value;
     }
     return settings;
 }
@@ -953,6 +983,31 @@ support::ExpectedVoid SettingsManager::set_output_pad(std::size_t padding) {
 bool SettingsManager::get_enable_skill_commands() const noexcept {
     // pi `getEnableSkillCommands`: `this.settings.enableSkillCommands ?? true`.
     return impl_->merged_settings.enable_skill_commands.value_or(true);
+}
+
+std::string SettingsManager::get_or_create_device_id() {
+    // pi `getOrCreateDeviceId`: read the global scope only (project settings
+    // are ignored so a committed project file cannot clone the ID); create and
+    // persist a fresh UUID v4 on first use.
+    if (impl_->global_settings.device_id && !impl_->global_settings.device_id->empty()) {
+        return *impl_->global_settings.device_id;
+    }
+    auto created = new_device_id();
+    if (impl_->global_write_suppressed()) {
+        // A global write failure never blocks login; the ID stays in memory
+        // for this process only.
+        impl_->global_settings.device_id = created;
+        impl_->recompute_merged();
+        return created;
+    }
+    if (auto persisted = impl_->persist_global_field("deviceId", support::JsonValue{created}); !persisted) {
+        impl_->global_settings.device_id = created;
+        impl_->recompute_merged();
+        return created;
+    }
+    impl_->global_settings.device_id = std::move(created);
+    impl_->recompute_merged();
+    return *impl_->global_settings.device_id;
 }
 
 support::ExpectedVoid SettingsManager::set_enable_skill_commands(bool enabled) {

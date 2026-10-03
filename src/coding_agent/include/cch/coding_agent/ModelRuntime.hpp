@@ -154,9 +154,11 @@ public:
     /// `Models::login` + `refresh()`. A post-login refresh failure is recorded
     /// in the composition-errors map and never fails the login call. The
     /// returned outcome carries only success or failure; the Credential remains
-    /// inside the Models/CredentialStore path.
+    /// inside the Models/CredentialStore path. `options` forwards the optional
+    /// app context (device-id hook) into the provider login flow.
     [[nodiscard]] support::AsyncResult<void> login(
-            std::string provider_id, ai::AuthType type, ai::AuthInteraction interaction);
+            std::string provider_id, ai::AuthType type, ai::AuthInteraction interaction,
+            std::optional<ai::LoginOptions> options = std::nullopt);
 
     /// `Models::logout` + `recomposeProvider` + `refresh()` (order preserved).
     /// A post-logout refresh failure is recorded and never fails the logout.

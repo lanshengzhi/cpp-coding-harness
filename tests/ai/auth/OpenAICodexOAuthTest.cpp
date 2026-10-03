@@ -189,7 +189,7 @@ struct BrowserLoginHarness {
             io,
             [&]() -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
                 auto auth = ai::auth::make_openai_codex_oauth_auth(http, options);
-                co_return co_await cch::support::detail::await_async_result(auth.login(std::move(interaction)));
+                co_return co_await cch::support::detail::await_async_result(auth.login(std::move(interaction), std::nullopt));
             },
             boost::asio::use_future);
         if (on_auth_url) {
@@ -651,7 +651,8 @@ TEST_CASE("callback server settles the wait only for a valid callback", "[ai][au
                     -> boost::asio::awaitable<void> {
                     auto code = co_await server->wait_for_code();
                     REQUIRE(code);
-                    *code_value = std::move(*code);
+                    REQUIRE(code->value);
+                    *code_value = std::move(*code->value);
                     code_seen->try_send(boost::system::error_code{});
                 },
                 boost::asio::detached);

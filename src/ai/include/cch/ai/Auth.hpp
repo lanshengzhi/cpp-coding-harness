@@ -146,6 +146,16 @@ using AuthPromptHook = std::move_only_function<
 /// Best-effort display callback. Never throws; secrets never appear here.
 using AuthNotifyHook = std::move_only_function<void(const AuthEvent&)>;
 
+/// App-supplied context for `Models::login` (pi `LoginOptions`). The device-id
+/// hook lets agent-host flows (Sign in with ChatGPT) identify this
+/// installation; it is invoked only by login flows that need it.
+struct LoginOptions {
+    /// pi `getDeviceId`: returns the stable UUID of this installation. Called
+    /// only by login flows that need it (the ChatGPT OAuth flow validates the
+    /// UUID shape itself before use).
+    std::move_only_function<std::string()> get_device_id{nullptr};
+};
+
 /// Login interaction callbacks serving both api-key and OAuth flows. The host
 /// owns the `std::stop_source`; this object observes its `std::stop_token`.
 /// Hooks are invoked on the moved-to interaction, so the flow may own it.
@@ -175,7 +185,8 @@ using OAuthToAuthHook = std::move_only_function<
         const OAuthCredential&)>;
 using OAuthLoginHook = std::move_only_function<
     cch::support::AsyncResult<OAuthCredential>(
-        AuthInteraction)>;
+        AuthInteraction,
+        std::optional<LoginOptions>)>;
 
 struct ApiKeyAuth {
     std::string name{};

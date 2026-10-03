@@ -1107,7 +1107,7 @@ TEST_CASE("Models login persists the provider OAuth credential via CredentialSto
         "[ai][models][auth][issue343][spec]") {
     auto [credentials, auth_context, models] = ModelsFixture{};
     auto provider = std::make_shared<RecordingProvider>("login-provider",
-            oauth_login_auth([](ai::AuthInteraction) -> cch::support::AsyncResult<ai::OAuthCredential> {
+            oauth_login_auth([](ai::AuthInteraction, std::optional<ai::LoginOptions>) -> cch::support::AsyncResult<ai::OAuthCredential> {
                 return tests::ready_result<ai::OAuthCredential>(ai::OAuthCredential{
                         .refresh = "dummy-refresh",
                         .access = "dummy-access",
@@ -1176,7 +1176,7 @@ TEST_CASE("Models login flow failure propagates unwrapped to the host", "[ai][mo
     auto provider = std::make_shared<RecordingProvider>(
         "login-provider",
         oauth_login_auth(
-            [](ai::AuthInteraction) -> cch::support::AsyncResult<ai::OAuthCredential> {
+            [](ai::AuthInteraction, std::optional<ai::LoginOptions>) -> cch::support::AsyncResult<ai::OAuthCredential> {
                 return cch::support::AsyncResult<ai::OAuthCredential>(
                     std::unexpected(support::make_error(
                         support::ErrorCode::Network,
@@ -1203,7 +1203,7 @@ TEST_CASE("Models login wraps CredentialStore modify failures as the auth catego
     auto auth_context = std::make_shared<FakeAuthContext>();
     auto models = make_models(credentials, auth_context);
     auto provider = std::make_shared<RecordingProvider>("login-provider",
-            oauth_login_auth([](ai::AuthInteraction) -> cch::support::AsyncResult<ai::OAuthCredential> {
+            oauth_login_auth([](ai::AuthInteraction, std::optional<ai::LoginOptions>) -> cch::support::AsyncResult<ai::OAuthCredential> {
                 return tests::ready_result<ai::OAuthCredential>(
                         ai::OAuthCredential{.refresh = "r", .access = "a", .expires = 1, .account_id = "acct"});
             }));
@@ -1271,7 +1271,7 @@ TEST_CASE("Models login persists an api-key credential through modify", "[ai][mo
 TEST_CASE("Models login rejects a provider without api-key login support", "[ai][models][auth][issue343][spec]") {
     auto [credentials, auth_context, models] = ModelsFixture{};
     auto provider = std::make_shared<RecordingProvider>(
-            "oauth-only", oauth_login_auth([](ai::AuthInteraction) -> cch::support::AsyncResult<ai::OAuthCredential> {
+            "oauth-only", oauth_login_auth([](ai::AuthInteraction, std::optional<ai::LoginOptions>) -> cch::support::AsyncResult<ai::OAuthCredential> {
                 return tests::ready_result<ai::OAuthCredential>(ai::OAuthCredential{});
             }));
     REQUIRE(install_provider(models, provider));

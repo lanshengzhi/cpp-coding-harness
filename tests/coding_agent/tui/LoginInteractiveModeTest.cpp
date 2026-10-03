@@ -84,7 +84,8 @@ public:
         ai::OAuthAuth oauth;
         oauth.name = provider_name_ + " OAuth";
         oauth.login = [script = std::make_shared<LoginScript>(std::move(login_script))](
-                              ai::AuthInteraction interaction) -> cch::support::AsyncResult<ai::OAuthCredential> {
+                              ai::AuthInteraction interaction,
+                              std::optional<ai::LoginOptions>) -> cch::support::AsyncResult<ai::OAuthCredential> {
             return cch::support::detail::make_async_result(
                     [script, interaction = std::move(interaction)]() mutable
                             -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {

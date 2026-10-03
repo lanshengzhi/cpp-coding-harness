@@ -152,6 +152,9 @@ constexpr auto kAsyncLockRetryCount = 10;
         if (const auto* account_id = string_field(*object, "accountId")) {
             credential.account_id = *account_id;
         }
+        if (const auto* client_id = string_field(*object, "clientId")) {
+            credential.client_id = *client_id;
+        }
         return ai::Credential{std::move(credential)};
     }
 
@@ -206,6 +209,11 @@ constexpr auto kAsyncLockRetryCount = 10;
         object["accountId"] = *oauth.account_id;
     } else {
         object.erase("accountId");
+    }
+    if (oauth.client_id) {
+        object["clientId"] = *oauth.client_id;
+    } else {
+        object.erase("clientId");
     }
     return object;
 }

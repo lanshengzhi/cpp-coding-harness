@@ -833,3 +833,46 @@ TEST_CASE("SettingsManager enableSkillCommands write is a no-op when unchanged",
     REQUIRE(manager.set_enable_skill_commands(true));
     CHECK(dirs.workspace.read("agent/settings.json") == before);
 }
+
+TEST_CASE("SettingsManager getOrCreateDeviceId creates persists and reuses a UUIDv4",
+        "[settings][two-scope][write][issue862][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"theme": "dark"})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    const auto device_id = manager.get_or_create_device_id();
+    REQUIRE(device_id.size() == 36);
+    CHECK(device_id[8] == '-');
+    CHECK(device_id[13] == '-');
+    CHECK(device_id[14] == '4');
+    CHECK(device_id[18] == '-');
+    CHECK((device_id[19] == '8' || device_id[19] == '9' || device_id[19] == 'a' || device_id[19] == 'b'));
+
+    // Same manager returns the same ID; the global file now carries it while
+    // unmodified and unknown fields survive.
+    CHECK(manager.get_or_create_device_id() == device_id);
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"deviceId\": \"" + device_id + "\"") != std::string::npos);
+    CHECK(content.find("\"theme\": \"dark\"") != std::string::npos);
+
+    // A fresh manager reloads the persisted ID.
+    auto reloaded = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    CHECK(reloaded.get_or_create_device_id() == device_id);
+}
+
+TEST_CASE("SettingsManager getOrCreateDeviceId ignores a committed project-scope deviceId",
+        "[settings][two-scope][write][issue862][spec]") {
+    SettingsDirs dirs;
+    dirs.write_project(R"({"deviceId": "123e4567-e89b-42d3-a456-426614174000"})");
+
+    auto manager = coding_agent::SettingsManager::create(
+        dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    const auto device_id = manager.get_or_create_device_id();
+    CHECK(device_id != "123e4567-e89b-42d3-a456-426614174000");
+    // The write landed in the global scope only.
+    CHECK(dirs.workspace.read("agent/settings.json").find("\"deviceId\"") != std::string::npos);
+    CHECK(dirs.workspace.read(".pi/settings.json").find("\"deviceId\": \"" + device_id + "\"") ==
+            std::string::npos);
+}

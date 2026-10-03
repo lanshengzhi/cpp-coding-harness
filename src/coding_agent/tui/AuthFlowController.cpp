@@ -429,8 +429,18 @@ boost::asio::awaitable<void> AuthFlowController::run_login_dialog(
         self->notify_auth_dialog(*dialog, event);
     };
     const auto completion_provider_id = provider_id;
+    std::optional<ai::LoginOptions> login_options{std::nullopt};
+    if (type == ai::AuthType::OAuth && hooks_.get_device_id) {
+        // Share the hook: std::move_only_function is move-only and its
+        // invocation is non-const in the supported standard libraries.
+        auto get_device_id =
+                std::make_shared<AuthFlowHostHooks::GetDeviceIdHook>(std::move(hooks_.get_device_id));
+        login_options = ai::LoginOptions{
+            .get_device_id = [get_device_id]() { return (*get_device_id)(); },
+        };
+    }
     auto result = co_await support::detail::await_async_result(
-            runtime->login(std::move(provider_id), type, std::move(interaction)));
+            runtime->login(std::move(provider_id), type, std::move(interaction), std::move(login_options)));
     untrack_dialog(dialog);
     // A late login completion admitted before a Session replacement must not
     // restore the slot or report against the replacement (ADR 0040).

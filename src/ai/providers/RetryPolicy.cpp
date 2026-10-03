@@ -197,7 +197,11 @@ InferenceFailureKind inference_failure_kind_from_provider_code(
                             "out_of_budget",
                             "usage_limit_reached",
                             "free_usage_limit_error",
-                            "go_usage_limit_error"}},
+                            "go_usage_limit_error",
+                            // Sign in with ChatGPT: the subscription's shared
+                            // usage limit resets after hours, not seconds (pi
+                            // `NON_RETRYABLE_PROVIDER_ERROR_PATTERN`).
+                            "subscription_sharing_usage_limit_exceeded"}},
             {InferenceFailureKind::TransientTransportFailure,
                     {"overloaded",
                             "overloaded_error",
@@ -206,7 +210,13 @@ InferenceFailureKind inference_failure_kind_from_provider_code(
                             "service_unavailable",
                             "resource_exhausted",
                             "timeout",
-                            "temporarily_unavailable"}},
+                            "temporarily_unavailable",
+                            // Sign in with ChatGPT: usage or user data
+                            // temporarily unavailable; can arrive mid-stream
+                            // without an HTTP 503 (pi
+                            // `RETRYABLE_PROVIDER_ERROR_PATTERN`).
+                            "subscription_sharing_usage_unavailable",
+                            "subscription_sharing_user_unavailable"}},
             {InferenceFailureKind::Cancelled, {"cancelled", "canceled"}},
     };
     for (const auto& group : kGroups) {

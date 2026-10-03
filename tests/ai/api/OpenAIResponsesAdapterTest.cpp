@@ -805,3 +805,108 @@ TEST_CASE("DeepSeek Responses rejects a completed stream whose tool call never r
 
     REQUIRE(transport->requests.size() == 1);
 }
+
+TEST_CASE("OpenAI Responses omits ChatGPT-rejected request fields for non-sk credentials",
+        "[ai][provider][responses][issue862][compat-pi]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    const auto sse = read_fixture_text("wire/openai-responses-deepseek.sse");
+    REQUIRE_FALSE(sse.empty());
+    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
+    auto model = tests::make_model("gpt-5.6-luna", "openai", "openai-responses");
+    model.base_url = "https://api.openai.com/v1";
+    model.reasoning = true;
+    model.input = {ai::ModelInput::Text};
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    // Sign in with ChatGPT access tokens do not start with `sk-`.
+    options.api_key = "chatgpt-oauth-access-token";
+    options.temperature = 0.2;
+    options.max_tokens = 123;
+    options.session_id = "session-1";
+    options.cache_retention = ai::CacheRetention::Long;
+    auto run = run_models(*models, model, request_context(), std::move(options));
+
+    REQUIRE(run.result);
+    REQUIRE(transport->requests.size() == 1);
+    const auto& request = transport->requests.front();
+    const auto body = support::read_json(request.body);
+    REQUIRE(body);
+    const auto* object = body->get_if<support::JsonValue::object_t>();
+    REQUIRE(object != nullptr);
+    // pi `omitUnsupportedFields`: prompt_cache_key and store stay; the
+    // ChatGPT-rejected fields go.
+    CHECK(object->contains("prompt_cache_key"));
+    CHECK(object->at("store").get_boolean() == false);
+    CHECK_FALSE(object->contains("max_output_tokens"));
+    CHECK_FALSE(object->contains("temperature"));
+    CHECK_FALSE(object->contains("prompt_cache_retention"));
+    CHECK_FALSE(object->contains("prompt_cache_options"));
+}
+
+TEST_CASE("OpenAI Responses keeps the standard request fields for sk- API keys",
+        "[ai][provider][responses][issue862][compat-pi]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    const auto sse = read_fixture_text("wire/openai-responses-deepseek.sse");
+    REQUIRE_FALSE(sse.empty());
+    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
+    auto model = tests::make_model("gpt-5.6-luna", "openai", "openai-responses");
+    model.base_url = "https://api.openai.com/v1";
+    model.reasoning = true;
+    model.input = {ai::ModelInput::Text};
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    options.api_key = "sk-standard-api-key";
+    options.temperature = 0.2;
+    options.max_tokens = 123;
+    options.session_id = "session-1";
+    options.cache_retention = ai::CacheRetention::Long;
+    auto run = run_models(*models, model, request_context(), std::move(options));
+
+    REQUIRE(run.result);
+    REQUIRE(transport->requests.size() == 1);
+    const auto body = support::read_json(transport->requests.front().body);
+    REQUIRE(body);
+    const auto* object = body->get_if<support::JsonValue::object_t>();
+    REQUIRE(object != nullptr);
+    CHECK(object->contains("max_output_tokens"));
+    CHECK(object->contains("temperature"));
+    CHECK(object->contains("prompt_cache_retention"));
+    CHECK(object->contains("prompt_cache_key"));
+}
+
+TEST_CASE("OpenAI Responses keeps the standard request fields for non-ChatGPT base URLs",
+        "[ai][provider][responses][issue862][compat-pi]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    const auto sse = read_fixture_text("wire/openai-responses-deepseek.sse");
+    REQUIRE_FALSE(sse.empty());
+    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
+    auto model = tests::make_model("deepseek-v4-flash", "openseek", "openai-responses");
+    model.base_url = "https://api.deepseek.example/v1";
+    model.reasoning = true;
+    model.input = {ai::ModelInput::Text};
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    // Non-sk credential, but the provider/base-url pair is not the ChatGPT
+    // sign-in surface.
+    options.api_key = "gateway-token";
+    options.temperature = 0.2;
+    options.max_tokens = 123;
+    options.session_id = "session-1";
+    options.cache_retention = ai::CacheRetention::Long;
+    auto run = run_models(*models, model, request_context(), std::move(options));
+
+    REQUIRE(run.result);
+    REQUIRE(transport->requests.size() == 1);
+    const auto body = support::read_json(transport->requests.front().body);
+    REQUIRE(body);
+    const auto* object = body->get_if<support::JsonValue::object_t>();
+    REQUIRE(object != nullptr);
+    CHECK(object->contains("max_output_tokens"));
+    CHECK(object->contains("temperature"));
+}

@@ -120,6 +120,17 @@ TEST_CASE("Provider retry policy classifies transient failures and bounds server
                   "authentication_error") == ai::InferenceFailureKind::Unauthorized);
     CHECK(ai::providers::inference_failure_kind_from_provider_code(
                   "provider_wording_changed") == ai::InferenceFailureKind::InvalidRequest);
+    // Sign in with ChatGPT subscription-sharing classification (pi
+    // `utils/retry.ts` NON_RETRYABLE / RETRYABLE_PROVIDER_ERROR_PATTERN,
+    // issue862).
+    CHECK(ai::providers::inference_failure_kind_from_provider_code(
+                  "subscription_sharing_usage_limit_exceeded") == ai::InferenceFailureKind::InvalidRequest);
+    CHECK(ai::providers::inference_failure_kind_from_provider_code(
+                  "subscription_sharing_usage_unavailable") ==
+          ai::InferenceFailureKind::TransientTransportFailure);
+    CHECK(ai::providers::inference_failure_kind_from_provider_code(
+                  "subscription_sharing_user_unavailable") ==
+          ai::InferenceFailureKind::TransientTransportFailure);
     CHECK(ai::providers::inference_failure_kind_from_http_status(413) ==
           ai::InferenceFailureKind::ContextOverflow);
     CHECK(ai::providers::provider_error_code_from_payload(

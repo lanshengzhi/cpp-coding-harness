@@ -173,8 +173,8 @@ OpenAICodexOAuth::login_browser(ai::AuthInteraction interaction) {
     }
 
     std::optional<std::string> code;
-    if (callback_code) {
-        code = callback_code;
+    if (callback_code.value) {
+        code = std::move(*callback_code.value);
     } else if (manual_input) {
         CCH_TRY(parsed_code, parse_manual_code(*manual_input, state));
         code = parsed_code;

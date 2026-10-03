@@ -40,6 +40,7 @@ cch_parity_declare_target(
         src/ai/auth/OAuthCallbackServer.cpp
         src/ai/auth/OAuthHttpClient.cpp
         src/ai/auth/OauthPage.cpp
+        src/ai/auth/OpenAIChatGPTOAuth.cpp
         src/ai/auth/OpenAICodexOAuth.cpp
         src/ai/auth/OpenAICodexOAuthWire.cpp
         src/ai/auth/OpenRouterOAuth.cpp

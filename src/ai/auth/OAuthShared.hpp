@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <stop_token>
 #include <utility>
@@ -55,18 +56,38 @@ template <typename Event> void notify_best_effort(ai::AuthNotifyHook& notify, Ev
     notify(ai::AuthEvent{std::forward<Event>(event)});
 }
 
+/// True when the implementation's `login` accepts the optional app context
+/// (pi `login(interaction, options?)`). Implementations that predate the
+/// `LoginOptions` surface keep their one-argument `login` bound here.
+template <typename Impl>
+concept OAuthLoginAcceptsOptions = requires(Impl& impl, ai::AuthInteraction interaction) {
+    { impl.login(std::move(interaction), std::optional<ai::LoginOptions>{}) };
+};
+
 /// Binds one OAuth implementation's login/refresh/to_auth coroutines to the
 /// `OAuthAuth` hook surface, each operation crossing the AsyncResult bridge.
 template <typename Impl> [[nodiscard]] ai::OAuthAuth bind_oauth_auth(std::string name, std::shared_ptr<Impl> impl) {
     ai::OAuthAuth auth;
     auth.name = std::move(name);
-    auth.login = [impl](ai::AuthInteraction interaction) -> cch::support::AsyncResult<ai::OAuthCredential> {
-        return cch::support::detail::make_async_result(
-                [impl, interaction = std::move(interaction)]() mutable
-                        -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
-                    co_return co_await impl->login(std::move(interaction));
-                });
-    };
+    if constexpr (OAuthLoginAcceptsOptions<Impl>) {
+        auth.login = [impl](ai::AuthInteraction interaction,
+                             std::optional<ai::LoginOptions> options) -> cch::support::AsyncResult<ai::OAuthCredential> {
+            return cch::support::detail::make_async_result(
+                    [impl, interaction = std::move(interaction), options = std::move(options)]() mutable
+                            -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
+                        co_return co_await impl->login(std::move(interaction), std::move(options));
+                    });
+        };
+    } else {
+        auth.login = [impl](ai::AuthInteraction interaction,
+                             std::optional<ai::LoginOptions>) -> cch::support::AsyncResult<ai::OAuthCredential> {
+            return cch::support::detail::make_async_result(
+                    [impl, interaction = std::move(interaction)]() mutable
+                            -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
+                        co_return co_await impl->login(std::move(interaction));
+                    });
+        };
+    }
     auth.refresh = [impl](ai::OAuthCredential credential) -> cch::support::AsyncResult<ai::OAuthCredential> {
         return cch::support::detail::make_async_result(
                 [impl, credential = std::move(credential)]()

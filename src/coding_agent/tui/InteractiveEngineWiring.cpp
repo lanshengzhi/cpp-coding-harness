@@ -151,6 +151,13 @@ std::shared_ptr<AuthFlowController> InteractiveEngine::make_auth_flow_controller
                 TuiActionVariant{OpenBrowserAction{std::move(url)}});
         }
     };
+    hooks.get_device_id = [weak] {
+        const auto self = weak.lock();
+        if (self && self->settings_manager_) {
+            return self->settings_manager_->get_or_create_device_id();
+        }
+        return std::string{};
+    };
     return std::make_shared<AuthFlowController>(
         executor_,
         *this,

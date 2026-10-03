@@ -237,6 +237,14 @@ struct ParsedTextSignature {
     return compat != nullptr && compat->supports_explicit_prompt_cache_mode.value_or(false);
 }
 
+/// pi `isChatGPTSignIn`: OpenAI API keys start with `sk-`; any other
+/// credential sent directly to api.openai.com is a Sign in with ChatGPT
+/// access token, and the Responses API rejects several request fields for it.
+[[nodiscard]] bool is_chatgpt_sign_in(const Model& model, const ProviderStreamOptions& options) noexcept {
+    return model.provider == "openai" && model.base_url == "https://api.openai.com/v1" &&
+            options.auth.api_key.has_value() && !options.auth.api_key->starts_with("sk-");
+}
+
 [[nodiscard]] support::JsonValue::array_t responses_tools(
         AdapterKind adapter, const Model& model, const std::vector<Tool>& tools) {
     support::JsonValue::array_t result;
@@ -310,18 +318,24 @@ struct ParsedTextSignature {
         payload.emplace("text", support::JsonValue::object_t{{"verbosity", "low"}});
         payload.emplace("tool_choice", "auto");
     } else {
-        payload.emplace("max_output_tokens", static_cast<double>(std::max<std::uint64_t>(16, options.max_tokens)));
-        if (options.cache_retention == CacheRetention::Long) {
-            payload.emplace("prompt_cache_retention", "24h");
-        }
-        if (options.cache_retention == CacheRetention::None && responses_supports_explicit_prompt_cache_mode(model)) {
-            payload.emplace("prompt_cache_options", support::JsonValue::object_t{{"mode", "explicit"}});
+        // Sign in with ChatGPT rejects these request fields (pi
+        // `omitUnsupportedFields`); prompt_cache_key and store stay.
+        const bool omit_unsupported = is_chatgpt_sign_in(model, options);
+        if (!omit_unsupported) {
+            payload.emplace("max_output_tokens", static_cast<double>(std::max<std::uint64_t>(16, options.max_tokens)));
+            if (options.cache_retention == CacheRetention::Long) {
+                payload.emplace("prompt_cache_retention", "24h");
+            }
+            if (options.cache_retention == CacheRetention::None &&
+                    responses_supports_explicit_prompt_cache_mode(model)) {
+                payload.emplace("prompt_cache_options", support::JsonValue::object_t{{"mode", "explicit"}});
+            }
         }
     }
     if (options.session_id && options.cache_retention != CacheRetention::None) {
         payload.emplace("prompt_cache_key", detail::clamp_openai_prompt_cache_key(*options.session_id));
     }
-    if (options.temperature) {
+    if (options.temperature && !is_chatgpt_sign_in(model, options)) {
         payload.emplace("temperature", *options.temperature);
     }
     if (!context.tools.empty()) {

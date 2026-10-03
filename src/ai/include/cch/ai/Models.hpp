@@ -114,10 +114,13 @@ public:
     /// CredentialStore::modify, the only write path. Login-flow failures
     /// propagate unwrapped to the host; only CredentialStore failures wrap as
     /// the `auth` category. Login errors never enter the stream error channel.
+    /// `options` supplies the optional app context (device-id hook) that
+    /// provider login flows may consult.
     [[nodiscard]] cch::support::AsyncResult<Credential> login(
         std::string provider_id,
         AuthType type,
-        AuthInteraction interaction);
+        AuthInteraction interaction,
+        std::optional<LoginOptions> options = std::nullopt);
 
     /// Produce one AI-owned move-only `ModelStream` for a single turn
     /// (ADR 0040 / #455). The returned value is consumed exactly once through

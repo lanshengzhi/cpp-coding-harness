@@ -23,13 +23,18 @@ struct ApiKeyCredential {
 };
 
 /// Stored canonical OAuth credential. `account_id` is Codex's JSON
-/// `accountId`; other provider-specific JSON fields are preserved privately by
+/// `accountId`; `client_id` is the dynamic client ID issued by the ChatGPT
+/// OAuth registration callback (pi's issued `clientId`), required for token
+/// refresh. Other provider-specific JSON fields are preserved privately by
 /// the file-backed serializer.
 struct OAuthCredential {
     std::string refresh{};
     std::string access{};
     std::int64_t expires{0};
     std::optional<std::string> account_id{std::nullopt};
+    /// pi `clientId`: the issued dynamic client ID (Sign in with ChatGPT).
+    /// Absent for flows with a static client ID.
+    std::optional<std::string> client_id{std::nullopt};
 
     bool operator==(const OAuthCredential&) const = default;
 };

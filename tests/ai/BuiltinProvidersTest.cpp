@@ -61,6 +61,17 @@ TEST_CASE("Built-in provider definitions preserve the frozen catalogs and auth m
         CHECK_FALSE(it->models.empty());
     }
 
+    // Sign in with ChatGPT rides alongside the env API key on the openai
+    // provider (pi `openaiChatGPTOAuth`, issue862).
+    const auto openai_it =
+            std::find_if(definitions.begin(), definitions.end(), [](const auto& d) { return d.id == "openai"; });
+    REQUIRE(openai_it != definitions.end());
+    REQUIRE(openai_it->auth.oauth);
+    CHECK(openai_it->auth.oauth->name == "OpenAI (ChatGPT subscription)");
+    CHECK(static_cast<bool>(openai_it->auth.oauth->login));
+    CHECK(static_cast<bool>(openai_it->auth.oauth->refresh));
+    CHECK(static_cast<bool>(openai_it->auth.oauth->to_auth));
+
     const auto openrouter_it =
             std::find_if(definitions.begin(), definitions.end(), [](const auto& d) { return d.id == "openrouter"; });
     REQUIRE(openrouter_it != definitions.end());

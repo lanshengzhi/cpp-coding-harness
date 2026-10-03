@@ -28,13 +28,14 @@
 namespace cch::ai::auth {
 namespace {
 
-using WaitResult = support::Expected<std::optional<std::string>>;
+using WaitResult = support::Expected<OAuthCallbackResult>;
 using WaitChannel = boost::asio::experimental::channel<void(boost::system::error_code, WaitResult)>;
 
 struct ParsedTarget {
     std::string path{};
     std::string code{};
     std::string state{};
+    std::string client_id{};
 };
 
 /// Parse a request target like `/auth/callback?code=X&state=Y` with
@@ -53,6 +54,9 @@ struct ParsedTarget {
     }
     if (const auto found = pairs.find("state"); found != pairs.end()) {
         parsed.state = found->second;
+    }
+    if (const auto found = pairs.find("client_id"); found != pairs.end()) {
+        parsed.client_id = found->second;
     }
     return parsed;
 }
@@ -108,14 +112,14 @@ std::uint16_t OAuthCallbackServer::bound_port() const {
     return endpoint.port();
 }
 
-boost::asio::awaitable<support::Expected<std::optional<std::string>>>
+boost::asio::awaitable<support::Expected<OAuthCallbackResult>>
 OAuthCallbackServer::wait_for_code() {
-    WaitResult result{std::optional<std::string>{}};
+    WaitResult result{OAuthCallbackResult{}};
     boost::system::error_code receive_error;
     result = co_await impl_->wait_channel.async_receive(
             boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
     if (receive_error) {
-        co_return std::optional<std::string>{};
+        co_return OAuthCallbackResult{};
     }
     co_return result;
 }
@@ -127,7 +131,7 @@ void OAuthCallbackServer::cancel_wait() {
             return;
         }
         impl->wait_cancelled = true;
-        impl->wait_channel.try_send(boost::system::error_code{}, WaitResult{std::optional<std::string>{}});
+        impl->wait_channel.try_send(boost::system::error_code{}, WaitResult{OAuthCallbackResult{}});
     });
 }
 
@@ -175,7 +179,7 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
         // Listen errors degrade to manual input only (pi settleWait(null)).
         impl->degraded = true;
         impl->wait_cancelled = true;
-        impl->wait_channel.try_send(boost::system::error_code{}, WaitResult{std::optional<std::string>{}});
+        impl->wait_channel.try_send(boost::system::error_code{}, WaitResult{OAuthCallbackResult{}});
         co_return std::make_shared<OAuthCallbackServer>(impl);
     }
 
@@ -225,9 +229,13 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
                                             if (callback_result) {
                                                 response = html_response(
                                                         200, oauth_success_html(impl->options.success_message));
+                                                OAuthCallbackResult settled;
+                                                settled.value = std::move(*callback_result);
+                                                settled.client_id = target.client_id.empty()
+                                                                            ? std::optional<std::string>{}
+                                                                            : std::optional<std::string>{target.client_id};
                                                 impl->wait_channel.try_send(boost::system::error_code{},
-                                                        WaitResult{std::optional<std::string>{
-                                                                std::move(*callback_result)}});
+                                                        WaitResult{std::move(settled)});
                                             } else {
                                                 auto callback_error = std::move(callback_result.error());
                                                 std::string details = callback_error.message;
@@ -244,8 +252,13 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
                                         } else {
                                             response = html_response(
                                                     200, oauth_success_html(impl->options.success_message));
+                                            OAuthCallbackResult settled;
+                                            settled.value = std::move(target.code);
+                                            settled.client_id = target.client_id.empty()
+                                                                        ? std::optional<std::string>{}
+                                                                        : std::optional<std::string>{target.client_id};
                                             impl->wait_channel.try_send(boost::system::error_code{},
-                                                    WaitResult{std::optional<std::string>{std::move(target.code)}});
+                                                    WaitResult{std::move(settled)});
                                         }
                                     }
                                     co_await http::async_write(

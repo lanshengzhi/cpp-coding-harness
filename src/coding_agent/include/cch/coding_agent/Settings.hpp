@@ -86,6 +86,10 @@ struct UserSettings {
     /// (default true). Graduated into the settings subset with decision 24
     /// of the G4 record; gates `/skill:` registration and autocomplete.
     std::optional<bool> enable_skill_commands{std::nullopt};
+    /// pi `deviceId` — stable UUID of this installation, created on first use
+    /// (pi `getOrCreateDeviceId`); global-only, never honored from the project
+    /// scope so a committed project file cannot clone the ID across machines.
+    std::optional<std::string> device_id{std::nullopt};
 };
 
 /// One `settings.json` scope (pi `SettingsScope`).
@@ -179,6 +183,12 @@ public:
     /// Resolved pi `enableSkillCommands` over the merged view (default true;
     /// pi `SettingsManager.getEnableSkillCommands`).
     [[nodiscard]] bool get_enable_skill_commands() const noexcept;
+
+    /// Stable UUID of this installation (pi `SettingsManager.getOrCreateDeviceId`).
+    /// Created on first use and persisted to the global scope; a committed
+    /// project settings file cannot give every clone the same ID because the
+    /// project scope is never consulted or written for this field.
+    [[nodiscard]] std::string get_or_create_device_id();
 
     /// Surgical field-level write of the pi `enableSkillCommands` field in
     /// the global scope (pi `SettingsManager.setEnableSkillCommands`, which

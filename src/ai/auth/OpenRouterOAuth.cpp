@@ -278,8 +278,8 @@ boost::asio::awaitable<support::Expected<ai::OAuthCredential>> OpenRouterOAuth::
     if (login_stop_token.stop_requested()) {
         co_return std::unexpected(login_cancelled());
     }
-    if (callback_result) {
-        co_return credential_from_key(std::move(*callback_result));
+    if (callback_result.value) {
+        co_return credential_from_key(std::move(*callback_result.value));
     }
 
     std::optional<support::Error> manual_error;

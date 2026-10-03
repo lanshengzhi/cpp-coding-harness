@@ -34,6 +34,11 @@ struct PromptSlot;
 /// the host supplies the current session, executor marshalling, and the one
 /// environment action (opening an OAuth URL).
 struct AuthFlowHostHooks {
+    /// Resolve (creating on first use) the stable installation device ID used
+    /// as the OAuth agent host ID (pi `getDeviceId`). May be null when the
+    /// host has no settings manager; the ChatGPT flow reports the missing-ID
+    /// error itself.
+    using GetDeviceIdHook = std::move_only_function<std::string()>;
     /// Marshal one input-thread action onto the host executor. The action is
     /// dropped once the host stops running.
     std::move_only_function<void(std::move_only_function<void()>)> post_on_executor{nullptr};
@@ -54,6 +59,11 @@ struct AuthFlowHostHooks {
     /// Deliver one browser-open request with the generation that admitted it.
     /// The host rejects requests from retired session generations.
     std::move_only_function<void(std::size_t, std::string)> open_browser{nullptr};
+    /// Resolve (creating on first use) the stable installation device ID used
+    /// as the OAuth agent host ID (pi `getDeviceId`). May be null when the
+    /// host has no settings manager; the ChatGPT flow reports the missing-ID
+    /// error itself.
+    GetDeviceIdHook get_device_id{nullptr};
 };
 
 /// Native TUI authentication flow controller (pi `interactive-mode.ts`

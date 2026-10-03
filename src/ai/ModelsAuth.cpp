@@ -139,7 +139,8 @@ namespace {
 }
 
 [[nodiscard]] boost::asio::awaitable<support::Expected<Credential>> login_impl(
-        Models::Impl& impl, std::string provider_id, AuthType type, AuthInteraction interaction) {
+        Models::Impl& impl, std::string provider_id, AuthType type, AuthInteraction interaction,
+        std::optional<LoginOptions> options) {
     const auto selected = impl.provider(provider_id);
     if (!selected) {
         co_return std::unexpected(
@@ -154,7 +155,8 @@ namespace {
             co_return std::unexpected(support::make_error(support::ErrorCode::Auth,
                     std::string{selected->name()} + " does not support " + type_name + " login"));
         }
-        auto credential = co_await invoke_async_operation([&]() { return auth.oauth->login(std::move(interaction)); });
+        auto credential = co_await invoke_async_operation(
+                [&]() { return auth.oauth->login(std::move(interaction), std::move(options)); });
         if (!credential) {
             // Login-flow failures propagate unwrapped to the host.
             co_return std::unexpected(std::move(credential.error()));
@@ -223,10 +225,13 @@ cch::support::AsyncResult<void> Models::logout(std::string provider_id) {
 }
 
 cch::support::AsyncResult<Credential> Models::login(
-        std::string provider_id, AuthType type, AuthInteraction interaction) {
+        std::string provider_id, AuthType type, AuthInteraction interaction,
+        std::optional<LoginOptions> options) {
     return support::detail::make_async_result(
-            [this, provider_id = std::move(provider_id), type, interaction = std::move(interaction)]() mutable {
-                return login_impl(*impl_, std::move(provider_id), type, std::move(interaction));
+            [this, provider_id = std::move(provider_id), type, interaction = std::move(interaction),
+                    options = std::move(options)]() mutable {
+                return login_impl(
+                        *impl_, std::move(provider_id), type, std::move(interaction), std::move(options));
             });
 }
 

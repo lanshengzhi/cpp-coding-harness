@@ -14,6 +14,15 @@ namespace cch::ai::auth {
 
 using OAuthCallbackHook = std::move_only_function<boost::asio::awaitable<support::Expected<std::string>>(std::string)>;
 
+/// One settled callback wait: the resolved value (authorization code, or the
+/// callback handler's result when configured) plus the issued dynamic
+/// `client_id` when the provider's callback carried one (Sign in with
+/// ChatGPT).
+struct OAuthCallbackResult {
+    std::optional<std::string> value{std::nullopt};
+    std::optional<std::string> client_id{std::nullopt};
+};
+
 struct OAuthCallbackServerOptions {
     /// Bind host; the frozen default is 127.0.0.1 with PI_OAUTH_CALLBACK_HOST
     /// resolved by the caller.
@@ -64,10 +73,10 @@ public:
 
     /// Resolves with the authorization code, or with the callback handler's
     /// result when one is configured. An exchange failure is returned through
-    /// the Expected error channel. Resolves with `std::nullopt` when the wait
-    /// is cancelled (manual prompt won, listen failure, server closed). Safe
-    /// to await once.
-    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<std::string>>>
+    /// the Expected error channel. Resolves with an empty result when the
+    /// wait is cancelled (manual prompt won, listen failure, server closed).
+    /// Safe to await once.
+    [[nodiscard]] boost::asio::awaitable<support::Expected<OAuthCallbackResult>>
     wait_for_code();
 
     /// Settle a pending `wait_for_code` with `std::nullopt` (idempotent).

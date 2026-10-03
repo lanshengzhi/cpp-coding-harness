@@ -490,12 +490,14 @@ support::AsyncResult<std::vector<ai::CredentialInfo>> ModelRuntime::list_credent
 }
 
 support::AsyncResult<void> ModelRuntime::login(
-        std::string provider_id, ai::AuthType type, ai::AuthInteraction interaction) {
+        std::string provider_id, ai::AuthType type, ai::AuthInteraction interaction,
+        std::optional<ai::LoginOptions> options) {
     return support::detail::make_async_result(
-            [this, provider_id = std::move(provider_id), type, interaction = std::move(interaction)]() mutable
+            [this, provider_id = std::move(provider_id), type, interaction = std::move(interaction),
+                    options = std::move(options)]() mutable
                     -> boost::asio::awaitable<support::ExpectedVoid> {
                 CCH_TRY_VOID(co_await support::detail::await_async_result(
-                        impl_->models->login(provider_id, type, std::move(interaction))));
+                        impl_->models->login(provider_id, type, std::move(interaction), std::move(options))));
                 impl_->stored_providers.insert(provider_id);
                 impl_->stored_auth_types[provider_id] = type == ai::AuthType::OAuth ? "oauth" : "api_key";
                 impl_->auth_snapshot[provider_id] = ai::AuthCheck{
