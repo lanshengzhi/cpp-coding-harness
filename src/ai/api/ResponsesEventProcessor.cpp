@@ -20,6 +20,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include "ResponsesSlots.hpp"
 
 namespace cch::ai::api {
@@ -281,10 +282,26 @@ support::Expected<ResponsesProcessOutcome> ResponsesEventProcessor::process(
             impl_->saw_terminal);
 }
 
-support::ExpectedVoid ResponsesEventProcessor::finish([[maybe_unused]] AssistantMessage&) {
+support::ExpectedVoid ResponsesEventProcessor::finish(AssistantMessage& assistant) {
     if (!impl_->saw_terminal) {
         return std::unexpected(support::make_error(
                 support::ErrorCode::Stream, "OpenAI Responses stream ended before a terminal response event"));
+    }
+    // The agent runs every tool call in the final message. Refuse to hand over
+    // calls whose output_item.done never arrived: their arguments may be cut
+    // off or mixed up (pi openai-responses-shared.ts, upstream 1b2aa0ca0). An
+    // unfinished tool call still holds its slot because finish_output_item
+    // erases the slot only after the done event.
+    if (assistant.stop_reason == AssistantStopReason::ToolUse) {
+        for (const auto& slot : impl_->slots) {
+            if (slot.second.kind != Slot::Kind::ToolCall) {
+                continue;
+            }
+            const auto& block = std::get<ToolCallContent>(assistant.content[slot.second.content_index]);
+            return std::unexpected(support::make_error(support::ErrorCode::Stream,
+                    "OpenAI Responses stream completed with an unfinished tool call: " + block.name + " (" +
+                            block.id + ")"));
+        }
     }
     return {};
 }

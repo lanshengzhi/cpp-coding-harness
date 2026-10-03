@@ -1,0 +1,6 @@
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}
+
+data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"q\":\""}
+
+data: {"type":"response.completed","response":{"id":"resp_unfinished","status":"completed","usage":{"input_tokens":5,"output_tokens":3,"total_tokens":8}}}
+

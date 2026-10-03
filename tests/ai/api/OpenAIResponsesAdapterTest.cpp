@@ -772,3 +772,36 @@ TEST_CASE("DeepSeek Responses cancellation yields one aborted terminal",
     REQUIRE(terminal);
     CHECK(terminal->reason == ai::AssistantStopReason::Aborted);
 }
+
+TEST_CASE("DeepSeek Responses rejects a completed stream whose tool call never received output_item.done",
+        "[ai][provider][responses][compat-pi]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    const auto sse =
+        read_fixture_text("wire/openai-responses-deepseek-unfinished-tool-call.sse");
+    REQUIRE_FALSE(sse.empty());
+    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
+    const auto model = deepseek_model();
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy-deepseek-key";
+
+    auto run = run_models(*models, model, {}, std::move(options));
+
+    // pi's `processResponsesStream` guard (openai-responses-shared.ts,
+    // upstream 1b2aa0ca0) refuses to hand the agent a tool call whose
+    // output_item.done never arrived; the arguments may be cut off.
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    REQUIRE(run.result->error_message);
+    CHECK(*run.result->error_message ==
+        "OpenAI Responses stream completed with an unfinished tool call: lookup (call_1|fc_1)");
+    REQUIRE_FALSE(run.events.empty());
+    REQUIRE(std::holds_alternative<ai::AssistantErrorEvent>(run.events.back()));
+    const auto& terminal = std::get<ai::AssistantErrorEvent>(run.events.back());
+    CHECK(terminal.reason == ai::AssistantStopReason::Error);
+    REQUIRE(terminal.error.error_message);
+    CHECK(*terminal.error.error_message == *run.result->error_message);
+
+    REQUIRE(transport->requests.size() == 1);
+}
