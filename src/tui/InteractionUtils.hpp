@@ -57,6 +57,37 @@ struct VisibleRange {
     return text.substr(static_cast<std::size_t>(first - text.begin()));
 }
 
+/// Remove unmatched opening punctuation wrappers before an autocomplete token
+/// (pi's stripLeadingWrappers). A matching closer inside the token means the
+/// punctuation is part of the path and must remain searchable.
+[[nodiscard]] inline std::string_view strip_leading_wrappers(std::string_view token) {
+    while (!token.empty()) {
+        char closer = '\0';
+        switch (token.front()) {
+        case '(':
+            closer = ')';
+            break;
+        case '[':
+            closer = ']';
+            break;
+        case '{':
+            closer = '}';
+            break;
+        case '<':
+            closer = '>';
+            break;
+        case '`':
+            closer = '`';
+            break;
+        default:
+            return token;
+        }
+        if (token.find(closer, 1) != std::string_view::npos) break;
+        token.remove_prefix(1);
+    }
+    return token;
+}
+
 [[nodiscard]] inline VisibleRange centered_visible_range(
     std::size_t total,
     std::size_t selected,

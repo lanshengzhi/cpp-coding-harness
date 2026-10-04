@@ -196,6 +196,31 @@ TEST_CASE(
     CHECK_FALSE(request_suggestions(provider, {"hello"}, 0, 5).has_value());
 }
 
+TEST_CASE(
+        "CombinedAutocompleteProvider completes paths after unmatched opening wrappers", "[tui][autocomplete][spec]") {
+    cch::tests::TempWorkspace workspace;
+    workspace.write("src/main.cc", "int main() {}\n");
+    workspace.write("(group)/layout.cc", "// layout\n");
+    auto provider = make_provider({}, workspace.path());
+
+    for (const auto wrapper : {"(", "[", "{", "<", "`", "((", "(`"}) {
+        const auto line = std::string{wrapper} + "src/ma";
+        const auto result = request_suggestions(provider, {line}, 0, line.size(), /*force=*/true);
+        REQUIRE(result);
+        CHECK(result->prefix == "src/ma");
+        REQUIRE(result->items.size() == 1);
+        CHECK(result->items[0].value == "src/main.cc");
+        const auto applied = provider.apply_completion({line}, 0, line.size(), result->items[0], result->prefix);
+        CHECK(applied.lines[0] == std::string{wrapper} + "src/main.cc");
+    }
+
+    const auto closed = request_suggestions(provider, {"(group)/la"}, 0, 10, /*force=*/true);
+    REQUIRE(closed);
+    CHECK(closed->prefix == "(group)/la");
+    REQUIRE(closed->items.size() == 1);
+    CHECK(closed->items[0].value == "(group)/layout.cc");
+}
+
 TEST_CASE("CombinedAutocompleteProvider offers @ attachment completion through fd",
         "[tui][autocomplete][issue383][spec]") {
     cch::tests::TempWorkspace workspace;
@@ -234,6 +259,21 @@ TEST_CASE("CombinedAutocompleteProvider offers @ attachment completion through f
     const auto forced = request_suggestions(provider, {"src"}, 0, 3, /*force=*/true);
     REQUIRE(forced);
     CHECK_FALSE(forced->items.empty());
+}
+
+TEST_CASE("CombinedAutocompleteProvider recognizes @ after opening wrappers", "[tui][autocomplete][spec]") {
+    cch::tests::TempWorkspace workspace;
+    const auto fake_fd = write_fake_fd(workspace, "README.md\n");
+    auto provider = make_provider({}, workspace.path(), fake_fd);
+    const std::string line = "see (@REA";
+
+    const auto result = request_suggestions(provider, {line}, 0, line.size());
+    REQUIRE(result);
+    CHECK(result->prefix == "@REA");
+    REQUIRE(result->items.size() == 1);
+    CHECK(result->items[0].value == "@README.md");
+    const auto applied = provider.apply_completion({line}, 0, line.size(), result->items[0], result->prefix);
+    CHECK(applied.lines[0] == "see (@README.md ");
 }
 
 TEST_CASE("CombinedAutocompleteProvider applyCompletion performs pi's text surgery",

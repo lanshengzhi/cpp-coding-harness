@@ -303,7 +303,7 @@ struct Editor::Impl {
             if (text_before_cursor[index] == ' ' || text_before_cursor[index] == '\t') token_start = index + 1;
         }
         if (token_start >= text_before_cursor.size()) return false;
-        const auto token = text_before_cursor.substr(token_start);
+        const auto token = detail::strip_leading_wrappers(text_before_cursor.substr(token_start));
         for (const auto& trigger : autocomplete_trigger_characters) {
             if (token.starts_with(trigger)) return true;
         }
@@ -421,8 +421,12 @@ struct Editor::Impl {
         }
         if (is_trigger_character(last_char)) {
             const auto length = text_before_cursor.size();
-            if (length == 1 ||
-                (length >= 2 && (text_before_cursor[length - 2] == ' ' || text_before_cursor[length - 2] == '\t'))) {
+            std::size_t token_start = 0;
+            for (std::size_t index = 0; index + 1 < length; ++index) {
+                if (text_before_cursor[index] == ' ' || text_before_cursor[index] == '\t') token_start = index + 1;
+            }
+            const auto before_trigger = text_before_cursor.substr(token_start, length - token_start - 1);
+            if (detail::strip_leading_wrappers(before_trigger).empty()) {
                 try_trigger_autocomplete();
             }
             return;
