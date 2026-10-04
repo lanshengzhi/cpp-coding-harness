@@ -494,6 +494,16 @@ TEST_CASE("slice_by_column carries leading styling into the slice", "[tui][issue
     CHECK(visible_width(*sliced) == 2);
 }
 
+TEST_CASE("slice_by_column preserves ANSI ordering at the slice start", "[tui][issue46][unicode][spec]") {
+    const auto reset = slice_by_column("\x1b[32mfoo\x1b[39m bar", 3, 4, true);
+    REQUIRE(reset);
+    CHECK(*reset == "\x1b[32m\x1b[39m bar");
+
+    const auto style = slice_by_column("Another \x1b[35malpha\x1b[39m line with more text", 13, 100, true);
+    REQUIRE(style);
+    CHECK(*style == "\x1b[35m\x1b[39m line with more text");
+}
+
 TEST_CASE("slice_by_column excludes a wide grapheme crossing the range end when strict",
         "[tui][issue46][unicode][spec]") {
     const std::string line = "abcd\xe8\xae\xa9" "EFGH"; // abcd让EFGH (让 spans columns 4-5)
