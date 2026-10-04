@@ -4,15 +4,91 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join, relative, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const EXPECTED_PI_REVISION = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe";
+// The named-baseline registry is the single authority for pi revisions (ADR 0065).
+// Resolved relative to this file, never relative to --fixture-root, so a copied fixture
+// tree still verifies against the repository's policy.
+const REGISTRY_PATH = join(
+	fileURLToPath(new URL(".", import.meta.url)),
+	"..",
+	"..",
+	"fixtures",
+	"pi-ai",
+	"baselines.json",
+);
+const REGISTRY_SCHEMA = "cpp-coding-harness/pi-ai-baselines/1";
+
+function loadBaselines() {
+	const registry = JSON.parse(readFileSync(REGISTRY_PATH, "utf8"));
+	if (registry.schema !== REGISTRY_SCHEMA) {
+		throw new Error(`unexpected baseline registry schema: ${REGISTRY_PATH}`);
+	}
+	if (!registry.baselines || typeof registry.baselines !== "object") {
+		throw new Error(`baseline registry has no baselines: ${REGISTRY_PATH}`);
+	}
+	for (const [name, entry] of Object.entries(registry.baselines)) {
+		if (typeof entry?.revision !== "string" || entry.revision.length !== 40) {
+			throw new Error(`baseline ${name} must record a full 40-character revision`);
+		}
+	}
+	if (!(registry.default_baseline in registry.baselines)) {
+		throw new Error(`default_baseline is not registered: ${REGISTRY_PATH}`);
+	}
+	return registry;
+}
+
+function resolveBaseline(name) {
+	const registry = loadBaselines();
+	const selected = name ?? registry.default_baseline;
+	const entry = registry.baselines[selected];
+	if (!entry) {
+		throw new Error(
+			`unknown baseline ${JSON.stringify(selected)}; registered baselines: ` +
+				Object.keys(registry.baselines).sort().join(", "),
+		);
+	}
+	return { registry, name: selected, ...entry };
+}
+
+// The historical bundle occupies the fixture root (bundle_path ""), so a later bundle's
+// directory nests inside it. Ownership therefore resolves by the LONGEST matching bundle
+// path, not by "is this path inside some other bundle".
+function owningBaseline(registry, target, fixtureRoot) {
+	const relativeTarget = relative(fixtureRoot, target);
+	let owner = null;
+	for (const [name, entry] of Object.entries(registry.baselines)) {
+		const bundlePath = entry.bundle_path;
+		const matches =
+			bundlePath === ""
+				? true
+				: relativeTarget === bundlePath || relativeTarget.startsWith(`${bundlePath}/`);
+		if (!matches) {
+			continue;
+		}
+		if (owner === null || bundlePath.length > owner.entry.bundle_path.length) {
+			owner = { name, entry };
+		}
+	}
+	return owner;
+}
+
+function assertWritesOwnBundle(registry, target, baseline, fixtureRoot) {
+	const owner = owningBaseline(registry, target, fixtureRoot);
+	if (owner && owner.name !== baseline.name) {
+		throw new Error(
+			`refusing to write ${target}: it belongs to bundle ${JSON.stringify(owner.name)}, ` +
+				`but this run records baseline ${JSON.stringify(baseline.name)}`,
+		);
+	}
+}
 
 function parseArgs(argv) {
 	const args = {
 		fixtureRoot: resolve("fixtures/pi-ai"),
 		output: undefined,
 		piRoot: undefined,
+		baseline: undefined,
 	};
 	for (let index = 0; index < argv.length; index += 1) {
 		const argument = argv[index];
@@ -22,6 +98,8 @@ function parseArgs(argv) {
 			args.output = resolve(argv[++index]);
 		} else if (argument === "--pi-root") {
 			args.piRoot = resolve(argv[++index]);
+		} else if (argument === "--baseline") {
+			args.baseline = argv[++index];
 		} else {
 			throw new Error(`unknown argument: ${argument}`);
 		}
@@ -161,8 +239,16 @@ async function runStream({ label, streamSimple, model, options, responseBody, so
 	return capture;
 }
 
-function providerModel(fixtureRoot, provider, api, modelId) {
-	const catalog = readJson(join(fixtureRoot, "models", "providers", `${provider}.json`));
+function bundleDirectory(fixtureRoot, baseline) {
+	return baseline.bundle_path === ""
+		? fixtureRoot
+		: join(fixtureRoot, baseline.bundle_path);
+}
+
+function providerModel(bundleRoot, provider, api, modelId) {
+	// The catalog must come from the selected baseline's own bundle, never the repository
+	// root: reading v0.87.1 models under a v1.0.0 report would be false evidence.
+	const catalog = readJson(join(bundleRoot, "models", "providers", `${provider}.json`));
 	const model = catalog[api]?.[modelId];
 	if (!model) throw new Error(`missing ${provider}/${modelId} in provenance fixture`);
 	return model;
@@ -176,8 +262,11 @@ function assertEqual(actual, expected, label) {
 
 async function main() {
 	const args = parseArgs(process.argv.slice(2));
+	// The expected revision is the registry entry for the baseline under test, not a
+	// module constant, so checkout, guard, and artifact cannot drift apart (ADR 0065).
+	const baseline = resolveBaseline(args.baseline);
 	const revision = gitRevision(args.piRoot);
-	assertEqual(revision, EXPECTED_PI_REVISION, "pi revision");
+	assertEqual(revision, baseline.revision, `pi revision (baseline ${baseline.name})`);
 
 	const sourceRoot = resolve(args.piRoot, "packages/ai");
 	const [completionsModule, anthropicModule, responsesModule] = await Promise.all([
@@ -186,9 +275,10 @@ async function main() {
 		import(pathToFileURL(join(sourceRoot, "src/api/openai-responses.ts"))),
 	]);
 
-	const completionsModel = providerModel(args.fixtureRoot, "deepseek", "openai-completions", "deepseek-flash");
-	const anthropicModel = providerModel(args.fixtureRoot, "opencode-go", "anthropic-messages", "minimax-m3");
-	const responsesModel = providerModel(args.fixtureRoot, "openai", "openai-responses", "gpt-4");
+	const bundleRoot = bundleDirectory(args.fixtureRoot, baseline);
+	const completionsModel = providerModel(bundleRoot, "deepseek", "openai-completions", "deepseek-flash");
+	const anthropicModel = providerModel(bundleRoot, "opencode-go", "anthropic-messages", "minimax-m3");
+	const responsesModel = providerModel(bundleRoot, "openai", "openai-responses", "gpt-4");
 
 	const completions = await runStream({
 		label: "openai-completions",
@@ -240,6 +330,7 @@ async function main() {
 	const report = {
 		schema: "cpp-coding-harness/issue-758-t0-cost-probe/1",
 		probe: {
+			baseline: baseline.name,
 			pi_revision: revision,
 			transport: "in-process fake fetch; no provider network or credentials",
 			context: "one system prompt, one user text, one ordinary JSON-schema tool",
@@ -263,6 +354,8 @@ async function main() {
 	};
 	const output = `${JSON.stringify(sortKeys(report), null, 2)}\n`;
 	if (args.output) {
+		// Refuse to write a probe into a bundle owned by another baseline.
+		assertWritesOwnBundle(baseline.registry, args.output, baseline, args.fixtureRoot);
 		mkdirSync(dirname(args.output), { recursive: true });
 		writeFileSync(args.output, output, "utf8");
 	}

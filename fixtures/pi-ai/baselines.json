@@ -1,0 +1,41 @@
+{
+  "schema": "cpp-coding-harness/pi-ai-baselines/1",
+  "comment": [
+    "Named-baseline registry for pi-ai evidence bundles (ADR 0065).",
+    "A baseline name resolves to exactly one full 40-character revision and one bundle path.",
+    "bundle_path is relative to this file's directory; \"\" means the historical bundle that",
+    "already occupies the fixture root, preserved in place and still verifiable.",
+    "Select baselines by name. Never introduce a free-form revision parameter: an ad-hoc",
+    "revision lets an operator verify one bundle against another baseline's checkout, and",
+    "every individual check still passes."
+  ],
+  "default_baseline": "pi-v0.87.1",
+  "baselines": {
+    "pi-v0.87.1": {
+      "label": "v0.87.1",
+      "revision": "f07218c4d4bbc12bef056a7058c3dd49dfe41abe",
+      "bundle_path": "",
+      "captured_at": "2026-09-23T12:05:52Z",
+      "source_endpoints": [
+        "models.dev",
+        "NVIDIA NIM",
+        "OpenRouter",
+        "Vercel AI Gateway",
+        "Radius"
+      ]
+    },
+    "pi-v1.0.0": {
+      "label": "v1.0.0",
+      "revision": "a13d35a742c6ef8462812a28fbe1d8c8b7431c32",
+      "bundle_path": "v1.0.0",
+      "captured_at": null,
+      "source_endpoints": [
+        "models.dev",
+        "NVIDIA NIM",
+        "OpenRouter",
+        "Vercel AI Gateway",
+        "Radius"
+      ]
+    }
+  }
+}

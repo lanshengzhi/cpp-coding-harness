@@ -9,13 +9,24 @@ import json
 import subprocess
 from pathlib import Path
 
-from record_pi_ai_provenance import BASELINE_REVISION, TARGET_PROVIDERS
+from record_pi_ai_provenance import (
+    TARGET_PROVIDERS,
+    bundle_dir,
+    resolve_baseline,
+)
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixture-root", default=Path("fixtures/pi-ai"), type=Path)
     parser.add_argument("--pi-root", type=Path)
+    parser.add_argument(
+        "--baseline",
+        help=(
+            "named baseline to verify, as registered in "
+            "fixtures/pi-ai/baselines.json (default: the registry default)"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -68,18 +79,30 @@ def _load_artifact(path: Path, provider_id: str) -> dict[str, dict[str, dict]]:
 def main() -> int:
     args = _parse_args()
     fixture_root = args.fixture_root.resolve()
-    provenance_path = fixture_root / "models" / "provenance.json"
+    # Verification binds to the baseline that owns the bundle under test, not to a module
+    # constant: the expected revision is the registry entry for that baseline (ADR 0065).
+    baseline = resolve_baseline(args.baseline)
+    bundle_root = bundle_dir(fixture_root, baseline)
+    provenance_path = bundle_root / "models" / "provenance.json"
     try:
         provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise SystemExit(f"cannot read provenance: {error}") from error
     if provenance.get("schema") != "cpp-coding-harness/pi-ai-provenance/1":
         raise SystemExit("unexpected provenance schema")
+    recorded_baseline = provenance.get("baseline")
+    if recorded_baseline is not None and recorded_baseline != baseline["name"]:
+        raise SystemExit(
+            f"bundle records baseline {recorded_baseline!r}, not {baseline['name']!r}"
+        )
     source = provenance.get("source", {})
-    if source.get("revision") != BASELINE_REVISION:
-        raise SystemExit("provenance source revision is not the pinned baseline")
-    if args.pi_root and _revision(args.pi_root.resolve()) != BASELINE_REVISION:
-        raise SystemExit("pi checkout is not at the pinned baseline")
+    if source.get("revision") != baseline["revision"]:
+        raise SystemExit(
+            f"provenance source revision is not the {baseline['name']} revision "
+            f"({baseline['revision']})"
+        )
+    if args.pi_root and _revision(args.pi_root.resolve()) != baseline["revision"]:
+        raise SystemExit(f"pi checkout is not at the {baseline['name']} revision")
 
     providers = provenance.get("providers", {})
     if set(providers) != set(TARGET_PROVIDERS):
@@ -92,7 +115,7 @@ def main() -> int:
         expected_path = f"models/providers/{provider_id}.json"
         if record.get("path") != expected_path:
             raise SystemExit(f"invalid provenance path: {provider_id}")
-        path = fixture_root / record["path"]
+        path = bundle_root / record["path"]
         if not path.is_file():
             raise SystemExit(f"missing artifact: {path}")
         if _sha256(path) != record["sha256"]:
@@ -116,7 +139,10 @@ def main() -> int:
         if apis != record["apis"]:
             raise SystemExit(f"API grouping mismatch: {provider_id}")
 
-    print("pi-ai provenance: PASS (six artifacts, hashes, and model sets verified)")
+    print(
+        f"pi-ai provenance: PASS (six artifacts, hashes, and model sets verified; "
+        f"baseline {baseline['name']})"
+    )
     return 0
 
 

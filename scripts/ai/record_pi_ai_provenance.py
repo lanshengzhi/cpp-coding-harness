@@ -13,8 +13,6 @@ from shutil import copyfile
 from typing import Any
 
 
-BASELINE_PREFIX = "f07218c4"
-BASELINE_REVISION = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe"
 TARGET_PROVIDERS = (
     "deepseek",
     "kimi-coding",
@@ -24,6 +22,65 @@ TARGET_PROVIDERS = (
     "opencode-go",
 )
 PROVENANCE_FILENAME = "provenance.json"
+
+# The named-baseline registry is the single authority for pi revisions and bundle paths
+# (ADR 0065). It is resolved relative to this file, never relative to --fixture-root, so a
+# copied fixture tree still verifies against the repository's policy.
+REGISTRY_PATH = Path(__file__).resolve().parents[2] / "fixtures" / "pi-ai" / "baselines.json"
+REGISTRY_SCHEMA = "cpp-coding-harness/pi-ai-baselines/1"
+
+
+def load_baselines(registry_path: Path = REGISTRY_PATH) -> dict[str, Any]:
+    """Return the named-baseline registry, refusing any schema or shape we do not understand."""
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise SystemExit(f"cannot read baseline registry {registry_path}: {error}") from error
+    if not isinstance(registry, dict) or registry.get("schema") != REGISTRY_SCHEMA:
+        raise SystemExit(f"unexpected baseline registry schema: {registry_path}")
+    baselines = registry.get("baselines")
+    if not isinstance(baselines, dict) or not baselines:
+        raise SystemExit(f"baseline registry has no baselines: {registry_path}")
+    for name, entry in baselines.items():
+        if not isinstance(name, str) or not name:
+            raise SystemExit(f"baseline registry has an invalid baseline name: {name!r}")
+        if not isinstance(entry, dict):
+            raise SystemExit(f"baseline registry entry is not an object: {name}")
+        revision = entry.get("revision")
+        if not isinstance(revision, str) or len(revision) != 40:
+            raise SystemExit(
+                f"baseline {name} must record a full 40-character revision, got {revision!r}"
+            )
+        if not isinstance(entry.get("bundle_path"), str):
+            raise SystemExit(f"baseline {name} must record a string bundle_path")
+    if registry.get("default_baseline") not in baselines:
+        raise SystemExit(f"default_baseline is not registered: {registry_path}")
+    return registry
+
+
+def resolve_baseline(name: str | None = None, registry_path: Path = REGISTRY_PATH) -> dict[str, Any]:
+    """Resolve a baseline by name to its registry entry. Selection is by name only."""
+    registry = load_baselines(registry_path)
+    selected = name if name is not None else registry["default_baseline"]
+    entry = registry["baselines"].get(selected)
+    if entry is None:
+        known = ", ".join(sorted(registry["baselines"]))
+        raise SystemExit(f"unknown baseline {selected!r}; registered baselines: {known}")
+    return {"name": selected, **entry}
+
+
+def bundle_dir(fixture_root: Path, baseline: dict[str, Any]) -> Path:
+    """The bundle directory a baseline owns, relative to the fixture root."""
+    bundle_path = baseline["bundle_path"]
+    return fixture_root if bundle_path == "" else fixture_root / bundle_path
+
+
+# Kept for importers that still expect module-level symbols. These are derived from the
+# registry's default baseline rather than restated, so the registry stays the only place a
+# revision is written down.
+_DEFAULT_BASELINE = resolve_baseline()
+BASELINE_PREFIX = _DEFAULT_BASELINE["revision"][:8]
+BASELINE_REVISION = _DEFAULT_BASELINE["revision"]
 
 
 def _parse_args() -> argparse.Namespace:
@@ -45,6 +102,13 @@ def _parse_args() -> argparse.Namespace:
         "--generation-command",
         required=True,
         help="exact generator command, including its output directory",
+    )
+    parser.add_argument(
+        "--baseline",
+        help=(
+            "named baseline to record, as registered in "
+            "fixtures/pi-ai/baselines.json (default: the registry default)"
+        ),
     )
     return parser.parse_args()
 
@@ -114,16 +178,33 @@ def main() -> int:
     pi_root = args.pi_root.resolve()
     generated_catalog = args.generated_catalog.resolve()
     fixture_root = args.fixture_root.resolve()
+    baseline = resolve_baseline(args.baseline)
     revision = _git_revision(pi_root)
-    if revision != BASELINE_REVISION or not revision.startswith(BASELINE_PREFIX):
+    if revision != baseline["revision"]:
         raise SystemExit(
-            f"pi checkout is {revision}, expected {BASELINE_REVISION} ({BASELINE_PREFIX})"
+            f"pi checkout is {revision}, but baseline {baseline['name']} records "
+            f"{baseline['revision']}"
         )
 
     source_dir = generated_catalog / "providers"
     if not source_dir.is_dir():
         source_dir = generated_catalog
-    fixture_dir = fixture_root / "models" / "providers"
+    bundle_root = bundle_dir(fixture_root, baseline)
+    provenance_path = bundle_root / "models" / PROVENANCE_FILENAME
+    # Never write across baselines: if the destination bundle already records a different
+    # baseline, refuse rather than overwrite the only surviving record of that snapshot.
+    if provenance_path.is_file():
+        try:
+            existing = json.loads(provenance_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise SystemExit(f"cannot read existing provenance: {error}") from error
+        existing_baseline = existing.get("baseline")
+        if existing_baseline is not None and existing_baseline != baseline["name"]:
+            raise SystemExit(
+                f"bundle at {bundle_root} already records baseline {existing_baseline!r}; "
+                f"refusing to overwrite it with {baseline['name']!r}"
+            )
+    fixture_dir = bundle_root / "models" / "providers"
     fixture_dir.mkdir(parents=True, exist_ok=True)
 
     artifacts: dict[str, dict[str, Any]] = {}
@@ -144,6 +225,7 @@ def main() -> int:
 
     provenance = {
         "schema": "cpp-coding-harness/pi-ai-provenance/1",
+        "baseline": baseline["name"],
         "source": {
             "repository": "https://github.com/earendil-works/pi",
             "checkout": "external pi checkout supplied via --pi-root",
@@ -159,7 +241,6 @@ def main() -> int:
             "resolution": "The pinned generator output is authoritative; the final set is recorded below.",
         },
     }
-    provenance_path = fixture_root / "models" / PROVENANCE_FILENAME
     provenance_path.parent.mkdir(parents=True, exist_ok=True)
     provenance_path.write_text(
         json.dumps(provenance, indent=2, ensure_ascii=False) + "\n",

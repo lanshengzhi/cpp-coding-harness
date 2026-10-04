@@ -7,7 +7,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -15,10 +15,80 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const fixtureDir = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(fixtureDir, "../..");
 const piCheckout = process.env.PI_CHECKOUT ?? path.resolve(repoRoot, "../pi");
-const frozenCommit = "f07218c4d4bbc12bef056a7058c3dd49dfe41abe";
+
+// The named-baseline registry is the single authority for pi revisions (ADR 0065),
+// resolved relative to this file rather than from the environment.
+const REGISTRY_PATH = path.join(fixtureDir, "baselines.json");
+const REGISTRY_SCHEMA = "cpp-coding-harness/pi-ai-baselines/1";
+
+function resolveBaseline(name) {
+	const registry = JSON.parse(readFileSync(REGISTRY_PATH, "utf8"));
+	if (registry.schema !== REGISTRY_SCHEMA) {
+		throw new Error(`unexpected baseline registry schema: ${REGISTRY_PATH}`);
+	}
+	const selected = name ?? registry.default_baseline;
+	const entry = registry.baselines[selected];
+	if (!entry) {
+		throw new Error(
+			`unknown baseline ${JSON.stringify(selected)}; registered baselines: ` +
+				Object.keys(registry.baselines).sort().join(", "),
+		);
+	}
+	return { registry, name: selected, ...entry };
+}
+
+function owningBaseline(registry, target, root) {
+	// The historical bundle occupies the fixture root, so a later bundle nests inside it;
+	// ownership resolves by the LONGEST matching bundle path.
+	const relativeTarget = path.relative(root, target);
+	let owner = null;
+	for (const [name, entry] of Object.entries(registry.baselines)) {
+		const bundlePath = entry.bundle_path;
+		const matches =
+			bundlePath === ""
+				? true
+				: relativeTarget === bundlePath || relativeTarget.startsWith(`${bundlePath}/`);
+		if (!matches) {
+			continue;
+		}
+		if (owner === null || bundlePath.length > owner.entry.bundle_path.length) {
+			owner = { name, entry };
+		}
+	}
+	return owner;
+}
+
+function bundleDirectory(root, baseline) {
+	const bundlePath = baseline.bundle_path;
+	return bundlePath === "" ? root : path.join(root, bundlePath);
+}
+
+const baseline = resolveBaseline(process.env.PI_BASELINE);
 const head = execFileSync("git", ["-C", piCheckout, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-if (head !== frozenCommit) {
-	throw new Error(`pi checkout must be at ${frozenCommit}, found ${head}`);
+if (head !== baseline.revision) {
+	throw new Error(`pi checkout must be at ${baseline.revision} (baseline ${baseline.name}), found ${head}`);
+}
+
+// The write target is derived from the selected baseline's bundle path, so the guard below
+// checks the destination this run will actually use rather than whatever the caller passed.
+const captureRoot = bundleDirectory(fixtureDir, baseline);
+const owner = owningBaseline(baseline.registry, captureRoot, fixtureDir);
+if (owner && owner.name !== baseline.name) {
+	throw new Error(
+		`refusing to capture into ${captureRoot}: it belongs to bundle ${JSON.stringify(owner.name)}, ` +
+			`but this capture records baseline ${JSON.stringify(baseline.name)}`,
+	);
+}
+// Any explicitly requested destination must also belong to this run's baseline.
+for (const target of process.argv.slice(2)) {
+	const destination = path.resolve(target);
+	const targetOwner = owningBaseline(baseline.registry, destination, fixtureDir);
+	if (targetOwner && targetOwner.name !== baseline.name) {
+		throw new Error(
+			`refusing to write ${destination}: it belongs to bundle ${JSON.stringify(targetOwner.name)}, ` +
+				`but this capture records baseline ${JSON.stringify(baseline.name)}`,
+		);
+	}
 }
 
 const aiSrc = (relative: string): string =>
@@ -136,7 +206,7 @@ function canonicalStringify(value: unknown): string {
 	return JSON.stringify(value) ?? "null";
 }
 
-const wireDirectory = path.join(fixtureDir, "wire");
+const wireDirectory = path.join(captureRoot, "wire");
 writeFileSync(path.join(wireDirectory, "openai-completions-deepseek.sse"), sse);
 writeFileSync(
 	path.join(wireDirectory, "openai-completions-deepseek-ts-request.json"),

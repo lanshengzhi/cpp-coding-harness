@@ -5,13 +5,31 @@ compared by tests in this repository against the C++ surface, so the gate's evid
 checklist away. No fixture value is a live credential or derived from one; all credential-like
 strings are distinguishable `dummy-*` tokens (see [Sanitization rules](#sanitization-rules)).
 
+## Named baselines
+
+Baseline revisions are **not** written down here or in any script. They live in
+[`baselines.json`](baselines.json), the registry introduced by
+[ADR 0065](../../docs/adr/0065-bind-pi-ai-evidence-bundles-to-a-named-baseline-registry.md).
+A baseline **name** resolves to exactly one full 40-character revision and one bundle path, and
+the capture, record, and verify scripts all read that registry. Select a baseline by name
+(`--baseline`, or `PI_BASELINE` for the capture script); there is deliberately no free-form
+revision argument, because an ad-hoc revision lets an operator verify one bundle against another
+baseline's checkout while every individual check still passes.
+
+The historical bundle below occupies the fixture root itself (`bundle_path: ""`), is preserved in
+place, and stays verifiable. Later baselines get their own bundle subdirectory, so recording one
+never rewrites another — generators refuse to write into a bundle owned by a different baseline.
+
+Registered baselines: `pi-v0.87.1` (default) and `pi-v1.0.0`.
+
 ## Issue #784 T1 provenance snapshot (pi v0.87.1)
 
 The snapshot named below is the current #784/#785 catalog acceptance target. It is intentionally
 revision- and hash-pinned; an unpinned "latest" catalog is not a provenance reference.
 
 The T1 catalog gate re-ran pi's generator at the exact upstream revision
-`f07218c4d4bbc12bef056a7058c3dd49dfe41abe` (`f07218c4`, tag `v0.87.1`). The run completed at
+`f07218c4d4bbc12bef056a7058c3dd49dfe41abe` (`f07218c4`, tag `v0.87.1`), registered as baseline
+`pi-v0.87.1` in [`baselines.json`](baselines.json). The run completed at
 `2026-09-23T12:05:52Z` from the pi checkout root with:
 
 ```text
@@ -201,7 +219,9 @@ shared by the scoped adapters:
   (`#761`): the current-baseline pi-ai DeepSeek Chat Completions request bytes, raw SSE
   sequence, and full assistant event snapshot. Regenerate from the sibling pinned checkout
   with `../pi/node_modules/.bin/tsx fixtures/pi-ai/capture/capture-completions-ts-events.mts`;
-  the script refuses any checkout other than `f07218c4`.
+  the script refuses any checkout whose `git rev-parse HEAD` does not match the revision the
+  selected baseline records, and refuses to write into a bundle owned by another baseline.
+  Select a baseline with `PI_BASELINE=<name>`; the default is `pi-v0.87.1`.
 - `wire/openai-responses-deepseek-ts-request.json` + `.sse` + `-ts-events.json` (#340): the frozen
   DeepSeek `openai-responses` request bytes, raw SSE sequence, and TS assistant event snapshot. The
   final `response.completed` frame is SSE-terminated (a single trailing `\n\n`) so strict SSE

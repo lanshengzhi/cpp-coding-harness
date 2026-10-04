@@ -62,6 +62,14 @@ _Avoid_: Advisory architecture test, source-format style check, optional CI job
 The one-time import boundary for pi's session and configuration formats, separate from Pike's runtime domain model.
 _Avoid_: Runtime dual-read, deprecation shims, shared default directories
 
+**Named Baseline**:
+A named pi revision, recorded by full 40-character commit SHA, that owns exactly one evidence bundle and the verification of that bundle. Baselines are selected by name, never by an ad-hoc revision argument.
+_Avoid_: Parity Baseline (historical), tag name, short SHA prefix, free-form revision parameter
+
+**Evidence Bundle**:
+The committed artifacts captured for one Named Baseline, bound to that baseline's revision and carrying its own capture timestamp, source endpoint set, and digests. A bundle is a recorded observation, not a value recomputable from its revision, because catalog data is read from live services.
+_Avoid_: Regenerated snapshot, Parity Baseline snapshot, checksum of a checkout
+
 **Runtime Root**:
 The shared runtime for one Pike invocation, spanning Agent Session replacements until final application Close.
 _Avoid_: Singleton scheduler, executor hierarchy, event bus, one thread or loop per Owner Package

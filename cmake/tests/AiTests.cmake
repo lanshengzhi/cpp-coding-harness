@@ -15,6 +15,12 @@ include_guard(GLOBAL)
     )
     set_tests_properties(cch_pi_ai_provenance PROPERTIES
         LABELS "ai;catalog;issue765;compat-pi")
+    add_test(
+        NAME cch_pi_ai_baseline_boundary
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ai/BaselineBoundaryTest.py
+    )
+    set_tests_properties(cch_pi_ai_baseline_boundary PROPERTIES
+        LABELS "ai;catalog;issue765;compat-pi")
 
     # AI
     add_executable(cch_tests_ai
