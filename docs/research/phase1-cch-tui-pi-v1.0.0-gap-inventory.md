@@ -6,7 +6,6 @@
 - Upstream: pi release v1.0.0, exact commit a13d35a742c6ef8462812a28fbe1d8c8b7431c32, package packages/tui.
 - ADR 0035's reference 83114817c68f5413e4d7ba6d7003ddc511cd31d2 is not an ancestor of this upstream commit (merge base aa0ec808b970db31822e07835a46647cb51d9d66). ADR 0060's pin f07218c4d4bbc12bef056a7058c3dd49dfe41abe is an ancestor. Findings compare against exact v1.0.0; the f07218c4..a13d35a7 window is used only to identify later upstream changes.
 - This is an inventory, not a product decision or implementation proposal. Pi code is comparison evidence, not Pike design authority (ADR 0053).
-- Pike has 69 tracked files under src/tui/ (19,199 lines); pi's package tree has a different structure and includes tests/native/docs, so raw file or LOC totals are not treated as capability parity measures.
 
 ## Findings
 
