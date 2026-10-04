@@ -24,6 +24,7 @@ include_guard(GLOBAL)
         tests/harness/session/SessionMessageJsonTest.cpp
         tests/harness/session/SessionRedactionCoverageTest.cpp
         tests/harness/session/SessionRoundTripGoldenTest.cpp
+        tests/harness/session/SessionStoreConformanceTest.cpp
         tests/harness/session/SessionStoreTest.cpp
         tests/harness/session/SessionTreeTest.cpp
         tests/tools/AsyncToolsTest.cpp
