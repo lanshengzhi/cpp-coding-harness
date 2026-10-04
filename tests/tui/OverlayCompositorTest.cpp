@@ -257,6 +257,37 @@ TEST_CASE("OverlayCompositor clips base images intersecting overlaid regions", "
     CHECK(output.images[0].resource_id == 2);
 }
 
+TEST_CASE("OverlayCompositor picks the nearest cell aspect for Kitty images", "[tui][overlay][spec]") {
+    const auto materialize = [](tui::InlineImageProtocol protocol) {
+        auto capabilities = kitty_capabilities();
+        capabilities.inline_images = protocol;
+        tui::RenderResult output{
+                .lines = std::vector<std::string>(10, std::string(20, ' ')),
+                .images = {tui::InlineImageRenderRegion{
+                        .resource_id = 99,
+                        .encoded_data = "AAAA",
+                        .mime_type = "image/png",
+                        .pixel_width = 1920,
+                        .pixel_height = 1000,
+                        .max_width = 20,
+                        .max_height = 10,
+                        .region = tui::CellRegion{.column = 0, .row = 0},
+                }},
+        };
+        return tui::detail::OverlayCompositor::materialize_images(std::move(output), capabilities, 20, 10);
+    };
+
+    const auto kitty = materialize(tui::InlineImageProtocol::Kitty);
+    REQUIRE(kitty.images.size() == 1);
+    CHECK(kitty.images[0].region.columns == 20);
+    CHECK(kitty.images[0].region.rows == 5);
+
+    const auto iterm = materialize(tui::InlineImageProtocol::ITerm2);
+    REQUIRE(iterm.images.size() == 1);
+    CHECK(iterm.images[0].region.columns == 20);
+    CHECK(iterm.images[0].region.rows == 6);
+}
+
 TEST_CASE("OverlayCompositor offsets overlay images into the composed buffer", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};

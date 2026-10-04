@@ -180,6 +180,16 @@ void append_trailing_columns(ComposedRow& row, const std::vector<TerminalToken>&
     return std::move(row.text);
 }
 
+[[nodiscard]] std::size_t nearest_cell_count(long double ideal, std::size_t upper) {
+    if (upper <= 1) return upper;
+    const auto lower = upper - 1;
+    const auto score = [ideal](std::size_t count) {
+        const auto value = static_cast<long double>(count);
+        return std::max(value / ideal, ideal / value);
+    };
+    return score(lower) < score(upper) ? lower : upper;
+}
+
 } // namespace
 
 support::Expected<std::reference_wrapper<Overlay>> OverlayCompositor::add_overlay(
@@ -264,14 +274,25 @@ RenderResult OverlayCompositor::materialize_images(
         const auto height_scale =
             static_cast<long double>(max_height * cells.height) / image.pixel_height;
         const auto scale = std::min(width_scale, height_scale);
-        const auto columns = std::max<std::size_t>(
-            1,
-            std::min(max_width, static_cast<std::size_t>(std::ceil(
-                static_cast<long double>(image.pixel_width) * scale / cells.width))));
-        const auto rows = std::max<std::size_t>(
-            1,
-            std::min(max_height, static_cast<std::size_t>(std::ceil(
-                static_cast<long double>(image.pixel_height) * scale / cells.height))));
+        auto rows = std::max<std::size_t>(1,
+                std::min(max_height,
+                        static_cast<std::size_t>(
+                                std::ceil(static_cast<long double>(image.pixel_height) * scale / cells.height))));
+        auto columns = std::max<std::size_t>(1,
+                std::min(max_width,
+                        static_cast<std::size_t>(
+                                std::ceil(static_cast<long double>(image.pixel_width) * scale / cells.width))));
+        if (capabilities.inline_images == InlineImageProtocol::Kitty) {
+            if (width_scale <= height_scale) {
+                const auto ideal_rows = static_cast<long double>(columns) * cells.width * image.pixel_height /
+                                        (static_cast<long double>(image.pixel_width) * cells.height);
+                rows = nearest_cell_count(ideal_rows, rows);
+            } else {
+                const auto ideal_columns = static_cast<long double>(rows) * cells.height * image.pixel_width /
+                                           (static_cast<long double>(image.pixel_height) * cells.width);
+                columns = nearest_cell_count(ideal_columns, columns);
+            }
+        }
         const auto target_row = image.region.row + added_rows;
         if (target_row >= available_rows || rows > available_rows - target_row) continue;
 
