@@ -346,6 +346,36 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
         os._exit(127)
     os.close(slave_fd)
 
+    def term_handler(signum, frame):
+        # A parent may stop us before we ever serve -- a spawn that could not publish the
+        # state does exactly that. A default SIGTERM would end us without running any
+        # cleanup and leave the pike child orphaned, because the parent never learns its
+        # pid; this process is the only one that has it. Installed here, before anything
+        # else, so the only window without it is before the child exists at all.
+        try:
+            os.kill(child_pid, signal.SIGTERM)
+        except OSError:
+            pass
+        for _ in range(30):
+            try:
+                if os.waitpid(child_pid, os.WNOHANG)[0]:
+                    break
+            except ChildProcessError:
+                break
+            time.sleep(0.1)
+        else:
+            try:
+                os.kill(child_pid, signal.SIGKILL)
+            except OSError:
+                pass
+            try:
+                os.waitpid(child_pid, 0)
+            except ChildProcessError:
+                pass
+        os._exit(1)
+
+    signal.signal(signal.SIGTERM, term_handler)
+
     # Record the child so `cmd_kill` can still reach it if this broker is taken
     # out forcefully. The broker is the only process that knows the pid. spawn
     # writes the state file just after forking us, so wait briefly for it rather
@@ -611,21 +641,35 @@ def cmd_spawn(a):
             os.waitpid(broker_pid, 0)
         except ChildProcessError:
             pass
-        print(f"{name}: could not publish the session state; no session was started",
-              file=sys.stderr)
+        print(f"{name}: could not publish the session state; the broker was stopped "
+              f"and no session was started", file=sys.stderr)
         sys.exit(1)
-    time.sleep(0.8)
+    # Wait for the broker to register its child. It writes `child_pid` only after it has
+    # taken the state and confirmed this run owns it, so that field is what separates a
+    # started session from one that died on the way up. Reporting `spawned` before it is
+    # a success claim nothing has established -- and the broker now exits when it cannot
+    # register, which makes that path reachable rather than theoretical.
+    deadline = time.time() + 5.0
+    registered = False
+    broker_gone = False
+    while time.time() < deadline:
+        try:
+            st_now = json.loads(state_file(name).read_text())
+        except (OSError, ValueError):
+            st_now = {}
+        if st_now.get("token") == token and st_now.get("child_pid"):
+            registered = True
+            break
+        try:
+            if os.waitpid(broker_pid, os.WNOHANG)[0]:
+                broker_gone = True
+                break
+        except ChildProcessError:
+            broker_gone = True
+            break
+        time.sleep(0.05)
 
-    # Reap a broker that already exited during the settle. Non-blocking on
-    # purpose: a live broker must keep serving later `send`/`screen`/`expect`
-    # calls, so this never waits on it. Once spawn returns, the broker is a
-    # detached process and the OS reaps it -- a boundary this helper states
-    # rather than claims to close.
-    try:
-        reaped, _ = os.waitpid(broker_pid, os.WNOHANG)
-    except ChildProcessError:
-        reaped = 0
-    if reaped:
+    if not registered:
         # Only drop the record this spawn published: a run started under the same name
         # since owns its own, and removing it would leave a live session with no state.
         lock = state_lock(name)
@@ -639,7 +683,10 @@ def cmd_spawn(a):
                     state_file(name).unlink(missing_ok=True)
             finally:
                 release_lock(lock)
-        print(f"broker for {name!r} exited during start-up", file=sys.stderr)
+        why = ("the broker exited during start-up" if broker_gone
+               else "the broker did not register its child in time")
+        print(f"{name}: no session was started -- {why}", file=sys.stderr)
+        sys.exit(1)
 
     print(f"spawned {name}: broker pid={broker_pid} "
           f"(pike child owned by the broker) log={raw_path}")
