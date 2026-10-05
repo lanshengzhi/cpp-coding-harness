@@ -697,7 +697,6 @@ def cmd_spawn(a):
     deadline = time.time() + 5.0
     registered = False
     broker_gone = False
-    lock_was_taken = None
     while time.time() < deadline:
         try:
             st_now = json.loads(state_file(name).read_text())
@@ -721,8 +720,13 @@ def cmd_spawn(a):
         # The registration field is re-read under the lock, because the broker can
         # register between the last poll above and this point -- deleting then would
         # remove the record of a session that is running.
+        #
+        # `confirmed_absent` records the one way this branch may conclude that no session
+        # exists: it read the state and saw no `child_pid` for this token, or saw that a
+        # later run owns the name (so this broker will refuse to serve). Anything else --
+        # no lock, an unreadable state -- leaves the answer unknown.
+        confirmed_absent = False
         lock = state_lock(name)
-        lock_was_taken = lock is not None
         if lock is not None:
             try:
                 try:
@@ -734,17 +738,19 @@ def cmd_spawn(a):
                         registered = True     # it came up after all: keep the record
                     else:
                         state_file(name).unlink(missing_ok=True)
-
+                        confirmed_absent = True
+                elif current is not None:
+                    confirmed_absent = True   # a later run owns the name; this one will not serve
             finally:
                 release_lock(lock)
     if not registered:
-        if lock_was_taken is False:
-            # Without the lock we cannot tell whether the broker registered, so we cannot
-            # report failure and leave it running: it could reach registration afterwards
-            # and serve a session this command already reported as not started. Stop the
-            # broker we forked and collect it, which bounds the outcome to "no session".
-            # The wait is bounded because the broker's own handler reaps its child and
-            # exits on SIGTERM.
+        if not confirmed_absent and not broker_gone:
+            # We could not confirm that no session was registered. Reporting failure and
+            # leaving the broker running would let it register afterwards and serve a
+            # session this command said was not started, so stop it and collect it. Not if
+            # it was already reaped: a reaped pid may since have been reused, and the
+            # signal would reach an unrelated process. The wait is bounded because the
+            # broker's own handler reaps its child and exits on SIGTERM.
             try:
                 os.kill(broker_pid, signal.SIGTERM)
             except OSError:
