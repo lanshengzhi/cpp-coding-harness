@@ -93,7 +93,13 @@ def state_lock(name):
     Returns None when the lock cannot be taken. An unknown state is not one to write
     or delete, so callers treat that as failure rather than proceeding without it.
     """
-    fd = os.open(str(session_dir(name) / "state.lock"), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fd = os.open(str(session_dir(name) / "state.lock"), os.O_CREAT | os.O_RDWR, 0o600)
+    except OSError:
+        # The directory may be gone, or unreadable. Same answer as failing to take the
+        # lock: no lock, so callers must not write or delete blind -- but this has to be
+        # caught here, or the exception escapes past the fail-closed branches.
+        return None
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
