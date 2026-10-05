@@ -18,6 +18,7 @@ This lets concurrent verification runs stay isolated by RUN_DIR.
 """
 
 import argparse
+import errno
 import fcntl
 import json
 import os
@@ -92,9 +93,39 @@ def process_starttime(pid):
         return None
 
 
-def same_process(pid, starttime):
-    """True while `pid` still names the process whose start time was recorded."""
-    return starttime is not None and process_starttime(pid) == starttime
+def signal_if_same(pid, starttime, sig=signal.SIGKILL):
+    """Signal `pid` only while it is provably still the process this state recorded.
+
+    A pid is a name, not a handle: it can be released and reused between a liveness
+    check and the signal, so comparing the start time and then calling
+    `os.kill(pid, ...)` still leaves a window to land in. A pidfd is bound to the
+    process it was opened on, so the signal goes through that handle instead and no
+    such window remains. Returns "signalled", "gone", "reused" or "unidentified".
+    """
+    if starttime is None:
+        return "unidentified"            # nothing recorded to compare against
+    try:
+        fd = os.pidfd_open(pid)
+    except OSError as exc:
+        if exc.errno == errno.ESRCH:
+            return "gone"                # no such process: the number is free
+        # No usable handle on this kernel, or no permission to take one. "Cannot
+        # look" is not "nothing is there", so this fails closed rather than reading
+        # an unsupported pidfd as an already-finished session.
+        return "unidentified"
+    try:
+        current = process_starttime(pid)
+        if current is None:
+            return "unidentified"        # cannot read an identity to compare
+        if current != starttime:
+            return "reused"              # the name now points at another process
+        try:
+            signal.pidfd_send_signal(fd, sig)
+        except OSError:
+            return "gone"
+        return "signalled"
+    finally:
+        os.close(fd)
 
 
 def broker_request(name, payload, timeout=30):
@@ -549,29 +580,23 @@ def cmd_kill(a):
             # The broker never answered, so both pids are this state's own
             # responsibility.
             targets = ("broker_pid", "child_pid")
-        # Either way a signal goes only to a process we can still identify as the one
-        # this state names. `kill(pid, 0)` would only show that the number is in use,
-        # which is not the same thing.
-        unidentifiable = None
+        # Either way a signal goes only to a process we can still prove is the one
+        # this state names, through a handle rather than the pid: `kill(pid, 0)` (or a
+        # start-time comparison) would only show that the number is in use.
+        outcomes = []
         for pidkey in targets:
             pid = st.get(pidkey)
             if not pid:
                 continue
-            if same_process(pid, st.get(pidkey + "_starttime")):
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                except OSError:
-                    pass
-            elif pid_alive(pid) and process_starttime(pid) is None:
-                # A live process holds this number and we cannot read enough to say
-                # whether it is ours.
-                unidentifiable = pidkey
-        if unidentifiable:
-            # Signal nothing and keep the state: guessing here is what turns a cleanup
-            # into a kill against an unrelated process.
-            print(f"{a.name}: the pid recorded for "
-                  f"{unidentifiable.replace('_pid', '')} is in use and cannot be "
-                  f"identified as this session's; leaving state and socket in place",
+            outcomes.append((pidkey, signal_if_same(pid, st.get(pidkey + "_starttime"))))
+        if any(outcome == "unidentified" for _, outcome in outcomes):
+            # A pid this state names is in use, or its identity cannot be read, so we
+            # cannot say the process is still ours. Signal nothing and keep the state
+            # and socket: guessing here is what turns a cleanup into a kill against an
+            # unrelated process.
+            which = [key for key, outcome in outcomes if outcome == "unidentified"][0]
+            print(f"{a.name}: cannot confirm the process recorded for "
+                  f"{which.replace('_pid', '')}; keeping state and socket",
                   file=sys.stderr)
             sys.exit(4)
         stf.unlink(missing_ok=True)
