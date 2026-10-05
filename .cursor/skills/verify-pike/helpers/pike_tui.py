@@ -338,26 +338,17 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
     it. Ownership of the child therefore stays inside the helper instead of
     resting on an outside reaper.
     """
-    child_pid = os.fork()
-    if child_pid == 0:
-        os.setsid()
-        os.dup2(slave_fd, 0)
-        os.dup2(slave_fd, 1)
-        os.dup2(slave_fd, 2)
-        os.close(master_fd)
-        os.close(slave_fd)
-        if cwd:
-            os.chdir(cwd)
-        os.execvpe(argv[0], argv, env)
-        os._exit(127)
-    os.close(slave_fd)
+    child_pid = None
 
     def term_handler(signum, frame):
         # A parent may stop us before we ever serve -- a spawn that could not publish the
         # state does exactly that. A default SIGTERM would end us without running any
         # cleanup and leave the pike child orphaned, because the parent never learns its
-        # pid; this process is the only one that has it. Installed here, before anything
-        # else, so the only window without it is before the child exists at all.
+        # pid; this process is the only one that has it. Installed *before* the fork, so
+        # there is no moment where a child exists and this handler does not: an empty
+        # `child_pid` is exactly "nothing forked yet, nothing to collect".
+        if child_pid is None:
+            os._exit(1)
         try:
             os.kill(child_pid, signal.SIGTERM)
         except OSError:
@@ -381,6 +372,20 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
         os._exit(1)
 
     signal.signal(signal.SIGTERM, term_handler)
+
+    child_pid = os.fork()
+    if child_pid == 0:
+        os.setsid()
+        os.dup2(slave_fd, 0)
+        os.dup2(slave_fd, 1)
+        os.dup2(slave_fd, 2)
+        os.close(master_fd)
+        os.close(slave_fd)
+        if cwd:
+            os.chdir(cwd)
+        os.execvpe(argv[0], argv, env)
+        os._exit(127)
+    os.close(slave_fd)
 
     # Record the child so `cmd_kill` can still reach it if this broker is taken
     # out forcefully. The broker is the only process that knows the pid. spawn
