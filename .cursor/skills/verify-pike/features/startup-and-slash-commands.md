@@ -20,11 +20,11 @@ available commands.
 
 Preconditions:
 
-- `build/release/pike` is built; Doctor passes.
+- The run's `$BIN` is built and exported; Doctor passes.
 - A disposable `HOME`/`XDG_CONFIG_HOME` root is exported.
 - The helper is on path as `$HELPER`.
 
-- **Boot.** Spawn: `"$HELPER" spawn --name boot --binary "$PWD/build/release/pike"
+- **Boot.** Spawn: `"$HELPER" spawn --name boot --binary "$BIN"
   --cwd "$VERIFY_ROOT/ws" --env "HOME=$HOME" --env "XDG_CONFIG_HOME=$XDG_CONFIG_HOME"
   -- --no-session`. The screen shows `Press ctrl+o to show full startup help` and a
   footer ending in the cwd and `unknown`. Run `"$HELPER" screen --name boot

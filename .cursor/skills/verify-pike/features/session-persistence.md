@@ -27,7 +27,7 @@ Preconditions:
 - A workspace directory `$VERIFY_ROOT/ws` exists and is the `--cwd`.
 
 - **Start a session-backed run.** Spawn **without** `--no-session`:
-  `"$HELPER" spawn --name sess --binary "$PWD/build/release/pike"
+  `"$HELPER" spawn --name sess --binary "$BIN"
   --cwd "$VERIFY_ROOT/ws" --env "HOME=$HOME" --env "XDG_CONFIG_HOME=$XDG_CONFIG_HOME"`.
   The TUI opens with a normal prompt (no `--no-session` marker).
 - **Send a prompt.** `"$HELPER" send --name sess --text "persist me"`, then

@@ -24,10 +24,10 @@ Preconditions:
 - This surface uses a plain subprocess, not the PTY harness.
 
 - **Offline failure.** `out="$(env HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME"
-  build/release/pike --print ping </dev/null 2>err.txt)"; echo "exit=$?"`. Expect
-  exit 1, empty stdout, and `err.txt` containing `Unknown provider: unknown`.
+  $BIN --print ping </dev/null 2>"$EVIDENCE_DIR/err.txt")"; echo "exit=$?"`. Expect
+  exit 1, empty stdout, and `$EVIDENCE_DIR/err.txt` containing `Unknown provider: unknown`.
 - **Stdin prompt.** `printf 'hello' | env HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME"
-  build/release/pike --print 2>err.txt`; offline it fails the same deterministic
+  $BIN --print 2>"$EVIDENCE_DIR/err.txt"`; offline it fails the same deterministic
   way.
 - **Success shape (configured provider).** With a valid credential/model, the
   same command exits 0 and stdout holds only the assistant text. Requires live
