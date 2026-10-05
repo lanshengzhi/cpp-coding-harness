@@ -344,9 +344,14 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
         # A parent may stop us before we ever serve -- a spawn that could not publish the
         # state does exactly that. A default SIGTERM would end us without running any
         # cleanup and leave the pike child orphaned, because the parent never learns its
-        # pid; this process is the only one that has it. Installed *before* the fork, so
-        # there is no moment where a child exists and this handler does not: an empty
-        # `child_pid` is exactly "nothing forked yet, nothing to collect".
+        # pid; this process is the only one that has it.
+        #
+        # The window where a child exists but this handler does not is closed by blocking
+        # SIGTERM across the fork, not by being installed early: installing early is not
+        # enough, because the kernel can create the child before the parent assigns
+        # `child_pid`. The guard below is a fallback for a signal that arrives before any
+        # fork -- `child_pid is None` means "nothing forked yet" only *until* the fork, so
+        # on its own it cannot close anything.
         if child_pid is None:
             os._exit(1)
         try:
