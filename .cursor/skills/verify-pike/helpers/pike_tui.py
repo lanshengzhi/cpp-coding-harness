@@ -239,6 +239,8 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path)
         except (OSError, ValueError):
             time.sleep(0.01)
             continue
+        if st.get("broker_pid") != os.getpid():
+            break                             # a later session owns the file now
         st["child_pid"] = child_pid
         try:
             state_file(name).write_text(json.dumps(st))
@@ -246,45 +248,49 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path)
             pass
         break
 
-    rawf = open(raw_path, "ab", buffering=0)
-    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sp = sock_path(name)
-    if os.path.exists(sp):
-        os.unlink(sp)
-    srv.bind(sp)
-    srv.listen(4)
-    srv.settimeout(0.2)
-    running = True
-    raw = bytearray()
-
-    def child_reaped():
-        """Answer "has the child exited?" and collect it in the same call.
-
-        `kill(pid, 0)` cannot answer this for our own unreaped child: a zombie
-        still holds the pid, so it always looks alive. `waitpid(WNOHANG)` answers
-        and reaps, which is why the parent uses it.
-        """
-        try:
-            reaped, _ = os.waitpid(child_pid, os.WNOHANG)
-        except ChildProcessError:
-            return True                      # already collected
-        return reaped != 0
-
-    def drain():
-        while True:
-            rl, _, _ = select.select([master_fd], [], [], 0.05)
-            if not rl:
-                break
-            try:
-                chunk = os.read(master_fd, 65536)
-            except OSError:
-                chunk = b""
-            if not chunk:
-                break
-            rawf.write(chunk)
-            raw.extend(chunk)
-
+    rawf = None
+    srv = None
+    bound = False
     try:
+        rawf = open(raw_path, "ab", buffering=0)
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sp = sock_path(name)
+        if os.path.exists(sp):
+            os.unlink(sp)
+        srv.bind(sp)
+        bound = True
+        srv.listen(4)
+        srv.settimeout(0.2)
+        running = True
+        raw = bytearray()
+
+        def child_reaped():
+            """Answer "has the child exited?" and collect it in the same call.
+
+            `kill(pid, 0)` cannot answer this for our own unreaped child: a zombie
+            still holds the pid, so it always looks alive. `waitpid(WNOHANG)` answers
+            and reaps, which is why the parent uses it.
+            """
+            try:
+                reaped, _ = os.waitpid(child_pid, os.WNOHANG)
+            except ChildProcessError:
+                return True                      # already collected
+            return reaped != 0
+
+        def drain():
+            while True:
+                rl, _, _ = select.select([master_fd], [], [], 0.05)
+                if not rl:
+                    break
+                try:
+                    chunk = os.read(master_fd, 65536)
+                except OSError:
+                    chunk = b""
+                if not chunk:
+                    break
+                rawf.write(chunk)
+                raw.extend(chunk)
+
         while running:
             try:
                 conn, _ = srv.accept()
@@ -358,18 +364,25 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path)
             os.close(master_fd)
         except OSError:
             pass
-        rawf.close()
-        srv.close()
-        try:
-            os.unlink(sp)
-        except OSError:
-            pass
+        if rawf is not None:
+            rawf.close()
+        if srv is not None:
+            srv.close()
+        if bound:
+            try:
+                os.unlink(sp)
+            except OSError:
+                pass
         # A stopped broker owns no live session, so it drops the state pointer with
-        # the socket. A SIGKILL leaves both; the next bind unlinks the socket, and
-        # `cmd_kill` (or the operator) can still remove the state file.
+        # the socket -- but only while the file still names this broker. A later
+        # session may have replaced it, and that one is not ours to remove. A
+        # SIGKILL leaves both; the next bind unlinks the socket, and `cmd_kill`
+        # (or the operator) can still remove the state file.
         try:
-            state_file(name).unlink(missing_ok=True)
-        except OSError:
+            st = json.loads(state_file(name).read_text())
+            if st.get("broker_pid") == os.getpid():
+                state_file(name).unlink(missing_ok=True)
+        except (OSError, ValueError):
             pass
 
 
