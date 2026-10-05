@@ -202,8 +202,6 @@ export PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run"
   **not** a general VT emulator and does **not** handle the alternate screen
   (`\x1b[?1049h` / `l`), so against an application that switches screens the
   reconstruction -- and an `expect` that matches on it -- can be incomplete.
-  tmux `capture-pane` reconstructs in the terminal itself and does not share that
-  limit.
 - **Send text / keys.** Helper: `"$HELPER" send --name main --text "/help"`, then
   `"$HELPER" send --name main --key enter`. tmux: `tmux -S "$TMUX_SOCK" send-keys -t "$SESS" -l "/help"`,
   then `tmux -S "$TMUX_SOCK" send-keys -t "$SESS" Enter`. Helper named keys: `enter escape tab
