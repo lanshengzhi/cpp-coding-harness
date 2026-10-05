@@ -163,11 +163,12 @@ leaves the state and socket in place. Treat 4 as **unfinished cleanup, not a cle
 one**, and stop for any other non-zero exit too — removing the root would delete
 the state that says what is still running.
 
-`kill` exits **5** when the identity check passed and cleanup had begun, but
-signalling a verified target failed for a reason other than "already gone". A target
-may already have been signalled and the session may still be running, so **5 is not
-4**: it carries no promise that nothing was sent, and it is not a clean kill. The
-state is kept while it still belongs to this session — do not assume it is still
+`kill` exits **5** when the identity check passed and cleanup had begun, but could
+not be confirmed complete — because signalling a verified target failed for a reason
+other than "already gone", the state lock could not be acquired, or the state file was
+unreadable. A target may already have been signalled and the session may still be running,
+so **5 is not 4**: it carries no promise that nothing was sent, and it is not a clean
+kill. The state is kept while it still belongs to this session — do not assume it is still
 there, because the broker may have finished its own teardown and removed the state
 and socket before this command got that far. **Stop, keep `$VERIFY_ROOT`, look at the
 evidence that does exist, and retry.**
@@ -390,10 +391,11 @@ rm -rf "$VERIFY_ROOT"
 
 The helper's `kill` terminates the Pike child and the broker for that session. It
 exits **4** when a recorded pid cannot be confirmed as this session's (nothing sent,
-state and socket kept) and **5** when cleanup began but a verified target could not be
-signalled. **Both are defined under Drive; read that, then stop**: neither is a clean
-kill, and any non-zero `kill` stops cleanup here — removing `$VERIFY_ROOT` would
-delete the state that records what is still running.
+state and socket kept) and **5** when cleanup began but could not be confirmed complete
+(signal failure, state lock unavailable, or state unreadable). **Both are defined
+under Launch; read that, then stop**: neither is a clean kill, and any non-zero
+`kill` stops cleanup here — removing `$VERIFY_ROOT` would delete the state that
+records what is still running.
 
 **Hard requirement: end the tmux server before removing the root, on the run's
 own socket.** Removing the socket file does not stop the server — `rm -rf
