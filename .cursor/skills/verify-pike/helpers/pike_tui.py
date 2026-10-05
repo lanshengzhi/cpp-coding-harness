@@ -95,7 +95,18 @@ def broker_request(name, payload, timeout=30):
         sys.exit(2)
     finally:
         s.close()
-    return json.loads(buf.decode()) if buf else {}
+    if not buf:
+        # The broker accepted the connection and closed it without answering.
+        # Exit 3 is "protocol/transport", distinct from 2 "cannot reach the
+        # broker" and 1 "the anchor was not seen" -- otherwise a silent broker
+        # reads as a missing anchor.
+        print(f"broker for session {name!r} closed without a response", file=sys.stderr)
+        sys.exit(3)
+    try:
+        return json.loads(buf.decode())
+    except ValueError:
+        print(f"broker for session {name!r} sent an unparseable response", file=sys.stderr)
+        sys.exit(3)
 
 
 # ---------------------------------------------------------------------------
@@ -216,87 +227,88 @@ def broker_loop(name, master_fd, child_pid, rows, cols, raw_path):
             rawf.write(chunk)
             raw.extend(chunk)
 
-    while running:
-        try:
-            conn, _ = srv.accept()
-        except socket.timeout:
-            drain()
-            if not pid_alive(child_pid):
-                # child exited; drain remaining then shut down
+    try:
+        while running:
+            try:
+                conn, _ = srv.accept()
+            except socket.timeout:
                 drain()
-                time.sleep(0.2)
-                drain()
-                running = False
-            continue
-        data = b""
-        while not data.endswith(b"\n"):
-            chunk = conn.recv(4096)
-            if not chunk:
-                break
-            data += chunk
-        try:
-            req = json.loads(data.decode())
-        except Exception:
-            conn.close()
-            continue
-        op = req.get("op")
-        resp = {}
-        if op == "send":
-            text = req.get("text", "")
-            os.write(master_fd, text.encode())
-            time.sleep(req.get("settle", 0.3))
-            drain()
-            resp = {"ok": True}
-        elif op == "screen":
-            drain()
-            text = screen_text(raw, rows, cols)
-            resp = {"screen": text}
-        elif op == "expect":
-            deadline = time.time() + req.get("timeout", 10)
-            found = False
-            while time.time() < deadline:
-                drain()
-                if req.get("text", "") in screen_text(raw, rows, cols):
-                    found = True
+                if not pid_alive(child_pid):
+                    # child exited; drain remaining then shut down
+                    drain()
+                    time.sleep(0.2)
+                    drain()
+                    running = False
+                continue
+            data = b""
+            while not data.endswith(b"\n"):
+                chunk = conn.recv(4096)
+                if not chunk:
                     break
-                time.sleep(0.1)
-            resp = {"found": found}
-        elif op == "kill":
-            running = False
-            resp = {"ok": True}
-        conn.sendall((json.dumps(resp) + "\n").encode())
-        conn.close()
+                data += chunk
+            try:
+                req = json.loads(data.decode())
+            except Exception:
+                conn.close()
+                continue
+            op = req.get("op")
+            resp = {}
+            if op == "send":
+                text = req.get("text", "")
+                os.write(master_fd, text.encode())
+                time.sleep(req.get("settle", 0.3))
+                drain()
+                resp = {"ok": True}
+            elif op == "screen":
+                drain()
+                text = screen_text(raw, rows, cols)
+                resp = {"screen": text}
+            elif op == "expect":
+                deadline = time.time() + req.get("timeout", 10)
+                found = False
+                while time.time() < deadline:
+                    drain()
+                    if req.get("text", "") in screen_text(raw, rows, cols):
+                        found = True
+                        break
+                    time.sleep(0.1)
+                resp = {"found": found}
+            elif op == "kill":
+                running = False
+                resp = {"ok": True}
+            conn.sendall((json.dumps(resp) + "\n").encode())
+            conn.close()
 
-    # teardown
-    try:
-        os.kill(child_pid, signal.SIGTERM)
-    except OSError:
-        pass
-    for _ in range(30):
-        if not pid_alive(child_pid):
-            break
-        time.sleep(0.1)
-    try:
-        os.kill(child_pid, signal.SIGKILL)
-    except OSError:
-        pass
-    try:
-        os.close(master_fd)
-    except OSError:
-        pass
-    rawf.close()
-    srv.close()
-    try:
-        os.unlink(sp)
-    except OSError:
-        pass
-    # A stopped broker owns no live session, so it drops the state pointer with
-    # the socket. A SIGKILL leaves both; the next bind unlinks the socket, and
-    # `cmd_kill` (or the operator) can still remove the state file.
-    try:
-        state_file(name).unlink(missing_ok=True)
-    except OSError:
-        pass
+    finally:
+        try:
+            os.kill(child_pid, signal.SIGTERM)
+        except OSError:
+            pass
+        for _ in range(30):
+            if not pid_alive(child_pid):
+                break
+            time.sleep(0.1)
+        try:
+            os.kill(child_pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
+        rawf.close()
+        srv.close()
+        try:
+            os.unlink(sp)
+        except OSError:
+            pass
+        # A stopped broker owns no live session, so it drops the state pointer with
+        # the socket. A SIGKILL leaves both; the next bind unlinks the socket, and
+        # `cmd_kill` (or the operator) can still remove the state file.
+        try:
+            state_file(name).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def cmd_spawn(a):
@@ -397,8 +409,22 @@ def cmd_kill(a):
     stf = state_file(a.name)
     if stf.exists():
         st = json.loads(stf.read_text())
-        broker_request(a.name, {"op": "kill"})
-        time.sleep(0.5)
+        try:
+            broker_request(a.name, {"op": "kill"})
+        except SystemExit:
+            # The broker is already gone, or its socket is stale. Its PID cleanup
+            # below is exactly what that state needs, so do not abort here -- a
+            # transport failure must not skip the reclamation.
+            pass
+        # Let the broker's own teardown finish before forcing anything: it may
+        # wait for the pike child before it unlinks the socket and the state
+        # file. A fixed short wait would SIGKILL it mid-teardown and leave both
+        # behind.
+        broker_pid = st.get("broker_pid")
+        for _ in range(40):                       # ~4s bound
+            if not broker_pid or not pid_alive(broker_pid):
+                break
+            time.sleep(0.1)
         for pidkey in ("broker_pid", "child_pid"):
             pid = st.get(pidkey)
             if pid and pid_alive(pid):
