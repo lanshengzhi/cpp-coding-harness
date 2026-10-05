@@ -42,11 +42,11 @@ using harness::session::SessionStore;
 
 SessionMetadata metadata_for(const tests::TempWorkspace& workspace) {
     return SessionMetadata{
-        .session_id = "conformance",
-        .created_at = "2026-10-04T00:00:00Z",
-        .workspace = workspace.path(),
-        .provider = "fake",
-        .model = "fake-model",
+            .session_id = "conformance",
+            .created_at = "2026-10-04T00:00:00Z",
+            .workspace = workspace.path(),
+            .provider = "fake",
+            .model = "fake-model",
     };
 }
 
@@ -93,8 +93,7 @@ void remove_no_backing(const harness::session::SessionStore&) {
 }
 
 support::Expected<SessionStore> build_jsonl(const tests::TempWorkspace& workspace) {
-    return SessionStore::create_new(
-            workspace.path() / "conformance.jsonl", metadata_for(workspace));
+    return SessionStore::create_new(workspace.path() / "conformance.jsonl", metadata_for(workspace));
 }
 
 support::Expected<SessionStore> build_in_memory(const tests::TempWorkspace& workspace) {
@@ -259,10 +258,10 @@ void a_label_can_be_cleared(SessionStore& store, const Alternative&) {
 
 void an_empty_retained_tail_is_not_engaged(SessionStore& store, const Alternative&) {
     const harness::session::CompactionEntryValue value{
-        .summary = "summary",
-        .first_kept_entry_id = "first-kept",
-        .tokens_before = 1000,
-        .retained_tail = std::vector<ai::MessageVariant>{},
+            .summary = "summary",
+            .first_kept_entry_id = "first-kept",
+            .tokens_before = 1000,
+            .retained_tail = std::vector<ai::MessageVariant>{},
     };
     REQUIRE(store.append_compaction(std::nullopt, value).has_value());
 
@@ -271,16 +270,13 @@ void an_empty_retained_tail_is_not_engaged(SessionStore& store, const Alternativ
     // first-kept path. Normalize at append time instead.
     const auto entries = store.entries();
     REQUIRE(entries.size() == 1);
-    const auto& compaction =
-            std::get<harness::session::CompactionEntryValue>(entries.front().value);
+    const auto& compaction = std::get<harness::session::CompactionEntryValue>(entries.front().value);
     CHECK_FALSE(compaction.retained_tail.has_value());
 }
 
 void branch_summaries_join_the_active_path(SessionStore& store, const Alternative&) {
     REQUIRE(store.append(user_message("branch root")).has_value());
-    REQUIRE(store
-                    .append_branch_summary(
-                            std::nullopt, "abandoned-leaf", "summary", std::nullopt, std::nullopt)
+    REQUIRE(store.append_branch_summary(std::nullopt, "abandoned-leaf", "summary", std::nullopt, std::nullopt)
                     .has_value());
 
     // The summary of an abandoned branch hangs on the path the session is
@@ -352,22 +348,21 @@ void a_moved_store_keeps_appending(SessionStore& store, const Alternative&) {
 }
 
 constexpr std::array<NamedCase, 15> kCases{
-    NamedCase{"metadata is the construction header", &metadata_is_the_construction_header},
-    NamedCase{"a fresh store is empty", &a_fresh_store_is_empty},
-    NamedCase{"appends become the live leaf", &appends_become_the_live_leaf},
-    NamedCase{"typed appends reach the live tree", &typed_appends_reach_the_live_tree},
-    NamedCase{"context rebuild walks the active leaf path",
-            &context_rebuild_walks_the_active_leaf_path},
-    NamedCase{"branching to a missing entry fails", &branching_to_a_missing_entry_fails},
-    NamedCase{"reset_leaf returns to the root position", &reset_leaf_returns_to_the_root_position},
-    NamedCase{"a leaf marker reparents later messages", &a_leaf_marker_reparents_later_messages},
-    NamedCase{"labels attach only to the entry they name", &labels_attach_only_to_the_entry_they_name},
-    NamedCase{"a label can be cleared", &a_label_can_be_cleared},
-    NamedCase{"an empty retained tail is not engaged", &an_empty_retained_tail_is_not_engaged},
-    NamedCase{"branch summaries join the active path", &branch_summaries_join_the_active_path},
-    NamedCase{"the tree snapshot is self-consistent", &the_tree_snapshot_is_self_consistent},
-    NamedCase{"queries answer without the session file", &queries_answer_without_the_session_file},
-    NamedCase{"a moved store keeps appending", &a_moved_store_keeps_appending},
+        NamedCase{"metadata is the construction header", &metadata_is_the_construction_header},
+        NamedCase{"a fresh store is empty", &a_fresh_store_is_empty},
+        NamedCase{"appends become the live leaf", &appends_become_the_live_leaf},
+        NamedCase{"typed appends reach the live tree", &typed_appends_reach_the_live_tree},
+        NamedCase{"context rebuild walks the active leaf path", &context_rebuild_walks_the_active_leaf_path},
+        NamedCase{"branching to a missing entry fails", &branching_to_a_missing_entry_fails},
+        NamedCase{"reset_leaf returns to the root position", &reset_leaf_returns_to_the_root_position},
+        NamedCase{"a leaf marker reparents later messages", &a_leaf_marker_reparents_later_messages},
+        NamedCase{"labels attach only to the entry they name", &labels_attach_only_to_the_entry_they_name},
+        NamedCase{"a label can be cleared", &a_label_can_be_cleared},
+        NamedCase{"an empty retained tail is not engaged", &an_empty_retained_tail_is_not_engaged},
+        NamedCase{"branch summaries join the active path", &branch_summaries_join_the_active_path},
+        NamedCase{"the tree snapshot is self-consistent", &the_tree_snapshot_is_self_consistent},
+        NamedCase{"queries answer without the session file", &queries_answer_without_the_session_file},
+        NamedCase{"a moved store keeps appending", &a_moved_store_keeps_appending},
 };
 
 } // namespace
@@ -382,8 +377,7 @@ TEST_CASE("every persistence alternative satisfies the storage conformance cases
         "[harness][session][store][conformance][issue464][spec]") {
     for (const auto& alternative : kAlternatives) {
         for (const auto& conformance_case : kCases) {
-            DYNAMIC_SECTION(std::string{alternative.name} + " / "
-                            + std::string{conformance_case.name}) {
+            DYNAMIC_SECTION(std::string{alternative.name} + " / " + std::string{conformance_case.name}) {
                 tests::TempWorkspace workspace;
                 auto built = alternative.build(workspace);
                 REQUIRE(built.has_value());
