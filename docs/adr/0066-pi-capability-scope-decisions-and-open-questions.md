@@ -27,20 +27,18 @@ Stated by **@lansy, 2026-10-05**, and delegated with authority to decide the ope
 > **Pike implements a functional subset of pi. For the subset Pike does implement, the behaviour a user
 > experiences is the same as pi's.**
 
-This is the rule the per-capability rows below are decided against, and it settles the distinction the
+This is the rule per-capability membership will be decided against, and it settles a distinction the
 earlier drafts kept circling:
 
 - **A capability inside the subset** must behave as pi does for the user. An internal mechanism may
   differ — that is permitted, and the user-visible result may not.
 - **A capability outside the subset** is not implemented. That is a decision, and it is recorded as
   Deferred — distinct from "nobody has decided".
-- **"Not decided"** now means only one thing: subset membership has not been settled.
+- **"Not decided"** means subset membership has not been settled for that capability.
 
-Under this rule, **Pike's subset is the interactive coding agent**. The four 甲 items are all outside
-it — background task orchestration, an additional session-store backend, model-generated code
-execution, and server-side model proxying are each a different product form or deployment shape, not a
-missing capability within the interactive agent. They are recorded as Deferred below, by delegated
-authority, with @lansy named as the source of the rule.
+**This rule does not by itself determine any individual capability's membership.** It states how an
+included capability must behave; it does not enumerate which capabilities are included. Per-capability
+membership remains for the owner to rule, and the rows below stay `No decision` until he does.
 
 ## Owner decisions
 
@@ -137,11 +135,11 @@ Pike's counterpart is therefore `src/agent/harness/`, not that path.
 | `packages/codemode` (whole package) | 11 files / 1,655 LOC (`declarations.ts` 13KB, `runtime/`) | **No decision.** Tied upstream to grammar tool-call machinery that Pike already carries as Deferred. |
 | Image generation (in-package capability, `packages/ai`) | `packages/ai/src/image-models.ts` (50 lines), `images-api-registry.ts` (53), `images.ts` (26) | **No decision.** Pike has image *input* handling (`ImageInput.cpp`); upstream image *generation* is a separate outbound API surface. |
 | Classifier models (in-package capability) | `packages/ai/src/types.ts:1161` (`ModelTypeMap.classifier: ClassifierModel<ClassifierApi>`), `models.ts` (`classify()` declarations at :228/:348/:966), `api/llama-cpp-classify.ts` (458 lines) + `.lazy.ts` (6), `coding-agent/src/core/model-registry.ts:77` (`findOfType("classifier", …)`) | **No decision.** Scope is the classifier model kind only: at this baseline `ModelTypeMap` has exactly `chat`, `image`, and `classifier`. Pike has no `ClassifierModel`, `classify()`, or `findOfType` equivalent. |
-| Durable execution layer (in-package capability of `packages/durable`) | scheduler 1,337 · generation 677 · output 288 · view 237 · submissions 207 · task-graph 222 · live 175 · inbox 132 · registry 114 · define 44 — the 10 listed files are 3,433 lines; `packages/durable` totals 15,483 | **Deferred** — outside Pike's subset, by delegated authority @lansy 2026-10-05: not part of the interactive coding agent Pike implements, and not a missing capability within it. The rationale is @Cindy's, applied under the owner's stated subset rule. |
-| SQLite session store (in-package capability) | `packages/durable/src/storage/sqlite/` — `database.ts` 38 · `index.ts` 8 · `migrations.ts` 125 · `node.ts` 210 · `storage.ts` 870 = **1,251 lines** | **Deferred** — outside Pike's subset, by delegated authority @lansy 2026-10-05: not part of the interactive coding agent Pike implements, and not a missing capability within it. The rationale is @Cindy's, applied under the owner's stated subset rule. |
-| Session transactions | `packages/durable/src/session/transaction.ts` (1,023 lines) | **Deferred** — outside Pike's subset, by delegated authority @lansy 2026-10-05. Not part of the interactive coding agent Pike implements; not a missing capability within it. Rationale above is @Cindy's, applied under the owner's stated subset rule. |
-| Extension/registry system | `packages/durable/src/harness/define.ts` (44), `harness/registry.ts` (114); `defineExtension` / `createRegistry` / `wrapTool` | **Deferred** — outside Pike's subset, by delegated authority @lansy 2026-10-05. Not part of the interactive coding agent Pike implements; not a missing capability within it. Rationale above is @Cindy's, applied under the owner's stated subset rule. |
-| `streamProxy` (server-side LLM forwarding, server-held auth) | `packages/agent/src/proxy.ts` 406 lines | **Deferred** — outside Pike's subset, by delegated authority @lansy 2026-10-05: not part of the interactive coding agent Pike implements, and not a missing capability within it. The rationale is @Cindy's, applied under the owner's stated subset rule. |
+| Durable execution layer (in-package capability of `packages/durable`) | scheduler 1,337 · generation 677 · output 288 · view 237 · submissions 207 · task-graph 222 · live 175 · inbox 132 · registry 114 · define 44 — the 10 listed files are 3,433 lines; `packages/durable` totals 15,483 | **No decision.** Subset membership not yet ruled per capability. |
+| SQLite session store (in-package capability) | `packages/durable/src/storage/sqlite/` — `database.ts` 38 · `index.ts` 8 · `migrations.ts` 125 · `node.ts` 210 · `storage.ts` 870 = **1,251 lines** | **No decision.** Subset membership not yet ruled per capability. |
+| Session transactions | `packages/durable/src/session/transaction.ts` (1,023 lines) | **No decision.** Subset membership not yet ruled per capability. |
+| Extension/registry system | `packages/durable/src/harness/define.ts` (44), `harness/registry.ts` (114); `defineExtension` / `createRegistry` / `wrapTool` | **No decision.** Subset membership not yet ruled per capability. |
+| `streamProxy` (server-side LLM forwarding, server-held auth) | `packages/agent/src/proxy.ts` 406 lines | **No decision.** Subset membership not yet ruled per capability. |
 Note the distinction the other tables make necessary: recording "the prompt does not reference
 MCP" is **not** a decision that MCP is unsupported. The two are independent, and only the first is
 currently observable. Likewise, Pike's image *input* support says nothing about image *generation*,
