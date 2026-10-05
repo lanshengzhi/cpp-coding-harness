@@ -6,6 +6,8 @@ status: accepted
 
 Semantic Parity is evaluated against a recorded pi commit and package version rather than an unpinned upstream HEAD. Advancing that baseline is an explicit audit that classifies upstream additions, changed semantics, local drift, and still-deferred capabilities; implementation specs may inspect newer pi source, but cannot silently redefine the repository's current compatibility claim.
 
+> The pi parity authority established here is superseded by [ADR 0053](0053-replace-pi-parity-authority-with-the-product-architecture-contract.md): pi is now evidence rather than design authority.
+
 ## Considered options
 
 - Always claim compatibility with latest pi: rejected because upstream movement could invalidate the claim without any local code change or review.
