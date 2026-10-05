@@ -43,7 +43,7 @@ Preconditions:
   at the top level; they live one level down.
 - **Proof.** The screen snapshot after submission, the path of the new `.jsonl`,
   and its parsed entries together prove persistence. Capture the file path and
-  first entries into ``artifacts/verify-pike/session-transcript.txt``.
+  first entries into ``$EVIDENCE_DIR/session-transcript.txt``.
 
 ## Gotchas
 

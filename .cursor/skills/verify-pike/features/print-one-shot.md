@@ -33,7 +33,7 @@ Preconditions:
   same command exits 0 and stdout holds only the assistant text. Requires live
   credentials and user authorization; out of scope for the offline default.
 - **Proof.** Capture stdout, stderr, and exit code into
-  `artifacts/verify-pike/print-*.txt`. The offline proof shows the deterministic
+  `$EVIDENCE_DIR/print-*.txt`. The offline proof shows the deterministic
   error and exit code; do not present it as a successful model call.
 
 ## Gotchas

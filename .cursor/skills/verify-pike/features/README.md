@@ -7,8 +7,8 @@ is `.cursor/skills/verify-pike/SKILL.md`.
 
 ## Baseline preconditions
 
-- `build/release/pike` exists and `pike --version` exits 0 (build it per
-  `SKILL.md` Launch if not).
+- The run's `$BIN` exists and `$BIN --version` exits 0 (Release or Debug — build
+  and export it per `SKILL.md` Launch if not).
 - A disposable state root: set `HOME` and `XDG_CONFIG_HOME` to a fresh
   `mktemp -d` tree. Pike's Agent Config Directory is `$XDG_CONFIG_HOME/pike/agent`
   and **no env var relocates it** — isolation is via `HOME`/`XDG_CONFIG_HOME`.
@@ -21,6 +21,11 @@ is `.cursor/skills/verify-pike/SKILL.md`.
 
 ## Driving conventions
 
+- `$BIN`, `$HELPER`, `$VERIFY_ROOT`, `$TMUX_SOCK`/`$SESS` and `$EVIDENCE_DIR` are
+  defined once in `SKILL.md` (Launch, Evidence). The feature files use them
+  instead of repeating the mechanics, so take their definitions from there.
+- Give each run its own `$EVIDENCE_DIR`. A fixed capture name lets a second run
+  overwrite the first run's proof; the run id is what keeps them apart.
 - Start every recipe from the baseline state unless its preconditions say
   otherwise.
 - Drive the TUI through `helpers/pike_tui.py` (`spawn`/`send`/`screen`/`expect`/

@@ -25,7 +25,7 @@ Preconditions:
 - **Open the picker.** Spawn `--no-session`, then send `/resume` and Enter:
   `"$HELPER" send --name res --text "/resume"`, `"$HELPER" send --name res --key
   enter`. Expect the header: `"$HELPER" expect --name res --text "Resume Session"`.
-- **Read the list.** `"$HELPER" screen --name res --path artifacts/verify-pike/resume-picker.txt`.
+- **Read the list.** `"$HELPER" screen --name res --path $EVIDENCE_DIR/resume-picker.txt`.
   The picker shows a `Resume Session (Current Folder)` header, scope/sort hints
   (`tab scope`, `re:<pattern>`, `ctrl+s sort`), and the prior session rows
   including the known prompt text.

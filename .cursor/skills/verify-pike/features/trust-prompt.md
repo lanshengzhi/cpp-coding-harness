@@ -36,7 +36,7 @@ anchors to assert.
 - **Boot into the prompt.** Spawn the TUI in the untrusted workspace; the screen
   shows `Trust project folder?` with options `Trust`, `Trust parent folder`,
   `Trust (this session only)`, `Do not trust`, `Do not trust (this session
-  only)`. Snapshot the modal as `artifacts/verify-pike/trust-modal.txt`.
+  only)`. Snapshot the modal as `$EVIDENCE_DIR/trust-modal.txt`.
 - **Confirm it does not cancel on Escape.** Send `Escape` (helper `--key
   escape`, tmux `Escape`), snapshot, and assert `Trust project folder?` is still
   on screen. Repeat with `ctrl+c`.
@@ -44,7 +44,7 @@ anchors to assert.
   times, then `Enter`.
 - **Assert the editor is reachable.** Expect `Press ctrl+o to show full startup
   help` and the untrusted banner. Snapshot as
-  `artifacts/verify-pike/trust-dismissed.txt` and grep for both anchors.
+  `$EVIDENCE_DIR/trust-dismissed.txt` and grep for both anchors.
 - **Proof.** The modal snapshot, the post-dismiss snapshot showing the banner
   and the editor, and a second launch on the same state root going straight to
   the editor together prove the flow.

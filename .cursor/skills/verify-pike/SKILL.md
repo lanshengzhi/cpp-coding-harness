@@ -50,6 +50,14 @@ The Runtime binary is `build/release/pike`. A faster-starting Debug binary is at
 `build/pike` after `cmake --build --preset vcpkg`; prefer the Release binary for
 final evidence, the Debug binary for fast iteration.
 
+**Pick one binary for the whole run and export it.** Every command below, the
+Doctor and the run manifest then refer to the same `$BIN`:
+
+```bash
+BIN="$PWD/build/release/pike"     # or "$PWD/build/pike" for the Debug binary
+export BIN
+```
+
 **Isolation (mandatory).** Pike roots all user state at the Agent Config
 Directory = `$XDG_CONFIG_HOME/pike/agent` (default `~/.config/pike/agent`).
 **No environment variable relocates this root** — `PIKE_CONFIG_DIR` and
@@ -76,7 +84,7 @@ live. Both are first-class; pick one per run and stay on it.
 ```bash
 HELPER=".cursor/skills/verify-pike/helpers/pike_tui.py"
 PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run" "$HELPER" spawn \
-  --name main --binary "$PWD/build/release/pike" --cwd "$VERIFY_ROOT/ws" \
+  --name main --binary "$BIN" --cwd "$VERIFY_ROOT/ws" \
   --env "HOME=$HOME" --env "XDG_CONFIG_HOME=$XDG_CONFIG_HOME" \
   -- --no-session          # or omit for a persisted session; add flags after --
 ```
@@ -90,7 +98,7 @@ machine can be addressed — neither by a drive nor by cleanup.
 TMUX_SOCK="$VERIFY_ROOT/tmux.sock"     # inside the disposable root; removed with it
 SESS="pike-verify"
 tmux -S "$TMUX_SOCK" new-session -d -s "$SESS" -x 100 -y 30 \
-  "env HOME=$HOME XDG_CONFIG_HOME=$XDG_CONFIG_HOME $PWD/build/release/pike --no-session"
+  "env HOME=$HOME XDG_CONFIG_HOME=$XDG_CONFIG_HOME $BIN --no-session"
 ```
 Every tmux command in this skill carries `-S "$TMUX_SOCK"`: that one path keeps
 this run's server separate and its teardown scoped to itself. Keep `-S` over `-L`:
@@ -121,7 +129,7 @@ prompt will time out on every anchor below it.
 
 ```bash
 env HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
-  build/release/pike --print "hello" </dev/null
+  $BIN --print "hello" </dev/null
 ```
 
 **Teardown:** kill every session you spawned and remove the disposable root.
@@ -145,7 +153,7 @@ rm -rf "$VERIFY_ROOT"                                   # then the root, socket 
 Run before driving whenever anything looks off. All checks are read-only.
 
 ```bash
-BIN=build/release/pike
+BIN="${BIN:-$PWD/build/release/pike}"   # the run's binary; Release default
 "$BIN" --version                       # prints a version, exit 0
 "$BIN" --help | grep -qF -- "--print"  # flag surface present
 test -x "$BIN"                          # binary is executable
@@ -225,11 +233,11 @@ A proof must capture the **action and the resulting state**, not just the final
 screen, and must **verify the side effect** alongside what's visible.
 
 - **TUI evidence.** Capture the screen after each meaningful action and save it
-  under `artifacts/verify-pike/<feature>-<step>.txt`. With the helper:
-  `"$HELPER" screen --name main --path artifacts/verify-pike/<feature>-<step>.txt`;
+  under `$EVIDENCE_DIR/<feature>-<step>.txt`. With the helper:
+  `"$HELPER" screen --name main --path "$EVIDENCE_DIR/<feature>-<step>.txt"`;
   the raw ANSI transcript at `$PIKE_VERIFY_RUN_DIR/<name>/raw.ansi` is the
   ground truth, and the reconstructed `screen` output is the readable form.
-  With tmux: `tmux -S "$TMUX_SOCK" capture-pane -t "$SESS" -p -e > artifacts/verify-pike/<feature>-<step>.txt`;
+  With tmux: `tmux -S "$TMUX_SOCK" capture-pane -t "$SESS" -p -e > "$EVIDENCE_DIR/<feature>-<step>.txt"`;
   tmux keeps no separate raw transcript, so capture at every step you may need
   to defend. Keep both forms where they exist.
 - **One-shot CLI evidence.** Capture stdout, stderr, and the exit code
@@ -247,8 +255,26 @@ screen, and must **verify the side effect** alongside what's visible.
   user-path result, not a mock: the provider resolution seam genuinely runs. Do
   not present it as a successful model call.
 
+**Run id, and where evidence lives.** Give every run its own id and write its
+captures under `artifacts/verify-pike/<run-id>/`:
+
+```bash
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-<feature>"
+EVIDENCE_DIR="artifacts/verify-pike/$RUN_ID"
+mkdir -p "$EVIDENCE_DIR"
+```
+
+**`<run-id>` must be unique per run.** A fixed capture name lets a second run
+overwrite the first run's proof — the same failure the per-run tmux socket avoids
+for sessions.
+
 Proof artifacts live under a directory you name (e.g. `artifacts/verify-pike/`)
-**outside** the disposable run root, so cleanup never deletes them.
+**outside** the disposable run root, so cleanup never deletes them. **That
+directory is a temporary holding area, not a home:** when the run ends, attach the
+run brief and the relevant captures to the issue, PR, or CI run they support.
+**Never commit a run directory** — a run's captures are evidence for one moment,
+not a repository asset. `artifacts/` is untracked here, and widening `.gitignore`
+is not this skill's business.
 
 ### Run identity (L1)
 
@@ -260,7 +286,7 @@ run_started_at               = <ISO-8601 timestamp>
 run_source_revision          = git rev-parse HEAD
 checkout_state_at_run_start  = git status --porcelain     # taken BEFORE evidence exists
 build_source_state           = unknown unless a build-time identity bound to the binary hash exists
-binary_path                  = build/release/pike
+binary_path                  = the $BIN this run drove (resolve to its real path)
 binary_version               = <BIN> --version
 binary_sha256                = sha256sum <BIN>
 commands                     = <the commands this run actually executed>

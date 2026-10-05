@@ -28,12 +28,12 @@ Preconditions:
   --cwd "$VERIFY_ROOT/ws" --env "HOME=$HOME" --env "XDG_CONFIG_HOME=$XDG_CONFIG_HOME"
   -- --no-session`. The screen shows `Press ctrl+o to show full startup help` and a
   footer ending in the cwd and `unknown`. Run `"$HELPER" screen --name boot
-  --path artifacts/verify-pike/startup-boot.txt`.
+  --path $EVIDENCE_DIR/startup-boot.txt`.
 - **Route a slash command.** Send `/help` then Enter: `"$HELPER" send --name boot
   --text "/help"`, `"$HELPER" send --name boot --key enter`. Expect
   `Available commands:`: `"$HELPER" expect --name boot --text "Available commands:"`.
 - **Read the command list.** `"$HELPER" screen --name boot --path
-  artifacts/verify-pike/startup-help.txt`. The list includes `/login /logout
+  $EVIDENCE_DIR/startup-help.txt`. The list includes `/login /logout
   /resume /fork /tree /reload /compact /trust`.
 - **Proof.** The boot and help snapshots plus the raw `raw.ansi` transcript show
   the banner, the routed command, and its output.
