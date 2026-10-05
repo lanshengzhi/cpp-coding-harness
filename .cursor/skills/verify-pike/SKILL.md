@@ -225,11 +225,12 @@ export PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run"
   **`expect` has four outcomes, and they are not interchangeable.** Exit **0**: the
   anchor is present in the rebuilt view. Exit **1**: the timeout expired without it
   appearing there. Exit **2**: the broker could not be reached. Exit **3**: a
-  protocol/transport failure -- an empty response, unparseable JSON, or a reply of
-  the wrong shape or missing its `found` field. **Only exit 1 is negative evidence
-  that the anchor was not there.** Exits 2 and 3 mean the observation did not
-  happen; recording either as the anchor's absence turns "could not look" into
-  "looked and did not find".
+  protocol/transport failure -- an empty response, unparseable JSON, a reply of the
+  wrong shape, a missing `found` field, or a `found` that is not a boolean (such as
+  the string `"false"`, which is truthy and would otherwise read as a hit). **Only
+  exit 1 is negative evidence that the anchor was not there.** Exits 2 and 3 mean
+  the observation did not happen; recording either as the anchor's absence turns
+  "could not look" into "looked and did not find".
 - **Slash dispatch is first-token.** A `/`-prefixed submission routes only when
   the editor buffer starts with `/`. Clear a stale buffer with `ctrl+c` before
   typing a slash command, or the leftover text prepends and the whole buffer
@@ -268,8 +269,9 @@ screen, and must **verify the side effect** alongside what's visible.
   under Drive**. Keep the raw record as the audit trail and assert on the view;
   read a view from an application outside that parser's subset as partial rather
   than as equivalent to the real rendering. Read a **negative** result only from
-  `expect` exit 1: exits 2 and 3 mean the observation could not be made, so record
-  those as a failed observation rather than as a missing anchor.
+  `expect` exit 1: exits 2 and 3 mean the observation could not be made (the outcome
+  list under Drive defines each), so record those as a failed observation rather
+  than as a missing anchor.
   With tmux: `tmux -S "$TMUX_SOCK" capture-pane -t "$SESS" -p -e > "$EVIDENCE_DIR/<feature>-<step>.txt"`;
   tmux keeps no separate raw transcript, so capture at every step you may need
   to defend. Keep both forms where they exist.
