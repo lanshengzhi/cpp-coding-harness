@@ -572,13 +572,21 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
                 conn.close()
                 break
             data = b""
+            recv_deadline = time.time() + 5.0
             try:
                 while not data.endswith(b"\n"):
+                    remaining = recv_deadline - time.time()
+                    if remaining <= 0:
+                        break
+                    conn.settimeout(max(0.05, remaining))
                     chunk = conn.recv(4096)
                     if not chunk:
                         break
                     data += chunk
-            except socket.timeout:
+            except (socket.timeout, OSError):
+                conn.close()
+                continue
+            if not data.endswith(b"\n"):
                 conn.close()
                 continue
             try:
@@ -605,6 +613,9 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
                     drain()
                     if req.get("text", "") in screen_text(raw, rows, cols):
                         found = True
+                        break
+                    if not verify_ownership():
+                        running = False
                         break
                     time.sleep(0.1)
                 resp = {"found": found}
