@@ -153,11 +153,11 @@ fi
 rm -rf "$VERIFY_ROOT"                                   # then the root, socket file included
 ```
 
-`kill` exits **4** when the pid recorded for a session is in use but cannot be
-identified as that session's: it signals nothing and leaves the state and socket in
-place. Treat 4 as **unfinished cleanup, not a clean one**, and stop for any other
-non-zero exit too — removing the root would delete the state that says what is
-still running.
+`kill` exits **4** when a recorded pid cannot be confirmed as this session's: it
+signals nothing at all — every target is checked before any signal goes out — and
+leaves the state and socket in place. Treat 4 as **unfinished cleanup, not a clean
+one**, and stop for any other non-zero exit too — removing the root would delete
+the state that says what is still running.
 
 ## Doctor
 
@@ -376,11 +376,11 @@ rm -rf "$VERIFY_ROOT"
 ```
 
 The helper's `kill` terminates the Pike child and the broker for that session. It
-exits **4** when the pid its state names is in use but cannot be confirmed as that
-session's: it signals nothing and keeps the state and socket, so **4 is unfinished
-cleanup, not a clean one**. Any non-zero `kill` stops cleanup here for the same
-reason — removing `$VERIFY_ROOT` would delete the state that records what is still
-running.
+exits **4** when a recorded pid cannot be confirmed as this session's: **no signal
+is sent at all** — every target is resolved before any signal goes out — and the
+state and socket are kept, so **4 is unfinished cleanup, not a clean one**. Any
+non-zero `kill` stops cleanup here for the same reason — removing `$VERIFY_ROOT`
+would delete the state that records what is still running.
 
 **Hard requirement: end the tmux server before removing the root, on the run's
 own socket.** Removing the socket file does not stop the server — `rm -rf
