@@ -572,10 +572,10 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
                 conn.close()
                 break
             data = b""
-            recv_deadline = time.time() + 5.0
+            recv_deadline = time.monotonic() + 5.0
             try:
                 while not data.endswith(b"\n"):
-                    remaining = recv_deadline - time.time()
+                    remaining = recv_deadline - time.monotonic()
                     if remaining <= 0:
                         break
                     conn.settimeout(max(0.05, remaining))
@@ -607,18 +607,27 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
                 text = screen_text(raw, rows, cols)
                 resp = {"screen": text}
             elif op == "expect":
-                deadline = time.time() + req.get("timeout", 10)
+                deadline = time.monotonic() + req.get("timeout", 10)
                 found = False
-                while time.time() < deadline:
+                interrupted = False
+                while time.monotonic() < deadline:
                     drain()
                     if req.get("text", "") in screen_text(raw, rows, cols):
                         found = True
                         break
                     if not verify_ownership():
                         running = False
+                        interrupted = True
                         break
                     time.sleep(0.1)
-                resp = {"found": found}
+                if interrupted:
+                    # Observation was cut short because this broker lost ownership.
+                    # Do not return {"found": False}: reporting exit 1 would claim
+                    # the anchor was missing after a full timeout, manufacturing
+                    # absence evidence when the check was aborted.
+                    resp = {"ok": False, "error": "lost ownership during observation"}
+                else:
+                    resp = {"found": found}
             elif op == "kill":
                 if req.get("token") != token:
                     # The caller resolved the session it meant from the state file, and this
@@ -759,10 +768,10 @@ def cmd_spawn(a):
     # started session from one that died on the way up. Reporting `spawned` before it is
     # a success claim nothing has established -- and the broker now exits when it cannot
     # register, which makes that path reachable rather than theoretical.
-    deadline = time.time() + 5.0
+    deadline = time.monotonic() + 5.0
     registered = False
     broker_gone = False
-    while time.time() < deadline:
+    while time.monotonic() < deadline:
         try:
             st_now = json.loads(state_file(name).read_text())
         except (OSError, ValueError):
