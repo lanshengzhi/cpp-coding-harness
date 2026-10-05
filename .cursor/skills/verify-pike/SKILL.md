@@ -429,7 +429,7 @@ confirm a named artifact still exists.
 - `helpers/pike_tui.py` — the PTY driver. Executable (`chmod +x`). Subcommands:
   `spawn`, `send`, `screen`, `expect`, `kill`. Run `helpers/pike_tui.py --help`.
   It ships with the skill; invoke it by path. State per session lives under
-  `$PIKE_VERIFY_RUN_DIR/<name>/` (`state.json`, `raw.ansi`, `broker.sock`).
+  `$PIKE_VERIFY_RUN_DIR/<name>/` (`state.json`, `raw.ansi`, `broker-<token>.sock`).
 - `tmux` — the real-terminal driver. No helper ships for it; the recipe in
   Launch/Drive is the whole contract. Useful when a run needs an in-pane shell
   or live observation. Requires an installed `tmux` (`tmux -V`). **Address it
