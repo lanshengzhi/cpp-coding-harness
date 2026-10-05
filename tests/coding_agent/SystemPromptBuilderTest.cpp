@@ -198,7 +198,7 @@ TEST_CASE("system prompt appends the append section after the documentation bloc
     options.appendSystemPrompt = "APPENDED";
     const auto prompt = coding_agent::prompt::buildSystemPrompt(options);
 
-    const auto docs_at = prompt.find("TUI API details)");
+    const auto docs_at = prompt.find("command-line usage)");
     REQUIRE(docs_at != std::string::npos);
     const auto docs_end = prompt.find("</docs>");
     REQUIRE(docs_end != std::string::npos);

@@ -123,7 +123,10 @@ TEST_CASE("system prompt is built at session construction and flows through Agen
     // docs paths from the source tree.
     CHECK(prompt.find("- Main documentation: " + std::string{CCH_SOURCE_DIR} + "/README.md\n") != std::string::npos);
     CHECK(prompt.find("- Additional docs: " + std::string{CCH_SOURCE_DIR} + "/docs\n") != std::string::npos);
-    CHECK(prompt.find("- Examples: " + std::string{CCH_SOURCE_DIR} + "/examples (extensions, custom tools, SDK)\n") != std::string::npos);
+    // ADR 0065: Pike ships no `examples/` tree, so the prompt must not advertise one.
+    // Presence became absence deliberately -- do not restore the Examples header.
+    CHECK(prompt.find("- Examples:") == std::string::npos);
+    CHECK(prompt.find("examples/") == std::string::npos);
 
     // The trailing posix-normalized cwd section.
     CHECK(prompt.find("<cwd>\n" + workspace.path().string() + "\n</cwd>") != std::string::npos);

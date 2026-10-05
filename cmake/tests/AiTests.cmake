@@ -21,6 +21,13 @@ include_guard(GLOBAL)
     )
     set_tests_properties(cch_pi_ai_baseline_boundary PROPERTIES
         LABELS "ai;catalog;issue765;compat-pi")
+    # ADR 0065: the System Prompt must reference only documentation Pike ships.
+    add_test(
+        NAME cch_prompt_reference_boundary
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ai/PromptReferenceBoundaryTest.py
+    )
+    set_tests_properties(cch_prompt_reference_boundary PROPERTIES
+        LABELS "ai;prompt;compat-pi")
 
     # AI
     add_executable(cch_tests_ai

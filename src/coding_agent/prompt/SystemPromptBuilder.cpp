@@ -110,29 +110,23 @@ constexpr std::string_view kDefaultPreamble =
 /// pi's verbatim block (pinned by the differential golden; ADR 0036 G4).
 [[nodiscard]] std::string build_docs(const BuildSystemPromptOptions& options) {
     std::string text = "pike documentation (read only when the user asks about pike itself, "
-                       "its SDK, extensions, themes, skills, or TUI):\n"
+                       "its usage, keybindings, agent session lifecycle, runtime "
+                       "capacities, or architecture):\n"
                        "- Main documentation: ";
     text += options.readmePath;
     text += "\n- Additional docs: ";
     text += options.docsPath;
-    text += "\n- Examples: ";
-    text += options.examplesPath;
-    text += " (extensions, custom tools, SDK)\n"
-            "- When reading pike docs or examples, resolve docs/... under "
-            "Additional docs and examples/... under Examples, not the current "
-            "working directory\n"
-            "- When asked about: extensions (docs/extensions.md, "
-            "examples/extensions/), themes (docs/themes.md), skills "
-            "(docs/skills.md), prompt templates (docs/prompt-templates.md), TUI "
-            "components (docs/tui.md), keybindings (docs/keybindings.md), SDK "
-            "integrations (docs/sdk.md), custom providers "
-            "(docs/custom-provider.md), adding models (docs/models.md), pike "
-            "packages (docs/packages.md), environment variables "
-            "(docs/environment-variables.md)\n"
-            "- When working on pike topics, read the docs and examples, and "
-            "follow .md cross-references before implementing\n"
+    text += "\n- When reading pike docs, resolve docs/... under Additional docs, "
+            "not the current working directory\n"
+            "- When asked about: usage (docs/usage.md), keybindings "
+            "(docs/keybindings.md), agent session lifecycle "
+            "(docs/agent-lifecycle.md), runtime capacities "
+            "(docs/runtime-capacities.md), architecture / module structure "
+            "(docs/agents/architecture.md)\n"
+            "- When working on pike topics, read the docs and follow .md "
+            "cross-references before implementing\n"
             "- Always read pike .md files completely and follow links to related "
-            "docs (e.g., tui.md for TUI API details)";
+            "docs (e.g., docs/usage.md for command-line usage)";
     return text;
 }
 
