@@ -194,7 +194,7 @@ export PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run"
 - **Snapshot the visible screen**, the primary source of truth. PTY helper
   (ANSI-stripped rows): `"$HELPER" screen --name main`. tmux (keeps colors with
   `-e`): `tmux -S "$TMUX_SOCK" capture-pane -t "$SESS" -p -e`. Save under
-  `artifacts/verify-pike/<feature>-<step>.txt`.
+  `$EVIDENCE_DIR/<feature>-<step>.txt`.
 - **Send text / keys.** Helper: `"$HELPER" send --name main --text "/help"`, then
   `"$HELPER" send --name main --key enter`. tmux: `tmux -S "$TMUX_SOCK" send-keys -t "$SESS" -l "/help"`,
   then `tmux -S "$TMUX_SOCK" send-keys -t "$SESS" Enter`. Helper named keys: `enter escape tab
@@ -255,18 +255,22 @@ screen, and must **verify the side effect** alongside what's visible.
   user-path result, not a mock: the provider resolution seam genuinely runs. Do
   not present it as a successful model call.
 
-**Run id, and where evidence lives.** Give every run its own id and write its
-captures under `artifacts/verify-pike/<run-id>/`:
+**Run id, and where evidence lives.** Give every run its own id and its own
+evidence directory. `$EVIDENCE_DIR` below is the only place captures go:
 
 ```bash
+mkdir -p artifacts/verify-pike
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-<feature>"
-EVIDENCE_DIR="artifacts/verify-pike/$RUN_ID"
-mkdir -p "$EVIDENCE_DIR"
+EVIDENCE_DIR="$(mktemp -d "artifacts/verify-pike/$RUN_ID.XXXXXX")"
 ```
 
-**`<run-id>` must be unique per run.** A fixed capture name lets a second run
-overwrite the first run's proof — the same failure the per-run tmux socket avoids
-for sessions.
+**`<run-id>` must be unique per run, and the directory must be created
+atomically.** A timestamp alone does not guarantee it: two runs of the same
+feature starting in the same second would take the same name, and `mkdir -p`
+would silently reuse the directory — so the second run overwrites the first
+run's proof. `mktemp -d` settles uniqueness in one atomic step and keeps the
+readable run id as the prefix. (A fixed capture name fails the same way; it is
+the same class as the per-run tmux socket.)
 
 Proof artifacts live under a directory you name (e.g. `artifacts/verify-pike/`)
 **outside** the disposable run root, so cleanup never deletes them. **That
@@ -279,7 +283,7 @@ is not this skill's business.
 ### Run identity (L1)
 
 Record a manifest at the start of every run, **before creating any evidence
-file**, alongside the captures (for example `artifacts/verify-pike/<feature>-run/identity.txt`):
+file**, alongside the captures (for example `$EVIDENCE_DIR/identity.txt`):
 
 ```
 run_started_at               = <ISO-8601 timestamp>
