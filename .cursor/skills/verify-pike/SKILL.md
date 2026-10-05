@@ -135,7 +135,12 @@ env HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
 **Teardown:** kill every session you spawned and remove the disposable root.
 
 ```bash
-PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run" "$HELPER" kill --name main
+# A non-zero `kill` means the session was not reclaimed: stop here and keep the
+# root, which holds the state naming what is still running.
+if ! PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run" "$HELPER" kill --name main; then
+  echo "kill failed for main; keeping $VERIFY_ROOT" >&2
+  exit 1
+fi
 # End this run's tmux server BEFORE the root goes away. A socket file means a
 # server was started. These snippets assume no `set -e`, so the failure branch is
 # written out: a kill that fails must never fall through to the rm -rf below.
@@ -147,6 +152,12 @@ if [ -S "$TMUX_SOCK" ]; then
 fi
 rm -rf "$VERIFY_ROOT"                                   # then the root, socket file included
 ```
+
+`kill` exits **4** when the pid recorded for a session is in use but cannot be
+identified as that session's: it signals nothing and leaves the state and socket in
+place. Treat 4 as **unfinished cleanup, not a clean one**, and stop for any other
+non-zero exit too — removing the root would delete the state that says what is
+still running.
 
 ## Doctor
 
@@ -342,8 +353,12 @@ anything stronger.
 Kill only what you started; never kill by process name.
 
 ```bash
-# one helper session
-PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run" "$HELPER" kill --name main
+# one helper session — a non-zero exit means it was not reclaimed, so stop and
+# keep the root: it holds the state that names what is still running.
+if ! PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run" "$HELPER" kill --name main; then
+  echo "kill failed for main; keeping $VERIFY_ROOT" >&2
+  exit 1
+fi
 # all helper sessions for a run root
 pkill -F "$VERIFY_ROOT/run"/*/state.json 2>/dev/null || true
 # this run's tmux server — a socket file means a server was started, and a failed
@@ -358,7 +373,12 @@ fi
 rm -rf "$VERIFY_ROOT"
 ```
 
-The helper's `kill` terminates the Pike child and the broker for that session.
+The helper's `kill` terminates the Pike child and the broker for that session. It
+exits **4** when the pid its state names is in use but cannot be confirmed as that
+session's: it signals nothing and keeps the state and socket, so **4 is unfinished
+cleanup, not a clean one**. Any non-zero `kill` stops cleanup here for the same
+reason — removing `$VERIFY_ROOT` would delete the state that records what is still
+running.
 
 **Hard requirement: end the tmux server before removing the root, on the run's
 own socket.** Removing the socket file does not stop the server — `rm -rf
