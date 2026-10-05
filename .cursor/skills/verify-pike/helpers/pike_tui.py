@@ -201,7 +201,44 @@ def screen_text(raw, rows, cols):
 # ---------------------------------------------------------------------------
 # Broker: owns the PTY master + pike child; services requests over the socket.
 # ---------------------------------------------------------------------------
-def broker_loop(name, master_fd, child_pid, rows, cols, raw_path):
+def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path):
+    """Own the session: fork the pike child, drive its PTY, and reap it.
+
+    The broker is the pike child's parent, so it is also the process that reaps
+    it. Ownership of the child therefore stays inside the helper instead of
+    resting on an outside reaper.
+    """
+    child_pid = os.fork()
+    if child_pid == 0:
+        os.setsid()
+        os.dup2(slave_fd, 0)
+        os.dup2(slave_fd, 1)
+        os.dup2(slave_fd, 2)
+        os.close(master_fd)
+        os.close(slave_fd)
+        if cwd:
+            os.chdir(cwd)
+        os.execvpe(argv[0], argv, env)
+        os._exit(127)
+    os.close(slave_fd)
+
+    # Record the child so `cmd_kill` can still reach it if this broker is taken
+    # out forcefully. The broker is the only process that knows the pid. spawn
+    # writes the state file just after forking us, so wait briefly for it rather
+    # than drop the pid to that race.
+    for _ in range(50):                       # ~0.5s bound
+        try:
+            st = json.loads(state_file(name).read_text())
+        except (OSError, ValueError):
+            time.sleep(0.01)
+            continue
+        st["child_pid"] = child_pid
+        try:
+            state_file(name).write_text(json.dumps(st))
+        except OSError:
+            pass
+        break
+
     rawf = open(raw_path, "ab", buffering=0)
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sp = sock_path(name)
@@ -212,6 +249,19 @@ def broker_loop(name, master_fd, child_pid, rows, cols, raw_path):
     srv.settimeout(0.2)
     running = True
     raw = bytearray()
+
+    def child_reaped():
+        """Answer "has the child exited?" and collect it in the same call.
+
+        `kill(pid, 0)` cannot answer this for our own unreaped child: a zombie
+        still holds the pid, so it always looks alive. `waitpid(WNOHANG)` answers
+        and reaps, which is why the parent uses it.
+        """
+        try:
+            reaped, _ = os.waitpid(child_pid, os.WNOHANG)
+        except ChildProcessError:
+            return True                      # already collected
+        return reaped != 0
 
     def drain():
         while True:
@@ -233,7 +283,7 @@ def broker_loop(name, master_fd, child_pid, rows, cols, raw_path):
                 conn, _ = srv.accept()
             except socket.timeout:
                 drain()
-                if not pid_alive(child_pid):
+                if child_reaped():
                     # child exited; drain remaining then shut down
                     drain()
                     time.sleep(0.2)
@@ -285,13 +335,18 @@ def broker_loop(name, master_fd, child_pid, rows, cols, raw_path):
         except OSError:
             pass
         for _ in range(30):
-            if not pid_alive(child_pid):
+            if child_reaped():
                 break
             time.sleep(0.1)
-        try:
-            os.kill(child_pid, signal.SIGKILL)
-        except OSError:
-            pass
+        if not child_reaped():
+            try:
+                os.kill(child_pid, signal.SIGKILL)
+            except OSError:
+                pass
+            try:
+                os.waitpid(child_pid, 0)     # collect what we just killed
+            except ChildProcessError:
+                pass
         try:
             os.close(master_fd)
         except OSError:
@@ -326,57 +381,44 @@ def cmd_spawn(a):
         env[k] = v
 
     args = [a.binary] + list(a.args or [])
-    pid = os.fork()
-    if pid == 0:
-        os.setsid()
-        os.dup2(slave, 0)
-        os.dup2(slave, 1)
-        os.dup2(slave, 2)
-        os.close(master)
-        if a.cwd:
-            os.chdir(a.cwd)
-        os.execvpe(args[0], args, env)
-        os._exit(127)
-    os.close(slave)
-
     raw_path = str(sdir / "raw.ansi")
 
-    # Fork the broker first, then write the state file once. A second write would
-    # leave a window in which the file carries no broker pid, and a kill landing
-    # in that window would reap the child and orphan the broker.
+    # The broker owns the pike child: it forks it, drives it, and reaps it. spawn
+    # owns the PTY setup and the broker and nothing deeper, so every process here
+    # is reaped by its own parent -- except the detached broker, which the
+    # boundary note below states instead of leaving implied.
     broker_pid = os.fork()
     if broker_pid == 0:
-        broker_loop(name, master, pid, a.rows, a.cols, raw_path)
+        broker_loop(name, master, slave, args, a.cwd, env, a.rows, a.cols, raw_path)
         os._exit(0)
+    os.close(master)
+    os.close(slave)
 
+    # Write the state file once, with the broker pid in it. The child pid arrives
+    # later and from the broker, because only the broker knows it.
     with open(state_file(name), "w") as f:
-        json.dump({"child_pid": pid, "broker_pid": broker_pid, "cols": a.cols,
+        json.dump({"broker_pid": broker_pid, "cols": a.cols,
                    "rows": a.rows, "raw_path": raw_path, "binary": a.binary}, f)
     time.sleep(0.8)
 
-    # The broker may have exited during the settle (for example a binary that
-    # fails to start). Close the race with the broker's own teardown: an exited
-    # broker cannot unlink a state file that was written after it left.
-    if not pid_alive(broker_pid):
+    # Reap a broker that already exited during the settle. Non-blocking on
+    # purpose: a live broker must keep serving later `send`/`screen`/`expect`
+    # calls, so this never waits on it. Once spawn returns, the broker is a
+    # detached process and the OS reaps it -- a boundary this helper states
+    # rather than claims to close.
+    try:
+        reaped, _ = os.waitpid(broker_pid, os.WNOHANG)
+    except ChildProcessError:
+        reaped = 0
+    if reaped:
         try:
             state_file(name).unlink(missing_ok=True)
         except OSError:
             pass
         print(f"broker for {name!r} exited during start-up", file=sys.stderr)
 
-    # Reap the pike child if it already exited during the settle: this process
-    # returns immediately below, so nothing else here will.
-    #
-    # The broker is deliberately NOT waited on. It must outlive this invocation
-    # to serve later `send`/`screen`/`expect` calls, so a blocking waitpid would
-    # hold `spawn` for the whole session. It is a detached child and init reaps
-    # it; `cmd_kill` stops it explicitly.
-    try:
-        os.waitpid(pid, os.WNOHANG)
-    except ChildProcessError:
-        pass
-
-    print(f"spawned {name}: pike pid={pid} broker pid={broker_pid} log={raw_path}")
+    print(f"spawned {name}: broker pid={broker_pid} "
+          f"(pike child owned by the broker) log={raw_path}")
 
 
 def cmd_send(a):
