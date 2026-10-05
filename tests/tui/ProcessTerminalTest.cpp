@@ -800,6 +800,12 @@ TEST_CASE("Process Terminal exposes env-derived color and appearance before star
     iterm_environment.unset();
     windows_terminal_environment.unset();
 
+    terminal_environment.set("xterm-direct");
+    cch::tui::ProcessTerminal direct_color(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    CHECK(direct_color.capabilities().color == cch::tui::TerminalColorCapability::TrueColor);
+    terminal_environment.set("xterm-unknown");
+
     // pi `getCapabilities()` (packages/tui terminal-image.ts) is synchronous
     // and feeds `initTheme` before the TUI is constructed, so the env-derived
     // observations are available ahead of `start()`; `start()` re-detects and

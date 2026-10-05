@@ -434,6 +434,10 @@ support::Expected<std::string> slice_by_column(
                 continue;
             }
             if (current_col >= start_col && current_col < end_col) {
+                if (current_col == start_col && !pending_ansi.empty()) {
+                    result += pending_ansi;
+                    pending_ansi.clear();
+                }
                 result += token.text;
             } else if (current_col < start_col) {
                 pending_ansi += token.text;

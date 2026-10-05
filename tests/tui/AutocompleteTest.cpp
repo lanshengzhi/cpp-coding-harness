@@ -120,6 +120,44 @@ TEST_CASE("CombinedAutocompleteProvider completes slash commands with fuzzy rank
     CHECK_FALSE(request_suggestions(provider, {"/set"}, 0, 4, /*force=*/true).has_value());
 }
 
+TEST_CASE(
+        "CombinedAutocompleteProvider completes slash commands after leading whitespace", "[tui][autocomplete][spec]") {
+    cch::tests::TempWorkspace workspace;
+    std::vector<std::variant<SlashCommand, AutocompleteItem>> slash_commands;
+    slash_commands.emplace_back(SlashCommand{.name = "model", .description = {}, .argument_hint = {}});
+    slash_commands.emplace_back(SlashCommand{.name = "settings", .description = {}, .argument_hint = {}});
+    auto provider = make_provider(std::move(slash_commands), workspace.path());
+
+    const std::string line = "  /set";
+    const auto commands = request_suggestions(provider, {line}, 0, line.size());
+    REQUIRE(commands);
+    CHECK(commands->prefix == "/set");
+    REQUIRE(commands->items.size() == 1);
+    CHECK(commands->items[0].value == "settings");
+    const auto command = provider.apply_completion({line}, 0, line.size(), commands->items[0], commands->prefix);
+    CHECK(command.lines[0] == "  /settings ");
+
+    std::vector<std::variant<SlashCommand, AutocompleteItem>> argument_commands;
+    argument_commands.emplace_back(SlashCommand{
+            .name = "model",
+            .description = {},
+            .argument_hint = {},
+            .get_argument_completions = [](std::string_view prefix) -> std::optional<std::vector<AutocompleteItem>> {
+                if (prefix != "g") return std::vector<AutocompleteItem>{};
+                return std::vector<AutocompleteItem>{{.value = "gpt", .label = "gpt", .description = {}}};
+            },
+    });
+    auto argument_provider = make_provider(std::move(argument_commands), workspace.path());
+    const std::string argument_line = "\t/model g";
+    const auto arguments = request_suggestions(argument_provider, {argument_line}, 0, argument_line.size());
+    REQUIRE(arguments);
+    CHECK(arguments->prefix == "g");
+    REQUIRE(arguments->items.size() == 1);
+    const auto argument = argument_provider.apply_completion(
+            {argument_line}, 0, argument_line.size(), arguments->items[0], arguments->prefix);
+    CHECK(argument.lines[0] == "\t/model gpt");
+}
+
 TEST_CASE("CombinedAutocompleteProvider completes command arguments through SlashCommand",
         "[tui][autocomplete][issue383][spec]") {
     cch::tests::TempWorkspace workspace;
@@ -196,6 +234,31 @@ TEST_CASE(
     CHECK_FALSE(request_suggestions(provider, {"hello"}, 0, 5).has_value());
 }
 
+TEST_CASE(
+        "CombinedAutocompleteProvider completes paths after unmatched opening wrappers", "[tui][autocomplete][spec]") {
+    cch::tests::TempWorkspace workspace;
+    workspace.write("src/main.cc", "int main() {}\n");
+    workspace.write("(group)/layout.cc", "// layout\n");
+    auto provider = make_provider({}, workspace.path());
+
+    for (const auto wrapper : {"(", "[", "{", "<", "`", "((", "(`"}) {
+        const auto line = std::string{wrapper} + "src/ma";
+        const auto result = request_suggestions(provider, {line}, 0, line.size(), /*force=*/true);
+        REQUIRE(result);
+        CHECK(result->prefix == "src/ma");
+        REQUIRE(result->items.size() == 1);
+        CHECK(result->items[0].value == "src/main.cc");
+        const auto applied = provider.apply_completion({line}, 0, line.size(), result->items[0], result->prefix);
+        CHECK(applied.lines[0] == std::string{wrapper} + "src/main.cc");
+    }
+
+    const auto closed = request_suggestions(provider, {"(group)/la"}, 0, 10, /*force=*/true);
+    REQUIRE(closed);
+    CHECK(closed->prefix == "(group)/la");
+    REQUIRE(closed->items.size() == 1);
+    CHECK(closed->items[0].value == "(group)/layout.cc");
+}
+
 TEST_CASE("CombinedAutocompleteProvider offers @ attachment completion through fd",
         "[tui][autocomplete][issue383][spec]") {
     cch::tests::TempWorkspace workspace;
@@ -234,6 +297,21 @@ TEST_CASE("CombinedAutocompleteProvider offers @ attachment completion through f
     const auto forced = request_suggestions(provider, {"src"}, 0, 3, /*force=*/true);
     REQUIRE(forced);
     CHECK_FALSE(forced->items.empty());
+}
+
+TEST_CASE("CombinedAutocompleteProvider recognizes @ after opening wrappers", "[tui][autocomplete][spec]") {
+    cch::tests::TempWorkspace workspace;
+    const auto fake_fd = write_fake_fd(workspace, "README.md\n");
+    auto provider = make_provider({}, workspace.path(), fake_fd);
+    const std::string line = "see (@REA";
+
+    const auto result = request_suggestions(provider, {line}, 0, line.size());
+    REQUIRE(result);
+    CHECK(result->prefix == "@REA");
+    REQUIRE(result->items.size() == 1);
+    CHECK(result->items[0].value == "@README.md");
+    const auto applied = provider.apply_completion({line}, 0, line.size(), result->items[0], result->prefix);
+    CHECK(applied.lines[0] == "see (@README.md ");
 }
 
 TEST_CASE("CombinedAutocompleteProvider applyCompletion performs pi's text surgery",

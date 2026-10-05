@@ -974,6 +974,29 @@ private:
 
 } // namespace
 
+TEST_CASE("Editor triggers attachment autocomplete after an opening wrapper", "[tui][editor][autocomplete][spec]") {
+    auto timer = std::make_unique<ManualDebounceTimer>();
+    auto* timer_ptr = timer.get();
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = cch::tui::AutocompleteSuggestions{
+            .items = {{.value = "@README.md", .label = "README.md", .description = {}}},
+            .prefix = "@",
+    };
+    cch::tui::Editor editor({.autocomplete_debounce_timer = std::move(timer)});
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "(");
+    type(editor, "@");
+    CHECK(provider_ptr->requests.empty());
+    CHECK(timer_ptr->start_count == 1);
+    timer_ptr->fire();
+
+    REQUIRE(provider_ptr->requests.size() == 1);
+    CHECK(provider_ptr->requests[0].lines == std::vector<std::string>{"(@"});
+    REQUIRE(menu_rendered(editor));
+}
+
 TEST_CASE("Editor debounces attachment autocomplete until the injected timer fires",
         "[tui][editor][autocomplete][issue383][spec]") {
     auto timer = std::make_unique<ManualDebounceTimer>();

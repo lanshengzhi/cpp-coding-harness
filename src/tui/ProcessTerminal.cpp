@@ -150,8 +150,9 @@ struct WriteAttempt {
 
 [[nodiscard]] TerminalColorCapability detect_color_capability() {
     const auto color_terminal = lowercase_environment("COLORTERM");
-    const bool has_true_color_hint = color_terminal == "truecolor" || color_terminal == "24bit";
     const auto terminal = lowercase_environment("TERM");
+    const bool has_true_color_hint =
+            color_terminal == "truecolor" || color_terminal == "24bit" || terminal.ends_with("-direct");
     if (!environment("TMUX").empty() || terminal.starts_with("tmux") || terminal.starts_with("screen")) {
         return has_true_color_hint ? TerminalColorCapability::TrueColor : TerminalColorCapability::Xterm256;
     }

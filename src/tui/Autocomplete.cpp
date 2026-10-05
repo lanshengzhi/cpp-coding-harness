@@ -550,9 +550,8 @@ struct ScopedQuery {
 
     const auto last_delimiter_index = find_last_delimiter(text);
     const auto token_start = last_delimiter_index ? *last_delimiter_index + 1 : 0U;
-    if (token_start < text.size() && text[token_start] == '@') {
-        return text.substr(token_start);
-    }
+    const auto token = detail::strip_leading_wrappers(text.substr(token_start));
+    if (token.starts_with('@')) return token;
     return std::nullopt;
 }
 
@@ -567,7 +566,8 @@ struct ScopedQuery {
     }
 
     const auto last_delimiter_index = find_last_delimiter(text);
-    const auto path_prefix = last_delimiter_index ? text.substr(*last_delimiter_index + 1) : text;
+    const auto path_prefix =
+            detail::strip_leading_wrappers(last_delimiter_index ? text.substr(*last_delimiter_index + 1) : text);
 
     if (force_extract) {
         return path_prefix;
@@ -650,10 +650,11 @@ void CombinedAutocompleteProvider::get_suggestions(
     }
 
     // Slash commands (not on a forced request; pi's `!options.force` gate).
-    if (!request.force && text_before_cursor.starts_with('/')) {
-        const auto space_index = text_before_cursor.find(' ');
+    const auto command_text = detail::trim_start_ascii(text_before_cursor);
+    if (!request.force && command_text.starts_with('/')) {
+        const auto space_index = command_text.find(' ');
         if (space_index == std::string_view::npos) {
-            const auto prefix = text_before_cursor.substr(1);
+            const auto prefix = command_text.substr(1);
 
             std::vector<CommandEntry> command_items;
             command_items.reserve(impl_->commands.size());
@@ -700,15 +701,15 @@ void CombinedAutocompleteProvider::get_suggestions(
                 });
             }
             (void)sink(AutocompleteSuggestions{
-                .items = std::move(items),
-                .prefix = std::string{text_before_cursor},
+                    .items = std::move(items),
+                    .prefix = std::string{command_text},
             });
             return;
         }
 
         // Command argument completion after `/name `.
-        const auto command_name = text_before_cursor.substr(1, space_index - 1);
-        const auto argument_text = text_before_cursor.substr(space_index + 1);
+        const auto command_name = command_text.substr(1, space_index - 1);
+        const auto argument_text = command_text.substr(space_index + 1);
         for (auto& command : impl_->commands) {
             auto* slash_command = std::get_if<SlashCommand>(&command);
             if (slash_command == nullptr || slash_command->name != command_name) continue;
