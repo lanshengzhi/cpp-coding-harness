@@ -38,7 +38,15 @@ const scriptDir = path.dirname(scriptPath);
 const fixtureDir = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(fixtureDir, "../..");
 const differentialDir = path.join(fixtureDir, "differential");
-const reportPath = path.join(differentialDir, "report.json");
+// The checked-in report is evidence about ONE baseline (ADR 0053 keeps pi as
+// reference material, not a specification), so recording against a newer pi
+// must not overwrite the report an older one describes.
+// `CCH_DIFFERENTIAL_REPORT` writes to a separate path and leaves
+// `report.json` untouched; unset keeps the historical single-report
+// behaviour, which is what the CTest adapter's `--verify` mode compares.
+const reportPath = process.env.CCH_DIFFERENTIAL_REPORT
+	? path.resolve(process.env.CCH_DIFFERENTIAL_REPORT)
+	: path.join(differentialDir, "report.json");
 // ADR 0053 makes pi optional reference material rather than a specification,
 // so the comparison target is the pi checkout this machine actually has
 // instead of a hardcoded revision. The resolved commit and version are still

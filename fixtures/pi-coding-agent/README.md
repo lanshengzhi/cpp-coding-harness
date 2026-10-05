@@ -208,9 +208,29 @@ parity evidence to the deterministic comparison seam introduced by
 [#800](https://github.com/lanshengzhi/cpp-coding-harness/issues/800), beside the existing C++-side
 goldens. `capture/native-tui-differential.mts` runs
 Pike's Native TUI VirtualTerminal and the pi checkout recorded in
-`differential/report.json` through the same scenario records and input byte sequences. The current
-baseline is pi v0.99.2 at commit `005af57d88ee23b33778f343a9595b32e67ff788`; the report records
-the exact pi revision used for its captures. The checked-in `differential/report.json` retains
+`differential/report.json` through the same scenario records and input byte sequences. The report
+records the exact pi revision used for its captures.
+
+**Two baselines are kept, because one report is evidence about one baseline (ADR 0053 treats pi as
+reference material, not a specification):**
+
+| File | pi baseline | Status |
+| --- | --- | --- |
+| `differential/report.json` | pi v1.0.0 at `a13d35a742c6ef8462812a28fbe1d8c8b7431c32` | **current** — the report `--verify` and the CTest gate compare against |
+| `differential/report-v0.99.2.json` | pi v0.99.2 at `005af57d88ee23b33778f343a9595b32e67ff788` | retained historical evidence; not overwritten when the baseline was advanced |
+
+Re-recording at a new baseline must never overwrite the older report. Record to a separate path
+and archive the previous one under its baseline name:
+
+```bash
+PI_CHECKOUT=../pi CCH_DIFFERENTIAL_REPORT="$PWD/fixtures/pi-coding-agent/differential/report-<baseline>.json" \
+  ../pi/node_modules/.bin/tsx fixtures/pi-coding-agent/capture/native-tui-differential.mts --write
+```
+
+`CCH_DIFFERENTIAL_REPORT` is unset by default, which keeps `report.json` as the compared path.
+The v0.99.2 → v1.0.0 triage found **no classification change** across all 17 scenarios; the two
+reports are not otherwise comparable difference-by-difference, because the pi-side captures moved
+with the baseline and the Pike-side captures moved with intervening Pike work. The checked-in `differential/report.json` retains
 visible cell rows, scrollback rows, raw ANSI output, and the SGR-token projection for both
 runtimes. It is not an opaque whole-session screenshot: each scenario and transition remains
 addressable as structured rows.
