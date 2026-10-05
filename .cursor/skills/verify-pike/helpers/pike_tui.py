@@ -29,6 +29,7 @@ import socket
 import struct
 import sys
 import termios
+import uuid
 import time
 from pathlib import Path
 
@@ -62,6 +63,37 @@ def sock_path(name):
 
 def state_file(name):
     return session_dir(name) / "state.json"
+
+
+def state_lock(name):
+    """Hold the session's state lock while publishing or conditionally deleting it.
+
+    Without it a publish and a delete can interleave: `kill` compares the state, a
+    `spawn` under the same name publishes a new one, and the delete then removes a
+    record it never examined.
+    """
+    fd = os.open(str(session_dir(name) / "state.lock"), os.O_CREAT | os.O_RDWR, 0o600)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    return fd
+
+
+def release_lock(fd):
+    fcntl.flock(fd, fcntl.LOCK_UN)
+    os.close(fd)
+
+
+def write_state(name, state):
+    """Publish the state atomically.
+
+    A reader sees either the old record or the new one, never a half-written file:
+    `open(..., "w")` truncates in place, and a concurrent reader can catch that and
+    read it as "no valid record" -- which is exactly when a delete is allowed.
+    """
+    path = state_file(name)
+    tmp = path.with_suffix(".json.tmp")
+    with open(tmp, "w") as f:
+        json.dump(state, f)
+    os.replace(tmp, path)
 
 
 def pid_alive(pid):
@@ -266,7 +298,7 @@ def screen_text(raw, rows, cols):
 # ---------------------------------------------------------------------------
 # Broker: owns the PTY master + pike child; services requests over the socket.
 # ---------------------------------------------------------------------------
-def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path):
+def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path, token):
     """Own the session: fork the pike child, drive its PTY, and reap it.
 
     The broker is the pike child's parent, so it is also the process that reaps
@@ -297,14 +329,17 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path)
         except (OSError, ValueError):
             time.sleep(0.01)
             continue
-        if st.get("broker_pid") != os.getpid():
+        if st.get("token") != token:
             break                             # a later session owns the file now
         st["child_pid"] = child_pid
         st["child_starttime"] = process_starttime(child_pid)
+        lock = state_lock(name)
         try:
-            state_file(name).write_text(json.dumps(st))
+            write_state(name, st)
         except OSError:
             pass
+        finally:
+            release_lock(lock)
         break
 
     child_collected = False
@@ -405,12 +440,14 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path)
                     time.sleep(0.1)
                 resp = {"found": found}
             elif op == "kill":
-                if req.get("broker_pid") != os.getpid():
+                if req.get("token") != token:
                     # The caller resolved the session it meant from the state file, and this
                     # broker is not that session: a name can be restarted, and the socket
-                    # now belongs to a newer run. Stopping here would end a session the
-                    # caller never inspected, so refuse and stay up -- the caller's
-                    # verified handles still reclaim the session its state describes.
+                    # now belongs to a newer run. A pid could not tell the two apart, since
+                    # the kernel reuses them; the token can, because it is unique per run.
+                    # Stopping here would end a session the caller never inspected, so
+                    # refuse and stay up -- the caller's verified handles still reclaim the
+                    # session its state describes.
                     resp = {"ok": False, "error": "not the session the caller resolved"}
                 else:
                     running = False
@@ -460,7 +497,7 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path)
         # (or the operator) can still remove the state file.
         try:
             st = json.loads(state_file(name).read_text())
-            if st.get("broker_pid") == os.getpid():
+            if st.get("token") == token:
                 state_file(name).unlink(missing_ok=True)
         except (OSError, ValueError):
             pass
@@ -487,20 +524,27 @@ def cmd_spawn(a):
     # owns the PTY setup and the broker and nothing deeper, so every process here
     # is reaped by its own parent -- except the detached broker, which the
     # boundary note below states instead of leaving implied.
+    token = uuid.uuid4().hex
     broker_pid = os.fork()
     if broker_pid == 0:
-        broker_loop(name, master, slave, args, a.cwd, env, a.rows, a.cols, raw_path)
+        broker_loop(name, master, slave, args, a.cwd, env, a.rows, a.cols, raw_path, token)
         os._exit(0)
     os.close(master)
     os.close(slave)
 
-    # Write the state file once, with the broker pid in it. The child pid arrives
-    # later and from the broker, because only the broker knows it.
-    with open(state_file(name), "w") as f:
-        json.dump({"broker_pid": broker_pid,
-                   "broker_starttime": process_starttime(broker_pid),
-                   "cols": a.cols,
-                   "rows": a.rows, "raw_path": raw_path, "binary": a.binary}, f)
+    # Publish the state once, atomically, with the run's token in it. The token is what
+    # identifies this run: a pid cannot, because the kernel reuses pids, so a later run
+    # under the same name could inherit the number and be mistaken for this one. The
+    # child pid arrives later and from the broker, because only the broker knows it.
+    lock = state_lock(name)
+    try:
+        write_state(name, {"broker_pid": broker_pid,
+                           "broker_starttime": process_starttime(broker_pid),
+                           "token": token,
+                           "cols": a.cols,
+                           "rows": a.rows, "raw_path": raw_path, "binary": a.binary})
+    finally:
+        release_lock(lock)
     time.sleep(0.8)
 
     # Reap a broker that already exited during the settle. Non-blocking on
@@ -513,10 +557,18 @@ def cmd_spawn(a):
     except ChildProcessError:
         reaped = 0
     if reaped:
+        # Only drop the record this spawn published: a run started under the same name
+        # since owns its own, and removing it would leave a live session with no state.
+        lock = state_lock(name)
         try:
-            state_file(name).unlink(missing_ok=True)
-        except OSError:
-            pass
+            try:
+                current = json.loads(state_file(name).read_text())
+            except (OSError, ValueError):
+                current = None
+            if current is not None and current.get("token") == token:
+                state_file(name).unlink(missing_ok=True)
+        finally:
+            release_lock(lock)
         print(f"broker for {name!r} exited during start-up", file=sys.stderr)
 
     print(f"spawned {name}: broker pid={broker_pid} "
@@ -602,8 +654,8 @@ def cmd_kill(a):
         stopped = False
         try:
             resp = broker_request(a.name,
-                                  {"op": "kill", "broker_pid": st.get("broker_pid")})
-            if resp.get("ok"):
+                                  {"op": "kill", "token": st.get("token")})
+            if resp.get("ok") is True:
                 stopped = True
             else:
                 print(f"{a.name}: the name now belongs to another session; reclaiming "
@@ -646,13 +698,18 @@ def cmd_kill(a):
         # Drop the state only if it still describes the session this command acted on.
         # A run started under the same name meanwhile owns its own record, and removing
         # it would leave a live session with no state for `screen`/`expect`/`kill` to
-        # find -- the same ownership guard the broker applies to its own unlink.
+        # find. The compare and the delete happen under the session lock, because
+        # publishing is what would otherwise slip between them.
+        lock = state_lock(a.name)
         try:
-            current = json.loads(stf.read_text())
-        except (OSError, ValueError):
-            current = None                 # already gone, or never a valid record
-        if current is None or current.get("broker_pid") == st.get("broker_pid"):
-            stf.unlink(missing_ok=True)
+            try:
+                current = json.loads(stf.read_text())
+            except (OSError, ValueError):
+                current = None             # already gone, or never a valid record
+            if current is None or current.get("token") == st.get("token"):
+                stf.unlink(missing_ok=True)
+        finally:
+            release_lock(lock)
     print(f"killed {a.name}")
 
 
