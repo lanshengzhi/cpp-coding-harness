@@ -539,6 +539,14 @@ def cmd_expect(a):
         # about a broker that never looked for it.
         print(f"broker for session {a.name!r} answered without a 'found' field", file=sys.stderr)
         sys.exit(3)
+    if not isinstance(resp["found"], bool):
+        # The field's type is part of the answer. `{"found": "false"}` is truthy, so
+        # testing the value directly would read a protocol error as a positive anchor
+        # hit -- the one direction a run record cites as proof the anchor appeared --
+        # and "could not look" would be recorded as "looked and found it".
+        print(f"broker for session {a.name!r} answered with "
+              f"{type(resp['found']).__name__} for 'found', not a boolean", file=sys.stderr)
+        sys.exit(3)
     if resp["found"]:
         print(f"found {a.text!r}")
     else:
