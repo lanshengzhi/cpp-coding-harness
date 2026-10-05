@@ -78,15 +78,23 @@ def broker_request(name, payload, timeout=30):
         sys.exit(2)
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.settimeout(timeout)
-    s.connect(sp)
-    s.sendall((json.dumps(payload) + "\n").encode())
-    buf = b""
-    while True:
-        chunk = s.recv(65536)
-        if not chunk:
-            break
-        buf += chunk
-    s.close()
+    try:
+        s.connect(sp)
+        s.sendall((json.dumps(payload) + "\n").encode())
+        buf = b""
+        while True:
+            chunk = s.recv(65536)
+            if not chunk:
+                break
+            buf += chunk
+    except (OSError, socket.timeout) as exc:
+        # Exit 2 is "cannot reach the broker", distinct from `cmd_expect`'s exit
+        # 1 "the anchor was not seen". Without this the two collapse into one
+        # traceback, and "not found" cannot be told from "could not look".
+        print(f"cannot reach broker for session {name!r}: {exc}", file=sys.stderr)
+        sys.exit(2)
+    finally:
+        s.close()
     return json.loads(buf.decode()) if buf else {}
 
 
@@ -94,6 +102,14 @@ def broker_request(name, payload, timeout=30):
 # Screen reconstruction
 # ---------------------------------------------------------------------------
 def interpret_screen(data, rows, cols):
+    """Rebuild the visible screen from a raw ANSI stream.
+
+    Implements the CSI subset pike emits: cursor motion (A/B/C/D/H/f), erase
+    (J/K), CR/LF/BS/TAB, and printable text. It does NOT implement the alternate
+    screen (``\x1b[?1049h`` / ``l``). On an application that switches screens, or
+    uses sequences outside this subset, the reconstruction is incomplete: do not
+    read a snapshot from such an application as the whole picture.
+    """
     grid = [[" "] * cols for _ in range(rows)]
     r = c = 0
     i = 0
@@ -160,6 +176,17 @@ def interpret_screen(data, rows, cols):
     return ["".join(row).rstrip() for row in grid]
 
 
+def screen_text(raw, rows, cols):
+    """The visible screen as text -- one rendering shared by `screen` and `expect`.
+
+    Both ops must read the same thing. `expect` searching the raw ANSI stream
+    instead would miss an anchor the terminal wrapped or that sits behind
+    intervening control bytes, and would match text the application had already
+    erased -- so a run record's "found" could name something the user never saw.
+    """
+    return "\n".join(interpret_screen(raw.decode("utf-8", "replace"), rows, cols))
+
+
 # ---------------------------------------------------------------------------
 # Broker: owns the PTY master + pike child; services requests over the socket.
 # ---------------------------------------------------------------------------
@@ -222,14 +249,14 @@ def broker_loop(name, master_fd, child_pid, rows, cols, raw_path):
             resp = {"ok": True}
         elif op == "screen":
             drain()
-            text = "\n".join(interpret_screen(raw.decode("utf-8", "replace"), rows, cols))
+            text = screen_text(raw, rows, cols)
             resp = {"screen": text}
         elif op == "expect":
             deadline = time.time() + req.get("timeout", 10)
             found = False
             while time.time() < deadline:
                 drain()
-                if req.get("text", "") in raw.decode("utf-8", "replace"):
+                if req.get("text", "") in screen_text(raw, rows, cols):
                     found = True
                     break
                 time.sleep(0.1)
@@ -294,10 +321,10 @@ def cmd_spawn(a):
     os.close(slave)
 
     raw_path = str(sdir / "raw.ansi")
-    with open(state_file(name), "w") as f:
-        json.dump({"child_pid": pid, "cols": a.cols, "rows": a.rows,
-                   "raw_path": raw_path, "binary": a.binary}, f)
 
+    # Fork the broker first, then write the state file once. A second write would
+    # leave a window in which the file carries no broker pid, and a kill landing
+    # in that window would reap the child and orphan the broker.
     broker_pid = os.fork()
     if broker_pid == 0:
         broker_loop(name, master, pid, a.rows, a.cols, raw_path)
@@ -307,6 +334,19 @@ def cmd_spawn(a):
         json.dump({"child_pid": pid, "broker_pid": broker_pid, "cols": a.cols,
                    "rows": a.rows, "raw_path": raw_path, "binary": a.binary}, f)
     time.sleep(0.8)
+
+    # Reap the pike child if it already exited during the settle: this process
+    # returns immediately below, so nothing else here will.
+    #
+    # The broker is deliberately NOT waited on. It must outlive this invocation
+    # to serve later `send`/`screen`/`expect` calls, so a blocking waitpid would
+    # hold `spawn` for the whole session. It is a detached child and init reaps
+    # it; `cmd_kill` stops it explicitly.
+    try:
+        os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        pass
+
     print(f"spawned {name}: pike pid={pid} broker pid={broker_pid} log={raw_path}")
 
 
