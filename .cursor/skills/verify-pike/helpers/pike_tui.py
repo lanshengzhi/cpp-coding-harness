@@ -57,12 +57,30 @@ def session_dir(name):
     return d
 
 
-def sock_path(name):
-    return str(session_dir(name) / "broker.sock")
+def sock_path(name, token):
+    """The socket for one run, addressed by its token rather than by its name.
+
+    A name can be restarted, and a replacement run binds the same path -- so a broker
+    tearing down could remove the socket its successor is serving on. A token-specific
+    path cannot collide that way: each run only ever unlinks its own.
+    """
+    return str(session_dir(name) / f"broker-{token}.sock")
 
 
 def state_file(name):
     return session_dir(name) / "state.json"
+
+
+def session_token(name):
+    """The token of the run the state describes, or None when there is no usable state.
+
+    Callers reach the broker through this rather than through the name, so a request
+    cannot land on whichever run holds the name now.
+    """
+    try:
+        return json.loads(state_file(name).read_text()).get("token")
+    except (OSError, ValueError):
+        return None
 
 
 def state_lock(name):
@@ -71,13 +89,22 @@ def state_lock(name):
     Without it a publish and a delete can interleave: `kill` compares the state, a
     `spawn` under the same name publishes a new one, and the delete then removes a
     record it never examined.
+
+    Returns None when the lock cannot be taken. An unknown state is not one to write
+    or delete, so callers treat that as failure rather than proceeding without it.
     """
     fd = os.open(str(session_dir(name) / "state.lock"), os.O_CREAT | os.O_RDWR, 0o600)
-    fcntl.flock(fd, fcntl.LOCK_EX)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return None
     return fd
 
 
 def release_lock(fd):
+    if fd is None:
+        return
     fcntl.flock(fd, fcntl.LOCK_UN)
     os.close(fd)
 
@@ -162,7 +189,7 @@ def open_verified(pid, starttime):
 
 
 def broker_request(name, payload, timeout=30):
-    sp = sock_path(name)
+    sp = sock_path(name, session_token(name) or "none")
     if not os.path.exists(sp):
         print(f"no broker for session {name!r}; is it spawned?", file=sys.stderr)
         sys.exit(2)
@@ -334,12 +361,13 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
         st["child_pid"] = child_pid
         st["child_starttime"] = process_starttime(child_pid)
         lock = state_lock(name)
-        try:
-            write_state(name, st)
-        except OSError:
-            pass
-        finally:
-            release_lock(lock)
+        if lock is not None:
+            try:
+                write_state(name, st)
+            except OSError:
+                pass
+            finally:
+                release_lock(lock)
         break
 
     child_collected = False
@@ -370,7 +398,7 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
     try:
         rawf = open(raw_path, "ab", buffering=0)
         srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sp = sock_path(name)
+        sp = sock_path(name, token)
         if os.path.exists(sp):
             os.unlink(sp)
         srv.bind(sp)
@@ -537,14 +565,15 @@ def cmd_spawn(a):
     # under the same name could inherit the number and be mistaken for this one. The
     # child pid arrives later and from the broker, because only the broker knows it.
     lock = state_lock(name)
-    try:
-        write_state(name, {"broker_pid": broker_pid,
-                           "broker_starttime": process_starttime(broker_pid),
-                           "token": token,
-                           "cols": a.cols,
-                           "rows": a.rows, "raw_path": raw_path, "binary": a.binary})
-    finally:
-        release_lock(lock)
+    if lock is not None:
+        try:
+            write_state(name, {"broker_pid": broker_pid,
+                               "broker_starttime": process_starttime(broker_pid),
+                               "token": token,
+                               "cols": a.cols,
+                               "rows": a.rows, "raw_path": raw_path, "binary": a.binary})
+        finally:
+            release_lock(lock)
     time.sleep(0.8)
 
     # Reap a broker that already exited during the settle. Non-blocking on
@@ -560,15 +589,16 @@ def cmd_spawn(a):
         # Only drop the record this spawn published: a run started under the same name
         # since owns its own, and removing it would leave a live session with no state.
         lock = state_lock(name)
-        try:
+        if lock is not None:
             try:
-                current = json.loads(state_file(name).read_text())
-            except (OSError, ValueError):
-                current = None
-            if current is not None and current.get("token") == token:
-                state_file(name).unlink(missing_ok=True)
-        finally:
-            release_lock(lock)
+                try:
+                    current = json.loads(state_file(name).read_text())
+                except (OSError, ValueError):
+                    current = None
+                if current is not None and current.get("token") == token:
+                    state_file(name).unlink(missing_ok=True)
+            finally:
+                release_lock(lock)
         print(f"broker for {name!r} exited during start-up", file=sys.stderr)
 
     print(f"spawned {name}: broker pid={broker_pid} "
@@ -685,29 +715,53 @@ def cmd_kill(a):
             # The broker never answered, so both pids are this state's own
             # responsibility.
             targets = ("broker_pid", "child_pid")
+        incomplete = False
         for pidkey in targets:
             fd = handles.get(pidkey)
             if fd is None:
                 continue
             try:
                 signal.pidfd_send_signal(fd, signal.SIGKILL)
-            except OSError:
-                pass
+            except OSError as exc:
+                # ESRCH means the target is already gone, which is the goal. Anything
+                # else means it was not reclaimed and may still be running.
+                if exc.errno != errno.ESRCH:
+                    print(f"{a.name}: could not signal the {pidkey.replace('_pid', '')}: "
+                          f"{exc.strerror}; the session may still be running",
+                          file=sys.stderr)
+                    incomplete = True
         for fd in handles.values():
             os.close(fd)
+        if incomplete:
+            # Exit 5 rather than 4: the preflight passed and cleanup began, so a target
+            # may already have been signalled. 4 promises that none was sent, and this
+            # must not borrow that promise -- nor report a clean kill.
+            sys.exit(5)
         # Drop the state only if it still describes the session this command acted on.
         # A run started under the same name meanwhile owns its own record, and removing
         # it would leave a live session with no state for `screen`/`expect`/`kill` to
         # find. The compare and the delete happen under the session lock, because
         # publishing is what would otherwise slip between them.
         lock = state_lock(a.name)
+        if lock is None:
+            print(f"{a.name}: could not lock the state to remove it; leaving it in "
+                  f"place", file=sys.stderr)
+            sys.exit(5)
         try:
             try:
                 current = json.loads(stf.read_text())
+            except FileNotFoundError:
+                current = "gone"            # already removed; nothing to judge
             except (OSError, ValueError):
-                current = None             # already gone, or never a valid record
-            if current is None or current.get("token") == st.get("token"):
+                # Unreadable or unparseable is not the same as absent: an unknown record
+                # is not one to delete.
+                current = None
+            if current == "gone" or (current and current.get("token") == st.get("token")):
                 stf.unlink(missing_ok=True)
+            elif current is None:
+                print(f"{a.name}: the state file is unreadable; leaving it in place",
+                      file=sys.stderr)
+                sys.exit(5)
         finally:
             release_lock(lock)
     print(f"killed {a.name}")
