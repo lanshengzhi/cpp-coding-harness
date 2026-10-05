@@ -22,7 +22,9 @@ without a decider is worse than no record, because it reads as settled.
 
 ## Product principle: Pike is a subset, and within it behaviour matches pi
 
-Stated by **@lansy, 2026-10-05**, and delegated with authority to decide the open items:
+Stated by **@lansy, 2026-10-05**. Under it, @lansy holds the per-capability membership rulings; any
+ruling made through an explicitly authorised representative is recorded as that representative's
+decision, attributed to it and not to the owner.
 
 > **Pike implements a functional subset of pi. For the subset Pike does implement, the behaviour a user
 > experiences is the same as pi's.**
@@ -38,7 +40,8 @@ earlier drafts kept circling:
 
 **This rule does not by itself determine any individual capability's membership.** It states how an
 included capability must behave; it does not enumerate which capabilities are included. Per-capability
-membership remains for the owner to rule, and the rows below stay `No decision` until he does.
+membership remains with the owner, or with a representative the owner has explicitly authorised for
+that item; the rows below stay `No decision` until such a ruling is recorded.
 
 ## Owner decisions
 
