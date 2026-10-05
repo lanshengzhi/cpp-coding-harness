@@ -354,6 +354,15 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
         # on its own it cannot close anything.
         if child_pid is None:
             os._exit(1)
+        # Do not signal a numeric pid that may already have been collected: the teardown
+        # checks `child_collected` for exactly this reason, and this path needs the same
+        # protection. Asking `waitpid` answers it here without depending on a flag that is
+        # defined further down.
+        try:
+            if os.waitpid(child_pid, os.WNOHANG)[0]:
+                os._exit(1)              # already reaped: nothing to signal
+        except ChildProcessError:
+            os._exit(1)                  # already reaped
         try:
             os.kill(child_pid, signal.SIGTERM)
         except OSError:
@@ -688,6 +697,7 @@ def cmd_spawn(a):
     deadline = time.time() + 5.0
     registered = False
     broker_gone = False
+    lock_was_taken = None
     while time.time() < deadline:
         try:
             st_now = json.loads(state_file(name).read_text())
@@ -712,6 +722,7 @@ def cmd_spawn(a):
         # register between the last poll above and this point -- deleting then would
         # remove the record of a session that is running.
         lock = state_lock(name)
+        lock_was_taken = lock is not None
         if lock is not None:
             try:
                 try:
@@ -727,6 +738,21 @@ def cmd_spawn(a):
             finally:
                 release_lock(lock)
     if not registered:
+        if lock_was_taken is False:
+            # Without the lock we cannot tell whether the broker registered, so we cannot
+            # report failure and leave it running: it could reach registration afterwards
+            # and serve a session this command already reported as not started. Stop the
+            # broker we forked and collect it, which bounds the outcome to "no session".
+            # The wait is bounded because the broker's own handler reaps its child and
+            # exits on SIGTERM.
+            try:
+                os.kill(broker_pid, signal.SIGTERM)
+            except OSError:
+                pass
+            try:
+                os.waitpid(broker_pid, 0)
+            except ChildProcessError:
+                pass
         why = ("the broker exited during start-up" if broker_gone
                else "the broker did not register its child in time")
         print(f"{name}: no session was started -- {why}", file=sys.stderr)
