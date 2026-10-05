@@ -28,23 +28,23 @@ Preconditions:
 - The workspace has not been trusted on this state root (a fresh root always
   qualifies).
 
-- **Boot into the prompt.** Spawn the TUI; the screen shows `Trust project
-  folder?` with options `Trust`, `Trust parent folder`, `Trust (this session
-  only)`, `Do not trust`, `Do not trust (this session only)`. With tmux:
-  `tmux send-keys -t "$S:0.0" "env HOME='$HOME' XDG_CONFIG_HOME='$XDG_CONFIG_HOME' '$BIN'" Enter`,
-  then `sleep 2` and
-  `tmux capture-pane -t "$S:0.0" -p > artifacts/verify-pike/trust-modal.txt`.
+Drive this feature with the Launch/Drive recipe in `../SKILL.md` — helper or
+tmux, and the tmux recipe there owns the run's socket and session. The steps
+below name only what is specific to this feature: which keys to send and which
+anchors to assert.
+
+- **Boot into the prompt.** Spawn the TUI in the untrusted workspace; the screen
+  shows `Trust project folder?` with options `Trust`, `Trust parent folder`,
+  `Trust (this session only)`, `Do not trust`, `Do not trust (this session
+  only)`. Snapshot the modal as `artifacts/verify-pike/trust-modal.txt`.
 - **Confirm it does not cancel on Escape.** Send `Escape` (helper `--key
   escape`, tmux `Escape`), snapshot, and assert `Trust project folder?` is still
   on screen. Repeat with `ctrl+c`.
 - **Choose `Do not trust`.** The selector opens on `Trust`; send `Down` three
-  times and `Enter`. With tmux:
-  `tmux send-keys -t "$S:0.0" Down Down Down`,
-  then `tmux send-keys -t "$S:0.0" Enter`.
+  times, then `Enter`.
 - **Assert the editor is reachable.** Expect `Press ctrl+o to show full startup
-  help` and the untrusted banner. With tmux:
-  `tmux capture-pane -t "$S:0.0" -p > artifacts/verify-pike/trust-dismissed.txt`
-  and grep for both anchors.
+  help` and the untrusted banner. Snapshot as
+  `artifacts/verify-pike/trust-dismissed.txt` and grep for both anchors.
 - **Proof.** The modal snapshot, the post-dismiss snapshot showing the banner
   and the editor, and a second launch on the same state root going straight to
   the editor together prove the flow.

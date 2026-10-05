@@ -128,7 +128,9 @@ env HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
 
 ```bash
 PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run" "$HELPER" kill --name main
-tmux -S "$TMUX_SOCK" kill-server 2>/dev/null || true   # end this run's server FIRST (see Cleanup)
+# End this run's tmux server BEFORE the root goes away. A socket file means a
+# server was started; if it will not die, stop here and keep the root.
+if [ -S "$TMUX_SOCK" ]; then tmux -S "$TMUX_SOCK" kill-server; fi
 rm -rf "$VERIFY_ROOT"                                   # then the root, socket file included
 ```
 
@@ -149,9 +151,12 @@ resolved="$(env HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" "$BIN" --print x
 grep -qF "Unknown provider" <<<"$resolved"
 ```
 
-A doctor failure means: the binary is missing/stale (rebuild), the flag surface
-drifted (the CLI seam changed — re-read `docs/usage.md`), or state is leaking
-into the real home (isolation broken — do not proceed).
+A doctor failure means: the binary is missing or unusable (rebuild), the flag
+surface drifted (the CLI seam changed — re-read `docs/usage.md`), or state is
+leaking into the real home (isolation broken — do not proceed). **Staleness is
+deliberately not on this list** — the doctor cannot see it (next paragraph), so
+`stale` is a verdict from build-identity evidence outside the doctor, never a
+doctor failure.
 
 **The doctor does not judge freshness.** It checks that the binary runs, that the
 flag surface is present, and that isolation holds — it cannot tell whether `BIN`
@@ -248,7 +253,7 @@ file**, alongside the captures (for example `artifacts/verify-pike/<feature>-run
 run_started_at               = <ISO-8601 timestamp>
 run_source_revision          = git rev-parse HEAD
 checkout_state_at_run_start  = git status --porcelain     # taken BEFORE evidence exists
-build_source_state           = <what the binary was built from, when known: revision + dirty + input fingerprint>
+build_source_state           = unknown unless a build-time identity bound to the binary hash exists
 binary_path                  = build/release/pike
 binary_version               = <BIN> --version
 binary_sha256                = sha256sum <BIN>
@@ -267,9 +272,12 @@ which inputs changed.
 were run against this checkout state*. It does **not** prove the binary was built
 from that revision: `run_source_revision` is where the checkout was, not where
 the binary came from. `binary_version` (a project version) and file mtimes cannot
-close that gap. When the build source was dirty and no exact input fingerprint was
-recorded, write `build_source_state = unknown` rather than inferring freshness
-from the revision alone.
+close that gap. **Without a build-time identity bound to the binary's own hash,
+write `build_source_state = unknown` — always**, whether or not the checkout was
+clean and whether or not the revision matches. A clean checkout at the right
+revision records where the sources were, not what the binary was built from; only
+an identity emitted by the build itself and tied to the binary hash supports
+anything stronger.
 
 ## Cleanup
 
@@ -280,8 +288,9 @@ Kill only what you started; never kill by process name.
 PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run" "$HELPER" kill --name main
 # all helper sessions for a run root
 pkill -F "$VERIFY_ROOT/run"/*/state.json 2>/dev/null || true
-# this run's tmux server only — never a session name on a shared server
-tmux -S "$TMUX_SOCK" kill-server 2>/dev/null || true
+# this run's tmux server — a socket file means a server was started, and a
+# failure to end it must stop the run before the root is removed
+if [ -S "$TMUX_SOCK" ]; then tmux -S "$TMUX_SOCK" kill-server; fi
 # remove the disposable state root (and the tmux socket inside it)
 rm -rf "$VERIFY_ROOT"
 ```
@@ -294,9 +303,15 @@ own socket.** Removing the socket file does not stop the server — `rm -rf
 order, with `-S "$TMUX_SOCK"` on the kill:
 
 ```bash
-tmux -S "$TMUX_SOCK" kill-server      # end THIS run's server
+if [ -S "$TMUX_SOCK" ]; then tmux -S "$TMUX_SOCK" kill-server; fi
 rm -rf "$VERIFY_ROOT"                 # then the root, socket file included
 ```
+
+**Two cases, two outcomes.** A run that never started tmux leaves no socket file,
+the guard skips the kill, and the root is removed. A run that did start a server
+and then cannot end it must fail here and leave the root and socket in place —
+never swallow that failure and continue to `rm -rf`, which would orphan the
+server behind a deleted socket.
 
 The order matters in both directions: deleting the socket first leaves `tmux` no
 target to reach, and a `kill-server` without `-S` reaches the default socket,
