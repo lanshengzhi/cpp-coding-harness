@@ -93,9 +93,10 @@ tmux -S "$TMUX_SOCK" new-session -d -s "$SESS" -x 100 -y 30 \
   "env HOME=$HOME XDG_CONFIG_HOME=$XDG_CONFIG_HOME $PWD/build/release/pike --no-session"
 ```
 Every tmux command in this skill carries `-S "$TMUX_SOCK"`: that one path keeps
-this run's server separate and its teardown scoped to itself. The guardrail
-after the positive form: a fixed session name on the default server can collide,
-and a name-based cleanup can reach a session this run never started.
+this run's server separate and its teardown scoped to itself. Keep `-S` over `-L`:
+`tmux(1)` states that with `-S` the default socket directory "is not used and any
+`-L` flag is ignored", so the socket stays under the run root that cleanup
+removes, and a later `-L` cannot silently redirect it.
 
 Readiness: the startup banner, `Press ctrl+o to show full startup help`, the
 footer (`<cwd>` … `unknown`), and the input editor are painted. The harness
@@ -127,8 +128,8 @@ env HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" \
 
 ```bash
 PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run" "$HELPER" kill --name main
-tmux -S "$TMUX_SOCK" kill-server 2>/dev/null || true   # this run's server only
-rm -rf "$VERIFY_ROOT"                                   # also removes $TMUX_SOCK
+tmux -S "$TMUX_SOCK" kill-server 2>/dev/null || true   # end this run's server FIRST (see Cleanup)
+rm -rf "$VERIFY_ROOT"                                   # then the root, socket file included
 ```
 
 ## Doctor
@@ -286,6 +287,20 @@ rm -rf "$VERIFY_ROOT"
 ```
 
 The helper's `kill` terminates the Pike child and the broker for that session.
+
+**Hard requirement: end the tmux server before removing the root, on the run's
+own socket.** Removing the socket file does not stop the server — `rm -rf
+"$VERIFY_ROOT"` deletes the path while the server process keeps running. Use this
+order, with `-S "$TMUX_SOCK"` on the kill:
+
+```bash
+tmux -S "$TMUX_SOCK" kill-server      # end THIS run's server
+rm -rf "$VERIFY_ROOT"                 # then the root, socket file included
+```
+
+The order matters in both directions: deleting the socket first leaves `tmux` no
+target to reach, and a `kill-server` without `-S` reaches the default socket,
+where it can end a server this run never started.
 A tmux teardown kills the whole session and every pane in it; exit any live
 Pike first (`C-c` twice, then `C-d`) so the pane shell is at a prompt.
 `--no-session` TUI runs and `--print` runs leave no transcript; a session-backed
