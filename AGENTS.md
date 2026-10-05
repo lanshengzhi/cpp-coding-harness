@@ -16,10 +16,11 @@ Read [validation](docs/agents/validation.md) before implementation, review, or d
 ## Task-specific context
 
 - **Implementation:** read [validation](docs/agents/validation.md); consult [CODING_STANDARDS.md](CODING_STANDARDS.md) §2 (mechanical style) and §11 (tests) as the change requires.
+- **Repeated mechanical work — the same step over many targets, or a step you will run again:** do one instance by hand to fix the recipe, then build the smallest tool that is safe to re-run and check it on that instance. A one-off or simple change needs no tool.
 - **Review:** read [CODING_STANDARDS.md](CODING_STANDARDS.md) and [validation](docs/agents/validation.md).
 - **Architecture, Owner packages, module structure, capability seams, or security boundaries:** read [architecture](docs/agents/architecture.md), [pi parity](docs/agents/pi-parity.md), and the relevant accepted ADRs.
 - **pi-ai catalog or upstream baseline sync:** read `fixtures/pi-ai/README.md` and the module's accepted ADR.
-- **Running or E2E-testing the product:** read [usage](docs/usage.md); the TUI seams and their fixed-width conventions live in `tests/coding_agent/tui/`.
+- **Running or E2E-testing the product:** read [usage](docs/usage.md); the TUI seams and their fixed-width conventions live in `tests/coding_agent/tui/`. To drive the real CLI/TUI and capture evidence, read the verification skill at `.cursor/skills/verify-pike/SKILL.md` from this repository.
 
 ## Agent skills
 
