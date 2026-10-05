@@ -390,33 +390,10 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
     # Record the child so `cmd_kill` can still reach it if this broker is taken
     # out forcefully. The broker is the only process that knows the pid. spawn
     # writes the state file just after forking us, so wait briefly for it rather
-    # than drop the pid to that race.
+    # than drop the pid to that race. The write happens below, once the socket is
+    # listening: `child_pid` is what spawn reads as "the session is up", so it must
+    # not appear before the broker can actually answer.
     registered = False
-    for _ in range(50):                       # ~0.5s bound
-        # Read, compare and update under one lock. Reading outside it would let this
-        # broker write its stale snapshot back after a later spawn published a new
-        # token -- the compare and the write have to see the same record.
-        lock = state_lock(name)
-        if lock is None:
-            time.sleep(0.01)
-            continue
-        try:
-            try:
-                st = json.loads(state_file(name).read_text())
-            except (OSError, ValueError):
-                time.sleep(0.01)
-                continue
-            if st.get("token") != token:
-                break                         # a later session owns the file now
-            st["child_pid"] = child_pid
-            st["child_starttime"] = process_starttime(child_pid)
-            write_state(name, st)
-            registered = True
-            break
-        except OSError:
-            pass
-        finally:
-            release_lock(lock)
 
     child_collected = False
     rawf = None
@@ -453,6 +430,34 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
         bound = True
         srv.listen(4)
         srv.settimeout(0.2)
+        # Register only now, with the socket listening: `child_pid` in the state is what
+        # spawn reads as "the session is up", so publishing it before the broker can
+        # answer would let spawn report a session that this broker then fails to bind.
+        for _ in range(50):                   # ~0.5s bound
+            # Read, compare and update under one lock. Reading outside it would let this
+            # broker write its stale snapshot back after a later spawn published a new
+            # token -- the compare and the write have to see the same record.
+            lock = state_lock(name)
+            if lock is None:
+                time.sleep(0.01)
+                continue
+            try:
+                try:
+                    st = json.loads(state_file(name).read_text())
+                except (OSError, ValueError):
+                    time.sleep(0.01)
+                    continue
+                if st.get("token") != token:
+                    break                     # a later session owns the file now
+                st["child_pid"] = child_pid
+                st["child_starttime"] = process_starttime(child_pid)
+                write_state(name, st)
+                registered = True
+                break
+            except OSError:
+                pass
+            finally:
+                release_lock(lock)
         # Serve only while this run is registered in the state. Both ways of failing to
         # be registered land here: losing the name to a later run, and never managing to
         # publish the child at all -- a broker serving in either case is a session no
@@ -683,6 +688,9 @@ def cmd_spawn(a):
     if not registered:
         # Only drop the record this spawn published: a run started under the same name
         # since owns its own, and removing it would leave a live session with no state.
+        # The registration field is re-read under the lock, because the broker can
+        # register between the last poll above and this point -- deleting then would
+        # remove the record of a session that is running.
         lock = state_lock(name)
         if lock is not None:
             try:
@@ -691,9 +699,14 @@ def cmd_spawn(a):
                 except (OSError, ValueError):
                     current = None
                 if current is not None and current.get("token") == token:
-                    state_file(name).unlink(missing_ok=True)
+                    if current.get("child_pid"):
+                        registered = True     # it came up after all: keep the record
+                    else:
+                        state_file(name).unlink(missing_ok=True)
+
             finally:
                 release_lock(lock)
+    if not registered:
         why = ("the broker exited during start-up" if broker_gone
                else "the broker did not register its child in time")
         print(f"{name}: no session was started -- {why}", file=sys.stderr)
