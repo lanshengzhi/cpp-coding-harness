@@ -628,7 +628,16 @@ def cmd_kill(a):
                 pass
         for fd in handles.values():
             os.close(fd)
-        stf.unlink(missing_ok=True)
+        # Drop the state only if it still describes the session this command acted on.
+        # A run started under the same name meanwhile owns its own record, and removing
+        # it would leave a live session with no state for `screen`/`expect`/`kill` to
+        # find -- the same ownership guard the broker applies to its own unlink.
+        try:
+            current = json.loads(stf.read_text())
+        except (OSError, ValueError):
+            current = None                 # already gone, or never a valid record
+        if current is None or current.get("broker_pid") == st.get("broker_pid"):
+            stf.unlink(missing_ok=True)
     print(f"killed {a.name}")
 
 
