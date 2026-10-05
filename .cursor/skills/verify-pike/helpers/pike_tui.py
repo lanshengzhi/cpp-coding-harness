@@ -18,6 +18,7 @@ This lets concurrent verification runs stay isolated by RUN_DIR.
 """
 
 import argparse
+import ctypes
 import errno
 import fcntl
 import json
@@ -135,6 +136,22 @@ def pid_alive(pid):
         return True
     except OSError:
         return False
+
+
+def set_pdeathsig(parent_pid):
+    """Ask the kernel to deliver SIGKILL to this process if its parent dies.
+
+    The check against getppid() handles the race where the parent died before
+    prctl was called (in which case the child has already been reparented).
+    """
+    try:
+        libc = ctypes.CDLL(None)
+        PR_SET_PDEATHSIG = 1
+        if libc.prctl(PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0) == 0:
+            if os.getppid() != parent_pid:
+                os._exit(1)
+    except Exception:
+        pass
 
 
 def process_starttime(pid):
@@ -392,9 +409,15 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
     # with `child_pid` still None, and it would exit while a child exists -- the orphan
     # the handler is there to prevent. Blocking makes the assignment atomic with respect
     # to the signal: a pending SIGTERM is delivered on restore, once the pid is known.
+    broker_parent_pid = os.getpid()
     previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGTERM})
     child_pid = os.fork()
     if child_pid == 0:
+        # Guarantee no orphan: if the broker dies for any reason (even by uncatchable
+        # SIGKILL or crash before publishing child_pid to state), the kernel delivers
+        # SIGKILL to the child. The ppid check closes the race where the parent dies
+        # before prctl is called.
+        set_pdeathsig(broker_parent_pid)
         # Dispositions are inherited across fork, and until `setsid()` this child is still
         # in the parent's process group -- so the handler must not run here: its
         # `os.kill(0, ...)` would signal the whole group, the broker and the invoking
@@ -520,6 +543,16 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
                     time.sleep(0.2)
                     drain()
                     running = False
+                else:
+                    # Check whether another session has taken over our name in state.json.
+                    # If so, this broker is no longer the active session and must exit
+                    # gracefully rather than linger orphaned without routing state.
+                    try:
+                        st_cur = json.loads(state_file(name).read_text())
+                        if st_cur.get("token") != token:
+                            running = False
+                    except (OSError, ValueError):
+                        pass
                 continue
             data = b""
             while not data.endswith(b"\n"):
@@ -720,12 +753,6 @@ def cmd_spawn(a):
         # The registration field is re-read under the lock, because the broker can
         # register between the last poll above and this point -- deleting then would
         # remove the record of a session that is running.
-        #
-        # `confirmed_absent` records the one way this branch may conclude that no session
-        # exists: it read the state and saw no `child_pid` for this token, or saw that a
-        # later run owns the name (so this broker will refuse to serve). Anything else --
-        # no lock, an unreadable state -- leaves the answer unknown.
-        confirmed_absent = False
         lock = state_lock(name)
         if lock is not None:
             try:
@@ -738,18 +765,14 @@ def cmd_spawn(a):
                         registered = True     # it came up after all: keep the record
                     else:
                         state_file(name).unlink(missing_ok=True)
-                        confirmed_absent = True
-                elif current is not None:
-                    confirmed_absent = True   # a later run owns the name; this one will not serve
             finally:
                 release_lock(lock)
     if not registered:
-        if not confirmed_absent and not broker_gone:
-            # We could not confirm that no session was registered. Reporting failure and
-            # leaving the broker running would let it register afterwards and serve a
-            # session this command said was not started, so stop it and collect it. Not if
-            # it was already reaped: a reaped pid may since have been reused, and the
-            # signal would reach an unrelated process. The wait is bounded because the
+        if not broker_gone:
+            # This spawn failed to confirm that its session registered and is ready.
+            # Stop our own forked broker so it does not linger without a valid session.
+            # We skip signaling only if the broker was already reaped (broker_gone),
+            # so we never signal a recycled PID. The wait is bounded because the
             # broker's own handler reaps its child and exits on SIGTERM.
             try:
                 os.kill(broker_pid, signal.SIGTERM)
