@@ -89,6 +89,10 @@ PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run" "$HELPER" spawn \
   -- --no-session          # or omit for a persisted session; add flags after --
 ```
 
+`spawn` exit 0 means the parent observed `child_pid` in the state for this token; the
+broker publishes that field only after the socket has successfully listened. It does not
+guarantee that the broker remains alive after the parent observes it.
+
 **tmux:** give the run its **own tmux server**, with the socket inside the
 disposable run root, and a plain session name. **Every tmux command in this
 skill passes `-S "$TMUX_SOCK"`**, so no other server, socket, or session on the
