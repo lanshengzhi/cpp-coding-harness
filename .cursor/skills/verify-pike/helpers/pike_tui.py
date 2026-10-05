@@ -103,10 +103,17 @@ def broker_request(name, payload, timeout=30):
         print(f"broker for session {name!r} closed without a response", file=sys.stderr)
         sys.exit(3)
     try:
-        return json.loads(buf.decode())
+        resp = json.loads(buf.decode())
     except ValueError:
         print(f"broker for session {name!r} sent an unparseable response", file=sys.stderr)
         sys.exit(3)
+    if not isinstance(resp, dict):
+        # A syntactically valid answer of the wrong shape is still a protocol
+        # error; callers index it, so it must not pass as a normal reply.
+        print(f"broker for session {name!r} sent a {type(resp).__name__}, not an object",
+              file=sys.stderr)
+        sys.exit(3)
+    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -440,7 +447,13 @@ def cmd_screen(a):
 
 def cmd_expect(a):
     resp = broker_request(a.name, {"op": "expect", "text": a.text, "timeout": a.timeout}, timeout=a.timeout + 10)
-    if resp.get("found"):
+    if "found" not in resp:
+        # A valid answer that carries no `found` field is a protocol error, not a
+        # missing anchor: reporting TIMEOUT would say "the anchor was not seen"
+        # about a broker that never looked for it.
+        print(f"broker for session {a.name!r} answered without a 'found' field", file=sys.stderr)
+        sys.exit(3)
+    if resp["found"]:
         print(f"found {a.text!r}")
     else:
         print(f"TIMEOUT: {a.text!r} not seen within {a.timeout}s", file=sys.stderr)
