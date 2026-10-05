@@ -8,6 +8,7 @@ A change is accepted for the property, not for the check that stands in for it. 
 
 1. **A text or existence check is not acceptance of a property.** A predicate that matches an include spelling, searches for a string, asserts that a file or symbol exists, or compares a projection of a value can be satisfied by a respelling, a moved file, or a field added on one side while the property it is named for is violated; the clause-4 `agent-no-ai-private-includes` rule and the two session goldens are the measured cases. Run such a check when it is cheap and catches the ordinary case, but report its pass as a check, never as acceptance of the property.
 2. **Acceptance includes a case the property separates and the check does not.** For each acceptance criterion, name one case the check passes while the property is violated, and make it part of the delivery: a test where automation reaches it, manual evidence where it does not. One question finds it — *if this stand-in were broken, which case would it let through?* — and that case then gets built. A criterion with no such case is not yet accepted.
+3. **An empirical fork is accepted on a recorded observation, not on a described option.** Where two or more candidate behaviors are observably different, a small throwaway prototype may settle the fork; record the question it answered and the observation it produced, and treat that record as the evidence. Where the direction is already settled, or only one candidate is on the table, there is no fork to settle and no prototype to run. A design option listed in an ADR is not itself such a record.
 
 ## Validation tiers
 
@@ -18,6 +19,8 @@ This document owns the engineering validation vocabulary and procedures. Depende
 | **Focused Validation** | During implementation: build the owning test shard and run the smallest targeted test selection that can fail. Architecture-sensitive changes also run the architecture selection. |
 | **Full Validation** | Once before code delivery: an incremental build followed by the complete unfiltered offline test suite, including every architecture gate test. |
 | **Fresh Validation** | Environment-level validation from host precheck through a fresh configure, build, and full test run; reserved for clean checkouts, vcpkg-baseline or toolchain changes, configure-orchestration changes, or explicit user request. |
+
+A multi-step change whose slices depend on one another proceeds slice by slice: complete the current slice and run its Focused Validation before starting the slice that depends on it. This orders the work against the dependency, not against a schedule. A single-step change is not split to satisfy it, and this is a default practice rather than a per-PR gate.
 
 For documentation-only changes, use the [documentation checks](#documentation-only-changes) instead of a C++ build.
 
