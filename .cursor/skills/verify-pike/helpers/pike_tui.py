@@ -350,25 +350,32 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
     # out forcefully. The broker is the only process that knows the pid. spawn
     # writes the state file just after forking us, so wait briefly for it rather
     # than drop the pid to that race.
+    lost_ownership = False
     for _ in range(50):                       # ~0.5s bound
-        try:
-            st = json.loads(state_file(name).read_text())
-        except (OSError, ValueError):
+        # Read, compare and update under one lock. Reading outside it would let this
+        # broker write its stale snapshot back after a later spawn published a new
+        # token -- the compare and the write have to see the same record.
+        lock = state_lock(name)
+        if lock is None:
             time.sleep(0.01)
             continue
-        if st.get("token") != token:
-            break                             # a later session owns the file now
-        st["child_pid"] = child_pid
-        st["child_starttime"] = process_starttime(child_pid)
-        lock = state_lock(name)
-        if lock is not None:
+        try:
             try:
-                write_state(name, st)
-            except OSError:
-                pass
-            finally:
-                release_lock(lock)
-        break
+                st = json.loads(state_file(name).read_text())
+            except (OSError, ValueError):
+                time.sleep(0.01)
+                continue
+            if st.get("token") != token:
+                lost_ownership = True         # a later session owns the file now
+                break
+            st["child_pid"] = child_pid
+            st["child_starttime"] = process_starttime(child_pid)
+            write_state(name, st)
+            break
+        except OSError:
+            pass
+        finally:
+            release_lock(lock)
 
     child_collected = False
     rawf = None
@@ -405,7 +412,10 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
         bound = True
         srv.listen(4)
         srv.settimeout(0.2)
-        running = True
+        # A broker that no longer owns the name must not serve: it would be a session no
+        # state points at. It still falls through to the teardown below, which reaps its
+        # own child.
+        running = not lost_ownership
         raw = bytearray()
 
         def drain():
@@ -518,17 +528,25 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
                 os.unlink(sp)
             except OSError:
                 pass
-        # A stopped broker owns no live session, so it drops the state pointer with
-        # the socket -- but only while the file still names this broker. A later
-        # session may have replaced it, and that one is not ours to remove. A
-        # SIGKILL leaves both; the next bind unlinks the socket, and `cmd_kill`
-        # (or the operator) can still remove the state file.
-        try:
-            st = json.loads(state_file(name).read_text())
-            if st.get("token") == token:
-                state_file(name).unlink(missing_ok=True)
-        except (OSError, ValueError):
-            pass
+        # A stopped broker owns no live session, so it drops the state pointer with the
+        # socket -- but only while the file still names this run. A later session may
+        # have replaced it, and that one is not ours to remove. The compare and the
+        # delete share the lock, because publishing is what would otherwise slip between
+        # them. A SIGKILL leaves both; `cmd_kill` (or the operator) can still remove the
+        # state file.
+        lock = state_lock(name)
+        if lock is not None:
+            try:
+                try:
+                    st = json.loads(state_file(name).read_text())
+                except FileNotFoundError:
+                    st = "gone"
+                except (OSError, ValueError):
+                    st = None             # unknown is not ours to delete
+                if st == "gone" or (st and st.get("token") == token):
+                    state_file(name).unlink(missing_ok=True)
+            finally:
+                release_lock(lock)
 
 
 def cmd_spawn(a):
