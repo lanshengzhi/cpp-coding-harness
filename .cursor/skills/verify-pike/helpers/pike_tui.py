@@ -71,6 +71,32 @@ def pid_alive(pid):
         return False
 
 
+def process_starttime(pid):
+    """The kernel's start time for a pid, in clock ticks (field 22 of /proc/pid/stat).
+
+    `kill(pid, 0)` only reports that *some* process currently holds the number. A
+    pid the kernel has since reused holds a different start time, so this is what
+    separates the process this state names from a later one that inherited its
+    number. Returns None when it cannot be read -- and a caller that cannot read it
+    must not signal, because unknown is not the same process.
+    """
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as f:
+            data = f.read()
+    except OSError:
+        return None
+    try:
+        # comm may contain spaces and parentheses, so split after its last ')'.
+        return int(data[data.rindex(b")") + 2:].split()[19])
+    except (ValueError, IndexError):
+        return None
+
+
+def same_process(pid, starttime):
+    """True while `pid` still names the process whose start time was recorded."""
+    return starttime is not None and process_starttime(pid) == starttime
+
+
 def broker_request(name, payload, timeout=30):
     sp = sock_path(name)
     if not os.path.exists(sp):
@@ -242,15 +268,38 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path)
         if st.get("broker_pid") != os.getpid():
             break                             # a later session owns the file now
         st["child_pid"] = child_pid
+        st["child_starttime"] = process_starttime(child_pid)
         try:
             state_file(name).write_text(json.dumps(st))
         except OSError:
             pass
         break
 
+    child_collected = False
     rawf = None
     srv = None
     bound = False
+
+    def child_reaped():
+        """Answer "has the child exited?" and collect it in the same call.
+
+        `kill(pid, 0)` cannot answer this for our own unreaped child: a zombie
+        still holds the pid, so it always looks alive. `waitpid(WNOHANG)` answers
+        and reaps, which is why the parent uses it. Collecting is recorded, so a
+        later teardown can tell an already-reaped child from one still running.
+        """
+        nonlocal child_collected
+        if child_collected:
+            return True
+        try:
+            reaped, _ = os.waitpid(child_pid, os.WNOHANG)
+        except ChildProcessError:
+            child_collected = True
+            return True                      # already collected
+        if reaped:
+            child_collected = True
+        return child_collected
+
     try:
         rawf = open(raw_path, "ab", buffering=0)
         srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -263,19 +312,6 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path)
         srv.settimeout(0.2)
         running = True
         raw = bytearray()
-
-        def child_reaped():
-            """Answer "has the child exited?" and collect it in the same call.
-
-            `kill(pid, 0)` cannot answer this for our own unreaped child: a zombie
-            still holds the pid, so it always looks alive. `waitpid(WNOHANG)` answers
-            and reaps, which is why the parent uses it.
-            """
-            try:
-                reaped, _ = os.waitpid(child_pid, os.WNOHANG)
-            except ChildProcessError:
-                return True                      # already collected
-            return reaped != 0
 
         def drain():
             while True:
@@ -343,23 +379,27 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path)
             conn.close()
 
     finally:
-        try:
-            os.kill(child_pid, signal.SIGTERM)
-        except OSError:
-            pass
-        for _ in range(30):
-            if child_reaped():
-                break
-            time.sleep(0.1)
-        if not child_reaped():
+        if not child_collected:
+            # Signal only a child we have not already collected. Once reaped the pid
+            # is free, and a signal aimed at that number reaches whatever process the
+            # kernel has since given it.
             try:
-                os.kill(child_pid, signal.SIGKILL)
+                os.kill(child_pid, signal.SIGTERM)
             except OSError:
                 pass
-            try:
-                os.waitpid(child_pid, 0)     # collect what we just killed
-            except ChildProcessError:
-                pass
+            for _ in range(30):
+                if child_reaped():
+                    break
+                time.sleep(0.1)
+            if not child_reaped():
+                try:
+                    os.kill(child_pid, signal.SIGKILL)
+                except OSError:
+                    pass
+                try:
+                    os.waitpid(child_pid, 0)     # collect what we just killed
+                except ChildProcessError:
+                    pass
         try:
             os.close(master_fd)
         except OSError:
@@ -417,7 +457,9 @@ def cmd_spawn(a):
     # Write the state file once, with the broker pid in it. The child pid arrives
     # later and from the broker, because only the broker knows it.
     with open(state_file(name), "w") as f:
-        json.dump({"broker_pid": broker_pid, "cols": a.cols,
+        json.dump({"broker_pid": broker_pid,
+                   "broker_starttime": process_starttime(broker_pid),
+                   "cols": a.cols,
                    "rows": a.rows, "raw_path": raw_path, "binary": a.binary}, f)
     time.sleep(0.8)
 
@@ -477,11 +519,13 @@ def cmd_kill(a):
     stf = state_file(a.name)
     if stf.exists():
         st = json.loads(stf.read_text())
+        stopped = False
         try:
             broker_request(a.name, {"op": "kill"})
+            stopped = True
         except SystemExit:
-            # The broker is already gone, or its socket is stale. Its PID cleanup
-            # below is exactly what that state needs, so do not abort here -- a
+            # The broker is already gone, or its socket is stale. The identity
+            # fallback below is exactly what that state needs, so do not abort here -- a
             # transport failure must not skip the reclamation.
             pass
         # Let the broker's own teardown finish before forcing anything: it may
@@ -493,13 +537,43 @@ def cmd_kill(a):
             if not broker_pid or not pid_alive(broker_pid):
                 break
             time.sleep(0.1)
-        for pidkey in ("broker_pid", "child_pid"):
+        if stopped:
+            # A broker that accepted this request stops under its own control: its
+            # teardown terminates and reaps the pike child and unlinks this state
+            # file. Nothing of the child's is ours to kill then -- by that point it may
+            # be reaped and its number handed to an unrelated process, and neither a
+            # stale snapshot nor `kill(pid, 0)` can tell the two apart. Only the broker
+            # itself is still worth forcing.
+            targets = ("broker_pid",)
+        else:
+            # The broker never answered, so both pids are this state's own
+            # responsibility.
+            targets = ("broker_pid", "child_pid")
+        # Either way a signal goes only to a process we can still identify as the one
+        # this state names. `kill(pid, 0)` would only show that the number is in use,
+        # which is not the same thing.
+        unidentifiable = None
+        for pidkey in targets:
             pid = st.get(pidkey)
-            if pid and pid_alive(pid):
+            if not pid:
+                continue
+            if same_process(pid, st.get(pidkey + "_starttime")):
                 try:
                     os.kill(pid, signal.SIGKILL)
                 except OSError:
                     pass
+            elif pid_alive(pid) and process_starttime(pid) is None:
+                # A live process holds this number and we cannot read enough to say
+                # whether it is ours.
+                unidentifiable = pidkey
+        if unidentifiable:
+            # Signal nothing and keep the state: guessing here is what turns a cleanup
+            # into a kill against an unrelated process.
+            print(f"{a.name}: the pid recorded for "
+                  f"{unidentifiable.replace('_pid', '')} is in use and cannot be "
+                  f"identified as this session's; leaving state and socket in place",
+                  file=sys.stderr)
+            sys.exit(4)
         stf.unlink(missing_ok=True)
     print(f"killed {a.name}")
 
