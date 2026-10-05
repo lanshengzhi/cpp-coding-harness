@@ -105,6 +105,8 @@ def open_verified(pid, starttime):
 
     Splitting the check from the signal lets a caller resolve every target before it
     signals any of them, which is what makes "this failed without signalling" true.
+    The returned fd belongs to the caller, which closes it on every path -- including
+    the failure one, before it exits.
     """
     if starttime is None:
         return None, "unidentified"     # nothing recorded to compare against
