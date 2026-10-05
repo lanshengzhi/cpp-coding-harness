@@ -350,7 +350,7 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
     # out forcefully. The broker is the only process that knows the pid. spawn
     # writes the state file just after forking us, so wait briefly for it rather
     # than drop the pid to that race.
-    lost_ownership = False
+    registered = False
     for _ in range(50):                       # ~0.5s bound
         # Read, compare and update under one lock. Reading outside it would let this
         # broker write its stale snapshot back after a later spawn published a new
@@ -366,11 +366,11 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
                 time.sleep(0.01)
                 continue
             if st.get("token") != token:
-                lost_ownership = True         # a later session owns the file now
-                break
+                break                         # a later session owns the file now
             st["child_pid"] = child_pid
             st["child_starttime"] = process_starttime(child_pid)
             write_state(name, st)
+            registered = True
             break
         except OSError:
             pass
@@ -412,10 +412,12 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
         bound = True
         srv.listen(4)
         srv.settimeout(0.2)
-        # A broker that no longer owns the name must not serve: it would be a session no
+        # Serve only while this run is registered in the state. Both ways of failing to
+        # be registered land here: losing the name to a later run, and never managing to
+        # publish the child at all -- a broker serving in either case is a session no
         # state points at. It still falls through to the teardown below, which reaps its
         # own child.
-        running = not lost_ownership
+        running = registered
         raw = bytearray()
 
         def drain():
@@ -583,6 +585,7 @@ def cmd_spawn(a):
     # under the same name could inherit the number and be mistaken for this one. The
     # child pid arrives later and from the broker, because only the broker knows it.
     lock = state_lock(name)
+    published = False
     if lock is not None:
         try:
             write_state(name, {"broker_pid": broker_pid,
@@ -590,8 +593,27 @@ def cmd_spawn(a):
                                "token": token,
                                "cols": a.cols,
                                "rows": a.rows, "raw_path": raw_path, "binary": a.binary})
+            published = True
+        except OSError:
+            pass
         finally:
             release_lock(lock)
+    if not published:
+        # Without the record, the broker this spawn just forked is one no command can
+        # find: `send`/`screen`/`expect`/`kill` all resolve the session through the
+        # state. Fail closed and take the broker down rather than report a spawn that
+        # nothing can manage.
+        try:
+            os.kill(broker_pid, signal.SIGTERM)
+        except OSError:
+            pass
+        try:
+            os.waitpid(broker_pid, 0)
+        except ChildProcessError:
+            pass
+        print(f"{name}: could not publish the session state; no session was started",
+              file=sys.stderr)
+        sys.exit(1)
     time.sleep(0.8)
 
     # Reap a broker that already exited during the settle. Non-blocking on
