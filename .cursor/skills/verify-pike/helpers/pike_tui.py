@@ -373,8 +373,22 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
 
     signal.signal(signal.SIGTERM, term_handler)
 
+    # Block SIGTERM across the fork. Otherwise a signal delivered after the kernel has
+    # created the child but before the parent assigns `child_pid` would run the handler
+    # with `child_pid` still None, and it would exit while a child exists -- the orphan
+    # the handler is there to prevent. Blocking makes the assignment atomic with respect
+    # to the signal: a pending SIGTERM is delivered on restore, once the pid is known.
+    previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGTERM})
     child_pid = os.fork()
     if child_pid == 0:
+        # Dispositions are inherited across fork, and until `setsid()` this child is still
+        # in the parent's process group -- so the handler must not run here: its
+        # `os.kill(0, ...)` would signal the whole group, the broker and the invoking
+        # command included. Restore the default BEFORE unblocking, or the handler is still
+        # installed for the moment between the two and a pending signal would run it. A
+        # signal mask survives exec, so both are undone before anything else happens.
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
         os.setsid()
         os.dup2(slave_fd, 0)
         os.dup2(slave_fd, 1)
@@ -385,6 +399,7 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
             os.chdir(cwd)
         os.execvpe(argv[0], argv, env)
         os._exit(127)
+    signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
     os.close(slave_fd)
 
     # Record the child so `cmd_kill` can still reach it if this broker is taken
