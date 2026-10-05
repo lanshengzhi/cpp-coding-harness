@@ -290,6 +290,13 @@ def broker_loop(name, master_fd, child_pid, rows, cols, raw_path):
         os.unlink(sp)
     except OSError:
         pass
+    # A stopped broker owns no live session, so it drops the state pointer with
+    # the socket. A SIGKILL leaves both; the next bind unlinks the socket, and
+    # `cmd_kill` (or the operator) can still remove the state file.
+    try:
+        state_file(name).unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def cmd_spawn(a):
@@ -334,6 +341,16 @@ def cmd_spawn(a):
         json.dump({"child_pid": pid, "broker_pid": broker_pid, "cols": a.cols,
                    "rows": a.rows, "raw_path": raw_path, "binary": a.binary}, f)
     time.sleep(0.8)
+
+    # The broker may have exited during the settle (for example a binary that
+    # fails to start). Close the race with the broker's own teardown: an exited
+    # broker cannot unlink a state file that was written after it left.
+    if not pid_alive(broker_pid):
+        try:
+            state_file(name).unlink(missing_ok=True)
+        except OSError:
+            pass
+        print(f"broker for {name!r} exited during start-up", file=sys.stderr)
 
     # Reap the pike child if it already exited during the settle: this process
     # returns immediately below, so nothing else here will.
