@@ -191,10 +191,19 @@ HELPER=".cursor/skills/verify-pike/helpers/pike_tui.py"
 export PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run"
 ```
 
-- **Snapshot the visible screen**, the primary source of truth. PTY helper
+- **Snapshot the visible screen**, the primary thing you assert on. PTY helper
   (ANSI-stripped rows): `"$HELPER" screen --name main`. tmux (keeps colors with
   `-e`): `tmux -S "$TMUX_SOCK" capture-pane -t "$SESS" -p -e`. Save under
   `$EVIDENCE_DIR/<feature>-<step>.txt`.
+
+  **Both `screen` and `expect` read one reconstruction**, produced by
+  `interpret_screen` in `helpers/pike_tui.py`. It parses the CSI subset that
+  helper lists: cursor motion, erase, CR/LF/BS/TAB, and printable text. It is
+  **not** a general VT emulator and does **not** handle the alternate screen
+  (`\x1b[?1049h` / `l`), so against an application that switches screens the
+  reconstruction -- and an `expect` that matches on it -- can be incomplete.
+  tmux `capture-pane` reconstructs in the terminal itself and does not share that
+  limit.
 - **Send text / keys.** Helper: `"$HELPER" send --name main --text "/help"`, then
   `"$HELPER" send --name main --key enter`. tmux: `tmux -S "$TMUX_SOCK" send-keys -t "$SESS" -l "/help"`,
   then `tmux -S "$TMUX_SOCK" send-keys -t "$SESS" Enter`. Helper named keys: `enter escape tab
@@ -235,8 +244,12 @@ screen, and must **verify the side effect** alongside what's visible.
 - **TUI evidence.** Capture the screen after each meaningful action and save it
   under `$EVIDENCE_DIR/<feature>-<step>.txt`. With the helper:
   `"$HELPER" screen --name main --path "$EVIDENCE_DIR/<feature>-<step>.txt"`;
-  the raw ANSI transcript at `$PIKE_VERIFY_RUN_DIR/<name>/raw.ansi` is the
-  ground truth, and the reconstructed `screen` output is the readable form.
+  the raw ANSI at `$PIKE_VERIFY_RUN_DIR/<name>/raw.ansi` is the **raw input
+  record** -- every byte the PTY delivered, as delivered -- and the reconstructed
+  `screen` output is a **view derived from it, bounded by the parser described
+  under Drive**. Keep the raw record as the audit trail and assert on the view;
+  read a view from an application outside that parser's subset as partial rather
+  than as equivalent to the real rendering.
   With tmux: `tmux -S "$TMUX_SOCK" capture-pane -t "$SESS" -p -e > "$EVIDENCE_DIR/<feature>-<step>.txt"`;
   tmux keeps no separate raw transcript, so capture at every step you may need
   to defend. Keep both forms where they exist.
