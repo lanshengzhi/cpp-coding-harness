@@ -557,14 +557,46 @@ def cmd_kill(a):
     stf = state_file(a.name)
     if stf.exists():
         st = json.loads(stf.read_text())
+        # Resolve every identity BEFORE anything that can act. Asking the broker to stop
+        # makes it signal its pike child and drop the socket and the state, so a target
+        # found unidentifiable after that request would force an exit claiming nothing
+        # was signalled while something already had been. Resolving both pids up front
+        # is what makes the failure contract hold on every path, not just the fallback.
+        #
+        # A pid is a name, not a handle: it can be released and reused between a check
+        # and a signal, so each verified target yields a pidfd bound to the process it
+        # was opened on. `kill(pid, 0)` (or a start-time comparison) would only show
+        # that the number is in use.
+        handles = {}
+        unverified = None
+        for pidkey in ("broker_pid", "child_pid"):
+            pid = st.get(pidkey)
+            if not pid:
+                continue
+            fd, reason = open_verified(pid, st.get(pidkey + "_starttime"))
+            if fd is not None:
+                handles[pidkey] = fd
+            elif reason == "unidentified" and unverified is None:
+                unverified = pidkey
+        if unverified:
+            # Nothing has been sent and nothing has been dropped: every handle closes
+            # before any signal goes out, so the state and the socket stay and the
+            # caller sees an explicit failure. Guessing here is what turns a cleanup
+            # into a kill against an unrelated process.
+            for fd in handles.values():
+                os.close(fd)
+            print(f"{a.name}: cannot confirm the process recorded for "
+                  f"{unverified.replace('_pid', '')}; keeping state and socket",
+                  file=sys.stderr)
+            sys.exit(4)
         stopped = False
         try:
             broker_request(a.name, {"op": "kill"})
             stopped = True
         except SystemExit:
-            # The broker is already gone, or its socket is stale. The identity
-            # fallback below is exactly what that state needs, so do not abort here -- a
-            # transport failure must not skip the reclamation.
+            # The broker is already gone, or its socket is stale. The verified handles
+            # are exactly what that state needs, so do not abort here -- a transport
+            # failure must not skip the reclamation.
             pass
         # Let the broker's own teardown finish before forcing anything: it may
         # wait for the pike child before it unlinks the socket and the state
@@ -579,50 +611,23 @@ def cmd_kill(a):
             # A broker that accepted this request stops under its own control: its
             # teardown terminates and reaps the pike child and unlinks this state
             # file. Nothing of the child's is ours to kill then -- by that point it may
-            # be reaped and its number handed to an unrelated process, and neither a
-            # stale snapshot nor `kill(pid, 0)` can tell the two apart. Only the broker
+            # be reaped and its number handed to an unrelated process. Only the broker
             # itself is still worth forcing.
             targets = ("broker_pid",)
         else:
             # The broker never answered, so both pids are this state's own
             # responsibility.
             targets = ("broker_pid", "child_pid")
-        # Either way a signal goes only to a process we can still prove is the one
-        # this state names, through a handle rather than the pid: `kill(pid, 0)` (or a
-        # start-time comparison) would only show that the number is in use.
-        # Resolve every target BEFORE signalling any of them. Signalling as we went
-        # would let an earlier target be killed and a later one then fail its identity
-        # check, so the command would exit 4 saying nothing had been signalled when
-        # something already had.
-        handles = []
-        unverified = None
         for pidkey in targets:
-            pid = st.get(pidkey)
-            if not pid:
+            fd = handles.get(pidkey)
+            if fd is None:
                 continue
-            fd, reason = open_verified(pid, st.get(pidkey + "_starttime"))
-            if fd is not None:
-                handles.append(fd)
-            elif reason == "unidentified" and unverified is None:
-                unverified = pidkey
-        if unverified:
-            # Nothing has been signalled: every handle is dropped before any signal is
-            # sent, so the state and socket stay and the caller sees an explicit
-            # failure. Guessing here is what turns a cleanup into a kill against an
-            # unrelated process.
-            for fd in handles:
-                os.close(fd)
-            print(f"{a.name}: cannot confirm the process recorded for "
-                  f"{unverified.replace('_pid', '')}; keeping state and socket",
-                  file=sys.stderr)
-            sys.exit(4)
-        for fd in handles:
             try:
                 signal.pidfd_send_signal(fd, signal.SIGKILL)
             except OSError:
                 pass
-            finally:
-                os.close(fd)
+        for fd in handles.values():
+            os.close(fd)
         stf.unlink(missing_ok=True)
     print(f"killed {a.name}")
 
