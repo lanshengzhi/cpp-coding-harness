@@ -93,39 +93,38 @@ def process_starttime(pid):
         return None
 
 
-def signal_if_same(pid, starttime, sig=signal.SIGKILL):
-    """Signal `pid` only while it is provably still the process this state recorded.
+def open_verified(pid, starttime):
+    """Open a handle on `pid`, but only while it is provably the recorded process.
 
     A pid is a name, not a handle: it can be released and reused between a liveness
-    check and the signal, so comparing the start time and then calling
-    `os.kill(pid, ...)` still leaves a window to land in. A pidfd is bound to the
-    process it was opened on, so the signal goes through that handle instead and no
-    such window remains. Returns "signalled", "gone", "reused" or "unidentified".
+    check and a signal, so comparing the start time and then calling `os.kill(pid,
+    ...)` still leaves a window to land in. This returns `(fd, None)` with a pidfd
+    bound to the process it was opened on, so a signal sent through it later cannot
+    reach a different one -- or `(None, reason)`, with reason in "gone", "reused" or
+    "unidentified".
+
+    Splitting the check from the signal lets a caller resolve every target before it
+    signals any of them, which is what makes "this failed without signalling" true.
     """
     if starttime is None:
-        return "unidentified"            # nothing recorded to compare against
+        return None, "unidentified"     # nothing recorded to compare against
     try:
         fd = os.pidfd_open(pid)
     except OSError as exc:
         if exc.errno == errno.ESRCH:
-            return "gone"                # no such process: the number is free
+            return None, "gone"          # no such process: the number is free
         # No usable handle on this kernel, or no permission to take one. "Cannot
         # look" is not "nothing is there", so this fails closed rather than reading
         # an unsupported pidfd as an already-finished session.
-        return "unidentified"
-    try:
-        current = process_starttime(pid)
-        if current is None:
-            return "unidentified"        # cannot read an identity to compare
-        if current != starttime:
-            return "reused"              # the name now points at another process
-        try:
-            signal.pidfd_send_signal(fd, sig)
-        except OSError:
-            return "gone"
-        return "signalled"
-    finally:
+        return None, "unidentified"
+    current = process_starttime(pid)
+    if current is None:
         os.close(fd)
+        return None, "unidentified"     # cannot read an identity to compare
+    if current != starttime:
+        os.close(fd)
+        return None, "reused"           # the name now points at another process
+    return fd, None
 
 
 def broker_request(name, payload, timeout=30):
@@ -591,22 +590,39 @@ def cmd_kill(a):
         # Either way a signal goes only to a process we can still prove is the one
         # this state names, through a handle rather than the pid: `kill(pid, 0)` (or a
         # start-time comparison) would only show that the number is in use.
-        outcomes = []
+        # Resolve every target BEFORE signalling any of them. Signalling as we went
+        # would let an earlier target be killed and a later one then fail its identity
+        # check, so the command would exit 4 saying nothing had been signalled when
+        # something already had.
+        handles = []
+        unverified = None
         for pidkey in targets:
             pid = st.get(pidkey)
             if not pid:
                 continue
-            outcomes.append((pidkey, signal_if_same(pid, st.get(pidkey + "_starttime"))))
-        if any(outcome == "unidentified" for _, outcome in outcomes):
-            # A pid this state names is in use, or its identity cannot be read, so we
-            # cannot say the process is still ours. Signal nothing and keep the state
-            # and socket: guessing here is what turns a cleanup into a kill against an
+            fd, reason = open_verified(pid, st.get(pidkey + "_starttime"))
+            if fd is not None:
+                handles.append(fd)
+            elif reason == "unidentified" and unverified is None:
+                unverified = pidkey
+        if unverified:
+            # Nothing has been signalled: every handle is dropped before any signal is
+            # sent, so the state and socket stay and the caller sees an explicit
+            # failure. Guessing here is what turns a cleanup into a kill against an
             # unrelated process.
-            which = [key for key, outcome in outcomes if outcome == "unidentified"][0]
+            for fd in handles:
+                os.close(fd)
             print(f"{a.name}: cannot confirm the process recorded for "
-                  f"{which.replace('_pid', '')}; keeping state and socket",
+                  f"{unverified.replace('_pid', '')}; keeping state and socket",
                   file=sys.stderr)
             sys.exit(4)
+        for fd in handles:
+            try:
+                signal.pidfd_send_signal(fd, signal.SIGKILL)
+            except OSError:
+                pass
+            finally:
+                os.close(fd)
         stf.unlink(missing_ok=True)
     print(f"killed {a.name}")
 
