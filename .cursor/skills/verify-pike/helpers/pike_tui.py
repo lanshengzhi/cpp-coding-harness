@@ -405,8 +405,16 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path)
                     time.sleep(0.1)
                 resp = {"found": found}
             elif op == "kill":
-                running = False
-                resp = {"ok": True}
+                if req.get("broker_pid") != os.getpid():
+                    # The caller resolved the session it meant from the state file, and this
+                    # broker is not that session: a name can be restarted, and the socket
+                    # now belongs to a newer run. Stopping here would end a session the
+                    # caller never inspected, so refuse and stay up -- the caller's
+                    # verified handles still reclaim the session its state describes.
+                    resp = {"ok": False, "error": "not the session the caller resolved"}
+                else:
+                    running = False
+                    resp = {"ok": True}
             conn.sendall((json.dumps(resp) + "\n").encode())
             conn.close()
 
@@ -593,8 +601,13 @@ def cmd_kill(a):
             sys.exit(4)
         stopped = False
         try:
-            broker_request(a.name, {"op": "kill"})
-            stopped = True
+            resp = broker_request(a.name,
+                                  {"op": "kill", "broker_pid": st.get("broker_pid")})
+            if resp.get("ok"):
+                stopped = True
+            else:
+                print(f"{a.name}: the name now belongs to another session; reclaiming "
+                      f"only the one this state describes", file=sys.stderr)
         except SystemExit:
             # The broker is already gone, or its socket is stale. The verified handles
             # are exactly what that state needs, so do not abort here -- a transport
