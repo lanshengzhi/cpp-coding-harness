@@ -143,15 +143,18 @@ def set_pdeathsig(parent_pid):
 
     The check against getppid() handles the race where the parent died before
     prctl was called (in which case the child has already been reparented).
+    Fails closed: if prctl cannot be set or verified, the child exits immediately
+    rather than run without an automatic death guarantee.
     """
     try:
         libc = ctypes.CDLL(None)
         PR_SET_PDEATHSIG = 1
-        if libc.prctl(PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0) == 0:
-            if os.getppid() != parent_pid:
-                os._exit(1)
+        if libc.prctl(PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0) != 0:
+            os._exit(1)
+        if os.getppid() != parent_pid:
+            os._exit(1)
     except Exception:
-        pass
+        os._exit(1)
 
 
 def process_starttime(pid):
@@ -532,6 +535,13 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
                 rawf.write(chunk)
                 raw.extend(chunk)
 
+        def verify_ownership():
+            try:
+                st_cur = json.loads(state_file(name).read_text())
+                return st_cur.get("token") == token
+            except Exception:
+                return False
+
         while running:
             try:
                 conn, _ = srv.accept()
@@ -543,23 +553,34 @@ def broker_loop(name, master_fd, slave_fd, argv, cwd, env, rows, cols, raw_path,
                     time.sleep(0.2)
                     drain()
                     running = False
-                else:
-                    # Check whether another session has taken over our name in state.json.
-                    # If so, this broker is no longer the active session and must exit
-                    # gracefully rather than linger orphaned without routing state.
-                    try:
-                        st_cur = json.loads(state_file(name).read_text())
-                        if st_cur.get("token") != token:
-                            running = False
-                    except (OSError, ValueError):
-                        pass
+                elif not verify_ownership():
+                    # State was replaced, deleted, or unreadable: this broker is no
+                    # longer the active session and must fail closed rather than linger.
+                    running = False
                 continue
+            try:
+                conn.settimeout(5.0)
+            except OSError:
+                pass
+            if not verify_ownership():
+                # Lost ownership or state missing: fail closed before acting
+                running = False
+                try:
+                    conn.sendall(json.dumps({"ok": False, "error": "lost ownership"}).encode() + b"\n")
+                except OSError:
+                    pass
+                conn.close()
+                break
             data = b""
-            while not data.endswith(b"\n"):
-                chunk = conn.recv(4096)
-                if not chunk:
-                    break
-                data += chunk
+            try:
+                while not data.endswith(b"\n"):
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        break
+                    data += chunk
+            except socket.timeout:
+                conn.close()
+                continue
             try:
                 req = json.loads(data.decode())
             except Exception:
