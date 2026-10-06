@@ -59,6 +59,18 @@ unreadable source file, an empty source, a bad `@options` line, or a duplicate
 tool name is a typed error that aborts the load. Nothing is skipped silently
 and a partially loaded set is never returned.
 
+## Presentation golden
+
+`golden/tool-result-render.json` pins the rendered form of a declared tool's
+result (#877): the `ToolRendererRegistry` fallback framing on screen (the bold
+tool name, a blank row, the argument JSON, and the folded text output) plus the
+inline image sidecar the component places after the tool block. A declared tool
+name is unregistered, exactly like an MCP or extension tool name, so the
+registry hands it the fallback pair and the image lands in the same inline slot
+as any other tool's image; there is no codemode-specific renderer. The golden's
+trailing `[Image: ...]` row is the image component's own placeholder, which the
+terminal replaces with the sidecar when it supports inline images.
+
 ## Intentional divergence from pi v1.0.4
 
 pi v1.0.4 has **no** on-disk codemode declaration format. In pi, codemode
@@ -72,9 +84,11 @@ tools and see them on the tool surface. It follows pi where there is a shape to
 follow: the source file format is pi's `source.ts`, and the model-facing
 identity (`name`, `description`, `inputSchema`) is pi's `CodemodeTool`.
 
-**Scope (#870, #874):** declarations are loaded, validated, and listed. As of #874 a call to a
+**Scope (#870, #874, #877):** declarations are loaded, validated, and listed. As of #874 a call to a
 declared tool runs its script inside the wasm sandbox and returns the script's value and output; the
-sandbox has no host filesystem, network, or module capability (see `quickjs/README.md`). The
-script's `tools.*` surface is empty in this slice, so a script that calls `tools.<name>` fails with
-an explicit "does not exist" error. Routing `tools.*` to the session's tool set, and loading the
+sandbox has no host filesystem, network, or module capability (see `quickjs/README.md`). As of #877
+that output is presented through the existing `ToolRendererRegistry` fallback pair and the same
+inline image slot as any other tool's output (see "Presentation golden" above). The script's
+`tools.*` surface is empty in this slice, so a script that calls `tools.<name>` fails with an
+explicit "does not exist" error. Routing `tools.*` to the session's tool set, and loading the
 source into a session from settings/CLI, land in later slices of spec #865.
