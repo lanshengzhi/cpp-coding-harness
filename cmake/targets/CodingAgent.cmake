@@ -53,6 +53,7 @@ cch_parity_declare_target(
         src/coding_agent/runtime/SessionFork.cpp
         src/coding_agent/runtime/SessionLifecycle.cpp
         src/coding_agent/runtime/SessionPersistence.cpp
+        src/coding_agent/runtime/ToolSelection.cpp
         src/coding_agent/runtime/UserBashOutputAccumulator.cpp
     DEPENDS
         cch_agent_core
