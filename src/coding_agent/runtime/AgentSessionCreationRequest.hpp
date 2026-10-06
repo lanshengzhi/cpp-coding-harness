@@ -8,6 +8,7 @@
 #include <cch/agent/tools/ToolFactories.hpp>
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/extensions/ExtensionToolSource.hpp"
+#include "coding_agent/mcp/McpHttpServerConfig.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 
 #include <cstddef>
@@ -162,6 +163,15 @@ struct AgentSessionCreationRequest {
     /// management slice (#876) persists a configured list; focused tests and
     /// the in-session surface supply explicit servers here.
     std::vector<mcp::McpStdioServerConfig> mcp_servers;
+    /// The MCP streamable-http servers this session connects (spec #865,
+    /// ticket #873). Registration is TLS-only (ADR 0054): every URL is
+    /// validated at assembly, a non-`https://` URL is rejected with an
+    /// explicit Validation error, and the transport never falls back to
+    /// plaintext. Each configured server is connected, handshaken, and
+    /// converted into one Extension Tool Source, so its tools join the same
+    /// registry as the built-ins. Empty in production until the server-
+    /// management slice (#876) persists a configured list.
+    std::vector<mcp::McpHttpServerConfig> mcp_http_servers;
     /// Private test seam: the shared live PI_* facts holder wired into the
     /// model Bash Tool. Production callers never set it (SessionFactory
     /// creates and wires the holder); focused tests capture it to assert the
