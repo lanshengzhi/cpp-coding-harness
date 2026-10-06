@@ -326,8 +326,8 @@ Proof artifacts live under a directory you name (e.g. `artifacts/verify-pike/`)
 directory is a temporary holding area, not a home:** when the run ends, attach the
 run brief and the relevant captures to the issue, PR, or CI run they support.
 **Never commit a run directory** — a run's captures are evidence for one moment,
-not a repository asset. `artifacts/` is untracked here, and widening `.gitignore`
-is not this skill's business.
+not a repository asset. `artifacts/` is gitignored here, so runs do not dirty
+`git status`.
 
 ### Run identity (L1)
 

@@ -60,6 +60,9 @@ struct BuildSystemPromptOptions {
     /// `getReadmePath()`/`getDocsPath()`/`getExamplesPath()`).
     std::string readmePath;
     std::string docsPath;
+    /// Retained while ADR 0066 leaves the `examples/` axis undecided: the
+    /// prompt no longer renders it, but removing the field would pre-empt the
+    /// owner's ruling on whether `examples/` is coming or goes.
     std::string examplesPath;
 };
 
