@@ -20,6 +20,8 @@ cch_parity_declare_target(
         src/coding_agent/extensions/ExtensionToolRegistry.cpp
         src/coding_agent/mcp/McpExtensionToolSource.cpp
         src/coding_agent/mcp/McpStdioClient.cpp
+        src/coding_agent/extensions/codemode/CodemodeDeclaration.cpp
+        src/coding_agent/extensions/codemode/CodemodeToolSource.cpp
         src/coding_agent/GitIgnoreMatcher.cpp
         src/coding_agent/ImageInput.cpp
         src/coding_agent/ModelConfig.cpp

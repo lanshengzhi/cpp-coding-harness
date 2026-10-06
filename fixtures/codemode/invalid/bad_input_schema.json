@@ -1,0 +1,1 @@
+{ "name": "bad_input_schema", "description": "schema is not an object", "inputSchema": "nope", "source": "source.js" }
