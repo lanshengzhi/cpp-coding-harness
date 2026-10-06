@@ -20,6 +20,7 @@
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/extensions/ExtensionToolRegistry.hpp"
+#include "coding_agent/mcp/McpConfigFile.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/LocalUserShell.hpp"
@@ -1368,6 +1369,31 @@ struct PreparedAssemblyTarget final {
     add_settings_diagnostics();
     const auto& settings = snapshot.manager.settings();
 
+    // 3b. Load the persisted MCP server configuration (spec #865, ticket
+    // #876): the global `<agentDir>/mcp.json` always, and the project
+    // `<cwd>/.pi/mcp.json` only while the project is trusted. Reading the file
+    // is filesystem work, so it runs on a Runtime worker. A malformed file or
+    // entry is reported as a diagnostic and the session continues with the
+    // entries that parsed — only the programmatic request seam keeps #869's
+    // hard-fail. `mcp_statuses` is reported on the creation result and mirrored
+    // by the per-state diagnostics.
+    std::vector<mcp::McpServerStatus> mcp_statuses;
+    auto mcp_config = co_await support::detail::await_async_result(
+            submit_runtime_work<mcp::McpConfigLoad>(plan.execution_runtime_target,
+                    coding_agent::agent_config_dir().string().size() + workspace.string().size() + 1,
+                    stop_token,
+                    [workspace, project_trusted]() {
+                        return support::Expected<mcp::McpConfigLoad>{
+                                mcp::load_mcp_config(coding_agent::agent_config_dir(), workspace, project_trusted)};
+                    }));
+    if (!mcp_config) {
+        co_await discard_unpublished_session();
+        co_return std::unexpected(std::move(mcp_config.error()));
+    }
+    for (const auto& error : mcp_config->errors) {
+        diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Warning, "mcp:config", error));
+    }
+
     // 4. Resolve the model/auth runtime. An injected runtime wins; otherwise a
     // runtime is default-created from the Agent Config Directory.
     std::shared_ptr<ModelRuntime> runtime;
@@ -1603,7 +1629,9 @@ struct PreparedAssemblyTarget final {
     // MCP servers (spec #865, ticket #869): launch each configured stdio
     // server, handshake, and list its tools. A server that cannot be reached or
     // does not speak MCP fails Session Assembly explicitly — a configured
-    // server is never silently dropped.
+    // server is never silently dropped. This programmatic seam keeps #869's
+    // hard-fail; the persisted `mcp.json` path below degrades to a failed
+    // status instead.
     for (auto& server : plan.mcp_servers) {
         auto source = co_await mcp::McpExtensionToolSource::connect_stdio(std::move(server));
         if (!source) {
@@ -1611,6 +1639,11 @@ struct PreparedAssemblyTarget final {
             co_await discard_unpublished_session();
             co_return std::unexpected(std::move(source.error()));
         }
+        mcp_statuses.push_back(mcp::McpServerStatus{
+                .name = (*source)->server_name(),
+                .state = mcp::McpServerState::Running,
+                .detail = std::to_string((*source)->tools().size()) + " tools",
+        });
         plan.extension_tool_sources.push_back(std::move(*source));
     }
 
@@ -1632,7 +1665,68 @@ struct PreparedAssemblyTarget final {
             co_await discard_unpublished_session();
             co_return std::unexpected(std::move(source.error()));
         }
+        mcp_statuses.push_back(mcp::McpServerStatus{
+                .name = (*source)->server_name(),
+                .state = mcp::McpServerState::Running,
+                .detail = std::to_string((*source)->tools().size()) + " tools",
+        });
         plan.extension_tool_sources.push_back(std::move(*source));
+    }
+
+    // Persisted MCP servers (spec #865, ticket #876): a server disabled in
+    // `mcp.json` is stopped — its tools are absent and an explicit notice names
+    // the file — and a server that fails to launch, handshake, or list tools is
+    // failed with an explicit error while the session continues with the
+    // remaining servers. One dead entry never vetoes the session, and it is
+    // never silently dropped. A server that dies mid-session surfaces the
+    // per-call transport error and reconnects on the next call (the stdio
+    // transport's `reconnect_transport`).
+    for (auto& entry : mcp_config->servers) {
+        const std::string name = entry.name;
+        const std::string source_path = entry.source.string();
+        if (!entry.enabled) {
+            mcp_statuses.push_back(mcp::McpServerStatus{
+                    .name = name,
+                    .state = mcp::McpServerState::Stopped,
+                    .detail = "disabled in " + source_path,
+            });
+            diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Info,
+                    "mcp:stopped",
+                    "MCP server '" + name + "' is disabled in " + source_path + "; its tools are not available",
+                    source_path));
+            continue;
+        }
+        support::Expected<std::unique_ptr<mcp::McpExtensionToolSource>> connected =
+                std::unexpected(support::make_error(support::ErrorCode::Validation, "unreachable"));
+        if (auto* http = std::get_if<mcp::McpHttpServerConfig>(&entry.config)) {
+            if (auto valid = mcp::validate_mcp_http_server_config(*http); !valid) {
+                connected = std::unexpected(std::move(valid.error()));
+            } else {
+                connected = co_await mcp::McpExtensionToolSource::connect_http(*http);
+            }
+        } else {
+            connected = co_await mcp::McpExtensionToolSource::connect_stdio(
+                    std::get<mcp::McpStdioServerConfig>(entry.config));
+        }
+        if (!connected) {
+            const std::string reason = connected.error().message;
+            mcp_statuses.push_back(mcp::McpServerStatus{
+                    .name = name,
+                    .state = mcp::McpServerState::Failed,
+                    .detail = reason + " (" + source_path + ")",
+            });
+            diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Error,
+                    "mcp:failed",
+                    "MCP server '" + name + "' failed: " + reason + " (" + source_path + ")",
+                    source_path));
+            continue;
+        }
+        mcp_statuses.push_back(mcp::McpServerStatus{
+                .name = name,
+                .state = mcp::McpServerState::Running,
+                .detail = std::to_string((*connected)->tools().size()) + " tools from " + source_path,
+        });
+        plan.extension_tool_sources.push_back(std::move(*connected));
     }
 
     // Extension Tool Source (spec #865): load every configured source and
@@ -1905,6 +1999,7 @@ struct PreparedAssemblyTarget final {
             std::move(diagnostics),
             std::move(model_fallback_message),
             std::move(theme_documents),
+            std::move(mcp_statuses),
             std::move(identity));
     if (!published) {
         cleanup_on_failure();
@@ -1947,6 +2042,7 @@ boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>
         std::vector<coding_agent::SessionDiagnostic> diagnostics,
         std::optional<std::string> model_fallback_message,
         std::vector<coding_agent::LoadedThemeResource> theme_resources,
+        std::vector<mcp::McpServerStatus> mcp_servers,
         coding_agent::ResolvedSessionIdentity identity) {
     auto session = co_await coding_agent::AgentSession::bind_assembly(std::move(assembly));
     if (!session) {
@@ -1957,6 +2053,7 @@ boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>
             .diagnostics = std::move(diagnostics),
             .model_fallback_message = std::move(model_fallback_message),
             .theme_resources = std::move(theme_resources),
+            .mcp_servers = std::move(mcp_servers),
             .resolved_identity = std::move(identity),
     };
 }
