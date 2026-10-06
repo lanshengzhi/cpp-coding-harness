@@ -86,17 +86,36 @@ than to a named individual. This ruling covers **the MCP stdio transport slice o
 
 | Capability | pi source | Pike status | Scope of this ruling |
 |---|---|---|---|
-| MCP server over **stdio** | `packages/mcp/src/transports/stdio.ts`, `client.ts`, `protocol/jsonrpc.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (stdio transport, #869)** | A `cch_coding_agent` client that launches one configured MCP server over stdio, speaks newline-delimited compact JSON-RPC (`initialize` → `notifications/initialized` → `tools/list` → `tools/call`), and converts each advertised tool into an extension Tool (`mcp__<server>__<tool>`) through the #867 Extension Tool Source seam. The child is a long-lived per-session process group torn down close-stdin → grace → SIGTERM → SIGKILL; a per-call failure follows the Agent's existing per-call isolation. This ruling covers **stdio only**: **OAuth** (later decided in the #875 ruling below), **resource tools**, **server-management persistence (`mcp.json`)**, and **exposure policy (`codemode`/`deferred`/`hidden`)** remain `No decision` (the **streamable-HTTP transport** was later decided in the #873 ruling below), and no codemode, CLI flag, or extension machinery is opened here. |
+| MCP server over **stdio** | `packages/mcp/src/transports/stdio.ts`, `client.ts`, `protocol/jsonrpc.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (stdio transport, #869)** | A `cch_coding_agent` client that launches one configured MCP server over stdio, speaks newline-delimited compact JSON-RPC (`initialize` → `notifications/initialized` → `tools/list` → `tools/call`), and converts each advertised tool into an extension Tool (`mcp__<server>__<tool>`) through the #867 Extension Tool Source seam. The child is a long-lived per-session process group torn down close-stdin → grace → SIGTERM → SIGKILL; a per-call failure follows the Agent's existing per-call isolation. This ruling covers **stdio only**: **OAuth** (later decided in the #875 ruling below), **resource tools**, and **exposure policy (`codemode`/`deferred`/`hidden`)** remain `No decision` (the **streamable-HTTP transport** was later decided in the #873 ruling below and **server-management persistence** in the #876 ruling below), and no codemode, CLI flag, or extension machinery is opened here. |
 
 The slice reuses the Agent's ordinary execution path and adds no Owner Interface; the transport and
 conversion stay private under `src/coding_agent/mcp/`.
 
-| MCP server over **streamable HTTP** | `packages/mcp/src/transports/streamable-http.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (streamable-http transport, #873)** | A `cch_coding_agent` client that reaches one configured MCP server over the streamable-HTTP transport: one JSON-RPC POST per request with `accept: application/json, text/event-stream`, an `application/json` or `text/event-stream` response, and an `mcp-session-id` captured at `initialize` and echoed on later requests, converting each advertised tool into an extension Tool (`mcp__<server>__<tool>`) through the #867 Extension Tool Source seam. The HTTPS round trip reuses the existing outbound client transport (`ai::providers::StreamTransport`, ADR 0054) rather than opening a second HTTP stack, and is **TLS-only**: a non-`https://` URL is rejected at registration and no redirect is ever followed, so the connection cannot be downgraded to plaintext. This ruling covers **the transport's request path only**: the server-to-client GET stream, **OAuth** (later decided in the #875 ruling below), **resource tools**, **server-management persistence (`mcp.json`)**, and **exposure policy (`codemode`/`deferred`/`hidden`)** remain `No decision`, and no codemode, CLI flag, or extension machinery is opened here. |
+| MCP server over **streamable HTTP** | `packages/mcp/src/transports/streamable-http.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (streamable-http transport, #873)** | A `cch_coding_agent` client that reaches one configured MCP server over the streamable-HTTP transport: one JSON-RPC POST per request with `accept: application/json, text/event-stream`, an `application/json` or `text/event-stream` response, and an `mcp-session-id` captured at `initialize` and echoed on later requests, converting each advertised tool into an extension Tool (`mcp__<server>__<tool>`) through the #867 Extension Tool Source seam. The HTTPS round trip reuses the existing outbound client transport (`ai::providers::StreamTransport`, ADR 0054) rather than opening a second HTTP stack, and is **TLS-only**: a non-`https://` URL is rejected at registration and no redirect is ever followed, so the connection cannot be downgraded to plaintext. This ruling covers **the transport's request path only**: the server-to-client GET stream, **OAuth** (later decided in the #875 ruling below), **resource tools**, and **exposure policy (`codemode`/`deferred`/`hidden`)** remain `No decision` (**server-management persistence** was later decided in the #876 ruling below), and no codemode, CLI flag, or extension machinery is opened here. |
 
 The slice reuses the Agent's ordinary execution path and adds no Owner Interface; the transport and
 conversion stay private under `src/coding_agent/mcp/`. The JSON-RPC framing and `initialize`
 validation shared with the stdio client are factored into `src/coding_agent/mcp/McpProtocol.hpp`,
 and the tool conversion is written once against the transport-independent `McpServerConnection`.
+
+### MCP server management and persistence — spec #865 (#876)
+
+Decided **2026-10-07**, authorized by the spec flow of
+[#865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865), in the same attributed manner
+as the transport rulings above. This ruling covers **persistence and lifecycle only**: the TUI `/mcp`
+manager and `pi mcp` CLI subcommands, live in-session tool add/remove, and the
+exposure/OAuth/timeout fields stay `No decision`.
+
+| Capability | pi source | Pike status | Scope of this ruling |
+|---|---|---|---|
+| MCP server **management and persistence** | `packages/coding-agent/src/core/mcp-servers.ts`, `src/extensions/mcp/config.ts`, `index.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (persistence + lifecycle, #876)** | The server list persists in pi's separate `mcp.json` — the global `<agentDir>/mcp.json` always and the trusted-project `<cwd>/.pi/mcp.json` only while the existing ProjectTrust gate says trusted — using the `mcpServers` shape, so it survives a restart. Project entries replace global entries by name, and a project entry without `command`/`url`/`type` overrides only the global entry's `enabled` flag. Each configured server reports an explicit lifecycle state (`starting`/`running`/`stopped`/`failed`) on the creation-result status list and as a per-state Session diagnostic, so a disabled or dead server stays visible. A persisted server that fails to launch, handshake, or list tools reports `failed` with an explicit diagnostic while the session continues with the remaining servers; the programmatic `AgentSessionCreationRequest::mcp_servers` seam keeps #869's hard-fail. The stdio transport reconnects a dead server on the next call (pi `connection.reconnect()`), so a crash fails its own call explicitly and the following call re-establishes the server. This ruling covers **stdio end to end** (restart persistence, stopped = tools absent with a notice, reconnect after death); the **write half of `mcp.json`** (pi's `/mcp` manager), **live in-session tool add/remove** (the registry stays immutable after assembly), the **server-to-client GET stream**, **OAuth**, **resource tools**, and **exposure policy** remain `No decision`, and no TUI command or CLI subcommand is opened here. |
+
+**Persistence-format decision (recorded).** The server list lives in a separate `mcp.json`, not in
+`settings.json`. pi persists MCP servers in `mcp.json` (global and trust-gated project) and keeps
+`settings.json` for `codemode`/`extensions`/`defaultTools`; a `UserSettings` member would be a
+non-pi shape and would put project-authored server commands behind a different gate than pi's
+ProjectTrust. The loader is the read half only; the `/mcp` write half is a later slice, so a user
+authors `mcp.json` today.
 
 ### Codemode declarations and source loading — spec #865
 
@@ -225,7 +244,7 @@ Pike's counterpart is therefore `src/agent/harness/`, not that path.
 
 | pi package or capability | Size | Status |
 |---|---|---|
-| `packages/mcp` (whole package) | 20 files / 3,179 LOC (`client.ts` 21KB, `protocol/`, `transports/`, `oauth/`) | **Decided in part.** The **stdio** and **streamable-HTTP** transports, the `initialize`/`tools/list`/`tools/call` client, MCP-tool-to-extension-Tool conversion, and **OAuth credential semantics** are an owner decision — see the Owner decisions section above (spec #865, #869, #873, and #875). The rest of the package — the **server-to-client GET stream**, **resource tools**, **server-management persistence**, and **exposure policy** — remains **No decision.** |
+| `packages/mcp` (whole package) | 20 files / 3,179 LOC (`client.ts` 21KB, `protocol/`, `transports/`, `oauth/`) | **Decided in part.** The **stdio** and **streamable-HTTP** transports, the `initialize`/`tools/list`/`tools/call` client, MCP-tool-to-extension-Tool conversion, **OAuth credential semantics**, and **server management/persistence** are an owner decision — see the Owner decisions section above (spec #865, #869, #873, #875 and #876). The rest of the package — the **server-to-client GET stream**, **resource tools**, and **exposure policy** — remains **No decision.** |
 | `packages/codemode` (whole package) | 11 files / 1,655 LOC (`declarations.ts` 13KB, `runtime/`) | **Decided in part.** Project-local codemode declarations and source loading are an owner decision — see the Owner decisions section above (spec #865, #870). The sandboxed `runtime/` and `wasm.ts` execution path remains **No decision** until #874. |
 | Image generation (in-package capability, `packages/ai`) | `packages/ai/src/image-models.ts` (50 lines), `images-api-registry.ts` (53), `images.ts` (26) | **No decision.** Pike has image *input* handling (`ImageInput.cpp`); upstream image *generation* is a separate outbound API surface. |
 | Classifier models (in-package capability) | `packages/ai/src/types.ts:1161` (`ModelTypeMap.classifier: ClassifierModel<ClassifierApi>`), `models.ts` (`classify()` declarations at :228/:348/:966), `api/llama-cpp-classify.ts` (458 lines) + `.lazy.ts` (6), `coding-agent/src/core/model-registry.ts:77` (`findOfType("classifier", …)`) | **No decision.** Scope is the classifier model kind only: at this baseline `ModelTypeMap` has exactly `chat`, `image`, and `classifier`. Pike has no `ClassifierModel`, `classify()`, or `findOfType` equivalent. |
@@ -266,8 +285,12 @@ All pi sizes above are measured at the pi baseline; all Pike sizes at the Pike c
 - The MCP **streamable-http** transport slice is now an **attributed owner decision** (spec #865,
   #873), TLS-only and reusing the existing outbound client transport (ADR 0054); the server-to-client
   GET stream and the rest of `packages/mcp` stay **undecided**.
+- The MCP **server management and persistence** slice is now an **attributed owner decision** (spec
+  #865, #876): pi-faithful `mcp.json` persistence (global + trust-gated project), the
+  running/stopped/failed lifecycle status surface, and stdio reconnect-on-next-call. The `/mcp`
+  manager, live in-session tool add/remove, and the exposure/OAuth fields stay **undecided**.
 - `pi-v1.0.4` (`7c10bd4337495ee613f2224843ecdf349b80d1df`) is registered by name with no captured bundle; a future capture is new evidence per ADR 0065 and needs its own step, not a silent edit.
-- A future proposal to add a remaining MCP capability (server-to-client stream, OAuth, resources, persistence) or
+- A future proposal to add a remaining MCP capability (server-to-client stream, OAuth, resources, exposure) or
 codemode execution, or any other **No decision** row, starts from those rows and needs its own membership ruling plus implementation record; this ADR claims no such coverage.
 
 ## References

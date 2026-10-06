@@ -8,6 +8,7 @@
 #include <cch/ai/Usage.hpp>
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/ProjectResourceLoader.hpp"
+#include "coding_agent/mcp/McpServerStatus.hpp"
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/ProjectionStream.hpp>
 #include <cch/coding_agent/ModelResolver.hpp>
@@ -111,6 +112,13 @@ struct CreateAgentSessionResult {
     /// applies them through the theme controller (`setRegisteredThemes` +
     /// `applyFromSettings`). Parsing stays in the TUI layer.
     std::vector<LoadedThemeResource> theme_resources;
+
+    /// MCP server lifecycle states observed at assembly (spec #865, ticket
+    /// #876): every server in the merged `mcp.json` reports running, stopped,
+    /// or failed, so a disabled or dead server stays visible instead of
+    /// silently vanishing. The per-state Session diagnostics carry the same
+    /// facts as user-visible text.
+    std::vector<mcp::McpServerStatus> mcp_servers;
 
     /// Resolved identity observation (provider/model/session paths/metadata).
     ResolvedSessionIdentity resolved_identity;
