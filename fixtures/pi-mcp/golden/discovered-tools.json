@@ -1,0 +1,27 @@
+{
+  "server": "echo",
+  "tools": [
+    {
+      "server_tool_name": "echo",
+      "name": "mcp__echo__echo",
+      "description": "Echo the incoming text back.",
+      "parameters": {
+        "type": "object",
+        "properties": { "text": { "type": "string" } },
+        "required": ["text"]
+      }
+    },
+    {
+      "server_tool_name": "fail",
+      "name": "mcp__echo__fail",
+      "description": "Always report a tool-level error.",
+      "parameters": { "type": "object", "properties": {} }
+    },
+    {
+      "server_tool_name": "crash",
+      "name": "mcp__echo__crash",
+      "description": "Exit the server without responding.",
+      "parameters": { "type": "object", "properties": {} }
+    }
+  ]
+}

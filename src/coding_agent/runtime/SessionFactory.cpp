@@ -20,6 +20,7 @@
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/extensions/ExtensionToolRegistry.hpp"
+#include "coding_agent/mcp/McpExtensionToolSource.hpp"
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/LocalUserShell.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
@@ -197,6 +198,10 @@ struct AssemblyPlan {
     /// contribute Agent Tools, loaded and registered alongside the built-ins
     /// before the registry moves into the Agent.
     std::vector<std::unique_ptr<extensions::ExtensionToolSource>> extension_tool_sources;
+    /// Configured MCP stdio servers (spec #865, ticket #869). Assembly connects
+    /// each one and appends the resulting Extension Tool Source before the
+    /// sources are loaded.
+    std::vector<mcp::McpStdioServerConfig> mcp_servers;
     /// Private test seam: the shared live PI_* facts holder wired into the
     /// model Bash Tool (live-refresh tests).
     std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
@@ -813,6 +818,7 @@ struct SessionTargetNormalizationOptions {
     plan.requested_model = std::move(request.request_model);
     plan.custom_tools = std::move(request.custom_tools);
     plan.extension_tool_sources = std::move(request.extension_tool_sources);
+    plan.mcp_servers = std::move(request.mcp_servers);
     plan.bash_session_environment = std::move(request.bash_session_environment);
     plan.project_trust_override = request.project_trust_override.has_value()
         ? request.project_trust_override
@@ -1567,6 +1573,20 @@ struct PreparedAssemblyTarget final {
                 co_return std::unexpected(added.error());
             }
         }
+    }
+
+    // MCP servers (spec #865, ticket #869): launch each configured stdio
+    // server, handshake, and list its tools. A server that cannot be reached or
+    // does not speak MCP fails Session Assembly explicitly — a configured
+    // server is never silently dropped.
+    for (auto& server : plan.mcp_servers) {
+        auto source = co_await mcp::McpExtensionToolSource::connect_stdio(std::move(server));
+        if (!source) {
+            cleanup_on_failure();
+            co_await discard_unpublished_session();
+            co_return std::unexpected(std::move(source.error()));
+        }
+        plan.extension_tool_sources.push_back(std::move(*source));
     }
 
     // Extension Tool Source (spec #865): load every configured source and

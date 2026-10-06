@@ -8,6 +8,7 @@
 #include <cch/agent/tools/ToolFactories.hpp>
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/extensions/ExtensionToolSource.hpp"
+#include "coding_agent/mcp/McpStdioServerConfig.hpp"
 
 #include <cstddef>
 #include <filesystem>
@@ -154,6 +155,13 @@ struct AgentSessionCreationRequest {
     /// codemode slices supply configured sources; the foundation tests inject
     /// a stub source here.
     std::vector<std::unique_ptr<extensions::ExtensionToolSource>> extension_tool_sources;
+    /// The MCP servers this session connects (spec #865, ticket #869). During
+    /// assembly each configured server is launched over stdio, handshaken, and
+    /// converted into one Extension Tool Source, so its tools join the same
+    /// registry as the built-ins. Empty in production until the server-
+    /// management slice (#876) persists a configured list; focused tests and
+    /// the in-session surface supply explicit servers here.
+    std::vector<mcp::McpStdioServerConfig> mcp_servers;
     /// Private test seam: the shared live PI_* facts holder wired into the
     /// model Bash Tool. Production callers never set it (SessionFactory
     /// creates and wires the holder); focused tests capture it to assert the

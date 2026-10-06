@@ -76,6 +76,21 @@ The boundary is enforced by the Product Architecture Contract rule
 through the Tool Owner Interface (`<cch/agent/AgentTool.hpp>`, `<cch/agent/ToolRegistry.hpp>`) and
 may not include the Agent's execution internals or construct an Agent.
 
+### MCP stdio server — spec #865 (#869)
+
+Decided **2026-10-06**, authorized by the spec flow of
+[#865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865): the owner ruling was recorded
+through the repository's explicitly authorised spec flow, so it is attributed to that spec rather
+than to a named individual. This ruling covers **the MCP stdio transport slice only**; every other
+`packages/mcp` capability stays `No decision`.
+
+| Capability | pi source | Pike status | Scope of this ruling |
+|---|---|---|---|
+| MCP server over **stdio** | `packages/mcp/src/transports/stdio.ts`, `client.ts`, `protocol/jsonrpc.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (stdio transport, #869)** | A `cch_coding_agent` client that launches one configured MCP server over stdio, speaks newline-delimited compact JSON-RPC (`initialize` → `notifications/initialized` → `tools/list` → `tools/call`), and converts each advertised tool into an extension Tool (`mcp__<server>__<tool>`) through the #867 Extension Tool Source seam. The child is a long-lived per-session process group torn down close-stdin → grace → SIGTERM → SIGKILL; a per-call failure follows the Agent's existing per-call isolation. This ruling covers **stdio only**: the **HTTP/streamable transport**, **OAuth**, **resource tools**, **server-management persistence (`mcp.json`)**, and **exposure policy (`codemode`/`deferred`/`hidden`)** remain `No decision`, and no codemode, CLI flag, or extension machinery is opened here. |
+
+The slice reuses the Agent's ordinary execution path and adds no Owner Interface; the transport and
+conversion stay private under `src/coding_agent/mcp/`.
+
 ## Finding: not a decision
 
 The following was found during the Phase 1 capability inventory. **It is not an owner decision and
@@ -162,7 +177,7 @@ Pike's counterpart is therefore `src/agent/harness/`, not that path.
 
 | pi package or capability | Size | Status |
 |---|---|---|
-| `packages/mcp` (whole package) | 20 files / 3,179 LOC (`client.ts` 21KB, `protocol/`, `transports/`, `oauth/`) | **No decision.** Whether external MCP server connectivity is in Pike's product boundary has not been decided. |
+| `packages/mcp` (whole package) | 20 files / 3,179 LOC (`client.ts` 21KB, `protocol/`, `transports/`, `oauth/`) | **Decided in part.** The **stdio** transport, `initialize`/`tools/list`/`tools/call` client, and MCP-tool-to-extension-Tool conversion are an owner decision — see the Owner decisions section above (spec #865, #869). The rest of the package — the **HTTP/streamable transport**, **OAuth**, **resource tools**, **server-management persistence**, and **exposure policy** — remains **No decision.** |
 | `packages/codemode` (whole package) | 11 files / 1,655 LOC (`declarations.ts` 13KB, `runtime/`) | **No decision.** Tied upstream to grammar tool-call machinery that Pike already carries as Deferred. |
 | Image generation (in-package capability, `packages/ai`) | `packages/ai/src/image-models.ts` (50 lines), `images-api-registry.ts` (53), `images.ts` (26) | **No decision.** Pike has image *input* handling (`ImageInput.cpp`); upstream image *generation* is a separate outbound API surface. |
 | Classifier models (in-package capability) | `packages/ai/src/types.ts:1161` (`ModelTypeMap.classifier: ClassifierModel<ClassifierApi>`), `models.ts` (`classify()` declarations at :228/:348/:966), `api/llama-cpp-classify.ts` (458 lines) + `.lazy.ts` (6), `coding-agent/src/core/model-registry.ts:77` (`findOfType("classifier", …)`) | **No decision.** Scope is the classifier model kind only: at this baseline `ModelTypeMap` has exactly `chat`, `image`, and `classifier`. Pike has no `ClassifierModel`, `classify()`, or `findOfType` equivalent. |
@@ -196,8 +211,13 @@ All pi sizes above are measured at the pi baseline; all Pike sizes at the Pike c
 - The Extension Tool Source foundation is now an **attributed owner decision** (spec #865, #867);
   its row states the slice's scope so a later reader cannot read it as having ruled on MCP, codemode,
   or the `packages/durable` extension machinery.
+- The MCP **stdio** server slice is now an **attributed owner decision** (spec #865, #869), so it is
+  no longer an undecided row; the rest of `packages/mcp` and codemode stay **undecided**, so nobody
+  can later cite this ADR as having excluded them.
 - `pi-v1.0.4` (`7c10bd4337495ee613f2224843ecdf349b80d1df`) is registered by name with no captured bundle; a future capture is new evidence per ADR 0065 and needs its own step, not a silent edit.
-- A future proposal to add MCP or codemode starts from these **No decision** rows and needs its own membership ruling plus implementation record; this ADR claims no such coverage.
+- A future proposal to add a remaining MCP capability (HTTP, OAuth, resources, persistence) or
+  codemode starts from these **No decision** rows and needs its own membership ruling plus
+  implementation record; this ADR claims no such coverage.
 
 ## References
 
