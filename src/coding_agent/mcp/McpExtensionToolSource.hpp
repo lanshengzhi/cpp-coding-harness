@@ -63,6 +63,18 @@ public:
     [[nodiscard]] static boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>>
     connect_http(McpHttpServerConfig config, std::shared_ptr<McpRequestAuthSource> request_auth = nullptr);
 
+    /// Construction passkey (§7.7): `std::make_unique` cannot reach a private
+    /// constructor, so construction goes through the public constructor below,
+    /// whose key only a member of this class can name. `connect_stdio` and
+    /// `connect_http` are the sole callers.
+    struct ConstructionKey {
+    private:
+        ConstructionKey() = default;
+        friend class McpExtensionToolSource;
+    };
+    McpExtensionToolSource(
+            ConstructionKey, std::shared_ptr<McpServerConnection> connection, std::vector<McpToolDescriptor> tools);
+
     McpExtensionToolSource(const McpExtensionToolSource&) = delete;
     McpExtensionToolSource& operator=(const McpExtensionToolSource&) = delete;
 
@@ -73,8 +85,6 @@ public:
     [[nodiscard]] const std::vector<McpToolDescriptor>& tools() const noexcept { return tools_; }
 
 private:
-    McpExtensionToolSource(std::shared_ptr<McpServerConnection> connection, std::vector<McpToolDescriptor> tools);
-
     std::shared_ptr<McpServerConnection> connection_;
     std::string server_name_;
     std::vector<McpToolDescriptor> tools_;

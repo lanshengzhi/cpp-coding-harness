@@ -1,5 +1,7 @@
 #include "coding_agent/runtime/ToolSelection.hpp"
 
+#include "coding_agent/runtime/ToolNames.hpp"
+
 #include <algorithm>
 #include <cstddef>
 
@@ -52,22 +54,11 @@ namespace {
             discovered_names, [pattern](const std::string& name) { return wildcard_matches(pattern, name); });
 }
 
-[[nodiscard]] std::string join_names(std::span<const std::string> names) {
-    std::string joined;
-    for (const auto& name : names) {
-        if (!joined.empty()) {
-            joined += ", ";
-        }
-        joined += name;
-    }
-    return joined;
-}
-
 [[nodiscard]] support::Error unmatched_pattern_error(
         std::string_view entry, std::span<const std::string> discovered_names) {
     return support::make_error(support::ErrorCode::Validation,
             "tool pattern '" + std::string{entry} + "' matched no discovered tool",
-            "discovered tools: " + join_names(discovered_names));
+            "discovered tools: " + detail::join_tool_names(discovered_names));
 }
 
 [[nodiscard]] support::ExpectedVoid validate_patterns(

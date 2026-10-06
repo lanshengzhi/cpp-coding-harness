@@ -12,6 +12,8 @@
 
 #include "coding_agent/mcp/McpOAuthProvider.hpp"
 
+#include "coding_agent/mcp/McpNamespace.hpp"
+
 #include "ai/JsonAccess.hpp"
 #include "ai/auth/OAuthCallbackServer.hpp"
 #include "ai/auth/OAuthHttpClient.hpp"
@@ -189,12 +191,9 @@ using PromptDoneChannel = boost::asio::experimental::channel<void(boost::system:
 } // namespace
 
 std::string mcp_oauth_provider_id(std::string_view server_name) {
-    std::string id = "mcp__";
-    id.reserve(server_name.size() + 5);
-    for (const char character : server_name) {
-        id.push_back(character == '-' ? '_' : character);
-    }
-    return id;
+    // The credential-store provider id is the MCP tool namespace by
+    // construction (McpNamespace.hpp).
+    return detail::mcp_namespace(server_name);
 }
 
 McpOAuthProvider::McpOAuthProvider(McpOAuthServerConfig config, std::shared_ptr<ai::auth::OAuthHttpClient> http_client)

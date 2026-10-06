@@ -55,6 +55,17 @@ public:
     [[nodiscard]] static boost::asio::awaitable<support::Expected<std::shared_ptr<McpStdioClient>>> connect(
             McpStdioServerConfig config);
 
+    /// Construction passkey (§7.7): `std::make_shared` cannot reach a private
+    /// constructor, so construction goes through the public constructor below,
+    /// whose key only a member of this class can name. `connect` is the sole
+    /// caller; the connection itself is still built behind that factory.
+    struct ConstructionKey {
+    private:
+        ConstructionKey() = default;
+        friend class McpStdioClient;
+    };
+    McpStdioClient(ConstructionKey, boost::asio::any_io_executor executor, McpStdioServerConfig config);
+
     McpStdioClient(const McpStdioClient&) = delete;
     McpStdioClient& operator=(const McpStdioClient&) = delete;
     ~McpStdioClient();
@@ -78,8 +89,6 @@ public:
     [[nodiscard]] const std::string& server_name() const noexcept override { return config_.name; }
 
 private:
-    McpStdioClient(boost::asio::any_io_executor executor, McpStdioServerConfig config);
-
     /// One queued frame. A notification carries no `id` and no completion.
     struct QueuedFrame {
         std::string frame;

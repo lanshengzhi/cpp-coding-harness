@@ -50,6 +50,21 @@ public:
             std::shared_ptr<ai::providers::StreamTransport> transport,
             std::shared_ptr<McpRequestAuthSource> request_auth = nullptr);
 
+    /// Construction passkey (§7.7): `std::make_shared` cannot reach a private
+    /// constructor, so construction goes through the public constructor below,
+    /// whose key only a member of this class can name. `connect` is the sole
+    /// caller.
+    struct ConstructionKey {
+    private:
+        ConstructionKey() = default;
+        friend class McpHttpClient;
+    };
+    McpHttpClient(ConstructionKey,
+            boost::asio::any_io_executor executor,
+            McpHttpServerConfig config,
+            std::shared_ptr<ai::providers::StreamTransport> transport,
+            std::shared_ptr<McpRequestAuthSource> request_auth);
+
     McpHttpClient(const McpHttpClient&) = delete;
     McpHttpClient& operator=(const McpHttpClient&) = delete;
 
@@ -70,11 +85,6 @@ public:
     [[nodiscard]] const std::string& server_name() const noexcept override { return config_.name; }
 
 private:
-    McpHttpClient(boost::asio::any_io_executor executor,
-            McpHttpServerConfig config,
-            std::shared_ptr<ai::providers::StreamTransport> transport,
-            std::shared_ptr<McpRequestAuthSource> request_auth);
-
     /// One queued request body. A notification carries no `id` and no
     /// completion.
     struct QueuedFrame {

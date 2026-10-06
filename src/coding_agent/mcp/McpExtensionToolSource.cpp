@@ -159,7 +159,7 @@ std::string mcp_tool_name(std::string_view server, std::string_view tool) {
 }
 
 McpExtensionToolSource::McpExtensionToolSource(
-        std::shared_ptr<McpServerConnection> connection, std::vector<McpToolDescriptor> tools)
+        ConstructionKey, std::shared_ptr<McpServerConnection> connection, std::vector<McpToolDescriptor> tools)
     : connection_(std::move(connection)), server_name_(connection_->server_name()), tools_(std::move(tools)) {}
 
 boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>>
@@ -172,8 +172,7 @@ McpExtensionToolSource::connect_stdio(McpStdioServerConfig config) {
     if (!tools) {
         co_return std::unexpected(std::move(tools.error()));
     }
-    co_return std::unique_ptr<McpExtensionToolSource>(
-            new McpExtensionToolSource(std::move(*client), std::move(*tools)));
+    co_return std::make_unique<McpExtensionToolSource>(ConstructionKey{}, std::move(*client), std::move(*tools));
 }
 
 boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>> McpExtensionToolSource::connect_http(
@@ -187,8 +186,7 @@ boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>
     if (!tools) {
         co_return std::unexpected(std::move(tools.error()));
     }
-    co_return std::unique_ptr<McpExtensionToolSource>(
-            new McpExtensionToolSource(std::move(*client), std::move(*tools)));
+    co_return std::make_unique<McpExtensionToolSource>(ConstructionKey{}, std::move(*client), std::move(*tools));
 }
 
 support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource::load_tools() {
