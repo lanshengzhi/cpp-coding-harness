@@ -19,6 +19,7 @@
 #include "coding_agent/SessionCwd.hpp"
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
+#include "coding_agent/extensions/ExtensionToolRegistry.hpp"
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/LocalUserShell.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
@@ -192,6 +193,10 @@ struct AssemblyPlan {
     /// Private test seam: custom tools registered alongside the fixed built-in
     /// tool set (retry-continuation tests).
     std::vector<agent::Tool> custom_tools;
+    /// The Extension Tool Source seam (spec #865): external capabilities that
+    /// contribute Agent Tools, loaded and registered alongside the built-ins
+    /// before the registry moves into the Agent.
+    std::vector<std::unique_ptr<extensions::ExtensionToolSource>> extension_tool_sources;
     /// Private test seam: the shared live PI_* facts holder wired into the
     /// model Bash Tool (live-refresh tests).
     std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
@@ -807,6 +812,7 @@ struct SessionTargetNormalizationOptions {
     // through the plan unchanged.
     plan.requested_model = std::move(request.request_model);
     plan.custom_tools = std::move(request.custom_tools);
+    plan.extension_tool_sources = std::move(request.extension_tool_sources);
     plan.bash_session_environment = std::move(request.bash_session_environment);
     plan.project_trust_override = request.project_trust_override.has_value()
         ? request.project_trust_override
@@ -1560,6 +1566,29 @@ struct PreparedAssemblyTarget final {
                 co_await discard_unpublished_session();
                 co_return std::unexpected(added.error());
             }
+        }
+    }
+
+    // Extension Tool Source (spec #865): load every configured source and
+    // register its tools before the registry moves into the Agent, so an
+    // extension tool joins the ordinary Agent surface (visible to the model
+    // and callable through the same executor path as the built-ins).
+    if (!plan.extension_tool_sources.empty()) {
+        std::vector<extensions::ExtensionToolSource*> sources;
+        sources.reserve(plan.extension_tool_sources.size());
+        for (auto& source : plan.extension_tool_sources) {
+            sources.push_back(source.get());
+        }
+        extensions::ExtensionToolRegistry extension_tools;
+        if (auto loaded = extensions::load_extension_tools(extension_tools, sources); !loaded) {
+            cleanup_on_failure();
+            co_await discard_unpublished_session();
+            co_return std::unexpected(loaded.error());
+        }
+        if (auto registered = extensions::register_extension_tools(tools, std::move(extension_tools)); !registered) {
+            cleanup_on_failure();
+            co_await discard_unpublished_session();
+            co_return std::unexpected(registered.error());
         }
     }
 

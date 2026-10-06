@@ -71,6 +71,17 @@ VALID_MANIFEST = {
                 "excluded_source_prefixes": [],
                 "forbidden_include_prefixes": ["ai/", "src/ai/"],
             },
+            {
+                "id": "extension-tool-source-no-agent-execution-reach-through",
+                "source_prefixes": ["src/coding_agent/extensions/"],
+                "excluded_source_prefixes": [],
+                "forbidden_include_prefixes": [
+                    "cch/agent/ToolCallExecutor.hpp",
+                    "agent/ToolCallExecutor.hpp",
+                    "cch/agent/Agent.hpp",
+                    "agent/Agent.hpp",
+                ],
+            },
         ],
         "exceptions": [],
     },
@@ -263,6 +274,27 @@ class ManifestSchemaTest(unittest.TestCase):
                 "agent/harness/compaction",
                 "agent/harness/session/EntrySerializer.hpp",
                 "agent/harness/session/SessionJournal.hpp",
+            ),
+        )
+
+    def test_checked_in_manifest_isolates_the_extension_tool_source_boundary(self):
+        # Spec #865 / #867: the Extension Tool Source contributes passive Tools
+        # through the Agent Tool Owner Interface and must not reach into the
+        # Agent's execution internals. The rule is scoped to the extension
+        # source directory so it names that boundary alone.
+        manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
+        manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
+        rules = {rule.rule_id: rule for rule in manifest.architecture_contract.rules}
+        clause = rules["extension-tool-source-no-agent-execution-reach-through"]
+        self.assertEqual(clause.source_prefixes, ("src/coding_agent/extensions/",))
+        self.assertEqual(clause.excluded_source_prefixes, ())
+        self.assertEqual(
+            clause.forbidden_include_prefixes,
+            (
+                "cch/agent/ToolCallExecutor.hpp",
+                "agent/ToolCallExecutor.hpp",
+                "cch/agent/Agent.hpp",
+                "agent/Agent.hpp",
             ),
         )
 
@@ -1310,6 +1342,63 @@ class ArchitectureContractTest(unittest.TestCase):
                 "cch_coding_agent",
                 "coding_agent/runtime/SessionFactory.cpp",
                 "agent/harness/RuntimeRoot.hpp",
+                spelling="quote",
+            )
+        self.assertEqual(diagnostics, [])
+
+    def test_extension_tool_source_cannot_include_agent_execution_headers(self):
+        # The Extension Tool Source registers passive Tools through the Agent
+        # Tool Owner Interface; it must not reach into the Agent's execution
+        # internals or construct an Agent. Both the private-root and Owner
+        # Interface spellings are caught, so a respelling cannot slip past the
+        # boundary.
+        for include_path, spelling in (
+            ("agent/ToolCallExecutor.hpp", "quote"),
+            ("cch/agent/Agent.hpp", "angle"),
+        ):
+            with self.subTest(include_path=include_path):
+                with tempfile.TemporaryDirectory() as tmp:
+                    diagnostics = run_include_case(
+                        tmp,
+                        "cch_coding_agent",
+                        "coding_agent/extensions/ExtensionLoader.cpp",
+                        include_path,
+                        spelling=spelling,
+                    )
+                self.assertEqual(
+                    rule_ids(diagnostics), [pg.RULE_EXTENSION_TOOL_SOURCE_REACH_THROUGH]
+                )
+                self.assertIn(
+                    "extension-tool-source-no-agent-execution-reach-through",
+                    diagnostics[0].message,
+                )
+                self.assertEqual(diagnostics[0].target, "cch_coding_agent")
+                self.assertEqual(diagnostics[0].dependency, include_path)
+
+    def test_extension_tool_source_may_include_the_tool_owner_interface(self):
+        # The Tool Owner Interface is the allowed path: only the Agent's
+        # execution internals and Agent construction are forbidden, so the rule
+        # is a boundary rather than a blanket ban on the Agent module.
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "coding_agent/extensions/ExtensionToolRegistry.cpp",
+                "agent/ToolRegistry.hpp",
+                spelling="quote",
+            )
+        self.assertEqual(diagnostics, [])
+
+    def test_extension_tool_source_boundary_does_not_cover_other_application_sources(self):
+        # The rule names the Extension Tool Source directory alone: a sibling
+        # application source that includes the same header is governed by its
+        # own rules, so the boundary cannot be satisfied by a move.
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "coding_agent/runtime/ExtensionRunner.cpp",
+                "agent/ToolCallExecutor.hpp",
                 spelling="quote",
             )
         self.assertEqual(diagnostics, [])
