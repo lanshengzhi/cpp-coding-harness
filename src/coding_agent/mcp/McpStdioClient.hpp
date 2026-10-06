@@ -15,9 +15,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
+#include <stop_token>
 #include <string>
 #include <string_view>
 
@@ -58,9 +61,14 @@ public:
 
     /// One JSON-RPC request. Completes with the response `result`, the
     /// server's JSON-RPC error, or a transport error (invalid response,
-    /// connection closed, timeout).
-    [[nodiscard]] support::AsyncResult<support::JsonValue> request(
-            std::string method, std::optional<support::JsonValue> params = std::nullopt) override;
+    /// connection closed, timeout). `stop_token` is the caller's cancellation
+    /// source (ADR 0020): requesting stop sends `notifications/cancelled` for
+    /// this request id and completes with a cancellation error once that
+    /// notification has been written, so the server observes the cancellation
+    /// before the call returns.
+    [[nodiscard]] support::AsyncResult<support::JsonValue> request(std::string method,
+            std::optional<support::JsonValue> params = std::nullopt,
+            std::stop_token stop_token = {}) override;
 
     /// One JSON-RPC notification (no `id`, no response). Ordered against
     /// requests through the same queue.
@@ -93,9 +101,23 @@ private:
     /// Read frames until the response for `id` arrives. Malformed/invalid
     /// frames are skipped as recoverable transport errors.
     [[nodiscard]] boost::asio::awaitable<support::Expected<support::JsonValue>> await_response(int id);
-    /// Read one newline-delimited frame; nullopt on timeout, EOF, or read
-    /// error (`closed_` is set for EOF/error).
+    /// Read one newline-delimited frame; nullopt on timeout, EOF, wake, or
+    /// read error. `last_read_timed_out_` is set for the deadline, and
+    /// `last_read_woken_` for a cancellation-driven wake (see
+    /// `cancel_request`); `closed_` is set for EOF or an unexpected error.
     [[nodiscard]] boost::asio::awaitable<std::optional<std::string>> read_line();
+
+    /// Resolve a cancellation request for `id` (posted from the stop
+    /// callback). Marks the id cancelled and wakes the in-flight response
+    /// wait so `await_response` sends `notifications/cancelled` and completes
+    /// the caller without waiting for a server response.
+    void cancel_request(int id);
+    /// Whether `id` is still queued or being served (so a late cancellation is
+    /// ignored once the request has already completed).
+    [[nodiscard]] bool request_pending(int id) const noexcept;
+    /// Write the `notifications/cancelled` frame for `id`. The write error is
+    /// ignored: the caller's cancellation outcome is the caller's intent.
+    [[nodiscard]] boost::asio::awaitable<void> write_cancellation(int id);
 
     void enqueue_frame(std::string frame,
             int id,
@@ -104,19 +126,35 @@ private:
     void teardown_process_group() noexcept;
     void close_transport() noexcept;
 
+    /// Keeps one request's stop callback alive until the request completes; the
+    /// callback holds a weak client reference, so the registration never keeps
+    /// the client alive.
+    using StopRegistration = std::stop_callback<std::function<void()>>;
+
     boost::asio::any_io_executor executor_;
     McpStdioServerConfig config_;
     boost::asio::posix::stream_descriptor stdin_pipe_;
     boost::asio::posix::stream_descriptor stdout_pipe_;
     std::deque<std::unique_ptr<QueuedFrame>> queue_;
+    /// Request ids a caller cancelled while they were still pending. Entries
+    /// live only while the request is pending.
+    std::set<int> cancelled_;
+    std::map<int, std::unique_ptr<StopRegistration>> stop_registrations_;
     std::string read_buffer_;
     int next_id_{1};
     int child_pid_{-1};
     int process_group_{-1};
+    /// The request id whose frame the pump is currently writing or awaiting;
+    /// 0 when the pump is idle. `awaiting_id_` is set only while a response
+    /// read is outstanding, so a cancellation wake targets the right read.
+    int current_id_{0};
+    int awaiting_id_{0};
     bool pumping_{false};
     bool closed_{false};
     /// The last `read_line` nullopt came from the deadline rather than EOF.
     bool last_read_timed_out_{false};
+    /// The last `read_line` nullopt was a cancellation wake, not EOF.
+    bool last_read_woken_{false};
     /// An over-size frame has no `\n` yet; skip bytes until the next newline.
     bool discarding_oversize_frame_{false};
 };

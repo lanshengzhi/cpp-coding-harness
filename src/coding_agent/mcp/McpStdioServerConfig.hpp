@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <map>
 #include <string>
 #include <vector>
@@ -22,6 +23,10 @@ struct McpStdioServerConfig {
     /// Environment variables layered over the inherited environment, so a
     /// configured entry wins. Empty keeps the inherited environment.
     std::map<std::string, std::string> env;
+    /// Longest a single request may wait for its response before failing with
+    /// a timeout (pi `DEFAULT_REQUEST_TIMEOUT_MS`). A value of zero or less
+    /// disables the deadline.
+    std::chrono::milliseconds request_timeout{std::chrono::milliseconds{30000}};
 };
 
 } // namespace cch::coding_agent::mcp

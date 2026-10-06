@@ -30,14 +30,27 @@
 
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
+#include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <charconv>
+#include <chrono>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <functional>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -54,6 +67,8 @@
 using namespace cch;
 
 namespace {
+
+using namespace std::chrono_literals;
 
 [[nodiscard]] std::string fixture_path(std::string_view name) {
     return std::string{CCH_SOURCE_DIR} + "/fixtures/pi-mcp/" + std::string{name};
@@ -72,7 +87,7 @@ namespace {
 /// reaps it on every scope-exit path, so no server survives a test.
 class HttpFixtureServer final {
 public:
-    HttpFixtureServer() {
+    explicit HttpFixtureServer(std::string trace_path = {}) {
         int fds[2]{-1, -1};
         REQUIRE(::pipe(fds) == 0);
         const pid_t child = ::fork();
@@ -84,6 +99,9 @@ public:
             const int devnull = ::open("/dev/null", O_WRONLY);
             if (devnull >= 0) {
                 (void)::dup2(devnull, STDERR_FILENO);
+            }
+            if (!trace_path.empty()) {
+                (void)::setenv("PIKE_MCP_TRACE", trace_path.c_str(), 1);
             }
             const std::string script = fixture_path("http_server.py");
             const std::string cert = tls_fixture_path("test-server.pem");
@@ -256,6 +274,97 @@ private:
     return std::move(created->session);
 }
 
+[[nodiscard]] std::string read_text_if_present(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        return {};
+    }
+    return std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+}
+
+[[nodiscard]] bool trace_contains(const std::filesystem::path& path, std::string_view needle) {
+    return read_text_if_present(path).find(needle) != std::string::npos;
+}
+
+/// Await until `predicate` holds or `budget` elapses; the caller asserts the
+/// property afterwards, so a timeout stays a test failure rather than a hang.
+[[nodiscard]] boost::asio::awaitable<void> wait_for(
+        boost::asio::any_io_executor executor, std::function<bool()> predicate, std::chrono::milliseconds budget) {
+    boost::asio::steady_timer timer(executor);
+    const auto deadline = std::chrono::steady_clock::now() + budget;
+    while (!predicate() && std::chrono::steady_clock::now() < deadline) {
+        timer.expires_after(10ms);
+        co_await timer.async_wait(boost::asio::use_awaitable);
+    }
+}
+
+[[nodiscard]] support::JsonValue tools_call_params(std::string name, support::JsonValue arguments) {
+    return support::JsonValue{support::JsonValue::object_t{
+            {"name", std::move(name)},
+            {"arguments", std::move(arguments)},
+    }};
+}
+
+[[nodiscard]] std::optional<std::string> first_text_content(const support::JsonValue& result) {
+    const auto* object = result.get_if<support::JsonValue::object_t>();
+    if (object == nullptr) {
+        return std::nullopt;
+    }
+    const auto content = object->find("content");
+    if (content == object->end()) {
+        return std::nullopt;
+    }
+    const auto* array = content->second.get_if<support::JsonValue::array_t>();
+    if (array == nullptr) {
+        return std::nullopt;
+    }
+    for (const auto& block : *array) {
+        const auto* block_object = block.get_if<support::JsonValue::object_t>();
+        if (block_object == nullptr) {
+            continue;
+        }
+        const auto text = block_object->find("text");
+        if (text != block_object->end() && text->second.holds<std::string>()) {
+            return text->second.get_string();
+        }
+    }
+    return std::nullopt;
+}
+
+/// Start one `tools/call` for `tool_name` over HTTP, wait until the fixture
+/// server has it in flight (its trace line), request cancellation through the
+/// caller's stop token, and return the call's terminal outcome. Waiting for the
+/// server's `hang-start` line guarantees the cancellation hits a running call
+/// rather than a queued one.
+[[nodiscard]] boost::asio::awaitable<support::Expected<support::JsonValue>> cancel_in_flight_http_call(
+        std::shared_ptr<coding_agent::mcp::McpHttpClient> client,
+        std::filesystem::path trace,
+        std::stop_source& cancel,
+        std::string tool_name) {
+    const auto executor = co_await boost::asio::this_coro::executor;
+    auto first = std::make_shared<std::optional<support::Expected<support::JsonValue>>>();
+    boost::asio::co_spawn(
+            executor,
+            [client,
+                    first,
+                    token = cancel.get_token(),
+                    params = tools_call_params(std::move(tool_name),
+                            support::JsonValue::object_t{})]() mutable -> boost::asio::awaitable<void> {
+                first->emplace(co_await support::detail::await_async_result(
+                        client->request("tools/call", std::move(params), token)));
+                co_return;
+            },
+            boost::asio::detached);
+    co_await wait_for(executor, [&] { return trace_contains(trace, "hang-start"); }, 10s);
+    cancel.request_stop();
+    co_await wait_for(executor, [&] { return first->has_value(); }, 10s);
+    if (!first->has_value()) {
+        co_return std::unexpected(
+                support::make_error(support::ErrorCode::Timeout, "the cancelled HTTP call never completed"));
+    }
+    co_return std::move(**first);
+}
+
 } // namespace
 
 TEST_CASE("connecting an MCP HTTP server lists its tools with the pi naming and schema",
@@ -271,13 +380,16 @@ TEST_CASE("connecting an MCP HTTP server lists its tools with the pi naming and 
     CHECK(source.value()->server_name() == "echo");
 
     const auto& tools = source.value()->tools();
-    REQUIRE(tools.size() == 3);
+    REQUIRE(tools.size() == 6);
     CHECK(tools[0].server_tool_name == "echo");
     CHECK(tools[0].full_name == "mcp__echo__echo");
     CHECK(tools[0].description == "Echo the incoming text back.");
     REQUIRE(tools[0].parameters.get_if<support::JsonValue::object_t>() != nullptr);
     CHECK(tools[1].full_name == "mcp__echo__fail");
     CHECK(tools[2].full_name == "mcp__echo__sse_echo");
+    CHECK(tools[3].full_name == "mcp__echo__hang");
+    CHECK(tools[4].full_name == "mcp__echo__slow");
+    CHECK(tools[5].full_name == "mcp__echo__crash");
 }
 
 TEST_CASE("an MCP HTTP server tool is discoverable and callable in the Agent Session",
@@ -447,4 +559,53 @@ TEST_CASE("an MCP HTTP tool is visible to the session only when its server is re
             {http_config(server)});
     CHECK(session_exposes_tool(*with, "mcp__echo__echo"));
     with->close();
+}
+
+TEST_CASE("cancelling an in-flight MCP HTTP call surfaces the cancellation error and keeps the connection usable",
+        "[coding_agent][mcp][issue872][spec]") {
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    HttpFixtureServer server{trace};
+    auto ca = trust_test_ca();
+    tests::RuntimeFixture runtime;
+
+    auto client = connect_http_client(runtime, http_config(server));
+    std::stop_source cancel;
+    const auto cancelled = tests::run_awaitable(runtime, cancel_in_flight_http_call(client, trace, cancel, "hang"));
+
+    // The in-flight call failed with the cancellation error the transport
+    // produced, not a timeout and not a silent hang.
+    REQUIRE_FALSE(cancelled.has_value());
+    CHECK(cancelled.error().code == support::ErrorCode::Cancelled);
+
+    // The connection stays usable: a subsequent call completes normally.
+    const auto after = tests::run_awaitable(runtime,
+            support::detail::await_async_result(client->request(
+                    "tools/call", tools_call_params("echo", support::JsonValue::object_t{{"text", "after cancel"}}))));
+    REQUIRE(after.has_value());
+    CHECK(first_text_content(*after) == std::optional<std::string>{"after cancel"});
+}
+
+TEST_CASE("an MCP HTTP call errors explicitly after the server dies between tools/list and tools/call",
+        "[coding_agent][mcp][issue872][spec]") {
+    HttpFixtureServer server;
+    auto ca = trust_test_ca();
+    tests::RuntimeFixture runtime;
+
+    auto client = connect_http_client(runtime, http_config(server));
+    const auto listed =
+            tests::run_awaitable(runtime, support::detail::await_async_result(client->request("tools/list")));
+    REQUIRE(listed.has_value());
+
+    // `tools/call crash` exits the server without responding; that call and
+    // the next one both fail explicitly rather than hanging.
+    const auto crash = tests::run_awaitable(runtime,
+            support::detail::await_async_result(
+                    client->request("tools/call", tools_call_params("crash", support::JsonValue::object_t{}))));
+    REQUIRE_FALSE(crash.has_value());
+
+    const auto call = tests::run_awaitable(runtime,
+            support::detail::await_async_result(client->request(
+                    "tools/call", tools_call_params("echo", support::JsonValue::object_t{{"text", "too late"}}))));
+    REQUIRE_FALSE(call.has_value());
 }

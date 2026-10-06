@@ -5,6 +5,7 @@
 
 #include "support/Json.hpp"
 
+#include <chrono>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -79,6 +80,25 @@ namespace detail {
         }
     }
     return support::make_error(support::ErrorCode::Process, std::move(message), std::move(detail));
+}
+
+/// The error a pending request fails with when its caller's stop token is
+/// requested (ADR 0020, ticket #872). The detail is what the Agent's
+/// tool-failure text reads, so it names the server and the cancellation. Both
+/// transports share it so a cancellation reads the same regardless of wire.
+[[nodiscard]] inline support::Error cancelled_error(const std::string& server) {
+    return support::make_error(support::ErrorCode::Cancelled,
+            "MCP server '" + server + "' request cancelled",
+            "MCP server '" + server + "' request cancelled before the server responded");
+}
+
+/// The error a pending request fails with when no response arrives within the
+/// configured request timeout (pi `McpTimeoutError`), so a hung server fails
+/// the call explicitly instead of blocking the session.
+[[nodiscard]] inline support::Error timeout_error(const std::string& server, std::chrono::milliseconds timeout) {
+    return support::make_error(support::ErrorCode::Timeout,
+            "MCP server '" + server + "' request timed out",
+            "MCP server '" + server + "' did not respond within " + std::to_string(timeout.count()) + " ms");
 }
 
 /// Validate the `initialize` result like pi `validateInitializeResult`: the

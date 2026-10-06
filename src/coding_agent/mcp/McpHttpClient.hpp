@@ -16,6 +16,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 
@@ -54,9 +55,13 @@ public:
 
     /// One JSON-RPC request. Completes with the response `result`, the
     /// server's JSON-RPC error, or a transport error (HTTP status, unsupported
-    /// content type, malformed body).
-    [[nodiscard]] support::AsyncResult<support::JsonValue> request(
-            std::string method, std::optional<support::JsonValue> params = std::nullopt) override;
+    /// content type, malformed body). `stop_token` is the caller's
+    /// cancellation source (ADR 0020): it is carried on the outbound
+    /// `StreamRequest`, so aborting the Agent Turn cancels the HTTPS request
+    /// and fails the call with a cancellation error.
+    [[nodiscard]] support::AsyncResult<support::JsonValue> request(std::string method,
+            std::optional<support::JsonValue> params = std::nullopt,
+            std::stop_token stop_token = {}) override;
 
     /// One JSON-RPC notification (no `id`, no response). Ordered against
     /// requests through the same queue.
@@ -77,19 +82,23 @@ private:
         int id{0};
         std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion;
         bool is_notification{false};
+        std::stop_token stop_token{};
     };
 
     /// Serve the queued frames in order until the queue drains; one pump runs
     /// at a time and is restarted by the next enqueue.
     [[nodiscard]] boost::asio::awaitable<void> pump();
-    /// POST one request body and interpret the response for `id`.
+    /// POST one request body and interpret the response for `id`; `stop_token`
+    /// cancels the in-flight HTTPS request.
     [[nodiscard]] boost::asio::awaitable<support::Expected<support::JsonValue>> send_request(
-            std::string_view frame, int id);
+            std::string_view frame, int id, std::stop_token stop_token);
     /// POST one notification body; any 2xx is success and the body is ignored.
     [[nodiscard]] boost::asio::awaitable<std::optional<support::Error>> send_notification(std::string_view frame);
     /// One HTTPS POST through the reused transport, buffering the full
-    /// response body (JSON or SSE).
-    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> post(std::string_view body);
+    /// response body (JSON or SSE). `stop_token` is carried on the request so
+    /// the transport can cancel it.
+    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> post(
+            std::string_view body, std::stop_token stop_token);
 
     [[nodiscard]] std::map<std::string, std::string> request_headers() const;
     /// The same headers plus, when a request-auth source is configured, the
@@ -102,7 +111,8 @@ private:
 
     void enqueue_frame(std::string frame,
             int id,
-            std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion);
+            std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
+            std::stop_token stop_token = {});
     void complete_frame(QueuedFrame& frame, support::Expected<support::JsonValue> outcome);
 
     boost::asio::any_io_executor executor_;

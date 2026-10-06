@@ -226,7 +226,7 @@ support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource
                                         {"name", server_tool_name},
                                         {"arguments", std::move(arguments)},
                                 }};
-                                connection->request("tools/call", std::move(params))
+                                connection->request("tools/call", std::move(params), stop_token)
                                         .start([server, completion = std::move(completion)](
                                                        support::Expected<support::JsonValue> outcome) mutable noexcept {
                                             if (!outcome) {

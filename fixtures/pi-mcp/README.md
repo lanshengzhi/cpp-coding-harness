@@ -21,8 +21,13 @@ responses on stdout, diagnostics on stderr.
 | `tools/call` `echo` | Echoes `arguments.text` as a text content block. |
 | `tools/call` `fail` | Returns a well-formed `isError: true` result. |
 | `tools/call` `crash` | Exits without responding (connection closed mid-request). |
+| `tools/call` `hang` | Never responds; once the client sends `notifications/cancelled` for it, keeps streaming notification frames without ever completing the request. |
+| `tools/call` `slow` | Sleeps `arguments.ms` (default 50 ms), then echoes `arguments.text`. |
+| `notifications/cancelled` | Observed on the read loop; logged, and a `hang` request is answered with streaming notifications. |
 | `debug/emit_garbage` | Writes a non-JSON line, then the valid response. |
 | `debug/emit_invalid_jsonrpc` | Writes valid JSON that is not a JSON-RPC message. |
+| `debug/exit` | Responds, then exits 0 (a server that dies between `tools/list` and `tools/call`). |
+
 
 `http_server.py` (the streamable-HTTP TLS fixture) also carries two debug
 methods used by the OAuth slice (#875) to observe credential attachment over
@@ -33,6 +38,30 @@ committed separately under `oauth/` (`oauth/README.md`).
 
 The server offers three tools (`echo`, `fail`, `crash`) in the order `tools/list`
 reports them.
+
+The server offers five tools (`echo`, `fail`, `crash`, `hang`, `slow`) in the
+order `tools/list` reports them.
+
+## Trace file
+
+When `PIKE_MCP_TRACE` names a file, the server appends one flushed line per
+observed event: `recv <method> id=<n>`, `hang-start id=<n>`, `stream id=<n>`,
+and `cancelled requestId=<n>`. The failure-isolation tests set it through
+`McpStdioServerConfig.env` and poll it to assert that a cancellation reached
+the server, so a run that only failed the call locally cannot pass.
+
+## `http_server.py`
+
+A self-contained TLS MCP server for the streamable-http slice (#873), speaking
+the same wire contract as `echo_server.py` over `POST`/SSE and issuing an
+`Mcp-Session-Id` the client must echo. It offers `echo`, `fail`, `sse_echo`,
+`hang`, `slow`, and `crash`; the last three are the failure-isolation modes
+(#872): `hang` holds a request open until the client cancels it, `slow` sleeps
+`arguments.ms` before answering, and `crash` exits the server without
+responding. The same `PIKE_MCP_TRACE` trace file applies (`recv <method>
+id=<n>`, `hang-start id=<n>`), so a test can prove a request was in flight
+before it cancelled it.
+
 
 ## `mcp.json`
 

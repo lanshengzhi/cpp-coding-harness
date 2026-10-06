@@ -17,10 +17,17 @@ Methods (`tools/list` reports one tool per page with `nextCursor`):
 
   initialize                  MCP handshake; issues `Mcp-Session-Id`
   notifications/initialized   notification; 202, no body
-  tools/list                  echo | fail | sse_echo
+  tools/list                  echo | fail | sse_echo | hang | slow | crash
   tools/call echo             JSON response echoing arguments.text
   tools/call fail             JSON `isError: true` result
   tools/call sse_echo         response delivered over `text/event-stream`
+  tools/call hang             never responds; holds the request open until cancelled
+  tools/call slow             sleeps arguments.ms (default 50), then echoes arguments.text
+  tools/call crash            exits the server without responding
+
+When `PIKE_MCP_TRACE` names a file, the server appends one flushed line per
+observed event, so a test can prove a request was genuinely in flight before it
+cancels it.
 
 Debug methods exercise the separation cases:
 
@@ -34,13 +41,28 @@ Debug methods exercise the separation cases:
 
 import argparse
 import json
+import os
 import ssl
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 SESSION_ID = "pike-test-session"
 PAGE_SIZE = 1
+
+# When `PIKE_MCP_TRACE` names a file, the server appends one flushed line per
+# observed event, which the failure-isolation tests poll to assert ordering.
+TRACE = os.environ.get("PIKE_MCP_TRACE")
+
+
+def trace(line):
+    if not TRACE:
+        return
+    with open(TRACE, "a", encoding="utf-8") as handle:
+        handle.write(line + "\n")
+        handle.flush()
+
 
 TOOLS = [
     {
@@ -66,6 +88,24 @@ TOOLS = [
             "required": ["text"],
         },
     },
+    {
+        "name": "hang",
+        "description": "Never respond; hold the request open.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "slow",
+        "description": "Respond after a delay.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"ms": {"type": "number"}, "text": {"type": "string"}},
+        },
+    },
+    {
+        "name": "crash",
+        "description": "Exit the server without responding.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
 ]
 
 
@@ -86,6 +126,7 @@ class Handler(BaseHTTPRequestHandler):
 
         method = message.get("method")
         rid = message.get("id")
+        trace("recv " + str(method) + " id=" + str(rid))
 
         if method != "initialize" and self.headers.get("Mcp-Session-Id") != SESSION_ID:
             # The client must capture the session id from `initialize` and echo
@@ -164,6 +205,17 @@ class Handler(BaseHTTPRequestHandler):
             }
             body = ("event: message\ndata: " + json.dumps(response, separators=(",", ":")) + "\n\n").encode()
             self._raw(200, "text/event-stream", body)
+        elif name == "hang":
+            # Hold the request open: the client must cancel it rather than wait
+            # for a response that never comes.
+            trace("hang-start id=" + str(rid))
+            time.sleep(3600)
+        elif name == "slow":
+            time.sleep(max(0.0, float(arguments.get("ms", 50))) / 1000.0)
+            self._json(rid, result={"content": [{"type": "text", "text": str(arguments.get("text", ""))}]})
+        elif name == "crash":
+            # Exit without responding: the client observes the connection drop.
+            os._exit(3)
         else:
             self._json(rid, error={"code": -32602, "message": "Unknown tool: " + str(name)})
 

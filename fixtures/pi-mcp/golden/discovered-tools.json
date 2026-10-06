@@ -22,6 +22,24 @@
       "name": "mcp__echo__crash",
       "description": "Exit the server without responding.",
       "parameters": { "type": "object", "properties": {} }
+    },
+    {
+      "server_tool_name": "hang",
+      "name": "mcp__echo__hang",
+      "description": "Never respond; keep streaming after a cancellation.",
+      "parameters": { "type": "object", "properties": {} }
+    },
+    {
+      "server_tool_name": "slow",
+      "name": "mcp__echo__slow",
+      "description": "Respond after a delay.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "ms": { "type": "number" },
+          "text": { "type": "string" }
+        }
+      }
     }
   ]
 }
