@@ -103,12 +103,13 @@ and the tool conversion is written once against the transport-independent `McpSe
 Decided **2026-10-07**, authorized by the spec flow of
 [#865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865), in the same attributed manner
 as the transport rulings above. This ruling covers **persistence and lifecycle only**: the TUI `/mcp`
-manager and `pi mcp` CLI subcommands, live in-session tool add/remove, and the
-exposure/OAuth/timeout fields stay `No decision`.
+manager and `pi mcp` CLI subcommands, live in-session tool add/remove, and the exposure/timeout
+fields stay `No decision`. **MCP OAuth** credential semantics were later decided in the #875 ruling
+below, which leaves only the `mcp.json` `auth` block and its sign-in trigger as a recorded follow-up.
 
 | Capability | pi source | Pike status | Scope of this ruling |
 |---|---|---|---|
-| MCP server **management and persistence** | `packages/coding-agent/src/core/mcp-servers.ts`, `src/extensions/mcp/config.ts`, `index.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (persistence + lifecycle, #876)** | The server list persists in pi's separate `mcp.json` — the global `<agentDir>/mcp.json` always and the trusted-project `<cwd>/.pi/mcp.json` only while the existing ProjectTrust gate says trusted — using the `mcpServers` shape, so it survives a restart. Project entries replace global entries by name, and a project entry without `command`/`url`/`type` overrides only the global entry's `enabled` flag. Each configured server reports an explicit lifecycle state (`starting`/`running`/`stopped`/`failed`) on the creation-result status list and as a per-state Session diagnostic, so a disabled or dead server stays visible. A persisted server that fails to launch, handshake, or list tools reports `failed` with an explicit diagnostic while the session continues with the remaining servers; the programmatic `AgentSessionCreationRequest::mcp_servers` seam keeps #869's hard-fail. The stdio transport reconnects a dead server on the next call (pi `connection.reconnect()`), so a crash fails its own call explicitly and the following call re-establishes the server. This ruling covers **stdio end to end** (restart persistence, stopped = tools absent with a notice, reconnect after death); the **write half of `mcp.json`** (pi's `/mcp` manager), **live in-session tool add/remove** (the registry stays immutable after assembly), the **server-to-client GET stream**, **OAuth**, **resource tools**, and **exposure policy** remain `No decision`, and no TUI command or CLI subcommand is opened here. |
+| MCP server **management and persistence** | `packages/coding-agent/src/core/mcp-servers.ts`, `src/extensions/mcp/config.ts`, `index.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (persistence + lifecycle, #876)** | The server list persists in pi's separate `mcp.json` — the global `<agentDir>/mcp.json` always and the trusted-project `<cwd>/.pi/mcp.json` only while the existing ProjectTrust gate says trusted — using the `mcpServers` shape, so it survives a restart. Project entries replace global entries by name, and a project entry without `command`/`url`/`type` overrides only the global entry's `enabled` flag. Each configured server reports an explicit lifecycle state (`starting`/`running`/`stopped`/`failed`) on the creation-result status list and as a per-state Session diagnostic, so a disabled or dead server stays visible. A persisted server that fails to launch, handshake, or list tools reports `failed` with an explicit diagnostic while the session continues with the remaining servers; the programmatic `AgentSessionCreationRequest::mcp_servers` seam keeps #869's hard-fail. The stdio transport reconnects a dead server on the next call (pi `connection.reconnect()`), so a crash fails its own call explicitly and the following call re-establishes the server. This ruling covers **stdio end to end** (restart persistence, stopped = tools absent with a notice, reconnect after death); the **write half of `mcp.json`** (pi's `/mcp` manager), **live in-session tool add/remove** (the registry stays immutable after assembly), the **server-to-client GET stream**, **resource tools**, and **exposure policy** remain `No decision` (**MCP OAuth** was later decided in the #875 ruling below), and no TUI command or CLI subcommand is opened here. |
 
 **Persistence-format decision (recorded).** The server list lives in a separate `mcp.json`, not in
 `settings.json`. pi persists MCP servers in `mcp.json` (global and trust-gated project) and keeps
@@ -127,7 +128,7 @@ not execution.
 | Capability | pi source | Pike status | Scope of this ruling |
 |---|---|---|---|
 | Codemode declarations and source loading | `packages/codemode/src/declarations.ts`, `source.ts`, `types.ts` at `7c10bd43` (`v1.0.4`); `packages/coding-agent/src/extensions/codemode/` | **In the supported subset (declarations / loading, #870)** | A project-local declaration surface — `<workspace>/.pi/codemode/*.json` carrying `{name, description, inputSchema?, source}`, with the `source` `*.js` in pi's `source.ts` format — loaded through the Extension Tool Source foundation and exposed on the tool surface. An invalid declaration is a typed error with no silent skip; loading never executes at declaration time. It opens no MCP server, adds no CLI flag, and rules on no other capability (execution is the #874 ruling below). |
-| Codemode sandboxed execution | `packages/codemode/src/runtime/` (`host.ts`, `worker.ts`, `prelude-source.ts`) and `wasm.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (sandboxed execution, #874)** | A `cch_coding_agent` sandbox that embeds WasmEdge (pinned vcpkg `wasmedge` via the in-tree overlay port `cmake/vcpkg-ports/wasmedge`) and runs a declared script inside pi's actual codemode guest (`quickjs-wasi` 3.6.2 `quickjs.wasm`, committed at `fixtures/codemode/quickjs/`) after evaluating pi's prelude (`prelude-source.ts`, embedded as `CodemodePrelude.hpp`). The host registers only the twelve imports the guest declares (`env.host_*` and the WASI subset the `wasi-shim.js` covers), so a script has no filesystem, socket, process, or module capability: an unprovided import refuses instantiation, and an escape (`require`, `fetch`, `process`, `WebAssembly`) is an explicit error. A script returns its JSON value plus text/image output (pi's `CodemodeOutputItem` shape); a runaway script is interrupted by its timeout or a cancellation. `<workspace>/.pi/codemode` is discovered by default through session assembly for a trusted project, and a malformed declaration fails Session Assembly explicitly. This ruling covers **the sandbox boundary and execution only**: routing the script's `tools.*` calls back to the session's tool set is **not opened here** and stays `No decision`. |
+| Codemode sandboxed execution | `packages/codemode/src/runtime/` (`host.ts`, `worker.ts`, `prelude-source.ts`) and `wasm.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (sandboxed execution, #874)** | A `cch_coding_agent` sandbox that embeds WasmEdge (pinned vcpkg `wasmedge` via the in-tree overlay port `cmake/vcpkg-ports/wasmedge`) and runs a declared script inside pi's actual codemode guest (`quickjs-wasi` 3.6.2 `quickjs.wasm`, committed at `fixtures/codemode/quickjs/`) after evaluating pi's prelude (`prelude-source.ts`, embedded as `CodemodePrelude.hpp`). The host registers only the twelve imports the guest declares (`env.host_*` and the WASI subset the `wasi-shim.js` covers), so a script has no filesystem, socket, process, or module capability: an unprovided import refuses instantiation, and an escape (`require`, `fetch`, `process`, `WebAssembly`) is an explicit error. A script returns its JSON value plus text/image output (pi's `CodemodeOutputItem` shape); a runaway script is interrupted by its timeout or a cancellation. `<workspace>/.pi/codemode` is discovered by default through session assembly for a trusted project, and a malformed declaration fails Session Assembly explicitly. This ruling covers **the sandbox boundary and execution only**: routing the script's `tools.*` calls back to the session's tool set is **not opened here**, stays `No decision`, and is recorded as a follow-up (spec #865 close-out, #879). |
 
 **Intentional divergence:** pi v1.0.4 has no on-disk codemode declaration format. Codemode scripts
 there are written inline in the model's `codemode` tool call, and "exposure" is an in-memory
@@ -136,7 +137,8 @@ defines this minimal format anyway so a project can declare script tools before 
 it follows pi where a shape exists (the `source.ts` script format and the `CodemodeTool`
 model-facing fields). The format is documented for users at `fixtures/codemode/README.md`. **The
 codemode sandbox and script execution were ruled in by #874 (see the sandboxed-execution row
-above); routing `tools.*` inside a script to the session's tool set remains `No decision`.**
+above); routing `tools.*` inside a script to the session's tool set remains `No decision` and is an
+explicitly recorded follow-up (spec #865 close-out, #879) — see the close-out section below.**
 
 ### MCP OAuth through the existing credential semantics — spec #865 (#875)
 
@@ -159,6 +161,24 @@ MCP **resource tools**, the server-to-client GET stream, and exposure policy rem
 
 The transport and credential resolution stay private under `src/coding_agent/mcp/` and add no Owner
 Interface.
+
+### Spec #865 close-out — recorded follow-ups (#879)
+
+The scope close-out of [spec #865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865)
+verified that every capability the spec names is either an owner decision (the rows above) or an
+explicitly **recorded follow-up**. The MCP capabilities the spec did not name — the server-to-client
+GET stream, **resource tools**, and **exposure policy** — and the spec's out-of-scope rows below stay
+`No decision`, untouched by this close-out.
+
+| Follow-up | Why it is deferred | Record |
+|---|---|---|
+| Codemode script → session-tool routing | A script's `tools.*`/globals surface is empty, so a call is an explicit `does-not-exist` error. Routing a call to the session's tool set needs an async bridge and a dispatcher that survives the registry move into the Agent. | #874 (issue comment and this ADR's codemode row), reconfirmed by the #879 close-out |
+| Codemode worker-thread execution | The shipped `CodemodeSandbox::run` drives WasmEdge on the calling thread, so a declared-tool call blocks its executor thread for the script's duration; pi uses a dedicated worker thread. Not required by the #874 criteria. | #874 (implementer record); first recorded in this ADR by the #879 close-out |
+| Codemode guest-wasm install packaging | Production resolves `$PIKE_CODEMODE_WASM`, else the compiled-in source-tree fixture path (`default_codemode_guest_wasm_path`); shipping `quickjs.wasm` with an installed binary is a packaging follow-up. | #874 (implementer record); first recorded in this ADR by the #879 close-out |
+
+Codemode **output presentation** (#877) opens no capability and therefore no scope row: a declared
+tool's name is unregistered, so it takes the existing `ToolRendererRegistry` fallback pair, and an
+`image` output item lands in the same inline image sidecar any other tool's image uses.
 
 ## Finding: not a decision
 
@@ -247,7 +267,7 @@ Pike's counterpart is therefore `src/agent/harness/`, not that path.
 | pi package or capability | Size | Status |
 |---|---|---|
 | `packages/mcp` (whole package) | 20 files / 3,179 LOC (`client.ts` 21KB, `protocol/`, `transports/`, `oauth/`) | **Decided in part.** The **stdio** and **streamable-HTTP** transports, the `initialize`/`tools/list`/`tools/call` client, MCP-tool-to-extension-Tool conversion, **OAuth credential semantics**, and **server management/persistence** are an owner decision — see the Owner decisions section above (spec #865, #869, #873, #875 and #876). The rest of the package — the **server-to-client GET stream**, **resource tools**, and **exposure policy** — remains **No decision.** |
-| `packages/codemode` (whole package) | 11 files / 1,655 LOC (`declarations.ts` 13KB, `runtime/`) | **Decided in part.** Project-local codemode declarations and source loading (#870) and the sandboxed `runtime/` + `wasm.ts` execution path (#874) are owner decisions — see the Owner decisions section above (spec #865). Routing a script's `tools.*` calls to the session's tools remains **No decision**. |
+| `packages/codemode` (whole package) | 11 files / 1,655 LOC (`declarations.ts` 13KB, `runtime/`) | **Decided in part.** Project-local codemode declarations and source loading (#870), the sandboxed `runtime/` + `wasm.ts` execution path (#874), and output presentation through the existing tool-renderer registry (#877) are owner decisions — see the Owner decisions section above (spec #865). Routing a script's `tools.*` calls to the session's tools remains **No decision** and is recorded as a follow-up (spec #865 close-out, #879). |
 | Image generation (in-package capability, `packages/ai`) | `packages/ai/src/image-models.ts` (50 lines), `images-api-registry.ts` (53), `images.ts` (26) | **No decision.** Pike has image *input* handling (`ImageInput.cpp`); upstream image *generation* is a separate outbound API surface. |
 | Classifier models (in-package capability) | `packages/ai/src/types.ts:1161` (`ModelTypeMap.classifier: ClassifierModel<ClassifierApi>`), `models.ts` (`classify()` declarations at :228/:348/:966), `api/llama-cpp-classify.ts` (458 lines) + `.lazy.ts` (6), `coding-agent/src/core/model-registry.ts:77` (`findOfType("classifier", …)`) | **No decision.** Scope is the classifier model kind only: at this baseline `ModelTypeMap` has exactly `chat`, `image`, and `classifier`. Pike has no `ClassifierModel`, `classify()`, or `findOfType` equivalent. |
 | Durable execution layer (in-package capability of `packages/durable`) | scheduler 1,337 · generation 677 · output 288 · view 237 · submissions 207 · task-graph 222 · live 175 · inbox 132 · registry 114 · define 44 — the 10 listed files are 3,433 lines; `packages/durable` totals 15,483 | **No decision.** Subset membership not yet ruled per capability. |
@@ -270,30 +290,37 @@ All pi sizes above are measured at the pi baseline; all Pike sizes at the Pike c
 
 - "Why does Pike have less than pi?" has one entry point instead of a grep across source comments.
 - A future proposal to add the logo or Radius finds a recorded owner decision and separately
-  attributed analysis. A
-  future proposal to add **MCP, or codemode's execution path, finds an explicitly undecided entry** — the discussion
-  starts there rather than being restarted, and no reader can cite this ADR as having excluded them.
+  attributed analysis. A future proposal to add a capability whose row is still **No decision** finds
+  an explicitly recorded entry — the discussion starts there rather than being restarted, and no
+  reader can cite this ADR as having excluded it.
 - The prompt reference defect is recorded as a **finding with an open remedy**, so it is neither
   silently fixed nor silently ratified.
-- MCP is recorded as **undecided**, and codemode's execution path with it, so nobody can later cite
-  this ADR as having excluded them; codemode declarations/loading are now an attributed owner decision
-  (spec #865, #870).
+- The MCP **client, transports, OAuth and server management** and codemode **declarations, sandboxed
+  execution and presentation** are now attributed owner decisions (spec #865), so nobody can later
+  cite this ADR as having excluded them. The MCP capabilities the spec does not name, and codemode's
+  script-to-session-tool routing, stay `No decision`/recorded follow-up.
 - The Extension Tool Source foundation is now an **attributed owner decision** (spec #865, #867);
   its row states the slice's scope so a later reader cannot read it as having ruled on MCP, codemode,
   or the `packages/durable` extension machinery.
 - The MCP **stdio** server slice is now an **attributed owner decision** (spec #865, #869), so it is
-  no longer an undecided row; the rest of `packages/mcp` and codemode stay **undecided**, so nobody
-  can later cite this ADR as having excluded them.
+  no longer an undecided row; the rest of `packages/mcp` stays **undecided** (codemode was later ruled
+  in by #874 and #877), so nobody can later cite this ADR as having excluded them.
 - The MCP **streamable-http** transport slice is now an **attributed owner decision** (spec #865,
   #873), TLS-only and reusing the existing outbound client transport (ADR 0054); the server-to-client
   GET stream and the rest of `packages/mcp` stay **undecided**.
 - The MCP **server management and persistence** slice is now an **attributed owner decision** (spec
   #865, #876): pi-faithful `mcp.json` persistence (global + trust-gated project), the
   running/stopped/failed lifecycle status surface, and stdio reconnect-on-next-call. The `/mcp`
-  manager, live in-session tool add/remove, and the exposure/OAuth fields stay **undecided**.
+  manager, live in-session tool add/remove, and the exposure fields stay **undecided** (the OAuth
+  credential semantics were later decided by #875).
 - `pi-v1.0.4` (`7c10bd4337495ee613f2224843ecdf349b80d1df`) is registered by name with no captured bundle; a future capture is new evidence per ADR 0065 and needs its own step, not a silent edit.
-- A future proposal to add a remaining MCP capability (server-to-client stream, OAuth, resources, exposure) or
-codemode execution, or any other **No decision** row, starts from those rows and needs its own membership ruling plus implementation record; this ADR claims no such coverage.
+- The MCP **OAuth** credential slice (spec #865, #875) and codemode **sandboxed execution** (#874)
+  and **output presentation** (#877) are attributed owner decisions reached through the same spec
+  flow; their rows above state the slices' boundaries.
+- A future proposal to add a remaining MCP capability (server-to-client stream, resources, exposure)
+  or codemode script-to-session-tool routing, or any other **No decision** row, starts from those
+  rows and needs its own membership ruling plus implementation record; this ADR claims no such
+  coverage.
 
 ## References
 
