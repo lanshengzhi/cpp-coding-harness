@@ -298,6 +298,16 @@ class ManifestSchemaTest(unittest.TestCase):
             ),
         )
 
+    def test_checked_in_manifest_declares_the_wasmedge_external_family(self):
+        # Spec #865 / #874: the codemode sandbox links the in-tree WasmEdge
+        # overlay port as the `wasmedge@wasmedge` external family. The
+        # production build-phase Gate rejects a dependency whose family is not
+        # declared, so the declaration is pinned here against silent removal;
+        # the Gate's behavioral enforcement is its own production case.
+        manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
+        manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
+        self.assertIn("wasmedge", manifest.external_families)
+
     def test_provider_capability_is_outside_ai_interface_root(self):
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
         manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
