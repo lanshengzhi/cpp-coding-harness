@@ -20,6 +20,7 @@
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
@@ -32,6 +33,9 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
+#include <set>
+#include <stop_token>
 #include <string>
 #include <utility>
 
@@ -46,9 +50,6 @@ extern char** environ;
 namespace cch::coding_agent::mcp {
 namespace {
 
-/// pi `client.ts` request timeout default (30 s); a request that gets no
-/// response by then fails with a timeout instead of hanging the queue.
-constexpr std::chrono::milliseconds kRequestTimeout{30000};
 /// pi `close`: close stdin, wait this long for a clean exit before SIGTERM.
 constexpr std::chrono::milliseconds kCloseGrace{500};
 /// pi `close`: after SIGTERM wait this long before SIGKILL.
@@ -303,18 +304,73 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpStdioClient>>> McpSt
 }
 
 support::AsyncResult<support::JsonValue> McpStdioClient::request(
-        std::string method, std::optional<support::JsonValue> params) {
+        std::string method, std::optional<support::JsonValue> params, std::stop_token stop_token) {
     return support::AsyncResult<support::JsonValue>{support::AsyncProducer<support::JsonValue, support::Error>{
-            [self = shared_from_this(), method = std::move(method), params = std::move(params)](
+            [self = shared_from_this(), method = std::move(method), params = std::move(params), stop_token](
                     support::AsyncCompletion<support::JsonValue, support::Error> completion) mutable noexcept {
                 if (self->closed_) {
                     completion(std::unexpected(closed_error(self->config_.name)));
                     return;
                 }
+                if (stop_token.stop_requested()) {
+                    completion(std::unexpected(detail::cancelled_error(self->config_.name)));
+                    return;
+                }
                 const int id = self->next_id_++;
+                // The stop callback bridges the caller's cancellation into the
+                // serialized domain: it only posts, so it is safe to run on
+                // whichever thread requests stop. A weak reference keeps the
+                // registration from extending the client's lifetime.
+                if (stop_token.stop_possible()) {
+                    std::weak_ptr<McpStdioClient> weak = self;
+                    self->stop_registrations_[id] =
+                            std::make_unique<StopRegistration>(stop_token, [weak, id]() noexcept {
+                                if (auto client = weak.lock()) {
+                                    boost::asio::post(
+                                            client->executor_, [client, id]() { client->cancel_request(id); });
+                                }
+                            });
+                }
                 self->enqueue_frame(
                         newline_frame(detail::build_request_body(id, method, params)), id, std::move(completion));
             }}};
+}
+
+void McpStdioClient::cancel_request(int id) {
+    if (closed_ || !request_pending(id)) {
+        return;
+    }
+    cancelled_.insert(id);
+    // Wake the in-flight response read so `await_response` can send the
+    // cancellation notification and complete the caller without waiting for a
+    // response that may never come.
+    if (awaiting_id_ == id) {
+        boost::system::error_code ignored;
+        stdout_pipe_.cancel(ignored);
+    }
+}
+
+bool McpStdioClient::request_pending(int id) const noexcept {
+    if (current_id_ == id) {
+        return true;
+    }
+    for (const auto& frame : queue_) {
+        if (!frame->is_notification && frame->id == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+boost::asio::awaitable<void> McpStdioClient::write_cancellation(int id) {
+    support::JsonValue params{support::JsonValue::object_t{
+            {"requestId", static_cast<double>(id)},
+            {"reason", std::string{"cancelled"}},
+    }};
+    // The write is awaited so the bytes reach the server before the caller is
+    // failed; a write failure is ignored because the caller already intended
+    // to leave the request (pi `cancelPending`).
+    (void)co_await write_frame(newline_frame(detail::build_notification_body("notifications/cancelled", params)));
 }
 
 void McpStdioClient::notify(std::string method, std::optional<support::JsonValue> params) {
@@ -353,8 +409,19 @@ boost::asio::awaitable<void> McpStdioClient::pump() {
             complete_frame(*item, std::move(outcome));
             continue;
         }
+        if (!item->is_notification && cancelled_.contains(item->id)) {
+            // Cancelled while queued: the server never saw the request, so
+            // there is nothing to notify and the caller fails immediately.
+            support::Expected<support::JsonValue> outcome = std::unexpected(detail::cancelled_error(config_.name));
+            complete_frame(*item, std::move(outcome));
+            continue;
+        }
+        if (!item->is_notification) {
+            current_id_ = item->id;
+        }
         if (auto write_error = co_await write_frame(item->frame)) {
             closed_ = true;
+            current_id_ = 0;
             support::Expected<support::JsonValue> outcome = std::unexpected(std::move(*write_error));
             complete_frame(*item, std::move(outcome));
             continue;
@@ -362,16 +429,24 @@ boost::asio::awaitable<void> McpStdioClient::pump() {
         if (item->is_notification) {
             continue;
         }
+        awaiting_id_ = item->id;
         auto outcome = co_await await_response(item->id);
+        awaiting_id_ = 0;
+        current_id_ = 0;
         complete_frame(*item, std::move(outcome));
     }
     pumping_ = false;
 }
 
 void McpStdioClient::complete_frame(QueuedFrame& frame, support::Expected<support::JsonValue> outcome) {
-    if (frame.completion.has_value()) {
-        (*frame.completion)(std::move(outcome));
+    if (!frame.completion.has_value()) {
+        return;
     }
+    // The request has settled: its cancellation state and stop registration
+    // must not outlive it.
+    stop_registrations_.erase(frame.id);
+    cancelled_.erase(frame.id);
+    (*frame.completion)(std::move(outcome));
 }
 
 boost::asio::awaitable<std::optional<support::Error>> McpStdioClient::write_frame(std::string_view frame) {
@@ -387,6 +462,7 @@ boost::asio::awaitable<std::optional<support::Error>> McpStdioClient::write_fram
 
 boost::asio::awaitable<std::optional<std::string>> McpStdioClient::read_line() {
     last_read_timed_out_ = false;
+    last_read_woken_ = false;
     for (;;) {
         if (!discarding_oversize_frame_) {
             const auto newline = read_buffer_.find('\n');
@@ -413,14 +489,16 @@ boost::asio::awaitable<std::optional<std::string>> McpStdioClient::read_line() {
         const auto executor = co_await boost::asio::this_coro::executor;
         boost::asio::steady_timer timer(executor);
         auto timed_out = std::make_shared<bool>(false);
-        timer.expires_after(kRequestTimeout);
-        timer.async_wait([this, timed_out](const boost::system::error_code& error) {
-            if (!error) {
-                *timed_out = true;
-                boost::system::error_code ignored;
-                stdout_pipe_.cancel(ignored);
-            }
-        });
+        if (config_.request_timeout > std::chrono::milliseconds::zero()) {
+            timer.expires_after(config_.request_timeout);
+            timer.async_wait([this, timed_out](const boost::system::error_code& error) {
+                if (!error) {
+                    *timed_out = true;
+                    boost::system::error_code ignored;
+                    stdout_pipe_.cancel(ignored);
+                }
+            });
+        }
 
         std::array<char, 4096> chunk{};
         const auto [error, count] = co_await stdout_pipe_.async_read_some(
@@ -430,11 +508,17 @@ boost::asio::awaitable<std::optional<std::string>> McpStdioClient::read_line() {
             closed_ = true;
             co_return std::nullopt;
         }
-        if (error) {
+        if (error == boost::asio::error::operation_aborted) {
+            // Either the request deadline fired or a cancellation woke the
+            // read; both leave the connection usable.
             if (*timed_out) {
                 last_read_timed_out_ = true;
-                co_return std::nullopt;
+            } else {
+                last_read_woken_ = true;
             }
+            co_return std::nullopt;
+        }
+        if (error) {
             closed_ = true;
             co_return std::nullopt;
         }
@@ -456,11 +540,26 @@ boost::asio::awaitable<std::optional<std::string>> McpStdioClient::read_line() {
 
 boost::asio::awaitable<support::Expected<support::JsonValue>> McpStdioClient::await_response(int id) {
     for (;;) {
+        if (cancelled_.contains(id)) {
+            co_await write_cancellation(id);
+            co_return std::unexpected(detail::cancelled_error(config_.name));
+        }
         auto line = co_await read_line();
         if (!line) {
+            if (cancelled_.contains(id)) {
+                co_await write_cancellation(id);
+                co_return std::unexpected(detail::cancelled_error(config_.name));
+            }
+            if (last_read_woken_) {
+                // A wake with no cancellation recorded is spurious; keep
+                // waiting for this request's own response.
+                continue;
+            }
             if (last_read_timed_out_) {
-                co_return std::unexpected(support::make_error(
-                        support::ErrorCode::Timeout, "MCP server '" + config_.name + "' did not respond in time"));
+                // pi cancels a timed-out request too, so the server stops
+                // working on a response nobody will read.
+                co_await write_cancellation(id);
+                co_return std::unexpected(detail::timeout_error(config_.name, config_.request_timeout));
             }
             co_return std::unexpected(closed_error(config_.name));
         }

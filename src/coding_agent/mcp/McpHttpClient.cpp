@@ -239,12 +239,17 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> McpHtt
 }
 
 support::AsyncResult<support::JsonValue> McpHttpClient::request(
-        std::string method, std::optional<support::JsonValue> params) {
+        std::string method, std::optional<support::JsonValue> params, std::stop_token stop_token) {
     return support::AsyncResult<support::JsonValue>{support::AsyncProducer<support::JsonValue, support::Error>{
-            [self = shared_from_this(), method = std::move(method), params = std::move(params)](
+            [self = shared_from_this(), method = std::move(method), params = std::move(params), stop_token](
                     support::AsyncCompletion<support::JsonValue, support::Error> completion) mutable noexcept {
+                if (stop_token.stop_requested()) {
+                    completion(std::unexpected(detail::cancelled_error(self->config_.name)));
+                    return;
+                }
                 const int id = self->next_id_++;
-                self->enqueue_frame(detail::build_request_body(id, method, params), id, std::move(completion));
+                self->enqueue_frame(
+                        detail::build_request_body(id, method, params), id, std::move(completion), stop_token);
             }}};
 }
 
@@ -254,12 +259,14 @@ void McpHttpClient::notify(std::string method, std::optional<support::JsonValue>
 
 void McpHttpClient::enqueue_frame(std::string frame,
         int id,
-        std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion) {
+        std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
+        std::stop_token stop_token) {
     auto item = std::make_unique<QueuedFrame>();
     item->frame = std::move(frame);
     item->id = id;
     item->completion = std::move(completion);
     item->is_notification = !item->completion.has_value();
+    item->stop_token = stop_token;
     queue_.push_back(std::move(item));
     if (!pumping_) {
         pumping_ = true;
@@ -283,7 +290,7 @@ boost::asio::awaitable<void> McpHttpClient::pump() {
             (void)co_await send_notification(item->frame);
             continue;
         }
-        complete_frame(*item, co_await send_request(item->frame, item->id));
+        complete_frame(*item, co_await send_request(item->frame, item->id, item->stop_token));
     }
     pumping_ = false;
 }
@@ -294,21 +301,26 @@ void McpHttpClient::complete_frame(QueuedFrame& frame, support::Expected<support
     }
 }
 
-boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> McpHttpClient::post(std::string_view body) {
+boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> McpHttpClient::post(
+        std::string_view body, std::stop_token stop_token) {
     ai::providers::StreamRequest request;
     request.method = "POST";
     request.url = config_.url;
     request.headers = request_headers();
     request.body = std::string{body};
     request.timeout = kRequestTimeout;
+    // The reused transport resolves the token into its own Cancelled error, so
+    // an aborted Agent Turn cancels the HTTPS request instead of waiting out
+    // the deadline.
+    request.stop_token = stop_token;
     // An empty body handler buffers the whole response body, which is enough
     // for the request path: a JSON reply, or the complete SSE response stream.
     co_return co_await transport_->async_stream(request, {});
 }
 
 boost::asio::awaitable<support::Expected<support::JsonValue>> McpHttpClient::send_request(
-        std::string_view frame, int id) {
-    auto response = co_await post(frame);
+        std::string_view frame, int id, std::stop_token stop_token) {
+    auto response = co_await post(frame, stop_token);
     if (!response) {
         co_return std::unexpected(std::move(response.error()));
     }
@@ -317,7 +329,7 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> McpHttpClient::sen
 }
 
 boost::asio::awaitable<std::optional<support::Error>> McpHttpClient::send_notification(std::string_view frame) {
-    auto response = co_await post(frame);
+    auto response = co_await post(frame, {});
     if (!response) {
         co_return std::move(response.error());
     }
