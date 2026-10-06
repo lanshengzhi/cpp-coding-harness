@@ -2,10 +2,10 @@
 
 #include "coding_agent/extensions/ExtensionTool.hpp"
 #include "coding_agent/extensions/ExtensionToolSource.hpp"
-#include "coding_agent/mcp/McpStdioClient.hpp"
+#include "coding_agent/mcp/McpHttpServerConfig.hpp"
+#include "coding_agent/mcp/McpServerConnection.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 
-#include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -35,21 +35,29 @@ struct McpToolDescriptor {
 /// replaced by `_`, so the name is also a valid identifier.
 [[nodiscard]] std::string mcp_tool_name(std::string_view server, std::string_view tool);
 
-/// Extension Tool Source backed by one MCP server over stdio (spec #865). The
-/// one async boundary of the slice is `connect_stdio`: it launches the server,
-/// runs the MCP `initialize` handshake, and lists the server's tools. The
-/// resulting source is synchronous, so the #867 Extension Tool Source seam is
-/// unchanged; `load_tools` converts the already-listed descriptors into
-/// Agent-visible tools whose execution is `tools/call` on the long-lived
-/// connection.
+/// Extension Tool Source backed by one MCP server (spec #865). The one async
+/// boundary is the transport factory — `connect_stdio` (ticket #869) or
+/// `connect_http` (ticket #873) — which connects the server, runs the MCP
+/// `initialize` handshake, and lists the server's tools. The resulting source
+/// is synchronous, so the #867 Extension Tool Source seam is unchanged;
+/// `load_tools` converts the already-listed descriptors into Agent-visible
+/// tools whose execution is `tools/call` on the long-lived connection. The
+/// tool surface is identical regardless of transport.
 class McpExtensionToolSource final : public extensions::ExtensionToolSource {
 public:
-    /// Launch `config`, handshake, and list the tools. A launch failure, a
-    /// failed handshake, or an invalid `tools/list` result is returned as an
-    /// explicit error — Session Assembly never silently drops a configured
-    /// server.
+    /// Launch `config` over stdio, handshake, and list the tools. A launch
+    /// failure, a failed handshake, or an invalid `tools/list` result is
+    /// returned as an explicit error — Session Assembly never silently drops a
+    /// configured server.
     [[nodiscard]] static boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>>
     connect_stdio(McpStdioServerConfig config);
+
+    /// Connect `config` over the streamable HTTP transport, handshake, and
+    /// list the tools. The URL is TLS-only (ADR 0054): a non-`https://` URL is
+    /// rejected at registration, and a network, status, or handshake failure
+    /// is returned as an explicit error.
+    [[nodiscard]] static boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>>
+    connect_http(McpHttpServerConfig config);
 
     McpExtensionToolSource(const McpExtensionToolSource&) = delete;
     McpExtensionToolSource& operator=(const McpExtensionToolSource&) = delete;
@@ -61,9 +69,9 @@ public:
     [[nodiscard]] const std::vector<McpToolDescriptor>& tools() const noexcept { return tools_; }
 
 private:
-    McpExtensionToolSource(std::shared_ptr<McpStdioClient> client, std::vector<McpToolDescriptor> tools);
+    McpExtensionToolSource(std::shared_ptr<McpServerConnection> connection, std::vector<McpToolDescriptor> tools);
 
-    std::shared_ptr<McpStdioClient> client_;
+    std::shared_ptr<McpServerConnection> connection_;
     std::string server_name_;
     std::vector<McpToolDescriptor> tools_;
 };

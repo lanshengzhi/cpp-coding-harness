@@ -1,17 +1,22 @@
-// MCP Extension Tool Source (spec #865, ticket #869): connect one stdio MCP
-// server at Session Assembly, list its tools, and convert each into an
-// extension Tool whose execution is `tools/call`. The tool conversion is
-// pi `extensions/mcp/tools.ts` `createMcpToolDefinition` narrowed to this
-// slice's scope: name, description, input schema, and a text/image result
-// mapping. Output truncation, resource tools, exposure policy, and OAuth are
-// later slices.
+// MCP Extension Tool Source (spec #865, tickets #869 stdio / #873
+// streamable-http): connect one MCP server at Session Assembly, list its
+// tools, and convert each into an extension Tool whose execution is
+// `tools/call` on the transport-independent `McpServerConnection`. The tool
+// conversion is pi `extensions/mcp/tools.ts` `createMcpToolDefinition`
+// narrowed to this slice's scope: name, description, input schema, and a
+// text/image result mapping. Output truncation, resource tools, exposure
+// policy, and OAuth are later slices.
 
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 
+#include "coding_agent/mcp/McpHttpClient.hpp"
+#include "coding_agent/mcp/McpStdioClient.hpp"
+
 #include <cch/ai/Content.hpp>
 
-#include "support/Json.hpp"
+#include "ai/providers/BoostBeastStreamTransport.hpp"
 #include "support/AsyncResultBridge.hpp"
+#include "support/Json.hpp"
 
 #include <optional>
 #include <stop_token>
@@ -87,8 +92,8 @@ namespace {
 
 /// `tools/list`, following `nextCursor` to exhaustion (pi `listAll`).
 [[nodiscard]] boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_server_tools(
-        McpStdioClient& client) {
-    const std::string server = client.server_name();
+        McpServerConnection& connection) {
+    const std::string server = connection.server_name();
     std::vector<McpToolDescriptor> tools;
     std::optional<std::string> cursor;
     for (;;) {
@@ -96,7 +101,7 @@ namespace {
         if (cursor.has_value()) {
             params = support::JsonValue{support::JsonValue::object_t{{"cursor", *cursor}}};
         }
-        auto page = co_await support::detail::await_async_result(client.request("tools/list", std::move(params)));
+        auto page = co_await support::detail::await_async_result(connection.request("tools/list", std::move(params)));
         if (!page) {
             co_return std::unexpected(std::move(page.error()));
         }
@@ -154,13 +159,27 @@ std::string mcp_tool_name(std::string_view server, std::string_view tool) {
 }
 
 McpExtensionToolSource::McpExtensionToolSource(
-        std::shared_ptr<McpStdioClient> client, std::vector<McpToolDescriptor> tools)
-    : client_(std::move(client)), server_name_(client_->server_name()), tools_(std::move(tools)) {}
+        std::shared_ptr<McpServerConnection> connection, std::vector<McpToolDescriptor> tools)
+    : connection_(std::move(connection)), server_name_(connection_->server_name()), tools_(std::move(tools)) {}
 
 boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>>
 McpExtensionToolSource::connect_stdio(McpStdioServerConfig config) {
-    const std::string server_name = config.name;
     auto client = co_await McpStdioClient::connect(std::move(config));
+    if (!client) {
+        co_return std::unexpected(std::move(client.error()));
+    }
+    auto tools = co_await list_server_tools(**client);
+    if (!tools) {
+        co_return std::unexpected(std::move(tools.error()));
+    }
+    co_return std::unique_ptr<McpExtensionToolSource>(
+            new McpExtensionToolSource(std::move(*client), std::move(*tools)));
+}
+
+boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>> McpExtensionToolSource::connect_http(
+        McpHttpServerConfig config) {
+    auto client = co_await McpHttpClient::connect(
+            std::move(config), std::make_shared<ai::providers::BoostBeastStreamTransport>());
     if (!client) {
         co_return std::unexpected(std::move(client.error()));
     }
@@ -188,14 +207,14 @@ support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource
         // list.
         tool.prompt_snippet = std::nullopt;
 
-        auto client = client_;
+        auto connection = connection_;
         const std::string server_tool_name = descriptor.server_tool_name;
         const std::string server = server_name_;
-        tool.execute = [client, server_tool_name, server](support::JsonValue arguments,
+        tool.execute = [connection, server_tool_name, server](support::JsonValue arguments,
                                std::stop_token stop_token) -> support::AsyncResult<extensions::ExtensionToolResult> {
             return support::AsyncResult<extensions::ExtensionToolResult>{
                     support::AsyncProducer<extensions::ExtensionToolResult, support::Error>{
-                            [client, server_tool_name, server, arguments = std::move(arguments), stop_token](
+                            [connection, server_tool_name, server, arguments = std::move(arguments), stop_token](
                                     support::AsyncCompletion<extensions::ExtensionToolResult, support::Error>
                                             completion) mutable noexcept {
                                 if (stop_token.stop_requested()) {
@@ -207,7 +226,7 @@ support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource
                                         {"name", server_tool_name},
                                         {"arguments", std::move(arguments)},
                                 }};
-                                client->request("tools/call", std::move(params))
+                                connection->request("tools/call", std::move(params))
                                         .start([server, completion = std::move(completion)](
                                                        support::Expected<support::JsonValue> outcome) mutable noexcept {
                                             if (!outcome) {
