@@ -8,6 +8,8 @@
 
 #include "coding_agent/mcp/McpConfigFile.hpp"
 
+#include "coding_agent/mcp/McpNamespace.hpp"
+
 #include "support/Json.hpp"
 
 #include <cstddef>
@@ -38,17 +40,6 @@ using JsonArray = support::JsonValue::array_t;
         }
     }
     return true;
-}
-
-/// pi `mcpNamespace`: `mcp__<server>` with `-` replaced by `_`. Two names that
-/// differ only in `-`/`_` share a tool namespace and cannot coexist.
-[[nodiscard]] std::string server_namespace(std::string_view name) {
-    std::string result = "mcp__";
-    result.reserve(name.size() + 5);
-    for (const char character : name) {
-        result.push_back(character == '-' ? '_' : character);
-    }
-    return result;
 }
 
 /// Read a config file's text. `std::nullopt` when the file is missing or
@@ -302,7 +293,7 @@ void read_config_file(const std::filesystem::path& path,
         }
         bool clash = false;
         for (const auto& existing : load.servers) {
-            if (existing.name != name && server_namespace(existing.name) == server_namespace(name)) {
+            if (existing.name != name && detail::mcp_namespace(existing.name) == detail::mcp_namespace(name)) {
                 load.errors.push_back(
                         path.string() + ": server \"" + name + "\" conflicts with \"" + existing.name + "\"");
                 clash = true;

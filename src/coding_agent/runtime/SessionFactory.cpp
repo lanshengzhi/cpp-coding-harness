@@ -31,6 +31,7 @@
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 #include "coding_agent/runtime/ToolSelection.hpp"
+#include "coding_agent/runtime/ToolNames.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -39,6 +40,7 @@
 #include <exception>
 #include <filesystem>
 #include <format>
+#include <initializer_list>
 #include <iterator>
 #include <map>
 #include <optional>
@@ -120,6 +122,18 @@ template <typename T> struct RuntimeWorkState final {
     support::AsyncCompletion<T, support::Error> completion;
     std::optional<support::Expected<T>> outcome;
 };
+
+/// The admission charge for Runtime work that holds one or more paths: the
+/// summed path text plus one terminating byte. It is a coarse proxy for the
+/// memory the queued work carries — the same shape the prepared-target
+/// admission already uses — not a measured byte bound.
+[[nodiscard]] std::size_t path_work_charge(std::initializer_list<std::filesystem::path> paths) {
+    std::size_t charge = 1;
+    for (const auto& path : paths) {
+        charge += path.string().size();
+    }
+    return charge;
+}
 
 template <typename T, typename Operation>
 [[nodiscard]] support::AsyncResult<T> submit_runtime_work(std::shared_ptr<harness::RuntimeTarget> runtime_target,
@@ -371,17 +385,6 @@ void add_project_resource_loading_diagnostics(
         }
     }
     return std::nullopt;
-}
-
-[[nodiscard]] std::string join_tool_names(const std::vector<std::string>& names) {
-    std::string joined;
-    for (const auto& name : names) {
-        if (!joined.empty()) {
-            joined += ", ";
-        }
-        joined += name;
-    }
-    return joined;
 }
 
 [[nodiscard]] support::ExpectedVoid validate_trust_store_path(
@@ -1166,7 +1169,7 @@ struct PreparedAssemblyTarget final {
     const auto target_workspace = std::visit([](const auto& target) { return target.workspace; }, plan.target);
     auto prepared_target = co_await support::detail::await_async_result(
             submit_runtime_work<PreparedAssemblyTarget>(plan.execution_runtime_target,
-                    target_workspace.string().size() + 1,
+                    path_work_charge({target_workspace}),
                     stop_token,
                     [target = std::move(plan.target), cwd_override = plan.resume_cwd_override]() mutable {
                         return prepare_assembly_target(std::move(target), std::move(cwd_override));
@@ -1384,7 +1387,7 @@ struct PreparedAssemblyTarget final {
     std::vector<mcp::McpServerStatus> mcp_statuses;
     auto mcp_config = co_await support::detail::await_async_result(
             submit_runtime_work<mcp::McpConfigLoad>(plan.execution_runtime_target,
-                    coding_agent::agent_config_dir().string().size() + workspace.string().size() + 1,
+                    path_work_charge({coding_agent::agent_config_dir(), workspace}),
                     stop_token,
                     [workspace, project_trusted]() {
                         return support::Expected<mcp::McpConfigLoad>{
@@ -1405,7 +1408,7 @@ struct PreparedAssemblyTarget final {
         runtime = std::move(plan.model_runtime);
     } else {
         auto built = co_await support::detail::await_async_result(submit_runtime_work<std::shared_ptr<ModelRuntime>>(
-                plan.execution_runtime_target, coding_agent::agent_config_dir().string().size() + 1, stop_token, [] {
+                plan.execution_runtime_target, path_work_charge({coding_agent::agent_config_dir()}), stop_token, [] {
                     return build_runtime(nullptr);
                 }));
         if (!built) {
@@ -1810,7 +1813,7 @@ struct PreparedAssemblyTarget final {
             diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Info,
                     "tool:selection",
                     "tool selection removed " + std::to_string(resolved->removed.size()) +
-                            " tool(s): " + join_tool_names(resolved->removed)));
+                            " tool(s): " + detail::join_tool_names(resolved->removed)));
         }
     }
 

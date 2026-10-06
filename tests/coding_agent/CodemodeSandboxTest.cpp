@@ -201,7 +201,8 @@ TEST_CASE("tools.* calls route back to the host tool handler", "[coding_agent][c
     CodemodeLimits limits;
     limits.timeout = std::chrono::seconds{30};
 
-    auto result = sandbox->run("const r = await tools.echo({ x: 1 }); return r;", tools, limits, {}, handler);
+    auto result =
+            sandbox->run("const r = await tools.echo({ x: 1 }); return r;", tools, limits, {}, std::move(handler));
 
     REQUIRE_FALSE(result.error.has_value());
     REQUIRE(result.value_json.has_value());

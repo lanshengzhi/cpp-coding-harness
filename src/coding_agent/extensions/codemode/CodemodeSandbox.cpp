@@ -6,6 +6,7 @@
 
 #include <wasmedge/wasmedge.h>
 
+#include <charconv>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -223,11 +224,12 @@ struct RunState {
         if (kind == "call" || kind == "global") {
             PendingToolCall call;
             // The id is the prelude's counter, never script-controlled; parse it
-            // without a throwing conversion (the core is -fno-exceptions).
+            // with the non-throwing std::from_chars (the core is
+            // -fno-exceptions, §9.3).
             const std::string id_text = args.size() > 1 ? g.read_string(args[1]) : std::string{};
-            for (const char c : id_text) {
-                if (c < '0' || c > '9') break;
-                call.id = call.id * 10 + (c - '0');
+            if (int parsed_id = 0;
+                    std::from_chars(id_text.data(), id_text.data() + id_text.size(), parsed_id).ec == std::errc{}) {
+                call.id = parsed_id;
             }
             call.name = args.size() > 2 ? g.read_string(args[2]) : std::string{};
             call.arguments_json = args.size() > 3 && !g.is_undefined(args[3]) ? g.read_string(args[3]) : std::string{};
@@ -457,10 +459,10 @@ support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(std:
                 std::format("codemode sandbox guest '{}' is not a valid WebAssembly module", impl->wasm_path.string()),
                 WasmEdge_ResultGetMessage(valid)));
     }
-    return std::unique_ptr<CodemodeSandbox>{new CodemodeSandbox(std::move(impl))};
+    return std::make_unique<CodemodeSandbox>(ConstructionKey{}, std::move(impl));
 }
 
-CodemodeSandbox::CodemodeSandbox(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
+CodemodeSandbox::CodemodeSandbox(ConstructionKey, std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 CodemodeSandbox::~CodemodeSandbox() = default;
 CodemodeSandbox::CodemodeSandbox(CodemodeSandbox&&) noexcept = default;
 CodemodeSandbox& CodemodeSandbox::operator=(CodemodeSandbox&&) noexcept = default;

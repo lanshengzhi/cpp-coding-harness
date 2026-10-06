@@ -34,6 +34,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <optional>
 #include <set>
 #include <stop_token>
 #include <string>
@@ -55,14 +56,8 @@ constexpr std::chrono::milliseconds kCloseGrace{500};
 /// pi `close`: after SIGTERM wait this long before SIGKILL.
 constexpr std::chrono::milliseconds kTerminateGrace{2000};
 
-[[nodiscard]] support::Error transport_error(std::string server, std::string message, std::string cause = {}) {
-    std::string summary = "MCP server '" + std::move(server) + "' " + std::move(message);
-    std::string detail = summary;
-    if (!cause.empty()) {
-        detail += ": " + std::move(cause);
-    }
-    return support::make_error(support::ErrorCode::Process, std::move(summary), std::move(detail));
-}
+using detail::initialize_params;
+using detail::transport_error;
 
 /// The error a pending request fails with when the server's stdout reaches EOF
 /// or the write end closes. Message and detail both name the server and the
@@ -81,19 +76,21 @@ constexpr std::chrono::milliseconds kTerminateGrace{2000};
     return body;
 }
 
-/// The `initialize` parameters (pi `client.ts` `connect`): the client's
-/// protocol version, empty capabilities, and identity. Shared by the initial
-/// handshake and a reconnect.
-[[nodiscard]] support::JsonValue initialize_params() {
-    return support::JsonValue{support::JsonValue::object_t{
-            {"protocolVersion", std::string{kMcpProtocolVersion}},
-            {"capabilities", support::JsonValue::object_t{}},
-            {"clientInfo",
-                    support::JsonValue::object_t{
-                            {"name", std::string{kMcpClientName}},
-                            {"version", std::string{kMcpClientVersion}},
-                    }},
-    }};
+/// One `pipe2` pair owned from creation (CODING_STANDARDS §7.8): `source` is
+/// the read end, `sink` the write end. Holding the descriptors in `UniqueFd`
+/// makes every early-return path close exactly the fds it still owns, with no
+/// manual `::close` ladder.
+struct OwnedPipe {
+    support::UniqueFd source;
+    support::UniqueFd sink;
+};
+
+[[nodiscard]] std::optional<OwnedPipe> make_pipe() {
+    int fds[2]{-1, -1};
+    if (::pipe2(fds, O_CLOEXEC) == -1) {
+        return std::nullopt;
+    }
+    return OwnedPipe{.source = support::UniqueFd(fds[0]), .sink = support::UniqueFd(fds[1])};
 }
 
 /// Child side of the launch. Runs between fork and exec only: no allocation,
@@ -132,7 +129,7 @@ constexpr std::chrono::milliseconds kTerminateGrace{2000};
 
 } // namespace
 
-McpStdioClient::McpStdioClient(boost::asio::any_io_executor executor, McpStdioServerConfig config)
+McpStdioClient::McpStdioClient(ConstructionKey, boost::asio::any_io_executor executor, McpStdioServerConfig config)
     : executor_(std::move(executor)), config_(std::move(config)), stdin_pipe_(executor_), stdout_pipe_(executor_) {}
 
 McpStdioClient::~McpStdioClient() {
@@ -151,27 +148,18 @@ support::ExpectedVoid McpStdioClient::spawn() {
     // shutdown handshake reaches a wrapper's descendants too.
     (void)::signal(SIGPIPE, SIG_IGN);
 
-    int stdin_fds[2]{-1, -1};
-    int stdout_fds[2]{-1, -1};
-    int error_fds[2]{-1, -1};
-    const auto close_pair = [](int fds[2]) {
-        if (fds[0] >= 0) {
-            (void)::close(fds[0]);
-        }
-        if (fds[1] >= 0) {
-            (void)::close(fds[1]);
-        }
-    };
-    if (::pipe2(stdin_fds, O_CLOEXEC) == -1) {
+    // Every pipe is owned by `UniqueFd` from creation, so a failure at any
+    // later step closes exactly the fds this call still owns.
+    auto stdin_fds = make_pipe();
+    if (!stdin_fds) {
         return std::unexpected(transport_error(config_.name, "stdin pipe creation failed", std::strerror(errno)));
     }
-    if (::pipe2(stdout_fds, O_CLOEXEC) == -1) {
-        close_pair(stdin_fds);
+    auto stdout_fds = make_pipe();
+    if (!stdout_fds) {
         return std::unexpected(transport_error(config_.name, "stdout pipe creation failed", std::strerror(errno)));
     }
-    if (::pipe2(error_fds, O_CLOEXEC) == -1) {
-        close_pair(stdin_fds);
-        close_pair(stdout_fds);
+    auto error_fds = make_pipe();
+    if (!error_fds) {
         return std::unexpected(transport_error(config_.name, "setup pipe creation failed", std::strerror(errno)));
     }
 
@@ -218,41 +206,39 @@ support::ExpectedVoid McpStdioClient::spawn() {
 
     const pid_t child = ::fork();
     if (child == -1) {
-        close_pair(stdin_fds);
-        close_pair(stdout_fds);
-        close_pair(error_fds);
         return std::unexpected(transport_error(config_.name, "fork failed", std::strerror(errno)));
     }
     if (child == 0) {
-        run_child(config_.command, argv, envp, stdin_fds[0], stdout_fds[1], error_fds[1]);
+        run_child(config_.command, argv, envp, stdin_fds->source.get(), stdout_fds->sink.get(), error_fds->sink.get());
     }
 
-    (void)::close(stdin_fds[0]);
-    (void)::close(stdout_fds[1]);
-    (void)::close(error_fds[1]);
+    // The parent keeps only the ends it drives; the child's ends are still
+    // owned by `UniqueFd` and close on return.
+    (void)stdin_fds->source.close();
+    (void)stdout_fds->sink.close();
+    (void)error_fds->sink.close();
 
     boost::system::error_code assign_error;
-    stdin_pipe_.assign(stdin_fds[1], assign_error);
+    stdin_pipe_.assign(stdin_fds->sink.get(), assign_error);
     if (assign_error) {
-        (void)::close(stdin_fds[1]);
-        (void)::close(stdout_fds[0]);
-        (void)::close(error_fds[0]);
         ::kill(child, SIGKILL);
         int status = 0;
         (void)::waitpid(child, &status, 0);
         return std::unexpected(transport_error(config_.name, "stdin pipe setup failed", assign_error.message()));
     }
+    // `assign` took ownership of the descriptor on success.
+    (void)stdin_fds->sink.release();
+
     assign_error.clear();
-    stdout_pipe_.assign(stdout_fds[0], assign_error);
+    stdout_pipe_.assign(stdout_fds->source.get(), assign_error);
     if (assign_error) {
-        (void)::close(stdout_fds[0]);
-        (void)::close(error_fds[0]);
         close_transport();
         ::kill(child, SIGKILL);
         int status = 0;
         (void)::waitpid(child, &status, 0);
         return std::unexpected(transport_error(config_.name, "stdout pipe setup failed", assign_error.message()));
     }
+    (void)stdout_fds->source.release();
 
     child_pid_ = child;
     process_group_ = child;
@@ -261,7 +247,6 @@ support::ExpectedVoid McpStdioClient::spawn() {
     // already exited).
     if (::setpgid(child, child) == -1 && errno != EACCES && errno != ESRCH) {
         const std::string detail = std::strerror(errno);
-        (void)::close(error_fds[0]);
         close_transport();
         ::kill(child, SIGKILL);
         int status = 0;
@@ -276,9 +261,8 @@ support::ExpectedVoid McpStdioClient::spawn() {
     int setup_error = 0;
     ssize_t read_count = 0;
     do {
-        read_count = ::read(error_fds[0], &setup_error, sizeof(setup_error));
+        read_count = ::read(error_fds->source.get(), &setup_error, sizeof(setup_error));
     } while (read_count == -1 && errno == EINTR);
-    (void)::close(error_fds[0]);
     if (read_count > 0) {
         int status = 0;
         (void)::waitpid(child, &status, 0);
@@ -293,7 +277,7 @@ support::ExpectedVoid McpStdioClient::spawn() {
 boost::asio::awaitable<support::Expected<std::shared_ptr<McpStdioClient>>> McpStdioClient::connect(
         McpStdioServerConfig config) {
     auto executor = co_await boost::asio::this_coro::executor;
-    auto client = std::shared_ptr<McpStdioClient>(new McpStdioClient(std::move(executor), std::move(config)));
+    auto client = std::make_shared<McpStdioClient>(ConstructionKey{}, std::move(executor), std::move(config));
     if (auto spawned = client->spawn(); !spawned) {
         co_return std::unexpected(std::move(spawned.error()));
     }
@@ -537,11 +521,19 @@ boost::asio::awaitable<std::optional<std::string>> McpStdioClient::read_line() {
         auto timed_out = std::make_shared<bool>(false);
         if (config_.request_timeout > std::chrono::milliseconds::zero()) {
             timer.expires_after(config_.request_timeout);
-            timer.async_wait([this, timed_out](const boost::system::error_code& error) {
-                if (!error) {
-                    *timed_out = true;
+            // The timer handler may outlive this read (the deadline can fire
+            // just as the read completes), so it reaches the client through a
+            // weak reference instead of capturing `this` across the async
+            // boundary (§6.2/§7.5).
+            std::weak_ptr<McpStdioClient> weak = weak_from_this();
+            timer.async_wait([weak, timed_out](const boost::system::error_code& error) {
+                if (error) {
+                    return;
+                }
+                *timed_out = true;
+                if (auto client = weak.lock()) {
                     boost::system::error_code ignored;
-                    stdout_pipe_.cancel(ignored);
+                    client->stdout_pipe_.cancel(ignored);
                 }
             });
         }
@@ -640,6 +632,9 @@ void McpStdioClient::teardown_process_group() noexcept {
         return;
     }
     int status = 0;
+    // debt: reaping busy-polls ::usleep(1000) for up to ~2.5 s on the executor
+    // thread; upgrade to a SIGCHLD/signalfd-driven wait when teardown latency
+    // (or executor occupancy) matters.
     const auto reap_within = [&](std::chrono::milliseconds budget) {
         const auto deadline = std::chrono::steady_clock::now() + budget;
         for (;;) {

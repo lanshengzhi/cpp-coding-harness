@@ -27,6 +27,32 @@ inline constexpr std::string_view kMcpClientVersion = "0.1.0";
 /// lines vs. HTTP POST bodies) differs per transport.
 namespace detail {
 
+/// The shared transport error of both MCP clients: the summary and detail name
+/// the server and the message, and an optional cause is appended to the detail.
+[[nodiscard]] inline support::Error transport_error(std::string server, std::string message, std::string cause = {}) {
+    std::string summary = "MCP server '" + std::move(server) + "' " + std::move(message);
+    std::string detail = summary;
+    if (!cause.empty()) {
+        detail += ": " + std::move(cause);
+    }
+    return support::make_error(support::ErrorCode::Process, std::move(summary), std::move(detail));
+}
+
+/// The `initialize` parameters (pi `client.ts` `connect`): the client's
+/// protocol version, empty capabilities, and identity. Shared by the initial
+/// handshake and a reconnect, and by both transports.
+[[nodiscard]] inline support::JsonValue initialize_params() {
+    return support::JsonValue{support::JsonValue::object_t{
+            {"protocolVersion", std::string{kMcpProtocolVersion}},
+            {"capabilities", support::JsonValue::object_t{}},
+            {"clientInfo",
+                    support::JsonValue::object_t{
+                            {"name", std::string{kMcpClientName}},
+                            {"version", std::string{kMcpClientVersion}},
+                    }},
+    }};
+}
+
 /// One compact JSON-RPC request body (no framing delimiter). The caller adds
 /// its transport's delimiter (`\n` for stdio, none for an HTTP body).
 [[nodiscard]] inline std::string build_request_body(

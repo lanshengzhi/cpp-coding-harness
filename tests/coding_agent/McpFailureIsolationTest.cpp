@@ -23,6 +23,7 @@
 #include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
+#include "support/McpTestKit.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
@@ -80,62 +81,12 @@ using namespace std::chrono_literals;
     return config;
 }
 
-[[nodiscard]] std::string read_text_if_present(const std::filesystem::path& path) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input) {
-        return {};
-    }
-    return std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
-}
-
-[[nodiscard]] bool trace_contains(const std::filesystem::path& path, std::string_view needle) {
-    return read_text_if_present(path).find(needle) != std::string::npos;
-}
-
-/// Await until `predicate` holds or `budget` elapses; the caller asserts the
-/// property afterwards, so a timeout stays a test failure rather than a hang.
-[[nodiscard]] boost::asio::awaitable<void> wait_for(
-        boost::asio::any_io_executor executor, std::function<bool()> predicate, std::chrono::milliseconds budget) {
-    boost::asio::steady_timer timer(executor);
-    const auto deadline = std::chrono::steady_clock::now() + budget;
-    while (!predicate() && std::chrono::steady_clock::now() < deadline) {
-        timer.expires_after(10ms);
-        co_await timer.async_wait(boost::asio::use_awaitable);
-    }
-}
-
-[[nodiscard]] support::JsonValue tools_call_params(std::string name, support::JsonValue arguments) {
-    return support::JsonValue{support::JsonValue::object_t{
-            {"name", std::move(name)},
-            {"arguments", std::move(arguments)},
-    }};
-}
-
-[[nodiscard]] std::optional<std::string> first_text_content(const support::JsonValue& result) {
-    const auto* object = result.get_if<support::JsonValue::object_t>();
-    if (object == nullptr) {
-        return std::nullopt;
-    }
-    const auto content = object->find("content");
-    if (content == object->end()) {
-        return std::nullopt;
-    }
-    const auto* array = content->second.get_if<support::JsonValue::array_t>();
-    if (array == nullptr) {
-        return std::nullopt;
-    }
-    for (const auto& block : *array) {
-        const auto* block_object = block.get_if<support::JsonValue::object_t>();
-        if (block_object == nullptr) {
-            continue;
-        }
-        const auto text = block_object->find("text");
-        if (text != block_object->end() && text->second.holds<std::string>()) {
-            return text->second.get_string();
-        }
-    }
-    return std::nullopt;
-}
+// The shared fixture-trace and tool-call helpers live in `tests/support`
+// (§11.5), so the stdio and HTTP session tests cannot drift apart.
+using cch::tests::first_text_content;
+using cch::tests::tools_call_params;
+using cch::tests::trace_contains;
+using cch::tests::wait_for;
 
 /// Scripted provider whose stream returns an aborted terminal while the
 /// prompt's stop token is requested; otherwise it serves the next scripted

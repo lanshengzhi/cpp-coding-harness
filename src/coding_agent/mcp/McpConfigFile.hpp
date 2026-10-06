@@ -18,6 +18,11 @@ inline constexpr std::string_view kMcpProjectConfigDir = ".pi";
 /// One server loaded from a global or project `mcp.json` (pi `McpServerEntry`
 /// narrowed to this slice). The effective configuration is a stdio or
 /// streamable-http descriptor plus the pi `enabled` flag.
+///
+/// The descriptor is the stdio-or-http sum type behind a named alias (§4.2), so
+/// dispatch sites can name the variant rather than respell its alternatives.
+using McpServerConfigVariant = std::variant<McpStdioServerConfig, McpHttpServerConfig>;
+
 struct McpConfigEntry {
     /// pi server name: the namespace of the server's tools
     /// (`mcp__<name>__<tool>`).
@@ -30,7 +35,7 @@ struct McpConfigEntry {
     /// entry only overrides `enabled`).
     std::filesystem::path source;
     /// The server descriptor, chosen by pi's `type`/`command`/`url` shape.
-    std::variant<McpStdioServerConfig, McpHttpServerConfig> config;
+    McpServerConfigVariant config;
 };
 
 /// The merged global + (trusted-)project MCP configuration (pi

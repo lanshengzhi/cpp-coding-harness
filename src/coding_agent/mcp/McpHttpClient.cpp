@@ -40,21 +40,14 @@
 namespace cch::coding_agent::mcp {
 namespace {
 
+using detail::transport_error;
+
 /// pi `client.ts` request timeout default (30 s); a request that gets no
 /// response by then fails with a timeout instead of hanging the queue.
 constexpr std::chrono::milliseconds kRequestTimeout{30000};
 /// The error-body excerpt carried in a non-2xx diagnostic, matching pi
 /// `ERROR_MESSAGE_BODY_CHARS` (500).
 constexpr std::size_t kErrorBodyChars = 500;
-
-[[nodiscard]] support::Error transport_error(std::string server, std::string message, std::string cause = {}) {
-    std::string summary = "MCP server '" + std::move(server) + "' " + std::move(message);
-    std::string detail = summary;
-    if (!cause.empty()) {
-        detail += ": " + std::move(cause);
-    }
-    return support::make_error(support::ErrorCode::Process, std::move(summary), std::move(detail));
-}
 
 [[nodiscard]] std::string lowercase(std::string_view text) {
     std::string result{text};
@@ -201,7 +194,8 @@ constexpr std::size_t kErrorBodyChars = 500;
 
 } // namespace
 
-McpHttpClient::McpHttpClient(boost::asio::any_io_executor executor,
+McpHttpClient::McpHttpClient(ConstructionKey,
+        boost::asio::any_io_executor executor,
         McpHttpServerConfig config,
         std::shared_ptr<ai::providers::StreamTransport> transport,
         std::shared_ptr<McpRequestAuthSource> request_auth)
@@ -221,19 +215,11 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> McpHtt
     }
     auto executor = co_await boost::asio::this_coro::executor;
     const std::string server_name = config.name;
-    auto client = std::shared_ptr<McpHttpClient>(
-            new McpHttpClient(std::move(executor), std::move(config), std::move(transport), std::move(request_auth)));
+    auto client = std::make_shared<McpHttpClient>(
+            ConstructionKey{}, std::move(executor), std::move(config), std::move(transport), std::move(request_auth));
 
-    support::JsonValue params{support::JsonValue::object_t{
-            {"protocolVersion", std::string{kMcpProtocolVersion}},
-            {"capabilities", support::JsonValue::object_t{}},
-            {"clientInfo",
-                    support::JsonValue::object_t{
-                            {"name", std::string{kMcpClientName}},
-                            {"version", std::string{kMcpClientVersion}},
-                    }},
-    }};
-    auto initialized = co_await support::detail::await_async_result(client->request("initialize", std::move(params)));
+    auto initialized =
+            co_await support::detail::await_async_result(client->request("initialize", detail::initialize_params()));
     if (!initialized) {
         co_return std::unexpected(std::move(initialized.error()));
     }

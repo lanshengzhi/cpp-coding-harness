@@ -54,17 +54,16 @@ struct CodemodeLimits {
     /// polls this; a script that exceeds it is interrupted and reported as a
     /// timeout. Zero disables the timeout.
     std::chrono::milliseconds timeout{std::chrono::seconds{300}};
-    /// QuickJS heap cap in bytes; zero keeps the guest default.
-    std::size_t memory_bytes{0};
 };
 
 /// Executes one tool a script requested through `tools.*` or a global, reusing
 /// the host's existing tool implementations (and therefore their containment).
 /// `arguments_json` is the JSON text of the call argument, or an empty string
 /// when the call passed no argument. The result is the tool's JSON text, or an
-/// error the sandbox reports to the script as a rejected call.
+/// error the sandbox reports to the script as a rejected call. Stored for the
+/// run's duration, so it is a move-only operation (§6.2).
 using CodemodeToolCallHandler =
-        std::function<support::Expected<std::string>(std::string_view name, std::string_view arguments_json)>;
+        std::move_only_function<support::Expected<std::string>(std::string_view name, std::string_view arguments_json)>;
 
 /// One tool the script may call through `tools.<js_name>` (pi `CodemodeTool`).
 /// The host lists these into the guest's `toolsJson`, so a call routes back
@@ -94,11 +93,29 @@ struct CodemodeToolDescriptor {
 /// runaway script. One sandbox owns one guest module; `run` instantiates a
 /// fresh instance per call, so a crashed or interrupted guest never poisons a
 /// later run.
+///
+// debt: `run` drives the guest synchronously on the calling thread (a runaway
+// script occupies its executor up to the 300 s default timeout); upgrade to an
+// off-executor worker when a concurrent codemode run or a non-blocking Turn is
+// required.
 class CodemodeSandbox {
+    struct Impl;
+
 public:
     /// Parse and validate the guest module at `wasm_path`. A missing or invalid
     /// module is an explicit error; nothing is deferred to the first `run`.
     [[nodiscard]] static support::Expected<std::unique_ptr<CodemodeSandbox>> create(std::filesystem::path wasm_path);
+
+    /// Construction passkey (§7.7): `std::make_unique` cannot reach a private
+    /// constructor, so construction goes through the public constructor below,
+    /// whose key only a member of this class can name. `create` is the sole
+    /// caller.
+    struct ConstructionKey {
+    private:
+        ConstructionKey() = default;
+        friend class CodemodeSandbox;
+    };
+    CodemodeSandbox(ConstructionKey, std::unique_ptr<Impl> impl);
 
     ~CodemodeSandbox();
     CodemodeSandbox(CodemodeSandbox&&) noexcept;
@@ -119,9 +136,6 @@ public:
             CodemodeToolCallHandler handler = {});
 
 private:
-    struct Impl;
-    explicit CodemodeSandbox(std::unique_ptr<Impl> impl);
-
     std::unique_ptr<Impl> impl_;
 };
 
