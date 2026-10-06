@@ -28,6 +28,8 @@ Debug methods exercise the separation cases:
   debug/http_status           500 with a plain error body
   debug/redirect              302 whose Location is a non-TLS `http://` target
   debug/json_rpc_error        a well-formed JSON-RPC error response
+  debug/authorization_present JSON-RPC result carrying the received Authorization header
+  debug/unauthorized          401 with a `WWW-Authenticate: Bearer` challenge
 """
 
 import argparse
@@ -105,6 +107,8 @@ class Handler(BaseHTTPRequestHandler):
             "debug/http_status": self._http_status,
             "debug/redirect": self._redirect,
             "debug/json_rpc_error": self._json_rpc_error,
+            "debug/authorization_present": self._authorization_present,
+            "debug/unauthorized": self._unauthorized,
         }.get(method)
         if handler is None:
             self._json(rid, error={"code": -32601, "message": "Method not found: " + str(method)})
@@ -180,6 +184,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def _json_rpc_error(self, rid, _params):
         self._json(rid, error={"code": -32000, "message": "server exploded"})
+
+    def _authorization_present(self, rid, _params):
+        # Reports exactly what `Authorization` header reached the server, so a
+        # client that attaches a credential only when the server needs one is
+        # observable over the wire.
+        self._json(rid, result={"authorization": self.headers.get("Authorization") or ""})
+
+    def _unauthorized(self, rid, _params):
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Bearer error="invalid_token"')
+        self.send_header("Content-Type", "application/json")
+        body = b'{"error":"invalid_token"}'
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     # --- helpers -----------------------------------------------------------
 

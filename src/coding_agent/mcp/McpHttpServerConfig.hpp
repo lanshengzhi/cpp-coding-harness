@@ -1,8 +1,11 @@
 #pragma once
 
+#include "coding_agent/mcp/McpOAuthServerConfig.hpp"
+
 #include <cch/support/Error.hpp>
 
 #include <map>
+#include <optional>
 #include <string>
 
 namespace cch::coding_agent::mcp {
@@ -22,6 +25,12 @@ struct McpHttpServerConfig {
     /// Extra request headers layered on every JSON-RPC POST (pi `headers`),
     /// for example an `Authorization` bearer token.
     std::map<std::string, std::string> headers;
+    /// OAuth sign-in configuration (spec #865, ticket #875). When set, every
+    /// request resolves its access token at request time through the shared
+    /// AuthStorage and attaches an `Authorization: Bearer` header; when absent,
+    /// no credentials are attached. The credential itself lives in `auth.json`
+    /// (`mcp_oauth_provider_id(name)`), never here.
+    std::optional<McpOAuthServerConfig> oauth{std::nullopt};
 };
 
 /// Registration-time TLS gate (ADR 0054): the URL must be a well-formed

@@ -24,6 +24,13 @@ responses on stdout, diagnostics on stderr.
 | `debug/emit_garbage` | Writes a non-JSON line, then the valid response. |
 | `debug/emit_invalid_jsonrpc` | Writes valid JSON that is not a JSON-RPC message. |
 
+`http_server.py` (the streamable-HTTP TLS fixture) also carries two debug
+methods used by the OAuth slice (#875) to observe credential attachment over
+the wire: `debug/authorization_present` returns the received `Authorization`
+header (empty when none), and `debug/unauthorized` answers `401` with a
+`WWW-Authenticate: Bearer` challenge. The MCP OAuth loopback exchange replay is
+committed separately under `oauth/` (`oauth/README.md`).
+
 The server offers three tools (`echo`, `fail`, `crash`) in the order `tools/list`
 reports them.
 
