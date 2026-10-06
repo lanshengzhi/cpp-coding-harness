@@ -206,6 +206,11 @@ struct AssemblyPlan {
     /// CLI tool selection (spec #865, ticket #871): the resolved `--tools` /
     /// `--exclude-tools` intent applied to the discovered tool set at assembly.
     ToolSelection tool_selection;
+    /// Configured MCP streamable-http servers (spec #865, ticket #873).
+    /// Assembly validates each URL at registration (TLS-only, ADR 0054),
+    /// connects it, and appends the resulting Extension Tool Source before the
+    /// sources are loaded.
+    std::vector<mcp::McpHttpServerConfig> mcp_http_servers;
     /// Private test seam: the shared live PI_* facts holder wired into the
     /// model Bash Tool (live-refresh tests).
     std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
@@ -838,6 +843,7 @@ struct SessionTargetNormalizationOptions {
             .allowed = std::move(request.session_facts.tools),
             .excluded = std::move(request.session_facts.exclude_tools),
     };
+    plan.mcp_http_servers = std::move(request.mcp_http_servers);
     plan.bash_session_environment = std::move(request.bash_session_environment);
     plan.project_trust_override = request.project_trust_override.has_value()
         ? request.project_trust_override
@@ -1600,6 +1606,27 @@ struct PreparedAssemblyTarget final {
     // server is never silently dropped.
     for (auto& server : plan.mcp_servers) {
         auto source = co_await mcp::McpExtensionToolSource::connect_stdio(std::move(server));
+        if (!source) {
+            cleanup_on_failure();
+            co_await discard_unpublished_session();
+            co_return std::unexpected(std::move(source.error()));
+        }
+        plan.extension_tool_sources.push_back(std::move(*source));
+    }
+
+    // MCP streamable-http servers (spec #865, ticket #873): the URL is
+    // validated at registration (TLS-only, ADR 0054) before any connection is
+    // attempted, then the server is connected and its tools listed. A
+    // non-https:// URL, an unreachable server, or a server that does not speak
+    // MCP fails Session Assembly explicitly — a configured server is never
+    // silently dropped and the transport never falls back to plaintext.
+    for (auto& server : plan.mcp_http_servers) {
+        if (auto valid = mcp::validate_mcp_http_server_config(server); !valid) {
+            cleanup_on_failure();
+            co_await discard_unpublished_session();
+            co_return std::unexpected(std::move(valid.error()));
+        }
+        auto source = co_await mcp::McpExtensionToolSource::connect_http(std::move(server));
         if (!source) {
             cleanup_on_failure();
             co_await discard_unpublished_session();

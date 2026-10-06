@@ -10,6 +10,8 @@
 
 #include "coding_agent/mcp/McpStdioClient.hpp"
 
+#include "coding_agent/mcp/McpProtocol.hpp"
+
 #include "support/Json.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/UniqueFd.hpp"
@@ -70,82 +72,12 @@ constexpr std::chrono::milliseconds kTerminateGrace{2000};
             "MCP server '" + server + "' connection closed before responding");
 }
 
-[[nodiscard]] std::string json_or_empty(const support::JsonValue& value) {
-    auto serialized = support::write_json(value);
-    return serialized ? std::move(*serialized) : std::string{"<unserializable>"};
-}
-
-[[nodiscard]] support::Error json_rpc_error(const support::JsonValue& error) {
-    std::string message = "returned a JSON-RPC error";
-    std::string detail = json_or_empty(error);
-    if (const auto* object = error.get_if<support::JsonValue::object_t>()) {
-        if (const auto it = object->find("message"); it != object->end() && it->second.holds<std::string>()) {
-            message = it->second.get_string();
-        }
-        if (const auto it = object->find("code"); it != object->end() && it->second.holds<double>()) {
-            detail = "code " + std::to_string(static_cast<long long>(it->second.get_number()));
-            if (const auto message_it = object->find("message");
-                    message_it != object->end() && message_it->second.holds<std::string>()) {
-                detail += ": " + message_it->second.get_string();
-            }
-        }
-    }
-    return support::make_error(support::ErrorCode::Process, std::move(message), std::move(detail));
-}
-
-[[nodiscard]] std::string build_request_frame(
-        int id, std::string_view method, const std::optional<support::JsonValue>& params) {
-    support::JsonValue request{support::JsonValue::object_t{
-            {"jsonrpc", "2.0"},
-            {"id", static_cast<double>(id)},
-            {"method", std::string{method}},
-    }};
-    if (params) {
-        request.get_object().emplace("params", *params);
-    }
-    auto serialized = support::write_json(request);
-    std::string frame = serialized ? std::move(*serialized) : std::string{"{}"};
-    frame.push_back('\n');
-    return frame;
-}
-
-[[nodiscard]] std::string build_notification_frame(
-        std::string_view method, const std::optional<support::JsonValue>& params) {
-    support::JsonValue notification{support::JsonValue::object_t{
-            {"jsonrpc", "2.0"},
-            {"method", std::string{method}},
-    }};
-    if (params) {
-        notification.get_object().emplace("params", *params);
-    }
-    auto serialized = support::write_json(notification);
-    std::string frame = serialized ? std::move(*serialized) : std::string{"{}"};
-    frame.push_back('\n');
-    return frame;
-}
-
-/// Validate the `initialize` result like pi `validateInitializeResult`: the
-/// protocol version, capabilities object, and serverInfo identity must be
-/// present, so a server that cannot speak MCP fails explicitly at connect.
-[[nodiscard]] support::ExpectedVoid validate_initialize_result(
-        const std::string& server, const support::JsonValue& result) {
-    const auto* object = result.get_if<support::JsonValue::object_t>();
-    if (object == nullptr) {
-        return std::unexpected(transport_error(server, "sent an invalid initialize result"));
-    }
-    const auto protocol_version = object->find("protocolVersion");
-    if (protocol_version == object->end() || !protocol_version->second.holds<std::string>()) {
-        return std::unexpected(transport_error(server, "initialize result is missing protocolVersion"));
-    }
-    const auto capabilities = object->find("capabilities");
-    if (capabilities == object->end() || capabilities->second.get_if<support::JsonValue::object_t>() == nullptr) {
-        return std::unexpected(transport_error(server, "initialize result is missing capabilities"));
-    }
-    const auto server_info = object->find("serverInfo");
-    if (server_info == object->end() || server_info->second.get_if<support::JsonValue::object_t>() == nullptr) {
-        return std::unexpected(transport_error(server, "initialize result is missing serverInfo"));
-    }
-    return {};
+/// One newline-delimited frame: the shared JSON-RPC body plus the stdio
+/// delimiter (pi `stdio.ts` writes one compact object per `\n`-terminated
+/// line).
+[[nodiscard]] std::string newline_frame(std::string body) {
+    body.push_back('\n');
+    return body;
 }
 
 /// Child side of the launch. Runs between fork and exec only: no allocation,
@@ -363,7 +295,7 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpStdioClient>>> McpSt
     if (!initialized) {
         co_return std::unexpected(std::move(initialized.error()));
     }
-    if (auto valid = validate_initialize_result(client->config_.name, *initialized); !valid) {
+    if (auto valid = detail::validate_initialize_result(client->config_.name, *initialized); !valid) {
         co_return std::unexpected(std::move(valid.error()));
     }
     client->notify("notifications/initialized");
@@ -380,7 +312,8 @@ support::AsyncResult<support::JsonValue> McpStdioClient::request(
                     return;
                 }
                 const int id = self->next_id_++;
-                self->enqueue_frame(build_request_frame(id, method, params), id, std::move(completion));
+                self->enqueue_frame(
+                        newline_frame(detail::build_request_body(id, method, params)), id, std::move(completion));
             }}};
 }
 
@@ -388,7 +321,7 @@ void McpStdioClient::notify(std::string method, std::optional<support::JsonValue
     if (closed_) {
         return;
     }
-    enqueue_frame(build_notification_frame(method, params), 0, std::nullopt);
+    enqueue_frame(newline_frame(detail::build_notification_body(method, params)), 0, std::nullopt);
 }
 
 void McpStdioClient::enqueue_frame(std::string frame,
@@ -537,30 +470,13 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> McpStdioClient::aw
             // request keeps waiting for its own response (pi `handleStdout`).
             continue;
         }
-        const auto* object = parsed->get_if<support::JsonValue::object_t>();
-        if (object == nullptr) {
-            continue;
+        auto matched = detail::response_for_id(*parsed, id);
+        if (!matched) {
+            co_return std::unexpected(std::move(matched.error()));
         }
-        const auto version = object->find("jsonrpc");
-        if (version == object->end() || !version->second.holds<std::string>() ||
-                version->second.get_string() != "2.0") {
-            continue;
+        if (matched->has_value()) {
+            co_return std::move(**matched);
         }
-        const auto response_id = object->find("id");
-        if (response_id == object->end() || !response_id->second.holds<double>()) {
-            continue;
-        }
-        if (static_cast<int>(response_id->second.get_number()) != id) {
-            continue;
-        }
-        if (const auto error = object->find("error"); error != object->end()) {
-            co_return std::unexpected(json_rpc_error(error->second));
-        }
-        const auto result = object->find("result");
-        if (result == object->end()) {
-            co_return std::unexpected(transport_error(config_.name, "sent a response without a result"));
-        }
-        co_return result->second;
     }
 }
 

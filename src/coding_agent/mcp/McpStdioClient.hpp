@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coding_agent/mcp/McpProtocol.hpp"
+#include "coding_agent/mcp/McpServerConnection.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 
 #include <cch/support/AsyncResult.hpp>
@@ -21,14 +23,6 @@
 
 namespace cch::coding_agent::mcp {
 
-/// The MCP protocol version Pike requests on a stdio connection (pi v1.0.4's
-/// default for the newline-delimited stdio transport).
-inline constexpr std::string_view kMcpProtocolVersion = "2025-06-18";
-
-/// Client identity sent in the `initialize` handshake.
-inline constexpr std::string_view kMcpClientName = "pike";
-inline constexpr std::string_view kMcpClientVersion = "0.1.0";
-
 /// The largest single frame accepted from the server (pi
 /// `DEFAULT_MAX_MESSAGE_BYTES` = 16 MiB). An over-size frame is dropped as a
 /// transport error rather than buffered without bound.
@@ -46,7 +40,7 @@ inline constexpr std::size_t kMcpMaxMessageBytes = 16u * 1024u * 1024u;
 /// concurrency the Agent applies. A malformed or over-size frame is a
 /// recoverable transport error: the pending request keeps waiting (it fails on
 /// timeout or connection close), matching pi's `handleStdout`.
-class McpStdioClient final : public std::enable_shared_from_this<McpStdioClient> {
+class McpStdioClient final : public McpServerConnection, public std::enable_shared_from_this<McpStdioClient> {
 public:
     /// Launch `config`, run the MCP `initialize` handshake, and return the
     /// connected client. A missing executable, an empty command, or an
@@ -63,14 +57,14 @@ public:
     /// server's JSON-RPC error, or a transport error (invalid response,
     /// connection closed, timeout).
     [[nodiscard]] support::AsyncResult<support::JsonValue> request(
-            std::string method, std::optional<support::JsonValue> params = std::nullopt);
+            std::string method, std::optional<support::JsonValue> params = std::nullopt) override;
 
     /// One JSON-RPC notification (no `id`, no response). Ordered against
     /// requests through the same queue.
-    void notify(std::string method, std::optional<support::JsonValue> params = std::nullopt);
+    void notify(std::string method, std::optional<support::JsonValue> params = std::nullopt) override;
 
     [[nodiscard]] bool closed() const noexcept { return closed_; }
-    [[nodiscard]] const std::string& server_name() const noexcept { return config_.name; }
+    [[nodiscard]] const std::string& server_name() const noexcept override { return config_.name; }
 
 private:
     McpStdioClient(boost::asio::any_io_executor executor, McpStdioServerConfig config);

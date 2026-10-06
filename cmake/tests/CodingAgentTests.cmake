@@ -62,6 +62,7 @@ include_guard(GLOBAL)
         tests/coding_agent/AgentConfigDirTest.cpp
         tests/coding_agent/PiImportTest.cpp
         tests/coding_agent/ExtensionToolSourceTest.cpp
+        tests/coding_agent/McpHttpSessionTest.cpp
         tests/coding_agent/McpStdioSessionTest.cpp
         tests/coding_agent/ToolSelectionTest.cpp
         tests/coding_agent/CodemodeDeclarationTest.cpp
