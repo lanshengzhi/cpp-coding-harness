@@ -76,6 +76,25 @@ The boundary is enforced by the Product Architecture Contract rule
 through the Tool Owner Interface (`<cch/agent/AgentTool.hpp>`, `<cch/agent/ToolRegistry.hpp>`) and
 may not include the Agent's execution internals or construct an Agent.
 
+### Codemode declarations and source loading — spec #865
+
+Decided **2026-10-06**, authorized by the spec flow of
+[#865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865), in the same attributed manner as the
+foundation ruling above. This ruling covers **this slice's scope only**: declarations and loading,
+not execution.
+
+| Capability | pi source | Pike status | Scope of this ruling |
+|---|---|---|---|
+| Codemode declarations and source loading | `packages/codemode/src/declarations.ts`, `source.ts`, `types.ts` at `7c10bd43` (`v1.0.4`); `packages/coding-agent/src/extensions/codemode/` | **In the supported subset (declarations / loading, #870)** | A project-local declaration surface — `<workspace>/.pi/codemode/*.json` carrying `{name, description, inputSchema?, source}`, with the `source` `*.js` in pi's `source.ts` format — loaded through the Extension Tool Source foundation and exposed on the tool surface. An invalid declaration is a typed error with no silent skip, and loading never executes: a call returns an explicit "not wired until #874" error. It runs no script, opens no MCP server, adds no CLI flag, and rules on no other capability. |
+
+**Intentional divergence:** pi v1.0.4 has no on-disk codemode declaration format. Codemode scripts
+there are written inline in the model's `codemode` tool call, and "exposure" is an in-memory
+registration concept, so there is no project-local codemode source directory to follow. Pike
+defines this minimal format anyway so a project can declare script tools before the sandbox exists;
+it follows pi where a shape exists (the `source.ts` script format and the `CodemodeTool`
+model-facing fields). The format is documented for users at `fixtures/codemode/README.md`. **The
+codemode sandbox and script execution remain undecided until #874.**
+
 ## Finding: not a decision
 
 The following was found during the Phase 1 capability inventory. **It is not an owner decision and
@@ -163,7 +182,7 @@ Pike's counterpart is therefore `src/agent/harness/`, not that path.
 | pi package or capability | Size | Status |
 |---|---|---|
 | `packages/mcp` (whole package) | 20 files / 3,179 LOC (`client.ts` 21KB, `protocol/`, `transports/`, `oauth/`) | **No decision.** Whether external MCP server connectivity is in Pike's product boundary has not been decided. |
-| `packages/codemode` (whole package) | 11 files / 1,655 LOC (`declarations.ts` 13KB, `runtime/`) | **No decision.** Tied upstream to grammar tool-call machinery that Pike already carries as Deferred. |
+| `packages/codemode` (whole package) | 11 files / 1,655 LOC (`declarations.ts` 13KB, `runtime/`) | **Decided in part.** Project-local codemode declarations and source loading are an owner decision — see the Owner decisions section above (spec #865, #870). The sandboxed `runtime/` and `wasm.ts` execution path remains **No decision** until #874. |
 | Image generation (in-package capability, `packages/ai`) | `packages/ai/src/image-models.ts` (50 lines), `images-api-registry.ts` (53), `images.ts` (26) | **No decision.** Pike has image *input* handling (`ImageInput.cpp`); upstream image *generation* is a separate outbound API surface. |
 | Classifier models (in-package capability) | `packages/ai/src/types.ts:1161` (`ModelTypeMap.classifier: ClassifierModel<ClassifierApi>`), `models.ts` (`classify()` declarations at :228/:348/:966), `api/llama-cpp-classify.ts` (458 lines) + `.lazy.ts` (6), `coding-agent/src/core/model-registry.ts:77` (`findOfType("classifier", …)`) | **No decision.** Scope is the classifier model kind only: at this baseline `ModelTypeMap` has exactly `chat`, `image`, and `classifier`. Pike has no `ClassifierModel`, `classify()`, or `findOfType` equivalent. |
 | Durable execution layer (in-package capability of `packages/durable`) | scheduler 1,337 · generation 677 · output 288 · view 237 · submissions 207 · task-graph 222 · live 175 · inbox 132 · registry 114 · define 44 — the 10 listed files are 3,433 lines; `packages/durable` totals 15,483 | **No decision.** Subset membership not yet ruled per capability. |
@@ -187,17 +206,18 @@ All pi sizes above are measured at the pi baseline; all Pike sizes at the Pike c
 - "Why does Pike have less than pi?" has one entry point instead of a grep across source comments.
 - A future proposal to add the logo or Radius finds a recorded owner decision and separately
   attributed analysis. A
-  future proposal to add **MCP or codemode finds an explicitly undecided entry** — the discussion
+  future proposal to add **MCP, or codemode's execution path, finds an explicitly undecided entry** — the discussion
   starts there rather than being restarted, and no reader can cite this ADR as having excluded them.
 - The prompt reference defect is recorded as a **finding with an open remedy**, so it is neither
   silently fixed nor silently ratified.
-- MCP and codemode are recorded as **undecided**, so nobody can later cite this ADR as having
-  excluded them.
+- MCP is recorded as **undecided**, and codemode's execution path with it, so nobody can later cite
+  this ADR as having excluded them; codemode declarations/loading are now an attributed owner decision
+  (spec #865, #870).
 - The Extension Tool Source foundation is now an **attributed owner decision** (spec #865, #867);
   its row states the slice's scope so a later reader cannot read it as having ruled on MCP, codemode,
   or the `packages/durable` extension machinery.
 - `pi-v1.0.4` (`7c10bd4337495ee613f2224843ecdf349b80d1df`) is registered by name with no captured bundle; a future capture is new evidence per ADR 0065 and needs its own step, not a silent edit.
-- A future proposal to add MCP or codemode starts from these **No decision** rows and needs its own membership ruling plus implementation record; this ADR claims no such coverage.
+- A future proposal to add MCP, codemode execution, or any other **No decision** row starts from those rows and needs its own membership ruling plus implementation record; this ADR claims no such coverage.
 
 ## References
 

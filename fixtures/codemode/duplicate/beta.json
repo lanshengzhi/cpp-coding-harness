@@ -1,0 +1,5 @@
+{
+  "name": "dup_tool",
+  "description": "Second declaration of a duplicated tool name.",
+  "source": "dup.js"
+}
