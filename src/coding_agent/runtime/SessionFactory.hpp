@@ -4,6 +4,7 @@
 #include <cch/support/AsyncResult.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"
+#include "coding_agent/mcp/McpServerStatus.hpp"
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/runtime/AsyncUserShell.hpp"
@@ -88,6 +89,7 @@ public:
             std::vector<coding_agent::SessionDiagnostic> diagnostics,
             std::optional<std::string> model_fallback_message,
             std::vector<coding_agent::LoadedThemeResource> theme_resources,
+            std::vector<mcp::McpServerStatus> mcp_servers,
             coding_agent::ResolvedSessionIdentity identity);
 };
 
