@@ -13,6 +13,11 @@
     "catch2",
     "utf8proc",
     {
+      "$comment": "codemode sandbox runtime (spec #865, ticket #874): WasmEdge 0.13.5 from the pinned baseline via the in-tree overlay port cmake/vcpkg-ports/wasmedge, which carries gcc16-demote-warnings.patch. Default features (tools) are off; only the static library and headers are consumed.",
+      "name": "wasmedge",
+      "default-features": false
+    },
+    {
       "$comment": "simd stays enabled (#477): with WEBP_ENABLE_SIMD=OFF libwebp appends -mno-sse2 globally, which hard-errors under the blocking Clang 22 conformance lane ('SSE2 register return with SSE2 disabled' in sharpyuv).",
       "name": "libwebp",
       "default-features": false,

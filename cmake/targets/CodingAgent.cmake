@@ -27,6 +27,7 @@ cch_parity_declare_target(
         src/coding_agent/mcp/McpOAuthTokenResolver.cpp
         src/coding_agent/mcp/McpStdioClient.cpp
         src/coding_agent/extensions/codemode/CodemodeDeclaration.cpp
+        src/coding_agent/extensions/codemode/CodemodeSandbox.cpp
         src/coding_agent/extensions/codemode/CodemodeToolSource.cpp
         src/coding_agent/GitIgnoreMatcher.cpp
         src/coding_agent/ImageInput.cpp
@@ -65,6 +66,7 @@ cch_parity_declare_target(
         Boost::headers@boost
         Threads::Threads@threads
         WebP::webpdecoder@webp
+        wasmedge@wasmedge
     INTERFACE_DEPENDS
         cch_agent_core
         cch_ai

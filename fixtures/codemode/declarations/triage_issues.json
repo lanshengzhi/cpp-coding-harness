@@ -1,5 +1,5 @@
 {
   "name": "triage_issues",
-  "description": "Read the issue list and return how many issues it holds.",
+  "description": "Count the issues in the built-in sample list.",
   "source": "triage_issues.js"
 }

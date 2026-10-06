@@ -115,6 +115,7 @@
     "glaze": { "description": "Glaze JSON serialization" },
     "md4c": { "description": "md4c Markdown parsing" },
     "webp": { "description": "libwebp image decoding" },
+    "wasmedge": { "description": "WasmEdge WebAssembly runtime (codemode sandbox)" },
     "utf8proc": { "description": "utf8proc Unicode processing" },
     "threads": { "description": "POSIX threads (pthread) system library" },
     "catch2": { "description": "Catch2 test framework" }

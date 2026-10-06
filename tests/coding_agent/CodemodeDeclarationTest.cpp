@@ -1,15 +1,17 @@
-// Spec #865 codemode slice (#870): project-local codemode declarations and
-// source loading through the #867 Extension Tool Source seam. The declared
-// script tool becomes a real Agent Tool — visible and listable in the session
-// — but its execute must NOT run the script: it reports an explicit "not wired
-// yet" error until the sandbox slice (#874). The fixtures under
-// fixtures/codemode/ pin the format; every invalid-declaration case here is one
-// error class and asserts the load fails rather than being skipped.
+// Spec #865 codemode slice (#870, #874): project-local codemode declarations
+// and source loading through the #867 Extension Tool Source seam. The declared
+// script tool becomes a real Agent Tool — visible and listable in the session —
+// and (#874) its execute runs the declared script inside the wasm sandbox. The
+// fixtures under fixtures/codemode/ pin the format; every invalid-declaration
+// case here is one error class and asserts the load fails rather than being
+// skipped.
 //
 // The separation case the cheap visibility check lets through: a session can
 // list a declared tool while execute silently succeeds (or runs the script).
-// The tests therefore pair "visible in active_tool_names" with "a call returns
-// the explicit error and never script content".
+// The tests therefore pair "visible in active_tool_names" with "a call reaches
+// the sandbox and returns the script's real result" — the shipped fixtures are
+// self-contained; the explicit does-not-exist error for an unavailable
+// `tools.*` call is asserted in CodemodeSandboxTest.cpp.
 
 #include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/AgentSession.hpp"
@@ -190,7 +192,7 @@ TEST_CASE("a valid codemode declaration loads its descriptor, schema, and parsed
     // File-name order: `summarize_repo` before `triage_issues`.
     const auto& summarize = declarations.at(0);
     CHECK(summarize.name == "summarize_repo");
-    CHECK(summarize.description == "Summarize the repository's top-level files.");
+    CHECK(summarize.description == "Join the repository's top-level file names.");
     REQUIRE(summarize.input_schema.has_value());
     CHECK(summarize.input_schema->get_object().contains("properties"));
     CHECK(summarize.source_path.filename() == "summarize_repo.js");
@@ -327,7 +329,7 @@ TEST_CASE("the loader refuses two declarations that declare the same codemode to
     CHECK(registry.size() == 1);
 }
 
-TEST_CASE("a declared codemode tool's execute reports the explicit not-yet-executable error",
+TEST_CASE("a declared codemode tool's execute runs its script in the wasm sandbox",
         "[coding_agent][codemode][issue870][spec]") {
     tests::TempWorkspace workspace;
     stage_valid_declarations(workspace);
@@ -346,57 +348,54 @@ TEST_CASE("a declared codemode tool's execute reports the explicit not-yet-execu
     auto executed = tool->execute(support::JsonValue::object_t{{"path", "README.md"}}, std::stop_token{});
     auto outcome = tests::run_async_result(std::move(executed));
 
-    REQUIRE_FALSE(outcome.has_value());
-    CHECK(outcome.error().code == support::ErrorCode::Validation);
-    CHECK(outcome.error().message.find("codemode execution is not wired until #874") != std::string::npos);
+    // The script now runs in the sandbox (#874): the shipped fixture is
+    // self-contained, so execute returns its computed result.
+    REQUIRE(outcome.has_value());
+    CHECK_FALSE(outcome->is_error);
+    CHECK(ai::text_from_content(outcome->content).find("AGENTS.md") != std::string::npos);
 }
 
-TEST_CASE("a declared codemode tool is visible in the session and its call returns the explicit error",
+TEST_CASE("a declared codemode tool is visible in the session and its call reaches the sandbox",
         "[coding_agent][codemode][issue870][spec]") {
     tests::TempWorkspace workspace;
     const tests::EnvVarGuard home{"HOME", (workspace.path() / "agent").string()};
     tests::RuntimeFixture runtime;
     stage_valid_declarations(workspace);
 
-    std::vector<std::unique_ptr<coding_agent::extensions::ExtensionToolSource>> sources;
-    sources.push_back(std::make_unique<CodemodeToolSource>(workspace.path()));
-    auto session = make_codemode_session(
-            runtime, workspace, std::make_shared<CodemodeCallProvider>("summarize_repo"), std::move(sources));
+    // (#874) A trusted project's `<workspace>/.pi/codemode` is discovered by
+    // default through session assembly; no explicit source is supplied.
+    auto session =
+            make_codemode_session(runtime, workspace, std::make_shared<CodemodeCallProvider>("summarize_repo"), {});
 
     // Visible and listable: the declared script tool is on the Agent's surface.
     CHECK(session_exposes_tool(*session, "summarize_repo"));
     CHECK(session_exposes_tool(*session, "triage_issues"));
 
-    // Callable only in the sense of discovery: the call reaches execute, which
-    // reports the explicit error, and never the script's result.
+    // Callable: the call reaches execute, which runs the self-contained fixture
+    // in the sandbox and returns its computed value.
     REQUIRE(tests::run_awaitable(runtime, session->prompt("summarize the repo")).has_value());
     const auto result = tool_result_text(*session, "summarize_repo");
     REQUIRE(result.has_value());
-    CHECK(result->find("#874") != std::string::npos);
-    CHECK(result->find("loaded for discovery only") != std::string::npos);
+    CHECK(result->find("AGENTS.md") != std::string::npos);
 
     session->close();
 }
 
-TEST_CASE("a declared codemode tool is visible only when the codemode source is assembled",
+TEST_CASE("codemode declarations are discovered by default only when present",
         "[coding_agent][codemode][issue870][spec]") {
-    tests::TempWorkspace workspace;
-    const tests::EnvVarGuard home{"HOME", (workspace.path() / "agent").string()};
+    tests::TempWorkspace empty;
+    const tests::EnvVarGuard home{"HOME", (empty.path() / "agent").string()};
     tests::RuntimeFixture runtime;
-    stage_valid_declarations(workspace);
 
-    // The declarations exist on disk and load, but a session assembled without
-    // the source does not expose them: visibility is registration at assembly,
-    // not the presence of the declaration.
-    auto without =
-            make_codemode_session(runtime, workspace, std::make_shared<CodemodeCallProvider>("summarize_repo"), {});
+    // A workspace with no `.pi/codemode` contributes no declared tools, even
+    // though default discovery runs for every trusted session.
+    auto without = make_codemode_session(runtime, empty, std::make_shared<CodemodeCallProvider>("summarize_repo"), {});
     CHECK_FALSE(session_exposes_tool(*without, "summarize_repo"));
     without->close();
 
-    std::vector<std::unique_ptr<coding_agent::extensions::ExtensionToolSource>> sources;
-    sources.push_back(std::make_unique<CodemodeToolSource>(workspace.path()));
-    auto with = make_codemode_session(
-            runtime, workspace, std::make_shared<CodemodeCallProvider>("summarize_repo"), std::move(sources));
+    tests::TempWorkspace workspace;
+    stage_valid_declarations(workspace);
+    auto with = make_codemode_session(runtime, workspace, std::make_shared<CodemodeCallProvider>("summarize_repo"), {});
     CHECK(session_exposes_tool(*with, "summarize_repo"));
     with->close();
 }
