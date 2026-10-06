@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "disabled-server": {
+      "command": "python3",
+      "args": ["echo_server.py"],
+      "enabled": false
+    },
+    "echo": {
+      "command": "python3",
+      "args": ["echo_server.py"]
+    },
+    "remote": {
+      "type": "http",
+      "url": "https://example.invalid/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DOCS_TOKEN}"
+      }
+    }
+  }
+}

@@ -42,7 +42,10 @@ inline constexpr std::size_t kMcpMaxMessageBytes = 16u * 1024u * 1024u;
 /// transport pair is never written or read concurrently regardless of the tool
 /// concurrency the Agent applies. A malformed or over-size frame is a
 /// recoverable transport error: the pending request keeps waiting (it fails on
-/// timeout or connection close), matching pi's `handleStdout`.
+/// timeout or connection close), matching pi's `handleStdout`. After the server
+/// dies, the in-flight request fails explicitly (never a silent hang) and the
+/// next call reconnects the server (pi `connection.reconnect()`), so a dead
+/// server does not end the session.
 class McpStdioClient final : public McpServerConnection, public std::enable_shared_from_this<McpStdioClient> {
 public:
     /// Launch `config`, run the MCP `initialize` handshake, and return the
@@ -86,6 +89,11 @@ private:
     };
 
     [[nodiscard]] support::ExpectedVoid spawn();
+    /// pi `connection.reconnect()`: tear down the dead child, launch a fresh
+    /// one, and re-run the `initialize` handshake. Returns the reconnect
+    /// failure through the shared error channel, leaving the client closed so
+    /// the next call tries once more.
+    [[nodiscard]] boost::asio::awaitable<std::optional<support::Error>> reconnect_transport();
     /// Serve the queued frames in order until the queue drains; one pump runs
     /// at a time and is restarted by the next enqueue.
     [[nodiscard]] boost::asio::awaitable<void> pump();

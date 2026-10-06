@@ -81,6 +81,21 @@ constexpr std::chrono::milliseconds kTerminateGrace{2000};
     return body;
 }
 
+/// The `initialize` parameters (pi `client.ts` `connect`): the client's
+/// protocol version, empty capabilities, and identity. Shared by the initial
+/// handshake and a reconnect.
+[[nodiscard]] support::JsonValue initialize_params() {
+    return support::JsonValue{support::JsonValue::object_t{
+            {"protocolVersion", std::string{kMcpProtocolVersion}},
+            {"capabilities", support::JsonValue::object_t{}},
+            {"clientInfo",
+                    support::JsonValue::object_t{
+                            {"name", std::string{kMcpClientName}},
+                            {"version", std::string{kMcpClientVersion}},
+                    }},
+    }};
+}
+
 /// Child side of the launch. Runs between fork and exec only: no allocation,
 /// no unwinding. A setup failure is reported to the parent through the error
 /// pipe (CLOEXEC, so a successful exec closes it and the parent reads EOF).
@@ -283,15 +298,7 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpStdioClient>>> McpSt
         co_return std::unexpected(std::move(spawned.error()));
     }
 
-    support::JsonValue params{support::JsonValue::object_t{
-            {"protocolVersion", std::string{kMcpProtocolVersion}},
-            {"capabilities", support::JsonValue::object_t{}},
-            {"clientInfo",
-                    support::JsonValue::object_t{
-                            {"name", std::string{kMcpClientName}},
-                            {"version", std::string{kMcpClientVersion}},
-                    }},
-    }};
+    support::JsonValue params = initialize_params();
     auto initialized = co_await support::detail::await_async_result(client->request("initialize", std::move(params)));
     if (!initialized) {
         co_return std::unexpected(std::move(initialized.error()));
@@ -305,13 +312,13 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpStdioClient>>> McpSt
 
 support::AsyncResult<support::JsonValue> McpStdioClient::request(
         std::string method, std::optional<support::JsonValue> params, std::stop_token stop_token) {
+    // A request made while the server is closed is still enqueued: the pump
+    // reconnects a dead server before serving it (pi `connection.reconnect()`),
+    // and reports an explicit error if the reconnect fails. Returning early
+    // here would make every post-death call fail without ever trying.
     return support::AsyncResult<support::JsonValue>{support::AsyncProducer<support::JsonValue, support::Error>{
             [self = shared_from_this(), method = std::move(method), params = std::move(params), stop_token](
                     support::AsyncCompletion<support::JsonValue, support::Error> completion) mutable noexcept {
-                if (self->closed_) {
-                    completion(std::unexpected(closed_error(self->config_.name)));
-                    return;
-                }
                 if (stop_token.stop_requested()) {
                     completion(std::unexpected(detail::cancelled_error(self->config_.name)));
                     return;
@@ -400,14 +407,53 @@ void McpStdioClient::enqueue_frame(std::string frame,
     }
 }
 
+boost::asio::awaitable<std::optional<support::Error>> McpStdioClient::reconnect_transport() {
+    // Reached only after close; rebuild the transport from scratch so a dead
+    // child's descriptors and buffered frames cannot leak into the new one.
+    teardown_process_group();
+    close_transport();
+    read_buffer_.clear();
+    discarding_oversize_frame_ = false;
+    last_read_timed_out_ = false;
+    closed_ = false;
+    if (auto spawned = spawn(); !spawned) {
+        closed_ = true;
+        co_return std::move(spawned.error());
+    }
+    const int id = next_id_++;
+    if (auto write_error = co_await write_frame(
+                newline_frame(detail::build_request_body(id, "initialize", initialize_params())));
+            write_error) {
+        closed_ = true;
+        co_return std::move(*write_error);
+    }
+    auto initialized = co_await await_response(id);
+    if (!initialized) {
+        closed_ = true;
+        co_return std::move(initialized.error());
+    }
+    if (auto valid = detail::validate_initialize_result(config_.name, *initialized); !valid) {
+        closed_ = true;
+        co_return std::move(valid.error());
+    }
+    notify("notifications/initialized");
+    co_return std::nullopt;
+}
+
 boost::asio::awaitable<void> McpStdioClient::pump() {
     while (!queue_.empty()) {
         auto item = std::move(queue_.front());
         queue_.pop_front();
         if (closed_) {
-            support::Expected<support::JsonValue> outcome = std::unexpected(closed_error(config_.name));
-            complete_frame(*item, std::move(outcome));
-            continue;
+            // pi `connection.reconnect()`: a disconnected server reconnects on
+            // the next call. Re-establish it once here; a failed reconnect is
+            // reported on this call (never a silent hang) and the next call
+            // gets its own attempt.
+            if (auto reconnect_error = co_await reconnect_transport()) {
+                complete_frame(
+                        *item, support::Expected<support::JsonValue>{std::unexpected(std::move(*reconnect_error))});
+                continue;
+            }
         }
         if (!item->is_notification && cancelled_.contains(item->id)) {
             // Cancelled while queued: the server never saw the request, so

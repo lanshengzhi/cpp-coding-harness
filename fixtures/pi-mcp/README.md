@@ -51,6 +51,14 @@ responding. The same `PIKE_MCP_TRACE` trace file applies (`recv <method>
 id=<n>`, `hang-start id=<n>`), so a test can prove a request was in flight
 before it cancelled it.
 
+## `mcp.json`
+
+A sample global MCP server configuration in pi's `mcpServers` shape (ticket
+#876): two stdio entries — one enabled, one `"enabled": false` — and one
+streamable-http entry. The committed file is the input the persistence loader
+must read; it is not launched. Its projection is pinned by
+`golden/mcp-config-servers.json`.
+
 ## `golden/`
 
 Committed expected observations compared structurally against a real run.
@@ -62,6 +70,9 @@ Committed expected observations compared structurally against a real run.
   renderer, viewport 80) for a call to `mcp__echo__echo` with
   `{"text":"hello"}`. Pins that MCP tools render through the existing fallback
   pair exactly like pi's MCP tools, with no named renderer.
+- `golden/mcp-config-servers.json` — the path-free projection (name, enabled,
+  kind, command/args or url/headers) of the entries `mcp.json` loads into, in
+  the loader's key order. Pins the `mcpServers` shape and the `enabled` flag.
 
 ## Provenance / scope
 
