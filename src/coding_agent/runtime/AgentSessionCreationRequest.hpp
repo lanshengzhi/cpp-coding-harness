@@ -70,6 +70,11 @@ struct InteractiveSessionFacts {
     std::optional<std::string> thinking;
     std::vector<std::string> models;
     std::optional<std::string> api_key;
+    /// pi `--tools`: the allowlist of tool names or `*` patterns. `std::nullopt`
+    /// when the flag is absent (every discovered tool stays unless excluded).
+    std::optional<std::vector<std::string>> tools;
+    /// pi `--exclude-tools`: the denylist of tool names or `*` patterns.
+    std::vector<std::string> exclude_tools;
 };
 
 /// Internal creation request shared by the CLI adapters. Session assembly is
