@@ -21,6 +21,7 @@
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/extensions/ExtensionToolRegistry.hpp"
+#include "coding_agent/extensions/codemode/CodemodeToolSource.hpp"
 #include "coding_agent/mcp/McpConfigFile.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 #include "coding_agent/mcp/McpOAuthProvider.hpp"
@@ -1750,6 +1751,17 @@ struct PreparedAssemblyTarget final {
                 .detail = std::to_string((*connected)->tools().size()) + " tools from " + source_path,
         });
         plan.extension_tool_sources.push_back(std::move(*connected));
+    }
+
+    // codemode (spec #865, ticket #874): project-local declared script tools at
+    // `<workspace>/.pi/codemode` are discovered by default, following the same
+    // assembly-time pattern as the MCP servers above. The directory is a
+    // project-local resource, so it shares the Project Trust decision the
+    // resource loader resolved: an untrusted project's scripts never load. A
+    // malformed declaration fails the source load (and therefore Session
+    // Assembly) explicitly, never silently dropped.
+    if (project_trusted) {
+        plan.extension_tool_sources.push_back(std::make_unique<extensions::CodemodeToolSource>(workspace));
     }
 
     // Extension Tool Source (spec #865): load every configured source and

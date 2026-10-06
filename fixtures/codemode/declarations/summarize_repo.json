@@ -1,6 +1,6 @@
 {
   "name": "summarize_repo",
-  "description": "Summarize the repository's top-level files.",
+  "description": "Join the repository's top-level file names.",
   "inputSchema": {
     "type": "object",
     "properties": { "path": { "type": "string" } },

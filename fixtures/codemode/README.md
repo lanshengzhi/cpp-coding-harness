@@ -40,9 +40,16 @@ line numbers in stack traces stay aligned.
 
 ```js
 // @options: {"max_output_tokens": 2000, "timeout_ms": 30000}
-const issues = await tools.read({ path: "issues.json" });
+const issues = [{ id: 1 }, { id: 2 }, { id: 3 }];
 return issues.length;
 ```
+
+A declared script runs self-contained inside the sandbox. It cannot reach the
+host tool surface: `tools.*` and globals are empty, so a call to one is an
+explicit `does not exist` error rather than an unimplemented capability. Routing
+a script's `tools.*` calls back to the session's tool set is a recorded
+follow-up (codemode tool forwarding), not silently dropped — see the #874
+notes.
 
 ## Errors are explicit
 
@@ -65,8 +72,9 @@ tools and see them on the tool surface. It follows pi where there is a shape to
 follow: the source file format is pi's `source.ts`, and the model-facing
 identity (`name`, `description`, `inputSchema`) is pi's `CodemodeTool`.
 
-**Scope (#870):** declarations are loaded, validated, and listed. The script is
-never executed — a call to a declared tool returns an explicit
-"codemode execution is not wired until #874" error. Sandboxed execution, and
-loading the source into a session by default (settings/CLI), land in later
-slices of spec #865.
+**Scope (#870, #874):** declarations are loaded, validated, and listed. As of #874 a call to a
+declared tool runs its script inside the wasm sandbox and returns the script's value and output; the
+sandbox has no host filesystem, network, or module capability (see `quickjs/README.md`). The
+script's `tools.*` surface is empty in this slice, so a script that calls `tools.<name>` fails with
+an explicit "does not exist" error. Routing `tools.*` to the session's tool set, and loading the
+source into a session from settings/CLI, land in later slices of spec #865.
