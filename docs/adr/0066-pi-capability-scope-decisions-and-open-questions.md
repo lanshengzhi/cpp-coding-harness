@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Pi capability scope decisions and open questions
@@ -28,6 +28,10 @@ decision, attributed to it and not to the owner.
 
 > **Pike implements a functional subset of pi. For the subset Pike does implement, the behaviour a user
 > experiences is the same as pi's.**
+
+Pike 实现 pi 的功能子集；在 Pike 已声明 Supported 的范围内，用户可见行为与基线 pi 一致（Semantic Parity）；子集之外逐项记为 Deferred，未裁决的记为 No decision，不存在默示对齐。
+
+Owner 原话“当前 pike 所实现功能全面对齐 ../pi”（2026-10-06）经 grill 澄清为上述子集内一致含义，不作零 Deferred 解读；“全面对齐”四字不进入正文断言。
 
 This is the rule per-capability membership will be decided against, and it settles a distinction the
 earlier drafts kept circling:
@@ -113,10 +117,17 @@ later reader does not re-raise it.
 
 ## Open question: no decision exists
 
-**Baselines — two, not one.** Every **pi** path, size, and line count in this table is measured at pi
-`a13d35a742c6ef8462812a28fbe1d8c8b7431c32` (`v1.0.0`) with `git ls-tree`/`git cat-file`. Every **Pike**
-figure is measured in the Pike tree at `54c736a0d`, where it appears. The two are never mixed: pi figures and
+**Baselines — three pi revisions, each named with its full 40-character SHA.** Every **pi** path, size, and line count in this table is measured at pi
+`a13d35a742c6ef8462812a28fbe1d8c8b7431c32` (`v1.0.0`) with `git ls-tree`/`git cat-file`, unless a row names `7c10bd43` explicitly. Every **Pike**
+figure is measured in the Pike tree at `54c736a0d`, where it appears. The two sides are never mixed: pi figures and
 Pike figures are read against their own baseline, as stated here.
+
+Revision roles (ADR 0065 Named Baseline rule — selection by name, never by floating HEAD):
+`f07218c4d4bbc12bef056a7058c3dd49dfe41abe` (`v0.87.1`, baseline `pi-v0.87.1`) is the captured evidence bundle;
+`a13d35a742c6ef8462812a28fbe1d8c8b7431c32` (`v1.0.0`, baseline `pi-v1.0.0`) is the Phase 1 inventory reference (bundle not yet captured);
+`7c10bd4337495ee613f2224843ecdf349b80d1df` (`v1.0.4`, baseline `pi-v1.0.4`) is registered in `fixtures/pi-ai/baselines.json` with no captured bundle yet —
+tools selecting it fail loudly on the missing bundle rather than falling back, per ADR 0065.
+The `v1.0.0` → `v1.0.4` delta (292 files, +17238/−4936) has not been per-capability inventoried; only the whole new packages below are recorded as rows.
 
 The following are pi packages and capabilities — **two whole packages and several in-package
 capabilities** — for which Pike has **no counterpart of that capability**, and for which **no decision
@@ -143,6 +154,8 @@ Pike's counterpart is therefore `src/agent/harness/`, not that path.
 | Session transactions | `packages/durable/src/session/transaction.ts` (1,023 lines) | **No decision.** Subset membership not yet ruled per capability. |
 | Extension/registry system | `packages/durable/src/harness/define.ts` (44), `harness/registry.ts` (114); `defineExtension` / `createRegistry` / `wrapTool` | **No decision.** Subset membership not yet ruled per capability. |
 | `streamProxy` (server-side LLM forwarding, server-held auth) | `packages/agent/src/proxy.ts` 406 lines | **No decision.** Subset membership not yet ruled per capability. |
+| `packages/env` (whole package, new in v1.0.0→v1.0.4) | 36 files / ~7,020 TS+Rust LOC (`@earendil-works/pi-env`, SSH bootstrap, daemon, remote ExecutionEnv client) at `7c10bd43` | **No decision.** Whether remote execution environments are in Pike's product boundary has not been decided. |
+| `packages/server` + `packages/protocol` + `packages/telemetry` (new package group in v1.0.0→v1.0.4) | 58 files / ~5,674 LOC at `7c10bd43` | **No decision.** Subset membership not yet ruled; per-capability deltas in durable watch/shell, MCP OAuth, codemode, and tui-alt-screen within the same range are likewise not yet inventoried. |
 Note the distinction the other tables make necessary: recording "the prompt does not reference
 MCP" is **not** a decision that MCP is unsupported. The two are independent, and only the first is
 currently observable. Likewise, Pike's image *input* support says nothing about image *generation*,
@@ -163,6 +176,8 @@ All pi sizes above are measured at the pi baseline; all Pike sizes at the Pike c
   silently fixed nor silently ratified.
 - MCP and codemode are recorded as **undecided**, so nobody can later cite this ADR as having
   excluded them.
+- `pi-v1.0.4` (`7c10bd4337495ee613f2224843ecdf349b80d1df`) is registered by name with no captured bundle; a future capture is new evidence per ADR 0065 and needs its own step, not a silent edit.
+- A future proposal to add MCP or codemode starts from these **No decision** rows and needs its own membership ruling plus implementation record; this ADR claims no such coverage.
 
 ## References
 
@@ -171,3 +186,5 @@ All pi sizes above are measured at the pi baseline; all Pike sizes at the Pike c
 - `src/coding_agent/ModelConfig.hpp:49` — the existing Radius exclusion
 - `src/coding_agent/prompt/SystemPromptBuilder.cpp:124-131` — the prompt reference list
 - `src/coding_agent/AgentSessionExecution.cpp:381-387` — `docsPath` resolution
+- [ADR 0065](0065-bind-pi-ai-evidence-bundles-to-a-named-baseline-registry.md) — Named Baseline registry rule
+- `fixtures/pi-ai/baselines.json` — `pi-v1.0.4` registration (`7c10bd43`, bundle not yet captured)

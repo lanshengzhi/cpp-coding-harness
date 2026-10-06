@@ -36,6 +36,19 @@
         "Vercel AI Gateway",
         "Radius"
       ]
+    },
+    "pi-v1.0.4": {
+      "label": "v1.0.4",
+      "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+      "bundle_path": "v1.0.4",
+      "captured_at": null,
+      "source_endpoints": [
+        "models.dev",
+        "NVIDIA NIM",
+        "OpenRouter",
+        "Vercel AI Gateway",
+        "Radius"
+      ]
     }
   }
 }
