@@ -48,6 +48,19 @@
           "ai/",
           "src/ai/"
         ]
+      },
+      {
+        "id": "extension-tool-source-no-agent-execution-reach-through",
+        "source_prefixes": [
+          "src/coding_agent/extensions/"
+        ],
+        "excluded_source_prefixes": [],
+        "forbidden_include_prefixes": [
+          "cch/agent/ToolCallExecutor.hpp",
+          "agent/ToolCallExecutor.hpp",
+          "cch/agent/Agent.hpp",
+          "agent/Agent.hpp"
+        ]
       }
     ],
     "exceptions": []

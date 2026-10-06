@@ -7,6 +7,7 @@
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
 #include "coding_agent/SessionTarget.hpp"
+#include "coding_agent/extensions/ExtensionToolSource.hpp"
 
 #include <cstddef>
 #include <filesystem>
@@ -144,6 +145,15 @@ struct AgentSessionCreationRequest {
     /// tool set. Production callers never set it (the fixed #331 tool set is
     /// always available); retry-continuation tests inject recording tools.
     std::vector<agent::Tool> custom_tools;
+    /// The Extension Tool Source seam (spec #865): the external capabilities
+    /// (MCP servers, codemode scripts) that contribute Agent Tools. Session
+    /// assembly loads each source and registers the resulting tools in the
+    /// session's ToolRegistry before it moves into the Agent, so extension
+    /// tools are visible to the model and callable through the ordinary
+    /// execution path. Production assembly leaves it empty until the MCP and
+    /// codemode slices supply configured sources; the foundation tests inject
+    /// a stub source here.
+    std::vector<std::unique_ptr<extensions::ExtensionToolSource>> extension_tool_sources;
     /// Private test seam: the shared live PI_* facts holder wired into the
     /// model Bash Tool. Production callers never set it (SessionFactory
     /// creates and wires the holder); focused tests capture it to assert the

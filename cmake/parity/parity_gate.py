@@ -125,6 +125,7 @@ RULE_FORBIDDEN_HEADLESS_FRONTEND_INCLUDE = "PARITY-8001"
 RULE_EXPIRED_ARCHITECTURE_EXCEPTION = "PARITY-8002"
 RULE_AGENT_AI_PRIVATE_INCLUDE = "PARITY-8003"
 RULE_PRIVATE_REACH_THROUGH_INCLUDE = "PARITY-8004"
+RULE_EXTENSION_TOOL_SOURCE_REACH_THROUGH = "PARITY-8005"
 
 # One stable diagnostic id per Product Architecture Contract rule (ADR 0039),
 # keyed by the manifest rule id whose clause the violation names. A rule that has
@@ -133,6 +134,7 @@ _ARCHITECTURE_RULE_DIAGNOSTIC_IDS = {
     "headless-no-frontend-dependencies": RULE_FORBIDDEN_HEADLESS_FRONTEND_INCLUDE,
     "no-agent-private-reach-through": RULE_PRIVATE_REACH_THROUGH_INCLUDE,
     "agent-no-ai-private-includes": RULE_AGENT_AI_PRIVATE_INCLUDE,
+    "extension-tool-source-no-agent-execution-reach-through": RULE_EXTENSION_TOOL_SOURCE_REACH_THROUGH,
 }
 
 

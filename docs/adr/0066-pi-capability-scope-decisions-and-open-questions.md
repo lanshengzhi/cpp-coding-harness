@@ -59,6 +59,23 @@ does not attribute it to @lansy.
 | Animated pi logo / wordmark | `packages/coding-agent/src/modes/interactive/components/pi-logo-animation.ts` (1209), `pi-logo-animation.lazy.ts` (14), `pi-logo.ts` (40) — 1263 total | **Not implemented** | Branding. |
 | Radius OAuth provider | `packages/ai/src/bun-oauth.ts:23` (`radius: createRadiusOAuth`), `packages/ai/src/env-api-keys.ts:99` (`radius: "RADIUS_API_KEY"`) | **Out of the supported subset** | Already decided and implemented at `src/coding_agent/ModelConfig.hpp:49` — `oauth: "radius"` is excluded. Scope note: the provider definition and its credential entry exist upstream, and its login selector is reachable only inside the `/login` flow. Pike's supported subset carries credential configuration but excludes OAuth definitions. |
 
+### Extension Tool Source foundation — spec #865
+
+Decided **2026-10-06**, authorized by the spec flow of
+[#865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865): the owner ruling was recorded through
+the repository's explicitly authorised spec flow, so it is attributed to that spec rather than to a
+named individual. This ruling covers **this slice's scope only**.
+
+| Capability | pi source | Pike status | Scope of this ruling |
+|---|---|---|---|
+| Extension Tool Source foundation (loader / runner / registry) | `packages/coding-agent/src/core/extensions/loader.ts`, `runner.ts`, `registerTool` in `core/extensions/types.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (minimal foundation, #867)** | A `cch_coding_agent` loader / runner / registry that converts an extension-provided tool into a `cch::agent::Tool` and registers it in the session's existing `ToolRegistry` at assembly time, with the Agent's execution path reused unchanged. It opens no MCP server, runs no codemode script, adds no CLI flag, and rules on no other capability in this ADR. |
+
+The boundary is enforced by the Product Architecture Contract rule
+`extension-tool-source-no-agent-execution-reach-through` (diagnostic `PARITY-8005`,
+`cmake/parity/manifest.json`): sources under `src/coding_agent/extensions/` reach the Agent only
+through the Tool Owner Interface (`<cch/agent/AgentTool.hpp>`, `<cch/agent/ToolRegistry.hpp>`) and
+may not include the Agent's execution internals or construct an Agent.
+
 ## Finding: not a decision
 
 The following was found during the Phase 1 capability inventory. **It is not an owner decision and
@@ -152,7 +169,7 @@ Pike's counterpart is therefore `src/agent/harness/`, not that path.
 | Durable execution layer (in-package capability of `packages/durable`) | scheduler 1,337 · generation 677 · output 288 · view 237 · submissions 207 · task-graph 222 · live 175 · inbox 132 · registry 114 · define 44 — the 10 listed files are 3,433 lines; `packages/durable` totals 15,483 | **No decision.** Subset membership not yet ruled per capability. |
 | SQLite session store (in-package capability) | `packages/durable/src/storage/sqlite/` — `database.ts` 38 · `index.ts` 8 · `migrations.ts` 125 · `node.ts` 210 · `storage.ts` 870 = **1,251 lines** | **No decision.** Subset membership not yet ruled per capability. |
 | Session transactions | `packages/durable/src/session/transaction.ts` (1,023 lines) | **No decision.** Subset membership not yet ruled per capability. |
-| Extension/registry system | `packages/durable/src/harness/define.ts` (44), `harness/registry.ts` (114); `defineExtension` / `createRegistry` / `wrapTool` | **No decision.** Subset membership not yet ruled per capability. |
+| Extension/registry system | `packages/durable/src/harness/define.ts` (44), `harness/registry.ts` (114); `defineExtension` / `createRegistry` / `wrapTool` | **Decided in part.** The coding-agent Extension Tool Source foundation (loader / runner / registry) is an owner decision — see the Owner decisions section above (spec #865, #867). This row's `packages/durable` `defineExtension` / `createRegistry` / `wrapTool` machinery remains **No decision.** |
 | `streamProxy` (server-side LLM forwarding, server-held auth) | `packages/agent/src/proxy.ts` 406 lines | **No decision.** Subset membership not yet ruled per capability. |
 | `packages/env` (whole package, new in v1.0.0→v1.0.4) | 36 files / ~7,020 TS+Rust LOC (`@earendil-works/pi-env`, SSH bootstrap, daemon, remote ExecutionEnv client) at `7c10bd43` | **No decision.** Whether remote execution environments are in Pike's product boundary has not been decided. |
 | `packages/server` + `packages/protocol` + `packages/telemetry` (new package group in v1.0.0→v1.0.4) | 58 files / ~5,674 LOC at `7c10bd43` | **No decision.** Subset membership not yet ruled; per-capability deltas in durable watch/shell, MCP OAuth, codemode, and tui-alt-screen within the same range are likewise not yet inventoried. |
@@ -176,6 +193,9 @@ All pi sizes above are measured at the pi baseline; all Pike sizes at the Pike c
   silently fixed nor silently ratified.
 - MCP and codemode are recorded as **undecided**, so nobody can later cite this ADR as having
   excluded them.
+- The Extension Tool Source foundation is now an **attributed owner decision** (spec #865, #867);
+  its row states the slice's scope so a later reader cannot read it as having ruled on MCP, codemode,
+  or the `packages/durable` extension machinery.
 - `pi-v1.0.4` (`7c10bd4337495ee613f2224843ecdf349b80d1df`) is registered by name with no captured bundle; a future capture is new evidence per ADR 0065 and needs its own step, not a silent edit.
 - A future proposal to add MCP or codemode starts from these **No decision** rows and needs its own membership ruling plus implementation record; this ADR claims no such coverage.
 
