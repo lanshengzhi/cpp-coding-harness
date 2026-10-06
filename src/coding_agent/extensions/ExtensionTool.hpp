@@ -30,8 +30,8 @@ struct ExtensionToolResult {
 /// the already-validated call arguments (the Agent's JSON Schema validation
 /// runs before the call reaches here); cancellation is resolved by the
 /// extension into its own terminal outcome (spec #865, ADR 0042).
-using ExtensionToolExecute = std::move_only_function<
-    support::AsyncResult<ExtensionToolResult>(support::JsonValue arguments, std::stop_token stop_token)>;
+using ExtensionToolExecute = std::move_only_function<support::AsyncResult<ExtensionToolResult>(
+        support::JsonValue arguments, std::stop_token stop_token)>;
 
 /// One Tool contributed by an Extension Tool Source (spec #865): the passive
 /// model-facing descriptor, the prompt metadata, the concurrency policy, and

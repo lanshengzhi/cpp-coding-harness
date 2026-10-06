@@ -21,15 +21,13 @@ namespace {
     agent_tool.concurrency = tool.concurrency;
     agent_tool.prompt_snippet = std::move(tool.prompt_snippet);
     agent_tool.prompt_guidelines = std::move(tool.prompt_guidelines);
-    agent_tool.execute = agent::ToolExecute{
-            [execute = std::move(tool.execute)](
-                    agent::ToolInvocation invocation,
-                    std::stop_token stop_token,
-                    agent::ToolUpdateSink /*update_sink*/) mutable -> agent::ToolExecuteResult {
+    agent_tool.execute =
+            agent::ToolExecute{[execute = std::move(tool.execute)](agent::ToolInvocation invocation,
+                                       std::stop_token stop_token,
+                                       agent::ToolUpdateSink /*update_sink*/) mutable -> agent::ToolExecuteResult {
                 return agent::ToolExecuteResult{agent::ToolExecuteResult::producer_type{
-                        [execute = std::move(execute),
-                                arguments = std::move(invocation.arguments),
-                                stop_token](agent::ToolExecuteResult::completion_type completion) mutable noexcept {
+                        [execute = std::move(execute), arguments = std::move(invocation.arguments), stop_token](
+                                agent::ToolExecuteResult::completion_type completion) mutable noexcept {
                             std::move(execute)(std::move(arguments), stop_token)
                                     .start([completion = std::move(completion)](
                                                    support::Expected<ExtensionToolResult> outcome) mutable noexcept {
@@ -52,8 +50,8 @@ namespace {
 
 support::ExpectedVoid ExtensionToolRegistry::add(ExtensionTool tool) {
     if (!tool.execute) {
-        return std::unexpected(support::make_error(support::ErrorCode::Validation,
-                "cannot register an extension tool without an execute operation"));
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "cannot register an extension tool without an execute operation"));
     }
     if (tool.definition.name.empty()) {
         return std::unexpected(support::make_error(
@@ -105,8 +103,7 @@ support::ExpectedVoid load_extension_tools(
     return {};
 }
 
-support::ExpectedVoid register_extension_tools(
-        agent::ToolRegistry& registry, ExtensionToolRegistry extension_tools) {
+support::ExpectedVoid register_extension_tools(agent::ToolRegistry& registry, ExtensionToolRegistry extension_tools) {
     for (auto& tool : extension_tools.take_tools()) {
         const std::string name = tool.definition.name;
         if (registry.find(name) != nullptr) {

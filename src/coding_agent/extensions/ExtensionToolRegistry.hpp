@@ -50,8 +50,7 @@ private:
 /// the load and is returned unchanged; a duplicate tool name is rejected by
 /// the registry's `add`.
 [[nodiscard]] support::ExpectedVoid load_extension_tools(
-    ExtensionToolRegistry& registry,
-    std::span<ExtensionToolSource* const> sources);
+        ExtensionToolRegistry& registry, std::span<ExtensionToolSource* const> sources);
 
 /// Runner: convert each registered extension Tool into a `cch::agent::Tool`
 /// and add it to the Agent's ToolRegistry. `extension_tools` is consumed. A
@@ -59,7 +58,6 @@ private:
 /// earlier extension tool) is a typed Validation error rather than a silent
 /// replacement.
 [[nodiscard]] support::ExpectedVoid register_extension_tools(
-    agent::ToolRegistry& registry,
-    ExtensionToolRegistry extension_tools);
+        agent::ToolRegistry& registry, ExtensionToolRegistry extension_tools);
 
 } // namespace cch::coding_agent::extensions

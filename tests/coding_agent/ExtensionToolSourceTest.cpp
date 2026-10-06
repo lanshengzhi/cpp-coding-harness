@@ -68,8 +68,8 @@ public:
         tool.concurrency = agent::ToolConcurrency::ParallelSafe;
         tool.prompt_snippet = "Run the stub extension tool";
         auto call_count = call_count_;
-        tool.execute = [call_count](support::JsonValue, std::stop_token)
-                -> support::AsyncResult<coding_agent::extensions::ExtensionToolResult> {
+        tool.execute = [call_count](support::JsonValue,
+                               std::stop_token) -> support::AsyncResult<coding_agent::extensions::ExtensionToolResult> {
             if (call_count) {
                 ++*call_count;
             }
@@ -96,15 +96,15 @@ private:
 /// round through the ordinary executor path.
 class ExtensionToolRoundProvider final : public tests::ScriptedProvider {
 public:
-    explicit ExtensionToolRoundProvider(std::string tool_name) : ScriptedProvider("fake"), tool_name_(std::move(tool_name)) {}
+    explicit ExtensionToolRoundProvider(std::string tool_name)
+        : ScriptedProvider("fake"), tool_name_(std::move(tool_name)) {}
 
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext, coding_agent::ModelRuntimeTestStreamOptions) override {
         const int request = request_count_++;
         const std::string tool_name = tool_name_;
         return ai::detail::make_model_stream(
-                [model = std::move(model), request, tool_name](
-                        ai::AssistantEventSink sink) mutable
+                [model = std::move(model), request, tool_name](ai::AssistantEventSink sink) mutable
                         -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
                     ai::AssistantMessage round;
                     round.provider = "extension-fake";
@@ -159,8 +159,7 @@ private:
 /// Assemble one in-memory session whose only tool contributions are the given
 /// extension sources. Every caller holds a clean HOME so settings isolation
 /// matches the rest of the coding-agent shard.
-[[nodiscard]] std::unique_ptr<coding_agent::AgentSession> make_extension_session(
-        tests::RuntimeFixture& runtime,
+[[nodiscard]] std::unique_ptr<coding_agent::AgentSession> make_extension_session(tests::RuntimeFixture& runtime,
         const tests::TempWorkspace& workspace,
         std::shared_ptr<tests::ScriptedProvider> provider,
         std::vector<std::unique_ptr<coding_agent::extensions::ExtensionToolSource>> sources) {
@@ -240,13 +239,12 @@ TEST_CASE("the runner refuses an extension tool whose name collides with an exis
     existing.name = "read";
     existing.description = "the built-in reader";
     existing.parameters = support::JsonValue::object_t{{"type", "object"}};
-    REQUIRE(registry
-                    .add(tests::make_fake_tool(std::move(existing),
-                            agent::ToolConcurrency::Exclusive,
-                            [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
-                                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
-                                co_return agent::AsyncToolExecutionResult{};
-                            }))
+    REQUIRE(registry.add(tests::make_fake_tool(std::move(existing),
+                                 agent::ToolConcurrency::Exclusive,
+                                 [](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                                         -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                                     co_return agent::AsyncToolExecutionResult{};
+                                 }))
                     .has_value());
 
     StubExtensionToolSource source{"read", nullptr};
@@ -303,8 +301,8 @@ TEST_CASE("an extension tool is visible to the session only when it is registere
 
     // A session assembled without the source does not expose the tool: the
     // tool's existence is not what makes it visible.
-    auto without = make_extension_session(
-            runtime, workspace, std::make_shared<ExtensionToolRoundProvider>("stub_ext"), {});
+    auto without =
+            make_extension_session(runtime, workspace, std::make_shared<ExtensionToolRoundProvider>("stub_ext"), {});
     CHECK_FALSE(session_exposes_tool(*without, "stub_ext"));
     without->close();
 
