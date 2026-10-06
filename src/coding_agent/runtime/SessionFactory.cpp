@@ -25,6 +25,7 @@
 #include "coding_agent/runtime/LocalUserShell.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
+#include "coding_agent/runtime/ToolSelection.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -202,6 +203,9 @@ struct AssemblyPlan {
     /// each one and appends the resulting Extension Tool Source before the
     /// sources are loaded.
     std::vector<mcp::McpStdioServerConfig> mcp_servers;
+    /// CLI tool selection (spec #865, ticket #871): the resolved `--tools` /
+    /// `--exclude-tools` intent applied to the discovered tool set at assembly.
+    ToolSelection tool_selection;
     /// Configured MCP streamable-http servers (spec #865, ticket #873).
     /// Assembly validates each URL at registration (TLS-only, ADR 0054),
     /// connects it, and appends the resulting Extension Tool Source before the
@@ -362,6 +366,17 @@ void add_project_resource_loading_diagnostics(
         }
     }
     return std::nullopt;
+}
+
+[[nodiscard]] std::string join_tool_names(const std::vector<std::string>& names) {
+    std::string joined;
+    for (const auto& name : names) {
+        if (!joined.empty()) {
+            joined += ", ";
+        }
+        joined += name;
+    }
+    return joined;
 }
 
 [[nodiscard]] support::ExpectedVoid validate_trust_store_path(
@@ -824,6 +839,10 @@ struct SessionTargetNormalizationOptions {
     plan.custom_tools = std::move(request.custom_tools);
     plan.extension_tool_sources = std::move(request.extension_tool_sources);
     plan.mcp_servers = std::move(request.mcp_servers);
+    plan.tool_selection = ToolSelection{
+            .allowed = std::move(request.session_facts.tools),
+            .excluded = std::move(request.session_facts.exclude_tools),
+    };
     plan.mcp_http_servers = std::move(request.mcp_http_servers);
     plan.bash_session_environment = std::move(request.bash_session_environment);
     plan.project_trust_override = request.project_trust_override.has_value()
@@ -1636,6 +1655,33 @@ struct PreparedAssemblyTarget final {
             cleanup_on_failure();
             co_await discard_unpublished_session();
             co_return std::unexpected(registered.error());
+        }
+    }
+
+    // Tool selection (spec #865, ticket #871): resolve `--tools` /
+    // `--exclude-tools` over the discovered set — the built-ins plus any
+    // custom and extension/MCP tools registered above — and retain only the
+    // selected names before the registry moves into the Agent. An unselected
+    // tool never enters the Agent's surface, so it is unreachable and no
+    // second filter is needed inside the Agent. The removal is reported so a
+    // selection is never silent.
+    if (!plan.tool_selection.empty()) {
+        std::vector<std::string> discovered;
+        for (const auto& definition : tools.definitions()) {
+            discovered.push_back(definition.name);
+        }
+        auto resolved = resolve_tool_selection(plan.tool_selection, discovered);
+        if (!resolved) {
+            cleanup_on_failure();
+            co_await discard_unpublished_session();
+            co_return std::unexpected(std::move(resolved.error()));
+        }
+        tools.retain_tools(resolved->selected);
+        if (!resolved->removed.empty()) {
+            diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Info,
+                    "tool:selection",
+                    "tool selection removed " + std::to_string(resolved->removed.size()) +
+                            " tool(s): " + join_tool_names(resolved->removed)));
         }
     }
 

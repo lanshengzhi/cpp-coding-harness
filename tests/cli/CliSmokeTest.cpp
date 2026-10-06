@@ -566,6 +566,62 @@ TEST_CASE("CLI help documents the pi-aligned surface and omits deleted flags", "
     CHECK(result.output.find("--version, -v") != std::string::npos);
 }
 
+TEST_CASE("CLI help documents the tool selection flags", "[cli][tools][issue871][spec]") {
+    auto result = run_command(bin() + " --help");
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.output.find("--tools, -t") != std::string::npos);
+    CHECK(result.output.find("--exclude-tools, -xt") != std::string::npos);
+}
+
+TEST_CASE("CLI --tools selects built-ins and reports the removed tools", "[cli][tools][issue871][spec]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "tools.jsonl";
+    auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
+            .args = {"--session", session.string(), "--tools", "read"},
+            .cwd = workspace.path(),
+            .env = {},
+            .stdin_text = {},
+    });
+
+    REQUIRE(result.exit_code == 0);
+    // The unselected tools are removed with a user-visible notice, not silently.
+    CHECK(result.stderr_text.find("[tool:info] selection:") != std::string::npos);
+    CHECK(result.stderr_text.find("bash") != std::string::npos);
+    CHECK(result.stderr_text.find("edit") != std::string::npos);
+    CHECK(result.stderr_text.find("write") != std::string::npos);
+}
+
+TEST_CASE("CLI --exclude-tools removes one tool and reports it", "[cli][tools][issue871][spec]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "exclude.jsonl";
+    auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
+            .args = {"--session", session.string(), "-xt", "bash"},
+            .cwd = workspace.path(),
+            .env = {},
+            .stdin_text = {},
+    });
+
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("[tool:info] selection:") != std::string::npos);
+    CHECK(result.stderr_text.find("bash") != std::string::npos);
+    CHECK(result.stderr_text.find("read") == std::string::npos);
+}
+
+TEST_CASE("CLI rejects a tool pattern that matches nothing", "[cli][tools][issue871][spec]") {
+    cch::tests::TempWorkspace workspace;
+    auto session = workspace.path() / "bad-pattern.jsonl";
+    auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
+            .args = {"--session", session.string(), "--tools", "mcp__nosuch__*"},
+            .cwd = workspace.path(),
+            .env = {},
+            .stdin_text = {},
+    });
+
+    REQUIRE(result.exit_code != 0);
+    CHECK(result.stderr_text.find("matched no discovered tool") != std::string::npos);
+}
+
 TEST_CASE("CLI non-TTY stdin becomes one print prompt", "[cli][selection][issue64][spec]") {
     cch::tests::TempWorkspace workspace;
     auto session = workspace.path() / "piped.jsonl";

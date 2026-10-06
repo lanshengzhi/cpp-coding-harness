@@ -123,6 +123,59 @@ TEST_CASE("parse_args trims --models patterns and tolerates empty entries", "[cl
     CHECK(parsed->session_facts.models[1] == "haiku");
 }
 
+TEST_CASE("parse_args leaves tool selection absent when the flags are omitted", "[cli][parse][spec]") {
+    std::vector<std::string> args{"cpp-harness", "hello"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    // An absent --tools is distinct from an engaged empty allowlist.
+    CHECK_FALSE(parsed->session_facts.tools.has_value());
+    CHECK(parsed->session_facts.exclude_tools.empty());
+}
+
+TEST_CASE("parse_args records the pi tool selection surface with patterns", "[cli][parse][spec]") {
+    std::vector<std::string> args{
+            "cpp-harness",
+            "--tools",
+            " read, bash ,mcp__radius__*",
+            "--exclude-tools",
+            "mcp__radius__delete",
+            "hello",
+    };
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    REQUIRE(parsed->session_facts.tools.has_value());
+    REQUIRE(parsed->session_facts.tools->size() == 3);
+    CHECK((*parsed->session_facts.tools)[0] == "read");
+    CHECK((*parsed->session_facts.tools)[1] == "bash");
+    CHECK((*parsed->session_facts.tools)[2] == "mcp__radius__*");
+    REQUIRE(parsed->session_facts.exclude_tools.size() == 1);
+    CHECK(parsed->session_facts.exclude_tools[0] == "mcp__radius__delete");
+}
+
+TEST_CASE("parse_args accepts pi's -t and -xt shorts and an engaged empty allowlist", "[cli][parse][spec]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "-t", "read", "-xt", "bash", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->session_facts.tools.has_value());
+        CHECK(*parsed->session_facts.tools == std::vector<std::string>{"read"});
+        CHECK(parsed->session_facts.exclude_tools == std::vector<std::string>{"bash"});
+    }
+    {
+        // pi `--tools ''` engages an empty allowlist (disables everything),
+        // which is not the same as omitting the flag.
+        std::vector<std::string> args{"cpp-harness", "--tools", "", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->session_facts.tools.has_value());
+        CHECK(parsed->session_facts.tools->empty());
+    }
+}
+
 TEST_CASE("parse_args rejects --api-key without an explicit model", "[cli][parse][spec]") {
     std::vector<std::string> args{"cpp-harness", "--api-key", "sk-demo", "hello"};
     auto argv = argv_from_strings(args);
