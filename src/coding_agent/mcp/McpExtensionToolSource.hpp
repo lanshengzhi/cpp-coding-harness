@@ -3,6 +3,7 @@
 #include "coding_agent/extensions/ExtensionTool.hpp"
 #include "coding_agent/extensions/ExtensionToolSource.hpp"
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
+#include "coding_agent/mcp/McpRequestAuthSource.hpp"
 #include "coding_agent/mcp/McpServerConnection.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 
@@ -55,9 +56,12 @@ public:
     /// Connect `config` over the streamable HTTP transport, handshake, and
     /// list the tools. The URL is TLS-only (ADR 0054): a non-`https://` URL is
     /// rejected at registration, and a network, status, or handshake failure
-    /// is returned as an explicit error.
+    /// is returned as an explicit error. When `request_auth` is present the
+    /// request-time headers it resolves (an OAuth access token, spec #865
+    /// ticket #875) are attached to every POST; a missing credential or a
+    /// failed refresh fails the connection explicitly.
     [[nodiscard]] static boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>>
-    connect_http(McpHttpServerConfig config);
+    connect_http(McpHttpServerConfig config, std::shared_ptr<McpRequestAuthSource> request_auth = nullptr);
 
     McpExtensionToolSource(const McpExtensionToolSource&) = delete;
     McpExtensionToolSource& operator=(const McpExtensionToolSource&) = delete;

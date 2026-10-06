@@ -86,12 +86,12 @@ than to a named individual. This ruling covers **the MCP stdio transport slice o
 
 | Capability | pi source | Pike status | Scope of this ruling |
 |---|---|---|---|
-| MCP server over **stdio** | `packages/mcp/src/transports/stdio.ts`, `client.ts`, `protocol/jsonrpc.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (stdio transport, #869)** | A `cch_coding_agent` client that launches one configured MCP server over stdio, speaks newline-delimited compact JSON-RPC (`initialize` → `notifications/initialized` → `tools/list` → `tools/call`), and converts each advertised tool into an extension Tool (`mcp__<server>__<tool>`) through the #867 Extension Tool Source seam. The child is a long-lived per-session process group torn down close-stdin → grace → SIGTERM → SIGKILL; a per-call failure follows the Agent's existing per-call isolation. This ruling covers **stdio only**: **OAuth**, **resource tools**, **server-management persistence (`mcp.json`)**, and **exposure policy (`codemode`/`deferred`/`hidden`)** remain `No decision` (the **streamable-HTTP transport** was later decided in the #873 ruling below), and no codemode, CLI flag, or extension machinery is opened here. |
+| MCP server over **stdio** | `packages/mcp/src/transports/stdio.ts`, `client.ts`, `protocol/jsonrpc.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (stdio transport, #869)** | A `cch_coding_agent` client that launches one configured MCP server over stdio, speaks newline-delimited compact JSON-RPC (`initialize` → `notifications/initialized` → `tools/list` → `tools/call`), and converts each advertised tool into an extension Tool (`mcp__<server>__<tool>`) through the #867 Extension Tool Source seam. The child is a long-lived per-session process group torn down close-stdin → grace → SIGTERM → SIGKILL; a per-call failure follows the Agent's existing per-call isolation. This ruling covers **stdio only**: **OAuth** (later decided in the #875 ruling below), **resource tools**, **server-management persistence (`mcp.json`)**, and **exposure policy (`codemode`/`deferred`/`hidden`)** remain `No decision` (the **streamable-HTTP transport** was later decided in the #873 ruling below), and no codemode, CLI flag, or extension machinery is opened here. |
 
 The slice reuses the Agent's ordinary execution path and adds no Owner Interface; the transport and
 conversion stay private under `src/coding_agent/mcp/`.
 
-| MCP server over **streamable HTTP** | `packages/mcp/src/transports/streamable-http.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (streamable-http transport, #873)** | A `cch_coding_agent` client that reaches one configured MCP server over the streamable-HTTP transport: one JSON-RPC POST per request with `accept: application/json, text/event-stream`, an `application/json` or `text/event-stream` response, and an `mcp-session-id` captured at `initialize` and echoed on later requests, converting each advertised tool into an extension Tool (`mcp__<server>__<tool>`) through the #867 Extension Tool Source seam. The HTTPS round trip reuses the existing outbound client transport (`ai::providers::StreamTransport`, ADR 0054) rather than opening a second HTTP stack, and is **TLS-only**: a non-`https://` URL is rejected at registration and no redirect is ever followed, so the connection cannot be downgraded to plaintext. This ruling covers **the transport's request path only**: the server-to-client GET stream, **OAuth**, **resource tools**, **server-management persistence (`mcp.json`)**, and **exposure policy (`codemode`/`deferred`/`hidden`)** remain `No decision`, and no codemode, CLI flag, or extension machinery is opened here. |
+| MCP server over **streamable HTTP** | `packages/mcp/src/transports/streamable-http.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (streamable-http transport, #873)** | A `cch_coding_agent` client that reaches one configured MCP server over the streamable-HTTP transport: one JSON-RPC POST per request with `accept: application/json, text/event-stream`, an `application/json` or `text/event-stream` response, and an `mcp-session-id` captured at `initialize` and echoed on later requests, converting each advertised tool into an extension Tool (`mcp__<server>__<tool>`) through the #867 Extension Tool Source seam. The HTTPS round trip reuses the existing outbound client transport (`ai::providers::StreamTransport`, ADR 0054) rather than opening a second HTTP stack, and is **TLS-only**: a non-`https://` URL is rejected at registration and no redirect is ever followed, so the connection cannot be downgraded to plaintext. This ruling covers **the transport's request path only**: the server-to-client GET stream, **OAuth** (later decided in the #875 ruling below), **resource tools**, **server-management persistence (`mcp.json`)**, and **exposure policy (`codemode`/`deferred`/`hidden`)** remain `No decision`, and no codemode, CLI flag, or extension machinery is opened here. |
 
 The slice reuses the Agent's ordinary execution path and adds no Owner Interface; the transport and
 conversion stay private under `src/coding_agent/mcp/`. The JSON-RPC framing and `initialize`
@@ -116,6 +116,28 @@ defines this minimal format anyway so a project can declare script tools before 
 it follows pi where a shape exists (the `source.ts` script format and the `CodemodeTool`
 model-facing fields). The format is documented for users at `fixtures/codemode/README.md`. **The
 codemode sandbox and script execution remain undecided until #874.**
+
+### MCP OAuth through the existing credential semantics — spec #865 (#875)
+
+Decided **2026-10-06**, authorized by the spec flow of
+[#865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865), in the same attributed manner as
+the rulings above. This ruling covers **the MCP OAuth credential slice only**.
+
+| Capability | pi source | Pike status | Scope of this ruling |
+|---|---|---|---|
+| MCP server **OAuth** | `packages/mcp/src/oauth/` (`flow.ts`, `discovery.ts`, `callback.ts`, `provider.ts`) and `packages/coding-agent/src/extensions/mcp/oauth.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (credential semantics, #875)** | The authorization-code + PKCE S256 flow, refresh-token rotation, and request-time token attachment of one configured MCP server, expressed entirely through the **existing** credential story: an `ai::OAuthCredential` stored in the shared `auth.json` through the coding-agent-owned AuthStorage under the provider id `mcp__<server>`, an OAuth-shaped login hook reusing the existing `AuthInteraction` presentation and the shared `ai::auth` PKCE/callback helpers, and per-request token resolution in the streamable-http transport. A `401` or an `invalid_grant` refresh is an explicit re-login error (never a silent unauthenticated request and never a retry loop); a server configured without OAuth is sent no credentials. |
+
+**Intentional divergence:** pi stores MCP OAuth state in a separate `<agent-dir>/mcp-auth.json`; the
+spec binds Pike to the existing AuthStorage/`auth.json` semantics instead, so there is no second
+credential store and the user learns no second credential story. **Deferred by this ruling:** RFC 9728
+authorization-server discovery and dynamic client registration (the endpoints and the pre-registered
+`client_id` are configuration), and **the user-visible sign-in trigger** — nothing in #875 opens a
+browser flow on its own; the trigger (a future `/mcp` surface or CLI command) is a follow-up decision,
+and #876's `mcp.json` server entry gaining an `auth: "oauth"` block is the natural handshake point.
+MCP **resource tools**, the server-to-client GET stream, and exposure policy remain `No decision`.
+
+The transport and credential resolution stay private under `src/coding_agent/mcp/` and add no Owner
+Interface.
 
 ## Finding: not a decision
 
@@ -203,7 +225,7 @@ Pike's counterpart is therefore `src/agent/harness/`, not that path.
 
 | pi package or capability | Size | Status |
 |---|---|---|
-| `packages/mcp` (whole package) | 20 files / 3,179 LOC (`client.ts` 21KB, `protocol/`, `transports/`, `oauth/`) | **Decided in part.** The **stdio** and **streamable-HTTP** transports, the `initialize`/`tools/list`/`tools/call` client, and MCP-tool-to-extension-Tool conversion are an owner decision — see the Owner decisions section above (spec #865, #869 and #873). The rest of the package — the **server-to-client GET stream**, **OAuth**, **resource tools**, **server-management persistence**, and **exposure policy** — remains **No decision.** |
+| `packages/mcp` (whole package) | 20 files / 3,179 LOC (`client.ts` 21KB, `protocol/`, `transports/`, `oauth/`) | **Decided in part.** The **stdio** and **streamable-HTTP** transports, the `initialize`/`tools/list`/`tools/call` client, MCP-tool-to-extension-Tool conversion, and **OAuth credential semantics** are an owner decision — see the Owner decisions section above (spec #865, #869, #873, and #875). The rest of the package — the **server-to-client GET stream**, **resource tools**, **server-management persistence**, and **exposure policy** — remains **No decision.** |
 | `packages/codemode` (whole package) | 11 files / 1,655 LOC (`declarations.ts` 13KB, `runtime/`) | **Decided in part.** Project-local codemode declarations and source loading are an owner decision — see the Owner decisions section above (spec #865, #870). The sandboxed `runtime/` and `wasm.ts` execution path remains **No decision** until #874. |
 | Image generation (in-package capability, `packages/ai`) | `packages/ai/src/image-models.ts` (50 lines), `images-api-registry.ts` (53), `images.ts` (26) | **No decision.** Pike has image *input* handling (`ImageInput.cpp`); upstream image *generation* is a separate outbound API surface. |
 | Classifier models (in-package capability) | `packages/ai/src/types.ts:1161` (`ModelTypeMap.classifier: ClassifierModel<ClassifierApi>`), `models.ts` (`classify()` declarations at :228/:348/:966), `api/llama-cpp-classify.ts` (458 lines) + `.lazy.ts` (6), `coding-agent/src/core/model-registry.ts:77` (`findOfType("classifier", …)`) | **No decision.** Scope is the classifier model kind only: at this baseline `ModelTypeMap` has exactly `chat`, `image`, and `classifier`. Pike has no `ClassifierModel`, `classify()`, or `findOfType` equivalent. |

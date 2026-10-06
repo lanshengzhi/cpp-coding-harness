@@ -177,9 +177,9 @@ McpExtensionToolSource::connect_stdio(McpStdioServerConfig config) {
 }
 
 boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>> McpExtensionToolSource::connect_http(
-        McpHttpServerConfig config) {
+        McpHttpServerConfig config, std::shared_ptr<McpRequestAuthSource> request_auth) {
     auto client = co_await McpHttpClient::connect(
-            std::move(config), std::make_shared<ai::providers::BoostBeastStreamTransport>());
+            std::move(config), std::make_shared<ai::providers::BoostBeastStreamTransport>(), std::move(request_auth));
     if (!client) {
         co_return std::unexpected(std::move(client.error()));
     }

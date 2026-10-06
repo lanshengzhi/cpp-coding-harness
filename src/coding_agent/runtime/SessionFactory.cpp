@@ -3,6 +3,7 @@
 #include <cch/agent/AgentContext.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AuthGuidance.hpp>
+#include <cch/coding_agent/AuthStorage.hpp>
 #include <cch/coding_agent/ModelResolver.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
@@ -21,6 +22,8 @@
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/extensions/ExtensionToolRegistry.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
+#include "coding_agent/mcp/McpOAuthProvider.hpp"
+#include "coding_agent/mcp/McpOAuthTokenResolver.hpp"
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/LocalUserShell.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
@@ -1620,13 +1623,33 @@ struct PreparedAssemblyTarget final {
     // non-https:// URL, an unreachable server, or a server that does not speak
     // MCP fails Session Assembly explicitly — a configured server is never
     // silently dropped and the transport never falls back to plaintext.
+    //
+    // An OAuth-configured server (spec #865, ticket #875) resolves its access
+    // token at request time from the shared auth.json through a per-assembly
+    // AuthStorage, so the same credential the host's login writes is the one the
+    // transport sends; the login trigger itself is a later slice (#876).
+    std::shared_ptr<ai::CredentialStore> mcp_credentials;
     for (auto& server : plan.mcp_http_servers) {
         if (auto valid = mcp::validate_mcp_http_server_config(server); !valid) {
             cleanup_on_failure();
             co_await discard_unpublished_session();
             co_return std::unexpected(std::move(valid.error()));
         }
-        auto source = co_await mcp::McpExtensionToolSource::connect_http(std::move(server));
+        std::shared_ptr<mcp::McpRequestAuthSource> request_auth;
+        if (server.oauth) {
+            if (auto valid = mcp::validate_mcp_oauth_server_config(*server.oauth); !valid) {
+                cleanup_on_failure();
+                co_await discard_unpublished_session();
+                co_return std::unexpected(std::move(valid.error()));
+            }
+            if (!mcp_credentials) {
+                mcp_credentials = std::make_shared<AuthStorage>(runtime->agent_dir() / "auth.json");
+            }
+            auto provider = std::make_shared<mcp::McpOAuthProvider>(*server.oauth);
+            request_auth = std::make_shared<mcp::McpOAuthTokenResolver>(
+                    mcp_credentials, mcp::mcp_oauth_provider_id(server.name), server.name, std::move(provider));
+        }
+        auto source = co_await mcp::McpExtensionToolSource::connect_http(std::move(server), std::move(request_auth));
         if (!source) {
             cleanup_on_failure();
             co_await discard_unpublished_session();

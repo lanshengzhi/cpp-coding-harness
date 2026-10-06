@@ -12,13 +12,16 @@
 
 #include "coding_agent/mcp/McpHttpClient.hpp"
 
+#include "coding_agent/mcp/McpOAuthProvider.hpp"
 #include "coding_agent/mcp/McpProtocol.hpp"
 
+#include <cch/coding_agent/AuthGuidance.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include "ai/providers/SseParser.hpp"
 #include "support/AsyncResultBridge.hpp"
+#include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -95,6 +98,14 @@ constexpr std::size_t kErrorBodyChars = 500;
 [[nodiscard]] support::Error http_status_error(
         const std::string& server, const ai::providers::StreamResponse& response) {
     const int status = response.head.status_code;
+    if (status == 401) {
+        // A rejected credential is an explicit re-login error (never a silent
+        // unauthenticated retry), reusing the shared `/login` guidance the
+        // Models auth path produces.
+        return support::make_error(support::ErrorCode::OAuth,
+                format_oauth_reauthenticate_message(mcp_oauth_provider_id(server)),
+                "MCP server '" + server + "' rejected the request (HTTP 401)");
+    }
     if (status >= 300 && status < 400) {
         std::string detail = "MCP streamable-http is TLS-only (ADR 0054) and never follows a redirect";
         if (const std::string location = header_value(response.head.headers, "location"); !location.empty()) {
@@ -192,11 +203,15 @@ constexpr std::size_t kErrorBodyChars = 500;
 
 McpHttpClient::McpHttpClient(boost::asio::any_io_executor executor,
         McpHttpServerConfig config,
-        std::shared_ptr<ai::providers::StreamTransport> transport)
-    : executor_(std::move(executor)), config_(std::move(config)), transport_(std::move(transport)) {}
+        std::shared_ptr<ai::providers::StreamTransport> transport,
+        std::shared_ptr<McpRequestAuthSource> request_auth)
+    : executor_(std::move(executor)), config_(std::move(config)), transport_(std::move(transport)),
+      request_auth_(std::move(request_auth)) {}
 
 boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> McpHttpClient::connect(
-        McpHttpServerConfig config, std::shared_ptr<ai::providers::StreamTransport> transport) {
+        McpHttpServerConfig config,
+        std::shared_ptr<ai::providers::StreamTransport> transport,
+        std::shared_ptr<McpRequestAuthSource> request_auth) {
     if (auto valid = validate_mcp_http_server_config(config); !valid) {
         co_return std::unexpected(std::move(valid.error()));
     }
@@ -207,7 +222,7 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> McpHtt
     auto executor = co_await boost::asio::this_coro::executor;
     const std::string server_name = config.name;
     auto client = std::shared_ptr<McpHttpClient>(
-            new McpHttpClient(std::move(executor), std::move(config), std::move(transport)));
+            new McpHttpClient(std::move(executor), std::move(config), std::move(transport), std::move(request_auth)));
 
     support::JsonValue params{support::JsonValue::object_t{
             {"protocolVersion", std::string{kMcpProtocolVersion}},
@@ -295,10 +310,11 @@ void McpHttpClient::complete_frame(QueuedFrame& frame, support::Expected<support
 }
 
 boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> McpHttpClient::post(std::string_view body) {
+    CCH_TRY(headers, co_await request_headers_for_call());
     ai::providers::StreamRequest request;
     request.method = "POST";
     request.url = config_.url;
-    request.headers = request_headers();
+    request.headers = std::move(headers);
     request.body = std::string{body};
     request.timeout = kRequestTimeout;
     // An empty body handler buffers the whole response body, which is enough
@@ -340,6 +356,25 @@ std::map<std::string, std::string> McpHttpClient::request_headers() const {
         headers["mcp-protocol-version"] = protocol_version_;
     }
     return headers;
+}
+
+boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>>
+McpHttpClient::request_headers_for_call() {
+    std::map<std::string, std::string> headers = request_headers();
+    if (request_auth_ == nullptr) {
+        co_return headers;
+    }
+    // Resolve the credential for this call only: a rotated or newly signed-in
+    // token is observed without restarting the connection, and a failure is the
+    // request's explicit error (never an unauthenticated send).
+    auto resolved = co_await support::detail::await_async_result(request_auth_->current_headers());
+    if (!resolved) {
+        co_return std::unexpected(std::move(resolved.error()));
+    }
+    for (auto& [name, value] : *resolved) {
+        headers.insert_or_assign(std::move(name), std::move(value));
+    }
+    co_return headers;
 }
 
 void McpHttpClient::capture_session(const ai::providers::StreamResponse& response) {
