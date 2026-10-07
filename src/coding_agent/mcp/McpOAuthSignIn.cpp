@@ -418,6 +418,10 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
         if (auto saved = request.store->save(request.server_name, request.server_url, working); !saved) {
             co_return std::unexpected(std::move(saved.error()));
         }
+        // pi `mergeScopes(settings.scope, challenge?.scope)`: the configured
+        // scope wins, then the resource's advertised scopes.
+        McpOAuthFlowOptions flow_options;
+        flow_options.scope = request.oauth.scope;
 
         auto outcome = co_await authorize_mcp(request.store,
                 request.server_name,
@@ -425,7 +429,7 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
                 request.oauth,
                 redirect_url,
                 http,
-                McpOAuthFlowOptions{});
+                flow_options);
         if (!outcome) {
             co_return std::unexpected(std::move(outcome.error()));
         }
@@ -448,6 +452,7 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
             co_return std::unexpected(std::move(authorization.error()));
         }
         McpOAuthFlowOptions exchange;
+        exchange.scope = flow_options.scope;
         exchange.authorization_code = authorization->code;
         exchange.iss = authorization->iss;
         auto authorized = co_await authorize_mcp(

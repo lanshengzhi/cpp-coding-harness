@@ -323,6 +323,21 @@ TEST_CASE("a server-specific Client ID Metadata Document signs in on its callbac
     CHECK(stored->tokens->access_token == "access-1");
 }
 
+TEST_CASE("a configured oauth scope is requested instead of the server's default",
+        "[coding_agent][mcp][issue884][spec]") {
+    SignInHarness harness;
+    harness.oauth.scope = "custom.scope";
+    harness.http->responses[kTokenUrl] = {{200, kTokenResponse}};
+
+    auto outcome = harness.run(/* drive_callback */ false);
+    REQUIRE(outcome.has_value());
+    REQUIRE(harness.authorization_url.has_value());
+    CHECK(query_param(*harness.authorization_url, "scope") == "custom.scope");
+    // The registration asks for the same scope.
+    REQUIRE(harness.http->requests.size() == 2);
+    CHECK(harness.http->requests[0].body.find("custom.scope") != std::string::npos);
+}
+
 TEST_CASE("a pasted redirect URL for another redirect URI does not complete the sign-in",
         "[coding_agent][mcp][issue884][spec]") {
     SignInHarness harness;
