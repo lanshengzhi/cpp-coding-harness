@@ -292,6 +292,37 @@ TEST_CASE("the browser callback completes the MCP OAuth sign-in", "[coding_agent
     CHECK(stored->tokens->access_token == "access-1");
 }
 
+TEST_CASE("a server-specific Client ID Metadata Document signs in on its callback path",
+        "[coding_agent][mcp][issue884][spec]") {
+    SignInHarness harness;
+    harness.paste_suffix = std::nullopt;
+    harness.oauth.client_registration = mcp::McpClientRegistration::Cimd;
+    // Without RFC 9207 `iss`, the document and the redirect URI are specific
+    // to this MCP server.
+    harness.authorization_server_document =
+            R"({"issuer":"https://auth.example.com","authorization_endpoint":"https://auth.example.com/authorize",)" +
+            std::string{R"("token_endpoint":"https://auth.example.com/token",)"} +
+            std::string{R"("response_types_supported":["code"],)"} +
+            std::string{R"("client_id_metadata_document_supported":true,)"} +
+            std::string{R"("token_endpoint_auth_methods_supported":["none"]})"};
+    harness.http->responses[kTokenUrl] = {{200, kTokenResponse}};
+
+    auto outcome = harness.run(/* drive_callback */ true);
+    REQUIRE(outcome.has_value());
+
+    // No registration POST: the document URL is the client id and the
+    // callback arrived on `/callback/<callback id>`.
+    REQUIRE(harness.http->requests.size() == 1);
+    CHECK(harness.http->requests.front().url == kTokenUrl);
+    REQUIRE(harness.authorization_url.has_value());
+    CHECK(query_param(*harness.authorization_url, "client_id").starts_with("https://pi.dev/oauth/"));
+    CHECK(query_param(*harness.authorization_url, "redirect_uri").find("/callback/") != std::string::npos);
+    const auto stored = harness.state();
+    REQUIRE(stored.has_value());
+    REQUIRE(stored->tokens.has_value());
+    CHECK(stored->tokens->access_token == "access-1");
+}
+
 TEST_CASE("a pasted redirect URL for another redirect URI does not complete the sign-in",
         "[coding_agent][mcp][issue884][spec]") {
     SignInHarness harness;

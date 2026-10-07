@@ -468,7 +468,8 @@ McpOAuthFlowTokenResolver::McpOAuthFlowTokenResolver(std::shared_ptr<McpAuthStor
         McpOAuthConfig oauth,
         std::shared_ptr<ai::auth::OAuthHttpClient> http)
     : store_(std::move(store)), server_name_(std::move(server_name)), server_url_(std::move(server_url)),
-      oauth_(std::move(oauth)), http_(std::move(http)) {}
+      oauth_(std::move(oauth)),
+      http_(http ? std::move(http) : std::make_shared<ai::auth::BoostBeastOAuthHttpClient>()) {}
 
 McpOAuthFlowTokenResolver::McpOAuthFlowTokenResolver(McpOAuthFlowTokenResolver&&) noexcept = default;
 McpOAuthFlowTokenResolver& McpOAuthFlowTokenResolver::operator=(McpOAuthFlowTokenResolver&&) noexcept = default;
