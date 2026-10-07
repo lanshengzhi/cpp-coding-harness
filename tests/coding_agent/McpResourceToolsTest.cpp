@@ -110,6 +110,9 @@ public:
     std::map<std::string, std::vector<support::JsonValue>> reads;
     std::vector<std::string> calls;
 
+    /// Replace the listed resources, standing in for a `list_changed` re-list.
+    void set_resources(std::vector<support::JsonValue> resources) { resources_ = std::move(resources); }
+
 private:
     [[nodiscard]] support::JsonValue page_for(const std::vector<support::JsonValue>& items,
             const std::string& key,
@@ -431,6 +434,29 @@ TEST_CASE("a listed resource with no name defaults it from the uri", "[coding_ag
     const auto resources = payload_of(*outcome).get_object().at("resources").get_array();
     REQUIRE(resources.size() == 1);
     CHECK(resources[0].get_object().at("name").get_string() == "notes://scratch");
+}
+
+TEST_CASE("the connected-time snapshot re-lists when asked, so a `list_changed` re-list sees new resources",
+        "[coding_agent][mcp][issue884][spec]") {
+    tests::RuntimeFixture runtime;
+    auto alpha = std::make_shared<ScriptedResourceServer>(
+            "alpha", std::vector<support::JsonValue>{object({{"uri", "file:///a.txt"}, {"name", "a.txt"}})});
+
+    auto first = tests::run_awaitable(runtime,
+            support::detail::await_async_result(
+                    coding_agent::mcp::fetch_mcp_resource_snapshot(*alpha, std::stop_token{})));
+    REQUIRE(first.has_value());
+    REQUIRE(first->resources.size() == 1);
+
+    // The server reports a change; the listener drives another snapshot, which
+    // must reflect the new list rather than the cached one.
+    alpha->set_resources({object({{"uri", "file:///a.txt"}, {"name", "a.txt"}}),
+            object({{"uri", "file:///b.txt"}, {"name", "b.txt"}})});
+    auto second = tests::run_awaitable(runtime,
+            support::detail::await_async_result(
+                    coding_agent::mcp::fetch_mcp_resource_snapshot(*alpha, std::stop_token{})));
+    REQUIRE(second.has_value());
+    CHECK(second->resources.size() == 2);
 }
 
 TEST_CASE("the real stdio fixture lists, templates, and reads over `resources/*`",

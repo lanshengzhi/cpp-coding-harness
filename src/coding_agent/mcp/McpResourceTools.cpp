@@ -185,6 +185,10 @@ using extensions::ExtensionToolResult;
     return contents;
 }
 
+/// The model-facing content of a resource listing: the compact JSON payload,
+/// exactly like pi's `jsonResult`. The existing MCP result path keeps no
+/// 20KB/full-output-file machinery, so these tools inherit that behavior
+/// rather than inventing truncation for resources alone (spec #882 slice note).
 [[nodiscard]] ExtensionToolResult json_result(support::JsonValue payload) {
     ExtensionToolResult result;
     auto serialized = support::write_json(payload);
