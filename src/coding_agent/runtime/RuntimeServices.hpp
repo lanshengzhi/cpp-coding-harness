@@ -6,11 +6,13 @@
 #include <cch/agent/harness/FileSystem.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
 #include "coding_agent/runtime/AsyncUserShell.hpp"
+#include "coding_agent/runtime/McpSessionManager.hpp"
 
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace cch::harness {
 class RuntimeTarget;
@@ -63,6 +65,16 @@ struct RuntimeServices {
     /// of these tools is pi's activation path, so a name surviving the
     /// selection filter is dropped here by Session Assembly.
     std::vector<std::string> initially_inactive_tool_names;
+    /// The live in-session MCP server manager (spec #882, ticket #884; pi
+    /// `createMcpExtension`'s session manager): the one connection story for
+    /// the persisted `mcp.json` servers — connections, exposure-aware tool
+    /// re-registration on the live Agent surface, the resource tools, the
+    /// `/mcp` actions, and the `mcp_servers` prompt section. Constructed by
+    /// SessionFactory, bound to the Agent in `bind_assembly`, owned here so
+    /// Session Close releases the connections with the other live services.
+    /// Null only when assembly ran without the MCP manager (never in
+    /// production assembly).
+    std::shared_ptr<McpSessionManager> mcp_manager;
 };
 
 } // namespace cch::coding_agent::runtime

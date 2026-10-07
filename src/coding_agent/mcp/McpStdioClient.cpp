@@ -290,6 +290,7 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpStdioClient>>> McpSt
     if (auto valid = detail::validate_initialize_result(client->config_.name, *initialized); !valid) {
         co_return std::unexpected(std::move(valid.error()));
     }
+    client->server_instructions_ = detail::initialize_instructions(*initialized);
     client->notify("notifications/initialized");
     co_return client;
 }

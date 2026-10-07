@@ -62,9 +62,9 @@ struct McpLiveTool {
     std::string name;
     std::string description;
     /// pi `Tool.inputSchema` (a JSON Schema object).
-    support::JsonValue input_schema;
+    support::JsonValue input_schema{};
     /// pi `Tool.outputSchema`, when the server declared one.
-    std::optional<support::JsonValue> output_schema;
+    std::optional<support::JsonValue> output_schema{std::nullopt};
 };
 
 /// One live connection (pi `McpServerConnection`). The manager owns one per
@@ -298,10 +298,18 @@ public:
     McpSessionManager(const McpSessionManager&) = delete;
     McpSessionManager& operator=(const McpSessionManager&) = delete;
 
+    /// Bind the session's live tool surface (pi's `pi` ExtensionAPI). The
+    /// session constructs the manager before the Agent exists, so the surface
+    /// arrives here; it must be attached before `start()`.
+    void attach_tool_surface(std::shared_ptr<McpToolSurface> surface);
+
     /// Connect every enabled server (pi `session_start`'s background connect).
     /// Each connection's state reflects the outcome; a failed server does not
     /// veto the others.
     [[nodiscard]] support::AsyncResult<void> start();
+
+    /// pi `session_end`: close every live connection. Idempotent.
+    void close() noexcept;
 
     /// The servers as the panel reads them, in configuration order.
     [[nodiscard]] std::vector<McpServerSnapshot> servers() const;

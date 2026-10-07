@@ -9,6 +9,7 @@
 #include "support/AsyncResultBridge.hpp"
 #include <cch/ai/InferenceFailure.hpp>
 #include "coding_agent/BoundedText.hpp"
+#include "coding_agent/mcp/McpServersSection.hpp"
 #include "coding_agent/prompt/PromptExpansion.hpp"
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 #include "coding_agent/runtime/AuthGuidanceStream.hpp"
@@ -235,10 +236,13 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // Every registered tool name, captured before the registry moves into the
     // Agent: the pi `defaultActive: false` shaping below needs the registered
     // set, which the Agent does not expose separately from the declared set.
+    // The retained copy also seeds the MCP surface's pi `getAllTools()` view
+    // in `bind_assembly`.
     std::vector<std::string> registered_tool_names;
     for (const auto& tool : services_.tools.definitions()) {
         registered_tool_names.push_back(tool.name);
     }
+    assembly_tool_names_ = registered_tool_names;
     std::vector<std::string> replayed_active_tool_names;
     if (session_.resumed) {
         const auto active_names = replay_active_tool_names(session_.history, registered_tool_names);
@@ -413,6 +417,27 @@ std::vector<prompt::SystemPromptSection> AgentSession::Impl::build_system_prompt
             prompt_options.promptGuidelines.end(), prompt_tool_guidelines_.begin(), prompt_tool_guidelines_.end());
     prompt_options.cwd = session_.workspace.string();
     prompt_options.skills = skills_;
+    // pi `before_agent_start`: every prompt lists the enabled servers whose
+    // tools are not declared to the model, rendered from the live manager
+    // state as it is at prompt-build time (the configured entries, with the
+    // connections' `instructions` as the summary fallback once connected).
+    // An absent value renders no section.
+    if (services_.mcp_manager) {
+        // The snapshots vector outlives the render: listings point at its
+        // entries.
+        const auto snapshots = services_.mcp_manager->servers();
+        std::vector<mcp::McpServerListing> listings;
+        listings.reserve(snapshots.size());
+        for (const auto& snapshot : snapshots) {
+            mcp::McpServerListing listing;
+            listing.entry = &snapshot.entry;
+            if (snapshot.connection) {
+                listing.instructions = snapshot.connection->instructions;
+            }
+            listings.push_back(std::move(listing));
+        }
+        prompt_options.mcpServersSection = mcp::render_mcp_servers_section(listings);
+    }
     // Identity delta: the C++ binary's own documentation paths (pi
     // `config.ts` `getReadmePath`/`getDocsPath`/`getExamplesPath` resolve the
     // pi package; pike resolves its own source tree).
@@ -872,6 +897,12 @@ std::shared_ptr<harness::AsyncFileSystem> AgentSession::Impl::release_close_reso
     if (agent_) {
         terminal_snapshot_ = std::make_shared<const AgentSessionSnapshot>(create_snapshot());
         agent_->clear_subscriptions();
+    }
+    // pi `session_end`: the MCP servers' connections close with the session —
+    // stdio children tear down, the HTTP client aborts the GET stream and
+    // DELETEs its session.
+    if (services_.mcp_manager) {
+        services_.mcp_manager->close();
     }
     agent_.reset();
     skills_.clear();

@@ -107,13 +107,18 @@ void write_global_mcp_json(const tests::TempWorkspace& workspace, std::string_vi
     output << content;
 }
 
-[[nodiscard]] std::string echo_server_mcp_json(
-        std::string_view server_name, bool enabled, std::optional<std::string_view> command_override = std::nullopt) {
+[[nodiscard]] std::string echo_server_mcp_json(std::string_view server_name,
+        bool enabled,
+        std::optional<std::string_view> command_override = std::nullopt,
+        std::optional<std::string_view> exposure = std::nullopt) {
     const std::string command = command_override ? std::string{*command_override} : std::string{"python3"};
     std::string json = "{\n  \"mcpServers\": {\n    \"" + std::string{server_name} + "\": {\n      \"command\": \"" +
                        command + "\"";
     if (!command_override) {
         json += ",\n      \"args\": [\"" + fixture_dir() + "/echo_server.py\"]";
+    }
+    if (exposure) {
+        json += ",\n      \"exposure\": \"" + std::string{*exposure} + "\"";
     }
     if (!enabled) {
         json += ",\n      \"enabled\": false";
@@ -356,7 +361,11 @@ TEST_CASE("a persisted MCP server survives restart and reports the running state
         "[coding_agent][mcp][issue876][spec]") {
     tests::TempWorkspace workspace;
     const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
-    write_global_mcp_json(workspace, echo_server_mcp_json("echo", /* enabled */ true));
+    // `direct` exposure declares the tool to the model; the default `codemode`
+    // exposure registers it undeclared (the activation slice's separation
+    // cases live in McpSessionIntegrationTest).
+    write_global_mcp_json(
+            workspace, echo_server_mcp_json("echo", /* enabled */ true, std::nullopt, /* exposure */ "direct"));
     tests::RuntimeFixture runtime;
 
     // First session sees the persisted server.
@@ -410,7 +419,8 @@ TEST_CASE("a persisted server whose command now fails surfaces failed state and 
     // surface as failed and must not veto the session or disappear silently.
     std::string config = "{\n  \"mcpServers\": {\n";
     config += "    \"broken\": {\"command\": \"/nonexistent/pike-mcp-server-xyz\"},\n";
-    config += "    \"echo\": {\"command\": \"python3\", \"args\": [\"" + fixture_dir() + "/echo_server.py\"]}\n";
+    config += "    \"echo\": {\"command\": \"python3\", \"args\": [\"" + fixture_dir() +
+              "/echo_server.py\"], \"exposure\": \"direct\"}\n";
     config += "  }\n}\n";
     write_global_mcp_json(workspace, config);
     tests::RuntimeFixture runtime;
@@ -482,7 +492,8 @@ TEST_CASE("a server that dies mid-session does not end the session and reconnect
         "[coding_agent][mcp][issue876][spec]") {
     tests::TempWorkspace workspace;
     const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
-    write_global_mcp_json(workspace, echo_server_mcp_json("echo", /* enabled */ true));
+    write_global_mcp_json(
+            workspace, echo_server_mcp_json("echo", /* enabled */ true, std::nullopt, /* exposure */ "direct"));
     tests::RuntimeFixture runtime;
 
     auto attempt = make_persisted_session(runtime, workspace, std::make_shared<CrashThenEchoProvider>());

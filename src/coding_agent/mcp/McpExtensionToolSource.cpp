@@ -40,11 +40,10 @@ namespace {
     return sanitized;
 }
 
-/// Convert one `tools/call` result (`{content, structuredContent?, isError?}`)
-/// into the extension-side outcome. Text blocks map to model text, image
-/// blocks to model images, and any other block to its compact JSON text so no
-/// server content is dropped silently.
-[[nodiscard]] support::Expected<extensions::ExtensionToolResult> convert_tools_call_result(
+} // namespace
+
+/// Convert one `tools/call` result (see the header declaration).
+support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result(
         const std::string& server, const support::JsonValue& result) {
     const auto* object = result.get_if<support::JsonValue::object_t>();
     if (object == nullptr) {
@@ -91,7 +90,7 @@ namespace {
 }
 
 /// `tools/list`, following `nextCursor` to exhaustion (pi `listAll`).
-[[nodiscard]] boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_server_tools(
+boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_mcp_server_tools(
         McpServerConnection& connection) {
     const std::string server = connection.server_name();
     std::vector<McpToolDescriptor> tools;
@@ -152,8 +151,6 @@ namespace {
     co_return tools;
 }
 
-} // namespace
-
 std::string mcp_tool_name(std::string_view server, std::string_view tool) {
     std::string name = "mcp__";
     name += sanitize_identifier(server);
@@ -191,7 +188,7 @@ McpExtensionToolSource::connect_stdio(McpStdioServerConfig config) {
     if (!client) {
         co_return std::unexpected(std::move(client.error()));
     }
-    auto tools = co_await list_server_tools(**client);
+    auto tools = co_await list_mcp_server_tools(**client);
     if (!tools) {
         co_return std::unexpected(std::move(tools.error()));
     }
@@ -205,7 +202,7 @@ boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>
     if (!client) {
         co_return std::unexpected(std::move(client.error()));
     }
-    auto tools = co_await list_server_tools(**client);
+    auto tools = co_await list_mcp_server_tools(**client);
     if (!tools) {
         co_return std::unexpected(std::move(tools.error()));
     }
@@ -255,7 +252,7 @@ support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource
                                                 completion(std::unexpected(std::move(outcome.error())));
                                                 return;
                                             }
-                                            completion(convert_tools_call_result(server, *outcome));
+                                            completion(convert_mcp_tools_call_result(server, *outcome));
                                         });
                             }}};
         };

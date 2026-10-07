@@ -42,6 +42,21 @@ struct McpToolDescriptor {
 [[nodiscard]] support::JsonValue create_mcp_result_schema(
         const std::optional<support::JsonValue>& structured_content_schema);
 
+/// pi `isTool` + `listAll`: list one connected server's tools, following
+/// `nextCursor` to exhaustion. An invalid page is an explicit error. Shared by
+/// the assembly-time Extension Tool Source and the live session manager's
+/// production connection.
+[[nodiscard]] boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_mcp_server_tools(
+        McpServerConnection& connection);
+
+/// pi `extensions/mcp/tools.ts`' result mapping: convert one `tools/call`
+/// result (`{content, structuredContent?, isError?}`) into the extension-side
+/// outcome — text blocks to model text, image blocks to model images, any
+/// other block to its compact JSON text, so no server content is dropped
+/// silently. Shared by the assembly-time conversion and the live tool surface.
+[[nodiscard]] support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result(
+        const std::string& server, const support::JsonValue& result);
+
 /// The Agent-visible name of one server tool (pi `createMcpToolName`): a
 /// `mcp__<server>__<tool>` identifier with everything outside `[A-Za-z0-9_]`
 /// replaced by `_`, so the name is also a valid identifier.

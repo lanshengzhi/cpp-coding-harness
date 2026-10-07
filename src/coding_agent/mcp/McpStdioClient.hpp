@@ -87,6 +87,12 @@ public:
 
     [[nodiscard]] bool closed() const noexcept { return closed_; }
     [[nodiscard]] const std::string& server_name() const noexcept override { return config_.name; }
+    /// pi `initialize` result `instructions`, when the server sent them: the
+    /// `mcp_servers` prompt section's summary fallback for a server whose
+    /// entry carries no description.
+    [[nodiscard]] const std::optional<std::string>& server_instructions() const noexcept {
+        return server_instructions_;
+    }
 
 private:
     /// One queued frame. A notification carries no `id` and no completion.
@@ -153,6 +159,8 @@ private:
     int next_id_{1};
     int child_pid_{-1};
     int process_group_{-1};
+    /// pi `initialize` result `instructions` (see the accessor).
+    std::optional<std::string> server_instructions_;
     /// The request id whose frame the pump is currently writing or awaiting;
     /// 0 when the pump is idle. `awaiting_id_` is set only while a response
     /// read is outstanding, so a cancellation wake targets the right read.

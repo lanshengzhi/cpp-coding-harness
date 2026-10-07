@@ -210,7 +210,19 @@ std::vector<McpServerSnapshot> McpSessionManager::servers() const {
     return snapshots;
 }
 
+void McpSessionManager::attach_tool_surface(std::shared_ptr<McpToolSurface> surface) {
+    dependencies_.tools = std::move(surface);
+}
+
 void McpSessionManager::set_change_listener(std::function<void()> listener) { change_listener_ = std::move(listener); }
+
+void McpSessionManager::close() noexcept {
+    for (auto& server : servers_) {
+        if (server.connection) {
+            server.connection->close();
+        }
+    }
+}
 
 void McpSessionManager::emit_change() {
     if (change_listener_) {

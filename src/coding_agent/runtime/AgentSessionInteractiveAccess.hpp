@@ -2,6 +2,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include <cch/support/Error.hpp>
+#include "coding_agent/runtime/McpSessionManager.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -16,6 +17,12 @@ namespace cch::coding_agent::detail {
 class AgentSessionInteractiveAccess {
 public:
     [[nodiscard]] static bool has_user_shell(const AgentSession& session);
+
+    /// The session's live MCP server manager (spec #882, ticket #884), or
+    /// null when assembly ran without one. The `/mcp` panel host builds its
+    /// presenter over this; the reference is non-owning and valid while the
+    /// session lives (pi's manager dies with the session).
+    [[nodiscard]] static runtime::McpSessionManager* mcp_manager(AgentSession& session);
 
     /// Whether the session's project scope is trusted (pi
     /// `settingsManager.isProjectTrusted()`).

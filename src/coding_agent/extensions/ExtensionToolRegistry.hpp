@@ -70,4 +70,9 @@ private:
 [[nodiscard]] support::ExpectedVoid register_extension_tools(
         agent::ToolRegistry& registry, ExtensionToolRegistry extension_tools);
 
+/// The one extension-Tool → Agent-Tool conversion (the runner's per-tool
+/// step), shared with live registration paths (the MCP session surface
+/// re-registers tools on the live Agent with the identical mapping).
+[[nodiscard]] agent::Tool convert_extension_tool(ExtensionTool tool);
+
 } // namespace cch::coding_agent::extensions
