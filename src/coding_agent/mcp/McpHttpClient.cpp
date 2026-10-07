@@ -1,11 +1,13 @@
-// MCP streamable-http transport client (spec #865, ticket #873). The protocol
-// shape mirrors pi v1.0.4 `packages/mcp/src/transports/streamable-http.ts` for
-// the request path: one JSON-RPC POST per request with
-// `accept: application/json, text/event-stream`, an `application/json` or
-// `text/event-stream` response, and an `mcp-session-id` captured from the
-// server and echoed on later requests. The HTTPS round trip itself reuses the
-// existing outbound client transport (`ai::providers::StreamTransport`, ADR
-// 0054); this file owns only the MCP protocol and opens no second HTTP stack.
+// MCP streamable-http transport client (spec #865, ticket #873; server-to-client
+// GET stream, spec #882 ticket #884). The protocol shape mirrors pi v1.0.4
+// `packages/mcp/src/transports/streamable-http.ts`: one JSON-RPC POST per
+// request with `accept: application/json, text/event-stream`, an
+// `application/json` or `text/event-stream` response, and an `mcp-session-id`
+// captured from the server and echoed on later requests, plus the long-lived
+// server-to-client GET stream (pi `runGetStream`) opened after
+// `notifications/initialized`. The HTTPS round trip itself reuses the existing
+// outbound client transport (`ai::providers::StreamTransport`, ADR 0054); this
+// file owns only the MCP protocol and opens no second HTTP stack.
 //
 // The transport is private to cch_coding_agent and is reached only through
 // `McpExtensionToolSource`; nothing here is an Owner Interface.
@@ -735,7 +737,8 @@ std::chrono::milliseconds McpHttpClient::reconnect_delay(int attempt, const std:
         return std::chrono::milliseconds{*server_delay_ms};
     }
     const auto initial = get_stream_options_.initial_delay;
-    const auto backoff = initial * (1 << attempt);
+    // Bound the shift so a large `max_retries` cannot overflow the backoff.
+    const auto backoff = attempt >= 30 ? get_stream_options_.max_delay : initial * (1 << attempt);
     return backoff < get_stream_options_.max_delay ? backoff : get_stream_options_.max_delay;
 }
 

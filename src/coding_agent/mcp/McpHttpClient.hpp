@@ -55,6 +55,13 @@ struct McpHttpGetStreamOptions {
 /// the Agent applies, matching `McpStdioClient`. A response that is not a
 /// JSON-RPC reply for the pending request fails that request explicitly; the
 /// client never treats a 200 with a non-MCP body as success.
+///
+/// After `notifications/initialized`, the client also opens the server-to-client
+/// GET stream (pi `runGetStream`): a second long-lived `text/event-stream`
+/// request on its own connection that reconnects with backoff and dispatches
+/// server-initiated requests and notifications. A server that answers 405 has
+/// no GET stream, which is not an error. `close()` aborts the stream and
+/// DELETEs the session.
 class McpHttpClient final : public McpServerConnection, public std::enable_shared_from_this<McpHttpClient> {
 public:
     /// Connect to `config` (TLS-only, ADR 0054), run the MCP `initialize`

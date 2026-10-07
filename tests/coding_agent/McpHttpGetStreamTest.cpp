@@ -400,6 +400,35 @@ TEST_CASE("MCP GET stream: exhausted retries report the dropped-stream error", "
     CHECK(transport->get_call_count() == 6);
 }
 
+TEST_CASE("MCP GET stream: a received event resets the reconnect attempt counter", "[coding_agent][mcp]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    // Attempt 1 ends cleanly (no event); attempt 2 delivers an event and ends,
+    // resetting the counter; attempt 3 ends cleanly and exhausts the one retry.
+    // Without the reset, attempt 2 would already exceed `max_retries` and only
+    // two GETs would be seen.
+    transport->push_get(GetScript{});
+    GetScript event_then_end;
+    event_then_end.chunks = {message_event(R"({"jsonrpc":"2.0","method":"notifications/message","params":{}})")};
+    transport->push_get(std::move(event_then_end));
+    transport->push_get(GetScript{});
+    transport->set_default_get(GetScript{});
+
+    McpHttpGetStreamOptions options;
+    options.initial_delay = 1ms;
+    options.max_delay = 50ms;
+    options.max_retries = 1;
+    Loop loop;
+    auto client = connect_client(loop, transport, options);
+
+    std::vector<support::Error> errors;
+    client->set_error_listener([&errors](const support::Error& error) { errors.push_back(error); });
+
+    REQUIRE(loop.pump_until([&] { return !errors.empty(); }, 5s));
+    REQUIRE(errors.size() == 1);
+    CHECK(errors[0].message == "MCP server-to-client stream dropped and could not be reopened");
+    CHECK(transport->get_call_count() == 3);
+}
+
 TEST_CASE("MCP GET stream: close() aborts the stream without the dropped error", "[coding_agent][mcp]") {
     auto transport = std::make_shared<ScriptedTransport>();
     transport->set_default_get(live_stream({}));
