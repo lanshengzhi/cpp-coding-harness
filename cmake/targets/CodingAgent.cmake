@@ -120,6 +120,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/LoadedResources.cpp
         src/coding_agent/tui/LoginDialog.cpp
         src/coding_agent/tui/LoginPresentation.cpp
+        src/coding_agent/tui/McpManagerView.cpp
         src/coding_agent/tui/ModelFlowController.cpp
         src/coding_agent/tui/ModelSelector.cpp
         src/coding_agent/tui/OAuthSelector.cpp

@@ -166,6 +166,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/LoadedResourcesTest.cpp
         tests/coding_agent/tui/LoginDialogTest.cpp
         tests/coding_agent/tui/LoginInteractiveModeTest.cpp
+        tests/coding_agent/tui/McpManagerViewTest.cpp
         tests/coding_agent/tui/ModelFlowControllerTest.cpp
         tests/coding_agent/tui/ModelSelectorInteractiveTest.cpp
         tests/coding_agent/tui/ModelSelectorTest.cpp
