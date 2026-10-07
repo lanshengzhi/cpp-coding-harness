@@ -1,11 +1,16 @@
 #pragma once
 
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
+#include "coding_agent/mcp/McpServerConfigBase.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
+
+#include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -34,6 +39,10 @@ struct McpConfigEntry {
     /// The `mcp.json` that defined the entry (the global file when a project
     /// entry only overrides `enabled`).
     std::filesystem::path source;
+    /// The project `mcp.json` whose override keys (`enabled`/`exposure`/
+    /// `toolExposure`) applied to this entry (pi `McpServerEntry.override`),
+    /// or `std::nullopt` for a plain entry.
+    std::optional<std::filesystem::path> override;
     /// The server descriptor, chosen by pi's `type`/`command`/`url` shape.
     McpServerConfigVariant config;
 };
@@ -44,6 +53,9 @@ struct McpConfigLoad {
     /// Configured servers in file order, project entries replacing global
     /// entries with the same name.
     std::vector<McpConfigEntry> servers;
+    /// pi `autoEnableCodemode` (default true): activate the codemode tool when
+    /// a `codemode` server connects. A project value overrides the global one.
+    bool auto_enable_codemode{true};
     /// Per-file read, parse, and validation failures, each `"<path>: <message>"`.
     /// A rejected entry is reported here and skipped, so a single bad entry
     /// never drops the working ones.
@@ -51,6 +63,13 @@ struct McpConfigLoad {
     /// The project `mcp.json` when the project is trusted (pi `projectConfig`).
     std::optional<std::filesystem::path> project_config;
 };
+
+/// Validate one `mcpServers` entry like pi `validateMcpServerConfig`: the
+/// name, `exposure`/`toolExposure` (aliases resolved), `description`, `timeout`,
+/// and the stdio-or-http shape, returning the parsed config or pi's error
+/// message verbatim. `raw` is the entry value from `mcpServers`.
+[[nodiscard]] support::Expected<McpServerConfigVariant> validate_mcp_server_config(
+        std::string_view name, const support::JsonValue& raw);
 
 /// Load the MCP server configuration (pi `loadMcpConfig`): the global
 /// `<agent_dir>/mcp.json` always, and the project `<cwd>/.pi/mcp.json` only

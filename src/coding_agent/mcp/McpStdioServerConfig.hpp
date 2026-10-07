@@ -1,5 +1,7 @@
 #pragma once
 
+#include "coding_agent/mcp/McpServerConfigBase.hpp"
+
 #include <chrono>
 #include <map>
 #include <string>
@@ -12,7 +14,7 @@ namespace cch::coding_agent::mcp {
 /// `command`/`args`/`env` shape carries). The Session creation request holds
 /// the configured list; full server management and persistence (pi `mcp.json`)
 /// is a later slice, so this value is only the launch descriptor.
-struct McpStdioServerConfig {
+struct McpStdioServerConfig : McpServerConfigBase {
     /// pi server name: the namespace of the server's tools
     /// (`mcp__<name>__<tool>`) and the identity used in diagnostics.
     std::string name;

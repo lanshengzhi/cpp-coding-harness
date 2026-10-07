@@ -1,10 +1,17 @@
-// MCP server configuration file (spec #865, ticket #876). pi persists MCP
-// servers in a separate `mcp.json` (global `<agentDir>/mcp.json`, trusted
-// project `<cwd>/.pi/mcp.json`) using the `mcpServers` shape shared by other
-// MCP clients, not in `settings.json`; this loader is the read half of that
+// MCP server configuration file (spec #865, ticket #876; exposure policy and
+// pi validation spec #882, ticket #884). pi persists MCP servers in a separate
+// `mcp.json` (global `<agentDir>/mcp.json`, trusted project
+// `<cwd>/.pi/mcp.json`) using the `mcpServers` shape shared by other MCP
+// clients, not in `settings.json`; this loader is the read half of that
 // persistence. The write half (pi's `/mcp` manager) is a later slice: a user
 // authors `mcp.json` and the list survives restarts because assembly reloads
-// it. entries and validation errors stay private to `cch_coding_agent`.
+// it. Entries and validation errors stay private to `cch_coding_agent`.
+//
+// pi source at `7c10bd43` (v1.0.4): `packages/coding-agent/src/extensions/mcp/
+// config.ts` (`loadMcpConfig`, `readConfigFile`) and
+// `packages/coding-agent/src/core/mcp-servers.ts` (`validateMcpServerConfig`).
+// The validation messages are matched verbatim so a differential test can diff
+// them against the frozen pi-v1.0.4 bundle.
 
 #include "coding_agent/mcp/McpConfigFile.hpp"
 
@@ -42,6 +49,26 @@ using JsonArray = support::JsonValue::array_t;
     return true;
 }
 
+/// pi `URL.canParse(value) && /^https?:$/.test(new URL(value).protocol)`: an
+/// absolute `http`/`https` URL with a host. The transport later enforces
+/// TLS-only (ADR 0054); this gate only matches pi's config acceptance.
+[[nodiscard]] bool is_http_url(std::string_view value) {
+    const auto scheme_end = value.find("://");
+    if (scheme_end == std::string_view::npos) {
+        return false;
+    }
+    const std::string_view scheme = value.substr(0, scheme_end);
+    if (scheme != "http" && scheme != "https") {
+        return false;
+    }
+    const std::string_view rest = value.substr(scheme_end + 3);
+    return !rest.empty() && rest.find_first_of("/?#") != 0;
+}
+
+[[nodiscard]] support::Error config_error(std::string message) {
+    return support::make_error(support::ErrorCode::Validation, std::move(message));
+}
+
 /// Read a config file's text. `std::nullopt` when the file is missing or
 /// unreadable.
 [[nodiscard]] std::optional<std::string> read_text_file(const std::filesystem::path& path) {
@@ -61,30 +88,41 @@ using JsonArray = support::JsonValue::array_t;
     return contents.str();
 }
 
-[[nodiscard]] std::string entry_error(const std::filesystem::path& path, const std::string& name, std::string message) {
-    return path.string() + ": server \"" + name + "\": " + std::move(message);
+/// pi's `enabled` check (`validateMcpServerConfig`): absent or a boolean.
+[[nodiscard]] std::optional<std::string> read_enabled(const JsonObject& object, bool& out) {
+    const auto entry = object.find("enabled");
+    if (entry == object.end()) {
+        return std::nullopt;
+    }
+    const auto* value = entry->second.get_if<bool>();
+    if (value == nullptr) {
+        return "enabled must be a boolean";
+    }
+    out = *value;
+    return std::nullopt;
 }
 
-/// A required non-empty string member. `std::nullopt` when present and valid.
-[[nodiscard]] std::optional<std::string> read_required_string(
-        const JsonObject& object, std::string_view key, std::string& out) {
-    const auto entry = object.find(std::string{key});
+/// pi's `args` check: absent or an array of strings.
+[[nodiscard]] std::optional<std::string> read_args(const JsonObject& object, std::vector<std::string>& out) {
+    const auto entry = object.find("args");
     if (entry == object.end()) {
-        return "\"" + std::string{key} + "\" is required";
+        return std::nullopt;
     }
-    if (!entry->second.holds<std::string>()) {
-        return "\"" + std::string{key} + "\" must be a string";
+    const auto* array = entry->second.get_if<JsonArray>();
+    if (array == nullptr) {
+        return "args must be an array of strings";
     }
-    out = entry->second.get_string();
-    if (out.empty()) {
-        return "\"" + std::string{key} + "\" must not be empty";
+    for (const auto& element : *array) {
+        if (!element.holds<std::string>()) {
+            return "args must be an array of strings";
+        }
+        out.push_back(element.get_string());
     }
     return std::nullopt;
 }
 
-/// An optional string-map member (`env`/`headers`). `std::nullopt` when absent
-/// or valid; the parsed map is written to `out` only when present.
-[[nodiscard]] std::optional<std::string> read_optional_string_map(
+/// pi's `env`/`headers` check: absent or an object of strings.
+[[nodiscard]] std::optional<std::string> read_string_map(
         const JsonObject& object, std::string_view key, std::map<std::string, std::string>& out) {
     const auto entry = object.find(std::string{key});
     if (entry == object.end()) {
@@ -92,129 +130,167 @@ using JsonArray = support::JsonValue::array_t;
     }
     const auto* map = entry->second.get_if<JsonObject>();
     if (map == nullptr) {
-        return "\"" + std::string{key} + "\" must be an object of strings";
+        return std::string{key} + " must map names to strings";
     }
     for (const auto& [name, value] : *map) {
         if (!value.holds<std::string>()) {
-            return "\"" + std::string{key} + "." + name + "\" must be a string";
+            return std::string{key} + " must map names to strings";
         }
         out.emplace(name, value.get_string());
     }
     return std::nullopt;
 }
 
-/// An optional array-of-strings member (`args`).
-[[nodiscard]] std::optional<std::string> read_optional_string_array(
-        const JsonObject& object, std::string_view key, std::vector<std::string>& out) {
-    const auto entry = object.find(std::string{key});
+/// pi `toolExposure`: an object mapping tool names/patterns to exposures
+/// (aliases resolved), in declaration order.
+[[nodiscard]] support::Expected<std::vector<std::pair<std::string, McpExposure>>> read_tool_exposure(
+        const std::string& server, const JsonObject& object) {
+    const auto entry = object.find("toolExposure");
     if (entry == object.end()) {
-        return std::nullopt;
+        return std::vector<std::pair<std::string, McpExposure>>{};
     }
-    const auto* array = entry->second.get_if<JsonArray>();
-    if (array == nullptr) {
-        return "\"" + std::string{key} + "\" must be an array of strings";
+    const auto* map = entry->second.get_if<JsonObject>();
+    if (map == nullptr) {
+        return std::unexpected(config_error(
+                "server \"" + server + "\": toolExposure must map tool names to exposures"));
     }
-    for (const auto& element : *array) {
-        if (!element.holds<std::string>()) {
-            return "\"" + std::string{key} + "\" must be an array of strings";
+    std::vector<std::pair<std::string, McpExposure>> overrides;
+    for (const auto& [tool, value] : *map) {
+        std::optional<McpExposure> parsed;
+        if (value.holds<std::string>()) {
+            parsed = parse_mcp_exposure(value.get_string());
         }
-        out.push_back(element.get_string());
+        if (!parsed) {
+            return std::unexpected(config_error("server \"" + server + "\": toolExposure \"" + tool +
+                                                "\" must be one of " + mcp_exposure_list()));
+        }
+        overrides.emplace_back(tool, *parsed);
     }
-    return std::nullopt;
+    return overrides;
 }
 
-/// The `enabled` flag (pi default true). `std::nullopt` when absent or valid.
-[[nodiscard]] std::optional<std::string> read_optional_bool(const JsonObject& object, std::string_view key, bool& out) {
-    const auto entry = object.find(std::string{key});
-    if (entry == object.end()) {
-        return std::nullopt;
-    }
-    const auto* value = entry->second.get_if<bool>();
-    if (value == nullptr) {
-        return "\"" + std::string{key} + "\" must be a boolean";
-    }
-    out = *value;
-    return std::nullopt;
+/// Apply the exposure/description/timeout half of a validated entry onto
+/// `base` (the transport-independent fields).
+void apply_base(McpServerConfigBase& base,
+        std::optional<McpExposure> exposure,
+        std::optional<std::string> description,
+        std::vector<std::pair<std::string, McpExposure>> tool_exposure,
+        std::optional<double> timeout) {
+    base.exposure = exposure;
+    base.description = std::move(description);
+    base.tool_exposure = std::move(tool_exposure);
+    base.timeout = timeout;
 }
 
-[[nodiscard]] std::optional<std::string> parse_entry(const std::filesystem::path& path,
-        const std::string& name,
-        const JsonObject& object,
-        bool has_command,
-        bool has_url,
-        bool has_type,
-        McpConfigEntry& out) {
-    std::optional<std::string> type;
-    if (has_type) {
-        if (auto error = read_required_string(object, "type", type.emplace())) {
-            return entry_error(path, name, std::move(*error));
+} // namespace
+
+support::Expected<McpServerConfigVariant> validate_mcp_server_config(
+        std::string_view name, const support::JsonValue& raw) {
+    const std::string server{name};
+    if (!valid_server_name(name)) {
+        return std::unexpected(config_error(
+                "invalid server name \"" + server + "\" (use letters, digits, \"_\" and \"-\")"));
+    }
+    const auto* object = raw.get_if<JsonObject>();
+    if (object == nullptr) {
+        return std::unexpected(config_error("server \"" + server + "\" must be an object"));
+    }
+
+    // `exposure` (alias-resolved), `toolExposure`, `description`, `timeout`,
+    // and `enabled` are validated before the transport shape.
+    std::optional<McpExposure> exposure;
+    if (const auto entry = object->find("exposure"); entry != object->end()) {
+        if (!entry->second.holds<std::string>()) {
+            return std::unexpected(
+                    config_error("server \"" + server + "\": exposure must be one of " + mcp_exposure_list()));
         }
-        if (*type != "stdio" && *type != "http") {
-            return entry_error(path, name, "\"type\" must be \"stdio\" or \"http\"");
+        exposure = parse_mcp_exposure(entry->second.get_string());
+        if (!exposure) {
+            return std::unexpected(
+                    config_error("server \"" + server + "\": exposure must be one of " + mcp_exposure_list()));
         }
     }
 
-    bool is_stdio = false;
-    if (type.has_value()) {
-        is_stdio = *type == "stdio";
-    } else if (has_command && !has_url) {
-        is_stdio = true;
-    } else if (has_url && !has_command) {
-        is_stdio = false;
-    } else if (has_command && has_url) {
-        return entry_error(path, name, "sets both \"command\" and \"url\"; set \"type\" to choose one");
-    } else {
-        return entry_error(path, name, "needs \"command\" or \"url\"");
-    }
-    if (is_stdio && !has_command) {
-        return entry_error(path, name, "\"type\": \"stdio\" requires \"command\"");
-    }
-    if (!is_stdio && !has_url) {
-        return entry_error(path, name, "\"type\": \"http\" requires \"url\"");
+    auto tool_exposure = read_tool_exposure(server, *object);
+    if (!tool_exposure) {
+        return std::unexpected(std::move(tool_exposure.error()));
     }
 
-    bool enabled = true;
-    if (auto error = read_optional_bool(object, "enabled", enabled)) {
-        return entry_error(path, name, std::move(*error));
+    // pi validates `enabled` before `description`/`timeout`; the value itself is
+    // read by `read_config_file` into `McpConfigEntry.enabled`.
+    if (const auto entry = object->find("enabled"); entry != object->end() && !entry->second.holds<bool>()) {
+        return std::unexpected(config_error("server \"" + server + "\": enabled must be a boolean"));
     }
 
-    McpConfigEntry entry;
-    entry.name = name;
-    entry.enabled = enabled;
-    entry.source = path;
-    if (is_stdio) {
-        McpStdioServerConfig config;
-        config.name = name;
-        if (auto error = read_required_string(object, "command", config.command)) {
-            return entry_error(path, name, std::move(*error));
+    std::optional<std::string> description;
+    if (const auto entry = object->find("description"); entry != object->end()) {
+        if (!entry->second.holds<std::string>()) {
+            return std::unexpected(config_error("server \"" + server + "\": description must be a string"));
         }
-        if (auto error = read_optional_string_array(object, "args", config.args)) {
-            return entry_error(path, name, std::move(*error));
+        description = entry->second.get_string();
+    }
+
+    std::optional<double> timeout;
+    if (const auto entry = object->find("timeout"); entry != object->end()) {
+        if (!entry->second.holds<double>() || !(entry->second.get_number() > 0)) {
+            return std::unexpected(
+                    config_error("server \"" + server + "\": timeout must be a positive number of seconds"));
         }
-        if (auto error = read_optional_string_map(object, "env", config.env)) {
-            return entry_error(path, name, std::move(*error));
+        timeout = entry->second.get_number();
+    }
+
+    std::string type;
+    if (const auto entry = object->find("type"); entry != object->end()) {
+        if (!entry->second.holds<std::string>()) {
+            return std::unexpected(config_error("server \"" + server + "\": type must be a string"));
         }
-        entry.config = std::move(config);
-    } else {
+        type = entry->second.get_string();
+    }
+    if (type == "sse") {
+        return std::unexpected(config_error(
+                "server \"" + server + "\": legacy SSE transport is not supported; use the streamable HTTP URL"));
+    }
+
+    const auto url_entry = object->find("url");
+    const bool has_url = url_entry != object->end() && url_entry->second.holds<std::string>();
+    const auto command_entry = object->find("command");
+    const bool has_command = command_entry != object->end() && command_entry->second.holds<std::string>();
+
+    if (has_url && (type.empty() || type == "http" || type == "streamable-http")) {
         McpHttpServerConfig config;
-        config.name = name;
-        if (auto error = read_required_string(object, "url", config.url)) {
-            return entry_error(path, name, std::move(*error));
+        config.name = server;
+        apply_base(config, exposure, std::move(description), std::move(*tool_exposure), timeout);
+        config.url = url_entry->second.get_string();
+        if (!is_http_url(config.url)) {
+            return std::unexpected(config_error("server \"" + server + "\": url must be an http or https URL"));
         }
-        if (auto error = read_optional_string_map(object, "headers", config.headers)) {
-            return entry_error(path, name, std::move(*error));
+        if (auto error = read_string_map(*object, "headers", config.headers)) {
+            return std::unexpected(config_error("server \"" + server + "\": " + *error));
         }
-        entry.config = std::move(config);
+        return McpServerConfigVariant{std::move(config)};
     }
-    out = std::move(entry);
-    return std::nullopt;
+    if (has_command && (type.empty() || type == "stdio")) {
+        McpStdioServerConfig config;
+        config.name = server;
+        apply_base(config, exposure, std::move(description), std::move(*tool_exposure), timeout);
+        config.command = command_entry->second.get_string();
+        if (auto error = read_args(*object, config.args)) {
+            return std::unexpected(config_error("server \"" + server + "\": " + *error));
+        }
+        if (auto error = read_string_map(*object, "env", config.env)) {
+            return std::unexpected(config_error("server \"" + server + "\": " + *error));
+        }
+        return McpServerConfigVariant{std::move(config)};
+    }
+    return std::unexpected(config_error(
+            "server \"" + server + "\" needs either \"command\" (stdio) or \"url\" (streamable HTTP)"));
 }
 
-/// A project entry with no `command`/`url`/`type` (pi `isOverride`): it only
+namespace {
+
+/// One project entry with no `command`/`url`/`type` (pi `isOverride`): it only
 /// carries override keys and applies them to the global server with the same
-/// name. Only `enabled` is in scope for this slice; pi's `exposure`/
-/// `toolExposure` override keys are accepted and ignored, so a pi config using
-/// a not-yet-supported exposure does not become unusable.
+/// name (pi `{ ...base.config, ...value }` re-validated).
 void apply_override(const std::filesystem::path& path,
         const std::string& name,
         const JsonObject& object,
@@ -234,12 +310,37 @@ void apply_override(const std::filesystem::path& path,
             return;
         }
     }
-    bool enabled = load.servers[found->second].enabled;
-    if (auto error = read_optional_bool(object, "enabled", enabled)) {
-        load.errors.push_back(entry_error(path, name, std::move(*error)));
-        return;
+
+    McpConfigEntry& base = load.servers[found->second];
+    if (const auto entry = object.find("enabled"); entry != object.end()) {
+        const auto* value = entry->second.get_if<bool>();
+        if (value == nullptr) {
+            load.errors.push_back(path.string() + ": server \"" + name + "\": enabled must be a boolean");
+            return;
+        }
+        base.enabled = *value;
     }
-    load.servers[found->second].enabled = enabled;
+    if (const auto entry = object.find("exposure"); entry != object.end()) {
+        std::optional<McpExposure> parsed;
+        if (entry->second.holds<std::string>()) {
+            parsed = parse_mcp_exposure(entry->second.get_string());
+        }
+        if (!parsed) {
+            load.errors.push_back(
+                    path.string() + ": server \"" + name + "\": exposure must be one of " + mcp_exposure_list());
+            return;
+        }
+        std::visit([&parsed](auto& config) { config.exposure = parsed; }, base.config);
+    }
+    if (object.contains("toolExposure")) {
+        auto overrides = read_tool_exposure(name, object);
+        if (!overrides) {
+            load.errors.push_back(path.string() + ": " + overrides.error().message);
+            return;
+        }
+        std::visit([&overrides](auto& config) { config.tool_exposure = std::move(*overrides); }, base.config);
+    }
+    base.override = path;
 }
 
 void read_config_file(const std::filesystem::path& path,
@@ -260,6 +361,13 @@ void read_config_file(const std::filesystem::path& path,
         load.errors.push_back(path.string() + ": expected an object with an \"mcpServers\" object");
         return;
     }
+    if (const auto auto_enable = root->find("autoEnableCodemode"); auto_enable != root->end()) {
+        if (const auto* value = auto_enable->second.get_if<bool>()) {
+            load.auto_enable_codemode = *value;
+        } else {
+            load.errors.push_back(path.string() + ": autoEnableCodemode must be a boolean");
+        }
+    }
     const auto servers_entry = root->find("mcpServers");
     if (servers_entry == root->end()) {
         return;
@@ -270,27 +378,28 @@ void read_config_file(const std::filesystem::path& path,
         return;
     }
     for (const auto& [name, value] : *servers) {
-        if (!valid_server_name(name)) {
-            load.errors.push_back(path.string() + ": server name \"" + name + "\" is invalid");
-            continue;
-        }
         const auto* object = value.get_if<JsonObject>();
-        if (object == nullptr) {
-            load.errors.push_back(path.string() + ": server \"" + name + "\" must be an object");
-            continue;
-        }
-        const bool has_command = object->contains("command");
-        const bool has_url = object->contains("url");
-        const bool has_type = object->contains("type");
-        if (project && !has_command && !has_url && !has_type) {
+        const bool has_command = object != nullptr && object->contains("command");
+        const bool has_url = object != nullptr && object->contains("url");
+        const bool has_type = object != nullptr && object->contains("type");
+        if (project && object != nullptr && !has_command && !has_url && !has_type) {
             apply_override(path, name, *object, load, index);
             continue;
         }
-        McpConfigEntry entry;
-        if (auto error = parse_entry(path, name, *object, has_command, has_url, has_type, entry)) {
-            load.errors.push_back(std::move(*error));
+        auto validated = validate_mcp_server_config(name, value);
+        if (!validated) {
+            load.errors.push_back(path.string() + ": " + validated.error().message);
             continue;
         }
+        McpConfigEntry entry;
+        entry.name = name;
+        entry.source = path;
+        entry.config = std::move(*validated);
+        bool enabled = true;
+        if (object != nullptr) {
+            static_cast<void>(read_enabled(*object, enabled));
+        }
+        entry.enabled = enabled;
         bool clash = false;
         for (const auto& existing : load.servers) {
             if (existing.name != name && detail::mcp_namespace(existing.name) == detail::mcp_namespace(name)) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coding_agent/mcp/McpOAuthServerConfig.hpp"
+#include "coding_agent/mcp/McpServerConfigBase.hpp"
 
 #include <cch/support/Error.hpp>
 
@@ -16,7 +17,7 @@ namespace cch::coding_agent::mcp {
 /// `url`/`headers` shape). The Session creation request holds the configured
 /// list; full server management and persistence (pi `mcp.json`) is a later
 /// slice, so this value is only the connection descriptor.
-struct McpHttpServerConfig {
+struct McpHttpServerConfig : McpServerConfigBase {
     /// pi server name: the namespace of the server's tools
     /// (`mcp__<name>__<tool>`) and the identity used in diagnostics.
     std::string name;
