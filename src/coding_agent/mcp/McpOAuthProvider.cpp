@@ -375,13 +375,46 @@ boost::asio::awaitable<support::Expected<ai::ModelAuth>> McpOAuthProvider::to_au
     co_return ai::ModelAuth{.headers = {{"Authorization", "Bearer " + credential.access}}};
 }
 
-support::AsyncResult<void> login_mcp_server(std::shared_ptr<ai::CredentialStore> credentials,
-        std::string provider_id,
+McpOAuthState mcp_oauth_state_from_credential(const ai::OAuthCredential& credential, std::string server_url) {
+    McpOAuthState state;
+    state.server_url = std::move(server_url);
+    McpOAuthTokens tokens;
+    tokens.access_token = credential.access;
+    tokens.token_type = "Bearer";
+    if (!credential.refresh.empty()) {
+        tokens.refresh_token = credential.refresh;
+    }
+    state.tokens = std::move(tokens);
+    state.tokens_expire_at = credential.expires;
+    if (credential.client_id) {
+        state.client_information = McpOAuthClientInformation{*credential.client_id, std::nullopt};
+    }
+    return state;
+}
+
+std::optional<ai::OAuthCredential> mcp_oauth_credential_from_state(const McpOAuthState& state) {
+    if (!state.tokens) {
+        return std::nullopt;
+    }
+    ai::OAuthCredential credential;
+    credential.access = state.tokens->access_token;
+    credential.refresh = state.tokens->refresh_token.value_or("");
+    credential.expires = state.tokens_expire_at.value_or(kNoReportedExpiry);
+    if (state.client_information) {
+        credential.client_id = state.client_information->client_id;
+    }
+    return credential;
+}
+
+support::AsyncResult<void> login_mcp_server(std::shared_ptr<McpAuthStore> store,
+        std::string server_name,
+        std::string server_url,
         McpOAuthProvider& provider,
         ai::AuthInteraction interaction) {
     return support::detail::make_async_result(
-            [credentials = std::move(credentials),
-                    provider_id = std::move(provider_id),
+            [store = std::move(store),
+                    server_name = std::move(server_name),
+                    server_url = std::move(server_url),
                     &provider,
                     interaction = std::move(interaction)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
                 auto credential = co_await provider.login(std::move(interaction));
@@ -389,22 +422,27 @@ support::AsyncResult<void> login_mcp_server(std::shared_ptr<ai::CredentialStore>
                     // Login-flow failures propagate unwrapped to the host.
                     co_return std::unexpected(std::move(credential.error()));
                 }
-                auto stored = credentials->modify(provider_id,
-                        [credential = std::move(*credential)](std::optional<ai::Credential>) mutable
-                                -> support::AsyncResult<std::optional<ai::Credential>> {
-                            return support::AsyncResult<std::optional<ai::Credential>>(
-                                    std::expected<std::optional<ai::Credential>, support::Error>{
-                                            std::optional<ai::Credential>{ai::Credential{std::move(credential)}}});
-                        });
-                CCH_TRY(stored_value, co_await support::detail::await_async_result(std::move(stored)));
-                static_cast<void>(stored_value);
+                auto state = mcp_oauth_state_from_credential(*credential, server_url);
+                auto stored = store->save(server_name, server_url, state);
+                if (!stored) {
+                    co_return std::unexpected(std::move(stored.error()));
+                }
                 co_return support::ExpectedVoid{};
             });
 }
 
 support::AsyncResult<void> logout_mcp_server(
-        std::shared_ptr<ai::CredentialStore> credentials, std::string provider_id) {
-    return credentials->remove(std::move(provider_id));
+        std::shared_ptr<McpAuthStore> store, std::string server_name, std::string server_url) {
+    return support::detail::make_async_result(
+            [store = std::move(store),
+                    server_name = std::move(server_name),
+                    server_url = std::move(server_url)]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                auto removed = store->remove(server_name, server_url);
+                if (!removed) {
+                    co_return std::unexpected(std::move(removed.error()));
+                }
+                co_return support::ExpectedVoid{};
+            });
 }
 
 } // namespace cch::coding_agent::mcp

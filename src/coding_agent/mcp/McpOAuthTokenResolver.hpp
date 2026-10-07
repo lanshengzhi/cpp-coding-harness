@@ -1,32 +1,29 @@
 #pragma once
 
+#include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpOAuthProvider.hpp"
 #include "coding_agent/mcp/McpRequestAuthSource.hpp"
 
-#include <cch/ai/CredentialStore.hpp>
 #include <cch/support/AsyncResult.hpp>
 
+#include <map>
 #include <memory>
 #include <string>
 
 namespace cch::coding_agent::mcp {
 
-/// AuthStorage-backed OAuth resolution for one MCP server (spec #865, ticket
-/// #875). Each call reads the shared `auth.json` credential through the
-/// credential store and, when the credential is within the same five-minute
-/// validity margin the Models runtime uses, refreshes it inside the same
-/// `CredentialStore::modify` transaction. That transaction re-reads the file
-/// under the whole-file lock and runs on AuthStorage's own execution context, so
-/// the request-time refresh stays off the caller's Runtime loop and a credential
-/// written by another process (or another AuthStorage instance) is observed. A
-/// missing credential, a non-OAuth record, or a failed refresh is an explicit
-/// re-login error — never a silent unauthenticated request, and never a retry
-/// loop.
+/// `mcp-auth.json`-backed OAuth resolution for one MCP server (spec #882,
+/// ticket #884; the store replaced #875's `auth.json` reuse). Each call loads
+/// the server's state, and when it is within the same five-minute validity
+/// margin the Models runtime uses, refreshes it and persists the rotated state
+/// back before the request continues. A missing state, a state without tokens,
+/// or a failed refresh is an explicit re-login error — never a silent
+/// unauthenticated request, and never a retry loop.
 class McpOAuthTokenResolver final : public McpRequestAuthSource {
 public:
-    McpOAuthTokenResolver(std::shared_ptr<ai::CredentialStore> credentials,
-            std::string provider_id,
+    McpOAuthTokenResolver(std::shared_ptr<McpAuthStore> store,
             std::string server_name,
+            std::string server_url,
             std::shared_ptr<McpOAuthProvider> provider);
 
     McpOAuthTokenResolver(McpOAuthTokenResolver&&) noexcept;
@@ -38,9 +35,9 @@ public:
     [[nodiscard]] support::AsyncResult<std::map<std::string, std::string>> current_headers() override;
 
 private:
-    std::shared_ptr<ai::CredentialStore> credentials_;
-    std::string provider_id_;
+    std::shared_ptr<McpAuthStore> store_;
     std::string server_name_;
+    std::string server_url_;
     std::shared_ptr<McpOAuthProvider> provider_;
 };
 

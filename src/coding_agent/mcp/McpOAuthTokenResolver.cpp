@@ -1,11 +1,9 @@
-// MCP OAuth request-time token resolution (spec #865, ticket #875). The
-// credential lives in the shared `auth.json` through AuthStorage; this resolver
-// reads it and, when it is within the five-minute validity margin, refreshes it
-// through the same `CredentialStore::modify` transaction the Models runtime
-// uses — the refresh hook runs on AuthStorage's own execution context, so it is
-// off the caller's Runtime loop, and the rotated credential is persisted before
-// the request goes out. There is no second credential store and no
-// unauthenticated fallback.
+// MCP OAuth request-time token resolution (spec #882, ticket #884; the store
+// replaced #875's `auth.json` reuse). The state lives in `mcp-auth.json`; this
+// resolver loads it, and when it is within the five-minute validity margin
+// refreshes it through the provider and persists the rotated state before the
+// request goes out. There is no second credential store and no unauthenticated
+// fallback.
 
 #include "coding_agent/mcp/McpOAuthTokenResolver.hpp"
 
@@ -20,6 +18,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -48,11 +47,11 @@ inline constexpr auto kOAuthMinimumValidity = std::chrono::minutes{5};
 
 } // namespace
 
-McpOAuthTokenResolver::McpOAuthTokenResolver(std::shared_ptr<ai::CredentialStore> credentials,
-        std::string provider_id,
+McpOAuthTokenResolver::McpOAuthTokenResolver(std::shared_ptr<McpAuthStore> store,
         std::string server_name,
+        std::string server_url,
         std::shared_ptr<McpOAuthProvider> provider)
-    : credentials_(std::move(credentials)), provider_id_(std::move(provider_id)), server_name_(std::move(server_name)),
+    : store_(std::move(store)), server_name_(std::move(server_name)), server_url_(std::move(server_url)),
       provider_(std::move(provider)) {}
 
 McpOAuthTokenResolver::McpOAuthTokenResolver(McpOAuthTokenResolver&&) noexcept = default;
@@ -61,59 +60,45 @@ McpOAuthTokenResolver::~McpOAuthTokenResolver() = default;
 
 support::AsyncResult<std::map<std::string, std::string>> McpOAuthTokenResolver::current_headers() {
     return support::detail::make_async_result(
-            [credentials = credentials_, provider_id = provider_id_, server_name = server_name_, provider = provider_]()
+            [store = store_, server_name = server_name_, server_url = server_url_, provider = provider_]()
                     -> boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> {
-                // One `modify` transaction: fresh cross-process read, then a
-                // refresh only when the credential is still expiring, persisted
-                // before the request continues. A refresh failure propagates
-                // unchanged and is mapped below; nothing is retried here, so an
-                // `invalid_grant` cannot loop.
-                auto modified = credentials->modify(provider_id,
-                        [provider](std::optional<ai::Credential> current)
-                                -> support::AsyncResult<std::optional<ai::Credential>> {
-                            return support::detail::make_async_result(
-                                    [provider, current = std::move(current)]() mutable
-                                            -> boost::asio::awaitable<
-                                                    support::Expected<std::optional<ai::Credential>>> {
-                                        const auto* oauth =
-                                                current ? std::get_if<ai::OAuthCredential>(&*current) : nullptr;
-                                        if (oauth == nullptr || !token_expires_soon(*oauth)) {
-                                            // Missing, non-OAuth, or still valid:
-                                            // leave the record unchanged; the
-                                            // caller decides from the returned
-                                            // value.
-                                            co_return std::optional<ai::Credential>{};
-                                        }
-                                        CCH_TRY(refreshed, co_await provider->refresh(*oauth));
-                                        co_return std::optional<ai::Credential>{ai::Credential{std::move(refreshed)}};
-                                    });
-                        });
-                auto modified_outcome = co_await support::detail::await_async_result(std::move(modified));
-                if (!modified_outcome) {
-                    // An `invalid_grant` (dead or already-rotated refresh token)
-                    // is mapped to the shared re-login guidance; any other store
-                    // or transport failure propagates unchanged. Both are
-                    // explicit, and neither is retried.
-                    if (modified_outcome.error().code == support::ErrorCode::OAuth) {
-                        std::string detail = modified_outcome.error().detail.empty() ? modified_outcome.error().message
-                                                                                     : modified_outcome.error().detail;
-                        co_return std::unexpected(re_login_error(server_name, provider_id, std::move(detail)));
-                    }
-                    co_return std::unexpected(std::move(modified_outcome.error()));
+                const std::string provider_id = mcp_oauth_provider_id(server_name);
+                auto state = store->load(server_name, server_url);
+                if (!state) {
+                    co_return std::unexpected(std::move(state.error()));
                 }
-                auto outcome = std::move(*modified_outcome);
-                const auto* oauth = outcome ? std::get_if<ai::OAuthCredential>(&*outcome) : nullptr;
-                if (oauth == nullptr) {
+                std::optional<ai::OAuthCredential> credential;
+                if (state->has_value()) {
+                    credential = mcp_oauth_credential_from_state(**state);
+                }
+                if (!credential.has_value()) {
                     co_return std::unexpected(re_login_error(server_name, provider_id, "no stored OAuth credential"));
                 }
-                if (token_expires_soon(*oauth)) {
-                    // The stored credential is still expiring: the refresh was
-                    // skipped (for example a concurrent writer holds it) or
-                    // returned a credential with no usable lifetime. Re-login is
-                    // required; the resolver does not loop.
+                if (token_expires_soon(*credential)) {
+                    // One refresh attempt: a failed refresh (including an
+                    // `invalid_grant`) propagates, is never retried, and leaves
+                    // the stored state untouched.
+                    auto refreshed = co_await provider->refresh(*credential);
+                    if (!refreshed) {
+                        if (refreshed.error().code == support::ErrorCode::OAuth) {
+                            std::string detail = refreshed.error().detail.empty() ? refreshed.error().message
+                                                                                  : refreshed.error().detail;
+                            co_return std::unexpected(re_login_error(server_name, provider_id, std::move(detail)));
+                        }
+                        co_return std::unexpected(std::move(refreshed.error()));
+                    }
+                    auto rotated = mcp_oauth_state_from_credential(*refreshed, server_url);
+                    if (auto saved = store->save(server_name, server_url, rotated); !saved) {
+                        co_return std::unexpected(std::move(saved.error()));
+                    }
+                    credential = std::move(*refreshed);
+                }
+                if (token_expires_soon(*credential)) {
+                    // The refresh left a credential with no usable lifetime:
+                    // re-login is required and the resolver does not loop.
                     co_return std::unexpected(re_login_error(server_name, provider_id, "credential is expired"));
                 }
-                CCH_TRY(auth, co_await provider->to_auth(*oauth));
+                CCH_TRY(auth, co_await provider->to_auth(*credential));
                 std::map<std::string, std::string> headers;
                 for (const auto& [name, value] : auth.headers) {
                     headers.insert_or_assign(name, value);

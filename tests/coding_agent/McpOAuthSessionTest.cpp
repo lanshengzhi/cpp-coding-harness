@@ -1,8 +1,8 @@
-// Spec #865 fourth slice (#875): MCP OAuth through the existing credential
-// semantics. The provider reuses the shared `ai::auth` PKCE/callback helpers,
-// the existing `AuthInteraction` presentation, and the existing
-// `ai::OAuthCredential` contract; the credential is stored in the shared
-// `auth.json` through AuthStorage under `mcp__<server>` and resolved per
+// Spec #865 fourth slice (#875), reworked for #884: MCP OAuth through the
+// existing credential semantics. The provider reuses the shared `ai::auth`
+// PKCE/callback helpers, the existing `AuthInteraction` presentation, and the
+// existing `ai::OAuthCredential` contract; the state is stored in
+// `<agentDir>/mcp-auth.json` under `mcp__<server>|<url>` and resolved per
 // request. The committed loopback exchange replay is
 // `fixtures/pi-mcp/oauth/replay.json`; the token transport is the scripted
 // `OAuthHttpClient` seam and the callback itself is a real loopback listener,
@@ -17,6 +17,7 @@
 #include "ai/auth/OAuthHttpClient.hpp"
 #include "ai/auth/Pkce.hpp"
 #include "ai/providers/BoostBeastStreamTransport.hpp"
+#include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpHttpClient.hpp"
 #include "coding_agent/mcp/McpOAuthProvider.hpp"
 #include "coding_agent/mcp/McpOAuthTokenResolver.hpp"
@@ -32,7 +33,6 @@
 #include <cch/ai/Auth.hpp>
 #include <cch/ai/CredentialStore.hpp>
 #include <cch/ai/Timestamps.hpp>
-#include <cch/coding_agent/AuthStorage.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -179,8 +179,9 @@ using SignalChannel = boost::asio::experimental::channel<void(boost::system::err
 
 struct LoginHarness {
     std::shared_ptr<tests::FakeOAuthHttpClient> http = std::make_shared<tests::FakeOAuthHttpClient>();
-    std::shared_ptr<ai::CredentialStore> credentials;
-    std::string provider_id{"mcp__echo"};
+    std::shared_ptr<mcp::McpAuthStore> store;
+    std::string server_name{"echo"};
+    std::string server_url{"https://echo.example.com/mcp"};
     std::optional<std::string> auth_url{std::nullopt};
     std::vector<ai::AuthEvent> events{};
     std::vector<ai::AuthPrompt> prompts{};
@@ -239,14 +240,15 @@ struct LoginHarness {
         };
 
         auto provider = std::make_shared<mcp::McpOAuthProvider>(config, http);
-        auto credentials = this->credentials;
-        auto provider_id = this->provider_id;
+        auto store = this->store;
+        auto server_name = this->server_name;
+        auto server_url = this->server_url;
         auto login_future = boost::asio::co_spawn(
                 io,
-                [provider, credentials, provider_id, interaction = std::move(interaction)]() mutable
+                [provider, store, server_name, server_url, interaction = std::move(interaction)]() mutable
                         -> boost::asio::awaitable<support::ExpectedVoid> {
                     co_return co_await support::detail::await_async_result(
-                            mcp::login_mcp_server(credentials, provider_id, *provider, std::move(interaction)));
+                            mcp::login_mcp_server(store, server_name, server_url, *provider, std::move(interaction)));
                 },
                 boost::asio::use_future);
 
@@ -273,42 +275,30 @@ struct LoginHarness {
 
 // ── resolver helpers ────────────────────────────────────────────────────────
 
-[[nodiscard]] ai::OAuthCredential oauth_credential(std::string access, std::string refresh, std::int64_t expires) {
-    return ai::OAuthCredential{
-            .refresh = std::move(refresh),
-            .access = std::move(access),
-            .expires = expires,
-            .account_id = std::nullopt,
-            .client_id = "pike-mcp-test-client",
-    };
+[[nodiscard]] mcp::McpOAuthState oauth_state(std::string access, std::string refresh, std::int64_t expires) {
+    mcp::McpOAuthState state;
+    state.server_url = "https://echo.example.com/mcp";
+    mcp::McpOAuthTokens tokens;
+    tokens.access_token = std::move(access);
+    tokens.token_type = "Bearer";
+    if (!refresh.empty()) {
+        tokens.refresh_token = std::move(refresh);
+    }
+    state.tokens = std::move(tokens);
+    state.tokens_expire_at = expires;
+    state.client_information = mcp::McpOAuthClientInformation{"pike-mcp-test-client", std::nullopt};
+    return state;
 }
 
-void seed_credential(tests::RuntimeFixture& runtime,
-        ai::CredentialStore& store,
-        std::string provider_id,
-        ai::OAuthCredential credential) {
-    auto stored = runtime.run(store.modify(provider_id,
-            [credential = std::move(credential)](
-                    std::optional<ai::Credential>) mutable -> support::AsyncResult<std::optional<ai::Credential>> {
-                return support::AsyncResult<std::optional<ai::Credential>>(
-                        std::expected<std::optional<ai::Credential>, support::Error>{
-                                std::optional<ai::Credential>{ai::Credential{std::move(credential)}}});
-            }));
+void seed_state(mcp::McpAuthStore& store, const mcp::McpOAuthState& state) {
+    auto stored = store.save("echo", state.server_url, state);
     REQUIRE(stored.has_value());
 }
 
-[[nodiscard]] std::optional<ai::OAuthCredential> read_credential(
-        tests::RuntimeFixture& runtime, ai::CredentialStore& store, const std::string& provider_id) {
-    auto stored = runtime.run(store.read(provider_id));
+[[nodiscard]] std::optional<mcp::McpOAuthState> read_state(mcp::McpAuthStore& store) {
+    auto stored = store.load("echo", "https://echo.example.com/mcp");
     REQUIRE(stored.has_value());
-    if (!stored->has_value()) {
-        return std::nullopt;
-    }
-    const auto* oauth = std::get_if<ai::OAuthCredential>(&**stored);
-    if (oauth == nullptr) {
-        return std::nullopt;
-    }
-    return *oauth;
+    return std::move(*stored);
 }
 
 /// Everything but `access` — the part a refresh must preserve or rotate.
@@ -443,7 +433,7 @@ private:
 
 } // namespace
 
-TEST_CASE("MCP OAuth login reuses the login surface and persists through AuthStorage",
+TEST_CASE("MCP OAuth login reuses the login surface and persists into mcp-auth.json",
         "[coding_agent][mcp][issue875][spec]") {
     const auto fixture = read_replay_fixture();
     const auto config = server_config_from_fixture(fixture);
@@ -455,7 +445,7 @@ TEST_CASE("MCP OAuth login reuses the login surface and persists through AuthSto
     tests::TempWorkspace workspace;
     LoginHarness harness;
     harness.http->responses[config.token_url] = {{200, token_body}};
-    harness.credentials = std::make_shared<coding_agent::AuthStorage>(workspace.path() / "auth.json");
+    harness.store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
 
     auto login = harness.run(config, [&harness](std::string url) -> boost::asio::awaitable<void> {
         const auto redirect_url = query_param(url, "redirect_uri");
@@ -493,7 +483,7 @@ TEST_CASE("MCP OAuth login reuses the login surface and persists through AuthSto
     CHECK(request.body.find("code_verifier=") != std::string::npos);
 }
 
-TEST_CASE("an MCP OAuth credential is stored under mcp__<server> as an OAuth record",
+TEST_CASE("an MCP OAuth credential is stored in mcp-auth.json under mcp__<server>|<url>",
         "[coding_agent][mcp][issue875][spec]") {
     const auto fixture = read_replay_fixture();
     const auto config = server_config_from_fixture(fixture);
@@ -502,11 +492,11 @@ TEST_CASE("an MCP OAuth credential is stored under mcp__<server> as an OAuth rec
 
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    auto credentials = std::make_shared<coding_agent::AuthStorage>(workspace.path() / "auth.json");
+    auto store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
 
     LoginHarness harness;
     harness.http->responses[config.token_url] = {{200, token_body}};
-    harness.credentials = credentials;
+    harness.store = store;
 
     auto login = harness.run(config, [](std::string url) -> boost::asio::awaitable<void> {
         const auto callback = callback_endpoint(query_param(url, "redirect_uri"));
@@ -515,27 +505,22 @@ TEST_CASE("an MCP OAuth credential is stored under mcp__<server> as an OAuth rec
     });
     REQUIRE(login.has_value());
 
-    // One `mcp__<server>` key in the shared auth.json, an `oauth` record with
-    // the existing credential fields — no second credential store.
-    auto listed = runtime.run(credentials->list());
-    REQUIRE(listed.has_value());
-    REQUIRE(listed->size() == 1);
-    CHECK((*listed)[0].provider_id == "mcp__echo");
-    CHECK((*listed)[0].type == "oauth");
-
-    const auto stored = read_credential(runtime, *credentials, "mcp__echo");
+    // One `mcp__<server>|<url>` key in mcp-auth.json, carrying the tokens and
+    // the client information — no second credential store.
+    const auto stored = read_state(*store);
     REQUIRE(stored.has_value());
-    CHECK(stored->access == "dummy-access-token");
-    CHECK(stored->refresh == "dummy-refresh-token");
-    CHECK(stored->client_id == std::optional<std::string>{"pike-mcp-test-client"});
-    CHECK(stored->expires > ai::current_timestamp_ms());
+    REQUIRE(stored->tokens.has_value());
+    CHECK(stored->tokens->access_token == "dummy-access-token");
+    CHECK(stored->tokens->refresh_token == std::optional<std::string>{"dummy-refresh-token"});
+    REQUIRE(stored->client_information.has_value());
+    CHECK(stored->client_information->client_id == "pike-mcp-test-client");
+    REQUIRE(stored->tokens_expire_at.has_value());
+    CHECK(*stored->tokens_expire_at > ai::current_timestamp_ms());
 
-    // Revocation reuses the existing remove path.
-    auto removed = runtime.run(mcp::logout_mcp_server(credentials, "mcp__echo"));
+    // Revocation removes the stored state.
+    auto removed = runtime.run(mcp::logout_mcp_server(store, "echo", "https://echo.example.com/mcp"));
     REQUIRE(removed.has_value());
-    auto after = runtime.run(credentials->list());
-    REQUIRE(after.has_value());
-    CHECK(after->empty());
+    CHECK_FALSE(read_state(*store).has_value());
 }
 
 TEST_CASE("a valid stored MCP OAuth credential resolves the bearer token without a token request",
@@ -543,17 +528,16 @@ TEST_CASE("a valid stored MCP OAuth credential resolves the bearer token without
     const auto config = server_config_from_fixture(read_replay_fixture());
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    auto credentials = std::make_shared<coding_agent::AuthStorage>(workspace.path() / "auth.json");
-    seed_credential(runtime,
-            *credentials,
-            "mcp__echo",
-            oauth_credential("dummy-access-token",
+    auto store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    seed_state(*store,
+            oauth_state("dummy-access-token",
                     "dummy-refresh-token",
                     ai::current_timestamp_ms() + std::chrono::hours{24}.count() * 1000));
 
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
     auto provider = std::make_shared<mcp::McpOAuthProvider>(config, http);
-    auto resolver = std::make_shared<mcp::McpOAuthTokenResolver>(credentials, "mcp__echo", "echo", provider);
+    auto resolver =
+            std::make_shared<mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE(headers.has_value());
@@ -571,17 +555,15 @@ TEST_CASE("a rotated MCP OAuth refresh is persisted before the request continues
 
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    auto credentials = std::make_shared<coding_agent::AuthStorage>(workspace.path() / "auth.json");
+    auto store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
     // Expiring within the five-minute margin, so the request-time path refreshes.
-    seed_credential(runtime,
-            *credentials,
-            "mcp__echo",
-            oauth_credential("dummy-old-access-token", "dummy-refresh-token", ai::current_timestamp_ms() + 1000));
+    seed_state(*store, oauth_state("dummy-old-access-token", "dummy-refresh-token", ai::current_timestamp_ms() + 1000));
 
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
     http->responses[config.token_url] = {{200, refresh_body}};
     auto provider = std::make_shared<mcp::McpOAuthProvider>(config, http);
-    auto resolver = std::make_shared<mcp::McpOAuthTokenResolver>(credentials, "mcp__echo", "echo", provider);
+    auto resolver =
+            std::make_shared<mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE(headers.has_value());
@@ -592,10 +574,11 @@ TEST_CASE("a rotated MCP OAuth refresh is persisted before the request continues
     CHECK(http->requests.front().body.find("refresh_token=dummy-refresh-token") != std::string::npos);
 
     // The rotated credential is persisted by the same transaction.
-    const auto stored = read_credential(runtime, *credentials, "mcp__echo");
+    const auto stored = read_state(*store);
     REQUIRE(stored.has_value());
-    CHECK(stored->access == "dummy-rotated-access-token");
-    CHECK(stored->refresh == "dummy-rotated-refresh-token");
+    REQUIRE(stored->tokens.has_value());
+    CHECK(stored->tokens->access_token == "dummy-rotated-access-token");
+    CHECK(stored->tokens->refresh_token == std::optional<std::string>{"dummy-rotated-refresh-token"});
 }
 
 TEST_CASE("an invalid_grant refresh is an explicit re-login error with no retry loop",
@@ -607,17 +590,16 @@ TEST_CASE("an invalid_grant refresh is an explicit re-login error with no retry 
 
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    auto credentials = std::make_shared<coding_agent::AuthStorage>(workspace.path() / "auth.json");
-    seed_credential(runtime,
-            *credentials,
-            "mcp__echo",
-            oauth_credential("dummy-old-access-token", "dummy-dead-refresh-token", ai::current_timestamp_ms() + 1000));
+    auto store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    seed_state(*store,
+            oauth_state("dummy-old-access-token", "dummy-dead-refresh-token", ai::current_timestamp_ms() + 1000));
 
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
     http->responses[config.token_url] = {
             {static_cast<int>(*ai::json_integer_member(response, "status")), fixture_string(response, "body")}};
     auto provider = std::make_shared<mcp::McpOAuthProvider>(config, http);
-    auto resolver = std::make_shared<mcp::McpOAuthTokenResolver>(credentials, "mcp__echo", "echo", provider);
+    auto resolver =
+            std::make_shared<mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE_FALSE(headers.has_value());
@@ -631,11 +613,12 @@ TEST_CASE("an invalid_grant refresh is an explicit re-login error with no retry 
     // One attempt only: a dead refresh token does not loop.
     CHECK(http->requests.size() == 1);
 
-    // The existing AuthStorage semantics preserve the stored credential for retry.
-    const auto stored = read_credential(runtime, *credentials, "mcp__echo");
+    // The stored state is preserved for a retry after sign-in.
+    const auto stored = read_state(*store);
     REQUIRE(stored.has_value());
-    CHECK(stored->access == "dummy-old-access-token");
-    CHECK(stored->refresh == "dummy-dead-refresh-token");
+    REQUIRE(stored->tokens.has_value());
+    CHECK(stored->tokens->access_token == "dummy-old-access-token");
+    CHECK(stored->tokens->refresh_token == std::optional<std::string>{"dummy-dead-refresh-token"});
 }
 
 TEST_CASE("a missing MCP OAuth credential is an explicit re-login error, never an unauthenticated request",
@@ -643,11 +626,12 @@ TEST_CASE("a missing MCP OAuth credential is an explicit re-login error, never a
     const auto config = server_config_from_fixture(read_replay_fixture());
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    auto credentials = std::make_shared<coding_agent::AuthStorage>(workspace.path() / "auth.json");
+    auto store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
 
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
     auto provider = std::make_shared<mcp::McpOAuthProvider>(config, http);
-    auto resolver = std::make_shared<mcp::McpOAuthTokenResolver>(credentials, "mcp__echo", "echo", provider);
+    auto resolver =
+            std::make_shared<mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE_FALSE(headers.has_value());

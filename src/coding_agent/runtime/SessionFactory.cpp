@@ -22,6 +22,7 @@
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/extensions/ExtensionToolRegistry.hpp"
 #include "coding_agent/extensions/codemode/CodemodeToolSource.hpp"
+#include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpConfigFile.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 #include "coding_agent/mcp/McpOAuthProvider.hpp"
@@ -1661,11 +1662,12 @@ struct PreparedAssemblyTarget final {
     // MCP fails Session Assembly explicitly — a configured server is never
     // silently dropped and the transport never falls back to plaintext.
     //
-    // An OAuth-configured server (spec #865, ticket #875) resolves its access
-    // token at request time from the shared auth.json through a per-assembly
-    // AuthStorage, so the same credential the host's login writes is the one the
-    // transport sends; the login trigger itself is a later slice (#876).
-    std::shared_ptr<ai::CredentialStore> mcp_credentials;
+    // An OAuth-configured server (spec #882, ticket #884) resolves its access
+    // token at request time from `<agentDir>/mcp-auth.json` through a
+    // per-assembly store, so the same state a sign-in writes is the one the
+    // transport sends. The `#875` `auth.json` `mcp__<server>` record is migrated
+    // into that store on the first need.
+    std::shared_ptr<mcp::McpAuthStore> mcp_auth;
     for (auto& server : plan.mcp_http_servers) {
         if (auto valid = mcp::validate_mcp_http_server_config(server); !valid) {
             cleanup_on_failure();
@@ -1679,12 +1681,15 @@ struct PreparedAssemblyTarget final {
                 co_await discard_unpublished_session();
                 co_return std::unexpected(std::move(valid.error()));
             }
-            if (!mcp_credentials) {
-                mcp_credentials = std::make_shared<AuthStorage>(runtime->agent_dir() / "auth.json");
+            if (!mcp_auth) {
+                mcp_auth = std::make_shared<mcp::McpAuthStore>(mcp::McpAuthStore::default_path(runtime->agent_dir()));
             }
+            // Best-effort one-way migration: a malformed auth.json never vetoes
+            // the session, it just leaves the legacy record unmigrated.
+            (void)mcp_auth->migrate_from_auth_json(runtime->agent_dir() / "auth.json", server.name, server.url);
             auto provider = std::make_shared<mcp::McpOAuthProvider>(*server.resolved_oauth);
             request_auth = std::make_shared<mcp::McpOAuthTokenResolver>(
-                    mcp_credentials, mcp::mcp_oauth_provider_id(server.name), server.name, std::move(provider));
+                    mcp_auth, server.name, server.url, std::move(provider));
         }
         auto source = co_await mcp::McpExtensionToolSource::connect_http(std::move(server), std::move(request_auth));
         if (!source) {

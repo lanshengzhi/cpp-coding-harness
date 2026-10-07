@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpOAuthServerConfig.hpp"
 
 #include <cch/ai/Auth.hpp>
@@ -81,20 +82,32 @@ private:
     std::shared_ptr<ai::auth::OAuthHttpClient> http_client_;
 };
 
+/// The `McpOAuthState` of an `ai::OAuthCredential` for `server_url`: the token
+/// pair plus the expiry, in pi's `mcp-auth.json` shape.
+[[nodiscard]] McpOAuthState mcp_oauth_state_from_credential(
+        const ai::OAuthCredential& credential, std::string server_url);
+
+/// The `ai::OAuthCredential` of a stored state, or `std::nullopt` when the
+/// state carries no tokens. A state without `tokensExpireAt` maps to the
+/// no-reported-expiry sentinel, matching the login path.
+[[nodiscard]] std::optional<ai::OAuthCredential> mcp_oauth_credential_from_state(const McpOAuthState& state);
+
 /// Run one MCP server's OAuth sign-in through the existing `AuthInteraction`
-/// surface and persist the credential into the shared `auth.json`, exactly as
-/// `ai::Models::login` does for a model provider: `CredentialStore::modify` is
-/// the only write path and a store failure is the only failure wrapped as
-/// `auth`. `provider_id` is `mcp_oauth_provider_id(server_name)`.
-[[nodiscard]] support::AsyncResult<void> login_mcp_server(std::shared_ptr<ai::CredentialStore> credentials,
-        std::string provider_id,
+/// surface and persist the tokens into `<agentDir>/mcp-auth.json` (spec #882,
+/// ticket #884): the pi `McpOAuthCredentialStore`-shaped state under
+/// `mcp__<server>|<url>`. The in-memory contract stays the existing
+/// `ai::OAuthCredential`; the store is the only write path. `server_name` and
+/// `server_url` identify the state key.
+[[nodiscard]] support::AsyncResult<void> login_mcp_server(std::shared_ptr<McpAuthStore> store,
+        std::string server_name,
+        std::string server_url,
         McpOAuthProvider& provider,
         ai::AuthInteraction interaction);
 
-/// Revoke one MCP server's stored credential (local removal through
-/// `CredentialStore::remove`, matching the existing logout semantics: no
-/// server-side revocation). Missing records are not an error.
+/// Revoke one MCP server's stored credential: local removal from
+/// `mcp-auth.json` (pi `McpOAuthCredentialStore.remove`), no server-side
+/// revocation. Missing records are not an error.
 [[nodiscard]] support::AsyncResult<void> logout_mcp_server(
-        std::shared_ptr<ai::CredentialStore> credentials, std::string provider_id);
+        std::shared_ptr<McpAuthStore> store, std::string server_name, std::string server_url);
 
 } // namespace cch::coding_agent::mcp
