@@ -16,29 +16,37 @@ struct OAuthHttpResponse {
     std::string body{};
 };
 
-/// Injectable HTTPS POST client used by the OAuth content layer. Login
-/// requests observe the passed `std::stop_token`; implementations return a
+/// Injectable HTTPS client used by the OAuth content layer: POST for token and
+/// registration requests, GET for the RFC 9728 / RFC 8414 metadata documents.
+/// Requests observe the passed `std::stop_token`; implementations return a
 /// `Cancelled` error when the token stops so the flow can normalize it to
 /// "Login cancelled".
 class OAuthHttpClient {
 public:
     virtual ~OAuthHttpClient() = default;
 
-    [[nodiscard]] virtual boost::asio::awaitable<support::Expected<OAuthHttpResponse>> post(
-        std::string url,
-        std::map<std::string, std::string, std::less<>> headers,
-        std::string body,
-        std::stop_token stop_token) = 0;
+    [[nodiscard]] virtual boost::asio::awaitable<support::Expected<OAuthHttpResponse>> post(std::string url,
+            std::map<std::string, std::string, std::less<>> headers,
+            std::string body,
+            std::stop_token stop_token) = 0;
+
+    /// A GET with no body, used by OAuth discovery. The response body is read
+    /// whatever the status, because a discovery miss (4xx/502) is the caller's
+    /// signal to try the next candidate.
+    [[nodiscard]] virtual boost::asio::awaitable<support::Expected<OAuthHttpResponse>> get(
+            std::string url, std::map<std::string, std::string, std::less<>> headers, std::stop_token stop_token) = 0;
 };
 
 /// Default Boost.Beast/OpenSSL implementation for `https://` endpoints.
 class BoostBeastOAuthHttpClient final : public OAuthHttpClient {
 public:
-    [[nodiscard]] boost::asio::awaitable<support::Expected<OAuthHttpResponse>> post(
-        std::string url,
-        std::map<std::string, std::string, std::less<>> headers,
-        std::string body,
-        std::stop_token stop_token) override;
+    [[nodiscard]] boost::asio::awaitable<support::Expected<OAuthHttpResponse>> post(std::string url,
+            std::map<std::string, std::string, std::less<>> headers,
+            std::string body,
+            std::stop_token stop_token) override;
+
+    [[nodiscard]] boost::asio::awaitable<support::Expected<OAuthHttpResponse>>
+    get(std::string url, std::map<std::string, std::string, std::less<>> headers, std::stop_token stop_token) override;
 };
 
 } // namespace cch::ai::auth

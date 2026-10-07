@@ -24,6 +24,10 @@ struct McpOAuthTokens {
     std::string access_token;
     std::string token_type;
     std::optional<std::string> refresh_token;
+    /// The scope the grant carries: a token response without one grants the
+    /// requested scope, and a refresh keeps the granted scope (RFC 6749
+    /// §5.1/§6), so it is recorded rather than inferred.
+    std::optional<std::string> scope;
 };
 
 /// pi `OAuthClientInformationMixed`, narrowed to the public-client fields:

@@ -19,6 +19,14 @@ struct PkcePair {
 /// Base64url (no padding) encode of raw bytes, pi's `base64urlEncode`.
 [[nodiscard]] std::string base64url_encode(std::string_view bytes);
 
+/// Standard base64 (padded) of raw bytes, pi's `Buffer.toString("base64")`;
+/// used for a `client_secret_basic` Authorization header.
+[[nodiscard]] std::string base64_encode(std::string_view bytes);
+
+/// The raw 32-byte SHA-256 digest of `data`, pi's `createHash("sha256")`; used
+/// for the Client ID Metadata Document's server-specific callback id.
+[[nodiscard]] support::Expected<std::string> sha256_digest(std::string_view data);
+
 /// Random 32-byte verifier base64url-encoded plus its SHA-256 challenge.
 [[nodiscard]] support::Expected<PkcePair> generate_pkce();
 
@@ -36,8 +44,7 @@ struct PkcePair {
 
 /// Parse a `key=value&key2=value2` query into decoded pairs. Duplicate keys
 /// keep the first value, matching pi's `URLSearchParams.get` semantics.
-[[nodiscard]] std::map<std::string, std::string, std::less<>> parse_query_pairs(
-    std::string_view query);
+[[nodiscard]] std::map<std::string, std::string, std::less<>> parse_query_pairs(std::string_view query);
 
 /// Parsed manual authorization input (pi `parseAuthorizationInput`).
 struct AuthorizationInput {
