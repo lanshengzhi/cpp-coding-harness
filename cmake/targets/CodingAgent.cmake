@@ -57,6 +57,7 @@ cch_parity_declare_target(
         src/coding_agent/prompt/SystemPromptBuilder.cpp
         src/coding_agent/runtime/AuthGuidanceStream.cpp
         src/coding_agent/runtime/LocalUserShell.cpp
+        src/coding_agent/runtime/McpSessionManager.cpp
         src/coding_agent/runtime/SessionEventCommitment.cpp
         src/coding_agent/runtime/SessionFactory.cpp
         src/coding_agent/runtime/SessionFork.cpp
@@ -120,6 +121,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/LoadedResources.cpp
         src/coding_agent/tui/LoginDialog.cpp
         src/coding_agent/tui/LoginPresentation.cpp
+        src/coding_agent/tui/McpManagerPresenter.cpp
         src/coding_agent/tui/McpManagerView.cpp
         src/coding_agent/tui/ModelFlowController.cpp
         src/coding_agent/tui/ModelSelector.cpp
