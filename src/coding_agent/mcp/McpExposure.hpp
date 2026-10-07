@@ -43,9 +43,7 @@ enum class McpExposure { Codemode, Deferred, Direct, Hidden };
 
 /// The pi error fragment listing every accepted exposure spelling
 /// (`validateMcpServerConfig`): `"codemode", "deferred", "direct", "hidden"`.
-[[nodiscard]] inline std::string mcp_exposure_list() {
-    return "\"codemode\", \"deferred\", \"direct\", \"hidden\"";
-}
+[[nodiscard]] inline std::string mcp_exposure_list() { return "\"codemode\", \"deferred\", \"direct\", \"hidden\""; }
 
 /// Parse one exposure spelling, resolving pi's aliases. `std::nullopt` when the
 /// value is not an exposure (`resolveExposureAlias` then `isExposure`).

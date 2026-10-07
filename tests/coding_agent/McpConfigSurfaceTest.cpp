@@ -35,7 +35,8 @@ using JsonObject = support::JsonValue::object_t;
 using JsonArray = support::JsonValue::array_t;
 
 [[nodiscard]] support::JsonValue load_surface() {
-    const std::string path = std::string{CCH_SOURCE_DIR} + "/fixtures/pi-ai/v1.0.4/mcp-codemode/mcp-config-surface.json";
+    const std::string path =
+            std::string{CCH_SOURCE_DIR} + "/fixtures/pi-ai/v1.0.4/mcp-codemode/mcp-config-surface.json";
     std::ifstream input(path, std::ios::binary);
     const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
     auto parsed = support::read_json(text);
@@ -47,8 +48,8 @@ using JsonArray = support::JsonValue::array_t;
 /// fixture's expected `config` object can be diffed. Only set fields appear,
 /// matching pi (an omitted `exposure` stays omitted).
 [[nodiscard]] support::JsonValue project_config(const coding_agent::mcp::McpServerConfigVariant& config) {
-    const auto& base =
-            std::visit([](const auto& value) -> const coding_agent::mcp::McpServerConfigBase& { return value; }, config);
+    const auto& base = std::visit(
+            [](const auto& value) -> const coding_agent::mcp::McpServerConfigBase& { return value; }, config);
     support::JsonValue value{JsonObject{}};
     auto& object = value.get_object();
     if (base.exposure) {
@@ -137,8 +138,8 @@ TEST_CASE("validateMcpServerConfig matches the pi-v1.0.4 exposure cases", "[codi
     }
 }
 
-TEST_CASE("validateMcpServerConfig matches the pi-v1.0.4 server entry examples",
-        "[coding_agent][mcp][issue884][spec]") {
+TEST_CASE(
+        "validateMcpServerConfig matches the pi-v1.0.4 server entry examples", "[coding_agent][mcp][issue884][spec]") {
     const auto surface = load_surface();
     const auto& examples = surface.get_object().at("serverEntryExamples").get_array();
 
@@ -185,8 +186,7 @@ TEST_CASE("validateMcpServerConfig matches the pi-v1.0.4 server entry examples",
     }
 }
 
-TEST_CASE("getMcpToolExposure matches the pi-v1.0.4 exact-beats-pattern rule",
-        "[coding_agent][mcp][issue884][spec]") {
+TEST_CASE("getMcpToolExposure matches the pi-v1.0.4 exact-beats-pattern rule", "[coding_agent][mcp][issue884][spec]") {
     using coding_agent::mcp::McpExposure;
     const auto surface = load_surface();
     const auto& expected = expect_object(surface, "exposureValues").at("toolExposure").get_object();
@@ -206,18 +206,18 @@ TEST_CASE("getMcpToolExposure matches the pi-v1.0.4 exact-beats-pattern rule",
     };
 
     CHECK(coding_agent::mcp::get_mcp_tool_exposure(overrides, McpExposure::Codemode, "read_file") ==
-          parse(expected.at("exactWins")));
+            parse(expected.at("exactWins")));
     CHECK(coding_agent::mcp::get_mcp_tool_exposure(overrides, McpExposure::Codemode, "read_dir") ==
-          parse(expected.at("patternMatch")));
+            parse(expected.at("patternMatch")));
     CHECK(coding_agent::mcp::get_mcp_tool_exposure(overrides, McpExposure::Codemode, "ab") ==
-          parse(expected.at("firstPatternWins")));
+            parse(expected.at("firstPatternWins")));
     CHECK(coding_agent::mcp::get_mcp_tool_exposure(overrides, McpExposure::Deferred, "other") ==
-          parse(expected.at("fallbackToServer")));
+            parse(expected.at("fallbackToServer")));
     // With no server exposure the default is `codemode` (pi `?? "codemode"`).
     CHECK(coding_agent::mcp::get_mcp_tool_exposure({}, std::nullopt, "other") == McpExposure::Codemode);
     // A key without `*` that is not an exact match never matches.
     CHECK(coding_agent::mcp::get_mcp_tool_exposure({{"read", McpExposure::Hidden}}, McpExposure::Direct, "read_file") ==
-          McpExposure::Direct);
+            McpExposure::Direct);
 }
 
 TEST_CASE("a project override merges only the pi override keys", "[coding_agent][mcp][issue884][spec]") {
@@ -248,7 +248,8 @@ TEST_CASE("a project override merges only the pi override keys", "[coding_agent]
     CHECK(stdio->tool_exposure.front().second == coding_agent::mcp::McpExposure::Direct);
 }
 
-TEST_CASE("an override naming a field outside the pi override keys is rejected", "[coding_agent][mcp][issue884][spec]") {
+TEST_CASE(
+        "an override naming a field outside the pi override keys is rejected", "[coding_agent][mcp][issue884][spec]") {
     tests::TempWorkspace workspace;
     workspace.write("home/mcp.json", R"({"mcpServers": {"srv": {"command": "my-server"}}})");
     workspace.write(".pi/mcp.json", R"({"mcpServers": {"srv": {"args": ["--evil"]}}})");
@@ -257,7 +258,7 @@ TEST_CASE("an override naming a field outside the pi override keys is rejected",
             coding_agent::mcp::load_mcp_config(workspace.path() / "home", workspace.path(), /* project_trusted */ true);
     REQUIRE(trusted.errors.size() == 1);
     CHECK(trusted.errors.front().find("an override can only set enabled, exposure, or toolExposure") !=
-          std::string::npos);
+            std::string::npos);
     // The global entry is kept unchanged rather than half-overridden.
     REQUIRE(trusted.servers.size() == 1);
     const auto* stdio = std::get_if<coding_agent::mcp::McpStdioServerConfig>(&trusted.servers.front().config);

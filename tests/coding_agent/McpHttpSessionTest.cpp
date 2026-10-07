@@ -583,8 +583,7 @@ TEST_CASE("a timed-out MCP HTTP call tells the server with the pi timeout reason
     CHECK(trace_contains(trace, "\"reason\":\"Request timed out\""));
 }
 
-TEST_CASE("a failed MCP HTTP call does not emit notifications/cancelled",
-        "[coding_agent][mcp][issue884][spec]") {
+TEST_CASE("a failed MCP HTTP call does not emit notifications/cancelled", "[coding_agent][mcp][issue884][spec]") {
     tests::TempWorkspace workspace;
     const auto trace = workspace.path() / "trace.log";
     HttpFixtureServer server{trace};

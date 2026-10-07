@@ -206,10 +206,8 @@ using JsonArray = support::JsonValue::array_t;
 
 } // namespace
 
-support::ExpectedVoid update_mcp_server_config(const std::filesystem::path& path,
-        std::string_view name,
-        const McpServerConfigPatch& patch,
-        bool override) {
+support::ExpectedVoid update_mcp_server_config(
+        const std::filesystem::path& path, std::string_view name, const McpServerConfigPatch& patch, bool override) {
     const std::string server{name};
     return edit_mcp_servers(path, [&](JsonObject& root) -> support::Expected<bool> {
         JsonObject* servers = servers_object(root, override);

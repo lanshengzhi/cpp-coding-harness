@@ -331,8 +331,7 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> McpHttpClient::sen
         // reason) before the call fails. `initialize` is never cancellable.
         const support::ErrorCode code = response.error().code;
         if (cancellable && (code == support::ErrorCode::Cancelled || code == support::ErrorCode::Timeout)) {
-            co_await notify_cancelled(
-                    id, code == support::ErrorCode::Timeout ? "Request timed out" : "Aborted");
+            co_await notify_cancelled(id, code == support::ErrorCode::Timeout ? "Request timed out" : "Aborted");
         }
         co_return std::unexpected(std::move(response.error()));
     }

@@ -151,8 +151,8 @@ using JsonArray = support::JsonValue::array_t;
     }
     const auto* map = entry->second.get_if<JsonObject>();
     if (map == nullptr) {
-        return std::unexpected(config_error(
-                "server \"" + server + "\": toolExposure must map tool names to exposures"));
+        return std::unexpected(
+                config_error("server \"" + server + "\": toolExposure must map tool names to exposures"));
     }
     std::vector<std::pair<std::string, McpExposure>> overrides;
     for (const auto& [tool, value] : *map) {
@@ -161,8 +161,8 @@ using JsonArray = support::JsonValue::array_t;
             parsed = parse_mcp_exposure(value.get_string());
         }
         if (!parsed) {
-            return std::unexpected(config_error("server \"" + server + "\": toolExposure \"" + tool +
-                                                "\" must be one of " + mcp_exposure_list()));
+            return std::unexpected(config_error(
+                    "server \"" + server + "\": toolExposure \"" + tool + "\" must be one of " + mcp_exposure_list()));
         }
         overrides.emplace_back(tool, *parsed);
     }
@@ -188,8 +188,8 @@ support::Expected<McpServerConfigVariant> validate_mcp_server_config(
         std::string_view name, const support::JsonValue& raw) {
     const std::string server{name};
     if (!valid_server_name(name)) {
-        return std::unexpected(config_error(
-                "invalid server name \"" + server + "\" (use letters, digits, \"_\" and \"-\")"));
+        return std::unexpected(
+                config_error("invalid server name \"" + server + "\" (use letters, digits, \"_\" and \"-\")"));
     }
     const auto* object = raw.get_if<JsonObject>();
     if (object == nullptr) {
@@ -282,8 +282,8 @@ support::Expected<McpServerConfigVariant> validate_mcp_server_config(
         }
         return McpServerConfigVariant{std::move(config)};
     }
-    return std::unexpected(config_error(
-            "server \"" + server + "\" needs either \"command\" (stdio) or \"url\" (streamable HTTP)"));
+    return std::unexpected(
+            config_error("server \"" + server + "\" needs either \"command\" (stdio) or \"url\" (streamable HTTP)"));
 }
 
 namespace {

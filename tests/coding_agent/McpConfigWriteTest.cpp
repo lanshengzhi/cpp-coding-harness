@@ -58,9 +58,7 @@ using JsonObject = support::JsonValue::object_t;
     return *entry;
 }
 
-[[nodiscard]] bool has_key(const JsonObject& object, std::string_view key) {
-    return object.contains(std::string{key});
-}
+[[nodiscard]] bool has_key(const JsonObject& object, std::string_view key) { return object.contains(std::string{key}); }
 
 [[nodiscard]] coding_agent::mcp::McpServerConfigPatch patch_of(
         std::optional<bool> enabled, std::optional<coding_agent::mcp::McpExposure> exposure) {
@@ -92,7 +90,8 @@ TEST_CASE("updating a plain entry writes a non-default value and deletes the def
 
     // `enabled: true` and `exposure: "codemode"` are the defaults, so the keys
     // are removed rather than written back.
-    REQUIRE(coding_agent::mcp::update_mcp_server_config(path, "srv", patch_of(true, McpExposure::Codemode)).has_value());
+    REQUIRE(coding_agent::mcp::update_mcp_server_config(path, "srv", patch_of(true, McpExposure::Codemode))
+                    .has_value());
     {
         const auto document = parse_file(path);
         const auto& entry = entry_of(document, "srv");
@@ -109,7 +108,8 @@ TEST_CASE("updating an override entry keeps default values", "[coding_agent][mcp
     // default value must be written, not deleted, or the override would vanish.
     workspace.write("mcp.json", R"({"mcpServers": {"srv": {"enabled": false}}})");
 
-    REQUIRE(coding_agent::mcp::update_mcp_server_config(path, "srv", patch_of(true, McpExposure::Codemode)).has_value());
+    REQUIRE(coding_agent::mcp::update_mcp_server_config(path, "srv", patch_of(true, McpExposure::Codemode))
+                    .has_value());
     const auto document = parse_file(path);
     const auto& entry = entry_of(document, "srv");
     REQUIRE(has_key(entry, "enabled"));
@@ -152,7 +152,7 @@ TEST_CASE("an mcp.json rewrite preserves indentation and unrelated content", "[c
             "}\n");
 
     REQUIRE(coding_agent::mcp::update_mcp_server_config(
-                    path, "srv", patch_of(std::nullopt, coding_agent::mcp::McpExposure::Direct))
+            path, "srv", patch_of(std::nullopt, coding_agent::mcp::McpExposure::Direct))
                     .has_value());
     const std::string text = read_file(path);
     CHECK(text.find("\n    \"unrelated\"") != std::string::npos);
