@@ -103,6 +103,15 @@
         "reason": "Spec #865 mandated reusing ai::providers::BoostBeastStreamTransport for the production MCP HTTP transport; promoting it to a narrow Owner Interface is the recorded upgrade (#881)."
       },
       {
+        "id": "mcp-oauth-discovery-reach-through",
+        "rule_id": "coding-agent-no-ai-private-includes",
+        "source": "src/coding_agent/mcp/McpOAuthDiscovery.cpp",
+        "owner": "cch_coding_agent",
+        "removal_ticket": "#881",
+        "expires": "2027-06-30",
+        "reason": "Spec #882 mandated reusing the shared ai OAuth seam (OAuthHttpClient, JsonAccess) for RFC 9728 / RFC 8414 metadata discovery, so MCP OAuth speaks the same HTTPS client as the built-in credential flows; promoting a narrow ai OAuth-discovery interface is the recorded upgrade (#881)."
+      },
+      {
         "id": "mcp-oauth-auth-helper-reach-through",
         "rule_id": "coding-agent-no-ai-private-includes",
         "source": "src/coding_agent/mcp/McpOAuthProvider.cpp",
