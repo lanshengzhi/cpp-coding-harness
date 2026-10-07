@@ -125,7 +125,6 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     suspend_controller_ = make_suspend_controller();
     if (!booting) {
         model_flows_->update_model_completion();
-        mcp_flows_->refresh_completion();
     }
 
     const auto weak = weak_from_this();
@@ -155,6 +154,14 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
 
     if (!booting) {
         initialize_view(diagnostics);
+        // The `/mcp` refresh drains the manager's latched warnings into the
+        // chat, so on a bind-existing start it must follow view creation —
+        // running it with the controller block above loses the warnings to
+        // the still-null view. The editor provider built with the view saw
+        // an empty MCP snapshot; rebuild it from the fresh one (the boot
+        // bind at `bind_boot_session` already orders it this way).
+        mcp_flows_->refresh_completion();
+        rebuild_autocomplete_provider();
         if (auto painted = paint_frame(); !painted) return fail_start(painted.error());
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
         if (auto painted = paint_frame(); !painted) return fail_start(painted.error());
