@@ -11,6 +11,11 @@ Methods:
   initialize                  MCP handshake (protocolVersion, capabilities, serverInfo)
   notifications/initialized   notification; no response
   tools/list                  one tool per page, `nextCursor` until exhausted
+  resources/list              one resource per page, `nextCursor` until exhausted;
+                              carries a `_meta`/icons resource, a `ui://` MCP App
+                              resource, and a resource with no `name`
+  resources/templates/list    one template page
+  resources/read              text and base64-blob contents for a known URI
   tools/call                  name = echo | fail | crash | hang | slow
   debug/emit_garbage          write a non-JSON line, then the valid response
   debug/emit_invalid_jsonrpc  write valid JSON that is not a JSON-RPC message
@@ -73,6 +78,49 @@ TOOLS = [
 ]
 
 PAGE_SIZE = 1
+
+# Resources the fixture lists, in order. The first carries `_meta` and `icons`
+# (stripped by the tools), the second is an MCP App UI (`ui://` plus a
+# `profile=mcp-app` mime, filtered out), and the third has no `name` (defaulted
+# from its `uri`). The list is paged one per page so client pagination is
+# exercised.
+RESOURCES = [
+    {
+        "uri": "file:///docs/readme.md",
+        "name": "readme.md",
+        "title": "Readme",
+        "description": "Project readme",
+        "mimeType": "text/markdown",
+        "size": 42,
+        "_meta": {"hidden": True},
+        "icons": [{"src": "data:image/png;base64,AA=="}],
+    },
+    {
+        "uri": "ui://widget/app.html",
+        "name": "app widget",
+        "mimeType": "text/html;profile=mcp-app",
+    },
+    {"uri": "notes://scratch"},
+]
+
+RESOURCE_TEMPLATES = [
+    {
+        "uriTemplate": "db://{table}/rows",
+        "name": "table rows",
+        "description": "Rows of a table",
+        "mimeType": "application/json",
+    },
+    {"uriTemplate": "ui://widget/{id}", "mimeType": "text/html;profile=mcp-app"},
+]
+
+READ_RESULTS = {
+    "file:///docs/readme.md": [
+        {"uri": "file:///docs/readme.md", "mimeType": "text/markdown", "text": "# readme\n", "_meta": {"x": 1}},
+    ],
+    "blob://image": [
+        {"uri": "blob://image", "mimeType": "image/png", "blob": "aGVsbG8="},
+    ],
+}
 
 
 def trace(line):
@@ -154,6 +202,46 @@ def handle_tools_call(rid, params):
         respond_error(rid, -32602, "Unknown tool: " + str(name))
 
 
+def handle_resources_list(rid, params):
+    cursor = params.get("cursor")
+    start = 0
+    if cursor is not None:
+        try:
+            start = int(cursor)
+        except (TypeError, ValueError):
+            respond_error(rid, -32602, "invalid cursor")
+            return
+    result = {"resources": RESOURCES[start : start + PAGE_SIZE]}
+    next_start = start + PAGE_SIZE
+    if next_start < len(RESOURCES):
+        result["nextCursor"] = str(next_start)
+    respond(rid, result)
+
+
+def handle_resource_templates_list(rid, params):
+    cursor = params.get("cursor")
+    start = 0
+    if cursor is not None:
+        try:
+            start = int(cursor)
+        except (TypeError, ValueError):
+            respond_error(rid, -32602, "invalid cursor")
+            return
+    result = {"resourceTemplates": RESOURCE_TEMPLATES[start : start + PAGE_SIZE]}
+    next_start = start + PAGE_SIZE
+    if next_start < len(RESOURCE_TEMPLATES):
+        result["nextCursor"] = str(next_start)
+    respond(rid, result)
+
+
+def handle_resource_read(rid, params):
+    uri = params.get("uri")
+    if uri not in READ_RESULTS:
+        respond_error(rid, -32602, "Unknown resource: " + str(uri))
+        return
+    respond(rid, {"contents": READ_RESULTS[uri]})
+
+
 def handle_cancelled(params):
     request_id = params.get("requestId")
     trace("cancelled requestId=" + str(request_id))
@@ -192,7 +280,7 @@ def main():
                 rid,
                 {
                     "protocolVersion": "2025-06-18",
-                    "capabilities": {"tools": {}},
+                    "capabilities": {"tools": {}, "resources": {"listChanged": True}},
                     "serverInfo": {"name": "pi-mcp-echo", "version": "1.0.0"},
                 },
             )
@@ -200,6 +288,12 @@ def main():
             handle_tools_list(rid, message.get("params") or {})
         elif method == "tools/call":
             handle_tools_call(rid, message.get("params") or {})
+        elif method == "resources/list":
+            handle_resources_list(rid, message.get("params") or {})
+        elif method == "resources/templates/list":
+            handle_resource_templates_list(rid, message.get("params") or {})
+        elif method == "resources/read":
+            handle_resource_read(rid, message.get("params") or {})
         elif method == "ping":
             respond(rid, {})
         elif method == "debug/emit_garbage":

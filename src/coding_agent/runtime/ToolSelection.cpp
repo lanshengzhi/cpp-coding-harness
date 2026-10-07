@@ -1,5 +1,6 @@
 #include "coding_agent/runtime/ToolSelection.hpp"
 
+#include "coding_agent/mcp/McpNamespace.hpp"
 #include "coding_agent/runtime/ToolNames.hpp"
 
 #include <algorithm>
@@ -86,7 +87,10 @@ bool tool_name_matches(std::span<const std::string> entries, std::string_view na
     return false;
 }
 
-bool is_mcp_tool_name(std::string_view name) { return name.starts_with("mcp__"); }
+bool is_mcp_tool_name(std::string_view name) {
+    return name.starts_with("mcp__") || name == mcp::kListMcpResourcesTool ||
+           name == mcp::kListMcpResourceTemplatesTool || name == mcp::kReadMcpResourceTool;
+}
 
 support::Expected<ToolSelectionResult> resolve_tool_selection(
         const ToolSelection& selection, std::span<const std::string> discovered_names) {

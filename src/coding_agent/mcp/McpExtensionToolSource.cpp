@@ -134,6 +134,10 @@ namespace {
                     description != entry_object->end() && description->second.holds<std::string>()) {
                 descriptor.description = description->second.get_string();
             }
+            if (const auto output = entry_object->find("outputSchema");
+                    output != entry_object->end() && output->second.get_if<support::JsonValue::object_t>() != nullptr) {
+                descriptor.output_schema = output->second;
+            }
             if (descriptor.description.empty()) {
                 descriptor.description = "MCP tool " + descriptor.server_tool_name + " from server " + server;
             }
@@ -156,6 +160,25 @@ std::string mcp_tool_name(std::string_view server, std::string_view tool) {
     name += "__";
     name += sanitize_identifier(tool);
     return name;
+}
+
+support::JsonValue create_mcp_result_schema(const std::optional<support::JsonValue>& structured_content_schema) {
+    support::JsonValue::object_t properties;
+    properties.emplace("content",
+            support::JsonValue{support::JsonValue::object_t{
+                    {"type", "array"},
+                    {"items", support::JsonValue::object_t{{"type", "object"}}},
+            }});
+    if (structured_content_schema.has_value()) {
+        properties.emplace("structuredContent", *structured_content_schema);
+    }
+    properties.emplace("isError", support::JsonValue{support::JsonValue::object_t{{"type", "boolean"}}});
+    properties.emplace("_meta", support::JsonValue{support::JsonValue::object_t{{"type", "object"}}});
+    return support::JsonValue{support::JsonValue::object_t{
+            {"type", "object"},
+            {"properties", std::move(properties)},
+            {"required", support::JsonValue::array_t{"content"}},
+    }};
 }
 
 McpExtensionToolSource::McpExtensionToolSource(
@@ -197,6 +220,7 @@ support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource
         tool.definition.name = descriptor.full_name;
         tool.definition.description = descriptor.description;
         tool.definition.parameters = descriptor.parameters;
+        tool.definition.output_schema = create_mcp_result_schema(descriptor.output_schema);
         // pi MCP tools carry no `executionMode`, so they are parallel-capable;
         // the transport serializes frames internally, which keeps that safe.
         tool.concurrency = agent::ToolConcurrency::ParallelSafe;

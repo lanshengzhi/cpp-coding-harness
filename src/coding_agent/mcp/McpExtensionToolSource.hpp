@@ -13,6 +13,7 @@
 #include <boost/asio/awaitable.hpp>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -29,7 +30,17 @@ struct McpToolDescriptor {
     std::string description;
     /// The tool's JSON Schema input schema, passed through unchanged.
     support::JsonValue parameters;
+    /// The tool's JSON Schema output schema (`tools/list` `outputSchema`), when
+    /// the server declares one. The Agent-visible tool declares
+    /// `create_mcp_result_schema` around it.
+    std::optional<support::JsonValue> output_schema;
 };
+
+/// pi `createMcpResultSchema`: the output schema every MCP tool declares — the
+/// `CallToolResult` a codemode script receives, with the tool's own output
+/// schema nested as `structuredContent`.
+[[nodiscard]] support::JsonValue create_mcp_result_schema(
+        const std::optional<support::JsonValue>& structured_content_schema);
 
 /// The Agent-visible name of one server tool (pi `createMcpToolName`): a
 /// `mcp__<server>__<tool>` identifier with everything outside `[A-Za-z0-9_]`
