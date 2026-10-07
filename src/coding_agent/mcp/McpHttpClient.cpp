@@ -42,9 +42,6 @@ namespace {
 
 using detail::transport_error;
 
-/// pi `client.ts` request timeout default (30 s); a request that gets no
-/// response by then fails with a timeout instead of hanging the queue.
-constexpr std::chrono::milliseconds kRequestTimeout{30000};
 /// The error-body excerpt carried in a non-2xx diagnostic, matching pi
 /// `ERROR_MESSAGE_BODY_CHARS` (500).
 constexpr std::size_t kErrorBodyChars = 500;
@@ -249,8 +246,11 @@ support::AsyncResult<support::JsonValue> McpHttpClient::request(
                     return;
                 }
                 const int id = self->next_id_++;
-                self->enqueue_frame(
-                        detail::build_request_body(id, method, params), id, std::move(completion), stop_token);
+                self->enqueue_frame(detail::build_request_body(id, method, params),
+                        id,
+                        std::move(completion),
+                        stop_token,
+                        /* cancellable */ method != "initialize");
             }}};
 }
 
@@ -261,13 +261,15 @@ void McpHttpClient::notify(std::string method, std::optional<support::JsonValue>
 void McpHttpClient::enqueue_frame(std::string frame,
         int id,
         std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
-        std::stop_token stop_token) {
+        std::stop_token stop_token,
+        bool cancellable) {
     auto item = std::make_unique<QueuedFrame>();
     item->frame = std::move(frame);
     item->id = id;
     item->completion = std::move(completion);
     item->is_notification = !item->completion.has_value();
     item->stop_token = stop_token;
+    item->cancellable = cancellable;
     queue_.push_back(std::move(item));
     if (!pumping_) {
         pumping_ = true;
@@ -291,7 +293,7 @@ boost::asio::awaitable<void> McpHttpClient::pump() {
             (void)co_await send_notification(item->frame);
             continue;
         }
-        complete_frame(*item, co_await send_request(item->frame, item->id, item->stop_token));
+        complete_frame(*item, co_await send_request(item->frame, item->id, item->stop_token, item->cancellable));
     }
     pumping_ = false;
 }
@@ -310,7 +312,7 @@ boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> McpHttp
     request.url = config_.url;
     request.headers = std::move(headers);
     request.body = std::string{body};
-    request.timeout = kRequestTimeout;
+    request.timeout = config_.request_timeout;
     // The reused transport resolves the token into its own Cancelled error, so
     // an aborted Agent Turn cancels the HTTPS request instead of waiting out
     // the deadline.
@@ -321,9 +323,17 @@ boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> McpHttp
 }
 
 boost::asio::awaitable<support::Expected<support::JsonValue>> McpHttpClient::send_request(
-        std::string_view frame, int id, std::stop_token stop_token) {
+        std::string_view frame, int id, std::stop_token stop_token, bool cancellable) {
     auto response = co_await post(frame, stop_token);
     if (!response) {
+        // pi `cancelPending`: a cancellable request that is aborted or times
+        // out tells the server through `notifications/cancelled` (with the pi
+        // reason) before the call fails. `initialize` is never cancellable.
+        const support::ErrorCode code = response.error().code;
+        if (cancellable && (code == support::ErrorCode::Cancelled || code == support::ErrorCode::Timeout)) {
+            co_await notify_cancelled(
+                    id, code == support::ErrorCode::Timeout ? "Request timed out" : "Aborted");
+        }
         co_return std::unexpected(std::move(response.error()));
     }
     capture_session(*response);
@@ -341,6 +351,17 @@ boost::asio::awaitable<std::optional<support::Error>> McpHttpClient::send_notifi
         co_return http_status_error(config_.name, *response);
     }
     co_return std::nullopt;
+}
+
+boost::asio::awaitable<void> McpHttpClient::notify_cancelled(int id, std::string reason) {
+    support::JsonValue params{support::JsonValue::object_t{
+            {"requestId", static_cast<double>(id)},
+            {"reason", std::move(reason)},
+    }};
+    // Best-effort: the notification is not tied to the caller's stop token (pi
+    // `cancelPending` ignores the send's outcome), so a cancellation still
+    // reaches the server after the in-flight request was aborted.
+    (void)co_await send_notification(detail::build_notification_body("notifications/cancelled", params));
 }
 
 std::map<std::string, std::string> McpHttpClient::request_headers() const {

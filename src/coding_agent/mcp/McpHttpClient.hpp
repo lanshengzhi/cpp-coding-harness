@@ -93,17 +93,27 @@ private:
         std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion;
         bool is_notification{false};
         std::stop_token stop_token{};
+        /// pi `cancellable`: `method !== "initialize"`. A cancellable request
+        /// that is aborted or times out emits `notifications/cancelled` (pi
+        /// `cancelPending`).
+        bool cancellable{false};
     };
 
     /// Serve the queued frames in order until the queue drains; one pump runs
     /// at a time and is restarted by the next enqueue.
     [[nodiscard]] boost::asio::awaitable<void> pump();
     /// POST one request body and interpret the response for `id`; `stop_token`
-    /// cancels the in-flight HTTPS request.
+    /// cancels the in-flight HTTPS request. A `cancellable` request that the
+    /// stop token aborts, or that times out, emits `notifications/cancelled`
+    /// (pi `cancelPending`) before completing.
     [[nodiscard]] boost::asio::awaitable<support::Expected<support::JsonValue>> send_request(
-            std::string_view frame, int id, std::stop_token stop_token);
+            std::string_view frame, int id, std::stop_token stop_token, bool cancellable);
     /// POST one notification body; any 2xx is success and the body is ignored.
     [[nodiscard]] boost::asio::awaitable<std::optional<support::Error>> send_notification(std::string_view frame);
+    /// Tell the server that `id` is cancelled (pi `cancelPending`'s
+    /// `notifications/cancelled`), carrying the pi reason string. Best-effort:
+    /// a failed notification send never fails the cancelled request.
+    [[nodiscard]] boost::asio::awaitable<void> notify_cancelled(int id, std::string reason);
     /// One HTTPS POST through the reused transport, buffering the full
     /// response body (JSON or SSE). `stop_token` is carried on the request so
     /// the transport can cancel it.
@@ -122,7 +132,8 @@ private:
     void enqueue_frame(std::string frame,
             int id,
             std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
-            std::stop_token stop_token = {});
+            std::stop_token stop_token = {},
+            bool cancellable = false);
     void complete_frame(QueuedFrame& frame, support::Expected<support::JsonValue> outcome);
 
     boost::asio::any_io_executor executor_;

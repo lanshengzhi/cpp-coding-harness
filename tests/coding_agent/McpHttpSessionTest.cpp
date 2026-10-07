@@ -537,6 +537,94 @@ TEST_CASE("cancelling an in-flight MCP HTTP call surfaces the cancellation error
     CHECK(first_text_content(*after) == std::optional<std::string>{"after cancel"});
 }
 
+TEST_CASE("cancelling an in-flight MCP HTTP call tells the server with notifications/cancelled",
+        "[coding_agent][mcp][issue884][spec]") {
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    HttpFixtureServer server{trace};
+    auto ca = trust_test_ca();
+    tests::RuntimeFixture runtime;
+
+    auto client = connect_http_client(runtime, http_config(server));
+    std::stop_source cancel;
+    const auto cancelled = tests::run_awaitable(runtime, cancel_in_flight_http_call(client, trace, cancel, "hang"));
+    REQUIRE_FALSE(cancelled.has_value());
+    CHECK(cancelled.error().code == support::ErrorCode::Cancelled);
+
+    // pi `cancelPending` sends `notifications/cancelled` for a non-`initialize`
+    // request with the aborted request's id and the pi reason. The fixture
+    // server traces the received notification, so this is the wire diff.
+    CHECK(trace_contains(trace, "notifications/cancelled"));
+    CHECK(trace_contains(trace, "\"reason\":\"Aborted\""));
+    CHECK(trace_contains(trace, "\"requestId\":2"));
+}
+
+TEST_CASE("a timed-out MCP HTTP call tells the server with the pi timeout reason",
+        "[coding_agent][mcp][issue884][spec]") {
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    HttpFixtureServer server{trace};
+    auto ca = trust_test_ca();
+    tests::RuntimeFixture runtime;
+
+    auto config = http_config(server);
+    config.request_timeout = 300ms;
+    auto client = connect_http_client(runtime, std::move(config));
+
+    const auto timed_out = tests::run_awaitable(runtime,
+            support::detail::await_async_result(
+                    client->request("tools/call", tools_call_params("hang", support::JsonValue::object_t{}))));
+    REQUIRE_FALSE(timed_out.has_value());
+    CHECK(timed_out.error().code == support::ErrorCode::Timeout);
+
+    // pi `armTimeout` cancels with reason `Request timed out`; the server sees
+    // that reason, not the generic abort one.
+    CHECK(trace_contains(trace, "notifications/cancelled"));
+    CHECK(trace_contains(trace, "\"reason\":\"Request timed out\""));
+}
+
+TEST_CASE("a failed MCP HTTP call does not emit notifications/cancelled",
+        "[coding_agent][mcp][issue884][spec]") {
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    HttpFixtureServer server{trace};
+    auto ca = trust_test_ca();
+    tests::RuntimeFixture runtime;
+
+    auto client = connect_http_client(runtime, http_config(server));
+    // A server-side failure is not a cancellation or a timeout, so pi
+    // `cancelPending` is never reached and no notification is sent. This is
+    // the separation case for "emits on cancel": a client that notified on
+    // every failure would satisfy the cancel checks while violating the rule.
+    const auto failed =
+            tests::run_awaitable(runtime, support::detail::await_async_result(client->request("debug/http_status")));
+    REQUIRE_FALSE(failed.has_value());
+    CHECK(failed.error().message.find("500") != std::string::npos);
+    CHECK_FALSE(trace_contains(trace, "notifications/cancelled"));
+}
+
+TEST_CASE("a request already cancelled before it is sent does not emit notifications/cancelled",
+        "[coding_agent][mcp][issue884][spec]") {
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    HttpFixtureServer server{trace};
+    auto ca = trust_test_ca();
+    tests::RuntimeFixture runtime;
+
+    auto client = connect_http_client(runtime, http_config(server));
+    std::stop_source cancel;
+    cancel.request_stop();
+    // pi throws `McpAbortError` before the request is registered when the
+    // signal is already aborted, so the server is told nothing.
+    const auto cancelled = tests::run_awaitable(runtime,
+            support::detail::await_async_result(client->request("tools/call",
+                    tools_call_params("echo", support::JsonValue::object_t{{"text", "never"}}),
+                    cancel.get_token())));
+    REQUIRE_FALSE(cancelled.has_value());
+    CHECK(cancelled.error().code == support::ErrorCode::Cancelled);
+    CHECK_FALSE(trace_contains(trace, "notifications/cancelled"));
+}
+
 TEST_CASE("an MCP HTTP call errors explicitly after the server dies between tools/list and tools/call",
         "[coding_agent][mcp][issue872][spec]") {
     HttpFixtureServer server;

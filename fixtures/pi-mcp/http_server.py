@@ -127,6 +127,11 @@ class Handler(BaseHTTPRequestHandler):
         method = message.get("method")
         rid = message.get("id")
         trace("recv " + str(method) + " id=" + str(rid))
+        if method == "notifications/cancelled":
+            # A cancelled request must name the id and carry the pi reason
+            # (`Aborted` / `Request timed out`); trace them so a test can diff
+            # the emitted notification.
+            trace("cancelled " + json.dumps(message.get("params") or {}, separators=(",", ":")))
 
         if method != "initialize" and self.headers.get("Mcp-Session-Id") != SESSION_ID:
             # The client must capture the session id from `initialize` and echo

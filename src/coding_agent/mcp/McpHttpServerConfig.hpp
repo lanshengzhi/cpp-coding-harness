@@ -4,6 +4,7 @@
 
 #include <cch/support/Error.hpp>
 
+#include <chrono>
 #include <map>
 #include <optional>
 #include <string>
@@ -25,6 +26,11 @@ struct McpHttpServerConfig {
     /// Extra request headers layered on every JSON-RPC POST (pi `headers`),
     /// for example an `Authorization` bearer token.
     std::map<std::string, std::string> headers;
+    /// Per-request deadline (pi `timeout` seconds, default 60 in the config;
+    /// pi's client default is 30 s). A request that gets no response by then
+    /// fails with a timeout, and a cancellable request tells the server with
+    /// `notifications/cancelled` reason `Request timed out` (pi `cancelPending`).
+    std::chrono::milliseconds request_timeout{std::chrono::milliseconds{30000}};
     /// OAuth sign-in configuration (spec #865, ticket #875). When set, every
     /// request resolves its access token at request time through the shared
     /// AuthStorage and attaches an `Authorization: Bearer` header; when absent,
