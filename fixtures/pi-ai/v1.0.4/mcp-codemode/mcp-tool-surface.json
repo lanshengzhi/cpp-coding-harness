@@ -1,0 +1,226 @@
+{
+  "schema": "cpp-coding-harness/pi-mcp-tool-surface/1",
+  "source": "packages/coding-agent/src/extensions/mcp/tools.ts",
+  "toolName": {
+    "pattern": "mcp__<server>__<tool>",
+    "sanitization": "every character outside [A-Za-z0-9_] becomes _",
+    "maxLength": 64,
+    "examples": [
+      {
+        "server": "filesystem",
+        "tool": "read_file",
+        "name": "mcp__filesystem__read_file"
+      },
+      {
+        "server": "a-b",
+        "tool": "x.y",
+        "name": "mcp__a_b__x_y"
+      },
+      {
+        "server": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+        "tool": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+        "name": "mcp__ssssssssssssssssssssssssssssssssssssssssssssssssss_a1dfb0a6"
+      }
+    ],
+    "collision": {
+      "first": "mcp__srv__a_b",
+      "second": "mcp__srv__a_b",
+      "secondWhenTaken": "mcp__srv__a_b_5c15ffbd"
+    }
+  },
+  "namespace": {
+    "example": "mcp__my_server",
+    "rule": "mcp__<server> with every - replaced by _"
+  },
+  "exposureMapping": {
+    "codemode": "deferred",
+    "deferred": "deferred",
+    "direct": "direct",
+    "hidden": "hidden"
+  },
+  "definitions": {
+    "codemode": {
+      "name": "mcp__filesystem__read_file",
+      "label": "filesystem/read_file",
+      "description": "Read a file from disk",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "isError": {
+            "type": "boolean"
+          },
+          "_meta": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "exposure": "deferred",
+      "namespace": {
+        "name": "mcp__filesystem"
+      },
+      "annotations": null
+    },
+    "withoutDescription": {
+      "name": "mcp__filesystem__empty",
+      "label": "filesystem/empty",
+      "description": "MCP tool empty from server filesystem",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "isError": {
+            "type": "boolean"
+          },
+          "_meta": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "exposure": "direct",
+      "namespace": {
+        "name": "mcp__filesystem"
+      },
+      "annotations": null
+    },
+    "withAnnotations": {
+      "name": "mcp__filesystem__read_file",
+      "label": "filesystem/read_file",
+      "description": "Read a file from disk",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "isError": {
+            "type": "boolean"
+          },
+          "_meta": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "exposure": "deferred",
+      "namespace": {
+        "name": "mcp__filesystem"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      }
+    }
+  },
+  "outputMaxBytes": 20480,
+  "resultSchema": {
+    "withoutStructuredContent": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "isError": {
+          "type": "boolean"
+        },
+        "_meta": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "content"
+      ]
+    },
+    "withStructuredContent": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "structuredContent": {
+          "type": "object",
+          "properties": {
+            "total": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "total"
+          ]
+        },
+        "isError": {
+          "type": "boolean"
+        },
+        "_meta": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "content"
+      ]
+    }
+  },
+  "resourceTools": {
+    "list": "list_mcp_resources",
+    "listTemplates": "list_mcp_resource_templates",
+    "read": "read_mcp_resource"
+  },
+  "isMcpToolNameExamples": {
+    "serverTool": true,
+    "resourceTool": true,
+    "other": false
+  }
+}

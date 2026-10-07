@@ -1,0 +1,84 @@
+{
+  "schema": "cpp-coding-harness/pi-codemode-tool-surface/1",
+  "sources": [
+    "packages/coding-agent/src/extensions/codemode/tool.ts",
+    "packages/codemode/src/source.ts",
+    "packages/codemode/src/types.ts",
+    "packages/codemode/src/runtime/prelude-source.ts"
+  ],
+  "name": "codemode",
+  "label": "codemode",
+  "description": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `searchTools(query, { limit?, namespace? })`, `describeTool(name)`, `describeNamespace(name)`: find unlisted tools, such as MCP tools.",
+  "promptSnippet": "Run JavaScript that calls other tools",
+  "promptGuidelines": [
+    "Use codemode to batch independent tool calls (Promise.allSettled), chain them, or filter large output, instead of many separate calls."
+  ],
+  "parameters": {
+    "type": "object",
+    "required": [
+      "code"
+    ],
+    "properties": {
+      "code": {
+        "type": "string",
+        "description": "Raw JavaScript source."
+      }
+    }
+  },
+  "exposure": "model-only",
+  "constrainedSampling": {
+    "type": "grammar",
+    "variants": {
+      "openai_lark": "\nstart: options_source | plain_source\noptions_source: OPTIONS_LINE NEWLINE SOURCE\nplain_source: SOURCE\n\nOPTIONS_LINE: /[ \\t]*\\/\\/ @options:[^\\r\\n]*/\nNEWLINE: /\\r?\\n/\nSOURCE: /[\\s\\S]+/\n"
+    }
+  },
+  "toolNameConstant": "codemode",
+  "storeEntryType": "codemode-store",
+  "defaultInlineBudget": 3000,
+  "optionsPrefix": "// @options:",
+  "limits": {
+    "maxOutputChars": 16777216,
+    "maxOutputItems": 100000,
+    "maxStoreValueChars": 262144,
+    "maxStoreTotalChars": 1048576,
+    "defaultInputSchemaMaxChars": 16000
+  },
+  "outputChannel": {
+    "items": [
+      {
+        "type": "text",
+        "text": "string"
+      },
+      {
+        "type": "image",
+        "data": "base64 string",
+        "mimeType": "string"
+      }
+    ],
+    "resultOk": {
+      "ok": true,
+      "value": "unknown",
+      "output": "CodemodeOutputItem[]",
+      "calls": "CodemodeCall[]",
+      "storeWrites": "CodemodeStoreWrites"
+    },
+    "resultError": {
+      "ok": false,
+      "error": "CodemodeError",
+      "output": "CodemodeOutputItem[]",
+      "calls": "CodemodeCall[]"
+    },
+    "callStatus": [
+      "ok",
+      "error",
+      "cancelled"
+    ],
+    "errorKind": [
+      "script",
+      "timeout",
+      "aborted",
+      "sandbox"
+    ],
+    "sourceType": "packages/codemode/src/types.ts"
+  }
+}

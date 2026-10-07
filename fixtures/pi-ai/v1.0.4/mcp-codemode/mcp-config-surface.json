@@ -1,0 +1,268 @@
+{
+  "schema": "cpp-coding-harness/pi-mcp-config-surface/1",
+  "sources": [
+    "packages/coding-agent/src/extensions/mcp/config.ts",
+    "packages/coding-agent/src/core/mcp-servers.ts",
+    "packages/coding-agent/src/core/settings-manager.ts"
+  ],
+  "locations": {
+    "global": "<agentDir>/mcp.json",
+    "project": "<cwd>/.pi/mcp.json (trusted projects only)",
+    "settings": "<agentDir>/settings.json (codemode keys only)"
+  },
+  "defaults": {
+    "exposure": "codemode",
+    "autoEnableCodemode": true,
+    "codemodeInlineBudget": 3000,
+    "defaultTools": [
+      "read",
+      "bash",
+      "edit",
+      "write"
+    ]
+  },
+  "exposureValues": {
+    "cases": [
+      {
+        "exposure": "codemode",
+        "result": {
+          "config": {
+            "command": "node",
+            "exposure": "codemode"
+          }
+        }
+      },
+      {
+        "exposure": "deferred",
+        "result": {
+          "config": {
+            "command": "node",
+            "exposure": "deferred"
+          }
+        }
+      },
+      {
+        "exposure": "direct",
+        "result": {
+          "config": {
+            "command": "node",
+            "exposure": "direct"
+          }
+        }
+      },
+      {
+        "exposure": "hidden",
+        "result": {
+          "config": {
+            "command": "node",
+            "exposure": "hidden"
+          }
+        }
+      },
+      {
+        "exposure": "codemode-deferred",
+        "result": {
+          "config": {
+            "command": "node",
+            "exposure": "codemode"
+          }
+        }
+      },
+      {
+        "exposure": "nope",
+        "result": {
+          "error": "server \"demo\": exposure must be one of \"codemode\", \"deferred\", \"direct\", \"hidden\""
+        }
+      }
+    ],
+    "aliases": [
+      "codemode-deferred -> codemode"
+    ],
+    "toolExposure": {
+      "exactWins": "direct",
+      "patternMatch": "hidden",
+      "firstPatternWins": "direct",
+      "fallbackToServer": "deferred"
+    }
+  },
+  "serverEntryExamples": [
+    {
+      "label": "stdio",
+      "result": {
+        "config": {
+          "command": "node",
+          "args": [
+            "server.mjs"
+          ],
+          "env": {
+            "TOKEN": "${TOKEN}"
+          }
+        }
+      }
+    },
+    {
+      "label": "http",
+      "result": {
+        "config": {
+          "url": "https://example.com/mcp",
+          "headers": {
+            "Authorization": "Bearer dummy-docs-token"
+          }
+        }
+      }
+    },
+    {
+      "label": "http+oauth",
+      "result": {
+        "config": {
+          "url": "https://example.com/mcp",
+          "oauth": {
+            "clientId": "dummy-client-id",
+            "callbackUrl": "http://127.0.0.1:7777/callback"
+          }
+        }
+      }
+    },
+    {
+      "label": "http+auth",
+      "result": {
+        "config": {
+          "url": "https://example.com/mcp",
+          "auth": {
+            "provider": "demo"
+          }
+        }
+      }
+    },
+    {
+      "label": "legacy-sse",
+      "result": {
+        "error": "server \"demo\": legacy SSE transport is not supported; use the streamable HTTP URL"
+      }
+    },
+    {
+      "label": "invalid-name",
+      "result": "invalid server name \"bad name\" (use letters, digits, \"_\" and \"-\")"
+    }
+  ],
+  "loopbackRedirectUri": {
+    "accepted": true,
+    "rejected": false
+  },
+  "loadedConfigs": {
+    "trustedProject": {
+      "servers": [
+        {
+          "name": "filesystem",
+          "config": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@modelcontextprotocol/server-filesystem",
+              "."
+            ],
+            "enabled": false
+          },
+          "scope": "global",
+          "source": "<config>",
+          "override": "<override>"
+        },
+        {
+          "name": "docs",
+          "config": {
+            "url": "https://example.com/mcp",
+            "headers": {
+              "Authorization": "Bearer ${DOCS_TOKEN}"
+            }
+          },
+          "scope": "global",
+          "source": "<config>",
+          "override": null
+        },
+        {
+          "name": "sentry",
+          "config": {
+            "url": "https://mcp.example.dev/mcp",
+            "exposure": "deferred"
+          },
+          "scope": "global",
+          "source": "<config>",
+          "override": null
+        },
+        {
+          "name": "local",
+          "config": {
+            "command": "node",
+            "args": [
+              "server.mjs"
+            ],
+            "exposure": "hidden"
+          },
+          "scope": "project",
+          "source": "<config>",
+          "override": null
+        }
+      ],
+      "autoEnableCodemode": true,
+      "errors": [],
+      "projectConfig": "<projectConfig>"
+    },
+    "untrustedProject": {
+      "servers": [
+        {
+          "name": "filesystem",
+          "config": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@modelcontextprotocol/server-filesystem",
+              "."
+            ]
+          },
+          "scope": "global",
+          "source": "<config>",
+          "override": null
+        },
+        {
+          "name": "docs",
+          "config": {
+            "url": "https://example.com/mcp",
+            "headers": {
+              "Authorization": "Bearer ${DOCS_TOKEN}"
+            }
+          },
+          "scope": "global",
+          "source": "<config>",
+          "override": null
+        },
+        {
+          "name": "sentry",
+          "config": {
+            "url": "https://mcp.example.dev/mcp",
+            "exposure": "deferred"
+          },
+          "scope": "global",
+          "source": "<config>",
+          "override": null
+        }
+      ],
+      "autoEnableCodemode": true,
+      "errors": [],
+      "projectConfig": null
+    }
+  },
+  "declarations": {
+    "codemodeMode": "export type CodemodeMode = \"on\" | \"only\";",
+    "codemodeSettings": "export interface CodemodeSettings {\n\t/** Default: `on`. */\n\tmode?: CodemodeMode;\n\t/** Estimated tokens (characters / 4) the codemode description may spend on tool declarations. Default: 3000. */\n\tinlineBudget?: number;\n}",
+    "defaultToolNames": "export const DEFAULT_TOOL_NAMES: readonly string[] = [\"read\", \"bash\", \"edit\", \"write\"];",
+    "mcpExposure": "export type McpExposure = \"codemode\" | \"deferred\" | \"direct\" | \"hidden\";",
+    "mcpExposures": "const MCP_EXPOSURES: readonly string[] = [\"codemode\", \"deferred\", \"direct\", \"hidden\"] satisfies McpExposure[];",
+    "mcpExposureAliases": "const MCP_EXPOSURE_ALIASES: Readonly<Record<string, McpExposure>> = { \"codemode-deferred\": \"codemode\" };",
+    "serverConfigBase": "interface McpServerConfigBase {\n\t/** Default: `codemode`. */\n\texposure?: McpExposure;\n\t/**\n\t * What the server offers, in a sentence. The `mcp_servers` system prompt section lists the server\n\t * with it, tool search ranks the server's tools by it, and codemode's `describeNamespace()` returns it.\n\t */\n\tdescription?: string;\n\t/**\n\t * Exposure of single tools, overriding `exposure`. Keys are tool names as the server offers them,\n\t * or patterns where `*` matches any characters. An exact name wins over patterns; among patterns\n\t * the first match in the object wins. `hidden` removes tools, so `\"exposure\": \"hidden\"` with\n\t * overrides for a few tools exposes only those.\n\t */\n\ttoolExposure?: Record<string, McpExposure>;\n\t/** Set to false to keep the entry without connecting. Default: true. */\n\tenabled?: boolean;\n\t/** Per-request timeout in seconds. Progress notifications from the server reset it. Default: 60. */\n\ttimeout?: number;\n}",
+    "stdioServerConfig": "export interface McpStdioServerConfig extends McpServerConfigBase {\n\ttype?: \"stdio\";\n\tcommand: string;\n\targs?: string[];\n\t/** Values may reference environment variables (`${NAME}`) or commands (`!cmd`). */\n\tenv?: Record<string, string>;\n\t/** Relative paths resolve against the session working directory. */\n\tcwd?: string;\n}",
+    "oauthConfig": "export interface McpOAuthConfig {\n\t/** Pre-registered client id. Without it, pi registers a client with the authorization server. */\n\tclientId?: string;\n\t/** May reference environment variables (`${NAME}`) or commands (`!cmd`). */\n\tclientSecret?: string;\n\t/**\n\t * Port of the loopback callback server, for clients registered with a fixed redirect URI. Without\n\t * `callbackUrl`, the redirect URI is `http://127.0.0.1:<port>/callback`.\n\t */\n\tcallbackPort?: number;\n\t/**\n\t * Redirect URI registered for `clientId`, for example `http://localhost:8080/oauth/callback`. It must\n\t * be an `http` URI on `localhost`, `127.0.0.1`, or `[::1]`. Without a port, the callback server\n\t * listens on `callbackPort` or a free port, which is added to the URI (RFC 8252).\n\t */\n\tcallbackUrl?: string;\n\t/** Scopes to request, separated by spaces. Default: the scopes the server advertises. */\n\tscope?: string;\n\t/**\n\t * `client_name` sent with dynamic client registration, for servers that only accept known clients.\n\t * Default: `pi`.\n\t */\n\tclientName?: string;\n\t/**\n\t * How pi identifies itself without `clientId`. `dcr` (default): dynamic client registration. `cimd`:\n\t * pi's Client ID Metadata Document on pi.dev, for authorization servers that allow pi by that URL. The\n\t * server must support it for public clients, and the callback must use the default path `/callback`.\n\t */\n\tclientRegistration?: \"dcr\" | \"cimd\";\n\t/**\n\t * Authorization server metadata document (RFC 8414 or OpenID Connect discovery) to use instead of\n\t * discovery through the server, for servers that advertise a wrong authorization server or none.\n\t * The document is trusted as configured. Must use https, except on loopback hosts.\n\t */\n\tauthServerMetadataUrl?: string;\n}",
+    "httpServerConfig": "export interface McpHttpServerConfig extends McpServerConfigBase {\n\ttype?: \"http\";\n\turl: string;\n\t/** Values may reference environment variables (`${NAME}`) or commands (`!cmd`). */\n\theaders?: Record<string, string>;\n\toauth?: McpOAuthConfig;\n\t/**\n\t * Send the token of a pi provider (`/login <provider>`) instead of using OAuth. Not allowed in project\n\t * `mcp.json` files, and requires https except on loopback hosts, since it sends the credential to `url`.\n\t */\n\tauth?: { provider: string };\n}",
+    "serverConfigPatch": "export interface McpServerConfigPatch {\n\tenabled?: boolean;\n\texposure?: McpExposure;\n}",
+    "overrideKeys": "const OVERRIDE_KEYS = [\"enabled\", \"exposure\", \"toolExposure\"];"
+  }
+}

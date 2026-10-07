@@ -1,0 +1,90 @@
+{
+  "schema": "cpp-coding-harness/pi-mcp-protocol-surface/1",
+  "sources": [
+    "packages/mcp/src/protocol/types.ts",
+    "packages/mcp/src/oauth/discovery.ts",
+    "packages/mcp/src/oauth/types.ts",
+    "packages/coding-agent/src/extensions/mcp/oauth.ts",
+    "packages/coding-agent/src/extensions/mcp/runtime.ts"
+  ],
+  "protocol": {
+    "latest": "2025-11-25",
+    "supported": [
+      "2025-11-25",
+      "2025-06-18",
+      "2025-03-26",
+      "2024-11-05"
+    ]
+  },
+  "notifications": {
+    "initialized": "notifications/initialized",
+    "cancelled": {
+      "method": "notifications/cancelled"
+    },
+    "progress": "notifications/progress"
+  },
+  "discovery": {
+    "protectedResourceWellKnown": "/.well-known/oauth-protected-resource",
+    "authorizationServerWellKnown": [
+      "https://auth.example.com/.well-known/oauth-authorization-server/tenant1",
+      "https://auth.example.com/.well-known/openid-configuration/tenant1",
+      "https://auth.example.com/tenant1/.well-known/openid-configuration"
+    ],
+    "wwwAuthenticateExample": {
+      "resourceMetadataUrl": "https://example.com/.well-known/oauth-protected-resource/mcp",
+      "scope": "files:read"
+    },
+    "protectedResourceMetadata": {
+      "resource": "https://example.com/mcp",
+      "authorization_servers": [
+        "https://auth.example.com"
+      ],
+      "scopes_supported": [
+        "files:read"
+      ]
+    },
+    "authorizationServerMetadata": {
+      "issuer": "https://auth.example.com",
+      "authorization_endpoint": "https://auth.example.com/authorize",
+      "token_endpoint": "https://auth.example.com/token",
+      "registration_endpoint": "https://auth.example.com/register",
+      "response_types_supported": [
+        "code"
+      ],
+      "code_challenge_methods_supported": [
+        "S256"
+      ]
+    }
+  },
+  "credentialStore": {
+    "file": "mcp-auth.json",
+    "keyFormat": "mcp__<server>|<serverUrl>",
+    "sampleFile": {
+      "mcp__filesystem|https://example.com/mcp": {
+        "serverUrl": "https://example.com/mcp",
+        "tokens": {
+          "access_token": "dummy-access-token",
+          "token_type": "Bearer",
+          "refresh_token": "dummy-refresh-token"
+        },
+        "tokensExpireAt": 0
+      }
+    },
+    "sourceType": "packages/mcp/src/oauth/provider.ts"
+  },
+  "lifecycleStates": {
+    "client": [
+      "idle",
+      "connecting",
+      "connected",
+      "closed"
+    ],
+    "server": "type ServerState = \"connecting\" | \"connected\" | \"disconnected\" | \"needs-auth\" | \"failed\" | \"closed\";"
+  },
+  "declarations": {
+    "cancelledNotification": "export interface CancelledNotification {\n\trequestId: JsonRpcId;\n\treason?: string;\n}",
+    "protectedResourceMetadata": "export interface OAuthProtectedResourceMetadata {\n\tresource: string;\n\tauthorization_servers?: string[];\n\tscopes_supported?: string[];\n\t[key: string]: unknown;\n}",
+    "authorizationServerMetadata": "export interface AuthorizationServerMetadata {\n\tissuer: string;\n\tauthorization_endpoint: string;\n\ttoken_endpoint: string;\n\tregistration_endpoint?: string;\n\tscopes_supported?: string[];\n\tresponse_types_supported: string[];\n\tgrant_types_supported?: string[];\n\ttoken_endpoint_auth_methods_supported?: string[];\n\tcode_challenge_methods_supported?: string[];\n\tclient_id_metadata_document_supported?: boolean;\n\t/** Whether authorization responses carry an `iss` parameter (RFC 9207). */\n\tauthorization_response_iss_parameter_supported?: boolean;\n\t[key: string]: unknown;\n}",
+    "oauthState": "export interface McpOAuthState {\n\tserverUrl: string;\n\tclientInformation?: OAuthClientInformationMixed;\n\ttokens?: OAuthTokens;\n\t/** When the access token expires, in milliseconds since the epoch, from `expires_in` at the time it was saved. */\n\ttokensExpireAt?: number;\n\tcodeVerifier?: string;\n\toauthState?: string;\n\tdiscovery?: OAuthDiscoveryState;\n}"
+  }
+}

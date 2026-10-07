@@ -1,0 +1,33 @@
+{
+  "schema": "cpp-coding-harness/pi-mcp-codemode-provenance/1",
+  "baseline": "pi-v1.0.4",
+  "source": {
+    "repository": "https://github.com/earendil-works/pi",
+    "checkout": "external pi checkout supplied to the capture script",
+    "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+    "generator": "fixtures/pi-ai/capture/capture-mcp-codemode.mts",
+    "captured_at": "2026-10-07T00:36:41Z"
+  },
+  "artifacts": {
+    "mcp-codemode/codemode-source-grammar.lark": {
+      "sha256": "c9c974d537396a68413b8e340792600fdb328282c13451dcadb64a472357e8ca",
+      "bytes": 184
+    },
+    "mcp-codemode/codemode-tool.json": {
+      "sha256": "f0ba98b03bcc67a85d01a8e1493e9133110b30bcd842ab5bf0cc3f7218e9319c",
+      "bytes": 3173
+    },
+    "mcp-codemode/mcp-config-surface.json": {
+      "sha256": "7c7fa44335d2ad55eed918eacd89abaab98b8ecd54fca98652243f4cce88a714",
+      "bytes": 10633
+    },
+    "mcp-codemode/mcp-protocol-surface.json": {
+      "sha256": "4ca7cf90ccc84776dd90e2ca7da06cee57586acfc4572d20c8bf79706653d1e9",
+      "bytes": 3922
+    },
+    "mcp-codemode/mcp-tool-surface.json": {
+      "sha256": "b85a4321cf77ccf957abf96b7af469b5e724280b53e77799b9ba45af46346a59",
+      "bytes": 5132
+    }
+  }
+}

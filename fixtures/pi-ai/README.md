@@ -20,7 +20,53 @@ The historical bundle below occupies the fixture root itself (`bundle_path: ""`)
 place, and stays verifiable. Later baselines get their own bundle subdirectory, so recording one
 never rewrites another — generators refuse to write into a bundle owned by a different baseline.
 
-Registered baselines: `pi-v0.87.1` (default), `pi-v1.0.0`, and `pi-v1.0.4` (registered, bundle not yet captured).
+Registered baselines: `pi-v0.87.1` (default), `pi-v1.0.0`, and `pi-v1.0.4`. The
+`pi-v1.0.4` baseline carries the captured MCP/codemode bundle described
+[below](#pi-v104-mcp-and-codemode-evidence-bundle-spec-882); `pi-v1.0.0` remains registered with no
+captured bundle.
+
+## pi-v1.0.4 MCP and codemode evidence bundle (spec #882)
+
+[Spec #882](../../docs/adr/0066-pi-capability-scope-decisions-and-open-questions.md) rules MCP and
+codemode into full alignment with pi `7c10bd4337495ee613f2224843ecdf349b80d1df` (`v1.0.4`), and
+requires each capability to close against a frozen differential baseline rather than a
+self-captured golden. The baseline is the bundle the `pi-v1.0.4` registry entry owns, captured by
+`capture/capture-mcp-codemode.mts` into `v1.0.4/mcp-codemode/`:
+
+| Artifact | Comparison surface |
+| --- | --- |
+| `mcp-tool-surface.json` | `mcp__<server>__<tool>` naming/sanitization/length and collision suffix; tool definition label, description fallback, parameter normalization, annotations, result schema; exposure-to-`ToolExposure` mapping; resource tool names |
+| `mcp-config-surface.json` | `mcp.json` global/project shape and override semantics, `autoEnableCodemode`, exposure policy values/aliases/tool patterns, `settings.json` codemode keys and defaults; the `McpExposure`, `McpServerConfigBase`, stdio/OAuth/http server and patch declarations, sliced verbatim |
+| `codemode-tool.json` | the inline `codemode` tool definition (name, verbatim description, input schema, prompt snippet/guidelines, exposure, grammar attachment), output channel shapes, and the output/store limits |
+| `codemode-source-grammar.lark` | the verbatim `CODEMODE_SOURCE_GRAMMAR` attached as the `openai_lark` grammar variant |
+| `mcp-protocol-surface.json` | protocol versions; `notifications/initialized`, `notifications/cancelled`, `notifications/progress`; RFC 9728/RFC 8414 discovery URLs and metadata fields; the `mcp-auth.json` credential key and state shape; server lifecycle states |
+
+Values are read by importing the frozen pi modules under the selected baseline, so the evidence is
+the running surface. Declaration text that exists only as a TypeScript type is sliced verbatim from
+the pinned source with a fail-loud anchor; the capture fails if the anchor moved. Capture selects
+its baseline by name (`PI_BASELINE`), refuses a checkout whose `HEAD` is not the baseline revision,
+and refuses to write into a bundle another baseline owns:
+
+```bash
+PI_CHECKOUT=<pi checkout> PI_BASELINE=pi-v1.0.4 \
+  ../pi/node_modules/.bin/tsx fixtures/pi-ai/capture/capture-mcp-codemode.mts
+```
+
+The script re-execs itself under the checkout's tsx so the workspace `paths` resolve; a plain
+`tsx fixtures/pi-ai/capture/capture-mcp-codemode.mts` invocation is enough once `PI_CHECKOUT` names
+the checkout. The recorded provenance is committed next to the artifacts and the registry records
+the selected baseline's `captured_at` and per-artifact `digests`:
+
+```bash
+python3 scripts/ai/record_mcp_codemode_provenance.py --baseline pi-v1.0.4 --pi-root "$PI_CHECKOUT"
+python3 scripts/ai/check_mcp_codemode_provenance.py --baseline pi-v1.0.4
+```
+
+**Sanitization.** Every credential-like value in the bundle is a distinguishable `dummy-*` token
+(`dummy-access-token`, `dummy-refresh-token`, `dummy-client-id`); header and env values are
+unexpanded `${NAME}` references, never resolved secrets. The credential-store sample is written by
+`McpOAuthCredentialStore` against an in-memory backend, so no live `<agent-dir>/mcp-auth.json` — nor
+any other live `~/.pi` file — enters the fixtures.
 
 ## Issue #784 T1 provenance snapshot (pi v0.87.1)
 
