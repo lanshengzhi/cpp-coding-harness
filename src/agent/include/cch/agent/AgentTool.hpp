@@ -32,7 +32,7 @@ struct ToolInvocation {
 
 struct AsyncToolExecutionResult {
     std::vector<ai::Content> content;
-    std::optional<support::JsonValue> details;
+    std::optional<support::JsonValue> details{std::nullopt};
     bool is_error{false};
     bool terminate{false};
 };
