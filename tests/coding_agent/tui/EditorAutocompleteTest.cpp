@@ -1,4 +1,5 @@
 #include "coding_agent/tui/EditorAutocomplete.hpp"
+#include "coding_agent/tui/McpManagerView.hpp"
 
 #include <cch/tui/Autocomplete.hpp>
 #include <cch/support/Error.hpp>
@@ -8,10 +9,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
+#include <utility>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -51,6 +55,53 @@ public:
 };
 
 } // namespace
+
+TEST_CASE("Native TUI /mcp autocomplete offers actions and eligible server names",
+        "[coding_agent][tui][autocomplete][issue884][spec]") {
+    auto snapshot = std::make_shared<cch::coding_agent::tui::McpCompletionSnapshot>();
+
+    cch::coding_agent::tui::McpServerView remote;
+    remote.entry.name = "remote";
+    remote.entry.config = cch::coding_agent::mcp::McpHttpServerConfig{};
+    cch::coding_agent::tui::McpConnectionView remote_connection;
+    remote_connection.state = cch::coding_agent::tui::McpServerViewState::Connected;
+    remote_connection.oauth = true;
+    remote.connection = std::move(remote_connection);
+    snapshot->servers.push_back(std::move(remote));
+
+    cch::coding_agent::tui::McpServerView local;
+    local.entry.name = "local";
+    local.entry.config = cch::coding_agent::mcp::McpStdioServerConfig{};
+    cch::coding_agent::tui::McpConnectionView local_connection;
+    local_connection.state = cch::coding_agent::tui::McpServerViewState::Disconnected;
+    local.connection = std::move(local_connection);
+    snapshot->servers.push_back(std::move(local));
+
+    auto commands = cch::coding_agent::tui::command_autocomplete_commands({}, {}, nullptr, snapshot, false);
+    cch::tui::SlashCommand* mcp_command = nullptr;
+    for (auto& item : commands) {
+        if (auto* command = std::get_if<cch::tui::SlashCommand>(&item); command != nullptr && command->name == "mcp") {
+            mcp_command = command;
+            break;
+        }
+    }
+    REQUIRE(mcp_command != nullptr);
+    REQUIRE(mcp_command->get_argument_completions);
+
+    const auto actions = mcp_command->get_argument_completions(" ");
+    REQUIRE(actions);
+    REQUIRE(actions->size() == 3);
+    CHECK((*actions)[0].value == "login ");
+    CHECK((*actions)[1].value == "logout ");
+    CHECK((*actions)[2].value == "reconnect ");
+
+    const auto login_servers = mcp_command->get_argument_completions("login ");
+    REQUIRE(login_servers);
+    REQUIRE(login_servers->size() == 1);
+    CHECK((*login_servers)[0].value == "login remote");
+    CHECK((*login_servers)[0].label == "remote");
+    CHECK((*login_servers)[0].description == "connected · 0 tools");
+}
 
 TEST_CASE("Executor-composed autocomplete delivery lands provider results on the serialized executor",
         "[coding_agent][tui][autocomplete][issue609][spec]") {
