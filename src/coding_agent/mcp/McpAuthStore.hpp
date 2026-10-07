@@ -16,6 +16,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace cch::coding_agent::mcp {
 
@@ -31,10 +32,15 @@ struct McpOAuthTokens {
 };
 
 /// pi `OAuthClientInformationMixed`, narrowed to the public-client fields:
-/// the dynamically registered (or configured) client id and optional secret.
+/// the dynamically registered (or configured) client id, optional secret, and
+/// the redirect URIs the registration lists. The URIs are recorded because a
+/// later sign-in reuses the registered port and a request-time refresh sends
+/// the registered redirect URI, so the client stays valid (pi
+/// `registeredRedirectUrls`).
 struct McpOAuthClientInformation {
     std::string client_id;
-    std::optional<std::string> client_secret;
+    std::optional<std::string> client_secret{std::nullopt};
+    std::vector<std::string> redirect_uris{};
 };
 
 /// pi `McpOAuthState`: one server's OAuth state. `discovery` (the resolved

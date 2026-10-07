@@ -4,20 +4,24 @@
 // connection probe is a scripted seam so `list`/`login` are deterministic.
 
 #include "coding_agent/cli/McpCommand.hpp"
-#include "support/Json.hpp"
 #include "support/CliRunFixture.hpp"
+#include "support/Json.hpp"
+#include "support/ReadyResult.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cch/support/AsyncResult.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <istream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -60,6 +64,27 @@ private:
     cli::McpProbeResult result_;
 };
 
+/// A scripted `McpServerProbe` returning one preset outcome per call.
+class SequenceProbe final : public cli::McpServerProbe {
+public:
+    explicit SequenceProbe(std::vector<cli::McpProbeResult> results) : results_(std::move(results)) {}
+
+    [[nodiscard]] boost::asio::awaitable<cli::McpProbeResult> probe(
+            const coding_agent::mcp::McpConfigEntry&, const std::filesystem::path&) override {
+        if (index_ < results_.size()) {
+            co_return results_[index_++];
+        }
+        co_return cli::McpProbeResult{};
+    }
+
+private:
+    std::vector<cli::McpProbeResult> results_;
+    std::size_t index_{0};
+};
+
+/// A completed, successful `AsyncResult<void>` for the sign-in seam.
+[[nodiscard]] support::AsyncResult<void> ready_void() { return support::AsyncResult<void>(support::ExpectedVoid{}); }
+
 struct DirectRun {
     int exit_code{0};
     std::string stdout_text;
@@ -69,7 +94,8 @@ struct DirectRun {
 [[nodiscard]] DirectRun run_direct(const std::filesystem::path& agent_dir,
         const std::filesystem::path& cwd,
         std::vector<std::string> args,
-        std::shared_ptr<cli::McpServerProbe> probe = nullptr) {
+        std::shared_ptr<cli::McpServerProbe> probe = nullptr,
+        cli::McpSignInHook sign_in = nullptr) {
     std::istringstream input;
     std::ostringstream output;
     std::ostringstream error;
@@ -80,6 +106,7 @@ struct DirectRun {
     options.error = &error;
     options.input = &input;
     options.probe = std::move(probe);
+    options.sign_in = std::move(sign_in);
     const int exit_code = cli::run_mcp_command(args, std::move(options));
     return DirectRun{exit_code, output.str(), error.str()};
 }
@@ -336,18 +363,66 @@ TEST_CASE("mcp login reports an already signed-in server", "[cli][mcp][issue884]
     CHECK(run.stdout_text == "Already signed in to MCP server \"notion\" (2 tools).\n");
 }
 
-TEST_CASE("mcp login reports an unresolved OAuth server", "[cli][mcp][issue884]") {
+TEST_CASE("mcp login drives the OAuth flow and reports the reconnect", "[cli][mcp][issue884]") {
     tests::TempWorkspace agent;
     tests::TempWorkspace cwd;
     agent.write("mcp.json", R"({"mcpServers":{"notion":{"url":"https://example.com/mcp","oauth":{}}}})");
 
     cli::McpProbeResult needs_auth;
     needs_auth.state = cli::McpProbeResult::State::NeedsAuth;
+    cli::McpProbeResult connected;
+    connected.state = cli::McpProbeResult::State::Connected;
+    connected.tools = {"search", "fetch"};
+    std::optional<std::chrono::milliseconds> observed_timeout;
+    cli::McpSignInHook sign_in = [&observed_timeout](const coding_agent::mcp::McpHttpServerConfig& http,
+                                         std::chrono::milliseconds timeout) {
+        CHECK(http.url == "https://example.com/mcp");
+        observed_timeout = timeout;
+        return ready_void();
+    };
+    const auto run = run_direct(agent.path(),
+            cwd.path(),
+            {"login", "notion", "--timeout", "15"},
+            std::make_shared<SequenceProbe>(std::vector<cli::McpProbeResult>{needs_auth, connected}),
+            std::move(sign_in));
+
+    REQUIRE(run.exit_code == 0);
+    CHECK(run.stdout_text == "Signed in to MCP server \"notion\" (2 tools).\n");
+    REQUIRE(observed_timeout.has_value());
+    CHECK(*observed_timeout == std::chrono::milliseconds{15000});
+}
+
+TEST_CASE("mcp login reports a failed sign-in", "[cli][mcp][issue884]") {
+    tests::TempWorkspace agent;
+    tests::TempWorkspace cwd;
+    agent.write("mcp.json", R"({"mcpServers":{"notion":{"url":"https://example.com/mcp","oauth":{}}}})");
+
+    cli::McpProbeResult needs_auth;
+    needs_auth.state = cli::McpProbeResult::State::NeedsAuth;
+    cli::McpSignInHook sign_in = [](const coding_agent::mcp::McpHttpServerConfig&, std::chrono::milliseconds) {
+        return tests::failed_result<void>(support::make_error(support::ErrorCode::OAuth, "sign-in cancelled"));
+    };
+    const auto run = run_direct(agent.path(),
+            cwd.path(),
+            {"login", "notion"},
+            std::make_shared<SequenceProbe>(std::vector<cli::McpProbeResult>{needs_auth}),
+            std::move(sign_in));
+
+    REQUIRE(run.exit_code == 1);
+    CHECK(run.stderr_text == "Sign-in to MCP server \"notion\" failed.\n");
+}
+
+TEST_CASE("mcp login reports an OAuth server with no oauth configuration", "[cli][mcp][issue884]") {
+    tests::TempWorkspace agent;
+    tests::TempWorkspace cwd;
+    agent.write("mcp.json", R"({"mcpServers":{"notion":{"url":"https://example.com/mcp"}}})");
+
+    cli::McpProbeResult needs_auth;
+    needs_auth.state = cli::McpProbeResult::State::NeedsAuth;
     const auto run =
             run_direct(agent.path(), cwd.path(), {"login", "notion"}, std::make_shared<ScriptedProbe>(needs_auth));
     REQUIRE(run.exit_code == 1);
-    CHECK(run.stderr_text == "MCP server \"notion\" requires OAuth sign-in, but its authorization-server endpoints "
-                             "are not resolved yet.\n");
+    CHECK(run.stderr_text == "MCP server \"notion\" requires OAuth sign-in, but it has no oauth configuration.\n");
 }
 
 TEST_CASE("mcp login rejects a non-positive timeout", "[cli][mcp][issue884]") {

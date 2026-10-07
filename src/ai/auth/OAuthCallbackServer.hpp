@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace cch::ai::auth {
 
@@ -21,6 +22,8 @@ using OAuthCallbackHook = std::move_only_function<boost::asio::awaitable<support
 struct OAuthCallbackResult {
     std::optional<std::string> value{std::nullopt};
     std::optional<std::string> client_id{std::nullopt};
+    /// The RFC 9207 `iss` the authorization response carried, when any.
+    std::optional<std::string> iss{std::nullopt};
 };
 
 struct OAuthCallbackServerOptions {
@@ -32,6 +35,10 @@ struct OAuthCallbackServerOptions {
     /// Exact callback route. The Codex-compatible default is
     /// `/auth/callback`; OpenRouter supplies a random route.
     std::string path{"/auth/callback"};
+    /// Additional accepted callback routes, for a client whose redirect URI is
+    /// specific to the server (a Client ID Metadata Document without RFC 9207
+    /// `iss` uses `/callback/<callback id>`).
+    std::vector<std::string> extra_paths{};
     /// Expected OAuth state for the Codex-compatible callback route.
     std::string state{};
     /// OpenRouter binds the exchange to PKCE and does not use OAuth state.

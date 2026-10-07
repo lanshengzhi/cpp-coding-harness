@@ -87,6 +87,12 @@ struct McpOAuthClientMetadata {
         std::string_view redirect_url,
         const std::optional<McpAuthorizationServerMetadata>& metadata);
 
+/// pi `callbackId`: the 12-character token that identifies `server_url` in the
+/// server-specific Client ID Metadata Document's redirect path
+/// (`/callback/<id>`). The sign-in listens on that path so a browser callback
+/// for a server-specific document arrives.
+[[nodiscard]] support::Expected<std::string> mcp_callback_id(std::string_view server_url);
+
 /// pi `registerClient`: POST the client metadata — plus the derived
 /// `application_type` and the requested `scope` — to
 /// `registration_endpoint`, or `/register` on the authorization server when it
