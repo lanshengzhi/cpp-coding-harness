@@ -211,3 +211,46 @@ TEST_CASE("removing a server reports whether the file defined it", "[coding_agen
     CHECK_FALSE(servers.contains("srv"));
     CHECK(servers.contains("other"));
 }
+
+TEST_CASE("an mcp.json rewrite preserves key insertion order", "[coding_agent][mcp][issue884][spec]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "mcp.json";
+    // pi's `JSON.stringify(JSON.parse(text), null, indent)` keeps the file's
+    // member order, so a read-modify-write must not reorder anything. A
+    // `std::map`-backed rewrite would sort these to `alpha`/`zulu` and
+    // `autoEnableCodemode`/`mcpServers`.
+    workspace.write("mcp.json",
+            "{\n"
+            "  \"mcpServers\": {\n"
+            "    \"zulu\": {\"url\": \"https://z.example/mcp\", \"exposure\": \"direct\"},\n"
+            "    \"alpha\": {\"command\": \"node\", \"args\": [\"server.mjs\"]}\n"
+            "  },\n"
+            "  \"autoEnableCodemode\": true\n"
+            "}\n");
+
+    REQUIRE(coding_agent::mcp::update_mcp_server_config(
+            path, "alpha", patch_of(std::nullopt, coding_agent::mcp::McpExposure::Hidden))
+                    .has_value());
+    const std::string text = read_file(path);
+    CHECK(text.find("\"zulu\"") < text.find("\"alpha\""));
+    CHECK(text.find("\"mcpServers\"") < text.find("\"autoEnableCodemode\""));
+    // `alpha`'s own member order survives, and the patch's new key appends last.
+    CHECK(text.find("\"command\"") < text.find("\"args\""));
+    // `alpha`'s existing members keep their order and the patch's new key
+    // appends last within the same entry.
+    const std::string alpha_block = text.substr(text.find("\"alpha\""));
+    CHECK(alpha_block.find("\"command\"") < alpha_block.find("\"args\""));
+    CHECK(alpha_block.find("\"args\"") < alpha_block.find("\"exposure\""));
+}
+
+TEST_CASE("an mcp.json rewrite leaves no temporary file behind", "[coding_agent][mcp][issue884][spec]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "mcp.json";
+    workspace.write("mcp.json", R"({"mcpServers": {"srv": {"command": "node"}}})");
+
+    REQUIRE(coding_agent::mcp::update_mcp_server_config(path, "srv", patch_of(false, std::nullopt)).has_value());
+    // The write half replaces the file through a temp name + rename; the temp
+    // name must not survive (a reader that opened it would see a torn file).
+    CHECK(std::filesystem::exists(path));
+    CHECK_FALSE(std::filesystem::exists(path.string() + ".tmp"));
+}
