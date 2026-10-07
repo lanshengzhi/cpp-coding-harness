@@ -50,12 +50,10 @@ struct Executed {
             {"properties", support::JsonValue::object_t{{"x", support::JsonValue::object_t{{"type", "number"}}}}},
             {"additionalProperties", false},
     };
-    return tests::make_fake_tool(
-            std::move(definition),
+    return tests::make_fake_tool(std::move(definition),
             agent::ToolConcurrency::ParallelSafe,
-            [calls](agent::ToolInvocation invocation,
-                    std::stop_token,
-                    agent::ToolUpdateSink) -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+            [calls](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
                 calls->push_back(invocation.name);
                 co_return agent::AsyncToolExecutionResult{
                         .content = std::vector<ai::Content>{ai::text_content("echoed")},
@@ -88,8 +86,8 @@ struct Executed {
     ai::ToolCallContent call;
     call.id = "call_1";
     call.name = "codemode";
-    call.raw_arguments = support::write_json(support::JsonValue{support::JsonValue::object_t{{"code", script}}})
-                                 .value();
+    call.raw_arguments =
+            support::write_json(support::JsonValue{support::JsonValue::object_t{{"code", script}}}).value();
     assistant.content.emplace_back(std::move(call));
     assistant.stop_reason = ai::AssistantStopReason::ToolUse;
 
@@ -100,9 +98,8 @@ struct Executed {
     std::optional<support::Expected<agent::ToolCallBatchResult>> result;
     std::mutex mutex;
     boost::asio::thread_pool pool{2};
-    agent::AgentEventSink sink{[&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
-        return support::ExpectedVoid{};
-    }};
+    agent::AgentEventSink sink{
+            [&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid { return support::ExpectedVoid{}; }};
     boost::asio::co_spawn(
             pool,
             [&]() -> boost::asio::awaitable<void> {
@@ -125,8 +122,8 @@ struct Executed {
 
 TEST_CASE("a codemode script's tools.* call runs the session tool and records the nested call",
         "[coding_agent][codemode][issue885][spec]") {
-    auto executed = run_script_with_tools(
-            "const r = await tools.echo({ x: 1 }); text('got:' + r); return 'done';", {"echo"});
+    auto executed =
+            run_script_with_tools("const r = await tools.echo({ x: 1 }); text('got:' + r); return 'done';", {"echo"});
 
     REQUIRE(executed.result.has_value());
     REQUIRE(executed.result->results.size() == 1);
@@ -152,8 +149,8 @@ TEST_CASE("a codemode script's tools.* call runs the session tool and records th
     CHECK(calls.front().get_object().at("status").get_string() == "ok");
 }
 
-TEST_CASE("both the jsName and the raw-name binding reach the session tool",
-        "[coding_agent][codemode][issue885][spec]") {
+TEST_CASE(
+        "both the jsName and the raw-name binding reach the session tool", "[coding_agent][codemode][issue885][spec]") {
     // `list-issues` normalizes to the identifier `list_issues`.
     auto executed = run_script_with_tools("text(await tools.list_issues({ x: 1 })); "
                                           "text(await tools['list-issues']({ x: 2 })); "

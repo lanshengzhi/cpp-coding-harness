@@ -93,19 +93,17 @@ private:
     /// pi `runToolCall`: run one nested call (a tool a tool made through
     /// `ctx.executeTool`) through the tool pipeline without emitting the
     /// model-issued start/end events (the nested runner owns those).
-    [[nodiscard]] support::AsyncResult<AsyncToolExecutionResult> run_nested_tool(
-        ToolInvocation invocation,
-        ToolCallBatchRequest request,
-        AgentEventSink* sink,
-        std::string parent_id,
-        std::stop_token signal);
+    [[nodiscard]] support::AsyncResult<AsyncToolExecutionResult> run_nested_tool(ToolInvocation invocation,
+            ToolCallBatchRequest request,
+            AgentEventSink* sink,
+            std::string parent_id,
+            std::stop_token signal);
 
-    [[nodiscard]] boost::asio::awaitable<AsyncToolExecutionResult> execute_nested(
-        ToolInvocation invocation,
-        ToolCallBatchRequest request,
-        AgentEventSink* sink,
-        std::string parent_id,
-        std::stop_token signal);
+    [[nodiscard]] boost::asio::awaitable<AsyncToolExecutionResult> execute_nested(ToolInvocation invocation,
+            ToolCallBatchRequest request,
+            AgentEventSink* sink,
+            std::string parent_id,
+            std::stop_token signal);
 
     /// Whether every nested call must run exclusively (pi
     /// `agent.toolExecution === "sequential"`).

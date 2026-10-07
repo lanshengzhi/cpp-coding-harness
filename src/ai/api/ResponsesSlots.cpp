@@ -491,8 +491,7 @@ std::optional<GrammarConstrainedSampling> resolve_grammar_constrained_sampling(
     }
     const auto required = schema->find("required");
     if (required == schema->end() || !required->second.holds<support::JsonValue::array_t>() ||
-            required->second.get_array().size() != 1 ||
-            !required->second.get_array().front().holds<std::string>()) {
+            required->second.get_array().size() != 1 || !required->second.get_array().front().holds<std::string>()) {
         return std::nullopt;
     }
     const std::string property = required->second.get_array().front().get_string();
@@ -532,10 +531,8 @@ std::map<std::string, std::string, std::less<>> grammar_tool_input_properties(
     return properties;
 }
 
-std::optional<std::string> append_grammar_tool_input_json_delta(GrammarToolInputJsonBuffer& buffer,
-        std::string_view input_property,
-        std::string_view next_input,
-        bool close) {
+std::optional<std::string> append_grammar_tool_input_json_delta(
+        GrammarToolInputJsonBuffer& buffer, std::string_view input_property, std::string_view next_input, bool close) {
     if (buffer.closed) {
         if (close && next_input == buffer.input) return std::nullopt;
         return std::nullopt;
@@ -547,7 +544,7 @@ std::optional<std::string> append_grammar_tool_input_json_delta(GrammarToolInput
     std::string fragment;
     if (!buffer.started) {
         fragment += "{" + support::write_json(support::JsonValue{std::string{input_property}}).value_or("\"input\"") +
-                ":\"";
+                    ":\"";
         buffer.started = true;
     }
     auto encoded = support::write_json(support::JsonValue{std::string{delta}});

@@ -24,9 +24,7 @@ namespace cch::agent {
 namespace {
 
 /// pi `textOf(result)`: the text content blocks joined with a newline.
-[[nodiscard]] std::string text_of(const std::vector<ai::Content>& content) {
-    return ai::text_from_content(content);
-}
+[[nodiscard]] std::string text_of(const std::vector<ai::Content>& content) { return ai::text_from_content(content); }
 
 /// pi `NestedCallRecorder`: collects the nested calls of one model-issued tool
 /// call, including calls made by nested tools. The snapshot becomes
@@ -61,8 +59,8 @@ public:
         return calls_.size() - 1;
     }
 
-    void finish(std::optional<std::size_t> index, bool is_error, std::string_view error_text,
-            std::uint64_t duration_ms) {
+    void finish(
+            std::optional<std::size_t> index, bool is_error, std::string_view error_text, std::uint64_t duration_ms) {
         if (!index || *index >= calls_.size()) return;
         NestedToolCallRecord& record = calls_[*index];
         record.status = is_error ? "error" : "ok";
@@ -77,10 +75,10 @@ public:
         if (calls_.empty() && complete_) return std::nullopt;
         NestedToolCalls snapshot;
         snapshot.calls = calls_;
-        snapshot.complete = complete_ &&
-                std::all_of(snapshot.calls.begin(), snapshot.calls.end(), [](const NestedToolCallRecord& call) {
-                    return call.status != "unfinished";
-                });
+        snapshot.complete =
+                complete_ && std::all_of(snapshot.calls.begin(),
+                                     snapshot.calls.end(),
+                                     [](const NestedToolCallRecord& call) { return call.status != "unfinished"; });
         return snapshot;
     }
 
@@ -141,9 +139,8 @@ struct NestedToolCallRunner::Impl {
         if (awaited) {
             outcome = std::move(*awaited);
         } else {
-            outcome.content.emplace_back(ai::text_content(awaited.error().detail.empty()
-                            ? awaited.error().message
-                            : awaited.error().detail));
+            outcome.content.emplace_back(ai::text_content(
+                    awaited.error().detail.empty() ? awaited.error().message : awaited.error().detail));
             outcome.is_error = true;
         }
 
@@ -164,8 +161,7 @@ struct NestedToolCallRunner::Impl {
     }
 };
 
-NestedToolCallRunner::NestedToolCallRunner(NestedToolCallHost host)
-    : impl_(std::make_unique<Impl>(std::move(host))) {
+NestedToolCallRunner::NestedToolCallRunner(NestedToolCallHost host) : impl_(std::make_unique<Impl>(std::move(host))) {
     impl_->owner = this;
 }
 
@@ -176,11 +172,8 @@ NestedToolCallRunner::~NestedToolCallRunner() = default;
 support::AsyncResult<AsyncToolExecutionResult> NestedToolCallRunner::execute(
         std::string caller_id, std::string name, support::JsonValue arguments, std::stop_token signal) {
     return support::detail::make_async_result(
-            [this,
-                    caller_id = std::move(caller_id),
-                    name = std::move(name),
-                    arguments = std::move(arguments),
-                    signal]() -> boost::asio::awaitable<support::Expected<AsyncToolExecutionResult>> {
+            [this, caller_id = std::move(caller_id), name = std::move(name), arguments = std::move(arguments), signal]()
+                    -> boost::asio::awaitable<support::Expected<AsyncToolExecutionResult>> {
                 co_return co_await impl_->execute(std::move(caller_id), std::move(name), std::move(arguments), signal);
             });
 }
@@ -203,9 +196,7 @@ std::vector<ai::Tool> NestedToolCallRunner::tools() const {
     return impl_->host.get_tools ? impl_->host.get_tools() : std::vector<ai::Tool>{};
 }
 
-bool NestedToolCallRunner::is_sequential() const {
-    return impl_->host.is_sequential && impl_->host.is_sequential();
-}
+bool NestedToolCallRunner::is_sequential() const { return impl_->host.is_sequential && impl_->host.is_sequential(); }
 
 support::JsonValue nested_calls_to_json(const NestedToolCalls& calls) {
     support::JsonValue::array_t records;

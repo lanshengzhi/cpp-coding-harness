@@ -49,8 +49,8 @@ struct FakeHost {
 
 } // namespace
 
-TEST_CASE("nested calls get the {callerId}/{n} id and are recorded on the caller",
-        "[agent][codemode][issue885][spec]") {
+TEST_CASE(
+        "nested calls get the {callerId}/{n} id and are recorded on the caller", "[agent][codemode][issue885][spec]") {
     FakeHost host;
     auto runner = make_runner(host);
 
@@ -75,8 +75,7 @@ TEST_CASE("nested calls get the {callerId}/{n} id and are recorded on the caller
     CHECK_FALSE(runner.take_record("call_1").has_value());
 }
 
-TEST_CASE("the nested-call record drops calls beyond pi's 256-call limit",
-        "[agent][codemode][issue885][spec]") {
+TEST_CASE("the nested-call record drops calls beyond pi's 256-call limit", "[agent][codemode][issue885][spec]") {
     FakeHost host;
     auto runner = make_runner(host);
 
@@ -92,8 +91,7 @@ TEST_CASE("the nested-call record drops calls beyond pi's 256-call limit",
     CHECK_FALSE(summary->calls->complete);
 }
 
-TEST_CASE("arguments over pi's per-call cap are omitted but counted",
-        "[agent][codemode][issue885][spec]") {
+TEST_CASE("arguments over pi's per-call cap are omitted but counted", "[agent][codemode][issue885][spec]") {
     FakeHost host;
     auto runner = make_runner(host);
 
@@ -111,8 +109,7 @@ TEST_CASE("arguments over pi's per-call cap are omitted but counted",
     CHECK(*summary->calls->calls[0].arguments_bytes > 8 * 1024);
 }
 
-TEST_CASE("a nested failure records the error text truncated to pi's 500 chars",
-        "[agent][codemode][issue885][spec]") {
+TEST_CASE("a nested failure records the error text truncated to pi's 500 chars", "[agent][codemode][issue885][spec]") {
     FakeHost host;
     host.error = true;
     host.text = std::string(800, 'e');

@@ -427,17 +427,18 @@ boost::asio::awaitable<support::Expected<FinalizedToolCallResult>> ToolCallExecu
         host.get_tools = [this]() { return registry_.definitions(); };
         host.is_sequential = [this]() { return is_sequential_execution(); };
         host.run_tool_call = [this, request, sink_ptr = &sink](
-                                     ToolInvocation invocation,
-                                     std::string parent_id,
-                                     std::stop_token signal) {
+                                     ToolInvocation invocation, std::string parent_id, std::stop_token signal) {
             return run_nested_tool(std::move(invocation), request, sink_ptr, std::move(parent_id), signal);
         };
-        host.emit = [sink_ptr = &sink](const AgentLifecycleEvent& event) {
-            return emit_agent_event(*sink_ptr, event);
-        };
+        host.emit = [sink_ptr = &sink](const AgentLifecycleEvent& event) { return emit_agent_event(*sink_ptr, event); };
         auto nested_runner = std::make_unique<NestedToolCallRunner>(std::move(host));
-        settled = co_await execute_resolved_call(
-                options_, request, call, *resolved.tool, std::move(resolved.invocation), permits, sink,
+        settled = co_await execute_resolved_call(options_,
+                request,
+                call,
+                *resolved.tool,
+                std::move(resolved.invocation),
+                permits,
+                sink,
                 nested_runner.get());
         if (auto summary = nested_runner->take_record(call.id); summary && summary->calls) {
             settled.tool_result.nested_calls = nested_calls_to_json(*summary->calls);
@@ -695,8 +696,7 @@ bool ToolCallExecutor::is_sequential_execution() const {
     return false;
 }
 
-support::AsyncResult<AsyncToolExecutionResult> ToolCallExecutor::run_nested_tool(
-        ToolInvocation invocation,
+support::AsyncResult<AsyncToolExecutionResult> ToolCallExecutor::run_nested_tool(ToolInvocation invocation,
         ToolCallBatchRequest request,
         AgentEventSink* sink,
         std::string parent_id,
@@ -708,8 +708,7 @@ support::AsyncResult<AsyncToolExecutionResult> ToolCallExecutor::run_nested_tool
                     sink,
                     parent_id = std::move(parent_id),
                     signal]() mutable -> boost::asio::awaitable<support::Expected<AsyncToolExecutionResult>> {
-                co_return co_await execute_nested(
-                        std::move(invocation), request, sink, std::move(parent_id), signal);
+                co_return co_await execute_nested(std::move(invocation), request, sink, std::move(parent_id), signal);
             });
 }
 
@@ -793,8 +792,8 @@ boost::asio::awaitable<AsyncToolExecutionResult> ToolCallExecutor::execute_neste
                 .is_error = outcome.is_error,
                 .context = request.context,
         };
-        auto after_result = co_await invoke_agent_hook(
-                "afterToolCall", *options_.after_tool_call, std::move(hook_context), signal);
+        auto after_result =
+                co_await invoke_agent_hook("afterToolCall", *options_.after_tool_call, std::move(hook_context), signal);
         if (!after_result) {
             outcome = nested_error_result(bounded_failure_text(after_result.error()));
         } else {

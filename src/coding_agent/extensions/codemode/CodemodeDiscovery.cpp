@@ -25,9 +25,7 @@ constexpr std::string_view kIndent = "  ";
 constexpr std::size_t kMaxRefExpansions = 32;
 constexpr std::size_t kDefaultInputSchemaMaxChars = 16'000;
 
-[[nodiscard]] bool is_object(const JsonValue& value) {
-    return value.holds<JsonValue::object_t>();
-}
+[[nodiscard]] bool is_object(const JsonValue& value) { return value.holds<JsonValue::object_t>(); }
 
 [[nodiscard]] const JsonValue* member(const JsonValue& object, std::string_view key) {
     if (!is_object(object)) return nullptr;
@@ -46,9 +44,7 @@ constexpr std::size_t kDefaultInputSchemaMaxChars = 16'000;
     const auto is_start = [](char c) {
         return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' || c == '$';
     };
-    const auto is_part = [&](char c) {
-        return is_start(c) || (c >= '0' && c <= '9');
-    };
+    const auto is_part = [&](char c) { return is_start(c) || (c >= '0' && c <= '9'); };
     if (!is_start(name.front())) return false;
     return std::all_of(name.begin() + 1, name.end(), is_part);
 }
@@ -88,7 +84,8 @@ struct SchemaContext {
     std::size_t start = 0;
     while (start <= path.size() && !path.empty()) {
         const std::size_t slash = path.find('/', start);
-        std::string segment{path.substr(start, slash == std::string_view::npos ? std::string_view::npos : slash - start)};
+        std::string segment{
+                path.substr(start, slash == std::string_view::npos ? std::string_view::npos : slash - start)};
         std::string decoded;
         for (std::size_t i = 0; i < segment.size(); ++i) {
             if (segment[i] == '~' && i + 1 < segment.size()) {
@@ -128,7 +125,7 @@ struct SchemaContext {
             prefix != nullptr && prefix->holds<JsonValue::array_t>()) {
         tuple = prefix;
     } else if (const JsonValue* items = member(schema, "items");
-               items != nullptr && items->holds<JsonValue::array_t>()) {
+            items != nullptr && items->holds<JsonValue::array_t>()) {
         tuple = items;
     }
     if (tuple != nullptr && !tuple->get_array().empty()) {
@@ -159,8 +156,7 @@ struct SchemaContext {
     const JsonValue* properties_ptr = member(schema, "properties");
     if (properties_ptr != nullptr && !is_object(*properties_ptr)) properties_ptr = nullptr;
     static const JsonValue::object_t kEmptyProperties{};
-    const JsonValue::object_t& properties =
-            properties_ptr != nullptr ? properties_ptr->get_object() : kEmptyProperties;
+    const JsonValue::object_t& properties = properties_ptr != nullptr ? properties_ptr->get_object() : kEmptyProperties;
 
     std::set<std::string> required;
     if (const JsonValue* required_ptr = member(schema, "required");
@@ -172,7 +168,8 @@ struct SchemaContext {
 
     std::vector<std::string> names;
     names.reserve(properties.size());
-    for (const auto& [name, _] : properties) names.push_back(name);
+    for (const auto& [name, _] : properties)
+        names.push_back(name);
     std::sort(names.begin(), names.end());
 
     std::vector<std::string> members;
@@ -181,7 +178,7 @@ struct SchemaContext {
         const JsonValue* property = member(properties_ptr != nullptr ? *properties_ptr : schema, name);
         const std::string optional = required.contains(name) ? "" : "?";
         members.push_back(property_key(name) + optional + ": " +
-                (property != nullptr ? to_type(*property, context) : std::string{"unknown"}) + ";");
+                          (property != nullptr ? to_type(*property, context) : std::string{"unknown"}) + ";");
     }
     const JsonValue* additional = member(schema, "additionalProperties");
     if (additional != nullptr && !(additional->holds<bool>() && !additional->get_boolean())) {
@@ -193,10 +190,9 @@ struct SchemaContext {
     }
     if (members.empty()) return "{}";
 
-    const bool any_description =
-            std::any_of(names.begin(), names.end(), [&](const std::string& name) {
-                return !description_of(member(properties_ptr != nullptr ? *properties_ptr : schema, name)).empty();
-            });
+    const bool any_description = std::any_of(names.begin(), names.end(), [&](const std::string& name) {
+        return !description_of(member(properties_ptr != nullptr ? *properties_ptr : schema, name)).empty();
+    });
     if (!any_description) {
         std::string inline_object = "{ ";
         for (std::size_t i = 0; i < members.size(); ++i) {
@@ -214,11 +210,16 @@ struct SchemaContext {
         while (!remaining.empty()) {
             const std::size_t newline = remaining.find('\n');
             std::string line{remaining.substr(0, newline == std::string_view::npos ? remaining.size() : newline)};
-            if (newline != std::string_view::npos) remaining = remaining.substr(newline + 1);
-            else remaining = {};
+            if (newline != std::string_view::npos)
+                remaining = remaining.substr(newline + 1);
+            else
+                remaining = {};
             if (line.find_first_not_of(" \t\r") == std::string::npos) continue;
-            line.erase(line.begin(), std::find_if(line.begin(), line.end(), [](unsigned char c) { return std::isspace(c) == 0; }));
-            line.erase(std::find_if(line.rbegin(), line.rend(), [](unsigned char c) { return std::isspace(c) == 0; }).base(), line.end());
+            line.erase(line.begin(),
+                    std::find_if(line.begin(), line.end(), [](unsigned char c) { return std::isspace(c) == 0; }));
+            line.erase(std::find_if(line.rbegin(), line.rend(), [](unsigned char c) { return std::isspace(c) == 0; })
+                               .base(),
+                    line.end());
             lines += "\n" + std::string{kIndent} + "// " + line;
         }
         lines += "\n" + std::string{kIndent} + members[i];
@@ -250,7 +251,8 @@ struct SchemaContext {
     if (const JsonValue* enumeration = member(schema, "enum");
             enumeration != nullptr && enumeration->holds<JsonValue::array_t>()) {
         std::vector<std::string> types;
-        for (const auto& value : enumeration->get_array()) types.push_back(json_literal(value));
+        for (const auto& value : enumeration->get_array())
+            types.push_back(json_literal(value));
         return union_types(std::move(types));
     }
 
@@ -258,11 +260,11 @@ struct SchemaContext {
     if (variants == nullptr || !variants->holds<JsonValue::array_t>()) variants = member(schema, "oneOf");
     if (variants != nullptr && variants->holds<JsonValue::array_t>()) {
         std::vector<std::string> types;
-        for (const auto& variant : variants->get_array()) types.push_back(to_type(variant, context));
+        for (const auto& variant : variants->get_array())
+            types.push_back(to_type(variant, context));
         return union_types(std::move(types));
     }
-    if (const JsonValue* all_of = member(schema, "allOf");
-            all_of != nullptr && all_of->holds<JsonValue::array_t>()) {
+    if (const JsonValue* all_of = member(schema, "allOf"); all_of != nullptr && all_of->holds<JsonValue::array_t>()) {
         std::vector<std::string> parts;
         for (const auto& part : all_of->get_array()) {
             std::string rendered = to_type(part, context);
@@ -311,8 +313,27 @@ struct SchemaContext {
 // ── Bm25 ──
 
 const std::set<std::string>& stop_words() {
-    static const std::set<std::string> words{"a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
-            "in", "is", "it", "of", "on", "or", "that", "the", "this", "to", "with"};
+    static const std::set<std::string> words{"a",
+            "an",
+            "and",
+            "are",
+            "as",
+            "at",
+            "be",
+            "by",
+            "for",
+            "from",
+            "in",
+            "is",
+            "it",
+            "of",
+            "on",
+            "or",
+            "that",
+            "the",
+            "this",
+            "to",
+            "with"};
     return words;
 }
 
@@ -344,7 +365,8 @@ void schema_text(const JsonValue& schema, std::vector<std::string>& parts) {
     for (const char* key : {"anyOf", "oneOf", "allOf"}) {
         if (const JsonValue* variants = member(schema, key);
                 variants != nullptr && variants->holds<JsonValue::array_t>()) {
-            for (const auto& variant : variants->get_array()) schema_text(variant, parts);
+            for (const auto& variant : variants->get_array())
+                schema_text(variant, parts);
         }
     }
 }
@@ -368,10 +390,11 @@ void schema_text(const JsonValue& schema, std::vector<std::string>& parts) {
         const char current = text[i];
         if (i > 0) {
             const char previous = text[i - 1];
-            const bool lower_to_upper = ((previous >= 'a' && previous <= 'z') || (previous >= '0' && previous <= '9')) &&
-                    current >= 'A' && current <= 'Z';
+            const bool lower_to_upper =
+                    ((previous >= 'a' && previous <= 'z') || (previous >= '0' && previous <= '9')) && current >= 'A' &&
+                    current <= 'Z';
             const bool acronym_end = previous >= 'A' && previous <= 'Z' && current >= 'A' && current <= 'Z' &&
-                    i + 1 < text.size() && text[i + 1] >= 'a' && text[i + 1] <= 'z';
+                                     i + 1 < text.size() && text[i + 1] >= 'a' && text[i + 1] <= 'z';
             if (lower_to_upper || acronym_end) spaced += ' ';
         }
         spaced += current;
@@ -390,8 +413,10 @@ void schema_text(const JsonValue& schema, std::vector<std::string>& parts) {
     };
     for (char c : spaced) {
         const bool alnum = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
-        if (alnum) current += c;
-        else flush();
+        if (alnum)
+            current += c;
+        else
+            flush();
     }
     flush();
     return terms;
@@ -442,7 +467,8 @@ std::vector<std::string> bm25_rank(std::string_view query, const std::vector<ai:
         }
     }
     double average_length = 0;
-    for (const double length : lengths) average_length += length;
+    for (const double length : lengths)
+        average_length += length;
     average_length = count > 0 ? average_length / static_cast<double>(count) : 0;
     if (average_length == 0) average_length = 1;
 
@@ -480,7 +506,8 @@ std::vector<std::string> bm25_rank(std::string_view query, const std::vector<ai:
     if (matches.size() > limit) matches.resize(limit);
     std::vector<std::string> names;
     names.reserve(matches.size());
-    for (auto& match : matches) names.push_back(std::move(match.name));
+    for (auto& match : matches)
+        names.push_back(std::move(match.name));
     return names;
 }
 
@@ -493,16 +520,16 @@ std::string schema_to_type(const JsonValue& schema, std::size_t max_chars) {
 }
 
 std::string render_tool_sample(const ai::Tool& tool) {
-    const std::string input = tool.parameters.holds<JsonValue::object_t>() || tool.parameters.holds<JsonValue::array_t>()
-            ? schema_to_type(tool.parameters, kDefaultInputSchemaMaxChars)
-            : std::string{"unknown"};
+    const std::string input =
+            tool.parameters.holds<JsonValue::object_t>() || tool.parameters.holds<JsonValue::array_t>()
+                    ? schema_to_type(tool.parameters, kDefaultInputSchemaMaxChars)
+                    : std::string{"unknown"};
     std::string description = tool.description;
     const auto not_space = [](unsigned char c) { return std::isspace(c) == 0; };
     description.erase(description.begin(), std::find_if(description.begin(), description.end(), not_space));
     description.erase(std::find_if(description.rbegin(), description.rend(), not_space).base(), description.end());
-    const std::string declaration =
-            "declare const tools: { " + to_codemode_identifier(tool.name) + "(args: " + input +
-            "): Promise<unknown>; };";
+    const std::string declaration = "declare const tools: { " + to_codemode_identifier(tool.name) + "(args: " + input +
+                                    "): Promise<unknown>; };";
     return description + "\n\ncodemode tool declaration:\n```ts\n" + declaration + "\n```";
 }
 
@@ -518,7 +545,8 @@ bool is_namespace_name(std::string_view namespace_name, std::string_view query) 
 }
 
 CodemodeDiscovery::CodemodeDiscovery(std::vector<ai::Tool> tools) : tools_(std::move(tools)) {
-    for (const auto& tool : tools_) samples_.emplace(tool.name, render_tool_sample(tool));
+    for (const auto& tool : tools_)
+        samples_.emplace(tool.name, render_tool_sample(tool));
 }
 
 support::JsonValue CodemodeDiscovery::globals_json() const {
@@ -532,8 +560,7 @@ support::JsonValue CodemodeDiscovery::globals_json() const {
     return JsonValue{std::move(globals)};
 }
 
-support::Expected<std::string> CodemodeDiscovery::handle(
-        std::string_view name, const JsonValue& arguments) const {
+support::Expected<std::string> CodemodeDiscovery::handle(std::string_view name, const JsonValue& arguments) const {
     const auto arg_at = [&](std::size_t index) -> const JsonValue* {
         if (!arguments.holds<JsonValue::array_t>()) return nullptr;
         const auto& array = arguments.get_array();
@@ -542,8 +569,8 @@ support::Expected<std::string> CodemodeDiscovery::handle(
     if (name == "searchTools") {
         const JsonValue* query = arg_at(0);
         if (query == nullptr || !query->holds<std::string>()) {
-            return std::unexpected(support::make_error(
-                    support::ErrorCode::Validation, "searchTools() expects a query string"));
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "searchTools() expects a query string"));
         }
         std::size_t limit = kDefaultToolSearchLimit;
         if (const JsonValue* options = arg_at(1); options != nullptr && is_object(*options)) {
@@ -569,8 +596,8 @@ support::Expected<std::string> CodemodeDiscovery::handle(
     if (name == "describeTool") {
         const JsonValue* tool_name = arg_at(0);
         if (tool_name == nullptr || !tool_name->holds<std::string>()) {
-            return std::unexpected(support::make_error(
-                    support::ErrorCode::Validation, "describeTool() expects a tool name"));
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "describeTool() expects a tool name"));
         }
         const std::string requested = tool_name->get_string();
         for (const auto& tool : tools_) {
@@ -586,8 +613,8 @@ support::Expected<std::string> CodemodeDiscovery::handle(
         // Pike registers no tool namespaces yet, so no namespace matches.
         return support::Expected<std::string>{std::string{"null"}};
     }
-    return std::unexpected(support::make_error(
-            support::ErrorCode::Validation, "unknown codemode global '" + std::string{name} + "'"));
+    return std::unexpected(
+            support::make_error(support::ErrorCode::Validation, "unknown codemode global '" + std::string{name} + "'"));
 }
 
 } // namespace cch::coding_agent::extensions

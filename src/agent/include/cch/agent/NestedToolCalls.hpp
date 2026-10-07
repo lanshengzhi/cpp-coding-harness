@@ -107,8 +107,7 @@ public:
     /// `<caller_id>/<n>` and is recorded on that caller's result. A tool failure
     /// comes back as `is_error = true`; the operation itself never fails.
     [[nodiscard]] support::AsyncResult<AsyncToolExecutionResult> execute(
-            std::string caller_id, std::string name, support::JsonValue arguments,
-            std::stop_token signal);
+            std::string caller_id, std::string name, support::JsonValue arguments, std::stop_token signal);
 
     /// Remove and return the record of the nested calls `caller_id` made.
     [[nodiscard]] std::optional<NestedCallSummary> take_record(std::string_view caller_id);

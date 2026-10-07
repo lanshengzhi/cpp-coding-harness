@@ -42,6 +42,12 @@ landed producers (ADR 0066 product principle; validation.md §Acceptance discipl
 slice, and nothing below flips out of Deferred.** Each item is named individually, as the ticket
 requires — there is no blanket flip in either direction.
 
+> **Partially superseded (2026-10-07, #885).** The three grammar rows below were re-measured after
+> [#885](https://github.com/lanshengzhi/cpp-coding-harness/issues/885) shipped the model-facing
+> `codemode` tool — the re-entry condition this section itself names. See the
+> [grammar-emission amendment](#amendment--grammar-emission-enabled-by-the-model-facing-codemode-tool-885-spec-882)
+> at the end of this ADR. The two tool-search rows still hold.
+
 | Capability (stays Deferred) | Measured reason: no producer in Pike's codemode path |
 |---|---|
 | Grammar-constrained tool input (`Tool.constrainedSampling` type `grammar`) | Upstream's only grammar declaration on the codemode path is on the **model-facing** `codemode` tool's `code` argument — `packages/coding-agent/src/extensions/codemode/tool.ts` at `7c10bd43`: `constrainedSampling: { type: "grammar", variants: { openai_lark: CODEMODE_SOURCE_GRAMMAR } }` (grammar defined in `packages/codemode/src/source.ts`). Pike has no model-facing script tool: a declaration is `<workspace>/.pi/codemode/<tool>.json` naming a fixed `source` `*.js` file (the recorded #870 intentional divergence), and the model supplies the declared tool's ordinary JSON-Schema `parameters`. No Pike Tool carries a grammar at all — `cch::ai::Tool` is `{name, description, parameters}`. |
@@ -62,6 +68,37 @@ that carries a grammar — that is new evidence and starts a new ticket from the
 flip of them. The owner ruling for this slice explicitly declined to invent a producer for it
 (A Pike-only per-declaration grammar field or a model-facing `codemode` tool is a product divergence this
 spec does not authorize).
+
+## Amendment — grammar emission enabled by the model-facing codemode tool (#885, spec #882)
+
+The [#878 amendment](#amendment--grammar-chain-and-tool-search-stay-deferred-878-spec-865) above
+recorded grammar emission as Deferred because no Pike Tool carried a grammar, and it named its own
+re-entry condition: "a model-facing script tool, or a declared tool that carries a grammar ... is new
+evidence and starts a new ticket". That condition is now met. [Spec #882](https://github.com/lanshengzhi/cpp-coding-harness/issues/882)
+/ [#885](https://github.com/lanshengzhi/cpp-coding-harness/issues/885) shipped pi's model-facing inline
+`codemode` tool, whose `code` argument carries
+`constrainedSampling: { type: "grammar", variants: { openai_lark: CODEMODE_SOURCE_GRAMMAR } }`
+(`src/coding_agent/extensions/codemode/CodemodeTool.cpp`, diffed field by field against the frozen
+`fixtures/pi-ai/v1.0.4/mcp-codemode/codemode-tool.json`).
+
+New evidence, measured at Pike `636dbc09f` against `../pi` `7c10bd43` (`v1.0.4`):
+
+| Row from the #878 amendment | New status | Evidence |
+|---|---|---|
+| Grammar-constrained tool input (`Tool.constrainedSampling` type `grammar`) | **Supported** | `cch::ai::Tool.constrained_sampling` (`src/ai/include/cch/ai/Tool.hpp`) carries provider-keyed grammar variants; the codemode definition sets `openai_lark` to pi's frozen `CODEMODE_SOURCE_GRAMMAR`. |
+| Grammar emission in the adapters (`resolveGrammarConstrainedSampling`, `createGrammarToolInputProperties`, the Responses `custom` tool, and the raw-text `custom_tool_call` input folded back into the single required string property) | **Supported (Responses path)** | `src/ai/api/ResponsesPayload.cpp` `responses_tools` emits `{type:"custom", name, description, format:{type:"grammar", syntax, definition}}` for a grammar tool on a grammar-capable model, and `src/ai/api/ResponsesSlots.cpp` streams `response.custom_tool_call_input.delta`/`.done` and the `custom_tool_call` output item back into the tool's single required string property. |
+| `supportsOpenAIGrammarTools` catalog flag (Codex / OpenAI-Responses compat) | **Supported** | Parsed into `OpenAIResponsesCompat.supports_openai_grammar_tools` for the `openai-responses` and `openai-codex-responses` paths (`src/ai/BuiltinProviders.cpp`). |
+| `supportsToolSearch` catalog flag, and the tool-search replay named `splitDeferredTools` | **Still Deferred** | Unchanged: nothing in Pike consumes the flag, and the `addedToolNames` replay it selects over still has no input. |
+| `addedToolNames` replay | **Still Deferred** | Unchanged: Pike produces `tools_added` only on the initial System Message and reads it back on resume; there is still no mid-conversation tool activation to replay. |
+
+The OpenAI-completions grammar emission (`openai-completions.ts` `convertTools` custom branch) stays
+unported: no `openai-completions` model in Pike's shipped catalog carries `supportsOpenAIGrammarTools`,
+so that branch still has no producer. It is named here so a future producer starts from a recorded row
+rather than an assumed one.
+
+**No decider is asserted beyond the flow.** This is the same #882 owner flow (2026-10-07) recorded
+through the repository's explicitly authorized path, a regular new-evidence revision per
+validation.md §Acceptance discipline 3. It rules on no other capability.
 
 ## References
 

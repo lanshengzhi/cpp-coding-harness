@@ -48,25 +48,24 @@ namespace {
                             stop_token,
                             finish](agent::ToolExecuteResult::completion_type completion) mutable noexcept {
                         std::move(execute)(std::move(arguments), std::move(context), stop_token)
-                                .start([completion = std::move(completion),
-                                               finish](support::Expected<ExtensionToolResult> outcome) mutable noexcept {
+                                .start([completion = std::move(completion), finish](
+                                               support::Expected<ExtensionToolResult> outcome) mutable noexcept {
                                     finish(std::move(completion), std::move(outcome));
                                 });
                     }}};
         }};
     } else {
-        agent_tool.execute = agent::ToolExecute{[execute = std::move(tool.execute), finish](agent::ToolInvocation invocation,
-                                                   std::stop_token stop_token,
-                                                   agent::ToolUpdateSink /*update_sink*/) mutable
-                                                   -> agent::ToolExecuteResult {
+        agent_tool.execute = agent::ToolExecute{[execute = std::move(tool.execute), finish](
+                                                        agent::ToolInvocation invocation,
+                                                        std::stop_token stop_token,
+                                                        agent::ToolUpdateSink /*update_sink*/) mutable
+                                                        -> agent::ToolExecuteResult {
             return agent::ToolExecuteResult{agent::ToolExecuteResult::producer_type{
-                    [execute = std::move(execute),
-                            arguments = std::move(invocation.arguments),
-                            stop_token,
-                            finish](agent::ToolExecuteResult::completion_type completion) mutable noexcept {
+                    [execute = std::move(execute), arguments = std::move(invocation.arguments), stop_token, finish](
+                            agent::ToolExecuteResult::completion_type completion) mutable noexcept {
                         std::move(execute)(std::move(arguments), stop_token)
-                                .start([completion = std::move(completion),
-                                               finish](support::Expected<ExtensionToolResult> outcome) mutable noexcept {
+                                .start([completion = std::move(completion), finish](
+                                               support::Expected<ExtensionToolResult> outcome) mutable noexcept {
                                     finish(std::move(completion), std::move(outcome));
                                 });
                     }}};

@@ -846,9 +846,7 @@ namespace {
                     break;
                 }
                 const Handle payload_handle = g.new_string(response->payload);
-                g.call(settle_fn,
-                        api,
-                        {id_handle, response->ok ? g.true_value() : g.false_value(), payload_handle});
+                g.call(settle_fn, api, {id_handle, response->ok ? g.true_value() : g.false_value(), payload_handle});
                 drain_jobs(g, state);
             }
         }
@@ -890,30 +888,28 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
         auto executor = co_await boost::asio::this_coro::executor;
         auto link = std::make_shared<SandboxLink>();
         auto timer = std::make_shared<boost::asio::steady_timer>(executor);
-        link->wake_host = [executor, timer]() {
-            boost::asio::post(executor, [timer]() { timer->cancel(); });
-        };
+        link->wake_host = [executor, timer]() { boost::asio::post(executor, [timer]() { timer->cancel(); }); };
 
         // The per-run cancellation the nested tool calls observe: requested
         // when the run's own stop token is, or when its deadline passes, so a
         // call in flight aborts instead of pinning the host forever.
         auto call_stop = std::make_shared<std::stop_source>();
         if (stop_token.stop_requested()) call_stop->request_stop();
-        const auto deadline = limits.timeout.count() > 0
-                ? std::optional<std::chrono::steady_clock::time_point>{
-                          std::chrono::steady_clock::now() + limits.timeout}
-                : std::nullopt;
+        const auto deadline =
+                limits.timeout.count() > 0
+                        ? std::optional<std::chrono::steady_clock::time_point>{std::chrono::steady_clock::now() +
+                                                                               limits.timeout}
+                        : std::nullopt;
         auto monitor_timer = std::make_shared<boost::asio::steady_timer>(executor);
         boost::asio::co_spawn(
                 executor,
                 [stop_token, deadline, call_stop, monitor_timer, link]() -> boost::asio::awaitable<void> {
                     while (true) {
                         monitor_timer->expires_after(std::chrono::milliseconds{25});
-                        const auto [error] = co_await monitor_timer->async_wait(
-                                boost::asio::as_tuple(boost::asio::use_awaitable));
+                        const auto [error] =
+                                co_await monitor_timer->async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
                         if (error) co_return; // cancelled: the run finished
-                        const bool expired = deadline.has_value() &&
-                                std::chrono::steady_clock::now() >= *deadline;
+                        const bool expired = deadline.has_value() && std::chrono::steady_clock::now() >= *deadline;
                         if (stop_token.stop_requested() || expired) {
                             if (stop_token.stop_requested()) {
                                 // Cancellation must stop a wasm-spinning worker.
@@ -930,21 +926,17 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                 },
                 boost::asio::detached);
 
-        auto worker = std::thread([this,
-                                          link,
-                                          script = std::move(script),
-                                          tools = std::move(tools),
-                                          limits,
-                                          stop_token]() mutable {
-            link->finish(run_engine(std::move(script),
-                    std::move(tools),
-                    limits,
-                    stop_token,
-                    *link,
-                    impl_->wasm_path,
-                    impl_->ast,
-                    impl_->configure));
-        });
+        auto worker = std::thread(
+                [this, link, script = std::move(script), tools = std::move(tools), limits, stop_token]() mutable {
+                    link->finish(run_engine(std::move(script),
+                            std::move(tools),
+                            limits,
+                            stop_token,
+                            *link,
+                            impl_->wasm_path,
+                            impl_->ast,
+                            impl_->configure));
+                });
 
         while (true) {
             auto requests = link->take_requests();
@@ -979,8 +971,8 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
         if (worker.joinable()) worker.join();
         auto result = link->take_result();
         if (result) co_return std::move(*result);
-        co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
-                "the codemode sandbox worker did not report a result"));
+        co_return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "the codemode sandbox worker did not report a result"));
     });
 }
 

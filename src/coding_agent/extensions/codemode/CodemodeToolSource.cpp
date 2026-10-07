@@ -205,14 +205,12 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
                     }
                     const auto started = std::chrono::steady_clock::now();
 
-                    auto handler = [discovery, nested_calls, caller_id](
-                                           std::string_view name,
+                    auto handler = [discovery, nested_calls, caller_id](std::string_view name,
                                            std::string_view arguments_json,
                                            std::stop_token signal) -> support::AsyncResult<std::string> {
                         if (is_discovery_global(name)) {
                             auto parsed_args = support::read_json(arguments_json);
-                            support::JsonValue args = parsed_args ? std::move(*parsed_args)
-                                                                  : support::JsonValue{};
+                            support::JsonValue args = parsed_args ? std::move(*parsed_args) : support::JsonValue{};
                             auto outcome = discovery->handle(name, args);
                             if (outcome) {
                                 return support::AsyncResult<std::string>{
@@ -224,8 +222,7 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
                         if (nested_calls == nullptr) {
                             return support::AsyncResult<std::string>{support::Expected<std::string>{
                                     std::unexpected(support::make_error(support::ErrorCode::Validation,
-                                            std::format("tool '{}' is not available to the codemode sandbox",
-                                                    name)))}};
+                                            std::format("tool '{}' is not available to the codemode sandbox", name)))}};
                         }
                         auto parsed_args = support::read_json(arguments_json);
                         support::JsonValue args = parsed_args ? std::move(*parsed_args) : support::JsonValue{};
@@ -234,8 +231,7 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
                                         caller_id,
                                         name = std::string{name},
                                         args = std::move(args),
-                                        signal]() mutable
-                                        -> boost::asio::awaitable<support::Expected<std::string>> {
+                                        signal]() mutable -> boost::asio::awaitable<support::Expected<std::string>> {
                                     auto outcome = co_await support::detail::await_async_result(
                                             nested_calls->execute(caller_id, name, std::move(args), signal));
                                     if (!outcome) {

@@ -767,8 +767,8 @@ template <typename Block, typename Convert>
             .details = message.details ? std::optional<glz::generic>{support::json_to_glaze(*message.details)}
                                        : std::nullopt,
             .nestedCalls = message.nested_calls
-                    ? std::optional<glz::generic>{support::json_to_glaze(*message.nested_calls)}
-                    : std::nullopt,
+                                   ? std::optional<glz::generic>{support::json_to_glaze(*message.nested_calls)}
+                                   : std::nullopt,
             .isError = message.is_error,
             .timestamp = message.timestamp,
     };
@@ -943,8 +943,8 @@ template <typename Block, typename Convert>
                 .details = dto.details ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.details)}
                                        : std::nullopt,
                 .nested_calls = dto.nestedCalls
-                        ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.nestedCalls)}
-                        : std::nullopt,
+                                        ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.nestedCalls)}
+                                        : std::nullopt,
                 .is_error = dto.isError.value_or(false),
                 .timestamp = dto.timestamp,
         }};

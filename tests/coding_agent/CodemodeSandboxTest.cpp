@@ -63,9 +63,8 @@ using coding_agent::extensions::CodemodeToolSource;
     return std::move(*sandbox);
 }
 
-[[nodiscard]] CodemodeRunResult run_script(CodemodeSandbox& sandbox,
-        std::string script,
-        std::chrono::milliseconds timeout = std::chrono::seconds{30}) {
+[[nodiscard]] CodemodeRunResult run_script(
+        CodemodeSandbox& sandbox, std::string script, std::chrono::milliseconds timeout = std::chrono::seconds{30}) {
     CodemodeLimits limits;
     limits.timeout = timeout;
     auto outcome = tests::run_async_result(sandbox.run(std::move(script), {}, limits));
@@ -148,7 +147,8 @@ TEST_CASE("a pre-cancelled run never starts the script", "[coding_agent][codemod
     CodemodeLimits limits;
     limits.timeout = std::chrono::seconds{30};
 
-    auto outcome = tests::run_async_result(sandbox->run("text('should not run'); return 1;", {}, limits, stop.get_token()));
+    auto outcome =
+            tests::run_async_result(sandbox->run("text('should not run'); return 1;", {}, limits, stop.get_token()));
     REQUIRE(outcome.has_value());
     const auto& result = *outcome;
 
@@ -205,8 +205,8 @@ TEST_CASE("tools.* calls route back to the host tool handler", "[coding_agent][c
     CodemodeLimits limits;
     limits.timeout = std::chrono::seconds{30};
 
-    auto outcome =
-            tests::run_async_result(sandbox->run("const r = await tools.echo({ x: 1 }); return r;", tools, limits, {}, std::move(handler)));
+    auto outcome = tests::run_async_result(
+            sandbox->run("const r = await tools.echo({ x: 1 }); return r;", tools, limits, {}, std::move(handler)));
     REQUIRE(outcome.has_value());
     const auto& result = *outcome;
 

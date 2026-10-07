@@ -127,3 +127,21 @@ The parser rejects `schema_version: 1` evidence as stale (`PARITY-3002`) before 
 The legal-graph table above states each Owner's direct Owner dependencies as one list. For `cch_coding_agent` that list is now a function of the depending target's role: `legal_owner_dependencies` stays authoritative for every target, and the optional manifest field `implementation_owner_dependencies` is appended only when the depending target's role is not `owner`. `cch_tui` moved into that field, so the headless `owner` library cannot reach the frontend while its `implementation` frontend targets keep the edge and their `<cch/tui/...>` includes.
 
 Both Parity Gate seams apply the split — the cross-Owner target edge (`PARITY-2001`) and the direct include edge (`PARITY-4007`). The Owner Interface standalone-compile check (`tests/architecture/owner_interface_standalone.py`) stays on `legal_owner_dependencies` deliberately: an interface header that reached for a frontend would put the frontend on the headless core's own contract surface, so the narrower set is the right authority there. Because the include check now judges the declaring target's role, a file declared by two targets is rejected as a contradictory declaration rather than resolved by declaration order. [ADR 0053](0053-replace-pi-parity-authority-with-the-product-architecture-contract.md)'s addendum records the contract clause this enforces.
+
+## Addendum: the codemode guest module is a required Runtime resource (Issue #885, spec #882)
+
+The Runtime-only install surface above installs the `pike` executable, required runtime resources, and
+required licenses/notices. The codemode guest module (`quickjs.wasm`, pinned `quickjs-wasi` 3.6.2) is a
+required runtime resource, not a development artifact: without it an installed Runtime cannot run a
+codemode script.
+
+Issue [#885](https://github.com/lanshengzhi/cpp-coding-harness/issues/885) therefore adds exactly one
+file to the install surface: `share/pike/codemode/quickjs.wasm`, staged by
+`cch_runtime_install_rules(CODEMODE_GUEST ...)` in `cmake/RuntimeInstall.cmake`. `pike` resolves it by
+path next to the installed executable (`share/pike/codemode/quickjs.wasm`,
+`default_codemode_guest_wasm_path` in `src/coding_agent/extensions/codemode/CodemodeSandbox.cpp`),
+following pi's `getQuickJSWasmPath` shape with no resolution environment variable. The install gate's
+fail-closed contract is unchanged: the guest is installed after the gate, and a missing source module
+fails configure rather than installing a Runtime that cannot run codemode. The staged-install test's
+exact-file list (`tests/cli/InstallRelocationTest.cpp`) records the new file so any further leak of
+development surface still fails the check.

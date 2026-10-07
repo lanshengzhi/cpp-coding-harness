@@ -53,18 +53,18 @@ struct WsAttemptOutcome {
 };
 
 boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
-    const std::shared_ptr<providers::WebSocketTransport>& ws_transport,
-    const Model& model,
-    const ProviderStreamOptions& options,
-    const support::JsonValue& full_body,
-    const providers::WebSocketConnectRequest& ws_request,
-    std::optional<std::string_view> cache_session_id,
-    std::string_view account_id,
-    CodexWebSocketCache& cache,
-    AssistantMessage& assistant,
-    bool started,
-    AssistantEventSink& sink,
-    const std::map<std::string, std::string, std::less<>>& grammar_properties) {
+        const std::shared_ptr<providers::WebSocketTransport>& ws_transport,
+        const Model& model,
+        const ProviderStreamOptions& options,
+        const support::JsonValue& full_body,
+        const providers::WebSocketConnectRequest& ws_request,
+        std::optional<std::string_view> cache_session_id,
+        std::string_view account_id,
+        CodexWebSocketCache& cache,
+        AssistantMessage& assistant,
+        bool started,
+        AssistantEventSink& sink,
+        const std::map<std::string, std::string, std::less<>>& grammar_properties) {
     const auto started_state = std::make_shared<bool>(started);
     const auto websocket_started_state = std::make_shared<bool>(false);
 
@@ -152,8 +152,7 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
         co_return finish_failed(sent.error(), kind);
     }
 
-    ResponsesEventProcessor processor{
-            ResponsesDialect::Codex, ResponsesDelivery::WebSocket, model, grammar_properties};
+    ResponsesEventProcessor processor{ResponsesDialect::Codex, ResponsesDelivery::WebSocket, model, grammar_properties};
     CodexFailure failure;
     for (;;) {
         if (options.stop_token.stop_requested()) {

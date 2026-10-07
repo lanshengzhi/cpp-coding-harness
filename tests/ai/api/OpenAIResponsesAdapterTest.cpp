@@ -957,19 +957,23 @@ namespace {
     return ai::Tool{
             .name = "codemode",
             .description = "Run JavaScript that calls other tools.",
-            .parameters = support::JsonValue::object_t{
-                    {"properties", support::JsonValue::object_t{
-                        {"code", support::JsonValue::object_t{
-                            {"type", "string"},
-                            {"description", "Raw JavaScript source."},
-                        }},
-                    }},
-                    {"required", support::JsonValue::array_t{"code"}},
-                    {"type", "object"},
-            },
-            .constrained_sampling = ai::ConstrainedSampling{
-                    .variants = {{"openai_lark", "start: SOURCE\nSOURCE: /[\\s\\S]+/\n"}},
-            },
+            .parameters =
+                    support::JsonValue::object_t{
+                            {"properties",
+                                    support::JsonValue::object_t{
+                                            {"code",
+                                                    support::JsonValue::object_t{
+                                                            {"type", "string"},
+                                                            {"description", "Raw JavaScript source."},
+                                                    }},
+                                    }},
+                            {"required", support::JsonValue::array_t{"code"}},
+                            {"type", "object"},
+                    },
+            .constrained_sampling =
+                    ai::ConstrainedSampling{
+                            .variants = {{"openai_lark", "start: SOURCE\nSOURCE: /[\\s\\S]+/\n"}},
+                    },
     };
 }
 
@@ -1047,7 +1051,8 @@ TEST_CASE("a grammar-constrained custom_tool_call streams back as a tool call wi
     sse += "data: {\"type\":\"response.custom_tool_call_input.delta\",\"output_index\":0,\"delta\":\"return 1;\"}\n\n";
     sse += "data: {\"type\":\"response.custom_tool_call_input.done\",\"output_index\":0,\"input\":\"return 1;\"}\n\n";
     sse += "data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"type\":"
-           "\"custom_tool_call\",\"id\":\"ctc_1\",\"call_id\":\"call_1\",\"name\":\"codemode\",\"input\":\"return 1;\"}}\n\n";
+           "\"custom_tool_call\",\"id\":\"ctc_1\",\"call_id\":\"call_1\",\"name\":\"codemode\",\"input\":\"return "
+           "1;\"}}\n\n";
     sse += terminal_sse("response.completed", "completed");
     transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
     auto model = deepseek_model();

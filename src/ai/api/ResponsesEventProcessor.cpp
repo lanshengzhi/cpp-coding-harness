@@ -272,9 +272,7 @@ struct ResponsesEventProcessor::Impl {
             ResponsesDelivery configured_delivery,
             Model configured_model,
             std::map<std::string, std::string, std::less<>> configured_grammar_properties)
-        : dialect(configured_dialect),
-          delivery(configured_delivery),
-          model(std::move(configured_model)),
+        : dialect(configured_dialect), delivery(configured_delivery), model(std::move(configured_model)),
           grammar_properties(std::move(configured_grammar_properties)) {}
 
     ResponsesDialect dialect;

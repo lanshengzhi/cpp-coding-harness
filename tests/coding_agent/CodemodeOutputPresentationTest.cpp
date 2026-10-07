@@ -61,10 +61,9 @@ namespace extensions = cch::coding_agent::extensions;
                                          "image('data:image/png;base64,{}');\n"
                                          "return {{ files: 3 }};",
             tests::kTinyPngBase64);
-    auto executed =
-            tools->front().context_execute(support::JsonValue{support::JsonValue::object_t{{"code", code}}},
-                    coding_agent::extensions::ExtensionToolContext{},
-                    std::stop_token{});
+    auto executed = tools->front().context_execute(support::JsonValue{support::JsonValue::object_t{{"code", code}}},
+            coding_agent::extensions::ExtensionToolContext{},
+            std::stop_token{});
     auto outcome = tests::run_async_result(std::move(executed));
     REQUIRE(outcome.has_value());
     return std::move(*outcome);
