@@ -193,8 +193,6 @@ private:
         dependencies.auth = fixture.auth;
         fixture.manager = std::make_unique<McpSessionManager>(std::move(load),
                 std::move(agent_dir),
-                "/repo",
-                false,
                 std::vector<std::string>{},
                 std::move(dependencies));
         fixture.presenter = std::make_unique<coding_agent::tui::McpManagerPresenter>(*fixture.manager);

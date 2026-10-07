@@ -241,11 +241,11 @@ public:
     /// Build a manager over an already-loaded `mcp.json` (pi `session_start`).
     /// `overridden` are the registered-server override notices (pi
     /// `overridden()`); `agent_dir` names the global `mcp.json` for the empty
-    /// message.
+    /// message. The project's trust decision is already applied by
+    /// `load_mcp_config`: a trusted project contributes its `mcp.json` entries
+    /// and `projectConfig`.
     McpSessionManager(mcp::McpConfigLoad config,
             std::filesystem::path agent_dir,
-            std::filesystem::path workspace,
-            bool project_trusted,
             std::vector<std::string> overridden,
             McpManagerDependencies dependencies);
 
@@ -328,8 +328,6 @@ private:
 
     mcp::McpConfigLoad config_;
     std::filesystem::path agent_dir_;
-    std::filesystem::path workspace_;
-    bool project_trusted_{false};
     std::optional<std::filesystem::path> project_config_;
     std::vector<std::string> config_errors_;
     std::vector<std::string> overridden_;

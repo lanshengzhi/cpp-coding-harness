@@ -121,13 +121,10 @@ void McpLiveNotificationRouter::on_resources_changed() {
 
 McpSessionManager::McpSessionManager(mcp::McpConfigLoad config,
         std::filesystem::path agent_dir,
-        std::filesystem::path workspace,
-        bool project_trusted,
         std::vector<std::string> overridden,
         McpManagerDependencies dependencies)
-    : config_(std::move(config)), agent_dir_(std::move(agent_dir)), workspace_(std::move(workspace)),
-      project_trusted_(project_trusted), project_config_(config_.project_config), config_errors_(config_.errors),
-      overridden_(std::move(overridden)), dependencies_(std::move(dependencies)) {
+    : config_(std::move(config)), agent_dir_(std::move(agent_dir)), project_config_(config_.project_config),
+      config_errors_(config_.errors), overridden_(std::move(overridden)), dependencies_(std::move(dependencies)) {
     servers_.reserve(config_.servers.size());
     for (auto& entry : config_.servers) {
         ManagedServer server;

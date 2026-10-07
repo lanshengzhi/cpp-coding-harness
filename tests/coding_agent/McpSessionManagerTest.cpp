@@ -247,12 +247,8 @@ struct Harness {
         dependencies.connections = harness.factory;
         dependencies.tools = harness.surface;
         dependencies.auth = harness.auth;
-        harness.manager = std::make_unique<McpSessionManager>(std::move(config),
-                std::move(agent_dir),
-                "/repo",
-                /* project_trusted */ false,
-                std::move(overridden),
-                std::move(dependencies));
+        harness.manager = std::make_unique<McpSessionManager>(
+                std::move(config), std::move(agent_dir), std::move(overridden), std::move(dependencies));
         return harness;
     }
 };
