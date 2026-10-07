@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 4.4)
 # driver (tests/install/InstallGateTest.cmake) can prove the install path
 # requires fresh successful Gate evidence:
 #   - `cmake --install` before any build fails closed (no depfile evidence),
-#   - after a build it installs only bin/ + licenses,
+#   - after a build it installs only bin/ + licenses + the codemode guest,
 #   - editing a source without rebuilding fails the install as stale.
 #
 # Injected by the test harness:
@@ -116,4 +116,9 @@ cch_runtime_install_rules(
     MANIFEST "${CCH_PARITY_MANIFEST}"
     PROJECT_ROOT "${CCH_PARITY_FIXTURE_ROOT}"
     LICENSE_FILES "fixture=${CMAKE_CURRENT_SOURCE_DIR}/NOTICE.txt"
+    # The real Runtime install ships the pinned quickjs.wasm next to the
+    # executable (ADR 0039); this stand-in carries the same installed name so
+    # the fixture proves the guest is staged without depending on the real
+    # 600 KiB module.
+    CODEMODE_GUEST "${CMAKE_CURRENT_SOURCE_DIR}/quickjs.wasm"
 )

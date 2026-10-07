@@ -4,7 +4,8 @@
 # prove the install path cannot bypass architecture validation:
 #   1. configure succeeds (configure-phase Gate passes),
 #   2. `cmake --install` before any build fails closed and stages no files,
-#   3. after a build the install succeeds with only bin/ + licenses staged,
+#   3. after a build the install succeeds with only bin/ + licenses + the
+#      codemode guest staged,
 #   4. editing a source without rebuilding fails the install as stale,
 #   5. rebuilding restores a passing install.
 #
@@ -74,12 +75,14 @@ if(staged_after_rejection)
         "a rejected install staged files: ${staged_after_rejection}")
 endif()
 
-# 3. Build, then install: only the Runtime and the notice land in the prefix.
+# 3. Build, then install: only the Runtime, the notice, and the codemode
+# guest land in the prefix.
 run_step(build TRUE "${CMAKE_COMMAND}" --build "${build_dir}")
 run_step(install TRUE "${CMAKE_COMMAND}" --install "${build_dir}" --prefix "${stage_dir}")
 file(GLOB_RECURSE staged_files RELATIVE "${stage_dir}" "${stage_dir}/*")
 list(SORT staged_files)
-if(NOT staged_files STREQUAL "bin/pike;share/pike/licenses/fixture.txt")
+if(NOT staged_files STREQUAL
+        "bin/pike;share/pike/codemode/quickjs.wasm;share/pike/licenses/fixture.txt")
     message(FATAL_ERROR
         "fixture install staged an unexpected file set: ${staged_files}")
 endif()

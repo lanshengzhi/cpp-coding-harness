@@ -1,0 +1,7 @@
+Placeholder codemode guest for the install-gate fixture.
+
+The real Runtime install ships the pinned quickjs.wasm as
+share/pike/codemode/quickjs.wasm (ADR 0039). This minimal project only proves
+the install rules stage a guest module at that destination, so a small
+stand-in file with the same installed name is enough; its bytes are never
+loaded.
