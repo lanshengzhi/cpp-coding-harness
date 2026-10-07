@@ -259,8 +259,10 @@ private:
             return;
         }
         const auto colon = line.find(':');
-        const std::string_view field = colon == std::string::npos ? std::string_view{line} : std::string_view{line}.substr(0, colon);
-        std::string_view value = colon == std::string::npos ? std::string_view{} : std::string_view{line}.substr(colon + 1);
+        const std::string_view field =
+                colon == std::string::npos ? std::string_view{line} : std::string_view{line}.substr(0, colon);
+        std::string_view value =
+                colon == std::string::npos ? std::string_view{} : std::string_view{line}.substr(colon + 1);
         if (!value.empty() && value.front() == ' ') {
             value.remove_prefix(1);
         }
@@ -273,7 +275,8 @@ private:
                 last_event_id_ = std::string{value};
             }
         } else if (field == "retry") {
-            if (!value.empty() && std::ranges::all_of(value, [](unsigned char character) { return std::isdigit(character) != 0; })) {
+            if (!value.empty() &&
+                    std::ranges::all_of(value, [](unsigned char character) { return std::isdigit(character) != 0; })) {
                 retry_ms_ = std::stoi(std::string{value});
             }
         }
@@ -316,8 +319,9 @@ McpHttpClient::McpHttpClient(ConstructionKey,
       request_auth_(std::move(request_auth)), get_stream_options_(std::move(get_stream_options)) {
     // pi `client.ts` installs `ping` by default; every other server request is
     // answered `-32601` until a handler is registered.
-    request_handlers_["ping"] = [](const support::JsonValue&, std::stop_token)
-            -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+    request_handlers_["ping"] =
+            [](const support::JsonValue&,
+                    std::stop_token) -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
         co_return support::JsonValue{support::JsonValue::object_t{}};
     };
 }
@@ -510,8 +514,8 @@ std::map<std::string, std::string> McpHttpClient::request_headers() const {
     return headers;
 }
 
-boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>>
-McpHttpClient::resolve_headers(std::map<std::string, std::string> headers) {
+boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> McpHttpClient::resolve_headers(
+        std::map<std::string, std::string> headers) {
     if (request_auth_ == nullptr) {
         co_return headers;
     }
@@ -537,9 +541,7 @@ void McpHttpClient::set_notification_listener(NotificationListener listener) {
     notification_listener_ = std::move(listener);
 }
 
-void McpHttpClient::set_error_listener(ErrorListener listener) {
-    error_listener_ = std::move(listener);
-}
+void McpHttpClient::set_error_listener(ErrorListener listener) { error_listener_ = std::move(listener); }
 
 void McpHttpClient::set_request_handler(std::string method, ServerRequestHandler handler) {
     request_handlers_.insert_or_assign(std::move(method), std::move(handler));
@@ -563,10 +565,11 @@ boost::asio::awaitable<void> McpHttpClient::serve_server_request(
         support::JsonValue response{support::JsonValue::object_t{
                 {"jsonrpc", "2.0"},
                 {"id", std::move(id)},
-                {"error", support::JsonValue::object_t{
-                        {"code", static_cast<double>(-32601)},
-                        {"message", "Method not found: " + method},
-                }},
+                {"error",
+                        support::JsonValue::object_t{
+                                {"code", static_cast<double>(-32601)},
+                                {"message", "Method not found: " + method},
+                        }},
         }};
         post_message(std::move(response));
         co_return;
@@ -589,10 +592,11 @@ boost::asio::awaitable<void> McpHttpClient::serve_server_request(
     post_message(support::JsonValue{support::JsonValue::object_t{
             {"jsonrpc", "2.0"},
             {"id", std::move(id)},
-            {"error", support::JsonValue::object_t{
-                    {"code", static_cast<double>(-32603)},
-                    {"message", std::move(message)},
-            }},
+            {"error",
+                    support::JsonValue::object_t{
+                            {"code", static_cast<double>(-32603)},
+                            {"message", std::move(message)},
+                    }},
     }});
 }
 
@@ -639,8 +643,8 @@ void McpHttpClient::handle_stream_message(const support::JsonValue& message) {
     }
 }
 
-boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>>
-McpHttpClient::get_stream_headers(const std::optional<std::string>& last_event_id) {
+boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> McpHttpClient::get_stream_headers(
+        const std::optional<std::string>& last_event_id) {
     std::map<std::string, std::string> headers = config_.headers;
     if (!session_id_.empty()) {
         headers["mcp-session-id"] = session_id_;
@@ -656,8 +660,8 @@ McpHttpClient::get_stream_headers(const std::optional<std::string>& last_event_i
     co_return co_await resolve_headers(std::move(headers));
 }
 
-boost::asio::awaitable<std::pair<McpHttpClient::GetStreamAttempt, support::Error>>
-McpHttpClient::consume_get_stream(GetStreamCursor& cursor) {
+boost::asio::awaitable<std::pair<McpHttpClient::GetStreamAttempt, support::Error>> McpHttpClient::consume_get_stream(
+        GetStreamCursor& cursor) {
     auto headers = co_await get_stream_headers(cursor.last_event_id);
     if (!headers) {
         co_return std::pair{GetStreamAttempt::FatalFailure, std::move(headers.error())};
@@ -699,8 +703,8 @@ McpHttpClient::consume_get_stream(GetStreamCursor& cursor) {
 
     auto response = co_await transport_->async_stream(request, on_chunk);
     if (!response) {
-        co_return std::pair{stream_stop_.stop_requested() ? GetStreamAttempt::FatalFailure
-                                                          : GetStreamAttempt::RetryableFailure,
+        co_return std::pair{
+                stream_stop_.stop_requested() ? GetStreamAttempt::FatalFailure : GetStreamAttempt::RetryableFailure,
                 std::move(response.error())};
     }
     for (const auto& event : reader.finish()) {
@@ -720,15 +724,13 @@ McpHttpClient::consume_get_stream(GetStreamCursor& cursor) {
     }
     if (status < 200 || status >= 300) {
         const bool transient = status == 408 || status == 429 || status >= 500;
-        co_return std::pair{
-                transient ? GetStreamAttempt::RetryableFailure : GetStreamAttempt::FatalFailure,
+        co_return std::pair{transient ? GetStreamAttempt::RetryableFailure : GetStreamAttempt::FatalFailure,
                 http_status_error(config_.name, *response)};
     }
     co_return std::pair{GetStreamAttempt::Ended, support::Error{}};
 }
 
-std::chrono::milliseconds McpHttpClient::reconnect_delay(
-        int attempt, const std::optional<int>& server_delay_ms) const {
+std::chrono::milliseconds McpHttpClient::reconnect_delay(int attempt, const std::optional<int>& server_delay_ms) const {
     if (server_delay_ms.has_value()) {
         return std::chrono::milliseconds{*server_delay_ms};
     }

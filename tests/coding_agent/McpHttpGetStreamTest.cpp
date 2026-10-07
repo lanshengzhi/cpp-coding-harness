@@ -206,8 +206,7 @@ public:
                         found != object->end() && found->second.holds<std::string>()) {
                     method = found->second.get_string();
                 }
-                if (const auto found = object->find("id");
-                        found != object->end() && found->second.holds<double>()) {
+                if (const auto found = object->find("id"); found != object->end() && found->second.holds<double>()) {
                     id = found->second.get_number();
                 }
             }
@@ -305,9 +304,8 @@ private:
     return config;
 }
 
-[[nodiscard]] std::shared_ptr<McpHttpClient> connect_client(Loop& loop,
-        const std::shared_ptr<ScriptedTransport>& transport,
-        McpHttpGetStreamOptions options = {}) {
+[[nodiscard]] std::shared_ptr<McpHttpClient> connect_client(
+        Loop& loop, const std::shared_ptr<ScriptedTransport>& transport, McpHttpGetStreamOptions options = {}) {
     auto client = loop.run(McpHttpClient::connect(scripted_config(), transport, nullptr, options));
     REQUIRE(client.has_value());
     return *client;
@@ -320,8 +318,7 @@ private:
 /// A live GET stream that stays open until the client closes it. The first
 /// chunk is delayed so the caller can attach its listener before it arrives,
 /// as a real server would.
-[[nodiscard]] GetScript live_stream(std::vector<std::string> chunks,
-        std::chrono::milliseconds chunk_interval = 0ms) {
+[[nodiscard]] GetScript live_stream(std::vector<std::string> chunks, std::chrono::milliseconds chunk_interval = 0ms) {
     GetScript script;
     script.hold_open = true;
     script.chunks = std::move(chunks);
@@ -361,7 +358,7 @@ TEST_CASE("MCP GET stream: a server retry field overrides the reconnect delay", 
     // delay, then ends; the second stays open.
     GetScript first;
     first.chunks = {"retry: 20\nid: 1\n" +
-            message_event(R"({"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info"}})")};
+                    message_event(R"({"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info"}})")};
     transport->push_get(std::move(first));
     transport->push_get(live_stream({}));
 
@@ -491,8 +488,8 @@ TEST_CASE("MCP GET stream: notifications/cancelled aborts the in-flight handler"
     Loop loop;
     auto client = connect_client(loop, transport);
     client->set_request_handler("test/wait",
-            [](const support::JsonValue&, std::stop_token stop)
-                    -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+            [](const support::JsonValue&,
+                    std::stop_token stop) -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
                 auto executor = co_await boost::asio::this_coro::executor;
                 boost::asio::steady_timer timer(executor);
                 while (!stop.stop_requested()) {
@@ -500,8 +497,7 @@ TEST_CASE("MCP GET stream: notifications/cancelled aborts the in-flight handler"
                     boost::system::error_code error;
                     co_await timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
                 }
-                co_return std::unexpected(
-                        support::make_error(support::ErrorCode::Cancelled, "MCP request aborted"));
+                co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "MCP request aborted"));
             });
 
     REQUIRE(loop.pump_until([&] { return transport->posted_response(9).has_value(); }, 3s));

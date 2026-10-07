@@ -210,14 +210,15 @@ private:
     void start_get_stream();
     /// One GET request: `accept: text/event-stream` plus `last-event-id` when
     /// resuming, and the session/protocol/auth headers every request carries.
-    [[nodiscard]] boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>>
-    get_stream_headers(const std::optional<std::string>& last_event_id);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> get_stream_headers(
+            const std::optional<std::string>& last_event_id);
     /// Await `delay` unless `close()` stops the stream first; false when the
     /// stream was stopped while waiting (pi `sleep`).
     [[nodiscard]] boost::asio::awaitable<bool> reconnect_wait(std::chrono::milliseconds delay);
     /// pi `reconnectDelay`: the server's `retry:` field when present, else the
     /// exponential backoff bounded by `max_delay`.
-    [[nodiscard]] std::chrono::milliseconds reconnect_delay(int attempt, const std::optional<int>& server_delay_ms) const;
+    [[nodiscard]] std::chrono::milliseconds reconnect_delay(
+            int attempt, const std::optional<int>& server_delay_ms) const;
 
     /// Dispatch one JSON-RPC message received on the GET stream: a
     /// server-to-client request is answered, a notification is dispatched to
