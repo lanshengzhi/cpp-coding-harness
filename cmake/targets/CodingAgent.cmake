@@ -19,6 +19,7 @@ cch_parity_declare_target(
         src/coding_agent/compat/pi/PiImport.cpp
         src/coding_agent/extensions/ExtensionToolRegistry.cpp
         src/coding_agent/mcp/McpConfigFile.cpp
+        src/coding_agent/mcp/McpConfigWrite.cpp
         src/coding_agent/mcp/McpExtensionToolSource.cpp
         src/coding_agent/mcp/McpHttpClient.cpp
         src/coding_agent/mcp/McpHttpServerConfig.cpp
