@@ -130,7 +130,7 @@ not execution.
 | Codemode declarations and source loading | `packages/codemode/src/declarations.ts`, `source.ts`, `types.ts` at `7c10bd43` (`v1.0.4`); `packages/coding-agent/src/extensions/codemode/` | **In the supported subset (declarations / loading, #870)** | A project-local declaration surface — `<workspace>/.pi/codemode/*.json` carrying `{name, description, inputSchema?, source}`, with the `source` `*.js` in pi's `source.ts` format — loaded through the Extension Tool Source foundation and exposed on the tool surface. An invalid declaration is a typed error with no silent skip; loading never executes at declaration time. It opens no MCP server, adds no CLI flag, and rules on no other capability (execution is the #874 ruling below). |
 | Codemode sandboxed execution | `packages/codemode/src/runtime/` (`host.ts`, `worker.ts`, `prelude-source.ts`) and `wasm.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (sandboxed execution, #874)** | A `cch_coding_agent` sandbox that embeds WasmEdge (pinned vcpkg `wasmedge` via the in-tree overlay port `cmake/vcpkg-ports/wasmedge`) and runs a declared script inside pi's actual codemode guest (`quickjs-wasi` 3.6.2 `quickjs.wasm`, committed at `fixtures/codemode/quickjs/`) after evaluating pi's prelude (`prelude-source.ts`, embedded as `CodemodePrelude.hpp`). The host registers only the twelve imports the guest declares (`env.host_*` and the WASI subset the `wasi-shim.js` covers), so a script has no filesystem, socket, process, or module capability: an unprovided import refuses instantiation, and an escape (`require`, `fetch`, `process`, `WebAssembly`) is an explicit error. A script returns its JSON value plus text/image output (pi's `CodemodeOutputItem` shape); a runaway script is interrupted by its timeout or a cancellation. `<workspace>/.pi/codemode` is discovered by default through session assembly for a trusted project, and a malformed declaration fails Session Assembly explicitly. This ruling covers **the sandbox boundary and execution only**: routing the script's `tools.*` calls back to the session's tool set is **not opened here**, stays `No decision`, and is recorded as a follow-up (spec #865 close-out, #879). |
 
-**Intentional divergence:** pi v1.0.4 has no on-disk codemode declaration format. Codemode scripts
+**Intentional divergence (reversed 2026-10-07 — see the full-parity ruling below):** pi v1.0.4 has no on-disk codemode declaration format. Codemode scripts
 there are written inline in the model's `codemode` tool call, and "exposure" is an in-memory
 registration concept, so there is no project-local codemode source directory to follow. Pike
 defines this minimal format anyway so a project can declare script tools before the sandbox exists;
@@ -179,6 +179,28 @@ GET stream, **resource tools**, and **exposure policy** — and the spec's out-o
 Codemode **output presentation** (#877) opens no capability and therefore no scope row: a declared
 tool's name is unregistered, so it takes the existing `ToolRendererRegistry` fallback pair, and an
 `image` output item lands in the same inline image sidecar any other tool's image uses.
+
+### Full-parity ruling — MCP and codemode aligned with pi v1.0.4 (2026-10-07, spec #882)
+
+Decided by **@lansy, 2026-10-07**, through the grill flow (rounds recorded in the #882 spec issue):
+the recorded gaps and divergences from spec #865 are to be **eliminated** — MCP and codemode are to
+match pi v1.0.4 (`7c10bd43`) with no identifiable user-visible behaviour difference. Tracked by
+[spec #882](https://github.com/lanshengzhi/cpp-coding-harness/issues/882) (bundle capture #883, MCP
+parity #884, codemode parity #885, close-out #886). The rulings, attributed as above:
+
+1. **The codemode declaration divergence above is reversed.** The `<workspace>/.pi/codemode/*.json`
+   surface (#870) is superseded by pi's model-facing inline `codemode` tool; the landed declaration
+   loader, trust gating, fixtures, and tests are to be **physically removed**, not kept dormant, with
+   the tool-surface enumeration checked against pi as removal evidence.
+2. **The credential-store divergence is retained.** MCP OAuth credentials stay in the existing
+   AuthStorage (`auth.json` under `mcp__<server>`); pi's separate `mcp-auth.json` is **not**
+   adopted. This is the single remaining intentional divergence, and it is reaffirmed here as an
+   owner ruling rather than a spec-flow default.
+3. **Acceptance is differential evidence.** Each capability closes only against the frozen
+   `pi-v1.0.4` evidence bundle (ADR 0065; captured in #883), not self-captured goldens alone.
+4. The #865 recorded follow-ups table above is absorbed by spec #882 item by item; each follow-up
+   gains a pointer comment to its absorbing ticket. #881 (ai transport/auth interface promotion) is
+   orthogonal and stays independent.
 
 ## Finding: not a decision
 
