@@ -533,6 +533,30 @@ TEST_CASE("the resource tools take the widest non-hidden exposure of resource-be
     CHECK(*only_codemode.surface->resource_exposure == McpExposure::Codemode);
 }
 
+TEST_CASE("the notification router maps the two list_changed notifications to the connection listeners",
+        "[coding_agent][mcp][issue884][spec]") {
+    int tools_changes = 0;
+    int resource_changes = 0;
+    coding_agent::runtime::McpLiveNotificationRouter router(
+            [&tools_changes]() { ++tools_changes; }, [&resource_changes]() { ++resource_changes; });
+
+    const support::JsonValue params{support::JsonValue::object_t{}};
+    router.dispatch("notifications/tools/list_changed", params);
+    CHECK(tools_changes == 1);
+    CHECK(resource_changes == 0);
+
+    router.dispatch("notifications/resources/list_changed", params);
+    CHECK(resource_changes == 1);
+    // The resource lane's consumer shape routes to the same listener.
+    router.on_resources_changed();
+    CHECK(resource_changes == 2);
+
+    // An unrelated notification is ignored: the separation case.
+    router.dispatch("notifications/message", params);
+    CHECK(tools_changes == 1);
+    CHECK(resource_changes == 2);
+}
+
 // ── OAuth actions ───────────────────────────────────────────────────────────
 
 TEST_CASE("sign-in runs the flow and reconnects", "[coding_agent][mcp][issue884][spec]") {

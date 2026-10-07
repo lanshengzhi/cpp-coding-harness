@@ -19,9 +19,11 @@
 #include "coding_agent/mcp/McpConfigFile.hpp"
 #include "coding_agent/mcp/McpConfigWrite.hpp"
 #include "coding_agent/mcp/McpExposure.hpp"
+#include "coding_agent/mcp/McpResourceTools.hpp"
 
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -101,6 +103,33 @@ public:
     using ResourcesChangedListener = std::function<void()>;
     virtual void set_tools_changed_listener(ToolsChangedListener listener) = 0;
     virtual void set_resources_changed_listener(ResourcesChangedListener listener) = 0;
+};
+
+/// pi runtime's per-connection notification dispatch: route a server-to-client
+/// notification to the connected server's re-list listeners. The production
+/// HTTP adapter installs `dispatch` on `McpHttpClient::set_notification_listener`
+/// (and its resource changes arrive through the resource lane's
+/// `McpResourceChangeListener`, which this also satisfies), so
+/// `notifications/tools/list_changed` and `notifications/resources/list_changed`
+/// reach the manager through one seam.
+class McpLiveNotificationRouter final : public mcp::McpResourceChangeListener {
+public:
+    McpLiveNotificationRouter(
+            McpLiveConnection::ToolsChangedListener on_tools,
+            McpLiveConnection::ResourcesChangedListener on_resources);
+
+    /// pi runtime's `notifications/message` switch: a `tools/list_changed`
+    /// re-lists and notifies `on_tools`; a `resources/list_changed` re-lists
+    /// and notifies `on_resources`. Every other method is ignored.
+    void dispatch(std::string_view method, const support::JsonValue& params);
+
+    /// pi `McpResourceChangeListener` consumer shape: the resource lane's
+    /// re-list hook routes to the same resources listener.
+    void on_resources_changed() override;
+
+private:
+    McpLiveConnection::ToolsChangedListener on_tools_;
+    McpLiveConnection::ResourcesChangedListener on_resources_;
 };
 
 /// The connection factory the manager drives (pi `createConnection`). The

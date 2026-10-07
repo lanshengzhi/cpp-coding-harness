@@ -96,6 +96,28 @@ std::string_view mcp_server_state_name(McpServerState state) {
     return "connecting";
 }
 
+McpLiveNotificationRouter::McpLiveNotificationRouter(McpLiveConnection::ToolsChangedListener on_tools,
+        McpLiveConnection::ResourcesChangedListener on_resources)
+    : on_tools_(std::move(on_tools)), on_resources_(std::move(on_resources)) {}
+
+void McpLiveNotificationRouter::dispatch(std::string_view method, const support::JsonValue&) {
+    if (method == "notifications/tools/list_changed") {
+        if (on_tools_) {
+            on_tools_();
+        }
+        return;
+    }
+    if (method == "notifications/resources/list_changed") {
+        on_resources_changed();
+    }
+}
+
+void McpLiveNotificationRouter::on_resources_changed() {
+    if (on_resources_) {
+        on_resources_();
+    }
+}
+
 McpSessionManager::McpSessionManager(mcp::McpConfigLoad config,
         std::filesystem::path agent_dir,
         std::filesystem::path workspace,
