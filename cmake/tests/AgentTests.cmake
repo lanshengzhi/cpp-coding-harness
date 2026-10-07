@@ -10,6 +10,7 @@ include_guard(GLOBAL)
         tests/agent/AgentBehaviorTest.cpp
         tests/agent/ModelRuntimeSeamTest.cpp
         tests/agent/ToolCallExecutorTest.cpp
+        tests/agent/NestedToolCallsTest.cpp
 )
     target_include_directories(cch_tests_agent PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_agent

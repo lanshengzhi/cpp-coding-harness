@@ -64,11 +64,13 @@ using coding_agent::extensions::CodemodeToolSource;
 }
 
 [[nodiscard]] CodemodeRunResult run_script(CodemodeSandbox& sandbox,
-        std::string_view script,
+        std::string script,
         std::chrono::milliseconds timeout = std::chrono::seconds{30}) {
     CodemodeLimits limits;
     limits.timeout = timeout;
-    return sandbox.run(script, {}, limits);
+    auto outcome = tests::run_async_result(sandbox.run(std::move(script), {}, limits));
+    REQUIRE(outcome.has_value());
+    return std::move(*outcome);
 }
 
 } // namespace
@@ -146,7 +148,9 @@ TEST_CASE("a pre-cancelled run never starts the script", "[coding_agent][codemod
     CodemodeLimits limits;
     limits.timeout = std::chrono::seconds{30};
 
-    auto result = sandbox->run("text('should not run'); return 1;", {}, limits, stop.get_token());
+    auto outcome = tests::run_async_result(sandbox->run("text('should not run'); return 1;", {}, limits, stop.get_token()));
+    REQUIRE(outcome.has_value());
+    const auto& result = *outcome;
 
     REQUIRE(result.error.has_value());
     CHECK(result.error->kind == CodemodeError::Kind::Aborted);
@@ -193,16 +197,18 @@ TEST_CASE("tools.* calls route back to the host tool handler", "[coding_agent][c
     };
     std::string seen_name;
     std::string seen_args;
-    CodemodeToolCallHandler handler = [&](std::string_view name, std::string_view args) {
+    CodemodeToolCallHandler handler = [&](std::string_view name, std::string_view args, std::stop_token) {
         seen_name = std::string{name};
         seen_args = std::string{args};
-        return support::Expected<std::string>{std::string{R"("pong")"}};
+        return support::AsyncResult<std::string>{support::Expected<std::string>{std::string{R"("pong")"}}};
     };
     CodemodeLimits limits;
     limits.timeout = std::chrono::seconds{30};
 
-    auto result =
-            sandbox->run("const r = await tools.echo({ x: 1 }); return r;", tools, limits, {}, std::move(handler));
+    auto outcome =
+            tests::run_async_result(sandbox->run("const r = await tools.echo({ x: 1 }); return r;", tools, limits, {}, std::move(handler)));
+    REQUIRE(outcome.has_value());
+    const auto& result = *outcome;
 
     REQUIRE_FALSE(result.error.has_value());
     REQUIRE(result.value_json.has_value());
@@ -220,7 +226,9 @@ TEST_CASE("a tool call with no handler is rejected explicitly, never silently",
     CodemodeLimits limits;
     limits.timeout = std::chrono::seconds{30};
 
-    auto result = sandbox->run("return await tools.echo(1);", tools, limits);
+    auto outcome = tests::run_async_result(sandbox->run("return await tools.echo(1);", tools, limits));
+    REQUIRE(outcome.has_value());
+    const auto& result = *outcome;
 
     REQUIRE(result.error.has_value());
     CHECK(result.error->kind == CodemodeError::Kind::Script);
@@ -237,7 +245,9 @@ TEST_CASE("a script's tools.* call is an explicit does-not-exist error, never si
     // The sandbox exposes no session tool surface in this slice; a script that
     // calls one is refused explicitly (the prelude's guard) rather than getting
     // an undefined function or an unimplemented-capability stub.
-    auto result = sandbox->run("return await tools.read({ path: 'x' });", {}, limits);
+    auto outcome = tests::run_async_result(sandbox->run("return await tools.read({ path: 'x' });", {}, limits));
+    REQUIRE(outcome.has_value());
+    const auto& result = *outcome;
 
     REQUIRE(result.error.has_value());
     CHECK(result.error->kind == CodemodeError::Kind::Script);
@@ -263,8 +273,9 @@ TEST_CASE("the model-facing codemode tool runs an inline script in the wasm sand
     REQUIRE(tools->size() == 1);
     CHECK(tools->front().definition.name == "codemode");
 
-    auto executed = tools->front().execute(
+    auto executed = tools->front().context_execute(
             support::JsonValue{support::JsonValue::object_t{{"code", "text('computing'); return 1 + 1;"}}},
+            coding_agent::extensions::ExtensionToolContext{},
             std::stop_token{});
     auto outcome = tests::run_async_result(std::move(executed));
 

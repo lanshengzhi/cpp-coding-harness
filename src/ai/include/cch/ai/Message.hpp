@@ -80,6 +80,9 @@ struct ToolResultMessage {
     std::string tool_name{};
     std::vector<Content> content{};
     std::optional<cch::support::JsonValue> details{};
+    /// pi `ToolResultMessage.nestedCalls`: the calls this call made through the
+    /// nested-call seam (`ctx.executeTool`), or absent when it made none.
+    std::optional<cch::support::JsonValue> nested_calls{};
     bool is_error{false};
     TimestampMs timestamp{};
 };

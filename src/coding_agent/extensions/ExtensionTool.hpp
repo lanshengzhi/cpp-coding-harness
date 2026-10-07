@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/agent/AgentTool.hpp>
+#include <cch/agent/NestedToolCalls.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Tool.hpp>
 #include <cch/support/AsyncResult.hpp>
@@ -26,12 +27,28 @@ struct ExtensionToolResult {
     bool is_error{false};
 };
 
+/// pi `ExtensionToolContext` slice an extension Tool execute needs: the
+/// model-issued call id it runs under and the nested-call dispatcher
+/// (`ctx.executeTool`) when the host provides one. `nested_calls` is a
+/// non-owning pointer to the run's dispatcher, which outlives the execution.
+struct ExtensionToolContext {
+    agent::NestedToolCallRunner* nested_calls{nullptr};
+    std::string call_id{};
+};
+
 /// Move-only execute operation of one extension-provided Tool. `arguments` are
 /// the already-validated call arguments (the Agent's JSON Schema validation
 /// runs before the call reaches here); cancellation is resolved by the
 /// extension into its own terminal outcome (spec #865, ADR 0042).
 using ExtensionToolExecute = std::move_only_function<support::AsyncResult<ExtensionToolResult>(
         support::JsonValue arguments, std::stop_token stop_token)>;
+
+/// pi `ctx.executeTool`-aware execute form: the same contract as
+/// `ExtensionToolExecute`, plus the run's nested-call dispatcher for tools that
+/// run other tools (codemode scripts). A Tool sets this instead of `execute`
+/// when it needs the context; the registry prefers it.
+using ExtensionToolContextExecute = std::move_only_function<support::AsyncResult<ExtensionToolResult>(
+        support::JsonValue arguments, ExtensionToolContext context, std::stop_token stop_token)>;
 
 /// One Tool contributed by an Extension Tool Source (spec #865): the passive
 /// model-facing descriptor, the prompt metadata, the concurrency policy, and
@@ -50,6 +67,9 @@ struct ExtensionTool {
     /// pi `ToolDefinition.promptGuidelines`; appended in declaration order.
     std::vector<std::string> prompt_guidelines;
     ExtensionToolExecute execute;
+    /// Set instead of `execute` by a Tool that runs other tools through the
+    /// nested-call seam; the registry prefers this form when present.
+    ExtensionToolContextExecute context_execute;
 };
 
 } // namespace cch::coding_agent::extensions

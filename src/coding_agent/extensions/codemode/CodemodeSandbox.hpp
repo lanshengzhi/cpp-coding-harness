@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 
 #include <chrono>
@@ -69,10 +70,13 @@ struct CodemodeLimits {
 /// the host's existing tool implementations (and therefore their containment).
 /// `arguments_json` is the JSON text of the call argument, or an empty string
 /// when the call passed no argument. The result is the tool's JSON text, or an
-/// error the sandbox reports to the script as a rejected call. Stored for the
+/// error the sandbox reports to the script as a rejected call. The handler is
+/// asynchronous because the host resolves the call through the session's
+/// tool pipeline while the sandbox worker stays parked; `signal` is the run's
+/// cancellation, so a cancelled run aborts an in-flight call. Stored for the
 /// run's duration, so it is a move-only operation (§6.2).
-using CodemodeToolCallHandler =
-        std::move_only_function<support::Expected<std::string>(std::string_view name, std::string_view arguments_json)>;
+using CodemodeToolCallHandler = std::move_only_function<support::AsyncResult<std::string>(
+        std::string_view name, std::string_view arguments_json, std::stop_token signal)>;
 
 /// One tool the script may call through `tools.<js_name>` (pi `CodemodeTool`).
 /// The host lists these into the guest's `toolsJson`, so a call routes back
@@ -133,13 +137,15 @@ public:
     CodemodeSandbox& operator=(const CodemodeSandbox&) = delete;
 
     /// Run `script` — a codemode source body (pi `parseCodemodeSource` result) —
-    /// as an async function body, exactly as pi's worker does, and return its
-    /// terminal outcome. `tools` become the script's `tools.*` surface; each
-    /// call is resolved through `handler`. A call with no `handler`, or a name
-    /// not in `tools`, is a rejected call the script sees — never a silent
-    /// success.
-    [[nodiscard]] CodemodeRunResult run(std::string_view script,
-            const std::vector<CodemodeToolDescriptor>& tools,
+    /// as an async function body on a dedicated worker thread, exactly as pi's
+    /// worker does, and return its terminal outcome. `tools` become the
+    /// script's `tools.*` surface; each call is resolved through `handler` on
+    /// the caller's executor while the worker parks. A call with no `handler`,
+    /// or a name not in `tools`, is a rejected call the script sees — never a
+    /// silent success. A fresh worker (and a fresh guest instance) runs per
+    /// call, so a crashed, timed-out, or aborted run never poisons a later one.
+    [[nodiscard]] support::AsyncResult<CodemodeRunResult> run(std::string script,
+            std::vector<CodemodeToolDescriptor> tools,
             CodemodeLimits limits,
             std::stop_token stop_token = {},
             CodemodeToolCallHandler handler = {});

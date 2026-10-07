@@ -14,42 +14,71 @@ namespace {
 /// Convert one extension-provided Tool into the Agent's Tool value. The
 /// definition, prompt metadata, and concurrency policy carry over unchanged;
 /// the extension execute operation runs when the Agent executor invokes the
-/// tool and its terminal outcome is mapped onto the Agent Tool result.
+/// tool and its terminal outcome is mapped onto the Agent Tool result. A tool
+/// that sets `context_execute` receives the run's nested-call dispatcher.
 [[nodiscard]] agent::Tool to_agent_tool(ExtensionTool tool) {
     agent::Tool agent_tool;
     agent_tool.definition = std::move(tool.definition);
     agent_tool.concurrency = tool.concurrency;
     agent_tool.prompt_snippet = std::move(tool.prompt_snippet);
     agent_tool.prompt_guidelines = std::move(tool.prompt_guidelines);
-    agent_tool.execute =
-            agent::ToolExecute{[execute = std::move(tool.execute)](agent::ToolInvocation invocation,
-                                       std::stop_token stop_token,
-                                       agent::ToolUpdateSink /*update_sink*/) mutable -> agent::ToolExecuteResult {
-                return agent::ToolExecuteResult{agent::ToolExecuteResult::producer_type{
-                        [execute = std::move(execute), arguments = std::move(invocation.arguments), stop_token](
-                                agent::ToolExecuteResult::completion_type completion) mutable noexcept {
-                            std::move(execute)(std::move(arguments), stop_token)
-                                    .start([completion = std::move(completion)](
-                                                   support::Expected<ExtensionToolResult> outcome) mutable noexcept {
-                                        if (!outcome) {
-                                            completion(std::unexpected(std::move(outcome.error())));
-                                            return;
-                                        }
-                                        completion(agent::AsyncToolExecutionResult{
-                                                .content = std::move(outcome->content),
-                                                .details = std::move(outcome->details),
-                                                .is_error = outcome->is_error,
-                                        });
-                                    });
-                        }}};
-            }};
+    const auto finish = [](agent::ToolExecuteResult::completion_type completion,
+                                support::Expected<ExtensionToolResult> outcome) mutable noexcept {
+        if (!outcome) {
+            completion(std::unexpected(std::move(outcome.error())));
+            return;
+        }
+        completion(agent::AsyncToolExecutionResult{
+                .content = std::move(outcome->content),
+                .details = std::move(outcome->details),
+                .is_error = outcome->is_error,
+        });
+    };
+    if (tool.context_execute) {
+        agent_tool.execute = agent::ToolExecute{[execute = std::move(tool.context_execute), finish](
+                                                        agent::ToolInvocation invocation,
+                                                        std::stop_token stop_token,
+                                                        agent::ToolUpdateSink /*update_sink*/) mutable
+                                                        -> agent::ToolExecuteResult {
+            return agent::ToolExecuteResult{agent::ToolExecuteResult::producer_type{
+                    [execute = std::move(execute),
+                            arguments = std::move(invocation.arguments),
+                            context = ExtensionToolContext{.nested_calls = invocation.nested_calls,
+                                    .call_id = std::move(invocation.call_id)},
+                            stop_token,
+                            finish](agent::ToolExecuteResult::completion_type completion) mutable noexcept {
+                        std::move(execute)(std::move(arguments), std::move(context), stop_token)
+                                .start([completion = std::move(completion),
+                                               finish](support::Expected<ExtensionToolResult> outcome) mutable noexcept {
+                                    finish(std::move(completion), std::move(outcome));
+                                });
+                    }}};
+        }};
+    } else {
+        agent_tool.execute = agent::ToolExecute{[execute = std::move(tool.execute), finish](agent::ToolInvocation invocation,
+                                                   std::stop_token stop_token,
+                                                   agent::ToolUpdateSink /*update_sink*/) mutable
+                                                   -> agent::ToolExecuteResult {
+            return agent::ToolExecuteResult{agent::ToolExecuteResult::producer_type{
+                    [execute = std::move(execute),
+                            arguments = std::move(invocation.arguments),
+                            stop_token,
+                            finish](agent::ToolExecuteResult::completion_type completion) mutable noexcept {
+                        std::move(execute)(std::move(arguments), stop_token)
+                                .start([completion = std::move(completion),
+                                               finish](support::Expected<ExtensionToolResult> outcome) mutable noexcept {
+                                    finish(std::move(completion), std::move(outcome));
+                                });
+                    }}};
+        }};
+    }
     return agent_tool;
 }
 
 } // namespace
 
 support::ExpectedVoid ExtensionToolRegistry::add(ExtensionTool tool) {
-    if (!tool.execute) {
+    if (!tool.execute && !tool.context_execute) {
         return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "cannot register an extension tool without an execute operation"));
     }

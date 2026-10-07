@@ -1,20 +1,30 @@
 #include "coding_agent/extensions/codemode/CodemodeToolSource.hpp"
 
+#include "coding_agent/extensions/codemode/CodemodeDiscovery.hpp"
 #include "coding_agent/extensions/codemode/CodemodeSandbox.hpp"
 #include "coding_agent/extensions/codemode/CodemodeSource.hpp"
 #include "coding_agent/extensions/codemode/CodemodeTool.hpp"
 
+#include "support/AsyncResultBridge.hpp"
+#include "support/Json.hpp"
+
+#include <cch/agent/NestedToolCalls.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
+#include <boost/asio/awaitable.hpp>
+
+#include <algorithm>
 #include <chrono>
+#include <expected>
 #include <format>
 #include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -64,9 +74,6 @@ struct GuestHolder {
         const CodemodeRunResult& run, std::chrono::steady_clock::duration elapsed) {
     ExtensionToolResult result;
     result.is_error = run.error.has_value();
-    // pi `executeCodemode`: `${ok ? "Script completed" : "Script failed"}\nWall
-    // time ${wallTime} seconds\nOutput:\n`. Built as one string so the first
-    // line carries no trailing space.
     std::string header = result.is_error ? "Script failed" : "Script completed";
     header += "\nWall time " + wall_time_seconds(elapsed) + " seconds\nOutput:\n";
     result.content.push_back(ai::text_content(std::move(header)));
@@ -96,6 +103,54 @@ struct GuestHolder {
     return ready(std::move(result));
 }
 
+/// pi `getCodemodeCallableTools`: every registered tool except codemode itself
+/// (its `exposure` is `model-only`, so scripts must not start other scripts).
+[[nodiscard]] std::vector<ai::Tool> callable_tools(const std::vector<ai::Tool>& tools) {
+    std::vector<ai::Tool> callable;
+    callable.reserve(tools.size());
+    for (const auto& tool : tools) {
+        if (tool.name == kCodemodeToolName) continue;
+        callable.push_back(tool);
+    }
+    return callable;
+}
+
+/// The `toolsJson` entries the prelude binds `tools.<jsName>` and
+/// `tools["<raw name>"]` to.
+[[nodiscard]] std::vector<CodemodeToolDescriptor> to_descriptors(const std::vector<ai::Tool>& tools) {
+    std::vector<CodemodeToolDescriptor> descriptors;
+    descriptors.reserve(tools.size());
+    for (const auto& tool : tools) {
+        CodemodeToolDescriptor descriptor;
+        descriptor.name = tool.name;
+        descriptor.js_name = to_codemode_identifier(tool.name);
+        descriptor.description = render_tool_sample(tool);
+        descriptors.push_back(std::move(descriptor));
+    }
+    return descriptors;
+}
+
+[[nodiscard]] bool is_discovery_global(std::string_view name) {
+    return name == "searchTools" || name == "describeTool" || name == "describeNamespace";
+}
+
+/// pi `toScriptValue`: a tool call resolves to its structured content when it
+/// carries one, otherwise to its text content; a failure rejects with the text.
+[[nodiscard]] support::Expected<std::string> script_value_from(const agent::AsyncToolExecutionResult& outcome) {
+    if (!outcome.is_error) {
+        if (outcome.details.has_value()) {
+            auto written = support::write_json(*outcome.details);
+            if (written) return std::move(*written);
+        }
+        auto written = support::write_json(support::JsonValue{ai::text_from_content(outcome.content)});
+        if (written) return std::move(*written);
+        return std::unexpected(std::move(written.error()));
+    }
+    std::string text = ai::text_from_content(outcome.content);
+    if (text.empty()) text = "Tool call failed";
+    return std::unexpected(support::make_error(support::ErrorCode::Validation, std::move(text)));
+}
+
 } // namespace
 
 CodemodeToolSource::CodemodeToolSource(std::filesystem::path guest_wasm_path)
@@ -110,14 +165,15 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
     tool.prompt_snippet = std::string{kCodemodePromptSnippet};
     tool.prompt_guidelines = codemode_prompt_guidelines();
     tool.concurrency = agent::ToolConcurrency::Exclusive;
-    tool.execute = [holder](support::JsonValue arguments,
-                           std::stop_token stop_token) -> support::AsyncResult<ExtensionToolResult> {
-        const auto* code = arguments.get_if<support::JsonValue::object_t>();
-        if (code == nullptr) {
+    tool.context_execute = [holder](support::JsonValue arguments,
+                                   ExtensionToolContext context,
+                                   std::stop_token stop_token) -> support::AsyncResult<ExtensionToolResult> {
+        const auto* fields = arguments.get_if<support::JsonValue::object_t>();
+        if (fields == nullptr) {
             return failed("codemode expects a JSON object with a `code` string argument.");
         }
-        const auto it = code->find("code");
-        const auto* source_text = it == code->end() ? nullptr : it->second.get_if<std::string>();
+        const auto it = fields->find("code");
+        const auto* source_text = it == fields->end() ? nullptr : it->second.get_if<std::string>();
         if (source_text == nullptr) {
             return failed("codemode expects a `code` string argument.");
         }
@@ -125,14 +181,82 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
         if (!parsed) {
             return failed("Script error:\n" + parsed.error().message);
         }
-        auto guest = holder->ensure();
-        if (!guest) {
-            return failed("Script failed\n" + guest.error().message);
+
+        std::vector<ai::Tool> callable;
+        if (context.nested_calls != nullptr) {
+            callable = callable_tools(context.nested_calls->tools());
         }
-        const auto started = std::chrono::steady_clock::now();
-        CodemodeRunResult run = (*guest)->run(parsed->code, {}, limits_for(parsed->options), stop_token);
-        const auto elapsed = std::chrono::steady_clock::now() - started;
-        return ready(to_extension_result(run, elapsed));
+        auto discovery = std::make_shared<CodemodeDiscovery>(callable);
+        auto descriptors = std::make_shared<std::vector<CodemodeToolDescriptor>>(to_descriptors(callable));
+        const std::string caller_id = context.call_id;
+
+        return support::detail::make_async_result(
+                [holder,
+                        parsed = std::move(*parsed),
+                        discovery,
+                        descriptors,
+                        caller_id,
+                        nested_calls = context.nested_calls,
+                        stop_token]() mutable -> boost::asio::awaitable<support::Expected<ExtensionToolResult>> {
+                    auto guest = holder->ensure();
+                    if (!guest) {
+                        co_return std::unexpected(support::make_error(
+                                support::ErrorCode::Validation, "Script failed\n" + guest.error().message));
+                    }
+                    const auto started = std::chrono::steady_clock::now();
+
+                    auto handler = [discovery, nested_calls, caller_id](
+                                           std::string_view name,
+                                           std::string_view arguments_json,
+                                           std::stop_token signal) -> support::AsyncResult<std::string> {
+                        if (is_discovery_global(name)) {
+                            auto parsed_args = support::read_json(arguments_json);
+                            support::JsonValue args = parsed_args ? std::move(*parsed_args)
+                                                                  : support::JsonValue{};
+                            auto outcome = discovery->handle(name, args);
+                            if (outcome) {
+                                return support::AsyncResult<std::string>{
+                                        support::Expected<std::string>{std::move(*outcome)}};
+                            }
+                            return support::AsyncResult<std::string>{
+                                    support::Expected<std::string>{std::unexpected(outcome.error())}};
+                        }
+                        if (nested_calls == nullptr) {
+                            return support::AsyncResult<std::string>{support::Expected<std::string>{
+                                    std::unexpected(support::make_error(support::ErrorCode::Validation,
+                                            std::format("tool '{}' is not available to the codemode sandbox",
+                                                    name)))}};
+                        }
+                        auto parsed_args = support::read_json(arguments_json);
+                        support::JsonValue args = parsed_args ? std::move(*parsed_args) : support::JsonValue{};
+                        return support::detail::make_async_result(
+                                [nested_calls,
+                                        caller_id,
+                                        name = std::string{name},
+                                        args = std::move(args),
+                                        signal]() mutable
+                                        -> boost::asio::awaitable<support::Expected<std::string>> {
+                                    auto outcome = co_await support::detail::await_async_result(
+                                            nested_calls->execute(caller_id, name, std::move(args), signal));
+                                    if (!outcome) {
+                                        co_return support::Expected<std::string>{std::unexpected(outcome.error())};
+                                    }
+                                    co_return script_value_from(*outcome);
+                                });
+                    };
+
+                    auto run = co_await support::detail::await_async_result((*guest)->run(std::move(parsed.code),
+                            std::move(*descriptors),
+                            limits_for(parsed.options),
+                            stop_token,
+                            std::move(handler)));
+                    if (!run) {
+                        co_return std::unexpected(
+                                support::make_error(support::ErrorCode::Validation, run.error().message));
+                    }
+                    const auto elapsed = std::chrono::steady_clock::now() - started;
+                    co_return to_extension_result(*run, elapsed);
+                });
     };
     std::vector<ExtensionTool> contributed;
     contributed.push_back(std::move(tool));

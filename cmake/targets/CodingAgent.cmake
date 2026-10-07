@@ -26,6 +26,7 @@ cch_parity_declare_target(
         src/coding_agent/mcp/McpOAuthServerConfig.cpp
         src/coding_agent/mcp/McpOAuthTokenResolver.cpp
         src/coding_agent/mcp/McpStdioClient.cpp
+        src/coding_agent/extensions/codemode/CodemodeDiscovery.cpp
         src/coding_agent/extensions/codemode/CodemodeSandbox.cpp
         src/coding_agent/extensions/codemode/CodemodeSource.cpp
         src/coding_agent/extensions/codemode/CodemodeTool.cpp

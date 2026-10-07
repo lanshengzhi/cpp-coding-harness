@@ -120,6 +120,7 @@ struct MessageDto {
     std::optional<std::string> toolCallId{std::nullopt};
     std::optional<std::string> toolName{std::nullopt};
     std::optional<glz::generic> details{std::nullopt};
+    std::optional<glz::generic> nestedCalls{std::nullopt};
     std::optional<bool> isError{std::nullopt};
     // Extended message type fields
     std::optional<std::string> command{std::nullopt};
@@ -765,6 +766,9 @@ template <typename Block, typename Convert>
             .toolName = message.tool_name,
             .details = message.details ? std::optional<glz::generic>{support::json_to_glaze(*message.details)}
                                        : std::nullopt,
+            .nestedCalls = message.nested_calls
+                    ? std::optional<glz::generic>{support::json_to_glaze(*message.nested_calls)}
+                    : std::nullopt,
             .isError = message.is_error,
             .timestamp = message.timestamp,
     };
@@ -938,6 +942,9 @@ template <typename Block, typename Convert>
                 .content = std::move(*content),
                 .details = dto.details ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.details)}
                                        : std::nullopt,
+                .nested_calls = dto.nestedCalls
+                        ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.nestedCalls)}
+                        : std::nullopt,
                 .is_error = dto.isError.value_or(false),
                 .timestamp = dto.timestamp,
         }};
