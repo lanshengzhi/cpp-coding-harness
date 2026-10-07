@@ -140,6 +140,28 @@ public:
     /// `AiContext.system_prompt`; live state advances in step.
     void set_system_prompt(std::string system_prompt);
 
+    /// pi `registerTool` + `refreshTools`: add or replace one tool on the live
+    /// surface. Registration alone does not declare the tool; the caller names
+    /// it with `set_active_tools` (the MCP surface's `direct` rule, pi's
+    /// `_isActivatedOnRegistration`). Rejects a tool with no name or no
+    /// execute operation.
+    [[nodiscard]] support::ExpectedVoid register_tool(Tool tool);
+
+    /// Remove one tool from the live registry and the declared set. pi never
+    /// unregisters a tool; it re-registers a withdrawn one as `hidden`, which
+    /// removes it from the declared set exactly like this. Returns whether a
+    /// registered tool was removed.
+    bool remove_tool(std::string_view name);
+
+    /// pi `setActiveTools`: replace the declared tool set. A name that is not
+    /// registered is ignored, so the declared set always names live tools. The
+    /// declared set is what the model sees; nested tool calls still reach every
+    /// registered tool.
+    [[nodiscard]] support::ExpectedVoid set_active_tools(std::vector<std::string> names);
+
+    /// pi `getActiveTools`: the declared tool names.
+    [[nodiscard]] std::vector<std::string> active_tools() const;
+
     /// Remove all pending steering messages.
     [[nodiscard]] support::ExpectedVoid clear_steering_queue();
 
