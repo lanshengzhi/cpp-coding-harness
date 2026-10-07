@@ -34,6 +34,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -68,6 +69,11 @@ using coding_agent::runtime::McpToolSurface;
 
 class ScriptedConnection final : public McpLiveConnection {
 public:
+    struct Call {
+        std::string tool;
+        support::JsonValue arguments;
+    };
+
     std::string name;
     McpServerState state_value{McpServerState::Connected};
     std::vector<McpLiveTool> offered_tools;
@@ -77,6 +83,22 @@ public:
     std::optional<std::string> stderr;
     bool oauth{false};
     std::string oauth_url_value{"https://mcp.example.com/mcp"};
+    std::optional<std::string> instructions_value;
+    std::vector<Call> calls;
+    support::JsonValue call_result{support::JsonValue{support::JsonValue::object_t{
+            {
+                    "content",
+                    support::JsonValue{support::JsonValue::array_t{
+                            support::JsonValue{support::JsonValue::object_t{
+                                    {"type", "text"},
+                                    {"text", "called"},
+                            }},
+                    }},
+            },
+    }}};
+    int resources_pages{0};
+    int resource_templates_pages{0};
+    std::vector<std::string> resource_reads;
     bool reconnect_succeeds{true};
     int reconnect_calls{0};
     int sign_out_calls{0};
@@ -93,6 +115,33 @@ public:
     [[nodiscard]] const std::optional<std::string>& stderr_tail() const noexcept override { return stderr; }
     [[nodiscard]] bool uses_oauth() const noexcept override { return oauth; }
     [[nodiscard]] const std::string& oauth_url() const noexcept override { return oauth_url_value; }
+    [[nodiscard]] const std::optional<std::string>& instructions() const noexcept override {
+        return instructions_value;
+    }
+
+    [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(
+            std::string_view tool, support::JsonValue arguments, std::stop_token) override {
+        calls.push_back(Call{std::string{tool}, std::move(arguments)});
+        return support::AsyncResult<support::JsonValue>{call_result};
+    }
+    [[nodiscard]] support::AsyncResult<support::JsonValue> resources_page(
+            std::optional<std::string>, std::stop_token) override {
+        ++resources_pages;
+        return support::AsyncResult<support::JsonValue>{
+                support::JsonValue{support::JsonValue::object_t{{"resources", support::JsonValue::array_t{}}}}};
+    }
+    [[nodiscard]] support::AsyncResult<support::JsonValue> resource_templates_page(
+            std::optional<std::string>, std::stop_token) override {
+        ++resource_templates_pages;
+        return support::AsyncResult<support::JsonValue>{support::JsonValue{support::JsonValue::object_t{
+                {"resourceTemplates", support::JsonValue::array_t{}},
+        }}};
+    }
+    [[nodiscard]] support::AsyncResult<support::JsonValue> read_resource(std::string uri, std::stop_token) override {
+        resource_reads.push_back(std::move(uri));
+        return support::AsyncResult<support::JsonValue>{
+                support::JsonValue{support::JsonValue::object_t{{"contents", support::JsonValue::array_t{}}}}};
+    }
 
     [[nodiscard]] support::AsyncResult<void> reconnect() override {
         ++reconnect_calls;
@@ -149,19 +198,27 @@ public:
     struct Registration {
         std::string name;
         McpExposure exposure;
+        support::JsonValue input_schema;
+        std::optional<support::JsonValue> output_schema;
+        coding_agent::runtime::McpToolCall call;
     };
 
     std::vector<Registration> registrations;
     std::optional<McpExposure> resource_exposure;
-    std::vector<std::string> resource_servers;
+    std::vector<std::shared_ptr<coding_agent::mcp::McpResourceServer>> resource_servers;
     std::vector<std::string> active;
     std::map<std::string, McpExposure> surface;
+    /// Whether the surface plays the codemode extension's registration (pi
+    /// `pi.getAllTools()` sees codemode); tests opt in by naming it.
+    bool codemode_registered{false};
 
     void register_tool(McpRegisteredTool tool) override {
-        registrations.push_back(Registration{tool.name, tool.exposure});
+        registrations.push_back(
+                Registration{tool.name, tool.exposure, tool.input_schema, tool.output_schema, tool.call});
         surface[tool.name] = tool.exposure;
     }
-    void register_resource_tools(McpExposure exposure, const std::vector<std::string>& servers) override {
+    void register_resource_tools(
+            McpExposure exposure, std::vector<std::shared_ptr<coding_agent::mcp::McpResourceServer>> servers) override {
         resource_exposure = exposure;
         resource_servers = servers;
         for (const auto name : {coding_agent::mcp::kListMcpResourcesTool,
@@ -176,6 +233,10 @@ public:
         std::vector<McpSurfaceTool> tools;
         for (const auto& [name, exposure] : surface) {
             tools.push_back(McpSurfaceTool{name, exposure});
+        }
+        if (codemode_registered &&
+                std::ranges::none_of(tools, [](const McpSurfaceTool& tool) { return tool.name == "codemode"; })) {
+            tools.push_back(McpSurfaceTool{"codemode", McpExposure::Codemode});
         }
         return tools;
     }
@@ -495,6 +556,162 @@ TEST_CASE("an exposure change re-registers the server's tools at the new exposur
     CHECK(harness.surface->last_exposure_of("mcp__echo__echo") == McpExposure::Direct);
 }
 
+// ── Tool schema and call execution ──────────────────────────────────────────
+
+TEST_CASE("registered tools carry their input schema and execute tools/call on the live connection",
+        "[coding_agent][mcp][issue884][spec]") {
+    auto harness = Harness::make(config_with({stdio_entry("echo")}));
+    auto connection = connection_for(harness, "echo");
+    connection->offered_tools = {
+            McpLiveTool{
+                    .name = "echo",
+                    .description = "echoes",
+                    .input_schema = support::JsonValue{support::JsonValue::object_t{
+                            {"type", "object"},
+                            {"required", support::JsonValue::array_t{"text"}},
+                    }},
+            },
+    };
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    REQUIRE(!harness.surface->registrations.empty());
+    const auto& registration = harness.surface->registrations.back();
+    CHECK(registration.name == "mcp__echo__echo");
+    // pi `Tool.inputSchema`: the schema `tools/list` advertised reaches the
+    // surface unchanged, so the declared parameters match the server's.
+    const auto* schema = registration.input_schema.get_if<support::JsonValue::object_t>();
+    REQUIRE(schema != nullptr);
+    CHECK(schema->contains("required"));
+
+    // The runnable call executes one `tools/call` on the server's live
+    // connection and returns the CallToolResult.
+    auto outcome = runtime.run(
+            registration.call(support::JsonValue{support::JsonValue::object_t{{"text", "hi"}}}, std::stop_token{}));
+    REQUIRE(outcome.has_value());
+    REQUIRE(connection->calls.size() == 1);
+    CHECK(connection->calls.front().tool == "echo");
+    const auto* arguments = connection->calls.front().arguments.get_if<support::JsonValue::object_t>();
+    REQUIRE(arguments != nullptr);
+    CHECK(arguments->at("text").get_string() == "hi");
+}
+
+// ── Discovery activation (pi `ensureDiscoveryActive`) ───────────────────────
+
+TEST_CASE("a codemode-exposure server activates the codemode tool from the config before any connect",
+        "[coding_agent][mcp][issue884][spec]") {
+    auto harness = Harness::make(config_with({stdio_entry("echo")}));
+    static_cast<void>(connection_for(harness, "echo"));
+    // The codemode extension registers its tool on the same surface; the
+    // recording surface only reports it when asked.
+    harness.surface->codemode_registered = true;
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    CHECK(harness.surface->active == std::vector<std::string>{"codemode"});
+    CHECK(harness.manager->warnings().empty());
+}
+
+TEST_CASE("an already-active codemode tool is not activated twice", "[coding_agent][mcp][issue884][spec]") {
+    auto harness = Harness::make(config_with({stdio_entry("echo")}));
+    static_cast<void>(connection_for(harness, "echo"));
+    harness.surface->codemode_registered = true;
+    harness.surface->active = {"codemode"};
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    CHECK(harness.surface->active == std::vector<std::string>{"codemode"});
+    CHECK(harness.manager->warnings().empty());
+}
+
+TEST_CASE("autoEnableCodemode false leaves codemode inactive and reports pi's verbatim warning",
+        "[coding_agent][mcp][issue884][spec]") {
+    auto config = config_with({stdio_entry("echo")});
+    config.auto_enable_codemode = false;
+    auto harness = Harness::make(std::move(config));
+    static_cast<void>(connection_for(harness, "echo"));
+    harness.surface->codemode_registered = true;
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    CHECK(harness.surface->active.empty());
+    REQUIRE(harness.manager->warnings().size() == 1);
+    CHECK(harness.manager->warnings().front() ==
+            "MCP tools are only reachable from the codemode or tool_search tool, but neither is active "
+            "(autoEnableCodemode is false); they cannot be called.");
+}
+
+TEST_CASE("a deferred-exposure server activates nothing and warns once that neither discovery tool is active",
+        "[coding_agent][mcp][issue884][spec]") {
+    // Pike has no tool_search tool (ADR 0066): the deferred branch records
+    // the gap and activates nothing, and pi's verbatim warning fires once
+    // because codemode is inactive too.
+    auto harness = Harness::make(config_with({stdio_entry("echo", true, McpExposure::Deferred)}));
+    static_cast<void>(connection_for(harness, "echo"));
+    harness.surface->codemode_registered = true;
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    CHECK(harness.surface->active.empty());
+    REQUIRE(harness.manager->warnings().size() == 1);
+    CHECK(harness.manager->warnings().front() ==
+            "MCP tools are only reachable from the codemode or tool_search tool, but neither is active; they "
+            "cannot be called.");
+
+    // The latch: repeated actions do not repeat the warning.
+    auto outcome = runtime.run(harness.manager->reconnect("echo"));
+    REQUIRE(outcome.has_value());
+    CHECK(harness.manager->warnings().size() == 1);
+}
+
+TEST_CASE(
+        "an active codemode tool also silences the deferred-exposure warning", "[coding_agent][mcp][issue884][spec]") {
+    // pi: either discovery tool reaches every undeclared tool, so a deferred
+    // server is reachable when codemode is already active.
+    auto harness = Harness::make(config_with({stdio_entry("echo", true, McpExposure::Deferred)}));
+    static_cast<void>(connection_for(harness, "echo"));
+    harness.surface->codemode_registered = true;
+    harness.surface->active = {"codemode"};
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    CHECK(harness.surface->active == std::vector<std::string>{"codemode"});
+    CHECK(harness.manager->warnings().empty());
+}
+
+TEST_CASE(
+        "direct and hidden exposures need no discovery tool and warn nothing", "[coding_agent][mcp][issue884][spec]") {
+    auto harness = Harness::make(config_with({
+            stdio_entry("direct", true, McpExposure::Direct),
+            stdio_entry("hidden", true, McpExposure::Hidden),
+    }));
+    static_cast<void>(connection_for(harness, "direct"));
+    static_cast<void>(connection_for(harness, "hidden"));
+    harness.surface->codemode_registered = true;
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    CHECK(harness.surface->active.empty());
+    CHECK(harness.manager->warnings().empty());
+}
+
+TEST_CASE("an exposure change to codemode activates codemode without waiting for a connect",
+        "[coding_agent][mcp][issue884][spec]") {
+    tests::TempWorkspace workspace;
+    auto harness = persisted_harness(workspace, stdio_mcp_json("echo"));
+    auto connection = connection_for(harness, "echo");
+    connection->offered_tools = {McpLiveTool{.name = "echo", .description = "echoes"}};
+    harness.surface->codemode_registered = true;
+
+    tests::RuntimeFixture runtime;
+    REQUIRE(runtime.run(harness.manager->start()).has_value());
+    auto outcome = runtime.run(harness.manager->set_exposure("echo", McpExposure::Codemode));
+    REQUIRE(outcome.has_value());
+    CHECK_FALSE(outcome->has_value());
+    CHECK(harness.surface->active == std::vector<std::string>{"codemode"});
+    CHECK(harness.manager->warnings().empty());
+}
+
 // ── Resource tools ──────────────────────────────────────────────────────────
 
 TEST_CASE("the resource tools take the widest non-hidden exposure of resource-bearing servers",
@@ -514,7 +731,18 @@ TEST_CASE("the resource tools take the widest non-hidden exposure of resource-be
     REQUIRE(runtime.run(harness.manager->start()).has_value());
     REQUIRE(harness.surface->resource_exposure.has_value());
     CHECK(*harness.surface->resource_exposure == McpExposure::Direct);
-    CHECK(harness.surface->resource_servers == std::vector<std::string>{"codemode", "direct"});
+    std::vector<std::string> resource_names;
+    for (const auto& server : harness.surface->resource_servers) {
+        resource_names.push_back(server->name());
+    }
+    CHECK(resource_names == std::vector<std::string>{"codemode", "direct"});
+
+    // The registered resource tools reach the live connections: a listing
+    // routes to the owning server's resource page, not to another server.
+    auto page = runtime.run(harness.surface->resource_servers.front()->resources_page(std::nullopt, {}));
+    REQUIRE(page.has_value());
+    CHECK(first->resources_pages == 1);
+    CHECK(second->resources_pages == 0);
 
     // Separation: when only the codemode server bears resources, the resource
     // tools fall back to codemode (never direct).

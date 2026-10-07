@@ -8,9 +8,11 @@
 
 #include "coding_agent/runtime/McpSessionManager.hpp"
 
+#include "coding_agent/extensions/codemode/CodemodeTool.hpp"
 #include "coding_agent/mcp/McpConfigWrite.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 #include "coding_agent/mcp/McpNamespace.hpp"
+#include "coding_agent/mcp/McpServersSection.hpp"
 
 #include "support/AsyncResultBridge.hpp"
 
@@ -21,6 +23,7 @@
 #include <format>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 
@@ -76,6 +79,31 @@ using mcp::McpServerConfigBase;
 [[nodiscard]] constexpr std::array<std::string_view, 3> resource_tool_names() {
     return {mcp::kListMcpResourcesTool, mcp::kListMcpResourceTemplatesTool, mcp::kReadMcpResourceTool};
 }
+
+/// One live connection presented as a resource server (pi
+/// `McpResourceServer` over `McpServerConnection`): the resource tools' lane
+/// to the connection's resource request methods.
+class LiveResourceServer final : public mcp::McpResourceServer {
+public:
+    explicit LiveResourceServer(std::shared_ptr<McpLiveConnection> connection) : connection_(std::move(connection)) {}
+
+    [[nodiscard]] const std::string& name() const noexcept override { return connection_->server_name(); }
+    [[nodiscard]] support::AsyncResult<support::JsonValue> resources_page(
+            std::optional<std::string> cursor, std::stop_token stop_token) override {
+        return connection_->resources_page(std::move(cursor), stop_token);
+    }
+    [[nodiscard]] support::AsyncResult<support::JsonValue> resource_templates_page(
+            std::optional<std::string> cursor, std::stop_token stop_token) override {
+        return connection_->resource_templates_page(std::move(cursor), stop_token);
+    }
+    [[nodiscard]] support::AsyncResult<support::JsonValue> read_resource(
+            std::string uri, std::stop_token stop_token) override {
+        return connection_->read_resource(std::move(uri), stop_token);
+    }
+
+private:
+    std::shared_ptr<McpLiveConnection> connection_;
+};
 
 } // namespace
 
@@ -174,6 +202,7 @@ std::vector<McpServerSnapshot> McpSessionManager::servers() const {
             connection.error = server.connection->error();
             connection.stderr_tail = server.connection->stderr_tail();
             connection.oauth = server.connection->uses_oauth();
+            connection.instructions = server.connection->instructions();
             snapshot.connection = std::move(connection);
         }
         snapshots.push_back(std::move(snapshot));
@@ -191,6 +220,10 @@ void McpSessionManager::emit_change() {
 
 support::AsyncResult<void> McpSessionManager::start() {
     return support::detail::make_async_result([this]() -> boost::asio::awaitable<support::ExpectedVoid> {
+        // pi `session_start`: the discovery tool is activated from the config
+        // before any connection, so a script or the first prompt never sees
+        // it inactive.
+        ensure_discovery_active();
         for (auto& server : servers_) {
             if (!is_enabled(server.entry)) {
                 continue;
@@ -259,6 +292,16 @@ void McpSessionManager::register_tools(std::string_view server) {
         registration.name = mcp::mcp_tool_name(name, tool.name);
         registration.description = tool.description;
         registration.exposure = mcp::get_mcp_tool_exposure(base.tool_exposure, base.exposure, tool.name);
+        registration.input_schema = tool.input_schema;
+        registration.output_schema = tool.output_schema;
+        // pi `client.callTool`: the runnable execution stays bound to the
+        // live connection, so a re-registration (including withdrawal as
+        // hidden) keeps the same caller.
+        std::shared_ptr<McpLiveConnection> connection = record->connection;
+        const std::string server_tool_name = tool.name;
+        registration.call = [connection, server_tool_name](support::JsonValue arguments, std::stop_token stop_token) {
+            return connection->call_tool(server_tool_name, std::move(arguments), stop_token);
+        };
         definitions_[registration.name] = registration;
         dependencies_.tools->register_tool(registration);
         current.insert(registration.name);
@@ -315,7 +358,13 @@ void McpSessionManager::sync_resource_tools() {
     }
     const bool was_direct = resource_tools_exposure_ && *resource_tools_exposure_ == McpExposure::Direct;
     resource_tools_exposure_ = next;
-    dependencies_.tools->register_resource_tools(next, resource_bearing_servers());
+    std::vector<std::shared_ptr<mcp::McpResourceServer>> servers;
+    for (const auto& name : resource_bearing_servers()) {
+        if (const ManagedServer* record = find(name); record != nullptr && record->connection) {
+            servers.push_back(std::make_shared<LiveResourceServer>(record->connection));
+        }
+    }
+    dependencies_.tools->register_resource_tools(next, std::move(servers));
     if (was_direct) {
         // pi: tools no longer exposed directly leave the declared set.
         std::set<std::string> names;
@@ -329,6 +378,79 @@ void McpSessionManager::sync_resource_tools() {
             }
         }
         dependencies_.tools->set_active_tools(std::move(active));
+    }
+}
+
+void McpSessionManager::ensure_discovery_active() {
+    // pi `configuredExposures` over every enabled server (the section
+    // renderer's helper): the exposures are known from the config before the
+    // servers connect.
+    std::set<McpExposure> exposures;
+    for (const auto& server : servers_) {
+        if (!is_enabled(server.entry)) {
+            continue;
+        }
+        for (const auto exposure : mcp::mcp_configured_exposures(server.entry)) {
+            exposures.insert(exposure);
+        }
+    }
+    const bool needs_codemode = exposures.contains(McpExposure::Codemode);
+    const bool needs_tool_search = exposures.contains(McpExposure::Deferred);
+    if (!needs_codemode && !needs_tool_search) {
+        return;
+    }
+    // pi `isCodemodeTool`/`isToolSearchTool`: whether the discovery tools are
+    // registered on this session's surface. Pike has no tool_search tool
+    // (ADR 0066): the deferred branch activates nothing and the warning
+    // names it only as pi's text does.
+    constexpr std::string_view kToolSearchToolName = "tool_search";
+    bool has_codemode = false;
+    bool has_tool_search = false;
+    for (const auto& tool : dependencies_.tools->all_tools()) {
+        has_codemode = has_codemode || tool.name == extensions::kCodemodeToolName;
+        has_tool_search = has_tool_search || tool.name == kToolSearchToolName;
+    }
+    const std::vector<std::string> active = dependencies_.tools->active_tools();
+    const std::string codemode_name{extensions::kCodemodeToolName};
+    std::vector<std::string> activate;
+    if (needs_codemode && has_codemode && config_.auto_enable_codemode &&
+            std::ranges::find(active, codemode_name) == active.end()) {
+        activate.push_back(codemode_name);
+    }
+    if (needs_tool_search && has_tool_search &&
+            std::ranges::find(active, std::string{kToolSearchToolName}) == active.end()) {
+        activate.push_back(std::string{kToolSearchToolName});
+    }
+    if (!activate.empty()) {
+        std::vector<std::string> next = active;
+        next.insert(next.end(), activate.begin(), activate.end());
+        dependencies_.tools->set_active_tools(std::move(next));
+    }
+    const auto reachable = [&] {
+        std::vector<std::string> names = active;
+        names.insert(names.end(), activate.begin(), activate.end());
+        return names;
+    }();
+    // Either discovery tool reaches every undeclared tool (pi's doc comment),
+    // so a warning is needed only when neither is active.
+    if (has_codemode && std::ranges::find(reachable, codemode_name) != reachable.end()) {
+        return;
+    }
+    if (has_tool_search && std::ranges::find(reachable, std::string{kToolSearchToolName}) != reachable.end()) {
+        return;
+    }
+    if (warned_unreachable_) {
+        return;
+    }
+    warned_unreachable_ = true;
+    const std::string reason =
+            needs_codemode && has_codemode && !config_.auto_enable_codemode ? " (autoEnableCodemode is false)" : "";
+    std::string warning = "MCP tools are only reachable from the codemode or tool_search tool, but neither is "
+                          "active" +
+                          reason + "; they cannot be called.";
+    warnings_.push_back(warning);
+    if (dependencies_.notify_warning) {
+        dependencies_.notify_warning(warning);
     }
 }
 
@@ -394,6 +516,9 @@ support::AsyncResult<std::optional<std::string>> McpSessionManager::sign_in(
                 if (record->connection->state() == McpServerState::Connected) {
                     register_tools(name);
                 }
+                // pi `runAction`: every action re-checks the discovery
+                // activation (a sign-in can make a codemode server reachable).
+                ensure_discovery_active();
                 record->message.reset();
                 emit_change();
                 co_return std::optional<std::string>{};
@@ -438,6 +563,7 @@ support::AsyncResult<std::optional<std::string>> McpSessionManager::reconnect(st
                 if (record->connection->state() == McpServerState::Connected) {
                     register_tools(name);
                 }
+                ensure_discovery_active();
                 record->message.reset();
                 emit_change();
                 co_return std::optional<std::string>{};
@@ -463,6 +589,7 @@ support::AsyncResult<std::optional<std::string>> McpSessionManager::set_enabled(
                     auto connection = std::move(record->connection);
                     record->connection.reset();
                     hide_tools(name);
+                    ensure_discovery_active();
                     record->message.reset();
                     emit_change();
                     if (connection) {
@@ -476,6 +603,7 @@ support::AsyncResult<std::optional<std::string>> McpSessionManager::set_enabled(
                     emit_change();
                     co_return support::Expected<std::optional<std::string>>{record->message};
                 }
+                ensure_discovery_active();
                 record->message.reset();
                 emit_change();
                 co_return support::Expected<std::optional<std::string>>{std::nullopt};
@@ -518,6 +646,7 @@ support::AsyncResult<std::optional<std::string>> McpSessionManager::set_exposure
                     }
                 }
                 dependencies_.tools->set_active_tools(std::move(active));
+                ensure_discovery_active();
                 record->message.reset();
                 emit_change();
                 co_return support::Expected<std::optional<std::string>>{std::nullopt};

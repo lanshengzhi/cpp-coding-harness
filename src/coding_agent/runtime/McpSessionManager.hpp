@@ -34,6 +34,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -55,11 +56,15 @@ enum class McpServerState {
 /// pi's `ServerState` spelling (`connecting`, `needs-auth`, ...).
 [[nodiscard]] std::string_view mcp_server_state_name(McpServerState state);
 
-/// pi `Tool` as the manager reads it: the server-side name and the description
-/// the tools list renders.
+/// pi `Tool` as the manager reads it: the server-side name, the description
+/// the tools list renders, and the input/output schemas the surface declares.
 struct McpLiveTool {
     std::string name;
     std::string description;
+    /// pi `Tool.inputSchema` (a JSON Schema object).
+    support::JsonValue input_schema;
+    /// pi `Tool.outputSchema`, when the server declared one.
+    std::optional<support::JsonValue> output_schema;
 };
 
 /// One live connection (pi `McpServerConnection`). The manager owns one per
@@ -87,6 +92,22 @@ public:
     [[nodiscard]] virtual bool uses_oauth() const noexcept = 0;
     /// pi `connection.oauthUrl`.
     [[nodiscard]] virtual const std::string& oauth_url() const noexcept = 0;
+    /// pi `initialize` result `instructions`, when the server sent them: the
+    /// `mcp_servers` prompt section's summary fallback.
+    [[nodiscard]] virtual const std::optional<std::string>& instructions() const noexcept = 0;
+
+    /// pi `client.callTool`: one `tools/call` for `tool` on this connection.
+    [[nodiscard]] virtual support::AsyncResult<support::JsonValue> call_tool(
+            std::string_view tool, support::JsonValue arguments, std::stop_token stop_token) = 0;
+    /// pi `client.listResourcesPage`: one `resources/list` page.
+    [[nodiscard]] virtual support::AsyncResult<support::JsonValue> resources_page(
+            std::optional<std::string> cursor, std::stop_token stop_token) = 0;
+    /// pi `client.listResourceTemplatesPage`: one `resources/templates/list` page.
+    [[nodiscard]] virtual support::AsyncResult<support::JsonValue> resource_templates_page(
+            std::optional<std::string> cursor, std::stop_token stop_token) = 0;
+    /// pi `client.readResource`: one `resources/read` for `uri`.
+    [[nodiscard]] virtual support::AsyncResult<support::JsonValue> read_resource(
+            std::string uri, std::stop_token stop_token) = 0;
 
     /// pi `connection.reconnect()`: stdio restarts the whole process; HTTP
     /// reconnects and refreshes `tools/list`.
@@ -145,14 +166,28 @@ public:
             const mcp::McpConfigEntry& entry) = 0;
 };
 
+/// pi `client.callTool`: one `tools/call` execution on a server's live
+/// connection, bound by the manager at registration. The surface turns it into
+/// the tool's execute operation; it stays bound when a withdrawn tool
+/// re-registers as hidden, exactly like pi's definition map.
+using McpToolCall = std::function<support::AsyncResult<support::JsonValue>(
+        support::JsonValue arguments, std::stop_token stop_token)>;
+
 /// One tool the manager registers on the session tool surface (pi
-/// `ToolDefinition` narrowed to the exposure decision).
+/// `ToolDefinition` narrowed to the exposure decision, plus the schemas and
+/// the call execution the declaration needs).
 struct McpRegisteredTool {
     std::string server;
     std::string server_tool_name;
     std::string name;
     std::string description;
     mcp::McpExposure exposure{mcp::McpExposure::Codemode};
+    /// pi `Tool.inputSchema`: the JSON Schema the server advertised.
+    support::JsonValue input_schema;
+    /// pi `Tool.outputSchema`, when the server declared one.
+    std::optional<support::JsonValue> output_schema;
+    /// pi `client.callTool`: the runnable `tools/call` execution.
+    McpToolCall call;
 };
 
 /// One tool already on the surface, for pi's `pi.getAllTools()`.
@@ -175,7 +210,8 @@ public:
     virtual void register_tool(McpRegisteredTool tool) = 0;
     /// Register the three Codex-compatible resource tools at `exposure`,
     /// reaching `servers` (pi `createMcpResourceToolDefinitions`).
-    virtual void register_resource_tools(mcp::McpExposure exposure, const std::vector<std::string>& servers) = 0;
+    virtual void register_resource_tools(
+            mcp::McpExposure exposure, std::vector<std::shared_ptr<mcp::McpResourceServer>> servers) = 0;
     /// Replace the active (declared) tool set (pi `pi.setActiveTools`).
     virtual void set_active_tools(std::vector<std::string> names) = 0;
     [[nodiscard]] virtual std::vector<std::string> active_tools() const = 0;
@@ -215,6 +251,8 @@ struct McpConnectionSnapshot {
     std::optional<std::string> error;
     std::optional<std::string> stderr_tail;
     bool oauth{false};
+    /// pi `connection`'s `instructions`: the initialize result's instructions.
+    std::optional<std::string> instructions;
 };
 
 /// One configured server plus its live connection and last action message (pi
@@ -232,6 +270,11 @@ struct McpManagerDependencies {
     std::shared_ptr<McpConnectionFactory> connections;
     std::shared_ptr<McpToolSurface> tools;
     std::shared_ptr<McpSignInDriver> auth;
+    /// pi `ctx.ui.notify(..., "warning")` for the discovery-reachability
+    /// warning (`ensureDiscoveryActive`). Optional: the warning is always
+    /// recorded on the manager (`warnings()`), so a host without a UI seam
+    /// still surfaces it through the panel or the session.
+    std::function<void(std::string_view message)> notify_warning;
 };
 
 /// The session-level MCP server manager (pi `createMcpExtension`'s `servers`
@@ -264,6 +307,10 @@ public:
     [[nodiscard]] std::vector<McpServerSnapshot> servers() const;
     [[nodiscard]] const std::vector<std::string>& config_errors() const noexcept { return config_errors_; }
     [[nodiscard]] const std::vector<std::string>& overridden() const noexcept { return overridden_; }
+    /// pi `warnedUnreachable`'s texts: the verbatim discovery-reachability
+    /// warning, recorded at most once for the manager's lifetime (pi latches
+    /// per session).
+    [[nodiscard]] const std::vector<std::string>& warnings() const noexcept { return warnings_; }
     [[nodiscard]] const std::filesystem::path& agent_dir() const noexcept { return agent_dir_; }
     /// pi `projectConfig !== undefined`: a trusted project's `mcp.json` exists,
     /// so a global server can be enabled or disabled for the project alone.
@@ -308,6 +355,12 @@ public:
     void sync_resource_tools();
 
 private:
+    /// pi `ensureDiscoveryActive`: activate the discovery tool the configured
+    /// exposures ask for — `codemode` for `codemode` exposure unless
+    /// `autoEnableCodemode` is false, `tool_search` for `deferred` — and warn
+    /// once, with pi's verbatim text, when neither is active. Computed from
+    /// the config, so the tool is active before the servers connect.
+    void ensure_discovery_active();
     struct ManagedServer {
         mcp::McpConfigEntry entry;
         std::optional<std::string> scope;
@@ -341,6 +394,10 @@ private:
     /// pi `resourceToolsExposure`: the exposure the resource tools were last
     /// registered with; unset until a server has resources.
     std::optional<mcp::McpExposure> resource_tools_exposure_;
+    /// pi `warnedUnreachable`: latch so the reachability warning fires once.
+    bool warned_unreachable_{false};
+    /// The recorded warning texts (see `warnings()`).
+    std::vector<std::string> warnings_;
     std::function<void()> change_listener_;
 };
 
