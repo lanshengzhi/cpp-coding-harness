@@ -29,13 +29,11 @@ constexpr std::string_view kDefaultPreamble =
 /// pi `String.prototype.trim()`.
 [[nodiscard]] std::string trim(std::string_view text) {
     std::size_t begin = 0;
-    while (begin < text.size() &&
-           std::isspace(static_cast<unsigned char>(text[begin]))) {
+    while (begin < text.size() && std::isspace(static_cast<unsigned char>(text[begin]))) {
         ++begin;
     }
     std::size_t end = text.size();
-    while (end > begin &&
-           std::isspace(static_cast<unsigned char>(text[end - 1]))) {
+    while (end > begin && std::isspace(static_cast<unsigned char>(text[end - 1]))) {
         --end;
     }
     return std::string{text.substr(begin, end - begin)};
@@ -216,6 +214,13 @@ std::vector<SystemPromptSection> buildSystemPromptSections(const BuildSystemProm
     }
 
     sections.push_back(wrap_section("cwd", posix_normalize_cwd(options.cwd)));
+
+    // pi's `sections` (customSections) are appended after `cwd`; Pike carries
+    // only the MCP extension's `mcp_servers` section today (pi
+    // `renderServersSection`). An empty body renders no section.
+    if (options.mcpServersSection && !options.mcpServersSection->empty()) {
+        sections.push_back(wrap_section("mcp_servers", *options.mcpServersSection));
+    }
     return sections;
 }
 
