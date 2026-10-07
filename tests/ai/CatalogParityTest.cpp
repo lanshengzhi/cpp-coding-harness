@@ -84,12 +84,12 @@ constexpr std::array<std::string_view, 4> kDeferredResizeLeaves{
 };
 
 // T1 carries only the typed fields represented by Model.hpp. The remaining
-// catalog flags are explicit Deferred fields: grammar/tool-search/additional
-// tools, mid-conversation system/tool additions, session-affinity request
-// flags and effort detection. Strict mode is carried for both Responses and
-// Completions; grammar-constrained tool schemas remain deferred.
-constexpr std::array<std::string_view, 7> kDeferredCompatFields{
-        "supportsOpenAIGrammarTools",
+// catalog flags are explicit Deferred fields: tool-search/additional tools,
+// mid-conversation system/tool additions, session-affinity request flags and
+// effort detection. Strict mode is carried for both Responses and Completions;
+// the grammar-tool flag is carried on both Responses API identities
+// (`openai-responses`, `openai-codex-responses`; ADR 0033 #885 amendment).
+constexpr std::array<std::string_view, 6> kDeferredCompatFields{
         "supportsToolSearch",
         "supportsAdditionalTools",
         "supportsMidConvoSystemMessages",
@@ -388,12 +388,18 @@ template <typename T> [[nodiscard]] ParseResult<T> fail(std::string path, std::s
     }
     if (api == "openai-responses") {
         return contains(
-                std::array<std::string_view, 3>{
+                std::array<std::string_view, 4>{
                         "sessionAffinityFormat",
                         "supportsStrictMode",
                         "supportsExplicitPromptCacheMode",
+                        "supportsOpenAIGrammarTools",
                 },
                 key);
+    }
+    if (api == "openai-codex-responses") {
+        // The Codex catalog carries the same Responses compat shape; today the
+        // only carried field is the grammar-tool flag (Model.hpp).
+        return contains(std::array<std::string_view, 1>{"supportsOpenAIGrammarTools"}, key);
     }
     if (api == "anthropic-messages") {
         return contains(
@@ -757,6 +763,8 @@ template <typename T> [[nodiscard]] ParseResult<T> fail(std::string path, std::s
                              "supportsStrictMode", &compat.supports_strict_mode),
                      std::pair<std::string_view, std::optional<bool>*>(
                              "supportsExplicitPromptCacheMode", &compat.supports_explicit_prompt_cache_mode),
+                     std::pair<std::string_view, std::optional<bool>*>(
+                             "supportsOpenAIGrammarTools", &compat.supports_openai_grammar_tools),
              }) {
             auto parsed = optional_scalar_bool(**object, key, std::format("{}.compat", path));
             if (!parsed) {
@@ -768,6 +776,21 @@ template <typename T> [[nodiscard]] ParseResult<T> fail(std::string path, std::s
             }
         }
         if (populated) {
+            return std::optional<ai::ModelCompatVariant>{ai::ModelCompatVariant{std::move(compat)}};
+        }
+    }
+
+    if (api == "openai-codex-responses") {
+        // The Codex catalog's only carried compat field is the grammar-tool
+        // flag, in the same Responses compat shape (Model.cpp accepts either
+        // Responses api for OpenAIResponsesCompat).
+        ai::OpenAIResponsesCompat compat;
+        auto grammar = optional_scalar_bool(**object, "supportsOpenAIGrammarTools", std::format("{}.compat", path));
+        if (!grammar) {
+            return std::unexpected(grammar.error());
+        }
+        if ((*grammar).has_value()) {
+            compat.supports_openai_grammar_tools = **grammar;
             return std::optional<ai::ModelCompatVariant>{ai::ModelCompatVariant{std::move(compat)}};
         }
     }
@@ -1375,6 +1398,10 @@ void compare_compat(const std::optional<ai::ModelCompatVariant>& expected,
                         compare_optional(expected_value.supports_explicit_prompt_cache_mode,
                                 actual_value.supports_explicit_prompt_cache_mode,
                                 "compat.supportsExplicitPromptCacheMode",
+                                mismatches);
+                        compare_optional(expected_value.supports_openai_grammar_tools,
+                                actual_value.supports_openai_grammar_tools,
+                                "compat.supportsOpenAIGrammarTools",
                                 mismatches);
                     }
                 }
