@@ -579,7 +579,7 @@ TEST_CASE("sign-in runs the flow and reconnects", "[coding_agent][mcp][issue884]
 
 TEST_CASE("sign-in of a non-OAuth server reports pi's message", "[coding_agent][mcp][issue884][spec]") {
     auto harness = Harness::make(config_with({stdio_entry("plain")}));
-    connection_for(harness, "plain");
+    static_cast<void>(connection_for(harness, "plain"));
     tests::RuntimeFixture runtime;
     REQUIRE(runtime.run(harness.manager->start()).has_value());
     auto outcome = runtime.run(harness.manager->sign_in("plain", McpSignInPrompt{}));
