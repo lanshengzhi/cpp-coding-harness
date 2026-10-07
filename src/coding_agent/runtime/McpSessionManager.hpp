@@ -169,7 +169,9 @@ public:
     virtual ~McpToolSurface() = default;
     /// Register or replace `tool.name` at `tool.exposure`. A withdrawn tool is
     /// re-registered with `exposure == hidden` (pi semantics: tools cannot be
-    /// unregistered).
+    /// unregistered). A `direct` tool joins the declared set on registration
+    /// (pi `_isActivatedOnRegistration`), which is the surface's responsibility
+    /// so the manager never needs to echo it back with `set_active_tools`.
     virtual void register_tool(McpRegisteredTool tool) = 0;
     /// Register the three Codex-compatible resource tools at `exposure`,
     /// reaching `servers` (pi `createMcpResourceToolDefinitions`).
