@@ -307,12 +307,14 @@ struct RunState {
     std::vector<PendingToolCall> pending;
 
     [[nodiscard]] bool interrupted() {
-        if (stop_token.stop_requested()) return true;
-        if (link != nullptr && link->interrupt.load()) return true;
+        // The script's own deadline is evaluated first so a timeout is reported
+        // as a timeout even when the host's monitor also flagged the worker.
         if (limits.timeout.count() > 0 && std::chrono::steady_clock::now() - started > limits.timeout) {
             timed_out = true;
             return true;
         }
+        if (stop_token.stop_requested()) return true;
+        if (link != nullptr && link->interrupt.load()) return true;
         return false;
     }
 
@@ -603,7 +605,10 @@ namespace {
 /// or the host interrupted it, so a runaway microtask loop cannot spin here.
 bool drain_jobs(const Guest& guest, const RunState& state) {
     while (guest.call_i32(guest.find("qjs_is_job_pending"), {}) != 0) {
-        if (state.finished || state.timed_out || state.stop_token.stop_requested()) return false;
+        if (state.finished || state.timed_out || state.stop_token.stop_requested() ||
+                (state.link != nullptr && state.link->interrupt.load())) {
+            return false;
+        }
         if (guest.call_i32(guest.find("qjs_execute_pending_job"), {}) < 0) return false;
     }
     return true;
@@ -816,10 +821,12 @@ namespace {
         // Settle every tool call the script is awaiting, then drain again. A
         // tool that is missing or has no handler rejects the call the script
         // sees — never a silent success.
-        while (!state.finished && !state.timed_out && !state.stop_token.stop_requested()) {
+        while (!state.finished) {
+            if (state.interrupted()) break;
             if (state.pending.empty()) {
                 g.call(stalled_fn, api, {});
                 drain_jobs(g, state);
+                if (state.interrupted()) break;
                 if (!state.finished) {
                     fail_sandbox("The codemode script did not settle: it is waiting on a promise that can "
                                  "never resolve, and the sandbox has no timers or I/O.");
@@ -908,7 +915,13 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                         const bool expired = deadline.has_value() &&
                                 std::chrono::steady_clock::now() >= *deadline;
                         if (stop_token.stop_requested() || expired) {
-                            link->interrupt.store(true);
+                            if (stop_token.stop_requested()) {
+                                // Cancellation must stop a wasm-spinning worker.
+                                link->interrupt.store(true);
+                            }
+                            // Abort an in-flight nested call at the deadline or on
+                            // cancellation; the engine's own clock reports the
+                            // timeout once the worker resumes.
                             call_stop->request_stop();
                             co_return;
                         }
