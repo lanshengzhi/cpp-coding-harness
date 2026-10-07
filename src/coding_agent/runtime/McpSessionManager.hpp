@@ -303,6 +303,13 @@ public:
     /// arrives here; it must be attached before `start()`.
     void attach_tool_surface(std::shared_ptr<McpToolSurface> surface);
 
+    /// pi `ctx.ui.notify(..., "warning")`: install (or replace) the host's
+    /// warning sink. The interactive host installs its notification channel
+    /// here once the TUI exists; until then the warning stays recorded on
+    /// the manager (`warnings()`), and the host drains the latched ones at
+    /// installation. Optional: an empty function clears the sink.
+    void set_notify_warning_sink(std::function<void(std::string_view message)> sink);
+
     /// Connect every enabled server (pi `session_start`'s background connect).
     /// Each connection's state reflects the outcome; a failed server does not
     /// veto the others.
@@ -319,6 +326,9 @@ public:
     /// warning, recorded at most once for the manager's lifetime (pi latches
     /// per session).
     [[nodiscard]] const std::vector<std::string>& warnings() const noexcept { return warnings_; }
+    /// How many warnings the manager has recorded (the host drains new ones
+    /// from this offset; pi latches, so the count only grows).
+    [[nodiscard]] std::size_t warning_count() const noexcept { return warnings_.size(); }
     [[nodiscard]] const std::filesystem::path& agent_dir() const noexcept { return agent_dir_; }
     /// pi `projectConfig !== undefined`: a trusted project's `mcp.json` exists,
     /// so a global server can be enabled or disabled for the project alone.

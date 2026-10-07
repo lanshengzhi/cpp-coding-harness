@@ -8,8 +8,10 @@
 #include "InteractiveEngine.hpp"
 
 #include "support/AsyncResultBridge.hpp"
+#include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/AuthFlowController.hpp"
 #include "coding_agent/tui/InteractiveView.hpp"
+#include "coding_agent/tui/McpManagerFlow.hpp"
 #include "coding_agent/tui/ModelFlowController.hpp"
 #include "coding_agent/tui/SessionFlowController.hpp"
 #include "coding_agent/tui/SessionUiBinding.hpp"
@@ -430,6 +432,49 @@ std::shared_ptr<SettingsFlowController> InteractiveEngine::make_settings_flow_co
         keybindings_,
         settings_manager_ ? &*settings_manager_ : nullptr,
         theme_controller_ ? theme_controller_.get() : nullptr);
+}
+
+std::shared_ptr<McpManagerFlow> InteractiveEngine::make_mcp_flow_controller() {
+    const auto weak = weak_from_this();
+    McpFlowHostHooks hooks;
+    hooks.post_on_executor = [weak](std::move_only_function<void()> action) mutable {
+        if (const auto self = weak.lock()) {
+            self->post_from_view([action = std::move(action)](InteractiveEngine&) mutable { action(); });
+        }
+    };
+    hooks.spawn_flow = [weak](std::move_only_function<boost::asio::awaitable<void>()> start,
+                               std::string failure_label) mutable {
+        if (const auto self = weak.lock()) {
+            self->spawn_flow(std::move(start), std::move(failure_label));
+        }
+    };
+    hooks.mcp_manager = [weak]() -> runtime::McpSessionManager* {
+        const auto self = weak.lock();
+        if (self == nullptr || self->session_ == nullptr) {
+            return nullptr;
+        }
+        return detail::AgentSessionInteractiveAccess::mcp_manager(*self->session_);
+    };
+    hooks.live_theme = [theme = &*theme_controller_]() -> const LiveTheme& { return theme->live_theme(); };
+    hooks.is_live = [weak] {
+        const auto self = weak.lock();
+        return self && self->running_ && self->view_ != nullptr;
+    };
+    hooks.overlay_active = [weak] {
+        const auto self = weak.lock();
+        return self && self->active_overlay_ != nullptr;
+    };
+    hooks.open_browser = [weak](std::string url) {
+        if (const auto self = weak.lock()) {
+            (void)self->deliver_action(self->action_generation_, TuiActionVariant{OpenBrowserAction{std::move(url)}});
+        }
+    };
+    hooks.copy_text = [weak](std::string text) {
+        if (const auto self = weak.lock()) {
+            static_cast<void>(self->write_clipboard_text_sink(std::move(text)));
+        }
+    };
+    return std::make_shared<McpManagerFlow>(executor_, *this, weak_from_this(), std::move(hooks), keybindings_);
 }
 
 std::shared_ptr<SuspendController> InteractiveEngine::make_suspend_controller() {

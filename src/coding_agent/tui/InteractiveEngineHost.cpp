@@ -9,6 +9,7 @@
 #include "coding_agent/tui/ClipboardWrite.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
 #include "coding_agent/tui/InteractiveView.hpp"
+#include "coding_agent/tui/McpManagerFlow.hpp"
 #include "coding_agent/tui/ModelFlowController.hpp"
 #include "coding_agent/tui/OpenBrowser.hpp"
 #include "coding_agent/tui/SessionFlowController.hpp"
@@ -265,6 +266,7 @@ support::ExpectedVoid InteractiveEngine::replace_session(
     owned_session_ = std::move(next);
     session_ = owned_session_.get();
     model_flows_->update_model_completion();
+    mcp_flows_->refresh_completion();
     auto subscribed = session_ui_->bind(*session_);
     if (!subscribed) {
         return std::unexpected(subscribed.error());
@@ -341,6 +343,7 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(
     case SlashCommandId::Reload:
     case SlashCommandId::Compact:
     case SlashCommandId::Trust:
+    case SlashCommandId::Mcp:
         return std::unexpected(support::make_error(
             support::ErrorCode::Validation,
             "Command is not an immediate slash command"));
@@ -414,6 +417,12 @@ void InteractiveEngine::dispatch_modal_slash_command(SlashCommandInvocation invo
         return;
     case SlashCommandId::Trust:
         session_flows_->open_trust();
+        return;
+    case SlashCommandId::Mcp:
+        // pi `registerCommand("mcp")`: no argument opens the manager (or
+        // prints the status report); `login|logout|reconnect [server]` run
+        // the subcommand flows with pi's pick and output strings.
+        mcp_flows_->handle_command(std::move(invocation.argument));
         return;
     case SlashCommandId::Clear:
     case SlashCommandId::Quit:

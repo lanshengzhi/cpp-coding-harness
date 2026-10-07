@@ -38,12 +38,12 @@ namespace {
 
 } // namespace
 
-std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>>
-command_autocomplete_commands(
-    std::span<const PromptTemplate> prompt_templates,
-    std::span<const Skill> skills,
-    std::shared_ptr<const ModelCompletionSnapshot> model_completion,
-    bool include_skill_commands) {
+std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>> command_autocomplete_commands(
+        std::span<const PromptTemplate> prompt_templates,
+        std::span<const Skill> skills,
+        std::shared_ptr<const ModelCompletionSnapshot> model_completion,
+        std::shared_ptr<const McpCompletionSnapshot> mcp_completion,
+        bool include_skill_commands) {
     std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>> items;
     std::set<std::string, std::less<>> names;
     std::map<std::string, std::string, std::less<>> descriptions_by_name;
@@ -93,6 +93,34 @@ command_autocomplete_commands(
                     }
                     return result;
                 };
+            items.push_back(std::move(slash));
+        } else if (command.name == "mcp") {
+            // pi `extensions/mcp/index.ts` `getArgumentCompletions`: action
+            // names for an incomplete first token, then server names for
+            // login/logout/reconnect, over the live manager snapshot. A null
+            // snapshot (no session manager yet) offers no argument
+            // completions but keeps the command in the palette.
+            cch::tui::SlashCommand slash;
+            slash.name = std::string{command.name};
+            slash.description = std::string{command.description};
+            slash.argument_hint = std::string{command.argument_hint};
+            slash.get_argument_completions =
+                    [mcp_completion](
+                            std::string_view prefix) -> std::optional<std::vector<cch::tui::AutocompleteItem>> {
+                if (!mcp_completion) return std::nullopt;
+                const auto completions = mcp_command_completions(prefix, mcp_completion->servers);
+                if (completions.empty()) return std::nullopt;
+                std::vector<cch::tui::AutocompleteItem> result;
+                result.reserve(completions.size());
+                for (const auto& completion : completions) {
+                    result.push_back(cch::tui::AutocompleteItem{
+                            .value = completion.value,
+                            .label = completion.label,
+                            .description = completion.description.value_or(std::string{}),
+                    });
+                }
+                return result;
+            };
             items.push_back(std::move(slash));
         } else {
             items.push_back(cch::tui::AutocompleteItem{
@@ -181,19 +209,19 @@ std::optional<std::filesystem::path> find_executable_on_path(std::string_view na
 }
 
 std::unique_ptr<cch::tui::AutocompleteProvider> build_editor_autocomplete_provider(
-    std::span<const PromptTemplate> prompt_templates,
-    std::span<const Skill> skills,
-    std::shared_ptr<const ModelCompletionSnapshot> model_completion,
-    bool include_skill_commands,
-    const std::filesystem::path& workspace) {
-    return std::make_unique<cch::tui::CombinedAutocompleteProvider>(
-        command_autocomplete_commands(
-            prompt_templates,
-            skills,
-            std::move(model_completion),
-            include_skill_commands),
-        workspace,
-        find_executable_on_path("fd"));
+        std::span<const PromptTemplate> prompt_templates,
+        std::span<const Skill> skills,
+        std::shared_ptr<const ModelCompletionSnapshot> model_completion,
+        std::shared_ptr<const McpCompletionSnapshot> mcp_completion,
+        bool include_skill_commands,
+        const std::filesystem::path& workspace) {
+    return std::make_unique<cch::tui::CombinedAutocompleteProvider>(command_autocomplete_commands(prompt_templates,
+                                                                            skills,
+                                                                            std::move(model_completion),
+                                                                            std::move(mcp_completion),
+                                                                            include_skill_commands),
+            workspace,
+            find_executable_on_path("fd"));
 }
 
 struct AsioAutocompleteDebounceTimer::State {

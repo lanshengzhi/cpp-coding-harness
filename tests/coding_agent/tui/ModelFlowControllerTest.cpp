@@ -68,6 +68,7 @@ public:
     }
     void show_status(std::string text) override { statuses.push_back(std::move(text)); }
     void show_error(std::string text) override { errors.push_back(std::move(text)); }
+    void show_warning(std::string text) override { warnings.push_back(std::move(text)); }
     void request_render() override { ++render_requests; }
     void invalidate() override { ++invalidations; }
 
@@ -80,6 +81,7 @@ public:
     int invalidations{0};
     std::vector<std::string> statuses;
     std::vector<std::string> errors;
+    std::vector<std::string> warnings;
 };
 
 /// `alpha` (keyed, reasoning) and `beta` (keyed, non-reasoning).

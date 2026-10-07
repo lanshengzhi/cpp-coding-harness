@@ -214,6 +214,10 @@ void McpSessionManager::attach_tool_surface(std::shared_ptr<McpToolSurface> surf
     dependencies_.tools = std::move(surface);
 }
 
+void McpSessionManager::set_notify_warning_sink(std::function<void(std::string_view message)> sink) {
+    dependencies_.notify_warning = std::move(sink);
+}
+
 void McpSessionManager::set_change_listener(std::function<void()> listener) { change_listener_ = std::move(listener); }
 
 void McpSessionManager::close() noexcept {

@@ -39,19 +39,20 @@ TEST_CASE("Slash command parsing trims input and resolves aliases", "[coding_age
         std::string_view argument;
     };
     const std::vector<Case> cases{
-        {.text = "  /clear  ", .command = Clear, .argument = {}},
-        {.text = "/new", .command = Clear, .argument = {}},
-        {.text = "/exit", .command = Quit, .argument = {}},
-        {.text = "/q", .command = Quit, .argument = {}},
-        {.text = "/commands", .command = Help, .argument = {}},
-        {.text = "/scoped-models", .command = Models, .argument = {}},
-        {.text = "/models", .command = Models, .argument = {}},
-        {.text = "/model\tprovider/model", .command = Model, .argument = "provider/model"},
-        {.text = "/login   provider", .command = Login, .argument = "provider"},
-        {.text = "/name  session name  ", .command = Name, .argument = "session name"},
-        {.text = "/compact  summarize this  ",
-         .command = Compact,
-         .argument = "summarize this"},
+            {.text = "  /clear  ", .command = Clear, .argument = {}},
+            {.text = "/new", .command = Clear, .argument = {}},
+            {.text = "/exit", .command = Quit, .argument = {}},
+            {.text = "/q", .command = Quit, .argument = {}},
+            {.text = "/commands", .command = Help, .argument = {}},
+            {.text = "/scoped-models", .command = Models, .argument = {}},
+            {.text = "/models", .command = Models, .argument = {}},
+            {.text = "/model\tprovider/model", .command = Model, .argument = "provider/model"},
+            {.text = "/login   provider", .command = Login, .argument = "provider"},
+            {.text = "/name  session name  ", .command = Name, .argument = "session name"},
+            {.text = "/compact  summarize this  ", .command = Compact, .argument = "summarize this"},
+            {.text = "/mcp", .command = Mcp, .argument = {}},
+            {.text = "/mcp login remote", .command = Mcp, .argument = "login remote"},
+            {.text = "/mcp   reconnect echo  ", .command = Mcp, .argument = "reconnect echo"},
     };
 
     for (const auto& test : cases) {
@@ -143,17 +144,20 @@ TEST_CASE("Slash command routing returns structured modal requests with argument
         std::string_view argument;
     };
     const std::vector<Case> cases{
-        {.text = "/model fake/model", .command = Model, .argument = "fake/model"},
-        {.text = "/models", .command = Models, .argument = {}},
-        {.text = "/thinking high", .command = Thinking, .argument = "high"},
-        {.text = "/login fake", .command = Login, .argument = "fake"},
-        {.text = "/logout", .command = Logout, .argument = {}},
-        {.text = "/resume", .command = Resume, .argument = {}},
-        {.text = "/fork", .command = Fork, .argument = {}},
-        {.text = "/tree", .command = Tree, .argument = {}},
-        {.text = "/reload", .command = Reload, .argument = {}},
-        {.text = "/compact summarize", .command = Compact, .argument = "summarize"},
-        {.text = "/trust", .command = Trust, .argument = {}},
+            {.text = "/model fake/model", .command = Model, .argument = "fake/model"},
+            {.text = "/models", .command = Models, .argument = {}},
+            {.text = "/thinking high", .command = Thinking, .argument = "high"},
+            {.text = "/login fake", .command = Login, .argument = "fake"},
+            {.text = "/logout", .command = Logout, .argument = {}},
+            {.text = "/resume", .command = Resume, .argument = {}},
+            {.text = "/fork", .command = Fork, .argument = {}},
+            {.text = "/tree", .command = Tree, .argument = {}},
+            {.text = "/reload", .command = Reload, .argument = {}},
+            {.text = "/compact summarize", .command = Compact, .argument = "summarize"},
+            {.text = "/trust", .command = Trust, .argument = {}},
+            {.text = "/mcp", .command = Mcp, .argument = {}},
+            {.text = "/mcp logout", .command = Mcp, .argument = "logout"},
+            {.text = "/mcp login alpha", .command = Mcp, .argument = "login alpha"},
     };
 
     for (const auto& test : cases) {

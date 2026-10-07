@@ -15,11 +15,14 @@ struct BuiltinSlashCommand {
 };
 
 /// The app layer's Supported built-in slash commands for autocomplete: the
-/// 18 Supported entries of pi's 24-command `BUILTIN_SLASH_COMMANDS` catalog
+/// 18 entries of pi's 24-command `BUILTIN_SLASH_COMMANDS` catalog
 /// (`pi:packages/coding-agent/src/core/slash-commands.ts` at `f07218c4`; it
 /// held 22 entries at the `83114817` baseline ADR 0036 G4 recorded, and
 /// gained `thinking` — ported here in #791 — and `bug` since) with pi's
-/// verbatim names/descriptions/argument hints. The names with no surface are
+/// verbatim names/descriptions/argument hints, plus `/mcp` — pi registers it
+/// as an extension command (`extensions/mcp/index.ts` `registerCommand`), and
+/// Pike's built-in manager merges it into the same palette (#884). The names
+/// with no surface are
 /// the Deferred slashes (`/export` `/import` `/share` `/changelog` `/clone`),
 /// the hidden pi-only `/debug` developer entry, `/bug` (pi's own
 /// bug-reporting endpoint: not-applicable, issue #793), and the easter eggs;
