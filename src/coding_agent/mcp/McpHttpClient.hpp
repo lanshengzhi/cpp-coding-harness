@@ -12,15 +12,35 @@
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
 
+#include <chrono>
 #include <deque>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace cch::coding_agent::mcp {
+
+/// The server-to-client GET stream's reconnect policy (pi
+/// `StreamableHttpReconnectOptions` + `openGetStream`). The defaults are pi's
+/// `DEFAULT_RECONNECT_INITIAL_DELAY_MS` 1000, `DEFAULT_RECONNECT_MAX_DELAY_MS`
+/// 30000, and `DEFAULT_RECONNECT_MAX_RETRIES` 5.
+struct McpHttpGetStreamOptions {
+    /// pi `openGetStream: false`: do not open the stream at all.
+    bool enabled{true};
+    /// pi `initialDelayMs`: delay before the first reconnect attempt, unless
+    /// the server's SSE `retry:` field overrides it.
+    std::chrono::milliseconds initial_delay{1000};
+    /// pi `maxDelayMs`: upper bound for the exponential backoff.
+    std::chrono::milliseconds max_delay{30000};
+    /// pi `maxRetries`: consecutive failed attempts before the stream is
+    /// reported dropped.
+    int max_retries{5};
+};
 
 /// Long-lived MCP server connection over the streamable HTTP transport (pi
 /// `packages/mcp/src/transports/streamable-http.ts`): one JSON-RPC POST per
@@ -35,6 +55,13 @@ namespace cch::coding_agent::mcp {
 /// the Agent applies, matching `McpStdioClient`. A response that is not a
 /// JSON-RPC reply for the pending request fails that request explicitly; the
 /// client never treats a 200 with a non-MCP body as success.
+///
+/// After `notifications/initialized`, the client also opens the server-to-client
+/// GET stream (pi `runGetStream`): a second long-lived `text/event-stream`
+/// request on its own connection that reconnects with backoff and dispatches
+/// server-initiated requests and notifications. A server that answers 405 has
+/// no GET stream, which is not an error. `close()` aborts the stream and
+/// DELETEs the session.
 class McpHttpClient final : public McpServerConnection, public std::enable_shared_from_this<McpHttpClient> {
 public:
     /// Connect to `config` (TLS-only, ADR 0054), run the MCP `initialize`
@@ -48,7 +75,8 @@ public:
     [[nodiscard]] static boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> connect(
             McpHttpServerConfig config,
             std::shared_ptr<ai::providers::StreamTransport> transport,
-            std::shared_ptr<McpRequestAuthSource> request_auth = nullptr);
+            std::shared_ptr<McpRequestAuthSource> request_auth = nullptr,
+            McpHttpGetStreamOptions get_stream_options = {});
 
     /// Construction passkey (§7.7): `std::make_shared` cannot reach a private
     /// constructor, so construction goes through the public constructor below,
@@ -63,7 +91,8 @@ public:
             boost::asio::any_io_executor executor,
             McpHttpServerConfig config,
             std::shared_ptr<ai::providers::StreamTransport> transport,
-            std::shared_ptr<McpRequestAuthSource> request_auth);
+            std::shared_ptr<McpRequestAuthSource> request_auth,
+            McpHttpGetStreamOptions get_stream_options);
 
     McpHttpClient(const McpHttpClient&) = delete;
     McpHttpClient& operator=(const McpHttpClient&) = delete;
@@ -81,6 +110,39 @@ public:
     /// One JSON-RPC notification (no `id`, no response). Ordered against
     /// requests through the same queue.
     void notify(std::string method, std::optional<support::JsonValue> params = std::nullopt) override;
+
+    /// One server-to-client notification received on the GET stream (pi
+    /// `TransportEvents`'s `message` for notifications), dispatched on the
+    /// client's executor. `notifications/message` logging and the
+    /// `.../list_changed` re-list hooks consume this dispatch; the re-list
+    /// itself is not implemented here. `params` is an empty object when the
+    /// notification carries none.
+    using NotificationListener = std::function<void(std::string_view method, const support::JsonValue& params)>;
+    void set_notification_listener(NotificationListener listener);
+
+    /// One server-to-client stream failure (pi `TransportEvents`'s `error`):
+    /// an exhausted reconnect reports "MCP server-to-client stream dropped and
+    /// could not be reopened", and a non-retryable open failure reports the
+    /// HTTP error. `close()` reports nothing.
+    using ErrorListener = std::function<void(const support::Error& error)>;
+    void set_error_listener(ErrorListener listener);
+
+    /// One server-to-client request handler (pi `setRequestHandler`): the
+    /// handler answers a JSON-RPC request the server sends on the GET stream.
+    /// `ping` is installed by default and returns `{}`; a method with no
+    /// handler is answered with `-32601 "Method not found: <method>"`.
+    /// `stop_token` is requested when the server sends
+    /// `notifications/cancelled` for the in-flight request. The handler's
+    /// error becomes the response's `-32603` JSON-RPC error.
+    using ServerRequestHandler = std::function<boost::asio::awaitable<support::Expected<support::JsonValue>>(
+            const support::JsonValue& params, std::stop_token stop_token)>;
+    void set_request_handler(std::string method, ServerRequestHandler handler);
+
+    /// pi `StreamableHttpTransport.close()`: abort the server-to-client GET
+    /// stream and end the HTTP session with a best-effort `DELETE` of the
+    /// session URL under a 1 s timeout. Idempotent; safe to call without a
+    /// session id.
+    void close() noexcept;
 
     [[nodiscard]] const std::string& server_name() const noexcept override { return config_.name; }
 
@@ -120,7 +182,72 @@ private:
     [[nodiscard]] boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> post(
             std::string_view body, std::stop_token stop_token);
 
+    /// The disposition of one server-to-client GET stream attempt (pi
+    /// `runGetStream`'s loop body).
+    enum class GetStreamAttempt {
+        /// HTTP 405: the server offers no GET stream; the feature is absent.
+        Absent,
+        /// The stream ended (cleanly or by server close); reconnect.
+        Ended,
+        /// A transient open/read failure worth retrying.
+        RetryableFailure,
+        /// A non-retryable failure; report it and stop.
+        FatalFailure,
+    };
+    /// Reconnect bookkeeping carried across attempts (pi `StreamCursor`).
+    struct GetStreamCursor {
+        std::optional<std::string> last_event_id;
+        std::optional<int> retry_ms;
+        /// Whether the stream delivered any event since it was (re)opened.
+        bool received{false};
+    };
+
+    /// Open the GET stream and consume it to its end (or the first read
+    /// failure), dispatching server-to-client requests and notifications. The
+    /// SSE `id`/`retry` fields update `cursor` so a resume echoes
+    /// `last-event-id` and honors a server delay override.
+    [[nodiscard]] boost::asio::awaitable<std::pair<GetStreamAttempt, support::Error>> consume_get_stream(
+            GetStreamCursor& cursor);
+    /// pi `runGetStream`: keep the server-to-client stream open, reconnecting
+    /// with backoff when it drops; a stream that delivered an event or stayed
+    /// up longer than `maxDelay` resets the attempt counter. Exhausted retries
+    /// report "MCP server-to-client stream dropped and could not be reopened".
+    [[nodiscard]] boost::asio::awaitable<void> run_get_stream();
+    /// Start the GET stream once, after `notifications/initialized` was sent.
+    void start_get_stream();
+    /// One GET request: `accept: text/event-stream` plus `last-event-id` when
+    /// resuming, and the session/protocol/auth headers every request carries.
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> get_stream_headers(
+            const std::optional<std::string>& last_event_id);
+    /// Await `delay` unless `close()` stops the stream first; false when the
+    /// stream was stopped while waiting (pi `sleep`).
+    [[nodiscard]] boost::asio::awaitable<bool> reconnect_wait(std::chrono::milliseconds delay);
+    /// pi `reconnectDelay`: the server's `retry:` field when present, else the
+    /// exponential backoff bounded by `max_delay`.
+    [[nodiscard]] std::chrono::milliseconds reconnect_delay(
+            int attempt, const std::optional<int>& server_delay_ms) const;
+
+    /// Dispatch one JSON-RPC message received on the GET stream: a
+    /// server-to-client request is answered, a notification is dispatched to
+    /// the listener (and `notifications/cancelled` aborts the matching
+    /// in-flight handler), and anything else is ignored.
+    void handle_stream_message(const support::JsonValue& message);
+    /// Answer one server-to-client request through a registered handler (pi
+    /// `handleRequest`), or `-32601` when the method has none.
+    [[nodiscard]] boost::asio::awaitable<void> serve_server_request(
+            support::JsonValue id, std::string method, support::JsonValue params);
+    /// POST one JSON-RPC response message (a raw frame, no completion).
+    void post_message(support::JsonValue message);
+
+    /// pi `close()`'s session teardown: one best-effort `DELETE` with a 1 s
+    /// timeout, its outcome ignored.
+    [[nodiscard]] boost::asio::awaitable<void> delete_session();
+
     [[nodiscard]] std::map<std::string, std::string> request_headers() const;
+    /// Layer, when a request-auth source is configured, the source's current
+    /// headers resolved for this request onto `headers`.
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> resolve_headers(
+            std::map<std::string, std::string> headers);
     /// The same headers plus, when a request-auth source is configured, the
     /// source's current headers resolved for this request.
     [[nodiscard]] boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>>
@@ -145,6 +272,19 @@ private:
     std::string protocol_version_;
     int next_id_{1};
     bool pumping_{false};
+
+    McpHttpGetStreamOptions get_stream_options_;
+    /// The server-to-client stream's cancellation source: `close()` requests
+    /// it to abort the GET request and the reconnect wait.
+    std::stop_source stream_stop_;
+    bool closed_{false};
+    NotificationListener notification_listener_;
+    ErrorListener error_listener_;
+    std::map<std::string, ServerRequestHandler> request_handlers_;
+    /// In-flight server-to-client request handlers, keyed by the serialized
+    /// request id the server chose, so `notifications/cancelled` can abort the
+    /// matching handler (pi `incoming`).
+    std::map<std::string, std::stop_source> incoming_handlers_;
 };
 
 } // namespace cch::coding_agent::mcp

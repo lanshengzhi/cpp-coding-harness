@@ -115,6 +115,17 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):  # keep the test output quiet
         pass
 
+    def do_GET(self):
+        # The fixture offers no server-to-client GET stream: 405 is the
+        # transport's "feature absent" answer (pi `openSseStream`).
+        trace("recv GET")
+        self._raw(405, "text/plain", b"")
+
+    def do_DELETE(self):
+        # pi `close()` ends the session with a DELETE; acknowledge it.
+        trace("recv DELETE")
+        self._raw(200, "application/json", b"")
+
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0"))
         raw = self.rfile.read(length)
