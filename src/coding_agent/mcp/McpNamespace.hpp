@@ -8,6 +8,17 @@
 #include <string>
 #include <string_view>
 
+namespace cch::coding_agent::mcp {
+
+/// The Codex-compatible resource tool names (pi `core/mcp-servers.ts`). The
+/// three tools reach every server with resources, so `runtime::is_mcp_tool_name`
+/// recognizes them as MCP tools alongside `mcp__<server>__<tool>`.
+inline constexpr std::string_view kListMcpResourcesTool = "list_mcp_resources";
+inline constexpr std::string_view kListMcpResourceTemplatesTool = "list_mcp_resource_templates";
+inline constexpr std::string_view kReadMcpResourceTool = "read_mcp_resource";
+
+} // namespace cch::coding_agent::mcp
+
 namespace cch::coding_agent::mcp::detail {
 
 /// pi `mcpNamespace`: `mcp__<name>` with `-` replaced by `_`. Two names that

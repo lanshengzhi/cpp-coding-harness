@@ -18,6 +18,9 @@ responses on stdout, diagnostics on stderr.
 | `initialize` | Returns `protocolVersion: 2025-06-18`, `capabilities`, `serverInfo`. |
 | `notifications/initialized` | Notification; no response. |
 | `tools/list` | One tool per page with `nextCursor`, exercising client pagination. |
+| `resources/list` | One resource per page with `nextCursor`; lists a resource with `_meta`/icons, a `ui://` `profile=mcp-app` MCP App resource, and one with no `name` (the resource tools' normalization cases). |
+| `resources/templates/list` | One resource template per page with `nextCursor`, including a `ui://` MCP App template. |
+| `resources/read` | Text (`file:///docs/readme.md`, carrying `_meta`) and base64-blob (`blob://image`, `image/png`) contents. |
 | `tools/call` `echo` | Echoes `arguments.text` as a text content block. |
 | `tools/call` `fail` | Returns a well-formed `isError: true` result. |
 | `tools/call` `crash` | Exits without responding (connection closed mid-request). |

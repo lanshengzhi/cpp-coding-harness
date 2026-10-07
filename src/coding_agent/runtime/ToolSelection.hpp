@@ -29,9 +29,9 @@ struct ToolSelection {
 /// entry without `*`) or as a `*` wildcard pattern.
 [[nodiscard]] bool tool_name_matches(std::span<const std::string> entries, std::string_view name);
 
-/// pi `isMcpToolName`: a server tool named `mcp__<server>__<tool>`. The three
-/// pi MCP resource tool names are not produced by any Pike slice yet, so only
-/// the `mcp__` prefix is recognized.
+/// pi `isMcpToolName`: a server tool named `mcp__<server>__<tool>` or one of
+/// the three MCP resource tool names (`list_mcp_resources`,
+/// `list_mcp_resource_templates`, `read_mcp_resource`).
 [[nodiscard]] bool is_mcp_tool_name(std::string_view name);
 
 /// The outcome of resolving a selection over the discovered tool set.
