@@ -199,6 +199,37 @@ parity #884, codemode parity #885, close-out #886). The rulings, attributed as a
    gains a pointer comment to its absorbing ticket. #881 (ai transport/auth interface promotion) is
    orthogonal and stays independent.
 
+### MCP parity implementation — spec #882 (#884)
+
+Implemented **2026-10-07**, authorized by the spec flow of
+[#882](https://github.com/lanshengzhi/cpp-coding-harness/issues/882). This record covers the **MCP
+lane** only (the codemode lane is #885). Every delivered behaviour diffs against the frozen
+`pi-v1.0.4` bundle captured in #883 (`fixtures/pi-ai/v1.0.4/mcp-codemode/`), not self-captured goldens.
+
+| Capability | pi source at `7c10bd43` | Pike status |
+|---|---|---|
+| `mcp.json` read half: `exposure`/`toolExposure`/`description`/`timeout`/`autoEnableCodemode`, `validateMcpServerConfig`, `getMcpToolExposure` | `extensions/mcp/config.ts`, `core/mcp-servers.ts` | **In the subset (#884)** — the validation messages, the `codemode-deferred` alias, and the exact-name-beats-pattern rule diff against `mcp-config-surface.json`. |
+| `mcp.json` write half: `updateMcpServerConfig` / `addMcpServerConfig` / `removeMcpServerConfig`, default-key deletion, indentation-preserving rewrite | `extensions/mcp/config.ts` | **In the subset (#884)** — `src/coding_agent/mcp/McpConfigWrite.{hpp,cpp}`. |
+| `notifications/cancelled` on HTTP cancel, reason `Aborted` / `Request timed out`, never `initialize` | `packages/mcp/src/client.ts` `cancelPending` | **In the subset (#884)** — diffed against `mcp-protocol-surface.json`. |
+
+**Remaining MCP gaps, and the seam each needs.** Recorded so a later slice starts here rather than
+from a grep:
+
+| Gap | Blocking seam |
+|---|---|
+| `/mcp` TUI panel + `pike mcp` CLI subcommands | a new TUI/CLI surface; the `McpConfigWrite` half is ready |
+| OAuth login trigger + `mcp.json` `auth` block wiring | the entry's `oauth`/`auth` blocks are not parsed yet; the trigger is a new TUI/CLI entry |
+| Exposure policy end to end (`deferred`/`codemode` declared-vs-loaded) | the Agent tool surface has no exposure concept — a cross-Owner change to `agent::Tool`/`ToolRegistry` |
+| MCP resource tools (`list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`) | `ai::Tool` carries no `outputSchema`, which pi's resource tools declare |
+| Server→client GET stream | the reused `StreamTransport` has no long-lived-stream consumer in the client |
+| RFC 9728 protected-resource discovery + dynamic client registration + CIMD | not started |
+| `mcp-auth.json` credential store + `auth.json` `mcp__<server>` migration | the OAuth flow is bound to `ai::CredentialStore`/`AuthStorage`; the rewiring is a slice of its own |
+
+**Settings keys Pike cannot carry (Deferred, not decided against).** pi's `settings.json` MCP/codemode
+keys with no Pike counterpart: `codemode` (`mode`, `inlineBudget`) and `defaultTools` — both are the
+codemode lane's (#885) — and `autoEnableCodemode`, which Pike reads from `mcp.json` (pi's own location
+for it), not `settings.json`.
+
 ## Finding: not a decision
 
 The following was found during the Phase 1 capability inventory. **It is not an owner decision and
@@ -331,7 +362,11 @@ All pi sizes above are measured at the pi baseline; all Pike sizes at the Pike c
   #865, #876): pi-faithful `mcp.json` persistence (global + trust-gated project), the
   running/stopped/failed lifecycle status surface, and stdio reconnect-on-next-call. The `/mcp`
   manager, live in-session tool add/remove, and the exposure fields stay **undecided** (the OAuth
-  credential semantics were later decided by #875).
+  credential semantics were later decided by #875). **Update (spec #882, #884):** the `mcp.json`
+  exposure policy, the `validateMcpServerConfig` surface, and the `mcp.json` write half are now in
+  the subset and diff against the `pi-v1.0.4` bundle; the `/mcp` surface, the OAuth login trigger,
+  the server→client GET stream, resource tools, RFC 9728 discovery, and the `mcp-auth.json` credential
+  store remain recorded gaps with the blocking seam named in the #884 implementation record above.
 - `pi-v1.0.4` (`7c10bd4337495ee613f2224843ecdf349b80d1df`) is registered by name with no captured bundle; a future capture is new evidence per ADR 0065 and needs its own step, not a silent edit.
 - The MCP **OAuth** credential slice (spec #865, #875) and codemode **sandboxed execution** (#874)
   and **output presentation** (#877) are attributed owner decisions reached through the same spec
