@@ -110,6 +110,8 @@ struct NormalizedArgv {
                        "Usage:\n"
                        "  pike [options] [@files...] [messages...]\n"
                        "  pike import [<pi-agent-dir>] [<pike-agent-dir>]\n"
+                       "  pike mcp <command>             Check MCP servers, sign in to or out of\n"
+                       "                                 OAuth servers\n"
                        "\n"
                        "Options:\n"
                        "  --provider <name>              Provider name\n"
@@ -200,6 +202,15 @@ struct NormalizedArgv {
 [[nodiscard]] cch::support::Error import_parse_error(std::string message) {
     return cch::support::make_error(
             cch::support::ErrorCode::Validation, message, message + "\n\n" + import_help_text());
+}
+
+[[nodiscard]] cch::support::Expected<CliConfig> parse_mcp_args(int argc, char** argv) {
+    CliConfig config;
+    config.mcp_command = true;
+    for (int index = 2; index < argc; ++index) {
+        config.mcp_args.emplace_back(argv[index]);
+    }
+    return config;
 }
 
 [[nodiscard]] cch::support::Expected<CliConfig> parse_import_args(int argc, char** argv) {
@@ -382,6 +393,9 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
     }
     if (raw_args.size() > 1 && raw_args[1] == "import") {
         return parse_import_args(argc, argv);
+    }
+    if (raw_args.size() > 1 && raw_args[1] == "mcp") {
+        return parse_mcp_args(argc, argv);
     }
 
     auto normalized = normalize_argv(raw_args);

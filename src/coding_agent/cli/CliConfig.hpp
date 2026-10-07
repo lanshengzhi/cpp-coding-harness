@@ -22,6 +22,11 @@ struct CliConfig {
     bool import_command{false};
     std::optional<std::filesystem::path> import_source;
     std::optional<std::filesystem::path> import_destination;
+    /// pi `pi mcp <command>` (`runMcpCommand`): the tokens after `mcp` are
+    /// passed through verbatim and handled by `run_mcp_command` before any
+    /// frontend or session startup. The subcommand owns its own help.
+    bool mcp_command{false};
+    std::vector<std::string> mcp_args;
     bool print{false};
     /// The CLI-owned session facts value: Project Trust override, resource
     /// flags, Skill/Prompt Template/Theme paths, system-prompt values, model
