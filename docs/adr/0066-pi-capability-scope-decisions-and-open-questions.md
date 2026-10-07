@@ -192,10 +192,7 @@ parity #884, codemode parity #885, close-out #886). The rulings, attributed as a
    surface (#870) is superseded by pi's model-facing inline `codemode` tool; the landed declaration
    loader, trust gating, fixtures, and tests are to be **physically removed**, not kept dormant, with
    the tool-surface enumeration checked against pi as removal evidence.
-2. **The credential-store divergence is retained.** MCP OAuth credentials stay in the existing
-   AuthStorage (`auth.json` under `mcp__<server>`); pi's separate `mcp-auth.json` is **not**
-   adopted. This is the single remaining intentional divergence, and it is reaffirmed here as an
-   owner ruling rather than a spec-flow default.
+2. **No intentional divergence is retained, including the credential store.** MCP OAuth credentials move to pi's `mcp-auth.json` shape (#875's AuthStorage/`auth.json` ruling is **superseded** for MCP OAuth, with a migration path for existing `mcp__<server>` credentials), so the full-parity target carries zero recorded divergences. Owner wording: "凭据库不要分叉" (2026-10-07, amending the same-day ruling recorded above).
 3. **Acceptance is differential evidence.** Each capability closes only against the frozen
    `pi-v1.0.4` evidence bundle (ADR 0065; captured in #883), not self-captured goldens alone.
 4. The #865 recorded follow-ups table above is absorbed by spec #882 item by item; each follow-up
