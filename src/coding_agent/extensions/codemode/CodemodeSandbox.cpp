@@ -626,7 +626,6 @@ namespace {
         CodemodeLimits limits,
         std::stop_token stop_token,
         SandboxLink& link,
-        const std::filesystem::path& wasm_path,
         WasmEdge_ASTModuleContext* ast,
         WasmEdge_ConfigureContext* configure) {
     RunState state;
@@ -933,7 +932,6 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                             limits,
                             stop_token,
                             *link,
-                            impl_->wasm_path,
                             impl_->ast,
                             impl_->configure));
                 });
