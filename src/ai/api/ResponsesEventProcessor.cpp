@@ -168,13 +168,15 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
         std::map<std::size_t, Slot>& slots,
         AssistantMessage& assistant,
         AssistantEventSink& sink,
-        bool& saw_terminal) {
+        bool& saw_terminal,
+        const std::map<std::string, std::string, std::less<>>& grammar_properties) {
     static constexpr std::string_view kDeltaEvents[] = {
             "response.reasoning_summary_text.delta",
             "response.reasoning_text.delta",
             "response.output_text.delta",
             "response.refusal.delta",
             "response.function_call_arguments.delta",
+            "response.custom_tool_call_input.delta",
     };
     static constexpr std::string_view kTerminalEvents[] = {
             "response.completed",
@@ -201,7 +203,7 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
         const auto index = output_index(event);
         const auto* item = json_object_member(event, "item");
         if (index && item) {
-            if (auto created = create_slot(*index, *item, slots, assistant, sink); !created) {
+            if (auto created = create_slot(*index, *item, slots, assistant, sink, &grammar_properties); !created) {
                 return std::unexpected(created.error());
             }
         }
@@ -219,7 +221,7 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
         }
         return ResponsesProcessOutcome{};
     }
-    if (*type == "response.function_call_arguments.done") {
+    if (*type == "response.function_call_arguments.done" || *type == "response.custom_tool_call_input.done") {
         if (auto processed = finish_argument_stream(event, slots, assistant, sink); !processed) {
             return std::unexpected(processed.error());
         }
@@ -266,18 +268,28 @@ void apply_codex_usage(const Model& model, const JsonObject& response, Assistant
 } // namespace
 
 struct ResponsesEventProcessor::Impl {
-    Impl(ResponsesDialect configured_dialect, ResponsesDelivery configured_delivery, Model configured_model)
-        : dialect(configured_dialect), delivery(configured_delivery), model(std::move(configured_model)) {}
+    Impl(ResponsesDialect configured_dialect,
+            ResponsesDelivery configured_delivery,
+            Model configured_model,
+            std::map<std::string, std::string, std::less<>> configured_grammar_properties)
+        : dialect(configured_dialect),
+          delivery(configured_delivery),
+          model(std::move(configured_model)),
+          grammar_properties(std::move(configured_grammar_properties)) {}
 
     ResponsesDialect dialect;
     ResponsesDelivery delivery;
     Model model;
     std::map<std::size_t, Slot> slots;
+    std::map<std::string, std::string, std::less<>> grammar_properties;
     bool saw_terminal{false};
 };
 
-ResponsesEventProcessor::ResponsesEventProcessor(ResponsesDialect dialect, ResponsesDelivery delivery, Model model)
-    : impl_(std::make_unique<Impl>(dialect, delivery, std::move(model))) {}
+ResponsesEventProcessor::ResponsesEventProcessor(ResponsesDialect dialect,
+        ResponsesDelivery delivery,
+        Model model,
+        std::map<std::string, std::string, std::less<>> grammar_properties)
+    : impl_(std::make_unique<Impl>(dialect, delivery, std::move(model), std::move(grammar_properties))) {}
 
 ResponsesEventProcessor::ResponsesEventProcessor(ResponsesEventProcessor&&) noexcept = default;
 ResponsesEventProcessor& ResponsesEventProcessor::operator=(ResponsesEventProcessor&&) noexcept = default;
@@ -292,7 +304,8 @@ support::Expected<ResponsesProcessOutcome> ResponsesEventProcessor::process(
             impl_->slots,
             assistant,
             sink,
-            impl_->saw_terminal);
+            impl_->saw_terminal,
+            impl_->grammar_properties);
 }
 
 support::ExpectedVoid ResponsesEventProcessor::finish(AssistantMessage& assistant) {

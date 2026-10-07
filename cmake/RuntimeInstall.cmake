@@ -69,23 +69,27 @@ endfunction()
 #     MANIFEST <path>
 #     PROJECT_ROOT <path>
 #     LICENSE_FILES <name=path> [...]
+#     CODEMODE_GUEST <path>
 #     [EXTERNAL_INCLUDE_ROOTS <path> [...]]
 # )
 #
 # Declares the Runtime-only install surface, in order: the fail-closed install
 # gate (an install SCRIPT that runs before any file lands in the prefix), the
-# Runtime executable under bin/, and the license texts as
-# share/<target>/licenses/<name>.txt. MANIFEST, PROJECT_ROOT, and
-# EXTERNAL_INCLUDE_ROOTS are the same Parity Architecture Gate inputs the
-# configure/build phases use; the generated gate revalidates them at install
-# time.
+# Runtime executable under bin/, the required notice texts as
+# share/<target>/licenses/<name>.txt, and the codemode guest module
+# (`quickjs.wasm`) as share/<target>/codemode/quickjs.wasm. The guest ships
+# next to the installed executable because `default_codemode_guest_wasm_path`
+# resolves it there (pi's `getQuickJSWasmPath` shape), with no resolution
+# environment variable. MANIFEST, PROJECT_ROOT, and EXTERNAL_INCLUDE_ROOTS are
+# the same Parity Architecture Gate inputs the configure/build phases use; the
+# generated gate revalidates them at install time.
 function(cch_runtime_install_rules)
     set(options "")
-    set(one_value_keywords TARGET MANIFEST PROJECT_ROOT)
+    set(one_value_keywords TARGET MANIFEST PROJECT_ROOT CODEMODE_GUEST)
     set(multi_value_keywords LICENSE_FILES EXTERNAL_INCLUDE_ROOTS)
     cmake_parse_arguments(arg "${options}" "${one_value_keywords}" "${multi_value_keywords}" ${ARGN})
 
-    foreach(required TARGET MANIFEST PROJECT_ROOT LICENSE_FILES)
+    foreach(required TARGET MANIFEST PROJECT_ROOT LICENSE_FILES CODEMODE_GUEST)
         if(NOT DEFINED arg_${required} OR "${arg_${required}}" STREQUAL "")
             message(FATAL_ERROR "cch_runtime_install_rules: ${required} is required")
         endif()
@@ -152,4 +156,16 @@ function(cch_runtime_install_rules)
             DESTINATION "share/${arg_TARGET}/licenses"
             RENAME "${CMAKE_MATCH_1}.txt")
     endforeach()
+
+    # The codemode guest module ships with the installed Runtime so an
+    # installed binary can run codemode scripts (pi bundles quickjs.wasm in its
+    # distribution); resolution is by path next to the executable, never an
+    # environment variable.
+    if(NOT EXISTS "${arg_CODEMODE_GUEST}")
+        message(FATAL_ERROR
+            "cch_runtime_install_rules: codemode guest not found: '${arg_CODEMODE_GUEST}'")
+    endif()
+    install(FILES "${arg_CODEMODE_GUEST}"
+        DESTINATION "share/${arg_TARGET}/codemode"
+        RENAME "quickjs.wasm")
 endfunction()

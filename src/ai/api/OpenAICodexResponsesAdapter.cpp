@@ -6,6 +6,7 @@
 #include <cch/ai/Timestamps.hpp>
 #include "ai/api/PartialJson.hpp"
 #include "ai/api/ResponsesEventProcessor.hpp"
+#include "ai/api/ResponsesSlots.hpp"
 #include "ai/api/RequestHeaders.hpp"
 #include "ai/auth/Pkce.hpp"
 #include "ai/providers/ProviderError.hpp"
@@ -62,7 +63,8 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
     CodexWebSocketCache& cache,
     AssistantMessage& assistant,
     bool started,
-    AssistantEventSink& sink) {
+    AssistantEventSink& sink,
+    const std::map<std::string, std::string, std::less<>>& grammar_properties) {
     const auto started_state = std::make_shared<bool>(started);
     const auto websocket_started_state = std::make_shared<bool>(false);
 
@@ -150,7 +152,8 @@ boost::asio::awaitable<support::Expected<WsAttemptOutcome>> run_ws_attempt(
         co_return finish_failed(sent.error(), kind);
     }
 
-    ResponsesEventProcessor processor{ResponsesDialect::Codex, ResponsesDelivery::WebSocket, model};
+    ResponsesEventProcessor processor{
+            ResponsesDialect::Codex, ResponsesDelivery::WebSocket, model, grammar_properties};
     CodexFailure failure;
     for (;;) {
         if (options.stop_token.stop_requested()) {
@@ -432,6 +435,7 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
 
     CodexWebSocketCache& cache = impl_->cache;
     auto& sse_fallback_sessions = impl_->sse_fallback_sessions;
+    const auto grammar_properties = grammar_tool_input_properties(context.tools, model);
 
     bool started = false;
     const bool ws_disabled = cache_session_id.has_value() &&
@@ -452,7 +456,8 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
                             cache,
                             assistant,
                             started,
-                            guarded_sink));
+                            guarded_sink,
+                            grammar_properties));
             started = outcome.output_started;
             const bool websocket_started = outcome.websocket_started;
             if (outcome.completed) {
@@ -494,9 +499,9 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAICodexResponses
 
     auto attempt_state = std::make_shared<AttemptState>();
 
-    auto attempt_hook = [attempt_state, &model]() -> support::Expected<providers::SseEventHook> {
-        attempt_state->processor =
-                std::make_unique<ResponsesEventProcessor>(ResponsesDialect::Codex, ResponsesDelivery::Sse, model);
+    auto attempt_hook = [attempt_state, &model, grammar_properties]() -> support::Expected<providers::SseEventHook> {
+        attempt_state->processor = std::make_unique<ResponsesEventProcessor>(
+                ResponsesDialect::Codex, ResponsesDelivery::Sse, model, grammar_properties);
         return [attempt_state](const providers::SseEvent& event,
                        AssistantMessage& assistant,
                        AssistantEventSink& sink,

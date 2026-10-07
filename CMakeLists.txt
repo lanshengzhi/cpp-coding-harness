@@ -29,6 +29,7 @@ cch_runtime_install_rules(
     MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json"
     PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}"
     LICENSE_FILES ${CCH_RUNTIME_LICENSE_FILES}
+    CODEMODE_GUEST "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/codemode/quickjs/quickjs.wasm"
     EXTERNAL_INCLUDE_ROOTS ${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
 )
 

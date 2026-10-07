@@ -4,6 +4,7 @@
 #include "ai/Headers.hpp"
 #include <cch/ai/Timestamps.hpp>
 #include "ai/api/ResponsesEventProcessor.hpp"
+#include "ai/api/ResponsesSlots.hpp"
 #include "ai/api/RequestHeaders.hpp"
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
@@ -210,9 +211,10 @@ boost::asio::awaitable<support::Expected<AssistantMessage>> OpenAIResponsesAdapt
 
     auto attempt_state = std::make_shared<AttemptState>();
 
-    auto attempt_hook = [attempt_state, &model]() -> support::Expected<providers::SseEventHook> {
-        attempt_state->processor =
-                std::make_unique<ResponsesEventProcessor>(ResponsesDialect::DeepSeek, ResponsesDelivery::Sse, model);
+    const auto grammar_properties = grammar_tool_input_properties(context.tools, model);
+    auto attempt_hook = [attempt_state, &model, grammar_properties]() -> support::Expected<providers::SseEventHook> {
+        attempt_state->processor = std::make_unique<ResponsesEventProcessor>(
+                ResponsesDialect::DeepSeek, ResponsesDelivery::Sse, model, grammar_properties);
         return [attempt_state](const providers::SseEvent& event,
                        AssistantMessage& assistant,
                        AssistantEventSink& sink,

@@ -948,3 +948,124 @@ TEST_CASE("OpenAI Responses keeps the standard request fields for non-ChatGPT ba
     CHECK(object->contains("max_output_tokens"));
     CHECK(object->contains("temperature"));
 }
+
+namespace {
+
+/// The model-facing codemode shape: one required `code` string and an
+/// `openai_lark` grammar variant.
+[[nodiscard]] ai::Tool grammar_tool() {
+    return ai::Tool{
+            .name = "codemode",
+            .description = "Run JavaScript that calls other tools.",
+            .parameters = support::JsonValue::object_t{
+                    {"properties", support::JsonValue::object_t{
+                        {"code", support::JsonValue::object_t{
+                            {"type", "string"},
+                            {"description", "Raw JavaScript source."},
+                        }},
+                    }},
+                    {"required", support::JsonValue::array_t{"code"}},
+                    {"type", "object"},
+            },
+            .constrained_sampling = ai::ConstrainedSampling{
+                    .variants = {{"openai_lark", "start: SOURCE\nSOURCE: /[\\s\\S]+/\n"}},
+            },
+    };
+}
+
+[[nodiscard]] ai::AiContext grammar_request_context() {
+    ai::AiContext context;
+    context.system_prompt = "system";
+    context.messages.push_back(ai::UserMessage{
+            .content = std::vector<ai::Content>{ai::text_content("hi")},
+            .timestamp = 1,
+    });
+    context.tools.push_back(grammar_tool());
+    return context;
+}
+
+} // namespace
+
+TEST_CASE("a grammar-constrained tool is emitted as a Responses custom tool on a grammar-capable model",
+        "[ai][provider][responses][issue885][spec]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    transport->attempts.push_back(TransportAttempt{
+            .chunks = {terminal_sse("response.completed", "completed")},
+    });
+    auto model = deepseek_model();
+    model.compat = ai::OpenAIResponsesCompat{.supports_openai_grammar_tools = true};
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy";
+    auto run = run_models(*models, model, grammar_request_context(), std::move(options));
+    REQUIRE(run.result);
+
+    REQUIRE(transport->requests.size() == 1);
+    auto body = support::read_json(transport->requests.front().body);
+    REQUIRE(body.has_value());
+    const auto& tools = body->at("tools").get_array();
+    REQUIRE(tools.size() == 1);
+    const auto& tool = tools.front().get_object();
+    CHECK(tool.at("type").get_string() == "custom");
+    CHECK(tool.at("name").get_string() == "codemode");
+    const auto& format = tool.at("format").get_object();
+    CHECK(format.at("type").get_string() == "grammar");
+    CHECK(format.at("syntax").get_string() == "lark");
+    CHECK(format.at("definition").get_string() == "start: SOURCE\nSOURCE: /[\\s\\S]+/\n");
+}
+
+TEST_CASE("a grammar-capable model without the flag keeps the function tool",
+        "[ai][provider][responses][issue885][spec]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    transport->attempts.push_back(TransportAttempt{
+            .chunks = {terminal_sse("response.completed", "completed")},
+    });
+    auto model = deepseek_model();
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy";
+    auto run = run_models(*models, model, grammar_request_context(), std::move(options));
+    REQUIRE(run.result);
+
+    auto body = support::read_json(transport->requests.front().body);
+    REQUIRE(body.has_value());
+    const auto& tool = body->at("tools").get_array().front().get_object();
+    CHECK(tool.at("type").get_string() == "function");
+    CHECK(tool.contains("parameters"));
+}
+
+TEST_CASE("a grammar-constrained custom_tool_call streams back as a tool call with the input property",
+        "[ai][provider][responses][issue885][spec]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    std::string sse;
+    sse += "data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":"
+           "\"custom_tool_call\",\"id\":\"ctc_1\",\"call_id\":\"call_1\",\"name\":\"codemode\",\"input\":\"\"}}\n\n";
+    sse += "data: {\"type\":\"response.custom_tool_call_input.delta\",\"output_index\":0,\"delta\":\"return 1;\"}\n\n";
+    sse += "data: {\"type\":\"response.custom_tool_call_input.done\",\"output_index\":0,\"input\":\"return 1;\"}\n\n";
+    sse += "data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"type\":"
+           "\"custom_tool_call\",\"id\":\"ctc_1\",\"call_id\":\"call_1\",\"name\":\"codemode\",\"input\":\"return 1;\"}}\n\n";
+    sse += terminal_sse("response.completed", "completed");
+    transport->attempts.push_back(TransportAttempt{.chunks = {sse}});
+    auto model = deepseek_model();
+    model.compat = ai::OpenAIResponsesCompat{.supports_openai_grammar_tools = true};
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+
+    ai::SimpleStreamOptions options;
+    options.api_key = "dummy";
+    auto run = run_models(*models, model, grammar_request_context(), std::move(options));
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::ToolUse);
+    REQUIRE(run.result->content.size() == 1);
+    const auto& tool = std::get<ai::ToolCallContent>(run.result->content.front());
+    CHECK(tool.id == "call_1|ctc_1");
+    CHECK(tool.name == "codemode");
+    CHECK(tool.arguments_valid);
+    REQUIRE(tool.arguments);
+    CHECK(tool.arguments->at("code").get_string() == "return 1;");
+    CHECK(tool.raw_arguments.find("return 1;") != std::string::npos);
+}
