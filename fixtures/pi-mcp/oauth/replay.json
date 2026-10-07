@@ -1,0 +1,58 @@
+{
+  "provenance": "Pike-side recorded loopback OAuth exchange for one MCP server (spec #865, ticket #875). Recorded against a local loopback authorization server on 127.0.0.1; no real provider, no live credentials, no network. Per-run secrets (authorization code, PKCE verifier, OAuth state) are recorded as the repository redaction placeholder [REDACTED]; replayed token values are dummy-* strings. The exchange is what the product must speak: the client's authorize request, authorization-code token exchange, refresh-token rotation, and the invalid_grant re-login case.",
+  "server": {
+    "name": "echo",
+    "authorization_url": "http://127.0.0.1:8765/authorize",
+    "token_url": "http://127.0.0.1:8765/token",
+    "client_id": "pike-mcp-test-client",
+    "scope": "mcp.read"
+  },
+  "authorize_request": {
+    "response_type": "code",
+    "client_id": "pike-mcp-test-client",
+    "code_challenge_method": "S256",
+    "code_challenge": "[REDACTED]",
+    "redirect_uri": "http://127.0.0.1:<callback-port>/callback",
+    "state": "[REDACTED]",
+    "scope": "mcp.read"
+  },
+  "callback": {
+    "code": "[REDACTED]",
+    "state": "[REDACTED]"
+  },
+  "token_exchange": {
+    "request": {
+      "grant_type": "authorization_code",
+      "code": "[REDACTED]",
+      "code_verifier": "[REDACTED]",
+      "client_id": "pike-mcp-test-client",
+      "redirect_uri": "http://127.0.0.1:<callback-port>/callback"
+    },
+    "response": {
+      "status": 200,
+      "body": "{\"access_token\":\"dummy-access-token\",\"refresh_token\":\"dummy-refresh-token\",\"token_type\":\"Bearer\",\"expires_in\":3600}"
+    }
+  },
+  "refresh_exchange": {
+    "request": {
+      "grant_type": "refresh_token",
+      "refresh_token": "[REDACTED]",
+      "client_id": "pike-mcp-test-client"
+    },
+    "response": {
+      "status": 200,
+      "body": "{\"access_token\":\"dummy-rotated-access-token\",\"refresh_token\":\"dummy-rotated-refresh-token\",\"token_type\":\"Bearer\",\"expires_in\":3600}"
+    }
+  },
+  "invalid_grant_exchange": {
+    "request": {
+      "grant_type": "refresh_token",
+      "refresh_token": "[REDACTED]",
+      "client_id": "pike-mcp-test-client"
+    },
+    "response": {
+      "status": 400,
+      "body": "{\"error\":\"invalid_grant\",\"error_description\":\"refresh token is expired or revoked\"}"
+    }
+  }
+}

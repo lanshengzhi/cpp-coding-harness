@@ -1,0 +1,14 @@
+--- a/cmake/Helper.cmake
++++ b/cmake/Helper.cmake
+@@ -41,6 +41,11 @@
+     list(APPEND WASMEDGE_CFLAGS
+       -Werror
+       -Wno-error=pedantic
++      # GCC 16 promotes diagnostics WasmEdge 0.13.5 did not anticipate to
++      # errors: -Werror=sfinae-incomplete in include/host/wasi/inode.h and
++      # -Werror=maybe-uninitialized in lib/loader/filemgr.cpp. Demote
++      # warnings so the pinned release builds on the GCC 16 toolchain.
++      -Wno-error
+     )
+     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 13)
+       list(APPEND WASMEDGE_CFLAGS

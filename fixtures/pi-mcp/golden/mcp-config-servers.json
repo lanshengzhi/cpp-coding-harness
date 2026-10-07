@@ -1,0 +1,25 @@
+[
+  {
+    "name": "disabled-server",
+    "enabled": false,
+    "kind": "stdio",
+    "command": "python3",
+    "args": ["echo_server.py"]
+  },
+  {
+    "name": "echo",
+    "enabled": true,
+    "kind": "stdio",
+    "command": "python3",
+    "args": ["echo_server.py"]
+  },
+  {
+    "name": "remote",
+    "enabled": true,
+    "kind": "http",
+    "url": "https://example.invalid/mcp",
+    "headers": {
+      "Authorization": "Bearer ${DOCS_TOKEN}"
+    }
+  }
+]

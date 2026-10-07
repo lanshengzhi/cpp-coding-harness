@@ -40,6 +40,8 @@ constexpr std::string_view kProjectVersion = CCH_PROJECT_VERSION;
     if (token == "-ns") return "--no-skills";
     if (token == "-np") return "--no-prompt-templates";
     if (token == "-nc") return "--no-context-files";
+    if (token == "-t") return "--tools";
+    if (token == "-xt") return "--exclude-tools";
     if (token == "-h") return "--help";
     if (token == "-v") return "--version";
     return std::string{token};
@@ -130,6 +132,12 @@ struct NormalizedArgv {
                        "  --session-dir <dir>            Directory for session storage and lookup\n"
                        "  --no-session                   Don't save session (ephemeral)\n"
                        "  --name, -n <name>              Set session display name\n"
+                       "  --tools, -t <tools>            Comma-separated allowlist of tool names or\n"
+                       "                                 patterns (*) to enable; keeps MCP tools unless\n"
+                       "                                 an entry starts with mcp__\n"
+                       "  --exclude-tools, -xt <tools>   Comma-separated denylist of tool names or\n"
+                       "                                 patterns (*) to disable; applies to all tools,\n"
+                       "                                 MCP tools included\n"
                        "  --approve, -a                  Trust project-local files for this run\n"
                        "  --no-approve, -na              Ignore project-local files for this run\n"
                        "  --system-prompt <text>         System prompt (default: coding assistant\n"
@@ -327,25 +335,25 @@ struct OptionToken {
             "Could not convert: {} = {}", original_token.substr(0, original_token.find('=')), option.inline_value)));
 }
 
-[[nodiscard]] std::vector<std::string> split_model_patterns(std::string_view models_text) {
-    std::vector<std::string> patterns;
+[[nodiscard]] std::vector<std::string> split_comma_separated(std::string_view text) {
+    std::vector<std::string> entries;
     std::size_t start = 0;
-    while (start <= models_text.size()) {
-        const auto comma = models_text.find(',', start);
-        const auto end = comma == std::string_view::npos ? models_text.size() : comma;
-        std::string pattern{models_text.substr(start, end - start)};
+    while (start <= text.size()) {
+        const auto comma = text.find(',', start);
+        const auto end = comma == std::string_view::npos ? text.size() : comma;
+        std::string entry{text.substr(start, end - start)};
         const auto not_space = [](unsigned char character) { return !std::isspace(character); };
-        pattern.erase(pattern.begin(), std::find_if(pattern.begin(), pattern.end(), not_space));
-        pattern.erase(std::find_if(pattern.rbegin(), pattern.rend(), not_space).base(), pattern.end());
-        if (!pattern.empty()) {
-            patterns.push_back(std::move(pattern));
+        entry.erase(entry.begin(), std::find_if(entry.begin(), entry.end(), not_space));
+        entry.erase(std::find_if(entry.rbegin(), entry.rend(), not_space).base(), entry.end());
+        if (!entry.empty()) {
+            entries.push_back(std::move(entry));
         }
         if (comma == std::string_view::npos) {
             break;
         }
         start = comma + 1;
     }
-    return patterns;
+    return entries;
 }
 
 } // namespace
@@ -384,6 +392,8 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
     std::string provider_text;
     std::string model_text;
     std::string models_text;
+    std::string tools_text;
+    std::string exclude_tools_text;
     std::string api_key_text;
     std::string thinking_text;
     std::string session_id_text;
@@ -396,6 +406,8 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
     bool provider_seen = false;
     bool model_seen = false;
     bool models_seen = false;
+    bool tools_seen = false;
+    bool exclude_tools_seen = false;
     bool api_key_seen = false;
     bool thinking_seen = false;
     bool session_id_seen = false;
@@ -622,6 +634,24 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
             }
             continue;
         }
+        if (option.name == "tools") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                tools_text = std::move(*value);
+                tools_seen = true;
+            }
+            continue;
+        }
+        if (option.name == "exclude-tools") {
+            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
+                return std::unexpected(std::move(value.error()));
+            } else {
+                exclude_tools_text = std::move(*value);
+                exclude_tools_seen = true;
+            }
+            continue;
+        }
         if (option.name == "api-key") {
             if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
                 return std::unexpected(std::move(value.error()));
@@ -704,7 +734,13 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
         config.session_facts.provider = std::move(provider_text);
     }
     if (models_seen) {
-        config.session_facts.models = split_model_patterns(models_text);
+        config.session_facts.models = split_comma_separated(models_text);
+    }
+    if (tools_seen) {
+        config.session_facts.tools = split_comma_separated(tools_text);
+    }
+    if (exclude_tools_seen) {
+        config.session_facts.exclude_tools = split_comma_separated(exclude_tools_text);
     }
     if (api_key_seen) {
         config.session_facts.api_key = std::move(api_key_text);

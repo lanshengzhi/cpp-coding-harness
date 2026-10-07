@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Pi capability scope decisions and open questions
@@ -29,6 +29,10 @@ decision, attributed to it and not to the owner.
 > **Pike implements a functional subset of pi. For the subset Pike does implement, the behaviour a user
 > experiences is the same as pi's.**
 
+Pike 实现 pi 的功能子集；在 Pike 已声明 Supported 的范围内，用户可见行为与基线 pi 一致（Semantic Parity）；子集之外逐项记为 Deferred，未裁决的记为 No decision，不存在默示对齐。
+
+Owner 原话“当前 pike 所实现功能全面对齐 ../pi”（2026-10-06）经 grill 澄清为上述子集内一致含义，不作零 Deferred 解读；“全面对齐”四字不进入正文断言。
+
 This is the rule per-capability membership will be decided against, and it settles a distinction the
 earlier drafts kept circling:
 
@@ -54,6 +58,146 @@ does not attribute it to @lansy.
 |---|---|---|---|
 | Animated pi logo / wordmark | `packages/coding-agent/src/modes/interactive/components/pi-logo-animation.ts` (1209), `pi-logo-animation.lazy.ts` (14), `pi-logo.ts` (40) — 1263 total | **Not implemented** | Branding. |
 | Radius OAuth provider | `packages/ai/src/bun-oauth.ts:23` (`radius: createRadiusOAuth`), `packages/ai/src/env-api-keys.ts:99` (`radius: "RADIUS_API_KEY"`) | **Out of the supported subset** | Already decided and implemented at `src/coding_agent/ModelConfig.hpp:49` — `oauth: "radius"` is excluded. Scope note: the provider definition and its credential entry exist upstream, and its login selector is reachable only inside the `/login` flow. Pike's supported subset carries credential configuration but excludes OAuth definitions. |
+
+### Extension Tool Source foundation — spec #865
+
+Decided **2026-10-06**, authorized by the spec flow of
+[#865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865): the owner ruling was recorded through
+the repository's explicitly authorised spec flow, so it is attributed to that spec rather than to a
+named individual. This ruling covers **this slice's scope only**.
+
+| Capability | pi source | Pike status | Scope of this ruling |
+|---|---|---|---|
+| Extension Tool Source foundation (loader / runner / registry) | `packages/coding-agent/src/core/extensions/loader.ts`, `runner.ts`, `registerTool` in `core/extensions/types.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (minimal foundation, #867)** | A `cch_coding_agent` loader / runner / registry that converts an extension-provided tool into a `cch::agent::Tool` and registers it in the session's existing `ToolRegistry` at assembly time, with the Agent's execution path reused unchanged. It opens no MCP server, runs no codemode script, adds no CLI flag, and rules on no other capability in this ADR. |
+
+The boundary is enforced by the Product Architecture Contract rule
+`extension-tool-source-no-agent-execution-reach-through` (diagnostic `PARITY-8005`,
+`cmake/parity/manifest.json`): sources under `src/coding_agent/extensions/` reach the Agent only
+through the Tool Owner Interface (`<cch/agent/AgentTool.hpp>`, `<cch/agent/ToolRegistry.hpp>`) and
+may not include the Agent's execution internals or construct an Agent.
+
+### MCP stdio server — spec #865 (#869)
+
+Decided **2026-10-06**, authorized by the spec flow of
+[#865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865): the owner ruling was recorded
+through the repository's explicitly authorised spec flow, so it is attributed to that spec rather
+than to a named individual. This ruling covers **the MCP stdio transport slice only**; every other
+`packages/mcp` capability stays `No decision`.
+
+| Capability | pi source | Pike status | Scope of this ruling |
+|---|---|---|---|
+| MCP server over **stdio** | `packages/mcp/src/transports/stdio.ts`, `client.ts`, `protocol/jsonrpc.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (stdio transport, #869)** | A `cch_coding_agent` client that launches one configured MCP server over stdio, speaks newline-delimited compact JSON-RPC (`initialize` → `notifications/initialized` → `tools/list` → `tools/call`), and converts each advertised tool into an extension Tool (`mcp__<server>__<tool>`) through the #867 Extension Tool Source seam. The child is a long-lived per-session process group torn down close-stdin → grace → SIGTERM → SIGKILL; a per-call failure follows the Agent's existing per-call isolation. This ruling covers **stdio only**: **OAuth** (later decided in the #875 ruling below), **resource tools**, and **exposure policy (`codemode`/`deferred`/`hidden`)** remain `No decision` (the **streamable-HTTP transport** was later decided in the #873 ruling below and **server-management persistence** in the #876 ruling below), and no codemode, CLI flag, or extension machinery is opened here. |
+
+The slice reuses the Agent's ordinary execution path and adds no Owner Interface; the transport and
+conversion stay private under `src/coding_agent/mcp/`.
+
+| MCP server over **streamable HTTP** | `packages/mcp/src/transports/streamable-http.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (streamable-http transport, #873)** | A `cch_coding_agent` client that reaches one configured MCP server over the streamable-HTTP transport: one JSON-RPC POST per request with `accept: application/json, text/event-stream`, an `application/json` or `text/event-stream` response, and an `mcp-session-id` captured at `initialize` and echoed on later requests, converting each advertised tool into an extension Tool (`mcp__<server>__<tool>`) through the #867 Extension Tool Source seam. The HTTPS round trip reuses the existing outbound client transport (`ai::providers::StreamTransport`, ADR 0054) rather than opening a second HTTP stack, and is **TLS-only**: a non-`https://` URL is rejected at registration and no redirect is ever followed, so the connection cannot be downgraded to plaintext. This ruling covers **the transport's request path only**: the server-to-client GET stream, **OAuth** (later decided in the #875 ruling below), **resource tools**, and **exposure policy (`codemode`/`deferred`/`hidden`)** remain `No decision` (**server-management persistence** was later decided in the #876 ruling below), and no codemode, CLI flag, or extension machinery is opened here. |
+
+The slice reuses the Agent's ordinary execution path and adds no Owner Interface; the transport and
+conversion stay private under `src/coding_agent/mcp/`. The JSON-RPC framing and `initialize`
+validation shared with the stdio client are factored into `src/coding_agent/mcp/McpProtocol.hpp`,
+and the tool conversion is written once against the transport-independent `McpServerConnection`.
+
+### MCP server management and persistence — spec #865 (#876)
+
+Decided **2026-10-07**, authorized by the spec flow of
+[#865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865), in the same attributed manner
+as the transport rulings above. This ruling covers **persistence and lifecycle only**: the TUI `/mcp`
+manager and `pi mcp` CLI subcommands, live in-session tool add/remove, and the exposure/timeout
+fields stay `No decision`. **MCP OAuth** credential semantics were later decided in the #875 ruling
+below, which leaves only the `mcp.json` `auth` block and its sign-in trigger as a recorded follow-up.
+
+| Capability | pi source | Pike status | Scope of this ruling |
+|---|---|---|---|
+| MCP server **management and persistence** | `packages/coding-agent/src/core/mcp-servers.ts`, `src/extensions/mcp/config.ts`, `index.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (persistence + lifecycle, #876)** | The server list persists in pi's separate `mcp.json` — the global `<agentDir>/mcp.json` always and the trusted-project `<cwd>/.pi/mcp.json` only while the existing ProjectTrust gate says trusted — using the `mcpServers` shape, so it survives a restart. Project entries replace global entries by name, and a project entry without `command`/`url`/`type` overrides only the global entry's `enabled` flag. Each configured server reports an explicit lifecycle state (`starting`/`running`/`stopped`/`failed`) on the creation-result status list and as a per-state Session diagnostic, so a disabled or dead server stays visible. A persisted server that fails to launch, handshake, or list tools reports `failed` with an explicit diagnostic while the session continues with the remaining servers; the programmatic `AgentSessionCreationRequest::mcp_servers` seam keeps #869's hard-fail. The stdio transport reconnects a dead server on the next call (pi `connection.reconnect()`), so a crash fails its own call explicitly and the following call re-establishes the server. This ruling covers **stdio end to end** (restart persistence, stopped = tools absent with a notice, reconnect after death); the **write half of `mcp.json`** (pi's `/mcp` manager), **live in-session tool add/remove** (the registry stays immutable after assembly), the **server-to-client GET stream**, **resource tools**, and **exposure policy** remain `No decision` (**MCP OAuth** was later decided in the #875 ruling below), and no TUI command or CLI subcommand is opened here. |
+
+**Persistence-format decision (recorded).** The server list lives in a separate `mcp.json`, not in
+`settings.json`. pi persists MCP servers in `mcp.json` (global and trust-gated project) and keeps
+`settings.json` for `codemode`/`extensions`/`defaultTools`; a `UserSettings` member would be a
+non-pi shape and would put project-authored server commands behind a different gate than pi's
+ProjectTrust. The loader is the read half only; the `/mcp` write half is a later slice, so a user
+authors `mcp.json` today.
+
+### Codemode declarations and source loading — spec #865
+
+Decided **2026-10-06**, authorized by the spec flow of
+[#865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865), in the same attributed manner as the
+foundation ruling above. This ruling covers **this slice's scope only**: declarations and loading,
+not execution.
+
+| Capability | pi source | Pike status | Scope of this ruling |
+|---|---|---|---|
+| Codemode declarations and source loading | `packages/codemode/src/declarations.ts`, `source.ts`, `types.ts` at `7c10bd43` (`v1.0.4`); `packages/coding-agent/src/extensions/codemode/` | **In the supported subset (declarations / loading, #870)** | A project-local declaration surface — `<workspace>/.pi/codemode/*.json` carrying `{name, description, inputSchema?, source}`, with the `source` `*.js` in pi's `source.ts` format — loaded through the Extension Tool Source foundation and exposed on the tool surface. An invalid declaration is a typed error with no silent skip; loading never executes at declaration time. It opens no MCP server, adds no CLI flag, and rules on no other capability (execution is the #874 ruling below). |
+| Codemode sandboxed execution | `packages/codemode/src/runtime/` (`host.ts`, `worker.ts`, `prelude-source.ts`) and `wasm.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (sandboxed execution, #874)** | A `cch_coding_agent` sandbox that embeds WasmEdge (pinned vcpkg `wasmedge` via the in-tree overlay port `cmake/vcpkg-ports/wasmedge`) and runs a declared script inside pi's actual codemode guest (`quickjs-wasi` 3.6.2 `quickjs.wasm`, committed at `fixtures/codemode/quickjs/`) after evaluating pi's prelude (`prelude-source.ts`, embedded as `CodemodePrelude.hpp`). The host registers only the twelve imports the guest declares (`env.host_*` and the WASI subset the `wasi-shim.js` covers), so a script has no filesystem, socket, process, or module capability: an unprovided import refuses instantiation, and an escape (`require`, `fetch`, `process`, `WebAssembly`) is an explicit error. A script returns its JSON value plus text/image output (pi's `CodemodeOutputItem` shape); a runaway script is interrupted by its timeout or a cancellation. `<workspace>/.pi/codemode` is discovered by default through session assembly for a trusted project, and a malformed declaration fails Session Assembly explicitly. This ruling covers **the sandbox boundary and execution only**: routing the script's `tools.*` calls back to the session's tool set is **not opened here**, stays `No decision`, and is recorded as a follow-up (spec #865 close-out, #879). |
+
+**Intentional divergence (reversed 2026-10-07 — see the full-parity ruling below):** pi v1.0.4 has no on-disk codemode declaration format. Codemode scripts
+there are written inline in the model's `codemode` tool call, and "exposure" is an in-memory
+registration concept, so there is no project-local codemode source directory to follow. Pike
+defines this minimal format anyway so a project can declare script tools before the sandbox exists;
+it follows pi where a shape exists (the `source.ts` script format and the `CodemodeTool`
+model-facing fields). The format is documented for users at `fixtures/codemode/README.md`. **The
+codemode sandbox and script execution were ruled in by #874 (see the sandboxed-execution row
+above); routing `tools.*` inside a script to the session's tool set remains `No decision` and is an
+explicitly recorded follow-up (spec #865 close-out, #879) — see the close-out section below.**
+
+### MCP OAuth through the existing credential semantics — spec #865 (#875)
+
+Decided **2026-10-06**, authorized by the spec flow of
+[#865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865), in the same attributed manner as
+the rulings above. This ruling covers **the MCP OAuth credential slice only**.
+
+| Capability | pi source | Pike status | Scope of this ruling |
+|---|---|---|---|
+| MCP server **OAuth** | `packages/mcp/src/oauth/` (`flow.ts`, `discovery.ts`, `callback.ts`, `provider.ts`) and `packages/coding-agent/src/extensions/mcp/oauth.ts` at `7c10bd43` (`v1.0.4`) | **In the supported subset (credential semantics, #875)** | The authorization-code + PKCE S256 flow, refresh-token rotation, and request-time token attachment of one configured MCP server, expressed entirely through the **existing** credential story: an `ai::OAuthCredential` stored in the shared `auth.json` through the coding-agent-owned AuthStorage under the provider id `mcp__<server>`, an OAuth-shaped login hook reusing the existing `AuthInteraction` presentation and the shared `ai::auth` PKCE/callback helpers, and per-request token resolution in the streamable-http transport. A `401` or an `invalid_grant` refresh is an explicit re-login error (never a silent unauthenticated request and never a retry loop); a server configured without OAuth is sent no credentials. |
+
+**Intentional divergence:** pi stores MCP OAuth state in a separate `<agent-dir>/mcp-auth.json`; the
+spec binds Pike to the existing AuthStorage/`auth.json` semantics instead, so there is no second
+credential store and the user learns no second credential story. **Deferred by this ruling:** RFC 9728
+authorization-server discovery and dynamic client registration (the endpoints and the pre-registered
+`client_id` are configuration), and **the user-visible sign-in trigger** — nothing in #875 opens a
+browser flow on its own; the trigger (a future `/mcp` surface or CLI command) is a follow-up decision,
+and #876's `mcp.json` server entry gaining an `auth: "oauth"` block is the natural handshake point.
+MCP **resource tools**, the server-to-client GET stream, and exposure policy remain `No decision`.
+
+The transport and credential resolution stay private under `src/coding_agent/mcp/` and add no Owner
+Interface.
+
+### Spec #865 close-out — recorded follow-ups (#879)
+
+The scope close-out of [spec #865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865)
+verified that every capability the spec names is either an owner decision (the rows above) or an
+explicitly **recorded follow-up**. The MCP capabilities the spec did not name — the server-to-client
+GET stream, **resource tools**, and **exposure policy** — and the spec's out-of-scope rows below stay
+`No decision`, untouched by this close-out.
+
+| Follow-up | Why it is deferred | Record |
+|---|---|---|
+| Codemode script → session-tool routing | A script's `tools.*`/globals surface is empty, so a call is an explicit `does-not-exist` error. Routing a call to the session's tool set needs an async bridge and a dispatcher that survives the registry move into the Agent. | #874 (issue comment and this ADR's codemode row), reconfirmed by the #879 close-out |
+| Codemode worker-thread execution | The shipped `CodemodeSandbox::run` drives WasmEdge on the calling thread, so a declared-tool call blocks its executor thread for the script's duration; pi uses a dedicated worker thread. Not required by the #874 criteria. | #874 (implementer record); first recorded in this ADR by the #879 close-out |
+| Codemode guest-wasm install packaging | Production resolves `$PIKE_CODEMODE_WASM`, else the compiled-in source-tree fixture path (`default_codemode_guest_wasm_path`); shipping `quickjs.wasm` with an installed binary is a packaging follow-up. | #874 (implementer record); first recorded in this ADR by the #879 close-out |
+
+Codemode **output presentation** (#877) opens no capability and therefore no scope row: a declared
+tool's name is unregistered, so it takes the existing `ToolRendererRegistry` fallback pair, and an
+`image` output item lands in the same inline image sidecar any other tool's image uses.
+
+### Full-parity ruling — MCP and codemode aligned with pi v1.0.4 (2026-10-07, spec #882)
+
+Decided by **@lansy, 2026-10-07**, through the grill flow (rounds recorded in the #882 spec issue):
+the recorded gaps and divergences from spec #865 are to be **eliminated** — MCP and codemode are to
+match pi v1.0.4 (`7c10bd43`) with no identifiable user-visible behaviour difference. Tracked by
+[spec #882](https://github.com/lanshengzhi/cpp-coding-harness/issues/882) (bundle capture #883, MCP
+parity #884, codemode parity #885, close-out #886). The rulings, attributed as above:
+
+1. **The codemode declaration divergence above is reversed.** The `<workspace>/.pi/codemode/*.json`
+   surface (#870) is superseded by pi's model-facing inline `codemode` tool; the landed declaration
+   loader, trust gating, fixtures, and tests are to be **physically removed**, not kept dormant, with
+   the tool-surface enumeration checked against pi as removal evidence.
+2. **No intentional divergence is retained, including the credential store.** MCP OAuth credentials move to pi's `mcp-auth.json` shape (#875's AuthStorage/`auth.json` ruling is **superseded** for MCP OAuth, with a migration path for existing `mcp__<server>` credentials), so the full-parity target carries zero recorded divergences. Owner wording: "凭据库不要分叉" (2026-10-07, amending the same-day ruling recorded above).
+3. **Acceptance is differential evidence.** Each capability closes only against the frozen
+   `pi-v1.0.4` evidence bundle (ADR 0065; captured in #883), not self-captured goldens alone.
+4. The #865 recorded follow-ups table above is absorbed by spec #882 item by item; each follow-up
+   gains a pointer comment to its absorbing ticket. #881 (ai transport/auth interface promotion) is
+   orthogonal and stays independent.
 
 ## Finding: not a decision
 
@@ -113,10 +257,17 @@ later reader does not re-raise it.
 
 ## Open question: no decision exists
 
-**Baselines — two, not one.** Every **pi** path, size, and line count in this table is measured at pi
-`a13d35a742c6ef8462812a28fbe1d8c8b7431c32` (`v1.0.0`) with `git ls-tree`/`git cat-file`. Every **Pike**
-figure is measured in the Pike tree at `54c736a0d`, where it appears. The two are never mixed: pi figures and
+**Baselines — three pi revisions, each named with its full 40-character SHA.** Every **pi** path, size, and line count in this table is measured at pi
+`a13d35a742c6ef8462812a28fbe1d8c8b7431c32` (`v1.0.0`) with `git ls-tree`/`git cat-file`, unless a row names `7c10bd43` explicitly. Every **Pike**
+figure is measured in the Pike tree at `54c736a0d`, where it appears. The two sides are never mixed: pi figures and
 Pike figures are read against their own baseline, as stated here.
+
+Revision roles (ADR 0065 Named Baseline rule — selection by name, never by floating HEAD):
+`f07218c4d4bbc12bef056a7058c3dd49dfe41abe` (`v0.87.1`, baseline `pi-v0.87.1`) is the captured evidence bundle;
+`a13d35a742c6ef8462812a28fbe1d8c8b7431c32` (`v1.0.0`, baseline `pi-v1.0.0`) is the Phase 1 inventory reference (bundle not yet captured);
+`7c10bd4337495ee613f2224843ecdf349b80d1df` (`v1.0.4`, baseline `pi-v1.0.4`) is registered in `fixtures/pi-ai/baselines.json` with no captured bundle yet —
+tools selecting it fail loudly on the missing bundle rather than falling back, per ADR 0065.
+The `v1.0.0` → `v1.0.4` delta (292 files, +17238/−4936) has not been per-capability inventoried; only the whole new packages below are recorded as rows.
 
 The following are pi packages and capabilities — **two whole packages and several in-package
 capabilities** — for which Pike has **no counterpart of that capability**, and for which **no decision
@@ -134,15 +285,17 @@ Pike's counterpart is therefore `src/agent/harness/`, not that path.
 
 | pi package or capability | Size | Status |
 |---|---|---|
-| `packages/mcp` (whole package) | 20 files / 3,179 LOC (`client.ts` 21KB, `protocol/`, `transports/`, `oauth/`) | **No decision.** Whether external MCP server connectivity is in Pike's product boundary has not been decided. |
-| `packages/codemode` (whole package) | 11 files / 1,655 LOC (`declarations.ts` 13KB, `runtime/`) | **No decision.** Tied upstream to grammar tool-call machinery that Pike already carries as Deferred. |
+| `packages/mcp` (whole package) | 20 files / 3,179 LOC (`client.ts` 21KB, `protocol/`, `transports/`, `oauth/`) | **Decided in part.** The **stdio** and **streamable-HTTP** transports, the `initialize`/`tools/list`/`tools/call` client, MCP-tool-to-extension-Tool conversion, **OAuth credential semantics**, and **server management/persistence** are an owner decision — see the Owner decisions section above (spec #865, #869, #873, #875 and #876). The rest of the package — the **server-to-client GET stream**, **resource tools**, and **exposure policy** — remains **No decision.** |
+| `packages/codemode` (whole package) | 11 files / 1,655 LOC (`declarations.ts` 13KB, `runtime/`) | **Decided in part.** Project-local codemode declarations and source loading (#870), the sandboxed `runtime/` + `wasm.ts` execution path (#874), and output presentation through the existing tool-renderer registry (#877) are owner decisions — see the Owner decisions section above (spec #865). Routing a script's `tools.*` calls to the session's tools remains **No decision** and is recorded as a follow-up (spec #865 close-out, #879). |
 | Image generation (in-package capability, `packages/ai`) | `packages/ai/src/image-models.ts` (50 lines), `images-api-registry.ts` (53), `images.ts` (26) | **No decision.** Pike has image *input* handling (`ImageInput.cpp`); upstream image *generation* is a separate outbound API surface. |
 | Classifier models (in-package capability) | `packages/ai/src/types.ts:1161` (`ModelTypeMap.classifier: ClassifierModel<ClassifierApi>`), `models.ts` (`classify()` declarations at :228/:348/:966), `api/llama-cpp-classify.ts` (458 lines) + `.lazy.ts` (6), `coding-agent/src/core/model-registry.ts:77` (`findOfType("classifier", …)`) | **No decision.** Scope is the classifier model kind only: at this baseline `ModelTypeMap` has exactly `chat`, `image`, and `classifier`. Pike has no `ClassifierModel`, `classify()`, or `findOfType` equivalent. |
 | Durable execution layer (in-package capability of `packages/durable`) | scheduler 1,337 · generation 677 · output 288 · view 237 · submissions 207 · task-graph 222 · live 175 · inbox 132 · registry 114 · define 44 — the 10 listed files are 3,433 lines; `packages/durable` totals 15,483 | **No decision.** Subset membership not yet ruled per capability. |
 | SQLite session store (in-package capability) | `packages/durable/src/storage/sqlite/` — `database.ts` 38 · `index.ts` 8 · `migrations.ts` 125 · `node.ts` 210 · `storage.ts` 870 = **1,251 lines** | **No decision.** Subset membership not yet ruled per capability. |
 | Session transactions | `packages/durable/src/session/transaction.ts` (1,023 lines) | **No decision.** Subset membership not yet ruled per capability. |
-| Extension/registry system | `packages/durable/src/harness/define.ts` (44), `harness/registry.ts` (114); `defineExtension` / `createRegistry` / `wrapTool` | **No decision.** Subset membership not yet ruled per capability. |
+| Extension/registry system | `packages/durable/src/harness/define.ts` (44), `harness/registry.ts` (114); `defineExtension` / `createRegistry` / `wrapTool` | **Decided in part.** The coding-agent Extension Tool Source foundation (loader / runner / registry) is an owner decision — see the Owner decisions section above (spec #865, #867). This row's `packages/durable` `defineExtension` / `createRegistry` / `wrapTool` machinery remains **No decision.** |
 | `streamProxy` (server-side LLM forwarding, server-held auth) | `packages/agent/src/proxy.ts` 406 lines | **No decision.** Subset membership not yet ruled per capability. |
+| `packages/env` (whole package, new in v1.0.0→v1.0.4) | 36 files / ~7,020 TS+Rust LOC (`@earendil-works/pi-env`, SSH bootstrap, daemon, remote ExecutionEnv client) at `7c10bd43` | **No decision.** Whether remote execution environments are in Pike's product boundary has not been decided. |
+| `packages/server` + `packages/protocol` + `packages/telemetry` (new package group in v1.0.0→v1.0.4) | 58 files / ~5,674 LOC at `7c10bd43` | **No decision.** Subset membership not yet ruled; per-capability deltas in durable watch/shell, MCP OAuth, codemode, and tui-alt-screen within the same range are likewise not yet inventoried. |
 Note the distinction the other tables make necessary: recording "the prompt does not reference
 MCP" is **not** a decision that MCP is unsupported. The two are independent, and only the first is
 currently observable. Likewise, Pike's image *input* support says nothing about image *generation*,
@@ -156,13 +309,37 @@ All pi sizes above are measured at the pi baseline; all Pike sizes at the Pike c
 
 - "Why does Pike have less than pi?" has one entry point instead of a grep across source comments.
 - A future proposal to add the logo or Radius finds a recorded owner decision and separately
-  attributed analysis. A
-  future proposal to add **MCP or codemode finds an explicitly undecided entry** — the discussion
-  starts there rather than being restarted, and no reader can cite this ADR as having excluded them.
+  attributed analysis. A future proposal to add a capability whose row is still **No decision** finds
+  an explicitly recorded entry — the discussion starts there rather than being restarted, and no
+  reader can cite this ADR as having excluded it.
 - The prompt reference defect is recorded as a **finding with an open remedy**, so it is neither
   silently fixed nor silently ratified.
-- MCP and codemode are recorded as **undecided**, so nobody can later cite this ADR as having
-  excluded them.
+- The MCP **client, transports, OAuth and server management** and codemode **declarations, sandboxed
+  execution and presentation** are now attributed owner decisions (spec #865), so nobody can later
+  cite this ADR as having excluded them. The MCP capabilities the spec does not name, and codemode's
+  script-to-session-tool routing, stay `No decision`/recorded follow-up.
+- The Extension Tool Source foundation is now an **attributed owner decision** (spec #865, #867);
+  its row states the slice's scope so a later reader cannot read it as having ruled on MCP, codemode,
+  or the `packages/durable` extension machinery.
+- The MCP **stdio** server slice is now an **attributed owner decision** (spec #865, #869), so it is
+  no longer an undecided row; the rest of `packages/mcp` stays **undecided** (codemode was later ruled
+  in by #874 and #877), so nobody can later cite this ADR as having excluded them.
+- The MCP **streamable-http** transport slice is now an **attributed owner decision** (spec #865,
+  #873), TLS-only and reusing the existing outbound client transport (ADR 0054); the server-to-client
+  GET stream and the rest of `packages/mcp` stay **undecided**.
+- The MCP **server management and persistence** slice is now an **attributed owner decision** (spec
+  #865, #876): pi-faithful `mcp.json` persistence (global + trust-gated project), the
+  running/stopped/failed lifecycle status surface, and stdio reconnect-on-next-call. The `/mcp`
+  manager, live in-session tool add/remove, and the exposure fields stay **undecided** (the OAuth
+  credential semantics were later decided by #875).
+- `pi-v1.0.4` (`7c10bd4337495ee613f2224843ecdf349b80d1df`) is registered by name with no captured bundle; a future capture is new evidence per ADR 0065 and needs its own step, not a silent edit.
+- The MCP **OAuth** credential slice (spec #865, #875) and codemode **sandboxed execution** (#874)
+  and **output presentation** (#877) are attributed owner decisions reached through the same spec
+  flow; their rows above state the slices' boundaries.
+- A future proposal to add a remaining MCP capability (server-to-client stream, resources, exposure)
+  or codemode script-to-session-tool routing, or any other **No decision** row, starts from those
+  rows and needs its own membership ruling plus implementation record; this ADR claims no such
+  coverage.
 
 ## References
 
@@ -171,3 +348,5 @@ All pi sizes above are measured at the pi baseline; all Pike sizes at the Pike c
 - `src/coding_agent/ModelConfig.hpp:49` — the existing Radius exclusion
 - `src/coding_agent/prompt/SystemPromptBuilder.cpp:124-131` — the prompt reference list
 - `src/coding_agent/AgentSessionExecution.cpp:381-387` — `docsPath` resolution
+- [ADR 0065](0065-bind-pi-ai-evidence-bundles-to-a-named-baseline-registry.md) — Named Baseline registry rule
+- `fixtures/pi-ai/baselines.json` — `pi-v1.0.4` registration (`7c10bd43`, bundle not yet captured)

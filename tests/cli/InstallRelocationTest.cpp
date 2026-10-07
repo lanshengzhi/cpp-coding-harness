@@ -71,12 +71,15 @@ CommandResult run_command(const std::string& command, const fs::path& capture_di
     return {
             "bin/pike",
             "share/pike/licenses/boost.txt",
+            "share/pike/licenses/fmt.txt",
             "share/pike/licenses/glaze.txt",
             "share/pike/licenses/libwebp.txt",
             "share/pike/licenses/md4c.txt",
             "share/pike/licenses/openssl.txt",
+            "share/pike/licenses/spdlog.txt",
             "share/pike/licenses/stb.txt",
             "share/pike/licenses/utf8proc.txt",
+            "share/pike/licenses/wasmedge.txt",
     };
 }
 

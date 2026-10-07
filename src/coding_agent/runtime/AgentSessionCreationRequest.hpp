@@ -7,6 +7,9 @@
 #include <cch/agent/harness/session/SessionTree.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
 #include "coding_agent/SessionTarget.hpp"
+#include "coding_agent/extensions/ExtensionToolSource.hpp"
+#include "coding_agent/mcp/McpHttpServerConfig.hpp"
+#include "coding_agent/mcp/McpStdioServerConfig.hpp"
 
 #include <cstddef>
 #include <filesystem>
@@ -68,6 +71,11 @@ struct InteractiveSessionFacts {
     std::optional<std::string> thinking;
     std::vector<std::string> models;
     std::optional<std::string> api_key;
+    /// pi `--tools`: the allowlist of tool names or `*` patterns. `std::nullopt`
+    /// when the flag is absent (every discovered tool stays unless excluded).
+    std::optional<std::vector<std::string>> tools;
+    /// pi `--exclude-tools`: the denylist of tool names or `*` patterns.
+    std::vector<std::string> exclude_tools;
 };
 
 /// Internal creation request shared by the CLI adapters. Session assembly is
@@ -144,6 +152,31 @@ struct AgentSessionCreationRequest {
     /// tool set. Production callers never set it (the fixed #331 tool set is
     /// always available); retry-continuation tests inject recording tools.
     std::vector<agent::Tool> custom_tools;
+    /// The Extension Tool Source seam (spec #865): the external capabilities
+    /// (MCP servers, codemode scripts) that contribute Agent Tools. Session
+    /// assembly loads each source and registers the resulting tools in the
+    /// session's ToolRegistry before it moves into the Agent, so extension
+    /// tools are visible to the model and callable through the ordinary
+    /// execution path. Production assembly leaves it empty until the MCP and
+    /// codemode slices supply configured sources; the foundation tests inject
+    /// a stub source here.
+    std::vector<std::unique_ptr<extensions::ExtensionToolSource>> extension_tool_sources;
+    /// The MCP servers this session connects (spec #865, ticket #869). During
+    /// assembly each configured server is launched over stdio, handshaken, and
+    /// converted into one Extension Tool Source, so its tools join the same
+    /// registry as the built-ins. Empty in production until the server-
+    /// management slice (#876) persists a configured list; focused tests and
+    /// the in-session surface supply explicit servers here.
+    std::vector<mcp::McpStdioServerConfig> mcp_servers;
+    /// The MCP streamable-http servers this session connects (spec #865,
+    /// ticket #873). Registration is TLS-only (ADR 0054): every URL is
+    /// validated at assembly, a non-`https://` URL is rejected with an
+    /// explicit Validation error, and the transport never falls back to
+    /// plaintext. Each configured server is connected, handshaken, and
+    /// converted into one Extension Tool Source, so its tools join the same
+    /// registry as the built-ins. Empty in production until the server-
+    /// management slice (#876) persists a configured list.
+    std::vector<mcp::McpHttpServerConfig> mcp_http_servers;
     /// Private test seam: the shared live PI_* facts holder wired into the
     /// model Bash Tool. Production callers never set it (SessionFactory
     /// creates and wires the holder); focused tests capture it to assert the

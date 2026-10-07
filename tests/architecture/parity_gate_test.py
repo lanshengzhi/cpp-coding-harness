@@ -71,6 +71,17 @@ VALID_MANIFEST = {
                 "excluded_source_prefixes": [],
                 "forbidden_include_prefixes": ["ai/", "src/ai/"],
             },
+            {
+                "id": "extension-tool-source-no-agent-execution-reach-through",
+                "source_prefixes": ["src/coding_agent/extensions/"],
+                "excluded_source_prefixes": [],
+                "forbidden_include_prefixes": [
+                    "cch/agent/ToolCallExecutor.hpp",
+                    "agent/ToolCallExecutor.hpp",
+                    "cch/agent/Agent.hpp",
+                    "agent/Agent.hpp",
+                ],
+            },
         ],
         "exceptions": [],
     },
@@ -250,6 +261,40 @@ class ManifestSchemaTest(unittest.TestCase):
         self.assertEqual(clause.source_prefixes, ("src/agent/",))
         self.assertEqual(clause.forbidden_include_prefixes, ("ai/", "src/ai/"))
 
+    def test_checked_in_manifest_covers_coding_agent_ai_private_reach_through(self):
+        # Spec #865 / ADR 0066: the MCP transports reuse the ai outbound
+        # transport and OAuth helpers, which is a cross-Owner reach-through.
+        # The rule pins the boundary and the dated, source-scoped exceptions
+        # record the migration (pi-parity.md), so a new unlisted include is
+        # rejected rather than silently tolerated. #881 removes both when the
+        # narrow ai interface lands.
+        manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
+        manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
+        rules = {rule.rule_id: rule for rule in manifest.architecture_contract.rules}
+        clause = rules["coding-agent-no-ai-private-includes"]
+        self.assertEqual(clause.source_prefixes, ("src/coding_agent/",))
+        self.assertEqual(clause.excluded_source_prefixes, ())
+        self.assertEqual(clause.forbidden_include_prefixes, ("ai/", "src/ai/"))
+
+        exceptions = {
+            exception.source: exception
+            for exception in manifest.architecture_contract.exceptions
+            if exception.rule_id == "coding-agent-no-ai-private-includes"
+        }
+        self.assertEqual(
+            set(exceptions),
+            {
+                "src/coding_agent/mcp/McpHttpClient.hpp",
+                "src/coding_agent/mcp/McpHttpClient.cpp",
+                "src/coding_agent/mcp/McpExtensionToolSource.cpp",
+                "src/coding_agent/mcp/McpOAuthProvider.cpp",
+            },
+        )
+        for exception in exceptions.values():
+            self.assertEqual(exception.owner, "cch_coding_agent")
+            self.assertEqual(exception.removal_ticket, "#881")
+            self.assertEqual(exception.expires, "2027-06-30")
+
     def test_checked_in_manifest_closes_the_private_reach_through_paths(self):
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
         manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
@@ -265,6 +310,37 @@ class ManifestSchemaTest(unittest.TestCase):
                 "agent/harness/session/SessionJournal.hpp",
             ),
         )
+
+    def test_checked_in_manifest_isolates_the_extension_tool_source_boundary(self):
+        # Spec #865 / #867: the Extension Tool Source contributes passive Tools
+        # through the Agent Tool Owner Interface and must not reach into the
+        # Agent's execution internals. The rule is scoped to the extension
+        # source directory so it names that boundary alone.
+        manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
+        manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
+        rules = {rule.rule_id: rule for rule in manifest.architecture_contract.rules}
+        clause = rules["extension-tool-source-no-agent-execution-reach-through"]
+        self.assertEqual(clause.source_prefixes, ("src/coding_agent/extensions/",))
+        self.assertEqual(clause.excluded_source_prefixes, ())
+        self.assertEqual(
+            clause.forbidden_include_prefixes,
+            (
+                "cch/agent/ToolCallExecutor.hpp",
+                "agent/ToolCallExecutor.hpp",
+                "cch/agent/Agent.hpp",
+                "agent/Agent.hpp",
+            ),
+        )
+
+    def test_checked_in_manifest_declares_the_wasmedge_external_family(self):
+        # Spec #865 / #874: the codemode sandbox links the in-tree WasmEdge
+        # overlay port as the `wasmedge@wasmedge` external family. The
+        # production build-phase Gate rejects a dependency whose family is not
+        # declared, so the declaration is pinned here against silent removal;
+        # the Gate's behavioral enforcement is its own production case.
+        manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
+        manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
+        self.assertIn("wasmedge", manifest.external_families)
 
     def test_provider_capability_is_outside_ai_interface_root(self):
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
@@ -1274,6 +1350,46 @@ class ArchitectureContractTest(unittest.TestCase):
                 self.assertEqual(diagnostics[0].target, "cch_agent_core")
                 self.assertEqual(diagnostics[0].dependency, include_path)
 
+    def test_coding_agent_ai_private_reach_through_is_rejected_except_for_listed_sources(self):
+        # The migration rule and its dated exceptions are pinned against the
+        # checked-in manifest: a NEW application source that includes an ai
+        # private header is rejected, while the four #881-listed MCP sources are
+        # allowed. The separation case is the difference between the rule
+        # (property) and the exception list (record): the property this proves
+        # is that only named sources can reach through.
+        manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
+        manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "coding_agent/mcp/McpUnlistedClient.cpp",
+                "ai/providers/StreamTransport.hpp",
+                spelling="quote",
+                manifest=manifest,
+            )
+        self.assertEqual(rule_ids(diagnostics), [pg.RULE_CODING_AGENT_AI_PRIVATE_INCLUDE])
+        self.assertIn("coding-agent-no-ai-private-includes", diagnostics[0].message)
+        self.assertEqual(diagnostics[0].dependency, "ai/providers/StreamTransport.hpp")
+
+        for listed_source in (
+            "coding_agent/mcp/McpHttpClient.hpp",
+            "coding_agent/mcp/McpHttpClient.cpp",
+            "coding_agent/mcp/McpExtensionToolSource.cpp",
+            "coding_agent/mcp/McpOAuthProvider.cpp",
+        ):
+            with self.subTest(source=listed_source):
+                with tempfile.TemporaryDirectory() as tmp:
+                    diagnostics = run_include_case(
+                        tmp,
+                        "cch_coding_agent",
+                        listed_source,
+                        "ai/providers/StreamTransport.hpp",
+                        spelling="quote",
+                        manifest=manifest,
+                    )
+                self.assertEqual(diagnostics, [])
+
     def test_application_source_cannot_include_agent_private_header(self):
         # The text-limiting, compaction, and session-serialization seams moved
         # into Owner Interfaces, so reaching back into the private root is a
@@ -1310,6 +1426,63 @@ class ArchitectureContractTest(unittest.TestCase):
                 "cch_coding_agent",
                 "coding_agent/runtime/SessionFactory.cpp",
                 "agent/harness/RuntimeRoot.hpp",
+                spelling="quote",
+            )
+        self.assertEqual(diagnostics, [])
+
+    def test_extension_tool_source_cannot_include_agent_execution_headers(self):
+        # The Extension Tool Source registers passive Tools through the Agent
+        # Tool Owner Interface; it must not reach into the Agent's execution
+        # internals or construct an Agent. Both the private-root and Owner
+        # Interface spellings are caught, so a respelling cannot slip past the
+        # boundary.
+        for include_path, spelling in (
+            ("agent/ToolCallExecutor.hpp", "quote"),
+            ("cch/agent/Agent.hpp", "angle"),
+        ):
+            with self.subTest(include_path=include_path):
+                with tempfile.TemporaryDirectory() as tmp:
+                    diagnostics = run_include_case(
+                        tmp,
+                        "cch_coding_agent",
+                        "coding_agent/extensions/ExtensionLoader.cpp",
+                        include_path,
+                        spelling=spelling,
+                    )
+                self.assertEqual(
+                    rule_ids(diagnostics), [pg.RULE_EXTENSION_TOOL_SOURCE_REACH_THROUGH]
+                )
+                self.assertIn(
+                    "extension-tool-source-no-agent-execution-reach-through",
+                    diagnostics[0].message,
+                )
+                self.assertEqual(diagnostics[0].target, "cch_coding_agent")
+                self.assertEqual(diagnostics[0].dependency, include_path)
+
+    def test_extension_tool_source_may_include_the_tool_owner_interface(self):
+        # The Tool Owner Interface is the allowed path: only the Agent's
+        # execution internals and Agent construction are forbidden, so the rule
+        # is a boundary rather than a blanket ban on the Agent module.
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "coding_agent/extensions/ExtensionToolRegistry.cpp",
+                "agent/ToolRegistry.hpp",
+                spelling="quote",
+            )
+        self.assertEqual(diagnostics, [])
+
+    def test_extension_tool_source_boundary_does_not_cover_other_application_sources(self):
+        # The rule names the Extension Tool Source directory alone: a sibling
+        # application source that includes the same header is governed by its
+        # own rules, so the boundary cannot be satisfied by a move.
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "coding_agent/runtime/ExtensionRunner.cpp",
+                "agent/ToolCallExecutor.hpp",
                 spelling="quote",
             )
         self.assertEqual(diagnostics, [])

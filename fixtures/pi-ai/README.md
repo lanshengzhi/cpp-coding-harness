@@ -20,7 +20,7 @@ The historical bundle below occupies the fixture root itself (`bundle_path: ""`)
 place, and stays verifiable. Later baselines get their own bundle subdirectory, so recording one
 never rewrites another — generators refuse to write into a bundle owned by a different baseline.
 
-Registered baselines: `pi-v0.87.1` (default) and `pi-v1.0.0`.
+Registered baselines: `pi-v0.87.1` (default), `pi-v1.0.0`, and `pi-v1.0.4` (registered, bundle not yet captured).
 
 ## Issue #784 T1 provenance snapshot (pi v0.87.1)
 

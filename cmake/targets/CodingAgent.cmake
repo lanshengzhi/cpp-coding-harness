@@ -17,6 +17,18 @@ cch_parity_declare_target(
         src/coding_agent/AgentSessionInteraction.cpp
         src/coding_agent/AuthStorage.cpp
         src/coding_agent/compat/pi/PiImport.cpp
+        src/coding_agent/extensions/ExtensionToolRegistry.cpp
+        src/coding_agent/mcp/McpConfigFile.cpp
+        src/coding_agent/mcp/McpExtensionToolSource.cpp
+        src/coding_agent/mcp/McpHttpClient.cpp
+        src/coding_agent/mcp/McpHttpServerConfig.cpp
+        src/coding_agent/mcp/McpOAuthProvider.cpp
+        src/coding_agent/mcp/McpOAuthServerConfig.cpp
+        src/coding_agent/mcp/McpOAuthTokenResolver.cpp
+        src/coding_agent/mcp/McpStdioClient.cpp
+        src/coding_agent/extensions/codemode/CodemodeDeclaration.cpp
+        src/coding_agent/extensions/codemode/CodemodeSandbox.cpp
+        src/coding_agent/extensions/codemode/CodemodeToolSource.cpp
         src/coding_agent/GitIgnoreMatcher.cpp
         src/coding_agent/ImageInput.cpp
         src/coding_agent/ModelConfig.cpp
@@ -45,6 +57,7 @@ cch_parity_declare_target(
         src/coding_agent/runtime/SessionFork.cpp
         src/coding_agent/runtime/SessionLifecycle.cpp
         src/coding_agent/runtime/SessionPersistence.cpp
+        src/coding_agent/runtime/ToolSelection.cpp
         src/coding_agent/runtime/UserBashOutputAccumulator.cpp
     DEPENDS
         cch_agent_core
@@ -53,6 +66,7 @@ cch_parity_declare_target(
         Boost::headers@boost
         Threads::Threads@threads
         WebP::webpdecoder@webp
+        wasmedge@wasmedge
     INTERFACE_DEPENDS
         cch_agent_core
         cch_ai

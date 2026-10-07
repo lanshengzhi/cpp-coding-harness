@@ -48,9 +48,70 @@
           "ai/",
           "src/ai/"
         ]
+      },
+      {
+        "id": "coding-agent-no-ai-private-includes",
+        "source_prefixes": [
+          "src/coding_agent/"
+        ],
+        "excluded_source_prefixes": [],
+        "forbidden_include_prefixes": [
+          "ai/",
+          "src/ai/"
+        ]
+      },
+      {
+        "id": "extension-tool-source-no-agent-execution-reach-through",
+        "source_prefixes": [
+          "src/coding_agent/extensions/"
+        ],
+        "excluded_source_prefixes": [],
+        "forbidden_include_prefixes": [
+          "cch/agent/ToolCallExecutor.hpp",
+          "agent/ToolCallExecutor.hpp",
+          "cch/agent/Agent.hpp",
+          "agent/Agent.hpp"
+        ]
       }
     ],
-    "exceptions": []
+    "exceptions": [
+      {
+        "id": "mcp-http-stream-transport-reach-through",
+        "rule_id": "coding-agent-no-ai-private-includes",
+        "source": "src/coding_agent/mcp/McpHttpClient.hpp",
+        "owner": "cch_coding_agent",
+        "removal_ticket": "#881",
+        "expires": "2027-06-30",
+        "reason": "Spec #865 mandated reusing ai::providers::StreamTransport for the MCP streamable-http transport; promoting the ai outbound transport to a narrow Owner Interface is the recorded upgrade (#881)."
+      },
+      {
+        "id": "mcp-http-sse-parser-reach-through",
+        "rule_id": "coding-agent-no-ai-private-includes",
+        "source": "src/coding_agent/mcp/McpHttpClient.cpp",
+        "owner": "cch_coding_agent",
+        "removal_ticket": "#881",
+        "expires": "2027-06-30",
+        "reason": "Spec #865 mandated reusing ai::providers::SseParser for MCP event-stream responses; promoting the ai SSE parser to a narrow Owner Interface is the recorded upgrade (#881)."
+      },
+      {
+        "id": "mcp-boost-beast-transport-reach-through",
+        "rule_id": "coding-agent-no-ai-private-includes",
+        "source": "src/coding_agent/mcp/McpExtensionToolSource.cpp",
+        "owner": "cch_coding_agent",
+        "removal_ticket": "#881",
+        "expires": "2027-06-30",
+        "reason": "Spec #865 mandated reusing ai::providers::BoostBeastStreamTransport for the production MCP HTTP transport; promoting it to a narrow Owner Interface is the recorded upgrade (#881)."
+      },
+      {
+        "id": "mcp-oauth-auth-helper-reach-through",
+        "rule_id": "coding-agent-no-ai-private-includes",
+        "source": "src/coding_agent/mcp/McpOAuthProvider.cpp",
+        "owner": "cch_coding_agent",
+        "removal_ticket": "#881",
+        "expires": "2027-06-30",
+        "reason": "Spec #865 mandated reusing the ai OAuth/auth helpers (Pkce, OAuthCallbackServer, OAuthHttpClient, OAuthShared, JsonAccess) so MCP OAuth shares the built-in credential flow; promoting a narrow ai auth interface is the recorded upgrade (#881)."
+      }
+    ]
   },
   "exception_policy": {
     "schema_version": 1,
@@ -102,6 +163,7 @@
     "glaze": { "description": "Glaze JSON serialization" },
     "md4c": { "description": "md4c Markdown parsing" },
     "webp": { "description": "libwebp image decoding" },
+    "wasmedge": { "description": "WasmEdge WebAssembly runtime (codemode sandbox)" },
     "utf8proc": { "description": "utf8proc Unicode processing" },
     "threads": { "description": "POSIX threads (pthread) system library" },
     "catch2": { "description": "Catch2 test framework" }

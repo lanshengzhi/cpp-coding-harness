@@ -3,6 +3,7 @@
 #include <cch/agent/AgentContext.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AuthGuidance.hpp>
+#include <cch/coding_agent/AuthStorage.hpp>
 #include <cch/coding_agent/ModelResolver.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
@@ -19,10 +20,18 @@
 #include "coding_agent/SessionCwd.hpp"
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
+#include "coding_agent/extensions/ExtensionToolRegistry.hpp"
+#include "coding_agent/extensions/codemode/CodemodeToolSource.hpp"
+#include "coding_agent/mcp/McpConfigFile.hpp"
+#include "coding_agent/mcp/McpExtensionToolSource.hpp"
+#include "coding_agent/mcp/McpOAuthProvider.hpp"
+#include "coding_agent/mcp/McpOAuthTokenResolver.hpp"
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/LocalUserShell.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
+#include "coding_agent/runtime/ToolSelection.hpp"
+#include "coding_agent/runtime/ToolNames.hpp"
 
 #include <boost/asio/awaitable.hpp>
 
@@ -31,6 +40,7 @@
 #include <exception>
 #include <filesystem>
 #include <format>
+#include <initializer_list>
 #include <iterator>
 #include <map>
 #include <optional>
@@ -113,6 +123,18 @@ template <typename T> struct RuntimeWorkState final {
     std::optional<support::Expected<T>> outcome;
 };
 
+/// The admission charge for Runtime work that holds one or more paths: the
+/// summed path text plus one terminating byte. It is a coarse proxy for the
+/// memory the queued work carries — the same shape the prepared-target
+/// admission already uses — not a measured byte bound.
+[[nodiscard]] std::size_t path_work_charge(std::initializer_list<std::filesystem::path> paths) {
+    std::size_t charge = 1;
+    for (const auto& path : paths) {
+        charge += path.string().size();
+    }
+    return charge;
+}
+
 template <typename T, typename Operation>
 [[nodiscard]] support::AsyncResult<T> submit_runtime_work(std::shared_ptr<harness::RuntimeTarget> runtime_target,
         std::size_t byte_charge,
@@ -192,6 +214,22 @@ struct AssemblyPlan {
     /// Private test seam: custom tools registered alongside the fixed built-in
     /// tool set (retry-continuation tests).
     std::vector<agent::Tool> custom_tools;
+    /// The Extension Tool Source seam (spec #865): external capabilities that
+    /// contribute Agent Tools, loaded and registered alongside the built-ins
+    /// before the registry moves into the Agent.
+    std::vector<std::unique_ptr<extensions::ExtensionToolSource>> extension_tool_sources;
+    /// Configured MCP stdio servers (spec #865, ticket #869). Assembly connects
+    /// each one and appends the resulting Extension Tool Source before the
+    /// sources are loaded.
+    std::vector<mcp::McpStdioServerConfig> mcp_servers;
+    /// CLI tool selection (spec #865, ticket #871): the resolved `--tools` /
+    /// `--exclude-tools` intent applied to the discovered tool set at assembly.
+    ToolSelection tool_selection;
+    /// Configured MCP streamable-http servers (spec #865, ticket #873).
+    /// Assembly validates each URL at registration (TLS-only, ADR 0054),
+    /// connects it, and appends the resulting Extension Tool Source before the
+    /// sources are loaded.
+    std::vector<mcp::McpHttpServerConfig> mcp_http_servers;
     /// Private test seam: the shared live PI_* facts holder wired into the
     /// model Bash Tool (live-refresh tests).
     std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
@@ -807,6 +845,13 @@ struct SessionTargetNormalizationOptions {
     // through the plan unchanged.
     plan.requested_model = std::move(request.request_model);
     plan.custom_tools = std::move(request.custom_tools);
+    plan.extension_tool_sources = std::move(request.extension_tool_sources);
+    plan.mcp_servers = std::move(request.mcp_servers);
+    plan.tool_selection = ToolSelection{
+            .allowed = std::move(request.session_facts.tools),
+            .excluded = std::move(request.session_facts.exclude_tools),
+    };
+    plan.mcp_http_servers = std::move(request.mcp_http_servers);
     plan.bash_session_environment = std::move(request.bash_session_environment);
     plan.project_trust_override = request.project_trust_override.has_value()
         ? request.project_trust_override
@@ -1124,7 +1169,7 @@ struct PreparedAssemblyTarget final {
     const auto target_workspace = std::visit([](const auto& target) { return target.workspace; }, plan.target);
     auto prepared_target = co_await support::detail::await_async_result(
             submit_runtime_work<PreparedAssemblyTarget>(plan.execution_runtime_target,
-                    target_workspace.string().size() + 1,
+                    path_work_charge({target_workspace}),
                     stop_token,
                     [target = std::move(plan.target), cwd_override = plan.resume_cwd_override]() mutable {
                         return prepare_assembly_target(std::move(target), std::move(cwd_override));
@@ -1331,6 +1376,31 @@ struct PreparedAssemblyTarget final {
     add_settings_diagnostics();
     const auto& settings = snapshot.manager.settings();
 
+    // 3b. Load the persisted MCP server configuration (spec #865, ticket
+    // #876): the global `<agentDir>/mcp.json` always, and the project
+    // `<cwd>/.pi/mcp.json` only while the project is trusted. Reading the file
+    // is filesystem work, so it runs on a Runtime worker. A malformed file or
+    // entry is reported as a diagnostic and the session continues with the
+    // entries that parsed — only the programmatic request seam keeps #869's
+    // hard-fail. `mcp_statuses` is reported on the creation result and mirrored
+    // by the per-state diagnostics.
+    std::vector<mcp::McpServerStatus> mcp_statuses;
+    auto mcp_config = co_await support::detail::await_async_result(
+            submit_runtime_work<mcp::McpConfigLoad>(plan.execution_runtime_target,
+                    path_work_charge({coding_agent::agent_config_dir(), workspace}),
+                    stop_token,
+                    [workspace, project_trusted]() {
+                        return support::Expected<mcp::McpConfigLoad>{
+                                mcp::load_mcp_config(coding_agent::agent_config_dir(), workspace, project_trusted)};
+                    }));
+    if (!mcp_config) {
+        co_await discard_unpublished_session();
+        co_return std::unexpected(std::move(mcp_config.error()));
+    }
+    for (const auto& error : mcp_config->errors) {
+        diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Warning, "mcp:config", error));
+    }
+
     // 4. Resolve the model/auth runtime. An injected runtime wins; otherwise a
     // runtime is default-created from the Agent Config Directory.
     std::shared_ptr<ModelRuntime> runtime;
@@ -1338,7 +1408,7 @@ struct PreparedAssemblyTarget final {
         runtime = std::move(plan.model_runtime);
     } else {
         auto built = co_await support::detail::await_async_result(submit_runtime_work<std::shared_ptr<ModelRuntime>>(
-                plan.execution_runtime_target, coding_agent::agent_config_dir().string().size() + 1, stop_token, [] {
+                plan.execution_runtime_target, path_work_charge({coding_agent::agent_config_dir()}), stop_token, [] {
                     return build_runtime(nullptr);
                 }));
         if (!built) {
@@ -1563,6 +1633,190 @@ struct PreparedAssemblyTarget final {
         }
     }
 
+    // MCP servers (spec #865, ticket #869): launch each configured stdio
+    // server, handshake, and list its tools. A server that cannot be reached or
+    // does not speak MCP fails Session Assembly explicitly — a configured
+    // server is never silently dropped. This programmatic seam keeps #869's
+    // hard-fail; the persisted `mcp.json` path below degrades to a failed
+    // status instead.
+    for (auto& server : plan.mcp_servers) {
+        auto source = co_await mcp::McpExtensionToolSource::connect_stdio(std::move(server));
+        if (!source) {
+            cleanup_on_failure();
+            co_await discard_unpublished_session();
+            co_return std::unexpected(std::move(source.error()));
+        }
+        mcp_statuses.push_back(mcp::McpServerStatus{
+                .name = (*source)->server_name(),
+                .state = mcp::McpServerState::Running,
+                .detail = std::to_string((*source)->tools().size()) + " tools",
+        });
+        plan.extension_tool_sources.push_back(std::move(*source));
+    }
+
+    // MCP streamable-http servers (spec #865, ticket #873): the URL is
+    // validated at registration (TLS-only, ADR 0054) before any connection is
+    // attempted, then the server is connected and its tools listed. A
+    // non-https:// URL, an unreachable server, or a server that does not speak
+    // MCP fails Session Assembly explicitly — a configured server is never
+    // silently dropped and the transport never falls back to plaintext.
+    //
+    // An OAuth-configured server (spec #865, ticket #875) resolves its access
+    // token at request time from the shared auth.json through a per-assembly
+    // AuthStorage, so the same credential the host's login writes is the one the
+    // transport sends; the login trigger itself is a later slice (#876).
+    std::shared_ptr<ai::CredentialStore> mcp_credentials;
+    for (auto& server : plan.mcp_http_servers) {
+        if (auto valid = mcp::validate_mcp_http_server_config(server); !valid) {
+            cleanup_on_failure();
+            co_await discard_unpublished_session();
+            co_return std::unexpected(std::move(valid.error()));
+        }
+        std::shared_ptr<mcp::McpRequestAuthSource> request_auth;
+        if (server.oauth) {
+            if (auto valid = mcp::validate_mcp_oauth_server_config(*server.oauth); !valid) {
+                cleanup_on_failure();
+                co_await discard_unpublished_session();
+                co_return std::unexpected(std::move(valid.error()));
+            }
+            if (!mcp_credentials) {
+                mcp_credentials = std::make_shared<AuthStorage>(runtime->agent_dir() / "auth.json");
+            }
+            auto provider = std::make_shared<mcp::McpOAuthProvider>(*server.oauth);
+            request_auth = std::make_shared<mcp::McpOAuthTokenResolver>(
+                    mcp_credentials, mcp::mcp_oauth_provider_id(server.name), server.name, std::move(provider));
+        }
+        auto source = co_await mcp::McpExtensionToolSource::connect_http(std::move(server), std::move(request_auth));
+        if (!source) {
+            cleanup_on_failure();
+            co_await discard_unpublished_session();
+            co_return std::unexpected(std::move(source.error()));
+        }
+        mcp_statuses.push_back(mcp::McpServerStatus{
+                .name = (*source)->server_name(),
+                .state = mcp::McpServerState::Running,
+                .detail = std::to_string((*source)->tools().size()) + " tools",
+        });
+        plan.extension_tool_sources.push_back(std::move(*source));
+    }
+
+    // Persisted MCP servers (spec #865, ticket #876): a server disabled in
+    // `mcp.json` is stopped — its tools are absent and an explicit notice names
+    // the file — and a server that fails to launch, handshake, or list tools is
+    // failed with an explicit error while the session continues with the
+    // remaining servers. One dead entry never vetoes the session, and it is
+    // never silently dropped. A server that dies mid-session surfaces the
+    // per-call transport error and reconnects on the next call (the stdio
+    // transport's `reconnect_transport`).
+    for (auto& entry : mcp_config->servers) {
+        const std::string name = entry.name;
+        const std::string source_path = entry.source.string();
+        if (!entry.enabled) {
+            mcp_statuses.push_back(mcp::McpServerStatus{
+                    .name = name,
+                    .state = mcp::McpServerState::Stopped,
+                    .detail = "disabled in " + source_path,
+            });
+            diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Info,
+                    "mcp:stopped",
+                    "MCP server '" + name + "' is disabled in " + source_path + "; its tools are not available",
+                    source_path));
+            continue;
+        }
+        support::Expected<std::unique_ptr<mcp::McpExtensionToolSource>> connected =
+                std::unexpected(support::make_error(support::ErrorCode::Validation, "unreachable"));
+        if (auto* http = std::get_if<mcp::McpHttpServerConfig>(&entry.config)) {
+            if (auto valid = mcp::validate_mcp_http_server_config(*http); !valid) {
+                connected = std::unexpected(std::move(valid.error()));
+            } else {
+                connected = co_await mcp::McpExtensionToolSource::connect_http(*http);
+            }
+        } else {
+            connected = co_await mcp::McpExtensionToolSource::connect_stdio(
+                    std::get<mcp::McpStdioServerConfig>(entry.config));
+        }
+        if (!connected) {
+            const std::string reason = connected.error().message;
+            mcp_statuses.push_back(mcp::McpServerStatus{
+                    .name = name,
+                    .state = mcp::McpServerState::Failed,
+                    .detail = reason + " (" + source_path + ")",
+            });
+            diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Error,
+                    "mcp:failed",
+                    "MCP server '" + name + "' failed: " + reason + " (" + source_path + ")",
+                    source_path));
+            continue;
+        }
+        mcp_statuses.push_back(mcp::McpServerStatus{
+                .name = name,
+                .state = mcp::McpServerState::Running,
+                .detail = std::to_string((*connected)->tools().size()) + " tools from " + source_path,
+        });
+        plan.extension_tool_sources.push_back(std::move(*connected));
+    }
+
+    // codemode (spec #865, ticket #874): project-local declared script tools at
+    // `<workspace>/.pi/codemode` are discovered by default, following the same
+    // assembly-time pattern as the MCP servers above. The directory is a
+    // project-local resource, so it shares the Project Trust decision the
+    // resource loader resolved: an untrusted project's scripts never load. A
+    // malformed declaration fails the source load (and therefore Session
+    // Assembly) explicitly, never silently dropped.
+    if (project_trusted) {
+        plan.extension_tool_sources.push_back(std::make_unique<extensions::CodemodeToolSource>(workspace));
+    }
+
+    // Extension Tool Source (spec #865): load every configured source and
+    // register its tools before the registry moves into the Agent, so an
+    // extension tool joins the ordinary Agent surface (visible to the model
+    // and callable through the same executor path as the built-ins).
+    if (!plan.extension_tool_sources.empty()) {
+        std::vector<extensions::ExtensionToolSource*> sources;
+        sources.reserve(plan.extension_tool_sources.size());
+        for (auto& source : plan.extension_tool_sources) {
+            sources.push_back(source.get());
+        }
+        extensions::ExtensionToolRegistry extension_tools;
+        if (auto loaded = extensions::load_extension_tools(extension_tools, sources); !loaded) {
+            cleanup_on_failure();
+            co_await discard_unpublished_session();
+            co_return std::unexpected(loaded.error());
+        }
+        if (auto registered = extensions::register_extension_tools(tools, std::move(extension_tools)); !registered) {
+            cleanup_on_failure();
+            co_await discard_unpublished_session();
+            co_return std::unexpected(registered.error());
+        }
+    }
+
+    // Tool selection (spec #865, ticket #871): resolve `--tools` /
+    // `--exclude-tools` over the discovered set — the built-ins plus any
+    // custom and extension/MCP tools registered above — and retain only the
+    // selected names before the registry moves into the Agent. An unselected
+    // tool never enters the Agent's surface, so it is unreachable and no
+    // second filter is needed inside the Agent. The removal is reported so a
+    // selection is never silent.
+    if (!plan.tool_selection.empty()) {
+        std::vector<std::string> discovered;
+        for (const auto& definition : tools.definitions()) {
+            discovered.push_back(definition.name);
+        }
+        auto resolved = resolve_tool_selection(plan.tool_selection, discovered);
+        if (!resolved) {
+            cleanup_on_failure();
+            co_await discard_unpublished_session();
+            co_return std::unexpected(std::move(resolved.error()));
+        }
+        tools.retain_tools(resolved->selected);
+        if (!resolved->removed.empty()) {
+            diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Info,
+                    "tool:selection",
+                    "tool selection removed " + std::to_string(resolved->removed.size()) +
+                            " tool(s): " + detail::join_tool_names(resolved->removed)));
+        }
+    }
+
     // pi buildSessionOptions/main.ts: an explicit `--thinking` overrides a
     // `:thinking` suffix on `--model`; either overrides resumed, branch, scoped,
     // and settings defaults. The Agent clamps the request at construction
@@ -1783,6 +2037,7 @@ struct PreparedAssemblyTarget final {
             std::move(diagnostics),
             std::move(model_fallback_message),
             std::move(theme_documents),
+            std::move(mcp_statuses),
             std::move(identity));
     if (!published) {
         cleanup_on_failure();
@@ -1825,6 +2080,7 @@ boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>
         std::vector<coding_agent::SessionDiagnostic> diagnostics,
         std::optional<std::string> model_fallback_message,
         std::vector<coding_agent::LoadedThemeResource> theme_resources,
+        std::vector<mcp::McpServerStatus> mcp_servers,
         coding_agent::ResolvedSessionIdentity identity) {
     auto session = co_await coding_agent::AgentSession::bind_assembly(std::move(assembly));
     if (!session) {
@@ -1835,6 +2091,7 @@ boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>
             .diagnostics = std::move(diagnostics),
             .model_fallback_message = std::move(model_fallback_message),
             .theme_resources = std::move(theme_resources),
+            .mcp_servers = std::move(mcp_servers),
             .resolved_identity = std::move(identity),
     };
 }
