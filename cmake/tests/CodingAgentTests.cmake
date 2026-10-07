@@ -72,6 +72,7 @@ include_guard(GLOBAL)
         tests/coding_agent/McpFailureIsolationTest.cpp
         tests/coding_agent/McpResourceToolsTest.cpp
         tests/coding_agent/McpServerManagementTest.cpp
+        tests/coding_agent/McpSessionManagerTest.cpp
         tests/coding_agent/McpAuthStoreTest.cpp
         tests/coding_agent/McpConfigSurfaceTest.cpp
         tests/coding_agent/McpConfigWriteTest.cpp
@@ -167,6 +168,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/LoadedResourcesTest.cpp
         tests/coding_agent/tui/LoginDialogTest.cpp
         tests/coding_agent/tui/LoginInteractiveModeTest.cpp
+        tests/coding_agent/tui/McpManagerPresenterTest.cpp
         tests/coding_agent/tui/McpManagerViewTest.cpp
         tests/coding_agent/tui/ModelFlowControllerTest.cpp
         tests/coding_agent/tui/ModelSelectorInteractiveTest.cpp

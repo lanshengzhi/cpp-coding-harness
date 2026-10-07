@@ -276,6 +276,14 @@ class ManifestSchemaTest(unittest.TestCase):
         self.assertEqual(clause.excluded_source_prefixes, ())
         self.assertEqual(clause.forbidden_include_prefixes, ("ai/", "src/ai/"))
 
+        # The checked-in convention this suite uses is an exact set comparison:
+        # every exception the manifest records for the rule is named here, so a
+        # newly added reach-through source must be recorded in this assertion in
+        # the same change. The OAuth discovery/flow sources joined the set with
+        # the RFC 9728 / DCR slice (#882), which also reuses the shared ai OAuth
+        # seam, and the manifest is the machine-readable authority (the test
+        # agrees with the landed reality rather than the earlier four-source
+        # list).
         exceptions = {
             exception.source: exception
             for exception in manifest.architecture_contract.exceptions
@@ -287,6 +295,8 @@ class ManifestSchemaTest(unittest.TestCase):
                 "src/coding_agent/mcp/McpHttpClient.hpp",
                 "src/coding_agent/mcp/McpHttpClient.cpp",
                 "src/coding_agent/mcp/McpExtensionToolSource.cpp",
+                "src/coding_agent/mcp/McpOAuthDiscovery.cpp",
+                "src/coding_agent/mcp/McpOAuthFlow.cpp",
                 "src/coding_agent/mcp/McpOAuthProvider.cpp",
                 "src/coding_agent/mcp/McpOAuthFlow.cpp",
                 "src/coding_agent/mcp/McpOAuthDiscovery.cpp",
