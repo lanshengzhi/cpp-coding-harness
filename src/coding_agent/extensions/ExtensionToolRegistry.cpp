@@ -91,7 +91,11 @@ support::ExpectedVoid ExtensionToolRegistry::add(ExtensionTool tool) {
                 "duplicate extension tool name: '" + name + "'",
                 "each extension tool must have a unique name"));
     }
+    const bool default_inactive = !tool.default_active;
     tools_.emplace(name, std::move(tool));
+    if (default_inactive) {
+        default_inactive_.push_back(name);
+    }
     return {};
 }
 

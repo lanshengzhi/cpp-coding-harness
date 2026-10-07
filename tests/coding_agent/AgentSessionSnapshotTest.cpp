@@ -27,6 +27,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <set>
 #include <stop_token>
 #include <string>
 #include <utility>
@@ -173,7 +174,9 @@ TEST_CASE("SDK fresh persisted snapshot is passive session and Agent state", "[s
     CHECK_FALSE(snapshot.agent_state.is_running);
     CHECK(snapshot.agent_state.model.id == "fake-model");
     CHECK(snapshot.agent_state.thinking_level == "off");
-    CHECK(snapshot.agent_state.active_tool_names.size() == 5);
+    // pi `defaultActive: false` (codemode/index.ts): the fixed four-tool
+    // loadout is declared; `codemode` is registered but not declared.
+    CHECK(snapshot.agent_state.active_tool_names.size() == 4);
     CHECK(snapshot.metadata.session_id == created->resolved_identity.session_id);
     CHECK(snapshot.metadata.workspace == paths.workspace.path());
     CHECK(snapshot.topology == harness::session::SessionTopology::Linear);
@@ -190,9 +193,52 @@ TEST_CASE("SDK fresh persisted snapshot is passive session and Agent state", "[s
     const auto* unchanged_system = std::get_if<ai::SystemMessage>(&unchanged.agent_state.messages.front());
     REQUIRE(unchanged_system != nullptr);
     CHECK(unchanged_system->content.empty());
-    CHECK(unchanged.agent_state.active_tool_names.size() == 5);
+    CHECK(unchanged.agent_state.active_tool_names.size() == 4);
     CHECK(unchanged.metadata.session_id == created->resolved_identity.session_id);
     CHECK(unchanged.session_path.has_value());
+    created->session->close();
+}
+
+TEST_CASE("codemode is registered but undeclared until an explicit activation names it",
+        "[coding_agent][snapshot][codemode][issue884][spec]") {
+    // pi `defaultActive: false` (extensions/codemode/index.ts): the model must
+    // not see `codemode` unless activation names it — pi's `--tools` selection,
+    // `setActiveTools`, or an MCP `codemode` exposure. The separation case for
+    // the declared-set check: the default session declares the fixed
+    // four-tool loadout only, while an explicit selection that names codemode
+    // declares it.
+    TestPaths paths;
+    tests::RuntimeFixture runtime;
+    {
+        auto options = new_session_options(paths, coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file});
+        auto models = std::move(options.models);
+        coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+        request.execution_runtime_target = runtime.make_target();
+        auto created = runtime.run(coding_agent::create_agent_session_async(
+                std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
+        REQUIRE(created.has_value());
+        const auto names = created->session->snapshot().agent_state.active_tool_names;
+        CHECK((std::set<std::string>{names.begin(), names.end()} ==
+                std::set<std::string>{"bash", "edit", "read", "write"}));
+        created->session->close();
+    }
+
+    // pi's `--tools` selection is an explicit activation: codemode joins the
+    // declared set when named.
+    TestPaths selected_paths;
+    tests::RuntimeFixture selected_runtime;
+    auto options = new_session_options(
+            selected_paths, coding_agent::ExplicitOpenOrCreateSessionTarget{selected_paths.session_file});
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.session_facts.tools = std::vector<std::string>{"read", "bash", "edit", "write", "codemode"};
+    request.execution_runtime_target = selected_runtime.make_target();
+    auto created = selected_runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
+    REQUIRE(created.has_value());
+    const auto names = created->session->snapshot().agent_state.active_tool_names;
+    CHECK((std::set<std::string>{names.begin(), names.end()} ==
+            std::set<std::string>{"bash", "codemode", "edit", "read", "write"}));
     created->session->close();
 }
 
@@ -301,7 +347,7 @@ TEST_CASE("SDK active snapshot copies running and streaming state on the prompt 
     CHECK(active.agent_state.streaming_message->model == "fake-model");
     CHECK(active.agent_state.model.id == "fake-model");
     CHECK(active.agent_state.thinking_level == "off");
-    CHECK(active.agent_state.active_tool_names.size() == 5);
+    CHECK(active.agent_state.active_tool_names.size() == 4);
     CHECK(active.agent_state.pending_tool_call_ids.empty());
 
     client_ptr->release();

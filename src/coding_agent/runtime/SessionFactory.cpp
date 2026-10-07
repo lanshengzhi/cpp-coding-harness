@@ -1817,6 +1817,12 @@ struct PreparedAssemblyTarget final {
     // first call, not at assembly.
     plan.extension_tool_sources.push_back(std::make_unique<extensions::CodemodeToolSource>());
 
+    // pi `defaultActive: false` registrations collected while the extension
+    // sources load (today only the codemode tool). The session excludes these
+    // names from the Agent's initial declared set; an explicit `--tools`
+    // selection that names one drops it from the list (activation).
+    std::vector<std::string> initially_inactive_tool_names;
+
     // Extension Tool Source (spec #865): load every configured source and
     // register its tools before the registry moves into the Agent, so an
     // extension tool joins the ordinary Agent surface (visible to the model
@@ -1833,6 +1839,9 @@ struct PreparedAssemblyTarget final {
             co_await discard_unpublished_session();
             co_return std::unexpected(loaded.error());
         }
+        // pi `defaultActive: false` registrations (the codemode tool): the
+        // session shapes the Agent's initial declared set around these names.
+        initially_inactive_tool_names = extension_tools.default_inactive_tool_names();
         if (auto registered = extensions::register_extension_tools(tools, std::move(extension_tools)); !registered) {
             cleanup_on_failure();
             co_await discard_unpublished_session();
@@ -1864,6 +1873,16 @@ struct PreparedAssemblyTarget final {
                     "tool:selection",
                     "tool selection removed " + std::to_string(resolved->removed.size()) +
                             " tool(s): " + detail::join_tool_names(resolved->removed)));
+        }
+        if (plan.tool_selection.allowed.has_value()) {
+            // pi's `--tools` allowlist is an explicit activation path: a
+            // default-inactive tool that survived the filter was named
+            // explicitly (an allowlist keeps an MCP tool only when it names
+            // MCP; codemode is not an MCP tool) and joins the declared set
+            // like any selected tool. A denylist-only selection activates
+            // nothing: surviving inactive names stay undeclared.
+            std::erase_if(initially_inactive_tool_names,
+                    [&tools](const std::string& name) { return tools.find(name) != nullptr; });
         }
     }
 
@@ -2063,6 +2082,7 @@ struct PreparedAssemblyTarget final {
     }
     services.bash_session_environment = std::move(bash_session_environment);
     services.tools = std::move(tools);
+    services.initially_inactive_tool_names = std::move(initially_inactive_tool_names);
 
     const auto session_path = open.store->path();
     const auto metadata = open.metadata;

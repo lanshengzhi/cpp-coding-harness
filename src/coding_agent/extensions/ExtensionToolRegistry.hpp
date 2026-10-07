@@ -42,8 +42,18 @@ public:
     /// transfer exactly once; the registry is empty afterwards.
     [[nodiscard]] std::vector<ExtensionTool> take_tools();
 
+    /// The names registered with pi `defaultActive: false` (registration
+    /// without declaration), in registration order. Session Assembly uses the
+    /// list to shape the Agent's initial declared set; a name later removed
+    /// from the registry (an explicit `--tools` selection is pi's activation
+    /// path) drops from this list too.
+    [[nodiscard]] const std::vector<std::string>& default_inactive_tool_names() const noexcept {
+        return default_inactive_;
+    }
+
 private:
     std::map<std::string, ExtensionTool, std::less<>> tools_;
+    std::vector<std::string> default_inactive_;
 };
 
 /// Loader: fill `registry` from every source in order. A source failure stops

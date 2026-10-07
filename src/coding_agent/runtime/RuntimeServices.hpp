@@ -57,6 +57,12 @@ struct RuntimeServices {
     /// Tool is absent or env-exposure-disabled.
     std::shared_ptr<tools::BashSessionEnvironment> bash_session_environment;
     agent::ToolRegistry tools;
+    /// pi `defaultActive: false` registrations (today only the codemode
+    /// tool): registered on the Agent's surface but excluded from the
+    /// initial declared set. An explicit `--tools` selection that names one
+    /// of these tools is pi's activation path, so a name surviving the
+    /// selection filter is dropped here by Session Assembly.
+    std::vector<std::string> initially_inactive_tool_names;
 };
 
 } // namespace cch::coding_agent::runtime

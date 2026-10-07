@@ -162,6 +162,10 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
 
     ExtensionTool tool;
     tool.definition = codemode_tool_definition();
+    // pi `defaultActive: false` (extensions/codemode/index.ts): the model must
+    // not see `codemode` unless activation names it — pi's `--tools` selection,
+    // an explicit `setActiveTools`, or the MCP `codemode` exposure.
+    tool.default_active = false;
     tool.prompt_snippet = std::string{kCodemodePromptSnippet};
     tool.prompt_guidelines = codemode_prompt_guidelines();
     tool.concurrency = agent::ToolConcurrency::Exclusive;

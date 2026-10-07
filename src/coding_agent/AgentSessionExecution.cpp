@@ -232,13 +232,29 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
         branch_history_to_persist_.assign(branch_start, session_.history.end());
     }
     options.system_prompt = rebuild_system_prompt();
+    // Every registered tool name, captured before the registry moves into the
+    // Agent: the pi `defaultActive: false` shaping below needs the registered
+    // set, which the Agent does not expose separately from the declared set.
+    std::vector<std::string> registered_tool_names;
+    for (const auto& tool : services_.tools.definitions()) {
+        registered_tool_names.push_back(tool.name);
+    }
+    std::vector<std::string> replayed_active_tool_names;
     if (session_.resumed) {
-        std::vector<std::string> available_names;
-        for (const auto& tool : services_.tools.definitions()) {
-            available_names.push_back(tool.name);
+        const auto active_names = replay_active_tool_names(session_.history, registered_tool_names);
+        // pi never unregisters a tool: the replayed loadout is retained and
+        // the default-inactive registrations (codemode) stay registered too,
+        // so a later activation — the MCP `codemode` exposure — can still
+        // declare them.
+        std::vector<std::string> retained = active_names;
+        for (const auto& name : services_.initially_inactive_tool_names) {
+            if (std::ranges::find(retained, name) == retained.end() &&
+                    std::ranges::find(registered_tool_names, name) != registered_tool_names.end()) {
+                retained.push_back(name);
+            }
         }
-        const auto active_names = replay_active_tool_names(session_.history, available_names);
-        services_.tools.retain_tools(active_names);
+        services_.tools.retain_tools(retained);
+        replayed_active_tool_names = active_names;
     }
     // pi `_installAgentNextTurnRefresh`: the between-turn trigger compacts
     // before the next assistant response of the same run, so a long tool loop
@@ -274,6 +290,28 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // Construct Agent last: it holds the AI-owned ModelStream factory (ADR
     // 0040 / #453) and takes sole ownership of the move-only tool registry.
     agent_.emplace(make_stream_factory(), std::move(services_.tools), std::move(options), std::move(initial_state));
+
+    // pi `defaultActive: false` (the codemode tool): the Agent's constructor
+    // declares every registered tool, so shape the initial declared set here.
+    // A fresh session declares everything except the default-inactive
+    // registrations; a resume declares exactly the replayed loadout (the
+    // inactive tools stay registered but undeclared).
+    if (!services_.initially_inactive_tool_names.empty() || session_.resumed) {
+        std::vector<std::string> initial_declared;
+        if (session_.resumed) {
+            initial_declared = replayed_active_tool_names;
+        } else {
+            initial_declared.reserve(registered_tool_names.size());
+            for (const auto& name : registered_tool_names) {
+                if (std::ranges::find(services_.initially_inactive_tool_names, name) ==
+                        services_.initially_inactive_tool_names.end()) {
+                    initial_declared.push_back(name);
+                }
+            }
+        }
+        // The names are registry-derived, so the replace cannot fail.
+        static_cast<void>(agent_->set_active_tools(std::move(initial_declared)));
+    }
 
     // Expose the live session facts to the model Bash Tool (pi
     // `resolveSpawnContext`); the Agent's clamped state is authoritative.
