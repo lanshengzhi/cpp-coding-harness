@@ -59,6 +59,9 @@ struct OpenAICompletionsCompat {
     std::optional<bool> supports_long_cache_retention{std::nullopt};
     std::optional<bool> supports_reasoning_effort{std::nullopt};
     std::optional<bool> send_session_affinity_headers{std::nullopt};
+    /// pi `supportsOpenAIGrammarTools`: the provider accepts grammar-constrained
+    /// `custom` tools, so a tool with a grammar variant is emitted as one.
+    std::optional<bool> supports_openai_grammar_tools{std::nullopt};
 };
 
 /// Typed compatibility values populated by the shipped openai-responses
@@ -69,6 +72,9 @@ struct OpenAIResponsesCompat {
     std::optional<OpenAIResponsesSessionAffinityFormat> session_affinity_format{std::nullopt};
     std::optional<bool> supports_strict_mode{std::nullopt};
     std::optional<bool> supports_explicit_prompt_cache_mode{std::nullopt};
+    /// pi `supportsOpenAIGrammarTools`: the Responses path emits a
+    /// grammar-constrained `custom` tool for a tool with a grammar variant.
+    std::optional<bool> supports_openai_grammar_tools{std::nullopt};
 };
 
 /// Typed compatibility values populated by the shipped

@@ -129,6 +129,14 @@ void redact_diagnostic_entry(ai::DiagnosticEntry& entry) {
                         if (tool.output_schema) {
                             *tool.output_schema = redact_json_value(std::move(*tool.output_schema));
                         }
+                        // pi `Tool.constrainedSampling`: the grammar-variant
+                        // sources are the same class of tool-definition text as
+                        // `description` (ADR 0026:23; #666).
+                        if (tool.constrained_sampling) {
+                            for (auto& variant : tool.constrained_sampling->variants) {
+                                variant.second = support::redact_text(std::move(variant.second));
+                            }
+                        }
                     }
                     for (auto& reference : concrete.tools_removed) {
                         reference.name = support::redact_text(std::move(reference.name));
@@ -190,6 +198,13 @@ void redact_diagnostic_entry(ai::DiagnosticEntry& entry) {
                     if constexpr (std::is_same_v<T, ai::ToolResultMessage>) {
                         if (concrete.details) {
                             concrete.details = redact_json_value(*concrete.details);
+                        }
+                        // pi `ToolResultMessage.nestedCalls`: the nested-call
+                        // record can carry free text (tool names, arguments,
+                        // results), so it takes the same mandatory redaction as
+                        // `details` (ADR 0026:23; #666).
+                        if (concrete.nested_calls) {
+                            concrete.nested_calls = redact_json_value(*concrete.nested_calls);
                         }
                     }
                 }

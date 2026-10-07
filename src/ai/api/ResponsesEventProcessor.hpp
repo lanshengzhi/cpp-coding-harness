@@ -7,6 +7,7 @@
 #include <cch/support/JsonValue.hpp>
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -42,7 +43,10 @@ struct ResponsesProcessOutcome {
 /// shared assistant event stream.
 class ResponsesEventProcessor final {
 public:
-    ResponsesEventProcessor(ResponsesDialect dialect, ResponsesDelivery delivery, Model model);
+    ResponsesEventProcessor(ResponsesDialect dialect,
+            ResponsesDelivery delivery,
+            Model model,
+            std::map<std::string, std::string, std::less<>> grammar_properties = {});
     ResponsesEventProcessor(ResponsesEventProcessor&&) noexcept;
     ResponsesEventProcessor& operator=(ResponsesEventProcessor&&) noexcept;
     ~ResponsesEventProcessor();

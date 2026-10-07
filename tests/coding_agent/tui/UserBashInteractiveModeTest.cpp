@@ -449,15 +449,15 @@ TEST_CASE("focused User Bash commits included and excluded results through the p
     // provider-visible drop is asserted on the adapter payload in
     // `tests/ai/MessageConversionTest.cpp`.
     CHECK(has_bash_command(provider_messages, "echo excluded"));
-    // The fixed #331 tool set (read/write/edit/bash) is always registered.
+    // The fixed #331 tool set (read/write/edit/bash) plus the always-registered
+    // model-facing codemode tool (#885) is active.
     const auto& tools = client_pointer->requests[0].context.tools;
-    REQUIRE(tools.size() == 4);
+    REQUIRE(tools.size() == 5);
     std::set<std::string> tool_names;
     for (const auto& tool : tools) {
         tool_names.insert(tool.name);
     }
-    CHECK((tool_names ==
-           std::set<std::string>{"bash", "edit", "read", "write"}));
+    CHECK((tool_names == std::set<std::string>{"bash", "codemode", "edit", "read", "write"}));
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);

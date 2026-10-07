@@ -146,6 +146,10 @@ namespace {
             compat.send_session_affinity_headers = *value;
             populated = true;
         }
+        if (const auto value = json_bool_member(*compat_obj, "supportsOpenAIGrammarTools"); value.has_value()) {
+            compat.supports_openai_grammar_tools = *value;
+            populated = true;
+        }
         if (populated) {
             return ModelCompatVariant{std::move(compat)};
         }
@@ -175,14 +179,28 @@ namespace {
             compat.supports_explicit_prompt_cache_mode = *value;
             populated = true;
         }
+        if (const auto value = json_bool_member(*compat_obj, "supportsOpenAIGrammarTools"); value.has_value()) {
+            compat.supports_openai_grammar_tools = *value;
+            populated = true;
+        }
         // The pinned snapshot has no supportsMaxOutputTokens field. It stays
         // out of the value contract until a scoped consumer exists.
         if (populated) {
             return ModelCompatVariant{std::move(compat)};
         }
     }
-    // Codex compat flags and other catalog-only fields are intentionally
-    // ignored: the current Codex seam has no consumer for them.
+    if (api == "openai-codex-responses") {
+        // Codex shares the Responses payload seam; only the grammar-tool flag
+        // has a scoped consumer today (the model-facing codemode tool).
+        OpenAIResponsesCompat compat;
+        if (const auto value = json_bool_member(*compat_obj, "supportsOpenAIGrammarTools"); value.has_value()) {
+            compat.supports_openai_grammar_tools = *value;
+            return ModelCompatVariant{std::move(compat)};
+        }
+        return std::nullopt;
+    }
+    // Other catalog-only fields are intentionally ignored: no scoped consumer
+    // exists for them.
     return std::nullopt;
 }
 

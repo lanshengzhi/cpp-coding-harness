@@ -3,6 +3,7 @@
 #include "ExecutionShared.hpp"
 #include "ToolArgumentPreparation.hpp"
 #include "support/AsyncResultBridge.hpp"
+#include <cch/agent/NestedToolCalls.hpp>
 #include <cch/support/BoundedText.hpp>
 #include "support/ExpectedMacros.hpp"
 #include <cch/ai/Content.hpp>
@@ -81,6 +82,15 @@ constexpr std::string_view kOperationAbortedMessage{"Operation aborted"};
         .is_error = tool_result.is_error,
         .terminate = terminate,
     };
+}
+
+/// A nested call's terminal outcome: a tool failure is an `is_error` result
+/// the nested runner reports to the script, never a batch failure.
+[[nodiscard]] AsyncToolExecutionResult nested_error_result(std::string message) {
+    AsyncToolExecutionResult result;
+    result.content.emplace_back(ai::text_content(std::move(message)));
+    result.is_error = true;
+    return result;
 }
 
 /// Build the aborted outcome for a call that never emitted a
@@ -237,7 +247,8 @@ struct SettledToolCall {
         Tool& tool,
         ToolInvocation invocation,
         ToolExecutionPermits permits,
-        AgentEventSink& sink) {
+        AgentEventSink& sink,
+        NestedToolCallRunner* nested_runner) {
     SettledToolCall settled;
     auto release_concurrency = [&permits]() {
         if (permits.concurrency != nullptr) {
@@ -266,6 +277,7 @@ struct SettledToolCall {
     }
 
     auto update_gate = std::make_shared<ToolUpdateGate>();
+    invocation.nested_calls = nested_runner;
     ToolUpdateSink update_sink = [&sink,
                                          update_gate,
                                          call_id = call.id,
@@ -408,8 +420,29 @@ boost::asio::awaitable<support::Expected<FinalizedToolCallResult>> ToolCallExecu
         // Preparation releases before the call waits on its execution lane so
         // a parallel batch cannot queue behind argument preparation.
         release_preparation();
-        settled = co_await execute_resolved_call(
-                options_, request, call, *resolved.tool, std::move(resolved.invocation), permits, sink);
+        // pi `ctx.executeTool`: the nested-call dispatcher is created for the
+        // call and resolves the live registry through its host closures, so a
+        // tool can run other tools without holding a registry reference.
+        NestedToolCallHost host;
+        host.get_tools = [this]() { return registry_.definitions(); };
+        host.is_sequential = [this]() { return is_sequential_execution(); };
+        host.run_tool_call = [this, request, sink_ptr = &sink](
+                                     ToolInvocation invocation, std::string parent_id, std::stop_token signal) {
+            return run_nested_tool(std::move(invocation), request, sink_ptr, std::move(parent_id), signal);
+        };
+        host.emit = [sink_ptr = &sink](const AgentLifecycleEvent& event) { return emit_agent_event(*sink_ptr, event); };
+        auto nested_runner = std::make_unique<NestedToolCallRunner>(std::move(host));
+        settled = co_await execute_resolved_call(options_,
+                request,
+                call,
+                *resolved.tool,
+                std::move(resolved.invocation),
+                permits,
+                sink,
+                nested_runner.get());
+        if (auto summary = nested_runner->take_record(call.id); summary && summary->calls) {
+            settled.tool_result.nested_calls = nested_calls_to_json(*summary->calls);
+        }
     }
 
     auto end_emit = emit_agent_event(sink,
@@ -651,6 +684,126 @@ boost::asio::awaitable<support::Expected<ToolCallBatchResult>> ToolCallExecutor:
     }
 
     co_return make_batch_result(std::move(completed));
+}
+
+bool ToolCallExecutor::is_sequential_execution() const {
+    if (std::holds_alternative<SequentialToolExecution>(options_.execution)) {
+        return true;
+    }
+    if (const auto* parallel = std::get_if<BoundedParallelToolExecution>(&options_.execution)) {
+        return parallel->max_in_flight == 1;
+    }
+    return false;
+}
+
+support::AsyncResult<AsyncToolExecutionResult> ToolCallExecutor::run_nested_tool(ToolInvocation invocation,
+        ToolCallBatchRequest request,
+        AgentEventSink* sink,
+        std::string parent_id,
+        std::stop_token signal) {
+    return support::detail::make_async_result(
+            [this,
+                    invocation = std::move(invocation),
+                    request,
+                    sink,
+                    parent_id = std::move(parent_id),
+                    signal]() mutable -> boost::asio::awaitable<support::Expected<AsyncToolExecutionResult>> {
+                co_return co_await execute_nested(std::move(invocation), request, sink, std::move(parent_id), signal);
+            });
+}
+
+boost::asio::awaitable<AsyncToolExecutionResult> ToolCallExecutor::execute_nested(ToolInvocation invocation,
+        ToolCallBatchRequest request,
+        AgentEventSink* sink,
+        std::string parent_id,
+        std::stop_token signal) {
+    if (signal.stop_requested()) {
+        co_return nested_error_result(std::string{kOperationAbortedMessage});
+    }
+    Tool* tool = registry_.find(invocation.name);
+    if (tool == nullptr) {
+        co_return nested_error_result("unknown tool: " + invocation.name);
+    }
+
+    ai::ToolCallContent nested_call;
+    nested_call.id = invocation.call_id;
+    nested_call.name = invocation.name;
+    nested_call.raw_arguments = invocation.raw_arguments;
+    nested_call.arguments = invocation.arguments;
+    auto arguments = prepare_tool_arguments(tool->definition, nested_call);
+    if (!arguments) {
+        co_return nested_error_result(arguments.error().detail);
+    }
+    invocation.arguments = std::move(*arguments);
+
+    if (options_.before_tool_call) {
+        BeforeToolCallContext hook_context{
+                .assistant_message = request.assistant_message,
+                .tool_call = nested_call,
+                .args = invocation.arguments,
+                .context = request.context,
+        };
+        auto before_result = co_await invoke_agent_hook(
+                "beforeToolCall", *options_.before_tool_call, std::move(hook_context), signal);
+        if (!before_result) {
+            co_return nested_error_result(bounded_failure_text(before_result.error()));
+        }
+        if (before_result->block) {
+            co_return nested_error_result(before_result->reason.value_or("Tool execution was blocked"));
+        }
+    }
+
+    auto update_gate = std::make_shared<ToolUpdateGate>();
+    ToolUpdateSink update_sink = [sink,
+                                         update_gate,
+                                         nested_id = invocation.call_id,
+                                         tool_name = invocation.name,
+                                         args = invocation.arguments,
+                                         parent_id](const AsyncToolExecutionResult& partial_result) {
+        std::lock_guard lock(update_gate->mutex);
+        if (!update_gate->active) {
+            return support::ExpectedVoid{};
+        }
+        return emit_agent_event(*sink,
+                ToolExecutionUpdateEvent{
+                        .tool_call_id = nested_id,
+                        .tool_name = tool_name,
+                        .args = args,
+                        .partial_result = partial_result,
+                        .parent_tool_call_id = parent_id,
+                });
+    };
+    auto executed =
+            co_await execute_with_update_lifetime(*tool, invocation, signal, std::move(update_sink), update_gate);
+
+    AsyncToolExecutionResult outcome;
+    if (!executed) {
+        outcome = nested_error_result(bounded_failure_text(executed.error()));
+    } else {
+        outcome = std::move(*executed);
+    }
+
+    if (options_.after_tool_call) {
+        AfterToolCallContext hook_context{
+                .assistant_message = request.assistant_message,
+                .tool_call = nested_call,
+                .args = invocation.arguments,
+                .result = outcome,
+                .is_error = outcome.is_error,
+                .context = request.context,
+        };
+        auto after_result =
+                co_await invoke_agent_hook("afterToolCall", *options_.after_tool_call, std::move(hook_context), signal);
+        if (!after_result) {
+            outcome = nested_error_result(bounded_failure_text(after_result.error()));
+        } else {
+            if (after_result->content) outcome.content = std::move(*after_result->content);
+            if (after_result->details) outcome.details = std::move(*after_result->details);
+            if (after_result->is_error) outcome.is_error = *after_result->is_error;
+            if (after_result->terminate) outcome.terminate = *after_result->terminate;
+        }
+    }
+    co_return outcome;
 }
 
 } // namespace cch::agent

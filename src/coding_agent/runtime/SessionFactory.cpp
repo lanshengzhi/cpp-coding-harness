@@ -1810,16 +1810,12 @@ struct PreparedAssemblyTarget final {
         plan.extension_tool_sources.push_back(std::move(*connected));
     }
 
-    // codemode (spec #865, ticket #874): project-local declared script tools at
-    // `<workspace>/.pi/codemode` are discovered by default, following the same
-    // assembly-time pattern as the MCP servers above. The directory is a
-    // project-local resource, so it shares the Project Trust decision the
-    // resource loader resolved: an untrusted project's scripts never load. A
-    // malformed declaration fails the source load (and therefore Session
-    // Assembly) explicitly, never silently dropped.
-    if (project_trusted) {
-        plan.extension_tool_sources.push_back(std::make_unique<extensions::CodemodeToolSource>(workspace));
-    }
+    // codemode (spec #882, ticket #885): pi's model-facing inline `codemode`
+    // tool. Scripts are written inline in the model's tool call; #870's
+    // on-disk `.pi/codemode` declaration face is removed, so there is no
+    // project-local resource to trust-gate. The guest module loads on the
+    // first call, not at assembly.
+    plan.extension_tool_sources.push_back(std::make_unique<extensions::CodemodeToolSource>());
 
     // Extension Tool Source (spec #865): load every configured source and
     // register its tools before the registry moves into the Agent, so an

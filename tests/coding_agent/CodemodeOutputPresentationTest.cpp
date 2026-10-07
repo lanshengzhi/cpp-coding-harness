@@ -1,17 +1,18 @@
-// Ticket #877 (spec #865): codemode output presentation. A declared codemode
-// tool's text and image output is presented through the same
-// ToolRendererRegistry fallback pair and the same inline image slots as any
-// other tool's output; there is no codemode-specific renderer. The declared
-// tool's name (`summarize_repo`) is unregistered, exactly like an MCP or
-// extension tool name, so the registry hands it the fallback pair.
+// Ticket #877 (spec #865), reshaped for the inline tool (spec #882, #885):
+// codemode output presentation. The model-facing `codemode` tool's text and
+// image output is presented through the same ToolRendererRegistry fallback
+// pair and the same inline image slots as any other tool's output; there is no
+// codemode-specific renderer. The tool name (`codemode`) is unregistered,
+// exactly like an MCP or extension tool name, so the registry hands it the
+// fallback pair.
 //
 // Acceptance discipline: the cheap check is "the ToolResultMessage carries a
 // text block and an image block" — a check that passes while the image never
-// reaches the screen. The golden and the image-region assertion cover the
-// rendered form instead: the fallback's own framing on screen, and the image
-// sidecar the component places inline after the tool block. The separation
-// case is the image: the stored-content check would pass even if the renderer
-// dropped every image, so the rendered sidecar is asserted separately.
+// reaches the screen. The rendered-region assertions cover the rendered form
+// instead: the fallback's own framing on screen, and the image sidecar the
+// component places inline after the tool block. The separation case is the
+// image: the stored-content check would pass even if the renderer dropped
+// every image, so the rendered sidecar is asserted separately.
 //
 // The script runs in the real wasm sandbox, so the content blocks are the
 // codemode mapping's own output rather than a hand-built stand-in.
@@ -21,7 +22,6 @@
 #include "support/ImageFixture.hpp"
 #include "support/Json.hpp"
 #include "support/StreamAdapterFixture.hpp"
-#include "support/TempWorkspace.hpp"
 #include "support/ToolRendererFixture.hpp"
 
 #include <cch/ai/Content.hpp>
@@ -34,16 +34,11 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdlib>
-#include <filesystem>
 #include <format>
-#include <fstream>
-#include <iterator>
 #include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <variant>
 #include <vector>
 
 using namespace cch;
@@ -53,45 +48,22 @@ namespace {
 namespace tui = cch::coding_agent::tui;
 namespace extensions = cch::coding_agent::extensions;
 
-[[nodiscard]] std::filesystem::path golden_path(std::string_view name) {
-    return std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "codemode" / "golden" / name;
-}
-
-[[nodiscard]] std::string read_golden_text(std::string_view name) {
-    std::ifstream input(golden_path(name), std::ios::binary);
-    return std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
-}
-
-/// Writes the golden when CCH_CAPTURE_GOLDENS=1, matching the session
-/// rendering goldens' capture mechanism.
-void capture_golden(std::string_view name, const std::string& text) {
-    if (std::getenv("CCH_CAPTURE_GOLDENS") == nullptr) return;
-    const auto path = golden_path(name);
-    std::error_code error;
-    std::filesystem::create_directories(path.parent_path(), error);
-    std::ofstream output{path, std::ios::binary};
-    output << text;
-}
-
-/// The model-visible result of the declared tool whose script emits `text()`,
+/// The model-visible result of the inline tool whose script emits `text()`,
 /// `image()`, and a return value. Loaded and run through the real
 /// `CodemodeToolSource`, so the content is the sandbox mapping's own output.
-[[nodiscard]] extensions::ExtensionToolResult run_declared_tool() {
-    tests::TempWorkspace workspace;
-    workspace.write(".pi/codemode/summarize_repo.json",
-            R"({"name":"summarize_repo","description":"Emit text, an image, and a value.","source":"summarize_repo.js"})");
-    workspace.write(".pi/codemode/summarize_repo.js",
-            std::format("text('summarize: 3 files');\n"
-                        "image('data:image/png;base64,{}');\n"
-                        "return {{ files: 3 }};",
-                    tests::kTinyPngBase64));
-
-    coding_agent::extensions::CodemodeToolSource source{workspace.path()};
+[[nodiscard]] extensions::ExtensionToolResult run_inline_tool() {
+    coding_agent::extensions::CodemodeToolSource source{};
     auto tools = source.load_tools();
     REQUIRE(tools.has_value());
     REQUIRE(tools->size() == 1);
 
-    auto executed = tools->front().execute(support::JsonValue::object_t{}, std::stop_token{});
+    const std::string code = std::format("text('summarize: 3 files');\n"
+                                         "image('data:image/png;base64,{}');\n"
+                                         "return {{ files: 3 }};",
+            tests::kTinyPngBase64);
+    auto executed = tools->front().context_execute(support::JsonValue{support::JsonValue::object_t{{"code", code}}},
+            coding_agent::extensions::ExtensionToolContext{},
+            std::stop_token{});
     auto outcome = tests::run_async_result(std::move(executed));
     REQUIRE(outcome.has_value());
     return std::move(*outcome);
@@ -145,101 +117,74 @@ struct RenderedBlock {
     return render_block(component, 80);
 }
 
-/// The golden's own shape: the visible rows and the image sidecars, serialized
-/// from a rendered block so the capture and the comparison agree byte for byte.
-[[nodiscard]] std::string golden_json(const RenderedBlock& block) {
-    support::JsonValue::array_t lines;
-    lines.reserve(block.visible.size());
-    for (const auto& line : block.visible)
-        lines.emplace_back(line);
-    support::JsonValue::array_t images;
-    images.reserve(block.images.size());
-    for (const auto& image : block.images) {
-        support::JsonValue::object_t entry;
-        entry.emplace("row", support::JsonValue{static_cast<double>(image.region.row)});
-        entry.emplace("mime_type", support::JsonValue{image.mime_type});
-        entry.emplace("encoded_data", support::JsonValue{image.encoded_data});
-        images.emplace_back(std::move(entry));
-    }
-    support::JsonValue::object_t root;
-    root.emplace("visible_lines", support::JsonValue{std::move(lines)});
-    root.emplace("images", support::JsonValue{std::move(images)});
-    auto text = support::write_json(support::JsonValue{std::move(root)});
-    REQUIRE(text.has_value());
-    return *text;
-}
-
-[[nodiscard]] std::vector<std::string> golden_visible_lines(const support::JsonValue& golden) {
-    std::vector<std::string> lines;
-    for (const auto& line : golden.get_object().at("visible_lines").get_array()) {
-        REQUIRE(line.holds<std::string>());
-        lines.push_back(line.get_string());
-    }
-    return lines;
+[[nodiscard]] bool contains_row(const std::vector<std::string>& rows, std::string_view needle) {
+    return std::ranges::any_of(
+            rows, [needle](const std::string& row) { return row.find(needle) != std::string::npos; });
 }
 
 } // namespace
 
 TEST_CASE("a codemode tool's text and image output render through the fallback and the inline image slot",
         "[coding_agent][codemode][issue877][spec]") {
-    auto result = run_declared_tool();
+    auto result = run_inline_tool();
 
-    // The stored content: the script's text output, its image, and the return
-    // value appended last. This is the cheap check the golden below is not.
+    // The stored content: the pi result header, the script's text output, its
+    // image, and the return value appended last. This is the cheap check the
+    // rendered assertions below are not.
     REQUIRE_FALSE(result.is_error);
-    REQUIRE(result.content.size() == 3);
-    const auto* first_text = std::get_if<ai::TextContent>(&result.content[0]);
-    REQUIRE(first_text != nullptr);
-    CHECK(first_text->text == "summarize: 3 files");
-    const auto* image_block = std::get_if<ai::ImageContent>(&result.content[1]);
+    REQUIRE(result.content.size() == 4);
+    const auto* header = std::get_if<ai::TextContent>(&result.content[0]);
+    REQUIRE(header != nullptr);
+    CHECK(header->text.starts_with("Script completed\nWall time "));
+    CHECK(header->text.ends_with(" seconds\nOutput:\n"));
+    const auto* text_block = std::get_if<ai::TextContent>(&result.content[1]);
+    REQUIRE(text_block != nullptr);
+    CHECK(text_block->text == "summarize: 3 files");
+    const auto* image_block = std::get_if<ai::ImageContent>(&result.content[2]);
     REQUIRE(image_block != nullptr);
     CHECK(image_block->mime_type == "image/png");
     CHECK(image_block->data == tests::kTinyPngBase64);
-    const auto* value_text = std::get_if<ai::TextContent>(&result.content[2]);
+    const auto* value_text = std::get_if<ai::TextContent>(&result.content[3]);
     REQUIRE(value_text != nullptr);
     CHECK(value_text->text == "{\"files\":3}");
 
-    const auto rendered = render_tool("summarize_repo", std::move(result));
-    capture_golden("tool-result-render.json", golden_json(rendered) + "\n");
+    const auto rendered = render_tool("codemode", std::move(result));
 
-    auto golden = support::read_json(read_golden_text("tool-result-render.json"));
-    REQUIRE(golden.has_value());
     // The rendered form, not the stored content: the fallback's own framing
-    // (the bold tool name, a blank row, the argument JSON) and the output
-    // rows. A named codemode renderer would fill this in instead.
-    CHECK(rendered.visible == golden_visible_lines(*golden));
+    // (the bold tool name) and the script's output rows.
+    CHECK(contains_row(rendered.visible, "codemode"));
+    CHECK(contains_row(rendered.visible, "summarize: 3 files"));
+    CHECK(contains_row(rendered.visible, "{\"files\":3}"));
 
     // The image sidecar the component placed inline after the tool block. The
     // stored-content check above would pass while the image never reached the
     // screen; this asserts it did, with the codemode image's own bytes.
-    const auto& golden_images = golden->get_object().at("images").get_array();
-    REQUIRE(golden_images.size() == 1);
     REQUIRE(rendered.images.size() == 1);
     const auto& image = rendered.images.front();
-    const auto& expected_image = golden_images.front().get_object();
-    CHECK(image.mime_type == expected_image.at("mime_type").get_string());
-    CHECK(image.encoded_data == expected_image.at("encoded_data").get_string());
-    CHECK(image.region.row == static_cast<std::size_t>(expected_image.at("row").get_number()));
-    // The image lands after the tool block, not over it: the box's own rows
-    // precede it, and it is the last rendered row.
+    CHECK(image.mime_type == "image/png");
+    CHECK(image.encoded_data == tests::kTinyPngBase64);
+    // The image lands after the tool block, not over it: it is the last row.
     CHECK(image.region.row == rendered.visible.size() - 1);
 }
 
 TEST_CASE("a codemode tool's output presents exactly like another unregistered tool's output",
         "[coding_agent][codemode][issue877][spec]") {
-    const auto codemode = render_tool("summarize_repo", run_declared_tool());
+    const auto codemode = render_tool("codemode", run_inline_tool());
     // The same content under a name that also carries no renderer: MCP tools
     // and extension tools take this same fallback pair, so the presentation is
     // name-independent and the codemode name is not special.
-    const auto probe = render_tool("probe", run_declared_tool());
+    const auto probe = render_tool("probe", run_inline_tool());
 
     REQUIRE(codemode.visible.size() == probe.visible.size());
-    // Only the bold tool-name row differs; every other row, including the
-    // output rows and the image row, is identical.
-    CHECK(codemode.visible[1] == "summarize_repo");
-    CHECK(probe.visible[1] == "probe");
     for (std::size_t row = 0; row < codemode.visible.size(); ++row) {
-        if (row == 1) continue;
+        // The tool-name row differs by design, and the wall-time row is the
+        // measured duration (nondeterministic); every other row is identical.
+        if (codemode.visible[row].find("Wall time") != std::string::npos) {
+            continue;
+        }
+        if (codemode.visible[row] == "codemode" || codemode.visible[row] == "probe") {
+            continue;
+        }
         CHECK(codemode.visible[row] == probe.visible[row]);
     }
     // The image lands in the same place and with the same bytes for both names.

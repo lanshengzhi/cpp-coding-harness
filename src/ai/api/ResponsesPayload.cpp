@@ -1,6 +1,7 @@
 #include "PayloadBuilders.hpp"
 
 #include "MessageNormalization.hpp"
+#include "ResponsesSlots.hpp"
 #include "MessageText.hpp"
 #include "ai/SimpleOptions.hpp"
 #include "support/Json.hpp"
@@ -248,7 +249,24 @@ struct ParsedTextSignature {
 [[nodiscard]] support::JsonValue::array_t responses_tools(
         AdapterKind adapter, const Model& model, const std::vector<Tool>& tools) {
     support::JsonValue::array_t result;
+    const bool grammar_capable = model_supports_openai_grammar_tools(model);
     for (const auto& tool : tools) {
+        if (auto grammar = resolve_grammar_constrained_sampling(tool, grammar_capable); grammar.has_value()) {
+            // pi `convertResponsesTools`: a grammar-constrained tool is a
+            // `custom` tool whose `format` carries the Lark/regex definition.
+            result.emplace_back(support::JsonValue::object_t{
+                    {"description", sanitize_text(tool.description)},
+                    {"format",
+                            support::JsonValue::object_t{
+                                    {"definition", grammar->definition},
+                                    {"syntax", grammar->format},
+                                    {"type", "grammar"},
+                            }},
+                    {"name", tool.name},
+                    {"type", "custom"},
+            });
+            continue;
+        }
         support::JsonValue::object_t converted{
                 {"description", sanitize_text(tool.description)},
                 {"name", tool.name},

@@ -6,6 +6,7 @@
 #include "support/JsonGlaze.hpp"
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -83,10 +84,19 @@ struct ContentDto {
 /// plain string or a block array; every other role carries a block array.
 using MessageContentDto = std::variant<std::string, std::vector<ContentDto>>;
 
+/// pi `Tool.constrainedSampling` (`packages/ai/src/types.ts`): the grammar member
+/// is a provider-keyed grammar map serialized as `{type: "grammar", variants:
+/// {...}}`. pike models only that member, so `type` is fixed (ADR 0033 #885
+/// amendment).
+struct ConstrainedSamplingDto {
+    std::string type{"grammar"};
+    std::map<std::string, std::string> variants;
+};
+
 /// pi `Tool` (`packages/ai/src/types.ts` at f07218c4, tag `v0.87.1`): a complete
 /// tool declaration. `parameters` is the tool's JSON-schema object, carried as
-/// generic JSON like the other schema-shaped session fields. pi's
-/// `constrainedSampling` is a Deferred capability pike does not model.
+/// generic JSON like the other schema-shaped session fields;
+/// `constrainedSampling` carries the provider-keyed grammar variants.
 struct ToolDto {
     std::string name;
     std::string description;
@@ -94,6 +104,7 @@ struct ToolDto {
     /// pi `Tool.outputSchema`: the tool's declared output JSON-schema object,
     /// carried as generic JSON like `parameters`.
     std::optional<glz::generic> outputSchema{std::nullopt};
+    std::optional<ConstrainedSamplingDto> constrainedSampling{std::nullopt};
 };
 
 /// pi `ToolReference`: the name of a tool a system message stops declaring.
@@ -123,6 +134,7 @@ struct MessageDto {
     std::optional<std::string> toolCallId{std::nullopt};
     std::optional<std::string> toolName{std::nullopt};
     std::optional<glz::generic> details{std::nullopt};
+    std::optional<glz::generic> nestedCalls{std::nullopt};
     std::optional<bool> isError{std::nullopt};
     // Extended message type fields
     std::optional<std::string> command{std::nullopt};
@@ -665,6 +677,13 @@ template <typename Block, typename Convert>
 }
 
 [[nodiscard]] inline ToolDto to_dto(const ai::Tool& tool) {
+    std::optional<ConstrainedSamplingDto> constrained_sampling;
+    if (tool.constrained_sampling) {
+        constrained_sampling = ConstrainedSamplingDto{
+                .type = "grammar",
+                .variants = tool.constrained_sampling->variants,
+        };
+    }
     return ToolDto{
             .name = tool.name,
             .description = tool.description,
@@ -672,17 +691,25 @@ template <typename Block, typename Convert>
             .outputSchema = tool.output_schema
                                     ? std::optional<glz::generic>{support::json_to_glaze(*tool.output_schema)}
                                     : std::nullopt,
+            .constrainedSampling = std::move(constrained_sampling),
     };
 }
 
 [[nodiscard]] inline ai::Tool tool_from_dto(const ToolDto& dto) {
+    std::optional<ai::ConstrainedSampling> constrained_sampling;
+    if (dto.constrainedSampling) {
+        constrained_sampling = ai::ConstrainedSampling{
+                .variants = dto.constrainedSampling->variants,
+        };
+    }
     return ai::Tool{
             .name = dto.name,
             .description = dto.description,
             .parameters = support::json_from_glaze(dto.parameters),
             .output_schema = dto.outputSchema
-                                     ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.outputSchema)}
-                                     : std::nullopt,
+                                    ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.outputSchema)}
+                                    : std::nullopt,
+            .constrained_sampling = std::move(constrained_sampling),
     };
 }
 
@@ -774,6 +801,9 @@ template <typename Block, typename Convert>
             .toolName = message.tool_name,
             .details = message.details ? std::optional<glz::generic>{support::json_to_glaze(*message.details)}
                                        : std::nullopt,
+            .nestedCalls = message.nested_calls
+                                   ? std::optional<glz::generic>{support::json_to_glaze(*message.nested_calls)}
+                                   : std::nullopt,
             .isError = message.is_error,
             .timestamp = message.timestamp,
     };
@@ -947,6 +977,9 @@ template <typename Block, typename Convert>
                 .content = std::move(*content),
                 .details = dto.details ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.details)}
                                        : std::nullopt,
+                .nested_calls = dto.nestedCalls
+                                        ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.nestedCalls)}
+                                        : std::nullopt,
                 .is_error = dto.isError.value_or(false),
                 .timestamp = dto.timestamp,
         }};

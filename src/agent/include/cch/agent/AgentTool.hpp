@@ -17,16 +17,22 @@
 
 namespace cch::agent {
 
+class NestedToolCallRunner;
+
 struct ToolInvocation {
     std::string call_id;
     std::string name;
     support::JsonValue arguments;
     std::string raw_arguments;
+    /// pi `ctx.executeTool`: the nested-call dispatcher for the active run, or
+    /// null when the host provides no nestable execution. It is a non-owning
+    /// pointer to the run's dispatcher, which outlives the tool execution.
+    NestedToolCallRunner* nested_calls{nullptr};
 };
 
 struct AsyncToolExecutionResult {
     std::vector<ai::Content> content;
-    std::optional<support::JsonValue> details;
+    std::optional<support::JsonValue> details{std::nullopt};
     bool is_error{false};
     bool terminate{false};
 };

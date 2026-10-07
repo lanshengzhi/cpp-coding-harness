@@ -36,6 +36,19 @@ struct UserRetrySettings {
     std::optional<std::uint64_t> base_delay_ms{std::nullopt};
 };
 
+/// pi `codemode` — nested codemode settings (pi `CodemodeSettings`). Every
+/// field is optional: a missing `mode` resolves as `"on"` and a missing
+/// `inlineBudget` falls back to pi's `DEFAULT_CODEMODE_INLINE_BUDGET` (3000
+/// estimated tokens).
+struct UserCodemodeSettings {
+    /// pi `CodemodeMode`: `"on"` (default) or `"only"`. An unknown stored
+    /// value leaves the field unset so resolution falls back to `"on"`.
+    std::optional<std::string> mode{std::nullopt};
+    /// pi `inlineBudget`: estimated tokens (characters / 4) the codemode
+    /// description's tool sections may use.
+    std::optional<std::int64_t> inline_budget{std::nullopt};
+};
+
 /// User settings following pi's two-scope `settings.json` contract (ADR 0031).
 /// All fields are optional — CLI flags and built-in defaults fill any gaps.
 /// Settings never carry secrets or secret references; `apiKey` appears only in
@@ -72,6 +85,9 @@ struct UserSettings {
     /// pi `retry` — nested turn auto-retry settings consumed by the
     /// session-assembly retry policy.
     std::optional<UserRetrySettings> retry{std::nullopt};
+    /// pi `codemode` — nested codemode settings consumed by the model-facing
+    /// `codemode` tool (mode and inline declaration budget).
+    std::optional<UserCodemodeSettings> codemode{std::nullopt};
     /// pi `hideThinkingBlock` — hide thinking blocks in assistant responses
     /// (default false). Graduated into the #327 field subset with decision 10
     /// of the G2 record; consumed by the interactive assistant-message
@@ -183,6 +199,13 @@ public:
     /// Resolved pi `enableSkillCommands` over the merged view (default true;
     /// pi `SettingsManager.getEnableSkillCommands`).
     [[nodiscard]] bool get_enable_skill_commands() const noexcept;
+
+    /// Resolved pi `codemode.mode` over the merged view: `"on"` (default) or
+    /// `"only"` (pi `getCodemodeMode`).
+    [[nodiscard]] std::string codemode_mode() const;
+    /// Resolved pi `codemode.inlineBudget` over the merged view; `std::nullopt`
+    /// means the caller uses pi's `DEFAULT_CODEMODE_INLINE_BUDGET` (3000).
+    [[nodiscard]] std::optional<std::int64_t> codemode_inline_budget() const noexcept;
 
     /// Stable UUID of this installation (pi `SettingsManager.getOrCreateDeviceId`).
     /// Created on first use and persisted to the global scope; a committed

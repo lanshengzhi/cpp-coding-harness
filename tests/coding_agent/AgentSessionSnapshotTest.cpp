@@ -173,7 +173,7 @@ TEST_CASE("SDK fresh persisted snapshot is passive session and Agent state", "[s
     CHECK_FALSE(snapshot.agent_state.is_running);
     CHECK(snapshot.agent_state.model.id == "fake-model");
     CHECK(snapshot.agent_state.thinking_level == "off");
-    CHECK(snapshot.agent_state.active_tool_names.size() == 4);
+    CHECK(snapshot.agent_state.active_tool_names.size() == 5);
     CHECK(snapshot.metadata.session_id == created->resolved_identity.session_id);
     CHECK(snapshot.metadata.workspace == paths.workspace.path());
     CHECK(snapshot.topology == harness::session::SessionTopology::Linear);
@@ -190,7 +190,7 @@ TEST_CASE("SDK fresh persisted snapshot is passive session and Agent state", "[s
     const auto* unchanged_system = std::get_if<ai::SystemMessage>(&unchanged.agent_state.messages.front());
     REQUIRE(unchanged_system != nullptr);
     CHECK(unchanged_system->content.empty());
-    CHECK(unchanged.agent_state.active_tool_names.size() == 4);
+    CHECK(unchanged.agent_state.active_tool_names.size() == 5);
     CHECK(unchanged.metadata.session_id == created->resolved_identity.session_id);
     CHECK(unchanged.session_path.has_value());
     created->session->close();
@@ -301,7 +301,7 @@ TEST_CASE("SDK active snapshot copies running and streaming state on the prompt 
     CHECK(active.agent_state.streaming_message->model == "fake-model");
     CHECK(active.agent_state.model.id == "fake-model");
     CHECK(active.agent_state.thinking_level == "off");
-    CHECK(active.agent_state.active_tool_names.size() == 4);
+    CHECK(active.agent_state.active_tool_names.size() == 5);
     CHECK(active.agent_state.pending_tool_call_ids.empty());
 
     client_ptr->release();

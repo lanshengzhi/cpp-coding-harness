@@ -70,6 +70,7 @@ CommandResult run_command(const std::string& command, const fs::path& capture_di
 [[nodiscard]] std::vector<std::string> expected_staged_files() {
     return {
             "bin/pike",
+            "share/pike/codemode/quickjs.wasm",
             "share/pike/licenses/boost.txt",
             "share/pike/licenses/fmt.txt",
             "share/pike/licenses/glaze.txt",

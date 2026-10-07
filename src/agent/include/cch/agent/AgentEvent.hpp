@@ -47,6 +47,10 @@ struct ToolExecutionStartEvent {
     std::string tool_call_id;
     std::string tool_name;
     support::JsonValue args;
+    /// pi `parentToolCallId`: the model-issued call this nested call ran under.
+    /// Absent for a model-issued call itself. Nested calls never appear as
+    /// transcript tool calls.
+    std::optional<std::string> parent_tool_call_id{};
 };
 
 struct ToolExecutionUpdateEvent {
@@ -54,6 +58,7 @@ struct ToolExecutionUpdateEvent {
     std::string tool_name{};
     support::JsonValue args{};
     AsyncToolExecutionResult partial_result{};
+    std::optional<std::string> parent_tool_call_id{};
 };
 
 struct ToolExecutionEndEvent {
@@ -61,6 +66,7 @@ struct ToolExecutionEndEvent {
     std::string tool_name;
     AsyncToolExecutionResult result;
     bool is_error{false};
+    std::optional<std::string> parent_tool_call_id{};
 };
 
 using AgentLifecycleEvent = std::variant<
