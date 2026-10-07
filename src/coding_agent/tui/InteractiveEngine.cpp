@@ -11,6 +11,7 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/InteractiveView.hpp"
 #include "coding_agent/tui/LoadedResources.hpp"
+#include "coding_agent/tui/McpManagerFlow.hpp"
 #include "coding_agent/tui/ModelFlowController.hpp"
 #include "coding_agent/tui/SessionFlowController.hpp"
 #include "coding_agent/tui/SessionUiBinding.hpp"
@@ -117,12 +118,14 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     // before view composition).
     model_flows_ = make_model_flow_controller();
     auth_flows_ = make_auth_flow_controller();
+    mcp_flows_ = make_mcp_flow_controller();
     session_flows_ = make_session_flow_controller();
     session_ui_ = make_session_ui_binding();
     settings_flows_ = make_settings_flow_controller();
     suspend_controller_ = make_suspend_controller();
     if (!booting) {
         model_flows_->update_model_completion();
+        mcp_flows_->refresh_completion();
     }
 
     const auto weak = weak_from_this();
@@ -265,6 +268,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
     owned_session_ = std::move(created->session);
     session_ = owned_session_.get();
     model_flows_->update_model_completion();
+    mcp_flows_->refresh_completion();
     rebuild_autocomplete_provider();
     if (auto subscribed = session_ui_->bind(*session_); !subscribed) {
         co_return std::unexpected(subscribed.error());
@@ -492,8 +496,12 @@ InteractiveEngine::build_autocomplete_provider() {
     // executor: the provider contract allows worker-thread delivery, and the
     // receiver re-enters the editor through the render request (#609).
     return std::make_unique<ExecutorAutocompleteProvider>(executor_,
-            build_editor_autocomplete_provider(
-                    templates, skills, model_flows_->model_completion(), include_skill_commands, workspace));
+            build_editor_autocomplete_provider(templates,
+                    skills,
+                    model_flows_->model_completion(),
+                    mcp_flows_ ? mcp_flows_->completion_snapshot() : nullptr,
+                    include_skill_commands,
+                    workspace));
 }
 
 void InteractiveEngine::rebuild_autocomplete_provider() {
@@ -752,6 +760,12 @@ void InteractiveEngine::show_status(std::string text) {
 void InteractiveEngine::show_error(std::string text) {
     if (view_ == nullptr) return;
     view_->append_diagnostic(std::move(text));
+    invalidate_frame();
+}
+
+void InteractiveEngine::show_warning(std::string text) {
+    if (view_ == nullptr) return;
+    view_->append_warning(std::move(text));
     invalidate_frame();
 }
 

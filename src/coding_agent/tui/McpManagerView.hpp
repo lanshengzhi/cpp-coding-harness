@@ -177,6 +177,18 @@ struct McpCommandCompletion {
 [[nodiscard]] std::vector<McpCommandCompletion> mcp_command_completions(
         std::string_view prefix, const std::vector<McpServerView>& servers);
 
+/// The immutable `/mcp` argument-completion view: the live server views plus
+/// the config notices and the agent dir the completer's eligibility and
+/// description lines need. The host rebuilds it on manager change (and on
+/// session replacement), so the editor domain reads one consistent snapshot
+/// instead of the live manager.
+struct McpCompletionSnapshot {
+    std::vector<McpServerView> servers{};
+    std::vector<std::string> config_errors{};
+    std::vector<std::string> overridden{};
+    std::filesystem::path agent_dir{};
+};
+
 /// pi `serverMenu`'s action values: the operation the manager runs for the
 /// selected server row. The `/mcp` wiring lane implements each one against
 /// the live server manager and re-presents the panel when it finishes; the

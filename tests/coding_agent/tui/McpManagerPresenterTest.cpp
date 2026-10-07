@@ -62,6 +62,7 @@ public:
     std::optional<std::string> stderr;
     bool oauth{false};
     std::string oauth_url_value{"https://mcp.example.com/mcp"};
+    std::optional<std::string> instructions_value;
 
     [[nodiscard]] const std::string& server_name() const noexcept override { return name; }
     [[nodiscard]] McpServerState state() const noexcept override { return state_value; }
@@ -72,6 +73,28 @@ public:
     [[nodiscard]] const std::optional<std::string>& stderr_tail() const noexcept override { return stderr; }
     [[nodiscard]] bool uses_oauth() const noexcept override { return oauth; }
     [[nodiscard]] const std::string& oauth_url() const noexcept override { return oauth_url_value; }
+    [[nodiscard]] const std::optional<std::string>& instructions() const noexcept override {
+        return instructions_value;
+    }
+    [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(
+            std::string_view, support::JsonValue, std::stop_token) override {
+        return support::AsyncResult<support::JsonValue>{
+                support::JsonValue{support::JsonValue::object_t{{"content", support::JsonValue::array_t{}}}}};
+    }
+    [[nodiscard]] support::AsyncResult<support::JsonValue> resources_page(
+            std::optional<std::string>, std::stop_token) override {
+        return support::AsyncResult<support::JsonValue>{
+                support::JsonValue{support::JsonValue::object_t{{"resources", support::JsonValue::array_t{}}}}};
+    }
+    [[nodiscard]] support::AsyncResult<support::JsonValue> resource_templates_page(
+            std::optional<std::string>, std::stop_token) override {
+        return support::AsyncResult<support::JsonValue>{
+                support::JsonValue{support::JsonValue::object_t{{"resourceTemplates", support::JsonValue::array_t{}}}}};
+    }
+    [[nodiscard]] support::AsyncResult<support::JsonValue> read_resource(std::string, std::stop_token) override {
+        return support::AsyncResult<support::JsonValue>{
+                support::JsonValue{support::JsonValue::object_t{{"contents", support::JsonValue::array_t{}}}}};
+    }
     [[nodiscard]] support::AsyncResult<void> reconnect() override {
         state_value = McpServerState::Connected;
         failure.reset();
@@ -112,7 +135,8 @@ public:
     std::vector<std::string> active;
     std::map<std::string, McpExposure> surface;
     void register_tool(McpRegisteredTool tool) override { surface[tool.name] = tool.exposure; }
-    void register_resource_tools(McpExposure, const std::vector<std::string>&) override {}
+    void register_resource_tools(
+            McpExposure, std::vector<std::shared_ptr<coding_agent::mcp::McpResourceServer>>) override {}
     void set_active_tools(std::vector<std::string> names) override { active = std::move(names); }
     [[nodiscard]] std::vector<std::string> active_tools() const override { return active; }
     [[nodiscard]] std::vector<McpSurfaceTool> all_tools() const override {

@@ -11,6 +11,7 @@
 // an Owner Interface, not installed, never exported.
 
 #include "coding_agent/tui/ModelFlowController.hpp"
+#include "coding_agent/tui/McpManagerView.hpp"
 
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/Skill.hpp>
@@ -33,23 +34,26 @@
 
 namespace cch::coding_agent::tui {
 
-/// Build the editor autocomplete command list: the 17 Supported built-in
-/// slash commands (pi `BUILTIN_SLASH_COMMANDS` subset) as plain items, the
-/// loaded prompt templates (scope-prefixed descriptions), and `/skill:`
+/// Build the editor autocomplete command list: the Supported built-in slash
+/// commands (pi `BUILTIN_SLASH_COMMANDS` subset plus `/mcp`) as plain items,
+/// the loaded prompt templates (scope-prefixed descriptions), and `/skill:`
 /// commands while the `enableSkillCommands` setting is enabled — plus the
 /// `model` command as a `SlashCommand` whose argument completion resolves
 /// pi's `model-search` text over the current candidate snapshot (scoped
-/// models when the session carries a scope, else the availability snapshot).
-/// The names with no surface — the Deferred slashes (`/export` `/import`
-/// `/share` `/changelog` `/clone`), the hidden pi-only `/debug` developer
-/// entry, `/bug` (pi's own bug-reporting endpoint), and the easter eggs —
-/// are absent (#793).
+/// models when the session carries a scope, else the availability snapshot),
+/// and the `mcp` command as a `SlashCommand` whose argument completion is
+/// pi's `getArgumentCompletions` (action names, then live server names for
+/// login/logout/reconnect) over the current manager snapshot. The names with
+/// no surface — the Deferred slashes (`/export` `/import` `/share`
+/// `/changelog` `/clone`), the hidden pi-only `/debug` developer entry,
+/// `/bug` (pi's own bug-reporting endpoint), and the easter eggs — are
+/// absent (#793).
 [[nodiscard]] std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>>
-command_autocomplete_commands(
-    std::span<const PromptTemplate> prompt_templates,
-    std::span<const Skill> skills,
-    std::shared_ptr<const ModelCompletionSnapshot> model_completion,
-    bool include_skill_commands);
+command_autocomplete_commands(std::span<const PromptTemplate> prompt_templates,
+        std::span<const Skill> skills,
+        std::shared_ptr<const ModelCompletionSnapshot> model_completion,
+        std::shared_ptr<const McpCompletionSnapshot> mcp_completion,
+        bool include_skill_commands);
 
 /// Resolve an executable on PATH (pi's `ensureTool`); nullopt when absent so
 /// `@`/`#` completion degrades gracefully to empty file suggestions.
@@ -60,13 +64,13 @@ command_autocomplete_commands(
 /// effective commands, prompt templates, and (while the
 /// `enableSkillCommands` setting is enabled) `skill:` commands, rooted at
 /// the session (or boot) workspace for file completion.
-[[nodiscard]] std::unique_ptr<cch::tui::AutocompleteProvider>
-build_editor_autocomplete_provider(
-    std::span<const PromptTemplate> prompt_templates,
-    std::span<const Skill> skills,
-    std::shared_ptr<const ModelCompletionSnapshot> model_completion,
-    bool include_skill_commands,
-    const std::filesystem::path& workspace);
+[[nodiscard]] std::unique_ptr<cch::tui::AutocompleteProvider> build_editor_autocomplete_provider(
+        std::span<const PromptTemplate> prompt_templates,
+        std::span<const Skill> skills,
+        std::shared_ptr<const ModelCompletionSnapshot> model_completion,
+        std::shared_ptr<const McpCompletionSnapshot> mcp_completion,
+        bool include_skill_commands,
+        const std::filesystem::path& workspace);
 
 /// Executor-bound one-shot debounce timer for the editor's autocomplete
 /// requests. All timer state is confined to the executor thread via posts;

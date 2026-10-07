@@ -58,6 +58,14 @@ using ExtensionToolContextExecute = std::move_only_function<support::AsyncResult
 /// built-in Tool.
 struct ExtensionTool {
     ai::Tool definition;
+    /// pi `ToolDefinition.defaultActive` (default true): whether registration
+    /// declares the tool to the model. `false` registers the tool inertly —
+    /// the model does not see it until an explicit activation names it (pi's
+    /// `--tools` selection, a later `setActiveTools`, or the MCP exposure
+    /// activation). pi registers its `codemode` and `tool_search` tools with
+    /// `defaultActive: false`; every other extension tool is declarable on
+    /// registration.
+    bool default_active{true};
     /// pi `executionMode`: the scheduling policy the Agent applies. Carried
     /// onto the Agent Tool unchanged.
     agent::ToolConcurrency concurrency{agent::ToolConcurrency::Exclusive};

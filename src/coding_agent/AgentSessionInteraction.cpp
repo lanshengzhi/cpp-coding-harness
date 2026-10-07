@@ -1517,6 +1517,13 @@ bool detail::AgentSessionInteractiveAccess::is_project_trusted(const AgentSessio
     return session.impl_ && session.impl_->is_project_trusted();
 }
 
+runtime::McpSessionManager* detail::AgentSessionInteractiveAccess::mcp_manager(AgentSession& session) {
+    if (!session.impl_ || !session.impl_->services_.mcp_manager) {
+        return nullptr;
+    }
+    return session.impl_->services_.mcp_manager.get();
+}
+
 boost::asio::awaitable<support::Expected<runtime::UserBashCompletion>>
 detail::AgentSessionInteractiveAccess::run_user_bash(AgentSession& session,
         std::string command,

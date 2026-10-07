@@ -155,6 +155,22 @@ namespace detail {
     return {};
 }
 
+/// pi `validateInitializeResult`'s optional `instructions`: the server usage
+/// guidance the `mcp_servers` prompt section falls back to. Absent unless the
+/// initialize result carries a non-empty string.
+[[nodiscard]] inline std::optional<std::string> initialize_instructions(const support::JsonValue& result) {
+    const auto* object = result.get_if<support::JsonValue::object_t>();
+    if (object == nullptr) {
+        return std::nullopt;
+    }
+    const auto instructions = object->find("instructions");
+    if (instructions == object->end() || !instructions->second.holds<std::string>() ||
+            instructions->second.get_string().empty()) {
+        return std::nullopt;
+    }
+    return instructions->second.get_string();
+}
+
 /// Interpret one JSON-RPC message as the response to `id`. Returns the
 /// response `result`; a JSON-RPC `error` becomes the shared error channel.
 /// A message that is not a `2.0` object, carries no numeric `id`, or answers a

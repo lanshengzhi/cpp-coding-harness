@@ -162,8 +162,10 @@ TEST_CASE("a stray .pi/codemode declaration adds nothing to the session tool sur
     auto session = std::move(created->session);
 
     const auto& names = session->snapshot().agent_state.active_tool_names;
-    // The single inline tool is present...
-    CHECK(std::ranges::find(names, "codemode") != names.end());
+    // The single inline tool is registered but not declared: pi registers
+    // codemode with `defaultActive: false` (#884), so the model does not see
+    // it until activation names it.
+    CHECK(std::ranges::find(names, "codemode") == names.end());
     // ...and the deleted declaration face contributes nothing.
     CHECK(std::ranges::find(names, "stale_declared") == names.end());
     CHECK(std::ranges::find(names, "stale") == names.end());

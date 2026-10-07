@@ -145,6 +145,12 @@ public:
     void close() noexcept;
 
     [[nodiscard]] const std::string& server_name() const noexcept override { return config_.name; }
+    /// pi `initialize` result `instructions`, when the server sent them: the
+    /// `mcp_servers` prompt section's summary fallback for a server whose
+    /// entry carries no description.
+    [[nodiscard]] const std::optional<std::string>& server_instructions() const noexcept {
+        return server_instructions_;
+    }
 
 private:
     /// One queued request body. A notification carries no `id` and no
@@ -270,6 +276,8 @@ private:
     std::deque<std::unique_ptr<QueuedFrame>> queue_;
     std::string session_id_;
     std::string protocol_version_;
+    /// pi `initialize` result `instructions` (see the accessor).
+    std::optional<std::string> server_instructions_;
     int next_id_{1};
     bool pumping_{false};
 

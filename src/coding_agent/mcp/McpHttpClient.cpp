@@ -363,6 +363,7 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> McpHtt
             client->protocol_version_ = version->second.get_string();
         }
     }
+    client->server_instructions_ = detail::initialize_instructions(*initialized);
     // pi sends `notifications/initialized` and only then opens the
     // server-to-client GET stream (`send` awaits the POST, then
     // `startGetStream`). The stream carries server-initiated requests and

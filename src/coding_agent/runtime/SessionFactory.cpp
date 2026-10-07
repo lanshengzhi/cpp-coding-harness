@@ -29,7 +29,9 @@
 #include "coding_agent/mcp/McpOAuthSignIn.hpp"
 #include "coding_agent/mcp/McpOAuthTokenResolver.hpp"
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
+#include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/runtime/LocalUserShell.hpp"
+#include "coding_agent/runtime/McpProductionAdapters.hpp"
 #include "coding_agent/runtime/RuntimeServices.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 #include "coding_agent/runtime/ToolSelection.hpp"
@@ -1744,70 +1746,28 @@ struct PreparedAssemblyTarget final {
         plan.extension_tool_sources.push_back(std::move(*source));
     }
 
-    // Persisted MCP servers (spec #865, ticket #876): a server disabled in
-    // `mcp.json` is stopped — its tools are absent and an explicit notice names
-    // the file — and a server that fails to launch, handshake, or list tools is
-    // failed with an explicit error while the session continues with the
-    // remaining servers. One dead entry never vetoes the session, and it is
-    // never silently dropped. A server that dies mid-session surfaces the
-    // per-call transport error and reconnects on the next call (the stdio
-    // transport's `reconnect_transport`).
-    for (auto& entry : mcp_config->servers) {
-        const std::string name = entry.name;
-        const std::string source_path = entry.source.string();
-        if (!entry.enabled) {
-            mcp_statuses.push_back(mcp::McpServerStatus{
-                    .name = name,
-                    .state = mcp::McpServerState::Stopped,
-                    .detail = "disabled in " + source_path,
-            });
-            diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Info,
-                    "mcp:stopped",
-                    "MCP server '" + name + "' is disabled in " + source_path + "; its tools are not available",
-                    source_path));
-            continue;
-        }
-        support::Expected<std::unique_ptr<mcp::McpExtensionToolSource>> connected =
-                std::unexpected(support::make_error(support::ErrorCode::Validation, "unreachable"));
-        if (auto* http = std::get_if<mcp::McpHttpServerConfig>(&entry.config)) {
-            if (auto valid = mcp::validate_mcp_http_server_config(*http); !valid) {
-                connected = std::unexpected(std::move(valid.error()));
-            } else {
-                std::shared_ptr<mcp::McpRequestAuthSource> request_auth;
-                if (http->resolved_oauth ||
-                        (http->oauth && !http->auth_provider && !has_authorization_header_sv(http->headers))) {
-                    if (!mcp_auth) {
-                        mcp_auth = std::make_shared<mcp::McpAuthStore>(
-                                mcp::McpAuthStore::default_path(runtime->agent_dir()));
-                    }
-                    (void)mcp_auth->migrate_from_auth_json(runtime->agent_dir() / "auth.json", http->name, http->url);
-                    request_auth = mcp_oauth_request_auth(mcp_auth, *http);
-                }
-                connected = co_await mcp::McpExtensionToolSource::connect_http(*http, std::move(request_auth));
-            }
-        } else {
-            connected = co_await mcp::McpExtensionToolSource::connect_stdio(
-                    std::get<mcp::McpStdioServerConfig>(entry.config));
-        }
-        if (!connected) {
-            const std::string reason = connected.error().message;
-            mcp_statuses.push_back(mcp::McpServerStatus{
-                    .name = name,
-                    .state = mcp::McpServerState::Failed,
-                    .detail = reason + " (" + source_path + ")",
-            });
-            diagnostics.push_back(make_diag(SessionDiagnostic::Severity::Error,
-                    "mcp:failed",
-                    "MCP server '" + name + "' failed: " + reason + " (" + source_path + ")",
-                    source_path));
-            continue;
-        }
-        mcp_statuses.push_back(mcp::McpServerStatus{
-                .name = name,
-                .state = mcp::McpServerState::Running,
-                .detail = std::to_string((*connected)->tools().size()) + " tools from " + source_path,
-        });
-        plan.extension_tool_sources.push_back(std::move(*connected));
+    // Persisted MCP servers (spec #865 #876, spec #882 #884): the live
+    // in-session manager is the one connection story. It owns one connection
+    // per enabled server through the production factory (the same landed
+    // stdio/streamable-http clients; an OAuth-eligible HTTP entry resolves its
+    // token from `mcp-auth.json` at request time), registers every tool at
+    // its configured exposure on the live Agent surface once `bind_assembly`
+    // binds the two, registers the three resource tools at the widest
+    // non-hidden exposure, activates `codemode` when a `codemode` exposure
+    // asks for it (pi `ensureDiscoveryActive`), and feeds the `mcp_servers`
+    // system prompt section. A server that fails to launch, handshake, or
+    // list tools reports a failed connection while the session continues; a
+    // disabled entry is stopped with an explicit notice naming the file. The
+    // static per-server connect path this replaces is subsumed — the manager
+    // subsumes `McpExtensionToolSource`'s persisted-config role (the
+    // programmatic request seam above keeps #869's hard-fail).
+    std::shared_ptr<McpSessionManager> mcp_manager;
+    {
+        McpManagerDependencies mcp_dependencies;
+        mcp_dependencies.connections = std::make_shared<ProductionMcpConnectionFactory>(runtime->agent_dir());
+        mcp_dependencies.auth = std::make_shared<McpOAuthFlowSignInDriver>(runtime->agent_dir());
+        mcp_manager = std::make_shared<McpSessionManager>(
+                std::move(*mcp_config), runtime->agent_dir(), std::vector<std::string>{}, std::move(mcp_dependencies));
     }
 
     // codemode (spec #882, ticket #885): pi's model-facing inline `codemode`
@@ -1816,6 +1776,12 @@ struct PreparedAssemblyTarget final {
     // project-local resource to trust-gate. The guest module loads on the
     // first call, not at assembly.
     plan.extension_tool_sources.push_back(std::make_unique<extensions::CodemodeToolSource>());
+
+    // pi `defaultActive: false` registrations collected while the extension
+    // sources load (today only the codemode tool). The session excludes these
+    // names from the Agent's initial declared set; an explicit `--tools`
+    // selection that names one drops it from the list (activation).
+    std::vector<std::string> initially_inactive_tool_names;
 
     // Extension Tool Source (spec #865): load every configured source and
     // register its tools before the registry moves into the Agent, so an
@@ -1833,6 +1799,9 @@ struct PreparedAssemblyTarget final {
             co_await discard_unpublished_session();
             co_return std::unexpected(loaded.error());
         }
+        // pi `defaultActive: false` registrations (the codemode tool): the
+        // session shapes the Agent's initial declared set around these names.
+        initially_inactive_tool_names = extension_tools.default_inactive_tool_names();
         if (auto registered = extensions::register_extension_tools(tools, std::move(extension_tools)); !registered) {
             cleanup_on_failure();
             co_await discard_unpublished_session();
@@ -1864,6 +1833,16 @@ struct PreparedAssemblyTarget final {
                     "tool:selection",
                     "tool selection removed " + std::to_string(resolved->removed.size()) +
                             " tool(s): " + detail::join_tool_names(resolved->removed)));
+        }
+        if (plan.tool_selection.allowed.has_value()) {
+            // pi's `--tools` allowlist is an explicit activation path: a
+            // default-inactive tool that survived the filter was named
+            // explicitly (an allowlist keeps an MCP tool only when it names
+            // MCP; codemode is not an MCP tool) and joins the declared set
+            // like any selected tool. A denylist-only selection activates
+            // nothing: surviving inactive names stay undeclared.
+            std::erase_if(initially_inactive_tool_names,
+                    [&tools](const std::string& name) { return tools.find(name) != nullptr; });
         }
     }
 
@@ -2063,6 +2042,8 @@ struct PreparedAssemblyTarget final {
     }
     services.bash_session_environment = std::move(bash_session_environment);
     services.tools = std::move(tools);
+    services.initially_inactive_tool_names = std::move(initially_inactive_tool_names);
+    services.mcp_manager = std::move(mcp_manager);
 
     const auto session_path = open.store->path();
     const auto metadata = open.metadata;
@@ -2135,6 +2116,85 @@ boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>
     auto session = co_await coding_agent::AgentSession::bind_assembly(std::move(assembly));
     if (!session) {
         co_return std::unexpected(session.error());
+    }
+    // The persisted mcp.json servers report their states as the connect phase
+    // resolved them (`bind_assembly` awaited the manager's start): a disabled
+    // entry is stopped, a connected one running with its tool count, an
+    // OAuth-challenged one needs sign-in, and a failed one carries its error —
+    // each with the same per-state diagnostic, so a dead server stays visible
+    // and never disappears silently.
+    if (auto* manager = coding_agent::detail::AgentSessionInteractiveAccess::mcp_manager(**session);
+            manager != nullptr) {
+        for (const auto& snapshot : manager->servers()) {
+            const std::string name = snapshot.entry.name;
+            const std::string source_path = snapshot.entry.source.string();
+            if (!snapshot.entry.enabled) {
+                mcp_servers.push_back(mcp::McpServerStatus{
+                        .name = name,
+                        .state = mcp::McpServerState::Stopped,
+                        .detail = "disabled in " + source_path,
+                });
+                diagnostics.push_back(coding_agent::SessionDiagnostic{
+                        coding_agent::SessionDiagnostic::Severity::Info,
+                        "mcp:stopped",
+                        "MCP server '" + name + "' is disabled in " + source_path + "; its tools are not available",
+                        source_path,
+                });
+                continue;
+            }
+            if (!snapshot.connection) {
+                mcp_servers.push_back(mcp::McpServerStatus{
+                        .name = name,
+                        .state = mcp::McpServerState::Starting,
+                        .detail = "connecting (" + source_path + ")",
+                });
+                continue;
+            }
+            switch (snapshot.connection->state) {
+            case McpServerState::Connected:
+                mcp_servers.push_back(mcp::McpServerStatus{
+                        .name = name,
+                        .state = mcp::McpServerState::Running,
+                        .detail = std::to_string(snapshot.connection->tools.size()) + " tools from " + source_path,
+                });
+                break;
+            case McpServerState::NeedsAuth:
+                mcp_servers.push_back(mcp::McpServerStatus{
+                        .name = name,
+                        .state = mcp::McpServerState::Failed,
+                        .detail = "needs sign-in (" + source_path + ")",
+                });
+                diagnostics.push_back(coding_agent::SessionDiagnostic{
+                        coding_agent::SessionDiagnostic::Severity::Warning,
+                        "mcp:needs-auth",
+                        "MCP server '" + name + "' needs sign-in; run /mcp login " + name,
+                        source_path,
+                });
+                break;
+            case McpServerState::Failed: {
+                const std::string reason = snapshot.connection->error.value_or("unknown error");
+                mcp_servers.push_back(mcp::McpServerStatus{
+                        .name = name,
+                        .state = mcp::McpServerState::Failed,
+                        .detail = reason + " (" + source_path + ")",
+                });
+                diagnostics.push_back(coding_agent::SessionDiagnostic{
+                        coding_agent::SessionDiagnostic::Severity::Error,
+                        "mcp:failed",
+                        "MCP server '" + name + "' failed: " + reason + " (" + source_path + ")",
+                        source_path,
+                });
+                break;
+            }
+            default:
+                mcp_servers.push_back(mcp::McpServerStatus{
+                        .name = name,
+                        .state = mcp::McpServerState::Starting,
+                        .detail = "connecting (" + source_path + ")",
+                });
+                break;
+            }
+        }
     }
     co_return coding_agent::CreateAgentSessionResult{
             .session = std::move(*session),

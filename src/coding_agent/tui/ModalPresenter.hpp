@@ -40,6 +40,10 @@ public:
     virtual void show_status(std::string text) = 0;
     /// pi `showError`: one diagnostic line in the chat.
     virtual void show_error(std::string text) = 0;
+    /// pi `ui.notify(..., "warning")`: one warning line in the chat (the
+    /// usage and manager-warning presentation; distinct from the error
+    /// color).
+    virtual void show_warning(std::string text) = 0;
 
     /// Request one re-render after component-internal state changed (pi
     /// `ui.requestRender`); coalescible and safe to call from any thread.

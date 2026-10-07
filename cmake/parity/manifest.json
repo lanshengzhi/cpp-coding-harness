@@ -103,6 +103,15 @@
         "reason": "Spec #865 mandated reusing ai::providers::BoostBeastStreamTransport for the production MCP HTTP transport; promoting it to a narrow Owner Interface is the recorded upgrade (#881)."
       },
       {
+        "id": "mcp-production-adapters-transport-reach-through",
+        "rule_id": "coding-agent-no-ai-private-includes",
+        "source": "src/coding_agent/runtime/McpProductionAdapters.cpp",
+        "owner": "cch_coding_agent",
+        "removal_ticket": "#881",
+        "expires": "2027-06-30",
+        "reason": "Spec #882's live session manager reuses ai::providers::BoostBeastStreamTransport for the production MCP HTTP connection factory, the same reach-through McpExtensionToolSource.cpp already records; promoting it to a narrow Owner Interface is the recorded upgrade (#881)."
+      },
+      {
         "id": "mcp-oauth-flow-reach-through",
         "rule_id": "coding-agent-no-ai-private-includes",
         "source": "src/coding_agent/mcp/McpOAuthFlow.cpp",

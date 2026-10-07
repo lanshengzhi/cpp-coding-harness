@@ -1,6 +1,7 @@
 #include "coding_agent/AgentSession.hpp"
 
 #include "coding_agent/AgentSessionImpl.hpp"
+#include "coding_agent/runtime/McpProductionAdapters.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 
 #include "support/AsyncResultBridge.hpp"
@@ -672,6 +673,19 @@ boost::asio::awaitable<support::Expected<std::unique_ptr<AgentSession>>> AgentSe
         runtime::AgentSessionAssembly assembly) {
     auto session = std::make_unique<AgentSession>();
     session->impl_ = std::make_shared<AgentSession::Impl>(std::move(assembly));
+    // The live MCP manager binds to the Agent's live tool surface now that the
+    // Agent exists (pi `session_start`): exposure-aware tool registration,
+    // the resource tools, and the codemode discovery activation all write
+    // into the session's declared set through this surface. The connect phase
+    // is awaited so the creation result reports resolved server states, and a
+    // failed server is a failed connection — never a veto on the session.
+    if (auto& manager = session->impl_->services_.mcp_manager; manager && session->impl_->agent_) {
+        manager->attach_tool_surface(std::make_shared<runtime::AgentMcpToolSurface>(
+                *session->impl_->agent_, session->impl_->assembly_tool_names_));
+        if (auto started = co_await support::detail::await_async_result(manager->start()); !started) {
+            co_return std::unexpected(std::move(started.error()));
+        }
+    }
     if (auto persisted = co_await session->impl_->persist_initial_system_message(); !persisted) {
         co_return std::unexpected(persisted.error());
     }

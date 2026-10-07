@@ -9,14 +9,9 @@
 
 namespace cch::coding_agent::extensions {
 
-namespace {
-
-/// Convert one extension-provided Tool into the Agent's Tool value. The
-/// definition, prompt metadata, and concurrency policy carry over unchanged;
-/// the extension execute operation runs when the Agent executor invokes the
-/// tool and its terminal outcome is mapped onto the Agent Tool result. A tool
-/// that sets `context_execute` receives the run's nested-call dispatcher.
-[[nodiscard]] agent::Tool to_agent_tool(ExtensionTool tool) {
+/// Convert one extension-provided Tool into the Agent's Tool value (see the
+/// header declaration).
+agent::Tool convert_extension_tool(ExtensionTool tool) {
     agent::Tool agent_tool;
     agent_tool.definition = std::move(tool.definition);
     agent_tool.concurrency = tool.concurrency;
@@ -74,8 +69,6 @@ namespace {
     return agent_tool;
 }
 
-} // namespace
-
 support::ExpectedVoid ExtensionToolRegistry::add(ExtensionTool tool) {
     if (!tool.execute && !tool.context_execute) {
         return std::unexpected(support::make_error(
@@ -91,7 +84,11 @@ support::ExpectedVoid ExtensionToolRegistry::add(ExtensionTool tool) {
                 "duplicate extension tool name: '" + name + "'",
                 "each extension tool must have a unique name"));
     }
+    const bool default_inactive = !tool.default_active;
     tools_.emplace(name, std::move(tool));
+    if (default_inactive) {
+        default_inactive_.push_back(name);
+    }
     return {};
 }
 
@@ -139,7 +136,7 @@ support::ExpectedVoid register_extension_tools(agent::ToolRegistry& registry, Ex
                     "extension tool name '" + name + "' collides with an existing tool",
                     "each tool name must be unique across built-in, custom, and extension tools"));
         }
-        if (auto added = registry.add(to_agent_tool(std::move(tool))); !added) {
+        if (auto added = registry.add(convert_extension_tool(std::move(tool))); !added) {
             return std::unexpected(std::move(added.error()));
         }
     }

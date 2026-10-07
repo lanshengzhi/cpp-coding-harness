@@ -529,6 +529,11 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     std::vector<std::string> prompt_selected_tools_;
     std::map<std::string, std::string> prompt_tool_snippets_;
     std::vector<std::string> prompt_tool_guidelines_;
+    /// Every tool name registered at assembly, captured before the registry
+    /// moved into the Agent (the Agent exposes the declared set, not the
+    /// registered set): the MCP surface seeds its pi `getAllTools()` view
+    /// with these so the discovery-activation check sees `codemode`.
+    std::vector<std::string> assembly_tool_names_;
     // Declared after the borrowed client/store owners so it is destroyed first.
     std::optional<agent::Agent> agent_;
 

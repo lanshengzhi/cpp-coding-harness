@@ -34,6 +34,12 @@ const std::vector<BuiltinSlashCommand>& builtin_slash_commands() {
             {"reload", "Reload keybindings, skills, prompts, themes, and context files", {}},
             // pi "/quit": `Quit ${APP_NAME}` with the C++ binary's own identity.
             {"quit", "Quit pike", {}},
+            // pi `extensions/mcp/index.ts` `registerCommand("mcp")`
+            // description, verbatim; the argument hint is the #884 wiring
+            // lane's spelling of pi's `login [server]` et al.
+            {"mcp",
+                    "Manage MCP servers: sign in, reconnect, enable or disable, and change exposure",
+                    "[action] [server]"},
     };
     return kCommands;
 }

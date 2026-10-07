@@ -58,6 +58,7 @@ namespace cch::coding_agent::tui {
 
 class AuthFlowController;
 class InteractiveView;
+class McpManagerFlow;
 class ModelFlowController;
 class SessionFlowController;
 class SessionUiBinding;
@@ -365,6 +366,8 @@ private:
     void show_status(std::string text) override;
     /// pi `showError`: one `Error: <text>` chat line.
     void show_error(std::string text) override;
+    /// pi `ui.notify(..., "warning")`: one warning-colored chat line.
+    void show_warning(std::string text) override;
     /// pi `ui.requestRender`: one coalescible re-render request, safe from
     /// any thread (posts the render to the executor).
     void request_render() override;
@@ -383,6 +386,7 @@ private:
 
     [[nodiscard]] std::shared_ptr<ModelFlowController> make_model_flow_controller();
     [[nodiscard]] std::shared_ptr<AuthFlowController> make_auth_flow_controller();
+    [[nodiscard]] std::shared_ptr<McpManagerFlow> make_mcp_flow_controller();
     [[nodiscard]] std::shared_ptr<SessionFlowController> make_session_flow_controller();
     [[nodiscard]] std::shared_ptr<SessionUiBinding> make_session_ui_binding();
     [[nodiscard]] std::shared_ptr<SettingsFlowController> make_settings_flow_controller();
@@ -543,6 +547,10 @@ private:
     /// keybindings) exist.
     std::shared_ptr<ModelFlowController> model_flows_;
     std::shared_ptr<AuthFlowController> auth_flows_;
+    /// The `/mcp` manager flow (spec #882, ticket #884): the manage panel,
+    /// the login/logout/reconnect subcommands, the argument-completion
+    /// snapshot, and the manager's warning surfacing.
+    std::shared_ptr<McpManagerFlow> mcp_flows_;
     std::shared_ptr<SessionFlowController> session_flows_;
     /// The settings selector + thinking/render-settings flows (#506).
     std::shared_ptr<SettingsFlowController> settings_flows_;
