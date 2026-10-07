@@ -185,6 +185,7 @@ cch_parity_declare_target(
         src/coding_agent/cli/FrontendSelection.cpp
         src/coding_agent/cli/InitialPrompt.cpp
         src/coding_agent/cli/ListModels.cpp
+        src/coding_agent/cli/McpCommand.cpp
         src/coding_agent/cli/PrintMode.cpp
         src/coding_agent/cli/SessionFamily.cpp
         src/coding_agent/cli/StartupTui.cpp

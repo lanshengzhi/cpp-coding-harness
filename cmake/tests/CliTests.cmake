@@ -15,6 +15,7 @@ include_guard(GLOBAL)
         tests/cli/InitialPromptTest.cpp
         tests/cli/InstallRelocationTest.cpp
         tests/cli/ListModelsTest.cpp
+        tests/cli/McpCommandTest.cpp
         tests/cli/PrintModeTest.cpp
         tests/cli/SessionFamilyCliTest.cpp
         tests/cli/StartupTuiTest.cpp

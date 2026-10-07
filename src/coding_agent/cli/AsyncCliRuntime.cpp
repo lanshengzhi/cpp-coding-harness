@@ -3,6 +3,7 @@
 #include "coding_agent/cli/CliParse.hpp"
 #include "coding_agent/cli/InitialPrompt.hpp"
 #include "coding_agent/cli/ListModels.hpp"
+#include "coding_agent/cli/McpCommand.hpp"
 #include "coding_agent/cli/PrintMode.hpp"
 #include "coding_agent/cli/SessionFamily.hpp"
 #include "coding_agent/cli/StartupTui.hpp"
@@ -10,8 +11,11 @@
 #include "coding_agent/compat/pi/PiImport.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/SessionCwd.hpp"
+#include <cch/coding_agent/AgentConfigDir.hpp>
+#include <cch/coding_agent/ProjectTrust.hpp>
 #include "agent/harness/RuntimeRoot.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
+#include "coding_agent/tui/OpenBrowser.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
 #include "coding_agent/tui/TerminationSignals.hpp"
@@ -524,6 +528,23 @@ void print_session_diagnostics(
                        << " directories into " << config.import_destination.value_or(coding_agent::agent_config_dir())
                        << '\n';
         return 0;
+    }
+
+    if (config.mcp_command) {
+        bool project_trusted = false;
+        coding_agent::ProjectTrustStore trust_store{coding_agent::trust_store_file_path()};
+        if (auto entry = trust_store.getEntry(config.workspace); entry && entry->has_value()) {
+            project_trusted = (*entry)->decision == coding_agent::ProjectTrustDecision::Trusted;
+        }
+        McpCommandOptions mcp_options;
+        mcp_options.cwd = config.workspace;
+        mcp_options.agent_dir = coding_agent::agent_config_dir();
+        mcp_options.project_trusted = project_trusted;
+        mcp_options.output = &streams.output;
+        mcp_options.error = &streams.error;
+        mcp_options.input = &streams.input;
+        mcp_options.open_browser = [](std::string_view url) { coding_agent::tui::open_browser(std::string{url}); };
+        return run_mcp_command(config.mcp_args, std::move(mcp_options));
     }
 
     const FrontendEnvironment environment =
