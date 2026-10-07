@@ -56,6 +56,11 @@ struct BuildSystemPromptOptions {
     std::vector<ProjectContextFile> contextFiles;
     /// Pre-loaded skills (pi `skills`).
     std::vector<Skill> skills;
+    /// Additional XML-wrapped prompt sections keyed by tag name (pi
+    /// `sections`). The only extra section Pike carries today is
+    /// `mcp_servers` (pi `renderServersSection`), rendered after `cwd`.
+    /// An absent or empty value renders no section.
+    std::optional<std::string> mcpServersSection;
     /// Identity delta: the C++ binary's own documentation paths (pi
     /// `getReadmePath()`/`getDocsPath()`/`getExamplesPath()`).
     std::string readmePath;

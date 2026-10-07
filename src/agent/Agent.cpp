@@ -8,7 +8,9 @@
 #include <memory>
 #include <optional>
 #include <stop_token>
+#include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -50,12 +52,22 @@ Agent::Impl::Impl(ai::ModelStreamFactory stream_factory,
 }
 
 [[nodiscard]] AgentExecutionSnapshot Agent::Impl::snapshot() const {
+    // The declared tool set is the active subset (pi `setActiveTools` ->
+    // declared tools): the registry keeps every registered tool for nested
+    // calls, while the model sees only the active names.
+    const std::unordered_set<std::string> active{state.active_tool_names.begin(), state.active_tool_names.end()};
+    std::vector<ai::Tool> declared;
+    for (auto& tool : run_policy.registry.definitions()) {
+        if (active.contains(tool.name)) {
+            declared.push_back(std::move(tool));
+        }
+    }
     return AgentExecutionSnapshot{
             .model = state.model,
             .thinking_level = state.thinking_level,
             .system_prompt = state.system_prompt,
             .messages = state.messages,
-            .tools = run_policy.registry.definitions(),
+            .tools = std::move(declared),
     };
 }
 
@@ -349,6 +361,43 @@ void Agent::set_system_prompt(std::string system_prompt) {
         return;
     }
     impl_->state.system_prompt = std::move(system_prompt);
+}
+
+support::ExpectedVoid Agent::register_tool(Tool tool) {
+    if (!impl_) {
+        return std::unexpected(agent_not_initialized());
+    }
+    return impl_->run_policy.registry.add(std::move(tool));
+}
+
+bool Agent::remove_tool(std::string_view name) {
+    if (!impl_) {
+        return false;
+    }
+    if (!impl_->run_policy.registry.remove(name)) {
+        return false;
+    }
+    std::erase(impl_->state.active_tool_names, std::string{name});
+    return true;
+}
+
+support::ExpectedVoid Agent::set_active_tools(std::vector<std::string> names) {
+    if (!impl_) {
+        return std::unexpected(agent_not_initialized());
+    }
+    std::vector<std::string> active;
+    active.reserve(names.size());
+    for (auto& name : names) {
+        if (impl_->run_policy.registry.find(name) != nullptr) {
+            active.push_back(std::move(name));
+        }
+    }
+    impl_->state.active_tool_names = std::move(active);
+    return {};
+}
+
+std::vector<std::string> Agent::active_tools() const {
+    return impl_ ? impl_->state.active_tool_names : std::vector<std::string>{};
 }
 
 support::ExpectedVoid Agent::clear_steering_queue() {

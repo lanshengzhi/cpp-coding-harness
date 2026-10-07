@@ -6,6 +6,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -56,6 +57,11 @@ public:
         auto it = tools_.find(name);
         return it == tools_.end() ? nullptr : &it->second;
     }
+
+    /// Remove one tool from the registry (pi re-registers a withdrawn tool as
+    /// `hidden`, which is the same effect on the declared set). Returns whether
+    /// a tool was removed.
+    bool remove(std::string_view name) { return tools_.erase(std::string{name}) > 0; }
 
     /// Prompt metadata for one registered tool, normalized like pi
     /// `agent-session.ts` `_normalizePromptSnippet`/`_normalizePromptGuidelines`
