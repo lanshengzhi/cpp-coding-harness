@@ -26,6 +26,7 @@
 #include "coding_agent/mcp/McpConfigFile.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 #include "coding_agent/mcp/McpOAuthProvider.hpp"
+#include "coding_agent/mcp/McpOAuthSignIn.hpp"
 #include "coding_agent/mcp/McpOAuthTokenResolver.hpp"
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/LocalUserShell.hpp"
@@ -37,6 +38,7 @@
 #include <boost/asio/awaitable.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -1157,6 +1159,40 @@ struct PreparedAssemblyTarget final {
     return result;
 }
 
+/// True when the server's configured headers already carry an `Authorization`
+/// (pi `usesOAuth`: an explicit header wins over the `oauth` block).
+[[nodiscard]] bool has_authorization_header_sv(const std::map<std::string, std::string>& headers) {
+    for (const auto& [key, value] : headers) {
+        if (key.size() != 13) {
+            continue;
+        }
+        std::string lowered = key;
+        for (char& character : lowered) {
+            character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+        }
+        if (lowered == "authorization") {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// The request-time OAuth source for one HTTP MCP server (spec #882, ticket
+/// #884): a pre-resolved endpoint set uses the `#875` provider, an `oauth`
+/// block with no pre-resolved endpoints runs the discovery/DCR flow, and a
+/// server with neither is sent no credential (fail-closed).
+[[nodiscard]] std::shared_ptr<mcp::McpRequestAuthSource> mcp_oauth_request_auth(
+        const std::shared_ptr<mcp::McpAuthStore>& store, const mcp::McpHttpServerConfig& server) {
+    if (server.resolved_oauth) {
+        return std::make_shared<mcp::McpOAuthTokenResolver>(
+                store, server.name, server.url, std::make_shared<mcp::McpOAuthProvider>(*server.resolved_oauth));
+    }
+    if (server.oauth && !server.auth_provider && !has_authorization_header_sv(server.headers)) {
+        return std::make_shared<mcp::McpOAuthFlowTokenResolver>(store, server.name, server.url, *server.oauth);
+    }
+    return nullptr;
+}
+
 [[nodiscard]] boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>> run_assembly_async(
         AssemblyPlan plan,
         SettingsSnapshot& snapshot,
@@ -1675,21 +1711,24 @@ struct PreparedAssemblyTarget final {
             co_return std::unexpected(std::move(valid.error()));
         }
         std::shared_ptr<mcp::McpRequestAuthSource> request_auth;
+        const bool uses_oauth =
+                server.resolved_oauth.has_value() ||
+                (server.oauth.has_value() && !server.auth_provider && !has_authorization_header_sv(server.headers));
         if (server.resolved_oauth) {
             if (auto valid = mcp::validate_mcp_oauth_server_config(*server.resolved_oauth); !valid) {
                 cleanup_on_failure();
                 co_await discard_unpublished_session();
                 co_return std::unexpected(std::move(valid.error()));
             }
+        }
+        if (uses_oauth) {
             if (!mcp_auth) {
                 mcp_auth = std::make_shared<mcp::McpAuthStore>(mcp::McpAuthStore::default_path(runtime->agent_dir()));
             }
             // Best-effort one-way migration: a malformed auth.json never vetoes
             // the session, it just leaves the legacy record unmigrated.
             (void)mcp_auth->migrate_from_auth_json(runtime->agent_dir() / "auth.json", server.name, server.url);
-            auto provider = std::make_shared<mcp::McpOAuthProvider>(*server.resolved_oauth);
-            request_auth = std::make_shared<mcp::McpOAuthTokenResolver>(
-                    mcp_auth, server.name, server.url, std::move(provider));
+            request_auth = mcp_oauth_request_auth(mcp_auth, server);
         }
         auto source = co_await mcp::McpExtensionToolSource::connect_http(std::move(server), std::move(request_auth));
         if (!source) {
@@ -1734,7 +1773,17 @@ struct PreparedAssemblyTarget final {
             if (auto valid = mcp::validate_mcp_http_server_config(*http); !valid) {
                 connected = std::unexpected(std::move(valid.error()));
             } else {
-                connected = co_await mcp::McpExtensionToolSource::connect_http(*http);
+                std::shared_ptr<mcp::McpRequestAuthSource> request_auth;
+                if (http->resolved_oauth ||
+                        (http->oauth && !http->auth_provider && !has_authorization_header_sv(http->headers))) {
+                    if (!mcp_auth) {
+                        mcp_auth = std::make_shared<mcp::McpAuthStore>(
+                                mcp::McpAuthStore::default_path(runtime->agent_dir()));
+                    }
+                    (void)mcp_auth->migrate_from_auth_json(runtime->agent_dir() / "auth.json", http->name, http->url);
+                    request_auth = mcp_oauth_request_auth(mcp_auth, *http);
+                }
+                connected = co_await mcp::McpExtensionToolSource::connect_http(*http, std::move(request_auth));
             }
         } else {
             connected = co_await mcp::McpExtensionToolSource::connect_stdio(

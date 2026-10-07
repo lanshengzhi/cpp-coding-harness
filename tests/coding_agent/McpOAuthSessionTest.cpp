@@ -286,7 +286,7 @@ struct LoginHarness {
     }
     state.tokens = std::move(tokens);
     state.tokens_expire_at = expires;
-    state.client_information = mcp::McpOAuthClientInformation{"pike-mcp-test-client", std::nullopt};
+    state.client_information = mcp::McpOAuthClientInformation{.client_id = "pike-mcp-test-client"};
     return state;
 }
 

@@ -128,6 +128,15 @@
         "removal_ticket": "#881",
         "expires": "2027-06-30",
         "reason": "Spec #865 mandated reusing the ai OAuth/auth helpers (Pkce, OAuthCallbackServer, OAuthHttpClient, OAuthShared, JsonAccess) so MCP OAuth shares the built-in credential flow; promoting a narrow ai auth interface is the recorded upgrade (#881)."
+      },
+      {
+        "id": "mcp-oauth-signin-reach-through",
+        "rule_id": "coding-agent-no-ai-private-includes",
+        "source": "src/coding_agent/mcp/McpOAuthSignIn.cpp",
+        "owner": "cch_coding_agent",
+        "removal_ticket": "#881",
+        "expires": "2027-06-30",
+        "reason": "Spec #882 mandated driving the landed OAuth flow through the shared ai OAuth seam (OAuthCallbackServer for the loopback callback and its pasted-URL fallback, OAuthHttpClient for discovery/registration/token requests, Pkce for the state and the callback id), so the interactive MCP sign-in reuses the built-in flows' callback server and HTTPS client; promoting a narrow ai auth interface is the recorded upgrade (#881)."
       }
     ]
   },

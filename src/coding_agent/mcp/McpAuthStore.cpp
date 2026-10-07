@@ -162,6 +162,14 @@ using JsonObject = support::JsonValue::object_t;
             if (const auto secret = string_member(client_object, "client_secret"); secret && !secret->empty()) {
                 information.client_secret = std::string{*secret};
             }
+            if (const auto uris = client_object.find("redirect_uris");
+                    uris != client_object.end() && uris->second.get_if<support::JsonValue::array_t>() != nullptr) {
+                for (const auto& uri : *uris->second.get_if<support::JsonValue::array_t>()) {
+                    if (const auto* text = uri.get_if<std::string>(); text != nullptr && !text->empty()) {
+                        information.redirect_uris.push_back(*text);
+                    }
+                }
+            }
             state.client_information = std::move(information);
         }
     }
@@ -186,6 +194,14 @@ using JsonObject = support::JsonValue::object_t;
         information.emplace("client_id", support::JsonValue{state.client_information->client_id});
         if (state.client_information->client_secret) {
             information.emplace("client_secret", support::JsonValue{*state.client_information->client_secret});
+        }
+        if (!state.client_information->redirect_uris.empty()) {
+            support::JsonValue::array_t uris;
+            uris.reserve(state.client_information->redirect_uris.size());
+            for (const auto& uri : state.client_information->redirect_uris) {
+                uris.emplace_back(uri);
+            }
+            information.emplace("redirect_uris", support::JsonValue{std::move(uris)});
         }
         object.emplace("clientInformation", support::JsonValue{std::move(information)});
     }

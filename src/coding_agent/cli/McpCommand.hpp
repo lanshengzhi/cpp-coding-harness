@@ -9,11 +9,13 @@
 
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpConfigFile.hpp"
+#include "coding_agent/mcp/McpHttpServerConfig.hpp"
 
 #include <cch/support/AsyncResult.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
+#include <chrono>
 #include <filesystem>
 #include <functional>
 #include <iosfwd>
@@ -46,6 +48,11 @@ public:
             const coding_agent::mcp::McpConfigEntry& entry, const std::filesystem::path& agent_dir) = 0;
 };
 
+/// The injectable `pike mcp login` sign-in (pi `signInMcpServer`), narrowed to
+/// what the command observes: the server and the `--timeout`.
+using McpSignInHook = std::function<support::AsyncResult<void>(
+        const coding_agent::mcp::McpHttpServerConfig&, std::chrono::milliseconds)>;
+
 /// Inputs `run_mcp_command` needs from the environment. `probe` and
 /// `open_browser` default to the production behavior; tests set `probe` to a
 /// scripted one.
@@ -70,6 +77,10 @@ struct McpCommandOptions {
     /// pi `openBrowser`: opens the authorization URL. Null leaves the URL to
     /// the user (the production CLI passes the platform opener).
     std::function<void(std::string_view)> open_browser{nullptr};
+    /// The OAuth sign-in `pike mcp login` drives (pi `signInMcpServer`). Null
+    /// runs the production loopback-callback flow; tests inject a scripted one
+    /// that observes the timeout and the requested server.
+    McpSignInHook sign_in{nullptr};
 };
 
 /// pi's `HELP` for `pi mcp`, with `pike` substituted for the app name.

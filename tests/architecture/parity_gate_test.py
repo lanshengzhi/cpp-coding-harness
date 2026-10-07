@@ -288,6 +288,9 @@ class ManifestSchemaTest(unittest.TestCase):
                 "src/coding_agent/mcp/McpHttpClient.cpp",
                 "src/coding_agent/mcp/McpExtensionToolSource.cpp",
                 "src/coding_agent/mcp/McpOAuthProvider.cpp",
+                "src/coding_agent/mcp/McpOAuthFlow.cpp",
+                "src/coding_agent/mcp/McpOAuthDiscovery.cpp",
+                "src/coding_agent/mcp/McpOAuthSignIn.cpp",
             },
         )
         for exception in exceptions.values():

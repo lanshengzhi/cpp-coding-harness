@@ -19,6 +19,7 @@
 #include <boost/system/error_code.hpp>
 
 #include <cstdint>
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -36,6 +37,7 @@ struct ParsedTarget {
     std::string code{};
     std::string state{};
     std::string client_id{};
+    std::string iss{};
 };
 
 /// Parse a request target like `/auth/callback?code=X&state=Y` with
@@ -57,6 +59,9 @@ struct ParsedTarget {
     }
     if (const auto found = pairs.find("client_id"); found != pairs.end()) {
         parsed.client_id = found->second;
+    }
+    if (const auto found = pairs.find("iss"); found != pairs.end()) {
+        parsed.iss = found->second;
     }
     return parsed;
 }
@@ -185,9 +190,10 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
 
     const auto expected_state = impl->options.state;
     const auto callback_path = impl->options.path;
+    const auto extra_paths = impl->options.extra_paths;
     co_spawn(
             executor,
-            [impl, expected_state, callback_path]() -> asio::awaitable<void> {
+            [impl, expected_state, callback_path, extra_paths]() -> asio::awaitable<void> {
                 while (!impl->closed) {
                     boost::asio::basic_stream_socket<tcp, TransportExecutor> socket(impl->executor);
                     boost::system::error_code accept_error;
@@ -198,7 +204,7 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
                     }
                     co_spawn(
                             impl->executor,
-                            [impl, expected_state, callback_path, socket = std::move(socket)]() mutable
+                            [impl, expected_state, callback_path, extra_paths, socket = std::move(socket)]() mutable
                                     -> asio::awaitable<void> {
                                 namespace http = boost::beast::http;
                                 auto response = html_response(
@@ -213,7 +219,11 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
                                         asio::redirect_error(asio::use_awaitable, handler_error));
                                 if (!handler_error) {
                                     const auto target = parse_target(request.target());
-                                    if (request.method() != http::verb::get || target.path != callback_path) {
+                                    const bool route_matches =
+                                            target.path == callback_path ||
+                                            std::find(extra_paths.begin(), extra_paths.end(), target.path) !=
+                                                    extra_paths.end();
+                                    if (request.method() != http::verb::get || !route_matches) {
                                         response = html_response(404, oauth_error_html("Callback route not found."));
                                     } else if (impl->wait_cancelled || impl->claimed) {
                                         response = html_response(
@@ -234,6 +244,9 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
                                                 settled.client_id = target.client_id.empty()
                                                                             ? std::optional<std::string>{}
                                                                             : std::optional<std::string>{target.client_id};
+                                                settled.iss = target.iss.empty()
+                                                                      ? std::optional<std::string>{}
+                                                                      : std::optional<std::string>{target.iss};
                                                 impl->wait_channel.try_send(boost::system::error_code{},
                                                         WaitResult{std::move(settled)});
                                             } else {
@@ -257,6 +270,8 @@ OAuthCallbackServer::start(OAuthCallbackServerOptions options) {
                                             settled.client_id = target.client_id.empty()
                                                                         ? std::optional<std::string>{}
                                                                         : std::optional<std::string>{target.client_id};
+                                            settled.iss = target.iss.empty() ? std::optional<std::string>{}
+                                                                             : std::optional<std::string>{target.iss};
                                             impl->wait_channel.try_send(boost::system::error_code{},
                                                     WaitResult{std::move(settled)});
                                         }

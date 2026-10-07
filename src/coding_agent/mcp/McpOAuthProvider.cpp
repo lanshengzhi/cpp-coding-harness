@@ -387,7 +387,7 @@ McpOAuthState mcp_oauth_state_from_credential(const ai::OAuthCredential& credent
     state.tokens = std::move(tokens);
     state.tokens_expire_at = credential.expires;
     if (credential.client_id) {
-        state.client_information = McpOAuthClientInformation{*credential.client_id, std::nullopt};
+        state.client_information = McpOAuthClientInformation{.client_id = *credential.client_id};
     }
     return state;
 }

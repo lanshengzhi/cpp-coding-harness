@@ -17,6 +17,7 @@
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
 #include "coding_agent/mcp/McpOAuthProvider.hpp"
+#include "coding_agent/mcp/McpOAuthSignIn.hpp"
 #include "coding_agent/mcp/McpOAuthTokenResolver.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -27,9 +28,12 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/experimental/channel.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/system/error_code.hpp>
 
@@ -41,8 +45,10 @@
 #include <map>
 #include <optional>
 #include <sstream>
+#include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -260,13 +266,21 @@ public:
             const McpConfigEntry& entry, const std::filesystem::path& agent_dir) override {
         if (const auto* http = std::get_if<McpHttpServerConfig>(&entry.config)) {
             std::shared_ptr<coding_agent::mcp::McpRequestAuthSource> request_auth;
-            if (http->resolved_oauth) {
+            const bool uses_oauth =
+                    http->resolved_oauth.has_value() ||
+                    (http->oauth.has_value() && !http->auth_provider && !has_authorization_header(*http));
+            if (uses_oauth) {
                 auto store = std::make_shared<coding_agent::mcp::McpAuthStore>(
                         coding_agent::mcp::McpAuthStore::default_path(agent_dir));
                 (void)store->migrate_from_auth_json(agent_dir / "auth.json", http->name, http->url);
-                auto provider = std::make_shared<coding_agent::mcp::McpOAuthProvider>(*http->resolved_oauth);
-                request_auth = std::make_shared<coding_agent::mcp::McpOAuthTokenResolver>(
-                        store, http->name, http->url, std::move(provider));
+                if (http->resolved_oauth) {
+                    auto provider = std::make_shared<coding_agent::mcp::McpOAuthProvider>(*http->resolved_oauth);
+                    request_auth = std::make_shared<coding_agent::mcp::McpOAuthTokenResolver>(
+                            store, http->name, http->url, std::move(provider));
+                } else {
+                    request_auth = std::make_shared<coding_agent::mcp::McpOAuthFlowTokenResolver>(
+                            store, http->name, http->url, *http->oauth);
+                }
             }
             auto source =
                     co_await coding_agent::mcp::McpExtensionToolSource::connect_http(*http, std::move(request_auth));
@@ -823,6 +837,87 @@ struct ServerReport {
     return *outcome ? 0 : 1;
 }
 
+/// The pasted redirect URL of `pike mcp login` (pi `waitForRedirectUrl`): a
+/// terminal gets the paste prompt, everything else waits until the callback or
+/// the timeout aborts the prompt. Resolves `std::nullopt` when aborted or when
+/// the input ends.
+[[nodiscard]] support::AsyncResult<std::optional<std::string>> wait_for_redirect_url(
+        const McpCommandOptions& options, std::stop_token stop) {
+    std::istream* input = options.input;
+    std::ostream* error = options.error;
+    const bool interactive = options.stdin_is_terminal;
+    return support::detail::make_async_result(
+            [input, error, interactive, stop]()
+                    -> boost::asio::awaitable<support::Expected<std::optional<std::string>>> {
+                auto executor = co_await boost::asio::this_coro::executor;
+                using Channel =
+                        boost::asio::experimental::channel<void(boost::system::error_code, std::optional<std::string>)>;
+                auto settled = std::make_shared<Channel>(executor, 1);
+                if (interactive && input != nullptr) {
+                    *error << "If the browser cannot reach this machine, paste the URL it was redirected to: "
+                           << std::flush;
+                    std::thread reader{[input, executor, settled]() {
+                        std::string line;
+                        const bool read = static_cast<bool>(std::getline(*input, line));
+                        boost::asio::post(executor, [settled, line = std::move(line), read]() {
+                            if (read) {
+                                settled->try_send(
+                                        boost::system::error_code{}, std::optional<std::string>{std::move(line)});
+                            } else {
+                                settled->try_send(boost::system::error_code{}, std::optional<std::string>{});
+                            }
+                        });
+                    }};
+                    reader.detach();
+                }
+                // The losing side of the race (the callback or the timeout) aborts
+                // this prompt through its stop token.
+                std::stop_callback cancel{stop, [executor, settled] {
+                                              boost::asio::post(executor, [settled] {
+                                                  settled->try_send(
+                                                          boost::system::error_code{}, std::optional<std::string>{});
+                                              });
+                                          }};
+                boost::system::error_code receive_error;
+                auto outcome = co_await settled->async_receive(
+                        boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
+                if (receive_error || !outcome.has_value()) {
+                    co_return std::optional<std::string>{};
+                }
+                co_return std::move(*outcome);
+            });
+}
+
+/// `pike mcp login` on an `oauth` block (pi `signInMcpServer`): discovery and
+/// registration happen inside the flow, the loopback callback races the pasted
+/// redirect URL, and the tokens land in `mcp-auth.json`.
+[[nodiscard]] support::AsyncResult<void> run_flow_login(const McpCommandOptions& options,
+        const McpHttpServerConfig& http,
+        const std::string& url,
+        std::chrono::milliseconds timeout) {
+    auto store = std::make_shared<coding_agent::mcp::McpAuthStore>(
+            coding_agent::mcp::McpAuthStore::default_path(options.agent_dir));
+    (void)store->migrate_from_auth_json(options.agent_dir / "auth.json", http.name, url);
+    coding_agent::mcp::McpOAuthSignInRequest request;
+    request.store = store;
+    request.server_name = http.name;
+    request.server_url = url;
+    request.oauth = *http.oauth;
+    request.timeout = timeout;
+    request.prompt.show_authorization_url = [&options, name = http.name](const std::string& authorization_url) {
+        *options.output << "Sign in to MCP server \"" << name << "\" in your browser:\n" << authorization_url << '\n';
+        if (options.open_browser) {
+            options.open_browser(authorization_url);
+        }
+    };
+    if (options.stdin_is_terminal) {
+        request.prompt.prompt_for_redirect_url = [&options](std::stop_token stop) {
+            return wait_for_redirect_url(options, std::move(stop));
+        };
+    }
+    return coding_agent::mcp::sign_in_mcp_server(std::move(request));
+}
+
 [[nodiscard]] int login_or_logout(const std::string& command,
         const std::vector<std::string>& args,
         const McpCommandOptions& options,
@@ -894,7 +989,7 @@ struct ServerReport {
             return 1;
         }
     }
-    (void)timeout_seconds;
+    const std::chrono::milliseconds timeout{static_cast<std::chrono::milliseconds::rep>(timeout_seconds * 1000.0)};
 
     DefaultMcpServerProbe default_probe;
     McpServerProbe& probe = options.probe ? *options.probe : default_probe;
@@ -909,12 +1004,22 @@ struct ServerReport {
         return 1;
     }
     const auto* http = std::get_if<McpHttpServerConfig>(&entry->config);
-    if (http == nullptr || !http->resolved_oauth) {
-        error << "MCP server \"" << name
-              << "\" requires OAuth sign-in, but its authorization-server endpoints are not resolved yet.\n";
+    if (http == nullptr) {
+        error << "MCP server \"" << name << "\" does not use OAuth. Only HTTP servers without an Authorization "
+              << "header do.\n";
         return 1;
     }
-    const int login_exit = run_result_void(run_oauth_login(options, *entry, *url));
+    int login_exit = 1;
+    if (options.sign_in) {
+        login_exit = run_result_void(options.sign_in(*http, timeout));
+    } else if (http->resolved_oauth) {
+        login_exit = run_result_void(run_oauth_login(options, *entry, *url));
+    } else if (http->oauth) {
+        login_exit = run_result_void(run_flow_login(options, *http, *url, timeout));
+    } else {
+        error << "MCP server \"" << name << "\" requires OAuth sign-in, but it has no oauth configuration.\n";
+        return 1;
+    }
     if (login_exit != 0) {
         error << "Sign-in to MCP server \"" << name << "\" failed.\n";
         return 1;

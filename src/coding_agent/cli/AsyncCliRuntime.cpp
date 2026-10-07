@@ -543,6 +543,8 @@ void print_session_diagnostics(
         mcp_options.output = &streams.output;
         mcp_options.error = &streams.error;
         mcp_options.input = &streams.input;
+        mcp_options.stdin_is_terminal = options.environment_explicit ? options.environment.stdin_is_terminal
+                                                                     : detect_frontend_environment().stdin_is_terminal;
         mcp_options.open_browser = [](std::string_view url) { coding_agent::tui::open_browser(std::string{url}); };
         return run_mcp_command(config.mcp_args, std::move(mcp_options));
     }

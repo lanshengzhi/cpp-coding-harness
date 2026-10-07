@@ -205,7 +205,7 @@ TEST_CASE("a stored refresh token is rotated and the rotated values are persiste
     tests::RuntimeFixture runtime;
     mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
-    seeded.client_information = mcp::McpOAuthClientInformation{"dyn-client-1", std::nullopt};
+    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
     mcp::McpOAuthTokens tokens;
     tokens.access_token = "old-access";
     tokens.token_type = "Bearer";
@@ -240,7 +240,7 @@ TEST_CASE("a dead refresh token invalidates the tokens and re-authorizes instead
     tests::RuntimeFixture runtime;
     mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
-    seeded.client_information = mcp::McpOAuthClientInformation{"dyn-client-1", std::nullopt};
+    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
     mcp::McpOAuthTokens tokens;
     tokens.access_token = "old-access";
     tokens.token_type = "Bearer";
@@ -273,7 +273,7 @@ TEST_CASE("invalid_client invalidates the registration and registers again", "[c
     mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
     // A registration the server no longer knows, with a refresh token to use.
-    seeded.client_information = mcp::McpOAuthClientInformation{"stale-client", std::nullopt};
+    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "stale-client"};
     mcp::McpOAuthTokens tokens;
     tokens.access_token = "old-access";
     tokens.token_type = "Bearer";
@@ -306,7 +306,7 @@ TEST_CASE("an invalid_client during a code exchange also drops the PKCE verifier
     tests::RuntimeFixture runtime;
     mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
-    seeded.client_information = mcp::McpOAuthClientInformation{"stale-client", std::nullopt};
+    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "stale-client"};
     seeded.code_verifier = "verifier-1";
     REQUIRE(harness.store->save("echo", kServerUrl, seeded).has_value());
     harness.http->responses[kTokenUrl] = {{401, R"({"error":"invalid_client"})"}};
@@ -402,7 +402,7 @@ TEST_CASE("an authorization code from another issuer never reaches the token end
     tests::RuntimeFixture runtime;
     mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
-    seeded.client_information = mcp::McpOAuthClientInformation{"dyn-client-1", std::nullopt};
+    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
     seeded.code_verifier = "verifier-1";
     REQUIRE(harness.store->save("echo", kServerUrl, seeded).has_value());
     harness.authorization_server_document =
@@ -435,7 +435,7 @@ TEST_CASE("a server that does not support the authorization code grant or PKCE S
     tests::RuntimeFixture runtime;
     mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
-    seeded.client_information = mcp::McpOAuthClientInformation{"dyn-client-1", std::nullopt};
+    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
     REQUIRE(harness.store->save("echo", kServerUrl, seeded).has_value());
 
     harness.authorization_server_document =
@@ -462,7 +462,7 @@ TEST_CASE("a server_error refresh is quiet and falls through to authorization", 
     tests::RuntimeFixture runtime;
     mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
-    seeded.client_information = mcp::McpOAuthClientInformation{"dyn-client-1", std::nullopt};
+    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
     mcp::McpOAuthTokens tokens;
     tokens.access_token = "old-access";
     tokens.token_type = "Bearer";

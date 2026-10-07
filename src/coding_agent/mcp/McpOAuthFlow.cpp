@@ -666,6 +666,8 @@ std::string select_client_auth_method(
     return client.client_secret ? "client_secret_post" : "none";
 }
 
+support::Expected<std::string> mcp_callback_id(std::string_view server_url) { return callback_id(server_url); }
+
 support::Expected<McpOAuthClientMetadataDocument> client_metadata_document(std::string_view server_url,
         std::string_view redirect_url,
         const std::optional<McpAuthorizationServerMetadata>& metadata) {
@@ -762,6 +764,20 @@ boost::asio::awaitable<support::Expected<McpOAuthClientInformation>> register_cl
     McpOAuthClientInformation client{.client_id = std::string{*client_id}, .client_secret = std::nullopt};
     if (const auto secret = ai::json_string_member(*object, "client_secret"); secret && !secret->empty()) {
         client.client_secret = std::string{*secret};
+    }
+    // pi `registeredRedirectUrls`: the registration names the redirect URIs the
+    // client may use. A server that echoes none is taken to accept the ones
+    // the registration requested, so a later sign-in or refresh still knows
+    // which redirect URI the client is bound to.
+    if (const auto* uris = ai::json_array_member(*object, "redirect_uris"); uris != nullptr) {
+        for (const auto& uri : *uris) {
+            if (const auto* text = uri.get_if<std::string>(); text != nullptr && !text->empty()) {
+                client.redirect_uris.push_back(*text);
+            }
+        }
+    }
+    if (client.redirect_uris.empty()) {
+        client.redirect_uris = client_metadata.redirect_uris;
     }
     co_return client;
 }
