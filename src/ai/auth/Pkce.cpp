@@ -19,44 +19,10 @@ namespace {
 
 [[nodiscard]] support::Expected<std::string> random_bytes(std::size_t count) {
     std::string bytes(count, '\0');
-    if (RAND_bytes(reinterpret_cast<unsigned char*>(bytes.data()),
-                   static_cast<int>(count)) != 1) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "secure random bytes unavailable"));
+    if (RAND_bytes(reinterpret_cast<unsigned char*>(bytes.data()), static_cast<int>(count)) != 1) {
+        return std::unexpected(support::make_error(support::ErrorCode::Unknown, "secure random bytes unavailable"));
     }
     return bytes;
-}
-
-[[nodiscard]] support::Expected<std::string> sha256(std::string_view data) {
-    std::array<unsigned char, EVP_MAX_MD_SIZE> digest{};
-    unsigned int digest_length = 0;
-    if (EVP_Digest(
-            data.data(),
-            data.size(),
-            digest.data(),
-            &digest_length,
-            EVP_sha256(),
-            nullptr) != 1) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "SHA-256 digest failed"));
-    }
-    return std::string(
-        reinterpret_cast<const char*>(digest.data()),
-        digest_length);
-}
-
-[[nodiscard]] std::string base64_encode(std::string_view bytes) {
-    // EVP_EncodeBlock writes one trailing NUL past the payload; size for it
-    // and trim back to the exact encoded length.
-    const std::size_t encoded_size = 4 * ((bytes.size() + 2) / 3);
-    std::string result(encoded_size + 1, '\0');
-    EVP_EncodeBlock(reinterpret_cast<unsigned char*>(result.data()),
-            reinterpret_cast<const unsigned char*>(bytes.data()),
-            static_cast<int>(bytes.size()));
-    result.resize(encoded_size);
-    return result;
 }
 
 [[nodiscard]] support::Expected<std::string> base64_decode(std::string_view text) {
@@ -74,9 +40,7 @@ namespace {
     // atob is forgiving about missing padding; pad to a multiple of four.
     const auto remainder = normalized.size() % 4;
     if (remainder == 1) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::JsonParse,
-            "invalid base64 length"));
+        return std::unexpected(support::make_error(support::ErrorCode::JsonParse, "invalid base64 length"));
     }
     if (remainder != 0) {
         normalized.append(4 - remainder, '=');
@@ -95,20 +59,14 @@ namespace {
     return result;
 }
 
-[[nodiscard]] support::Expected<support::JsonValue> decode_jwt_payload(
-    std::string_view token) {
+[[nodiscard]] support::Expected<support::JsonValue> decode_jwt_payload(std::string_view token) {
     const std::size_t first_dot = token.find('.');
     if (first_dot == std::string_view::npos) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::JsonParse,
-            "JWT has no payload segment"));
+        return std::unexpected(support::make_error(support::ErrorCode::JsonParse, "JWT has no payload segment"));
     }
     const std::size_t second_dot = token.find('.', first_dot + 1);
-    if (second_dot == std::string_view::npos ||
-        token.find('.', second_dot + 1) != std::string_view::npos) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::JsonParse,
-            "JWT is not a three-part token"));
+    if (second_dot == std::string_view::npos || token.find('.', second_dot + 1) != std::string_view::npos) {
+        return std::unexpected(support::make_error(support::ErrorCode::JsonParse, "JWT is not a three-part token"));
     }
     const auto payload = token.substr(first_dot + 1, second_dot - first_dot - 1);
     if (auto decoded = base64_decode(payload); !decoded) {
@@ -123,6 +81,27 @@ namespace {
 }
 
 } // namespace
+
+std::string base64_encode(std::string_view bytes) {
+    // EVP_EncodeBlock writes one trailing NUL past the payload; size for it
+    // and trim back to the exact encoded length.
+    const std::size_t encoded_size = 4 * ((bytes.size() + 2) / 3);
+    std::string result(encoded_size + 1, '\0');
+    EVP_EncodeBlock(reinterpret_cast<unsigned char*>(result.data()),
+            reinterpret_cast<const unsigned char*>(bytes.data()),
+            static_cast<int>(bytes.size()));
+    result.resize(encoded_size);
+    return result;
+}
+
+support::Expected<std::string> sha256_digest(std::string_view data) {
+    std::array<unsigned char, EVP_MAX_MD_SIZE> digest{};
+    unsigned int digest_length = 0;
+    if (EVP_Digest(data.data(), data.size(), digest.data(), &digest_length, EVP_sha256(), nullptr) != 1) {
+        return std::unexpected(support::make_error(support::ErrorCode::Unknown, "SHA-256 digest failed"));
+    }
+    return std::string(reinterpret_cast<const char*>(digest.data()), digest_length);
+}
 
 std::string base64url_encode(std::string_view bytes) {
     auto encoded = base64_encode(bytes);
@@ -142,13 +121,13 @@ support::Expected<PkcePair> generate_pkce() {
         return std::unexpected(std::move(verifier_bytes.error()));
     } else {
         const std::string verifier = base64url_encode(*verifier_bytes);
-        if (auto hashed = sha256(verifier); !hashed) {
+        if (auto hashed = sha256_digest(verifier); !hashed) {
             return std::unexpected(std::move(hashed.error()));
         } else {
             const std::string challenge = base64url_encode(*hashed);
             return PkcePair{
-                .verifier = verifier,
-                .challenge = challenge,
+                    .verifier = verifier,
+                    .challenge = challenge,
             };
         }
     }
@@ -162,9 +141,7 @@ support::Expected<std::string> create_oauth_state() {
         state.reserve(32);
         for (const unsigned char byte : *bytes) {
             const auto push_hex = [&state](unsigned char nibble) {
-                state.push_back(nibble < 10
-                    ? static_cast<char>('0' + nibble)
-                    : static_cast<char>('a' + nibble - 10));
+                state.push_back(nibble < 10 ? static_cast<char>('0' + nibble) : static_cast<char>('a' + nibble - 10));
             };
             push_hex(byte >> 4);
             push_hex(byte & 0x0F);
@@ -179,11 +156,9 @@ std::string url_query_encode(std::string_view value) {
     result.reserve(value.size());
     for (const unsigned char byte : value) {
         const auto is_unreserved = [](unsigned char character) {
-            return (character >= 'A' && character <= 'Z') ||
-                   (character >= 'a' && character <= 'z') ||
-                   (character >= '0' && character <= '9') ||
-                   character == '*' || character == '-' ||
-                   character == '.' || character == '_';
+            return (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z') ||
+                   (character >= '0' && character <= '9') || character == '*' || character == '-' || character == '.' ||
+                   character == '_';
         };
         if (is_unreserved(byte)) {
             result.push_back(static_cast<char>(byte));
@@ -233,21 +208,16 @@ std::string url_query_decode(std::string_view value) {
     return result;
 }
 
-std::map<std::string, std::string, std::less<>> parse_query_pairs(
-    std::string_view query) {
+std::map<std::string, std::string, std::less<>> parse_query_pairs(std::string_view query) {
     std::map<std::string, std::string, std::less<>> pairs;
     std::size_t offset = 0;
     while (offset <= query.size()) {
         const auto ampersand = query.find('&', offset);
-        const auto pair = query.substr(
-            offset,
-            (ampersand == std::string_view::npos ? query.size() : ampersand) -
-                offset);
+        const auto pair =
+                query.substr(offset, (ampersand == std::string_view::npos ? query.size() : ampersand) - offset);
         const auto equals = pair.find('=');
         const auto key = url_query_decode(pair.substr(0, equals));
-        const auto value = equals == std::string_view::npos
-            ? std::string{}
-            : url_query_decode(pair.substr(equals + 1));
+        const auto value = equals == std::string_view::npos ? std::string{} : url_query_decode(pair.substr(equals + 1));
         // First value wins, matching URLSearchParams.get.
         pairs.emplace(key, value);
         if (ampersand == std::string_view::npos) {
@@ -262,10 +232,8 @@ AuthorizationInput parse_authorization_input(std::string_view input) {
     const std::string value{input};
     const auto trimmed_start = value.find_first_not_of(" \t\r\n");
     const auto trimmed = trimmed_start == std::string::npos
-        ? std::string{}
-        : value.substr(
-              trimmed_start,
-              value.find_last_not_of(" \t\r\n") - trimmed_start + 1);
+                                 ? std::string{}
+                                 : value.substr(trimmed_start, value.find_last_not_of(" \t\r\n") - trimmed_start + 1);
     if (trimmed.empty()) {
         return {};
     }
@@ -274,15 +242,13 @@ AuthorizationInput parse_authorization_input(std::string_view input) {
     const auto scheme_end = trimmed.find("://");
     if (scheme_end != std::string::npos) {
         const auto scheme = trimmed.substr(0, scheme_end);
-        const auto valid_scheme = !scheme.empty() &&
-            ((scheme[0] >= 'A' && scheme[0] <= 'Z') ||
-             (scheme[0] >= 'a' && scheme[0] <= 'z')) &&
-            std::all_of(scheme.begin() + 1, scheme.end(), [](char character) {
-                return (character >= 'A' && character <= 'Z') ||
-                       (character >= 'a' && character <= 'z') ||
-                       (character >= '0' && character <= '9') ||
-                       character == '+' || character == '.' || character == '-';
-            });
+        const auto valid_scheme =
+                !scheme.empty() && ((scheme[0] >= 'A' && scheme[0] <= 'Z') || (scheme[0] >= 'a' && scheme[0] <= 'z')) &&
+                std::all_of(scheme.begin() + 1, scheme.end(), [](char character) {
+                    return (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z') ||
+                           (character >= '0' && character <= '9') || character == '+' || character == '.' ||
+                           character == '-';
+                });
         if (valid_scheme) {
             const auto query_start = trimmed.find('?');
             if (query_start == std::string::npos) {
@@ -290,9 +256,7 @@ AuthorizationInput parse_authorization_input(std::string_view input) {
             }
             const auto query_end = trimmed.find('#', query_start);
             const auto query = trimmed.substr(
-                query_start + 1,
-                (query_end == std::string::npos ? trimmed.size() : query_end) -
-                    query_start - 1);
+                    query_start + 1, (query_end == std::string::npos ? trimmed.size() : query_end) - query_start - 1);
             const auto pairs = parse_query_pairs(query);
             AuthorizationInput parsed;
             if (const auto found = pairs.find("code"); found != pairs.end()) {
@@ -308,8 +272,8 @@ AuthorizationInput parse_authorization_input(std::string_view input) {
     if (trimmed.find('#') != std::string::npos) {
         const auto hash = trimmed.find('#');
         return AuthorizationInput{
-            .code = trimmed.substr(0, hash),
-            .state = trimmed.substr(hash + 1),
+                .code = trimmed.substr(0, hash),
+                .state = trimmed.substr(hash + 1),
         };
     }
 
@@ -335,33 +299,26 @@ support::Expected<std::string> extract_account_id(std::string_view access_token)
         constexpr std::string_view kClaimPath = "https://api.openai.com/auth";
         const auto* claim = payload->get_if<support::JsonValue::object_t>();
         if (claim == nullptr) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::JsonParse,
-                "JWT payload is not an object"));
+            return std::unexpected(support::make_error(support::ErrorCode::JsonParse, "JWT payload is not an object"));
         }
         const auto claim_found = claim->find(std::string{kClaimPath});
         if (claim_found == claim->end()) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::JsonParse,
-                "JWT payload has no auth claim"));
+            return std::unexpected(support::make_error(support::ErrorCode::JsonParse, "JWT payload has no auth claim"));
         }
         const auto* auth = claim_found->second.get_if<support::JsonValue::object_t>();
         if (auth == nullptr) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::JsonParse,
-                "JWT auth claim is not an object"));
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::JsonParse, "JWT auth claim is not an object"));
         }
         const auto account_found = auth->find("chatgpt_account_id");
         if (account_found == auth->end()) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::JsonParse,
-                "JWT auth claim has no chatgpt_account_id"));
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::JsonParse, "JWT auth claim has no chatgpt_account_id"));
         }
         const auto* account_id = account_found->second.get_if<std::string>();
         if (account_id == nullptr || account_id->empty()) {
             return std::unexpected(support::make_error(
-                support::ErrorCode::JsonParse,
-                "JWT chatgpt_account_id is not a non-empty string"));
+                    support::ErrorCode::JsonParse, "JWT chatgpt_account_id is not a non-empty string"));
         }
         return *account_id;
     }

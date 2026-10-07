@@ -135,6 +135,9 @@ using JsonObject = support::JsonValue::object_t;
     if (const auto refresh = string_member(object, "refresh_token"); refresh && !refresh->empty()) {
         tokens.refresh_token = std::string{*refresh};
     }
+    if (const auto scope = string_member(object, "scope"); scope && !scope->empty()) {
+        tokens.scope = std::string{*scope};
+    }
     return tokens;
 }
 
@@ -192,6 +195,9 @@ using JsonObject = support::JsonValue::object_t;
         tokens.emplace("token_type", support::JsonValue{state.tokens->token_type});
         if (state.tokens->refresh_token) {
             tokens.emplace("refresh_token", support::JsonValue{*state.tokens->refresh_token});
+        }
+        if (state.tokens->scope) {
+            tokens.emplace("scope", support::JsonValue{*state.tokens->scope});
         }
         object.emplace("tokens", support::JsonValue{std::move(tokens)});
     }
