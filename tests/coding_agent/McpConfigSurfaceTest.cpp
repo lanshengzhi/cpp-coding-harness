@@ -96,6 +96,44 @@ using JsonArray = support::JsonValue::array_t;
                         }
                         object.emplace("headers", std::move(headers));
                     }
+                    // pi carries the `oauth` block through unchanged, so every
+                    // field it set appears here in pi's own spelling.
+                    if (typed.oauth) {
+                        support::JsonValue oauth{JsonObject{}};
+                        auto& block = oauth.get_object();
+                        if (typed.oauth->client_id) {
+                            block.emplace("clientId", *typed.oauth->client_id);
+                        }
+                        if (typed.oauth->client_secret) {
+                            block.emplace("clientSecret", *typed.oauth->client_secret);
+                        }
+                        if (typed.oauth->callback_port) {
+                            block.emplace("callbackPort", static_cast<double>(*typed.oauth->callback_port));
+                        }
+                        if (typed.oauth->callback_url) {
+                            block.emplace("callbackUrl", *typed.oauth->callback_url);
+                        }
+                        if (typed.oauth->scope) {
+                            block.emplace("scope", *typed.oauth->scope);
+                        }
+                        if (typed.oauth->client_name) {
+                            block.emplace("clientName", *typed.oauth->client_name);
+                        }
+                        if (typed.oauth->client_registration) {
+                            block.emplace("clientRegistration",
+                                    std::string{*typed.oauth->client_registration ==
+                                                                coding_agent::mcp::McpClientRegistration::Cimd
+                                                        ? "cimd"
+                                                        : "dcr"});
+                        }
+                        if (typed.oauth->auth_server_metadata_url) {
+                            block.emplace("authServerMetadataUrl", *typed.oauth->auth_server_metadata_url);
+                        }
+                        object.emplace("oauth", std::move(oauth));
+                    }
+                    if (typed.auth_provider) {
+                        object.emplace("auth", support::JsonValue{JsonObject{{"provider", *typed.auth_provider}}});
+                    }
                 }
             },
             config);
@@ -155,7 +193,7 @@ TEST_CASE(
 
     // A round-trip: pi's validated config is the input with aliases resolved, so
     // validating the expected config returns it unchanged.
-    for (const std::string_view label : {"stdio", "http"}) {
+    for (const std::string_view label : {"stdio", "http", "http+oauth", "http+auth"}) {
         const auto& result = find_example(label);
         const auto& expected = expect_object(result, "config");
         support::JsonValue raw{expected};
@@ -277,4 +315,123 @@ TEST_CASE("autoEnableCodemode is read from the global file and overridden by the
 
     const auto trusted = coding_agent::mcp::load_mcp_config(workspace.path() / "home", workspace.path(), true);
     CHECK(trusted.auto_enable_codemode);
+}
+
+TEST_CASE("the mcp.json oauth block matches the pi-v1.0.4 validation rules", "[coding_agent][mcp][issue884][spec]") {
+    using coding_agent::mcp::McpClientRegistration;
+    const auto validate = [](support::JsonValue oauth) {
+        return coding_agent::mcp::validate_mcp_server_config("demo",
+                support::JsonValue{JsonObject{{"url", "https://example.com/mcp"}, {"oauth", std::move(oauth)}}});
+    };
+    const auto expect_error = [&](support::JsonValue oauth, std::string_view message) {
+        auto validated = validate(std::move(oauth));
+        REQUIRE_FALSE(validated.has_value());
+        CHECK(validated.error().message == std::string{"server \"demo\": "} + std::string{message});
+    };
+
+    expect_error(support::JsonValue{JsonArray{}}, "oauth must be an object");
+    expect_error(support::JsonValue{JsonObject{{"clientId", true}}}, "oauth.clientId must be a string");
+    expect_error(support::JsonValue{JsonObject{{"clientSecret", 4}}}, "oauth.clientSecret must be a string");
+    expect_error(support::JsonValue{JsonObject{{"callbackPort", 0}}}, "oauth.callbackPort must be a port number");
+    expect_error(support::JsonValue{JsonObject{{"callbackPort", 65536}}}, "oauth.callbackPort must be a port number");
+    expect_error(support::JsonValue{JsonObject{{"callbackPort", 1.5}}}, "oauth.callbackPort must be a port number");
+    expect_error(support::JsonValue{JsonObject{{"callbackUrl", "https://127.0.0.1/callback"}}},
+            "oauth.callbackUrl must be an http URI on localhost, 127.0.0.1, or [::1] without query or fragment");
+    expect_error(support::JsonValue{JsonObject{{"callbackUrl", "http://127.0.0.1/callback?x=1"}}},
+            "oauth.callbackUrl must be an http URI on localhost, 127.0.0.1, or [::1] without query or fragment");
+    expect_error(support::JsonValue{JsonObject{{"callbackUrl", "http://example.com/callback"}}},
+            "oauth.callbackUrl must be an http URI on localhost, 127.0.0.1, or [::1] without query or fragment");
+    expect_error(
+            support::JsonValue{JsonObject{{"callbackUrl", "http://127.0.0.1:7777/callback"}, {"callbackPort", 7778}}},
+            "oauth.callbackUrl and oauth.callbackPort name different ports");
+    expect_error(support::JsonValue{JsonObject{{"scope", 3}}}, "oauth.scope must be a string");
+    expect_error(support::JsonValue{JsonObject{{"clientName", "  "}}}, "oauth.clientName must be a non-empty string");
+    expect_error(support::JsonValue{JsonObject{{"clientRegistration", "x"}}},
+            "oauth.clientRegistration must be \"dcr\" or \"cimd\"");
+    expect_error(support::JsonValue{JsonObject{{"clientRegistration", "cimd"}, {"clientId", "id"}}},
+            "oauth.clientRegistration \"cimd\" cannot be combined with oauth.clientId or oauth.clientName");
+    expect_error(support::JsonValue{JsonObject{{"clientRegistration", "cimd"}, {"clientName", "n"}}},
+            "oauth.clientRegistration \"cimd\" cannot be combined with oauth.clientId or oauth.clientName");
+    expect_error(
+            support::JsonValue{JsonObject{{"clientRegistration", "cimd"}, {"callbackUrl", "http://127.0.0.1:7/cb"}}},
+            "oauth.clientRegistration \"cimd\" requires oauth.callbackUrl on localhost or 127.0.0.1 with path "
+            "/callback");
+    expect_error(
+            support::JsonValue{JsonObject{{"clientRegistration", "cimd"}, {"callbackUrl", "http://[::1]:7/callback"}}},
+            "oauth.clientRegistration \"cimd\" requires oauth.callbackUrl on localhost or 127.0.0.1 with path "
+            "/callback");
+    expect_error(support::JsonValue{JsonObject{{"authServerMetadataUrl", "http://example.com/.well-known"}}},
+            "oauth.authServerMetadataUrl must be an https URL, or http on localhost, 127.0.0.1, or [::1]");
+
+    // The fixture example round-trips: a pre-registered client with a fixed
+    // loopback callback is accepted, and the block is carried in pi's spelling.
+    {
+        auto validated = validate(support::JsonValue{
+                JsonObject{{"clientId", "dummy-client-id"}, {"callbackUrl", "http://127.0.0.1:7777/callback"}}});
+        REQUIRE(validated.has_value());
+        const auto* http = std::get_if<coding_agent::mcp::McpHttpServerConfig>(&*validated);
+        REQUIRE(http != nullptr);
+        REQUIRE(http->oauth.has_value());
+        REQUIRE(http->oauth->client_id.has_value());
+        CHECK(*http->oauth->client_id == "dummy-client-id");
+        REQUIRE(http->oauth->callback_url.has_value());
+        CHECK(*http->oauth->callback_url == "http://127.0.0.1:7777/callback");
+    }
+    // `cimd` with a `/callback` path on a loopback host is accepted and recorded.
+    {
+        auto validated = validate(support::JsonValue{
+                JsonObject{{"clientRegistration", "cimd"}, {"callbackUrl", "http://localhost:7/callback"}}});
+        REQUIRE(validated.has_value());
+        const auto* http = std::get_if<coding_agent::mcp::McpHttpServerConfig>(&*validated);
+        REQUIRE(http != nullptr);
+        REQUIRE(http->oauth.has_value());
+        CHECK(http->oauth->client_registration == McpClientRegistration::Cimd);
+    }
+}
+
+TEST_CASE("auth is only allowed in the global mcp.json", "[coding_agent][mcp][issue884][spec]") {
+    using coding_agent::mcp::McpHttpServerConfig;
+    // A global entry may name a `/login` provider, but only over https (or a
+    // loopback http URL).
+    {
+        support::JsonValue raw{JsonObject{
+                {"url", "https://example.com/mcp"}, {"auth", support::JsonValue{JsonObject{{"provider", "demo"}}}}}};
+        auto validated = coding_agent::mcp::validate_mcp_server_config("demo", raw);
+        REQUIRE(validated.has_value());
+        const auto* http = std::get_if<McpHttpServerConfig>(&*validated);
+        REQUIRE(http != nullptr);
+        REQUIRE(http->auth_provider.has_value());
+        CHECK(*http->auth_provider == "demo");
+    }
+    {
+        support::JsonValue raw{JsonObject{
+                {"url", "http://example.com/mcp"}, {"auth", support::JsonValue{JsonObject{{"provider", "demo"}}}}}};
+        auto validated = coding_agent::mcp::validate_mcp_server_config("demo", raw);
+        REQUIRE_FALSE(validated.has_value());
+        CHECK(validated.error().message ==
+                "server \"demo\": auth requires an https URL, or http on localhost, 127.0.0.1, or [::1]");
+    }
+    {
+        support::JsonValue raw{
+                JsonObject{{"url", "https://example.com/mcp"}, {"auth", support::JsonValue{JsonObject{}}}}};
+        auto validated = coding_agent::mcp::validate_mcp_server_config("demo", raw);
+        REQUIRE_FALSE(validated.has_value());
+        CHECK(validated.error().message == "server \"demo\": auth.provider must be a provider name");
+    }
+
+    // A project file cannot choose where the credential goes: the same entry is
+    // rejected there with pi's message, while the global entry still loads.
+    tests::TempWorkspace workspace;
+    workspace.write("home/mcp.json",
+            R"({"mcpServers": {"tools": {"url": "https://example.com/mcp", "auth": {"provider": "demo"}}}})");
+    workspace.write(".pi/mcp.json",
+            R"({"mcpServers": {"tools": {"url": "https://example.com/mcp", "auth": {"provider": "demo"}}}})");
+
+    const auto trusted =
+            coding_agent::mcp::load_mcp_config(workspace.path() / "home", workspace.path(), /* project_trusted */ true);
+    REQUIRE(trusted.servers.size() == 1);
+    CHECK(trusted.servers.front().name == "tools");
+    REQUIRE(trusted.errors.size() == 1);
+    CHECK(trusted.errors.front() == (workspace.path() / ".pi" / "mcp.json").string() +
+                                            ": server \"tools\": auth is only allowed in the global mcp.json");
 }

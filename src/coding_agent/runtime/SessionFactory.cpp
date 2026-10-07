@@ -1673,8 +1673,8 @@ struct PreparedAssemblyTarget final {
             co_return std::unexpected(std::move(valid.error()));
         }
         std::shared_ptr<mcp::McpRequestAuthSource> request_auth;
-        if (server.oauth) {
-            if (auto valid = mcp::validate_mcp_oauth_server_config(*server.oauth); !valid) {
+        if (server.resolved_oauth) {
+            if (auto valid = mcp::validate_mcp_oauth_server_config(*server.resolved_oauth); !valid) {
                 cleanup_on_failure();
                 co_await discard_unpublished_session();
                 co_return std::unexpected(std::move(valid.error()));
@@ -1682,7 +1682,7 @@ struct PreparedAssemblyTarget final {
             if (!mcp_credentials) {
                 mcp_credentials = std::make_shared<AuthStorage>(runtime->agent_dir() / "auth.json");
             }
-            auto provider = std::make_shared<mcp::McpOAuthProvider>(*server.oauth);
+            auto provider = std::make_shared<mcp::McpOAuthProvider>(*server.resolved_oauth);
             request_auth = std::make_shared<mcp::McpOAuthTokenResolver>(
                     mcp_credentials, mcp::mcp_oauth_provider_id(server.name), server.name, std::move(provider));
         }

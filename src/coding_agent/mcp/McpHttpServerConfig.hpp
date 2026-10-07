@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coding_agent/mcp/McpOAuthConfig.hpp"
 #include "coding_agent/mcp/McpOAuthServerConfig.hpp"
 #include "coding_agent/mcp/McpServerConfigBase.hpp"
 
@@ -32,12 +33,18 @@ struct McpHttpServerConfig : McpServerConfigBase {
     /// fails with a timeout, and a cancellable request tells the server with
     /// `notifications/cancelled` reason `Request timed out` (pi `cancelPending`).
     std::chrono::milliseconds request_timeout{std::chrono::milliseconds{30000}};
-    /// OAuth sign-in configuration (spec #865, ticket #875). When set, every
-    /// request resolves its access token at request time through the shared
-    /// AuthStorage and attaches an `Authorization: Bearer` header; when absent,
-    /// no credentials are attached. The credential itself lives in `auth.json`
+    /// pi `oauth`: the entry's `oauth` block (spec #882, ticket #884). Its
+    /// presence means the server uses OAuth; the authorization and token
+    /// endpoints are discovered (RFC 9728), so they are not part of the entry.
+    std::optional<McpOAuthConfig> oauth{std::nullopt};
+    /// pi `auth.provider`: send the named `/login` provider's token instead of
+    /// using OAuth. Only allowed in the global `mcp.json` (pi `readConfigFile`).
+    std::optional<std::string> auth_provider{std::nullopt};
+    /// The resolved OAuth endpoints (spec #865, ticket #875). Before OAuth
+    /// discovery (spec #882) these are supplied by configuration; the
+    /// credential itself lives in the shared credential store
     /// (`mcp_oauth_provider_id(name)`), never here.
-    std::optional<McpOAuthServerConfig> oauth{std::nullopt};
+    std::optional<McpOAuthServerConfig> resolved_oauth{std::nullopt};
 };
 
 /// Registration-time TLS gate (ADR 0054): the URL must be a well-formed

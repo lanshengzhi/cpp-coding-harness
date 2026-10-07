@@ -19,6 +19,7 @@
 
 #include "support/Json.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <fstream>
 #include <map>
@@ -69,6 +70,195 @@ using JsonArray = support::JsonValue::array_t;
     return support::make_error(support::ErrorCode::Validation, std::move(message));
 }
 
+/// The loopback hosts a plaintext redirect or metadata URL may name (pi
+/// `LOOPBACK_HOSTS`). `[::1]` keeps its brackets, as JavaScript's `URL`
+/// `hostname` does.
+[[nodiscard]] bool is_loopback_host(std::string_view hostname) {
+    return hostname == "localhost" || hostname == "127.0.0.1" || hostname == "[::1]";
+}
+
+[[nodiscard]] bool is_ascii_digit(char character) { return character >= '0' && character <= '9'; }
+
+/// A decimal port written without signs or spaces. `std::nullopt` when `text`
+/// is empty or not all digits.
+[[nodiscard]] std::optional<int> parse_port(std::string_view text) {
+    if (text.empty() || !std::ranges::all_of(text, is_ascii_digit)) {
+        return std::nullopt;
+    }
+    int value = 0;
+    for (const char character : text) {
+        value = value * 10 + (character - '0');
+    }
+    return value;
+}
+
+/// The parts of an absolute URL pi's `new URL(value)` exposes that the config
+/// validation reads. `valid` is false when the value is not an absolute URL
+/// (`URL.canParse`).
+struct ParsedUrl {
+    std::string protocol;
+    std::string hostname;
+    std::string port;
+    std::string pathname;
+    std::string search;
+    std::string hash;
+    bool valid{false};
+};
+
+[[nodiscard]] ParsedUrl parse_url(std::string_view value) {
+    ParsedUrl url;
+    const auto scheme_end = value.find("://");
+    if (scheme_end == std::string_view::npos || scheme_end == 0) {
+        return url;
+    }
+    url.protocol = std::string{value.substr(0, scheme_end)} + ":";
+    std::string_view rest = value.substr(scheme_end + 3);
+    const auto authority_end = rest.find_first_of("/?#");
+    std::string_view authority = authority_end == std::string_view::npos ? rest : rest.substr(0, authority_end);
+    std::string_view remainder =
+            authority_end == std::string_view::npos ? std::string_view{} : rest.substr(authority_end);
+    if (const auto userinfo = authority.rfind('@'); userinfo != std::string_view::npos) {
+        authority = authority.substr(userinfo + 1);
+    }
+    if (authority.empty()) {
+        return url;
+    }
+    if (authority.front() == '[') {
+        const auto close = authority.find(']');
+        if (close == std::string_view::npos) {
+            return url;
+        }
+        url.hostname = std::string{authority.substr(0, close + 1)};
+        std::string_view after = authority.substr(close + 1);
+        if (after.starts_with(':')) {
+            url.port = std::string{after.substr(1)};
+        }
+    } else if (const auto colon = authority.rfind(':'); colon != std::string_view::npos) {
+        url.hostname = std::string{authority.substr(0, colon)};
+        url.port = std::string{authority.substr(colon + 1)};
+    } else {
+        url.hostname = std::string{authority};
+    }
+    if (url.hostname.empty()) {
+        return url;
+    }
+    std::string_view path = remainder;
+    if (const auto hash_start = path.find('#'); hash_start != std::string_view::npos) {
+        url.hash = std::string{path.substr(hash_start)};
+        path = path.substr(0, hash_start);
+    }
+    if (const auto query_start = path.find('?'); query_start != std::string_view::npos) {
+        url.search = std::string{path.substr(query_start)};
+        path = path.substr(0, query_start);
+    }
+    url.pathname = path.empty() ? "/" : std::string{path};
+    url.valid = true;
+    return url;
+}
+
+/// pi `isLoopbackRedirectUri`: an `http` URI on a loopback host, without query
+/// or fragment.
+[[nodiscard]] bool is_loopback_redirect_uri(std::string_view value) {
+    const ParsedUrl url = parse_url(value);
+    return url.valid && url.protocol == "http:" && is_loopback_host(url.hostname) && url.search.empty() &&
+           url.hash.empty();
+}
+
+/// pi `validateOAuth`: the `oauth` block's field types and cross-field rules,
+/// returning pi's verbatim message (without the `server "<name>": ` prefix) and
+/// filling `out` when valid.
+[[nodiscard]] std::optional<std::string> validate_oauth_block(const support::JsonValue& value, McpOAuthConfig& out) {
+    const auto* object = value.get_if<JsonObject>();
+    if (object == nullptr) {
+        return "oauth must be an object";
+    }
+    const auto read_optional_string = [&](std::string_view key,
+                                              std::optional<std::string>& target) -> std::optional<std::string> {
+        const auto entry = object->find(std::string{key});
+        if (entry == object->end()) {
+            return std::nullopt;
+        }
+        if (!entry->second.holds<std::string>()) {
+            return "oauth." + std::string{key} + " must be a string";
+        }
+        target = entry->second.get_string();
+        return std::nullopt;
+    };
+
+    if (auto error = read_optional_string("clientId", out.client_id)) {
+        return error;
+    }
+    if (auto error = read_optional_string("clientSecret", out.client_secret)) {
+        return error;
+    }
+    const auto callback_port = object->find("callbackPort");
+    if (callback_port != object->end()) {
+        const auto* number = callback_port->second.get_if<double>();
+        if (number == nullptr || *number != static_cast<double>(static_cast<int>(*number)) || *number < 1 ||
+                *number > 65535) {
+            return "oauth.callbackPort must be a port number";
+        }
+        out.callback_port = static_cast<int>(*number);
+    }
+    const auto callback_url = object->find("callbackUrl");
+    if (callback_url != object->end()) {
+        if (!callback_url->second.holds<std::string>() ||
+                !is_loopback_redirect_uri(callback_url->second.get_string())) {
+            return "oauth.callbackUrl must be an http URI on localhost, 127.0.0.1, or [::1] without query or "
+                   "fragment";
+        }
+        out.callback_url = callback_url->second.get_string();
+        const std::optional<int> url_port = parse_port(parse_url(*out.callback_url).port);
+        if (url_port.has_value() && out.callback_port.has_value() && *url_port != *out.callback_port) {
+            return "oauth.callbackUrl and oauth.callbackPort name different ports";
+        }
+    }
+    if (auto error = read_optional_string("scope", out.scope)) {
+        return error;
+    }
+    if (auto error = read_optional_string("clientName", out.client_name)) {
+        return error;
+    }
+    if (out.client_name.has_value() && out.client_name->find_first_not_of(" \t\n\r\f\v") == std::string::npos) {
+        return "oauth.clientName must be a non-empty string";
+    }
+    if (const auto registration = object->find("clientRegistration"); registration != object->end()) {
+        if (!registration->second.holds<std::string>()) {
+            return "oauth.clientRegistration must be \"dcr\" or \"cimd\"";
+        }
+        const std::string& spelling = registration->second.get_string();
+        if (spelling == "dcr") {
+            out.client_registration = McpClientRegistration::Dcr;
+        } else if (spelling == "cimd") {
+            out.client_registration = McpClientRegistration::Cimd;
+            if (out.client_id.has_value() || out.client_name.has_value()) {
+                return "oauth.clientRegistration \"cimd\" cannot be combined with oauth.clientId or "
+                       "oauth.clientName";
+            }
+            if (out.callback_url.has_value()) {
+                const ParsedUrl callback = parse_url(*out.callback_url);
+                if (callback.hostname == "[::1]" || callback.pathname != "/callback") {
+                    return "oauth.clientRegistration \"cimd\" requires oauth.callbackUrl on localhost or "
+                           "127.0.0.1 with path /callback";
+                }
+            }
+        } else {
+            return "oauth.clientRegistration must be \"dcr\" or \"cimd\"";
+        }
+    }
+    const auto metadata_url = object->find("authServerMetadataUrl");
+    if (metadata_url != object->end()) {
+        const ParsedUrl parsed =
+                metadata_url->second.holds<std::string>() ? parse_url(metadata_url->second.get_string()) : ParsedUrl{};
+        const bool allowed = parsed.valid && (parsed.protocol == "https:" ||
+                                                     (parsed.protocol == "http:" && is_loopback_host(parsed.hostname)));
+        if (!allowed) {
+            return "oauth.authServerMetadataUrl must be an https URL, or http on localhost, 127.0.0.1, or [::1]";
+        }
+        out.auth_server_metadata_url = metadata_url->second.get_string();
+    }
+    return std::nullopt;
+}
 /// Read a config file's text. `std::nullopt` when the file is missing or
 /// unreadable.
 [[nodiscard]] std::optional<std::string> read_text_file(const std::filesystem::path& path) {
@@ -267,6 +457,37 @@ support::Expected<McpServerConfigVariant> validate_mcp_server_config(
         if (auto error = read_string_map(*object, "headers", config.headers)) {
             return std::unexpected(config_error("server \"" + server + "\": " + *error));
         }
+        // pi `validateOAuth`: `oauth` is validated before `auth`, and both
+        // messages carry the `server "<name>": ` prefix.
+        if (const auto entry = object->find("oauth"); entry != object->end()) {
+            McpOAuthConfig oauth;
+            if (auto error = validate_oauth_block(entry->second, oauth)) {
+                return std::unexpected(config_error("server \"" + server + "\": " + *error));
+            }
+            config.oauth = std::move(oauth);
+        }
+        if (const auto entry = object->find("auth"); entry != object->end()) {
+            const auto* auth = entry->second.get_if<JsonObject>();
+            std::optional<std::string> provider;
+            if (auth != nullptr) {
+                const auto provider_entry = auth->find("provider");
+                if (provider_entry != auth->end() && provider_entry->second.holds<std::string>() &&
+                        !provider_entry->second.get_string().empty()) {
+                    provider = provider_entry->second.get_string();
+                }
+            }
+            if (!provider) {
+                return std::unexpected(
+                        config_error("server \"" + server + "\": auth.provider must be a provider name"));
+            }
+            const ParsedUrl parsed = parse_url(config.url);
+            if (parsed.protocol != "https:" && !is_loopback_host(parsed.hostname)) {
+                return std::unexpected(
+                        config_error("server \"" + server +
+                                     "\": auth requires an https URL, or http on localhost, 127.0.0.1, or [::1]"));
+            }
+            config.auth_provider = std::move(provider);
+        }
         return McpServerConfigVariant{std::move(config)};
     }
     if (has_command && (type.empty() || type == "stdio")) {
@@ -411,6 +632,16 @@ void read_config_file(const std::filesystem::path& path,
         }
         if (clash) {
             continue;
+        }
+        // pi: a project file cannot choose where a credential goes, so `auth`
+        // is only allowed in the global `mcp.json`.
+        if (project) {
+            if (const auto* http = std::get_if<McpHttpServerConfig>(&*validated);
+                    http != nullptr && http->auth_provider.has_value()) {
+                load.errors.push_back(
+                        path.string() + ": server \"" + name + "\": auth is only allowed in the global mcp.json");
+                continue;
+            }
         }
         if (const auto existing = index.find(name); existing != index.end()) {
             load.servers[existing->second] = std::move(entry);
