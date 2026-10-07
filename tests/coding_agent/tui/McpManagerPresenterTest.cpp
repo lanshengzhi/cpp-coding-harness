@@ -191,10 +191,8 @@ private:
         dependencies.connections = fixture.factory;
         dependencies.tools = fixture.surface;
         dependencies.auth = fixture.auth;
-        fixture.manager = std::make_unique<McpSessionManager>(std::move(load),
-                std::move(agent_dir),
-                std::vector<std::string>{},
-                std::move(dependencies));
+        fixture.manager = std::make_unique<McpSessionManager>(
+                std::move(load), std::move(agent_dir), std::vector<std::string>{}, std::move(dependencies));
         fixture.presenter = std::make_unique<coding_agent::tui::McpManagerPresenter>(*fixture.manager);
         fixture.connection = std::make_shared<TestConnection>();
         fixture.connection->name = std::move(first_name);

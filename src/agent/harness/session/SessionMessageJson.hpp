@@ -91,6 +91,9 @@ struct ToolDto {
     std::string name;
     std::string description;
     glz::generic parameters;
+    /// pi `Tool.outputSchema`: the tool's declared output JSON-schema object,
+    /// carried as generic JSON like `parameters`.
+    std::optional<glz::generic> outputSchema{std::nullopt};
 };
 
 /// pi `ToolReference`: the name of a tool a system message stops declaring.
@@ -666,6 +669,9 @@ template <typename Block, typename Convert>
             .name = tool.name,
             .description = tool.description,
             .parameters = support::json_to_glaze(tool.parameters),
+            .outputSchema = tool.output_schema
+                                    ? std::optional<glz::generic>{support::json_to_glaze(*tool.output_schema)}
+                                    : std::nullopt,
     };
 }
 
@@ -674,6 +680,9 @@ template <typename Block, typename Convert>
             .name = dto.name,
             .description = dto.description,
             .parameters = support::json_from_glaze(dto.parameters),
+            .output_schema = dto.outputSchema
+                                     ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.outputSchema)}
+                                     : std::nullopt,
     };
 }
 

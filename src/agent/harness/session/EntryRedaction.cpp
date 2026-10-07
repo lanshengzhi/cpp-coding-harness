@@ -124,6 +124,11 @@ void redact_diagnostic_entry(ai::DiagnosticEntry& entry) {
                         tool.name = support::redact_text(std::move(tool.name));
                         tool.description = support::redact_text(std::move(tool.description));
                         tool.parameters = redact_json_value(tool.parameters);
+                        // pi `Tool.outputSchema`: schema-shaped tool-definition
+                        // text, the same class as `parameters` (ADR 0026:23; #666).
+                        if (tool.output_schema) {
+                            *tool.output_schema = redact_json_value(std::move(*tool.output_schema));
+                        }
                     }
                     for (auto& reference : concrete.tools_removed) {
                         reference.name = support::redact_text(std::move(reference.name));

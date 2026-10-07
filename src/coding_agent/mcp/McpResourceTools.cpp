@@ -307,7 +307,8 @@ using extensions::ExtensionToolResult;
         co_return std::unexpected(error("cursor can only be used when a server is specified"));
     }
 
-    std::sort(servers.begin(), servers.end(),
+    std::sort(servers.begin(),
+            servers.end(),
             [](const std::shared_ptr<McpResourceServer>& left, const std::shared_ptr<McpResourceServer>& right) {
                 return left->name() < right->name();
             });
@@ -396,9 +397,9 @@ using extensions::ExtensionToolResult;
             outcome.content.push_back(ai::image_content(*blob, *mime_type));
         } else if (blob != nullptr) {
             const std::string kind = (mime_type != nullptr && !mime_type->empty()) ? *mime_type : "binary";
-            outcome.content.push_back(ai::text_content("[Binary resource " +
-                                                       (content_uri != nullptr ? *content_uri : std::string{}) + " (" + kind +
-                                                       ") not shown inline; its base64 is in the result details]"));
+            outcome.content.push_back(
+                    ai::text_content("[Binary resource " + (content_uri != nullptr ? *content_uri : std::string{}) +
+                                     " (" + kind + ") not shown inline; its base64 is in the result details]"));
         }
     }
     outcome.details = std::move(payload);
@@ -422,9 +423,7 @@ using extensions::ExtensionToolResult;
             {"type", "object"},
             {"properties",
                     support::JsonValue::object_t{
-                            {"server",
-                                    string_property(
-                                            "MCP server name. Omit to list every server with resources.")},
+                            {"server", string_property("MCP server name. Omit to list every server with resources.")},
                             {"cursor",
                                     string_property("Opaque cursor from a previous call with the same server; omit for "
                                                     "the first page.")},
@@ -443,9 +442,8 @@ using extensions::ExtensionToolResult;
                                     string_property("MCP server name exactly as configured. Must match the 'server' "
                                                     "field returned by list_mcp_resources.")},
                             {"uri",
-                                    string_property(
-                                            "Resource URI to read. Must be one of the URIs returned by "
-                                            "list_mcp_resources.")},
+                                    string_property("Resource URI to read. Must be one of the URIs returned by "
+                                                    "list_mcp_resources.")},
                     }},
             {"required", support::JsonValue::array_t{"server", "uri"}},
             {"additionalProperties", false},
@@ -494,8 +492,7 @@ using extensions::ExtensionToolResult;
                                                                                     support::JsonValue::object_t{
                                                                                             {"type", "string"}}},
                                                                             {"title", optional_string_property()},
-                                                                            {"description",
-                                                                                    optional_string_property()},
+                                                                            {"description", optional_string_property()},
                                                                             {"mimeType", optional_string_property()},
                                                                             {"size",
                                                                                     support::JsonValue::object_t{
@@ -541,10 +538,8 @@ using extensions::ExtensionToolResult;
                                                                                     support::JsonValue::object_t{
                                                                                             {"type", "string"}}},
                                                                             {"title", optional_string_property()},
-                                                                            {"description",
-                                                                                    optional_string_property()},
-                                                                            {"mimeType",
-                                                                                    optional_string_property()},
+                                                                            {"description", optional_string_property()},
+                                                                            {"mimeType", optional_string_property()},
                                                                     }},
                                                             {"required",
                                                                     support::JsonValue::array_t{
@@ -573,48 +568,68 @@ using extensions::ExtensionToolResult;
                                                     support::JsonValue::object_t{
                                                             {"anyOf",
                                                                     support::JsonValue::array_t{
-                                                                            support::JsonValue{
-                                                                                    support::JsonValue::object_t{
-                                                                                            {"type", "object"},
-                                                                                            {"properties",
-                                                                                                    support::JsonValue::object_t{
-                                                                                                            {"uri",
-                                                                                                                    support::JsonValue::object_t{
-                                                                                                                            {"type",
-                                                                                                                             "string"}}},
-                                                                                                            {"mimeType",
-                                                                                                                    optional_string_property()},
-                                                                                                            {"text",
-                                                                                                                    support::JsonValue::object_t{
-                                                                                                                            {"type",
-                                                                                                                             "string"}}},
-                                                                                                    }},
-                                                                                            {"required",
-                                                                                                    support::JsonValue::array_t{
-                                                                                                            "uri", "text"}},
-                                                                                    }},
-                                                                            support::JsonValue{
-                                                                                    support::JsonValue::object_t{
-                                                                                            {"type", "object"},
-                                                                                            {"properties",
-                                                                                                    support::JsonValue::object_t{
-                                                                                                            {"uri",
-                                                                                                                    support::JsonValue::object_t{
-                                                                                                                            {"type",
-                                                                                                                             "string"}}},
-                                                                                                            {"mimeType",
-                                                                                                                    optional_string_property()},
-                                                                                                            {"blob",
-                                                                                                                    support::JsonValue::object_t{
-                                                                                                                            {"type",
-                                                                                                                             "string"},
-                                                                                                                            {"description",
-                                                                                                                             "base64"}}},
-                                                                                                    }},
-                                                                                            {"required",
-                                                                                                    support::JsonValue::array_t{
-                                                                                                            "uri", "blob"}},
-                                                                                    }},
+                                                                            support::JsonValue{support::JsonValue::object_t{
+                                                                                    {"type", "object"},
+                                                                                    {"properties",
+                                                                                            support::JsonValue::object_t{
+                                                                                                    {"uri",
+                                                                                                            support::JsonValue::object_t{
+                                                                                                                    {"t"
+                                                                                                                     "y"
+                                                                                                                     "p"
+                                                                                                                     "e",
+                                                                                                                            "string"}}},
+                                                                                                    {"mimeType",
+                                                                                                            optional_string_property()},
+                                                                                                    {"text",
+                                                                                                            support::JsonValue::object_t{
+                                                                                                                    {"t"
+                                                                                                                     "y"
+                                                                                                                     "p"
+                                                                                                                     "e",
+                                                                                                                            "string"}}},
+                                                                                            }},
+                                                                                    {"required",
+                                                                                            support::JsonValue::array_t{
+                                                                                                    "uri", "text"}},
+                                                                            }},
+                                                                            support::JsonValue{support::JsonValue::object_t{
+                                                                                    {"type", "object"},
+                                                                                    {"properties",
+                                                                                            support::JsonValue::object_t{
+                                                                                                    {"uri",
+                                                                                                            support::JsonValue::object_t{
+                                                                                                                    {"t"
+                                                                                                                     "y"
+                                                                                                                     "p"
+                                                                                                                     "e",
+                                                                                                                            "string"}}},
+                                                                                                    {"mimeType",
+                                                                                                            optional_string_property()},
+                                                                                                    {"blob",
+                                                                                                            support::JsonValue::object_t{
+                                                                                                                    {"t"
+                                                                                                                     "y"
+                                                                                                                     "p"
+                                                                                                                     "e",
+                                                                                                                            "string"},
+                                                                                                                    {"d"
+                                                                                                                     "e"
+                                                                                                                     "s"
+                                                                                                                     "c"
+                                                                                                                     "r"
+                                                                                                                     "i"
+                                                                                                                     "p"
+                                                                                                                     "t"
+                                                                                                                     "i"
+                                                                                                                     "o"
+                                                                                                                     "n",
+                                                                                                                            "base64"}}},
+                                                                                            }},
+                                                                                    {"required",
+                                                                                            support::JsonValue::array_t{
+                                                                                                    "uri", "blob"}},
+                                                                            }},
                                                                     }},
                                                     }},
                                     }},
@@ -628,29 +643,29 @@ constexpr std::string_view kListResourcesDescription =
         "language models, such as files, database schemas, or application-specific information. Prefer resources over "
         "web search when possible.";
 constexpr std::string_view kListResourceTemplatesDescription =
-        "Lists resource templates provided by MCP servers. Parameterized resource templates allow servers to share data "
+        "Lists resource templates provided by MCP servers. Parameterized resource templates allow servers to share "
+        "data "
         "that takes parameters and provides context to language models, such as files, database schemas, or "
         "application-specific information. Prefer resource templates over web search when possible.";
 constexpr std::string_view kReadResourceDescription =
         "Read a specific resource from an MCP server given the server name and resource URI.";
 
-[[nodiscard]] ExtensionTool make_list_tool(
-        std::vector<std::shared_ptr<McpResourceServer>> servers, bool templates) {
+[[nodiscard]] ExtensionTool make_list_tool(std::vector<std::shared_ptr<McpResourceServer>> servers, bool templates) {
     ExtensionTool tool;
     tool.definition.name = std::string{templates ? kListMcpResourceTemplatesTool : kListMcpResourcesTool};
-    tool.definition.description = std::string{templates ? kListResourceTemplatesDescription : kListResourcesDescription};
+    tool.definition.description =
+            std::string{templates ? kListResourceTemplatesDescription : kListResourcesDescription};
     tool.definition.parameters = list_parameters();
     tool.definition.output_schema = templates ? list_templates_output_schema() : list_output_schema();
     // pi MCP tools carry no `executionMode`; the transports serialize frames
     // internally, which keeps parallel-safe listing safe.
     tool.concurrency = agent::ToolConcurrency::ParallelSafe;
-    tool.execute = [servers = std::move(servers), templates](
-                           support::JsonValue arguments, std::stop_token stop_token) {
-        return support::detail::make_async_result([servers, templates, arguments = std::move(arguments), stop_token]()
-                                                          mutable -> boost::asio::awaitable<
-                                                                  support::Expected<ExtensionToolResult>> {
-            co_return co_await run_list(std::move(servers), std::move(arguments), templates, stop_token);
-        });
+    tool.execute = [servers = std::move(servers), templates](support::JsonValue arguments, std::stop_token stop_token) {
+        return support::detail::make_async_result(
+                [servers, templates, arguments = std::move(arguments), stop_token]() mutable
+                        -> boost::asio::awaitable<support::Expected<ExtensionToolResult>> {
+                    co_return co_await run_list(std::move(servers), std::move(arguments), templates, stop_token);
+                });
     };
     return tool;
 }
@@ -681,82 +696,80 @@ const std::string& McpConnectionResourceServer::name() const noexcept { return c
 support::AsyncResult<support::JsonValue> McpConnectionResourceServer::resources_page(
         std::optional<std::string> cursor, std::stop_token stop_token) {
     auto connection = connection_;
-    return support::detail::make_async_result(
-            [connection, cursor = std::move(cursor), stop_token]() -> boost::asio::awaitable<
-                    support::Expected<support::JsonValue>> {
-                std::optional<support::JsonValue> params;
-                if (cursor.has_value()) {
-                    params = support::JsonValue{support::JsonValue::object_t{{"cursor", *cursor}}};
-                }
-                auto result = co_await support::detail::await_async_result(
-                        connection->request("resources/list", std::move(params), stop_token));
-                if (!result) {
-                    co_return std::unexpected(std::move(result.error()));
-                }
-                auto list = list_items(*result, "resources");
-                if (!list) {
-                    co_return std::unexpected(std::move(list.error()));
-                }
-                // pi's client defaults a missing resource `name` from its `uri`.
-                auto* items = result->get_object().at("resources").get_if<support::JsonValue::array_t>();
-                for (auto& item : *items) {
-                    if (auto* object = item.get_if<support::JsonValue::object_t>()) {
-                        if (string_field(*object, "name") == nullptr) {
-                            if (const std::string* uri = string_field(*object, "uri")) {
-                                object->emplace("name", *uri);
-                            }
-                        }
+    return support::detail::make_async_result([connection, cursor = std::move(cursor), stop_token]()
+                                                      -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+        std::optional<support::JsonValue> params;
+        if (cursor.has_value()) {
+            params = support::JsonValue{support::JsonValue::object_t{{"cursor", *cursor}}};
+        }
+        auto result = co_await support::detail::await_async_result(
+                connection->request("resources/list", std::move(params), stop_token));
+        if (!result) {
+            co_return std::unexpected(std::move(result.error()));
+        }
+        auto list = list_items(*result, "resources");
+        if (!list) {
+            co_return std::unexpected(std::move(list.error()));
+        }
+        // pi's client defaults a missing resource `name` from its `uri`.
+        auto* items = result->get_object().at("resources").get_if<support::JsonValue::array_t>();
+        for (auto& item : *items) {
+            if (auto* object = item.get_if<support::JsonValue::object_t>()) {
+                if (string_field(*object, "name") == nullptr) {
+                    if (const std::string* uri = string_field(*object, "uri")) {
+                        object->emplace("name", *uri);
                     }
                 }
-                co_return *result;
-            });
+            }
+        }
+        co_return *result;
+    });
 }
 
 support::AsyncResult<support::JsonValue> McpConnectionResourceServer::resource_templates_page(
         std::optional<std::string> cursor, std::stop_token stop_token) {
     auto connection = connection_;
-    return support::detail::make_async_result(
-            [connection, cursor = std::move(cursor), stop_token]() -> boost::asio::awaitable<
-                    support::Expected<support::JsonValue>> {
-                std::optional<support::JsonValue> params;
-                if (cursor.has_value()) {
-                    params = support::JsonValue{support::JsonValue::object_t{{"cursor", *cursor}}};
-                }
-                auto result = co_await support::detail::await_async_result(
-                        connection->request("resources/templates/list", std::move(params), stop_token));
-                if (!result) {
-                    if (is_method_not_found(result.error())) {
-                        co_return support::JsonValue{support::JsonValue::object_t{
-                                {"resourceTemplates", support::JsonValue::array_t{}}}};
-                    }
-                    co_return std::unexpected(std::move(result.error()));
-                }
-                auto list = list_items(*result, "resourceTemplates");
-                if (!list) {
-                    co_return std::unexpected(std::move(list.error()));
-                }
-                // pi defaults a missing template `name` from its `uriTemplate`.
-                auto* items = result->get_object().at("resourceTemplates").get_if<support::JsonValue::array_t>();
-                for (auto& item : *items) {
-                    if (auto* object = item.get_if<support::JsonValue::object_t>()) {
-                        if (string_field(*object, "name") == nullptr) {
-                            if (const std::string* uri_template = string_field(*object, "uriTemplate")) {
-                                object->emplace("name", *uri_template);
-                            }
-                        }
+    return support::detail::make_async_result([connection, cursor = std::move(cursor), stop_token]()
+                                                      -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+        std::optional<support::JsonValue> params;
+        if (cursor.has_value()) {
+            params = support::JsonValue{support::JsonValue::object_t{{"cursor", *cursor}}};
+        }
+        auto result = co_await support::detail::await_async_result(
+                connection->request("resources/templates/list", std::move(params), stop_token));
+        if (!result) {
+            if (is_method_not_found(result.error())) {
+                co_return support::JsonValue{
+                        support::JsonValue::object_t{{"resourceTemplates", support::JsonValue::array_t{}}}};
+            }
+            co_return std::unexpected(std::move(result.error()));
+        }
+        auto list = list_items(*result, "resourceTemplates");
+        if (!list) {
+            co_return std::unexpected(std::move(list.error()));
+        }
+        // pi defaults a missing template `name` from its `uriTemplate`.
+        auto* items = result->get_object().at("resourceTemplates").get_if<support::JsonValue::array_t>();
+        for (auto& item : *items) {
+            if (auto* object = item.get_if<support::JsonValue::object_t>()) {
+                if (string_field(*object, "name") == nullptr) {
+                    if (const std::string* uri_template = string_field(*object, "uriTemplate")) {
+                        object->emplace("name", *uri_template);
                     }
                 }
-                co_return *result;
-            });
+            }
+        }
+        co_return *result;
+    });
 }
 
 support::AsyncResult<support::JsonValue> McpConnectionResourceServer::read_resource(
         std::string uri, std::stop_token stop_token) {
     auto connection = connection_;
-    return support::detail::make_async_result([connection, uri = std::move(uri), stop_token]() -> boost::asio::awaitable<
-            support::Expected<support::JsonValue>> {
-        co_return co_await support::detail::await_async_result(connection->request("resources/read",
-                support::JsonValue{support::JsonValue::object_t{{"uri", uri}}}, stop_token));
+    return support::detail::make_async_result([connection, uri = std::move(uri), stop_token]()
+                                                      -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+        co_return co_await support::detail::await_async_result(connection->request(
+                "resources/read", support::JsonValue{support::JsonValue::object_t{{"uri", uri}}}, stop_token));
     });
 }
 
@@ -767,8 +780,7 @@ support::AsyncResult<McpResourceSnapshot> fetch_mcp_resource_snapshot(
                 McpResourceSnapshot snapshot;
                 std::optional<std::string> cursor;
                 for (;;) {
-                    auto page = co_await support::detail::await_async_result(
-                            server.resources_page(cursor, stop_token));
+                    auto page = co_await support::detail::await_async_result(server.resources_page(cursor, stop_token));
                     if (!page) {
                         break;
                     }
@@ -826,13 +838,13 @@ std::vector<ExtensionTool> create_mcp_resource_tools(std::vector<std::shared_ptr
     read_tool.definition.parameters = read_parameters();
     read_tool.definition.output_schema = read_output_schema();
     read_tool.concurrency = agent::ToolConcurrency::ParallelSafe;
-    read_tool.execute = [servers = std::move(servers)](
-                                support::JsonValue arguments, std::stop_token stop_token) {
-        return support::detail::make_async_result([servers, arguments = std::move(arguments), stop_token]() mutable
-                                                          -> boost::asio::awaitable<
-                                                                  support::Expected<ExtensionToolResult>> {
-            co_return co_await run_read(std::move(servers), std::move(arguments), stop_token);
-        });
+    read_tool.execute = [servers = std::move(servers)](support::JsonValue arguments, std::stop_token stop_token) {
+        return support::detail::make_async_result(
+                [servers,
+                        arguments = std::move(arguments),
+                        stop_token]() mutable -> boost::asio::awaitable<support::Expected<ExtensionToolResult>> {
+                    co_return co_await run_read(std::move(servers), std::move(arguments), stop_token);
+                });
     };
     tools.push_back(std::move(read_tool));
     return tools;

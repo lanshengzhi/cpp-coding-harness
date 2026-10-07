@@ -66,9 +66,8 @@ using coding_agent::mcp::McpResourceSnapshot;
 /// follow `nextCursor`.
 class ScriptedResourceServer final : public McpResourceServer {
 public:
-    ScriptedResourceServer(std::string name,
-            std::vector<support::JsonValue> resources,
-            std::vector<support::JsonValue> templates = {})
+    ScriptedResourceServer(
+            std::string name, std::vector<support::JsonValue> resources, std::vector<support::JsonValue> templates = {})
         : name_(std::move(name)), resources_(std::move(resources)), templates_(std::move(templates)) {}
 
     [[nodiscard]] const std::string& name() const noexcept override { return name_; }
@@ -184,9 +183,7 @@ private:
     return *result.details;
 }
 
-[[nodiscard]] std::string tool_text(const ExtensionToolResult& result) {
-    return ai::text_from_content(result.content);
-}
+[[nodiscard]] std::string tool_text(const ExtensionToolResult& result) { return ai::text_from_content(result.content); }
 
 } // namespace
 
@@ -198,17 +195,17 @@ TEST_CASE("the three resource tools carry pi's verbatim descriptions, parameters
 
     CHECK(tools[0].definition.name == "list_mcp_resources");
     CHECK(tools[0].definition.description ==
-          "Lists resources provided by MCP servers. Resources allow servers to share data that provides context to "
-          "language models, such as files, database schemas, or application-specific information. Prefer resources "
-          "over web search when possible.");
+            "Lists resources provided by MCP servers. Resources allow servers to share data that provides context to "
+            "language models, such as files, database schemas, or application-specific information. Prefer resources "
+            "over web search when possible.");
     CHECK(tools[1].definition.name == "list_mcp_resource_templates");
     CHECK(tools[1].definition.description ==
-          "Lists resource templates provided by MCP servers. Parameterized resource templates allow servers to share "
-          "data that takes parameters and provides context to language models, such as files, database schemas, or "
-          "application-specific information. Prefer resource templates over web search when possible.");
+            "Lists resource templates provided by MCP servers. Parameterized resource templates allow servers to share "
+            "data that takes parameters and provides context to language models, such as files, database schemas, or "
+            "application-specific information. Prefer resource templates over web search when possible.");
     CHECK(tools[2].definition.name == "read_mcp_resource");
     CHECK(tools[2].definition.description ==
-          "Read a specific resource from an MCP server given the server name and resource URI.");
+            "Read a specific resource from an MCP server given the server name and resource URI.");
 
     // The list tools share pi's `LIST_PARAMETERS`; read declares `required`
     // `[server, uri]`.
@@ -222,8 +219,9 @@ TEST_CASE("the three resource tools carry pi's verbatim descriptions, parameters
                                                     "MCP server name. Omit to list every server with resources."}})},
                             {"cursor",
                                     object({{"type", "string"},
-                                            {"description", "Opaque cursor from a previous call with the same server; "
-                                                            "omit for the first page."}})},
+                                            {"description",
+                                                    "Opaque cursor from a previous call with the same server; "
+                                                    "omit for the first page."}})},
                     })},
             {"additionalProperties", false},
     });
@@ -254,7 +252,9 @@ TEST_CASE("list_mcp_resources without a server lists every page of every server 
                             {"size", 3},
                             {"_meta", object({{"hidden", true}})},
                             {"icons", array({object({{"src", "data:,"}})})}}),
-                    object({{"uri", "ui://widget/a.html"}, {"name", "widget"}, {"mimeType", "text/html;profile=mcp-app"}}),
+                    object({{"uri", "ui://widget/a.html"},
+                            {"name", "widget"},
+                            {"mimeType", "text/html;profile=mcp-app"}}),
                     object({{"uri", "notes://scratch"}}),
             });
     auto zeta = std::make_shared<ScriptedResourceServer>("zeta", std::vector<support::JsonValue>{});
@@ -342,8 +342,7 @@ TEST_CASE("an unknown server names every server the resource tools reach", "[cod
 
     auto outcome = run_tool(runtime, tools[0], object({{"server", "nope"}}));
     REQUIRE_FALSE(outcome.has_value());
-    CHECK(outcome.error().message ==
-          "MCP server \"nope\" has no resources. Servers with resources: beta, alpha");
+    CHECK(outcome.error().message == "MCP server \"nope\" has no resources. Servers with resources: beta, alpha");
 }
 
 TEST_CASE("list_mcp_resource_templates uses `resourceTemplates` and defaults a missing name",
@@ -353,7 +352,9 @@ TEST_CASE("list_mcp_resource_templates uses `resourceTemplates` and defaults a m
             std::vector<support::JsonValue>{},
             std::vector<support::JsonValue>{
                     object({{"uriTemplate", "db://{table}/rows"}, {"name", "rows"}}),
-                    object({{"uriTemplate", "ui://widget/{id}"}, {"name", "widget"}, {"mimeType", "text/html;profile=mcp-app"}}),
+                    object({{"uriTemplate", "ui://widget/{id}"},
+                            {"name", "widget"},
+                            {"mimeType", "text/html;profile=mcp-app"}}),
             });
     auto tools = coding_agent::mcp::create_mcp_resource_tools({alpha});
 
@@ -375,9 +376,9 @@ TEST_CASE("read_mcp_resource returns the contents shape with `_meta` stripped", 
     auto alpha = std::make_shared<ScriptedResourceServer>("alpha", std::vector<support::JsonValue>{});
     alpha->reads.emplace("file:///a.txt",
             std::vector<support::JsonValue>{object({{"uri", "file:///a.txt"},
-                                                    {"mimeType", "text/plain"},
-                                                    {"text", "hello"},
-                                                    {"_meta", object({{"x", 1}})}})});
+                    {"mimeType", "text/plain"},
+                    {"text", "hello"},
+                    {"_meta", object({{"x", 1}})}})});
     alpha->reads.emplace("blob://image",
             std::vector<support::JsonValue>{
                     object({{"uri", "blob://image"}, {"mimeType", "image/png"}, {"blob", "aGVsbG8="}})});
@@ -472,9 +473,9 @@ TEST_CASE("the real stdio fixture lists, templates, and reads over `resources/*`
 
     // Connected-time snapshot: the `ui://` and `profile=mcp-app` entries are
     // filtered out of the resources and templates the server lists.
-    auto snapshot = tests::run_awaitable(
-            runtime, support::detail::await_async_result(
-                             coding_agent::mcp::fetch_mcp_resource_snapshot(*server, std::stop_token{})));
+    auto snapshot = tests::run_awaitable(runtime,
+            support::detail::await_async_result(
+                    coding_agent::mcp::fetch_mcp_resource_snapshot(*server, std::stop_token{})));
     REQUIRE(snapshot.has_value());
     CHECK(snapshot->has_resources);
     REQUIRE(snapshot->resources.size() == 2);
@@ -497,15 +498,15 @@ TEST_CASE("the real stdio fixture lists, templates, and reads over `resources/*`
     REQUIRE(listed_templates.size() == 1);
     CHECK(listed_templates[0].get_object().at("uriTemplate").get_string() == "db://{table}/rows");
 
-    auto read = run_tool(
-            runtime, tools[2], object({{"server", "echo"}, {"uri", "file:///docs/readme.md"}}));
+    auto read = run_tool(runtime, tools[2], object({{"server", "echo"}, {"uri", "file:///docs/readme.md"}}));
     REQUIRE(read.has_value());
     const support::JsonValue expected = object({
             {"server", "echo"},
             {"uri", "file:///docs/readme.md"},
             {"contents",
-                    array({object(
-                            {{"uri", "file:///docs/readme.md"}, {"mimeType", "text/markdown"}, {"text", "# readme\n"}})})},
+                    array({object({{"uri", "file:///docs/readme.md"},
+                            {"mimeType", "text/markdown"},
+                            {"text", "# readme\n"}})})},
     });
     const auto mismatch = tests::json_mismatch(expected, payload_of(*read));
     CHECK_FALSE(mismatch.has_value());
@@ -515,16 +516,14 @@ TEST_CASE("the real stdio fixture lists, templates, and reads over `resources/*`
     CHECK(tool_text(*read) == std::string{"# readme\n"});
 }
 
-TEST_CASE("converted MCP tools declare pi's CallToolResult output schema",
-        "[coding_agent][mcp][issue884][spec]") {
+TEST_CASE("converted MCP tools declare pi's CallToolResult output schema", "[coding_agent][mcp][issue884][spec]") {
     // A server tool with no `outputSchema` still declares the MCP result shape.
     const auto without_structured = coding_agent::mcp::create_mcp_result_schema(std::nullopt);
     const support::JsonValue expected_without = object({
             {"type", "object"},
             {"properties",
                     object({
-                            {"content",
-                                    object({{"type", "array"}, {"items", object({{"type", "object"}})}})},
+                            {"content", object({{"type", "array"}, {"items", object({{"type", "object"}})}})},
                             {"isError", object({{"type", "boolean"}})},
                             {"_meta", object({{"type", "object"}})},
                     })},
@@ -533,12 +532,11 @@ TEST_CASE("converted MCP tools declare pi's CallToolResult output schema",
     CHECK_FALSE(tests::json_mismatch(expected_without, without_structured).has_value());
 
     // A server tool's own `outputSchema` nests as `structuredContent`.
-    const support::JsonValue structured = object({{"type", "object"}, {"properties", object({{"total", object({{"type", "number"}})}})}});
+    const support::JsonValue structured =
+            object({{"type", "object"}, {"properties", object({{"total", object({{"type", "number"}})}})}});
     const auto with_structured = coding_agent::mcp::create_mcp_result_schema(structured);
-    const auto structured_property = with_structured.get_object()
-                                             .at("properties")
-                                             .get_object()
-                                             .find("structuredContent");
+    const auto structured_property =
+            with_structured.get_object().at("properties").get_object().find("structuredContent");
     REQUIRE(structured_property != with_structured.get_object().at("properties").get_object().end());
     CHECK_FALSE(tests::json_mismatch(structured, structured_property->second).has_value());
 }
