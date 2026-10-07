@@ -115,8 +115,7 @@ public:
 class McpLiveNotificationRouter final : public mcp::McpResourceChangeListener {
 public:
     McpLiveNotificationRouter(
-            McpLiveConnection::ToolsChangedListener on_tools,
-            McpLiveConnection::ResourcesChangedListener on_resources);
+            McpLiveConnection::ToolsChangedListener on_tools, McpLiveConnection::ResourcesChangedListener on_resources);
 
     /// pi runtime's `notifications/message` switch: a `tools/list_changed`
     /// re-lists and notifies `on_tools`; a `resources/list_changed` re-lists

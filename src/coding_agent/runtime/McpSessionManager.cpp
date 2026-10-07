@@ -53,7 +53,8 @@ using mcp::McpServerConfigBase;
 [[nodiscard]] bool is_enabled(const McpConfigEntry& entry) { return entry.enabled; }
 
 /// pi `configPatch`: the exposure value as the write half's patch.
-[[nodiscard]] mcp::McpServerConfigPatch patch_for_optional(std::optional<bool> enabled, std::optional<McpExposure> exposure) {
+[[nodiscard]] mcp::McpServerConfigPatch patch_for_optional(
+        std::optional<bool> enabled, std::optional<McpExposure> exposure) {
     mcp::McpServerConfigPatch patch;
     patch.enabled = enabled;
     patch.exposure = exposure;
@@ -96,8 +97,8 @@ std::string_view mcp_server_state_name(McpServerState state) {
     return "connecting";
 }
 
-McpLiveNotificationRouter::McpLiveNotificationRouter(McpLiveConnection::ToolsChangedListener on_tools,
-        McpLiveConnection::ResourcesChangedListener on_resources)
+McpLiveNotificationRouter::McpLiveNotificationRouter(
+        McpLiveConnection::ToolsChangedListener on_tools, McpLiveConnection::ResourcesChangedListener on_resources)
     : on_tools_(std::move(on_tools)), on_resources_(std::move(on_resources)) {}
 
 void McpLiveNotificationRouter::dispatch(std::string_view method, const support::JsonValue&) {
@@ -124,14 +125,9 @@ McpSessionManager::McpSessionManager(mcp::McpConfigLoad config,
         bool project_trusted,
         std::vector<std::string> overridden,
         McpManagerDependencies dependencies)
-    : config_(std::move(config)),
-      agent_dir_(std::move(agent_dir)),
-      workspace_(std::move(workspace)),
-      project_trusted_(project_trusted),
-      project_config_(config_.project_config),
-      config_errors_(config_.errors),
-      overridden_(std::move(overridden)),
-      dependencies_(std::move(dependencies)) {
+    : config_(std::move(config)), agent_dir_(std::move(agent_dir)), workspace_(std::move(workspace)),
+      project_trusted_(project_trusted), project_config_(config_.project_config), config_errors_(config_.errors),
+      overridden_(std::move(overridden)), dependencies_(std::move(dependencies)) {
     servers_.reserve(config_.servers.size());
     for (auto& entry : config_.servers) {
         ManagedServer server;
@@ -188,9 +184,7 @@ std::vector<McpServerSnapshot> McpSessionManager::servers() const {
     return snapshots;
 }
 
-void McpSessionManager::set_change_listener(std::function<void()> listener) {
-    change_listener_ = std::move(listener);
-}
+void McpSessionManager::set_change_listener(std::function<void()> listener) { change_listener_ = std::move(listener); }
 
 void McpSessionManager::emit_change() {
     if (change_listener_) {
@@ -214,37 +208,38 @@ support::AsyncResult<void> McpSessionManager::start() {
 }
 
 support::AsyncResult<void> McpSessionManager::start_connection(std::string_view server) {
-    return support::detail::make_async_result([this, name = std::string{server}]() -> boost::asio::awaitable<
-            support::ExpectedVoid> {
-        auto* record = find(name);
-        if (record == nullptr) {
-            co_return support::ExpectedVoid{};
-        }
-        auto connection = co_await support::detail::await_async_result(dependencies_.connections->connect(record->entry));
-        if (!connection) {
-            co_return std::unexpected(std::move(connection.error()));
-        }
-        record->connection = std::move(*connection);
-        // pi runtime `notifications/tools/list_changed` -> re-list -> `onTools`;
-        // `notifications/resources/list_changed` -> re-list -> `onChange`.
-        record->connection->set_tools_changed_listener([this, name]() {
-            register_tools(name);
-            emit_change();
-        });
-        record->connection->set_resources_changed_listener([this]() { emit_change(); });
-        if (record->connection->state() == McpServerState::Connected) {
-            register_tools(name);
-        }
-        emit_change();
-        co_return support::ExpectedVoid{};
-    });
+    return support::detail::make_async_result(
+            [this, name = std::string{server}]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                auto* record = find(name);
+                if (record == nullptr) {
+                    co_return support::ExpectedVoid{};
+                }
+                auto connection =
+                        co_await support::detail::await_async_result(dependencies_.connections->connect(record->entry));
+                if (!connection) {
+                    co_return std::unexpected(std::move(connection.error()));
+                }
+                record->connection = std::move(*connection);
+                // pi runtime `notifications/tools/list_changed` -> re-list -> `onTools`;
+                // `notifications/resources/list_changed` -> re-list -> `onChange`.
+                record->connection->set_tools_changed_listener([this, name]() {
+                    register_tools(name);
+                    emit_change();
+                });
+                record->connection->set_resources_changed_listener([this]() { emit_change(); });
+                if (record->connection->state() == McpServerState::Connected) {
+                    register_tools(name);
+                }
+                emit_change();
+                co_return support::ExpectedVoid{};
+            });
 }
 
 std::vector<std::string> McpSessionManager::resource_bearing_servers() const {
     std::vector<std::string> names;
     for (const auto& server : servers_) {
         if (server.connection && is_enabled(server.entry) && server.connection->has_resources() &&
-            exposure_of(server.entry) != McpExposure::Hidden) {
+                exposure_of(server.entry) != McpExposure::Hidden) {
             names.push_back(server.entry.name);
         }
     }
@@ -310,7 +305,7 @@ void McpSessionManager::sync_resource_tools() {
     std::set<McpExposure> exposures;
     for (const auto& server : servers_) {
         if (server.connection && is_enabled(server.entry) && server.connection->has_resources() &&
-            exposure_of(server.entry) != McpExposure::Hidden) {
+                exposure_of(server.entry) != McpExposure::Hidden) {
             exposures.insert(exposure_of(server.entry));
         }
     }
@@ -347,7 +342,7 @@ std::optional<std::string> McpSessionManager::save_config(
     // pi `saveConfig`: an extension-registered server is session-only; this
     // manager's servers always come from mcp.json.
     if (auto updated = mcp::update_mcp_server_config(path, server.entry.name, patch, override_path.has_value());
-        !updated) {
+            !updated) {
         return "Could not update " + path.string() + ": " + updated.error().message;
     }
     if (in_project) {
@@ -367,20 +362,19 @@ std::optional<std::string> McpSessionManager::save_config(
 support::AsyncResult<std::optional<std::string>> McpSessionManager::sign_in(
         std::string_view server, McpSignInPrompt prompt) {
     return support::detail::make_async_result(
-            [this, name = std::string{server}, prompt = std::move(prompt)]() mutable -> boost::asio::awaitable<
-                    support::Expected<std::optional<std::string>>> {
+            [this, name = std::string{server}, prompt = std::move(prompt)]() mutable
+                    -> boost::asio::awaitable<support::Expected<std::optional<std::string>>> {
                 auto* record = find(name);
                 if (record == nullptr) {
-                    co_return std::optional<std::string>{
-                            std::format("MCP server \"{}\" does not use OAuth.", name)};
+                    co_return std::optional<std::string>{std::format("MCP server \"{}\" does not use OAuth.", name)};
                 }
                 if (!record->connection || !record->connection->uses_oauth() || !dependencies_.auth) {
                     record->message = std::format("MCP server \"{}\" does not use OAuth.", name);
                     emit_change();
                     co_return std::optional<std::string>{record->message};
                 }
-                auto signed_in =
-                        co_await support::detail::await_async_result(dependencies_.auth->sign_in(record->entry, prompt));
+                auto signed_in = co_await support::detail::await_async_result(
+                        dependencies_.auth->sign_in(record->entry, prompt));
                 if (!signed_in) {
                     record->message = "Sign-in failed: " + signed_in.error().message;
                     emit_change();
@@ -410,57 +404,60 @@ support::AsyncResult<std::optional<std::string>> McpSessionManager::sign_in(
 }
 
 support::AsyncResult<bool> McpSessionManager::sign_out(std::string_view server) {
-    return support::detail::make_async_result([this, name = std::string{server}]() -> boost::asio::awaitable<
-            support::Expected<bool>> {
-        auto* record = find(name);
-        if (record == nullptr || !record->connection || !record->connection->uses_oauth() || !dependencies_.auth) {
-            co_return false;
-        }
-        auto removed = co_await support::detail::await_async_result(dependencies_.auth->sign_out(record->entry));
-        if (!removed) {
-            co_return support::Expected<bool>{false};
-        }
-        auto signed_out = co_await support::detail::await_async_result(record->connection->sign_out());
-        (void)signed_out;
-        emit_change();
-        co_return support::Expected<bool>{*removed};
-    });
+    return support::detail::make_async_result(
+            [this, name = std::string{server}]() -> boost::asio::awaitable<support::Expected<bool>> {
+                auto* record = find(name);
+                if (record == nullptr || !record->connection || !record->connection->uses_oauth() ||
+                        !dependencies_.auth) {
+                    co_return false;
+                }
+                auto removed =
+                        co_await support::detail::await_async_result(dependencies_.auth->sign_out(record->entry));
+                if (!removed) {
+                    co_return support::Expected<bool>{false};
+                }
+                auto signed_out = co_await support::detail::await_async_result(record->connection->sign_out());
+                (void)signed_out;
+                emit_change();
+                co_return support::Expected<bool>{*removed};
+            });
 }
 
 support::AsyncResult<std::optional<std::string>> McpSessionManager::reconnect(std::string_view server) {
-    return support::detail::make_async_result([this, name = std::string{server}]() -> boost::asio::awaitable<
-            support::Expected<std::optional<std::string>>> {
-        auto* record = find(name);
-        if (record == nullptr || !record->connection) {
-            co_return std::optional<std::string>{std::format("MCP server \"{}\" is disabled.", name)};
-        }
-        auto reconnected = co_await support::detail::await_async_result(record->connection->reconnect());
-        if (!reconnected) {
-            const std::string message = error_message(reconnected.error());
-            record->message = message;
-            emit_change();
-            co_return std::optional<std::string>{message};
-        }
-        if (record->connection->state() == McpServerState::Connected) {
-            register_tools(name);
-        }
-        record->message.reset();
-        emit_change();
-        co_return std::optional<std::string>{};
-    });
+    return support::detail::make_async_result(
+            [this, name = std::string{server}]()
+                    -> boost::asio::awaitable<support::Expected<std::optional<std::string>>> {
+                auto* record = find(name);
+                if (record == nullptr || !record->connection) {
+                    co_return std::optional<std::string>{std::format("MCP server \"{}\" is disabled.", name)};
+                }
+                auto reconnected = co_await support::detail::await_async_result(record->connection->reconnect());
+                if (!reconnected) {
+                    const std::string message = error_message(reconnected.error());
+                    record->message = message;
+                    emit_change();
+                    co_return std::optional<std::string>{message};
+                }
+                if (record->connection->state() == McpServerState::Connected) {
+                    register_tools(name);
+                }
+                record->message.reset();
+                emit_change();
+                co_return std::optional<std::string>{};
+            });
 }
 
 support::AsyncResult<std::optional<std::string>> McpSessionManager::set_enabled(
         std::string_view server, bool enabled, bool in_project) {
     return support::detail::make_async_result(
-            [this, name = std::string{server}, enabled, in_project]() -> boost::asio::awaitable<
-                    support::Expected<std::optional<std::string>>> {
+            [this, name = std::string{server}, enabled, in_project]()
+                    -> boost::asio::awaitable<support::Expected<std::optional<std::string>>> {
                 auto* record = find(name);
                 if (record == nullptr) {
                     co_return support::Expected<std::optional<std::string>>{std::nullopt};
                 }
                 if (auto failed = save_config(*record, patch_for_optional(enabled, std::nullopt), in_project);
-                    failed.has_value()) {
+                        failed.has_value()) {
                     record->message = *failed;
                     emit_change();
                     co_return support::Expected<std::optional<std::string>>{*failed};
@@ -491,14 +488,15 @@ support::AsyncResult<std::optional<std::string>> McpSessionManager::set_enabled(
 support::AsyncResult<std::optional<std::string>> McpSessionManager::set_exposure(
         std::string_view server, McpExposure exposure) {
     return support::detail::make_async_result(
-            [this, name = std::string{server}, exposure]() -> boost::asio::awaitable<
-                    support::Expected<std::optional<std::string>>> {
+            [this,
+                    name = std::string{server},
+                    exposure]() -> boost::asio::awaitable<support::Expected<std::optional<std::string>>> {
                 auto* record = find(name);
                 if (record == nullptr) {
                     co_return support::Expected<std::optional<std::string>>{std::nullopt};
                 }
                 if (auto failed = save_config(*record, patch_for_optional(std::nullopt, exposure), false);
-                    failed.has_value()) {
+                        failed.has_value()) {
                     record->message = *failed;
                     emit_change();
                     co_return support::Expected<std::optional<std::string>>{*failed};

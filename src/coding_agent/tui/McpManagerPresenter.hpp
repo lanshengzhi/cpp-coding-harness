@@ -66,9 +66,8 @@ public:
     /// the side-effecting actions return the failure message (`server.message`)
     /// or `std::nullopt`. `sign_in_prompt` drives the OAuth screen for
     /// `SignIn` only.
-    [[nodiscard]] support::AsyncResult<McpActionOutcome> run_action(std::string_view server,
-            McpServerAction action,
-            runtime::McpSignInPrompt sign_in_prompt = {});
+    [[nodiscard]] support::AsyncResult<McpActionOutcome> run_action(
+            std::string_view server, McpServerAction action, runtime::McpSignInPrompt sign_in_prompt = {});
 
     /// pi `chooseExposure`'s save step: write the chosen exposure and
     /// re-register. Completes with the failure message or `std::nullopt`.

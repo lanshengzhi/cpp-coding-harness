@@ -77,7 +77,9 @@ public:
         failure.reset();
         return support::AsyncResult<void>{support::ExpectedVoid{}};
     }
-    [[nodiscard]] support::AsyncResult<void> sign_out() override { return support::AsyncResult<void>{support::ExpectedVoid{}}; }
+    [[nodiscard]] support::AsyncResult<void> sign_out() override {
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    }
     void close() noexcept override {}
     void set_tools_changed_listener(ToolsChangedListener listener) override { tools_changed = std::move(listener); }
     void set_resources_changed_listener(ResourcesChangedListener listener) override {
@@ -92,7 +94,8 @@ class TestFactory final : public McpConnectionFactory {
 public:
     std::map<std::string, std::shared_ptr<TestConnection>> outcomes;
     std::vector<std::string> connect_order;
-    [[nodiscard]] support::AsyncResult<std::shared_ptr<McpLiveConnection>> connect(const McpConfigEntry& entry) override {
+    [[nodiscard]] support::AsyncResult<std::shared_ptr<McpLiveConnection>> connect(
+            const McpConfigEntry& entry) override {
         connect_order.push_back(entry.name);
         const auto found = outcomes.find(entry.name);
         if (found == outcomes.end()) {
@@ -165,7 +168,8 @@ struct Fixture {
     static Fixture make_persisted(tests::TempWorkspace& workspace, std::string_view server_name, bool enabled) {
         const auto agent_dir = workspace.path() / "agent";
         std::filesystem::create_directories(agent_dir);
-        std::string json = "{\n  \"mcpServers\": {\n    \"" + std::string{server_name} + "\": {\n      \"command\": \"python3\"";
+        std::string json =
+                "{\n  \"mcpServers\": {\n    \"" + std::string{server_name} + "\": {\n      \"command\": \"python3\"";
         if (!enabled) {
             json += ",\n      \"enabled\": false";
         }
@@ -187,8 +191,12 @@ private:
         dependencies.connections = fixture.factory;
         dependencies.tools = fixture.surface;
         dependencies.auth = fixture.auth;
-        fixture.manager = std::make_unique<McpSessionManager>(
-                std::move(load), std::move(agent_dir), "/repo", false, std::vector<std::string>{}, std::move(dependencies));
+        fixture.manager = std::make_unique<McpSessionManager>(std::move(load),
+                std::move(agent_dir),
+                "/repo",
+                false,
+                std::vector<std::string>{},
+                std::move(dependencies));
         fixture.presenter = std::make_unique<coding_agent::tui::McpManagerPresenter>(*fixture.manager);
         fixture.connection = std::make_shared<TestConnection>();
         fixture.connection->name = std::move(first_name);
@@ -231,8 +239,7 @@ TEST_CASE("McpManagerPresenter maps manager state onto the panel's server view",
     CHECK(server.confirm_label == "select");
 }
 
-TEST_CASE("McpManagerPresenter exposes the tools and exposure sub-menus",
-        "[coding_agent][tui][mcp][issue884][spec]") {
+TEST_CASE("McpManagerPresenter exposes the tools and exposure sub-menus", "[coding_agent][tui][mcp][issue884][spec]") {
     auto fixture = Fixture::make({stdio_entry("echo")});
     fixture.connection->offered_tools = {McpLiveTool{.name = "echo", .description = "echoes"}};
 
@@ -251,8 +258,8 @@ TEST_CASE("McpManagerPresenter exposes the tools and exposure sub-menus",
     CHECK(exposure->next_menu->title == "Exposure of echo");
 }
 
-TEST_CASE("McpManagerPresenter runs the enable action against the manager",
-        "[coding_agent][tui][mcp][issue884][spec]") {
+TEST_CASE(
+        "McpManagerPresenter runs the enable action against the manager", "[coding_agent][tui][mcp][issue884][spec]") {
     tests::TempWorkspace workspace;
     auto fixture = Fixture::make_persisted(workspace, "off", /* enabled */ false);
 

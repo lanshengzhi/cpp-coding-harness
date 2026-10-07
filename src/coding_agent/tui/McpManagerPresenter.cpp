@@ -117,9 +117,8 @@ support::AsyncResult<std::optional<std::string>> McpManagerPresenter::set_exposu
     return manager_->set_exposure(server, exposure);
 }
 
-support::AsyncResult<McpActionOutcome> McpManagerPresenter::run_action(std::string_view server,
-        McpServerAction action,
-        runtime::McpSignInPrompt sign_in_prompt) {
+support::AsyncResult<McpActionOutcome> McpManagerPresenter::run_action(
+        std::string_view server, McpServerAction action, runtime::McpSignInPrompt sign_in_prompt) {
     return support::detail::make_async_result(
             [this, name = std::string{server}, action, prompt = std::move(sign_in_prompt)]() mutable
                     -> boost::asio::awaitable<support::Expected<McpActionOutcome>> {
@@ -132,7 +131,8 @@ support::AsyncResult<McpActionOutcome> McpManagerPresenter::run_action(std::stri
                     outcome.next_menu = exposure_menu(name);
                     break;
                 case McpServerAction::SignIn: {
-                    auto result = co_await support::detail::await_async_result(manager_->sign_in(name, std::move(prompt)));
+                    auto result =
+                            co_await support::detail::await_async_result(manager_->sign_in(name, std::move(prompt)));
                     if (!result) {
                         co_return std::unexpected(std::move(result.error()));
                     }

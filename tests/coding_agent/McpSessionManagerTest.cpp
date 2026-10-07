@@ -112,9 +112,7 @@ public:
     }
     void close() noexcept override { ++close_calls; }
 
-    void set_tools_changed_listener(ToolsChangedListener listener) override {
-        tools_changed = std::move(listener);
-    }
+    void set_tools_changed_listener(ToolsChangedListener listener) override { tools_changed = std::move(listener); }
     void set_resources_changed_listener(ResourcesChangedListener listener) override {
         resources_changed = std::move(listener);
     }
@@ -166,10 +164,9 @@ public:
     void register_resource_tools(McpExposure exposure, const std::vector<std::string>& servers) override {
         resource_exposure = exposure;
         resource_servers = servers;
-        for (const auto name :
-                {coding_agent::mcp::kListMcpResourcesTool,
-                        coding_agent::mcp::kListMcpResourceTemplatesTool,
-                        coding_agent::mcp::kReadMcpResourceTool}) {
+        for (const auto name : {coding_agent::mcp::kListMcpResourcesTool,
+                     coding_agent::mcp::kListMcpResourceTemplatesTool,
+                     coding_agent::mcp::kReadMcpResourceTool}) {
             surface[std::string{name}] = exposure;
         }
     }
@@ -260,8 +257,7 @@ struct Harness {
     }
 };
 
-[[nodiscard]] std::optional<McpServerSnapshot> snapshot_for(
-        const McpSessionManager& manager, std::string_view name) {
+[[nodiscard]] std::optional<McpServerSnapshot> snapshot_for(const McpSessionManager& manager, std::string_view name) {
     for (const auto& snapshot : manager.servers()) {
         if (snapshot.entry.name == name) {
             return snapshot;
@@ -288,8 +284,7 @@ void check_state(const McpSessionManager& manager, std::string_view name, McpSer
 
 /// The `mcp.json` with one enabled stdio server.
 [[nodiscard]] std::string stdio_mcp_json(std::string_view name, bool enabled = true) {
-    std::string json = "{\n  \"mcpServers\": {\n    \"" + std::string{name} +
-                      "\": {\n      \"command\": \"python3\"";
+    std::string json = "{\n  \"mcpServers\": {\n    \"" + std::string{name} + "\": {\n      \"command\": \"python3\"";
     if (!enabled) {
         json += ",\n      \"enabled\": false";
     }
@@ -362,7 +357,8 @@ TEST_CASE("a disabled server stays disabled across a manager rebuild via the mcp
         output << "{\n  \"mcpServers\": {\n    \"echo\": {\n      \"command\": \"python3\"\n    }\n  }\n}\n";
     }
 
-    const auto first_load = coding_agent::mcp::load_mcp_config(agent_dir, workspace.path(), /* project_trusted */ false);
+    const auto first_load =
+            coding_agent::mcp::load_mcp_config(agent_dir, workspace.path(), /* project_trusted */ false);
     REQUIRE(first_load.errors.empty());
     auto first = Harness::make(first_load, {}, agent_dir);
     auto connection = connection_for(first, "echo");
@@ -395,7 +391,8 @@ TEST_CASE("an enable persists across a manager rebuild too", "[coding_agent][mcp
     std::filesystem::create_directories(agent_dir);
     {
         std::ofstream output(agent_dir / "mcp.json", std::ios::binary | std::ios::trunc);
-        output << "{\n  \"mcpServers\": {\n    \"echo\": {\n      \"command\": \"python3\",\n      \"enabled\": false\n    }\n"
+        output << "{\n  \"mcpServers\": {\n    \"echo\": {\n      \"command\": \"python3\",\n      \"enabled\": "
+                  "false\n    }\n"
                   "  }\n}\n";
     }
 
