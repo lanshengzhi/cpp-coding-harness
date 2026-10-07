@@ -10,15 +10,40 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <format>
 #include <initializer_list>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
+#ifndef CCH_SOURCE_DIR
+#define CCH_SOURCE_DIR ""
+#endif
+
 namespace cch::coding_agent::extensions {
+
+std::filesystem::path default_codemode_guest_wasm_path() {
+    // pi resolves the guest through the packaged module tree
+    // (`createRequire(...).resolve("quickjs-wasi/quickjs.wasm")`), so the
+    // installed product carries its own copy. Pike follows the same shape:
+    // the installed Runtime looks for the guest at
+    // `share/pike/codemode/quickjs.wasm` next to its executable, and a source
+    // build falls back to the committed fixture. No resolution environment
+    // variable exists.
+    std::error_code error;
+    const auto executable = std::filesystem::read_symlink("/proc/self/exe", error);
+    if (!error) {
+        auto installed = executable.parent_path() / "share" / "pike" / "codemode" / "quickjs.wasm";
+        if (std::filesystem::exists(installed, error)) {
+            return installed;
+        }
+    }
+    return std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "codemode" / "quickjs" / "quickjs.wasm";
+}
 
 namespace {
 

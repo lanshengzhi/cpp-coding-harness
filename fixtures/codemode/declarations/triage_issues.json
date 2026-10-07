@@ -1,5 +1,0 @@
-{
-  "name": "triage_issues",
-  "description": "Count the issues in the built-in sample list.",
-  "source": "triage_issues.js"
-}

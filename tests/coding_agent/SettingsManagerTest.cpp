@@ -876,3 +876,34 @@ TEST_CASE("SettingsManager getOrCreateDeviceId ignores a committed project-scope
     CHECK(dirs.workspace.read(".pi/settings.json").find("\"deviceId\": \"" + device_id + "\"") ==
             std::string::npos);
 }
+
+TEST_CASE("SettingsManager resolves pi's codemode mode and inline budget",
+        "[settings][two-scope][codemode][issue885][spec]") {
+    SettingsDirs dirs;
+    auto empty = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    // pi `getCodemodeMode` default: "on"; pi `getCodemodeInlineBudget`: unset
+    // (the caller falls back to DEFAULT_CODEMODE_INLINE_BUDGET = 3000).
+    CHECK(empty.codemode_mode() == "on");
+    CHECK_FALSE(empty.codemode_inline_budget().has_value());
+
+    dirs.write_global(R"({"codemode": {"mode": "only", "inlineBudget": 1200}})");
+    auto global = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    CHECK(global.codemode_mode() == "only");
+    REQUIRE(global.codemode_inline_budget().has_value());
+    CHECK(*global.codemode_inline_budget() == 1200);
+
+    // Project scope wins per field, pi deep-merge semantics.
+    dirs.write_project(R"({"codemode": {"mode": "on"}})");
+    auto project = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    CHECK(project.codemode_mode() == "on");
+    REQUIRE(project.codemode_inline_budget().has_value());
+    CHECK(*project.codemode_inline_budget() == 1200);
+
+    // An unknown mode is ignored rather than rejected, so a newer pi setting
+    // cannot break the load and resolution falls back to "on".
+    SettingsDirs other;
+    other.write_global(R"({"codemode": {"mode": "sometimes"}})");
+    auto unknown = coding_agent::SettingsManager::create(other.cwd, other.agent_dir, /* project_trusted */ true);
+    CHECK(unknown.errors().empty());
+    CHECK(unknown.codemode_mode() == "on");
+}

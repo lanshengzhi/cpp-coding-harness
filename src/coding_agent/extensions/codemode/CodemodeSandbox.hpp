@@ -15,6 +15,15 @@
 
 namespace cch::coding_agent::extensions {
 
+/// The codemode guest module (`quickjs.wasm`) resolution, following pi's
+/// `getQuickJSWasmPath` shape (`packages/coding-agent/src/config.ts`): a
+/// compile-time fallback used by an installed Runtime, overridable for tests
+/// and embedded hosts. Production resolves the guest that ships next to the
+/// installed executable first, then the committed in-tree fixture, so a
+/// source build and an installed build both find the module with no new
+/// resolution environment variable.
+[[nodiscard]] std::filesystem::path default_codemode_guest_wasm_path();
+
 /// One item a codemode script emitted with `text()`, `image()`, or `console.*`
 /// (pi `CodemodeOutputItem`). The kind is the pi channel, not a rendering hint.
 struct CodemodeOutputItem {

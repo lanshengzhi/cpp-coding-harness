@@ -259,6 +259,37 @@ void migrate_settings(JsonObject& settings) {
     return settings;
 }
 
+/// Parse pi's nested `codemode` object (`{mode, inlineBudget}`). Each field is
+/// optional; unknown or mistyped fields are ignored (a mistyped field falls
+/// back to the pi default at resolution, mirroring pi's
+/// `settings.codemode?.mode ?? "on"` reads). `mode` is validated against pi's
+/// `"on" | "only"`; an unknown value is ignored rather than rejected so a
+/// newer pi setting cannot break the load.
+[[nodiscard]] support::Expected<UserCodemodeSettings> parse_codemode_settings(const support::JsonValue& value) {
+    const auto* object = value.get_if<JsonObject>();
+    if (object == nullptr) {
+        return std::unexpected(settings_file_error("invalid codemode", {}, "codemode must be an object"));
+    }
+    UserCodemodeSettings settings;
+    const auto mode = object->find("mode");
+    if (mode != object->end()) {
+        if (const auto* parsed = mode->second.get_if<std::string>()) {
+            if (*parsed == "on" || *parsed == "only") {
+                settings.mode = *parsed;
+            }
+        }
+    }
+    const auto inline_budget = object->find("inlineBudget");
+    if (inline_budget != object->end()) {
+        if (const auto* parsed = inline_budget->second.get_if<double>()) {
+            if (*parsed >= 0) {
+                settings.inline_budget = static_cast<std::int64_t>(*parsed);
+            }
+        }
+    }
+    return settings;
+}
+
 /// Parse one scope into `UserSettings`. `allow_default_project_trust` is true
 /// only for the global scope; a project-scope `defaultProjectTrust` is ignored
 /// (global-only). Unknown fields are ignored for forward compatibility and
@@ -330,6 +361,13 @@ void migrate_settings(JsonObject& settings) {
     if (const auto found = object.find("retry"); found != object.end()) {
         if (auto parsed = parse_retry_settings(found->second); parsed) {
             settings.retry = std::move(*parsed);
+        } else {
+            return std::unexpected(parsed.error());
+        }
+    }
+    if (const auto found = object.find("codemode"); found != object.end()) {
+        if (auto parsed = parse_codemode_settings(found->second); parsed) {
+            settings.codemode = std::move(*parsed);
         } else {
             return std::unexpected(parsed.error());
         }
@@ -657,6 +695,17 @@ struct SettingsManager::Impl {
             }
             merged.retry = merged_retry;
         }
+        if (project.codemode) {
+            // Per-field deep merge for the nested `codemode` object.
+            auto merged_codemode = merged.codemode.value_or(UserCodemodeSettings{});
+            if (project.codemode->mode) {
+                merged_codemode.mode = project.codemode->mode;
+            }
+            if (project.codemode->inline_budget) {
+                merged_codemode.inline_budget = project.codemode->inline_budget;
+            }
+            merged.codemode = merged_codemode;
+        }
         if (project.hide_thinking_block) {
             merged.hide_thinking_block = project.hide_thinking_block;
         }
@@ -983,6 +1032,18 @@ support::ExpectedVoid SettingsManager::set_output_pad(std::size_t padding) {
 bool SettingsManager::get_enable_skill_commands() const noexcept {
     // pi `getEnableSkillCommands`: `this.settings.enableSkillCommands ?? true`.
     return impl_->merged_settings.enable_skill_commands.value_or(true);
+}
+
+std::string SettingsManager::codemode_mode() const {
+    // pi `getCodemodeMode`: `this.settings.codemode?.mode ?? "on"`.
+    const auto& codemode = impl_->merged_settings.codemode;
+    return codemode && codemode->mode ? *codemode->mode : std::string{"on"};
+}
+
+std::optional<std::int64_t> SettingsManager::codemode_inline_budget() const noexcept {
+    // pi `getCodemodeInlineBudget`: `this.settings.codemode?.inlineBudget`.
+    const auto& codemode = impl_->merged_settings.codemode;
+    return codemode ? codemode->inline_budget : std::nullopt;
 }
 
 std::string SettingsManager::get_or_create_device_id() {

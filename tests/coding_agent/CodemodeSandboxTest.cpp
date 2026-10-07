@@ -253,17 +253,19 @@ TEST_CASE("a missing guest module is an explicit create error, not a deferred fa
     CHECK(sandbox.error().code == support::ErrorCode::Validation);
 }
 
-TEST_CASE("a declared codemode tool executes a self-contained script", "[coding_agent][codemode][issue874][spec]") {
-    tests::TempWorkspace workspace;
-    workspace.write(".pi/codemode/answer.json", R"({"name":"answer","description":"Compute.","source":"answer.js"})");
-    workspace.write(".pi/codemode/answer.js", "text('computing'); return 1 + 1;");
-
-    CodemodeToolSource source{workspace.path()};
+TEST_CASE("the model-facing codemode tool runs an inline script in the wasm sandbox",
+        "[coding_agent][codemode][issue885][spec]") {
+    // The inline tool carries no on-disk declaration; the source is the model's
+    // `code` argument, exactly as pi's `codemode` tool.
+    CodemodeToolSource source{};
     auto tools = source.load_tools();
     REQUIRE(tools.has_value());
     REQUIRE(tools->size() == 1);
+    CHECK(tools->front().definition.name == "codemode");
 
-    auto executed = tools->front().execute(support::JsonValue::object_t{}, std::stop_token{});
+    auto executed = tools->front().execute(
+            support::JsonValue{support::JsonValue::object_t{{"code", "text('computing'); return 1 + 1;"}}},
+            std::stop_token{});
     auto outcome = tests::run_async_result(std::move(executed));
 
     REQUIRE(outcome.has_value());
