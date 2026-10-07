@@ -31,6 +31,7 @@
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -51,6 +52,9 @@ template <class U> struct is_optional<std::optional<U>> : std::true_type {};
 
 template <class T> struct is_vector : std::false_type {};
 template <class U> struct is_vector<std::vector<U>> : std::true_type {};
+
+template <class T> struct is_map : std::false_type {};
+template <class K, class V> struct is_map<std::map<K, V>> : std::true_type {};
 
 template <class T> struct is_variant : std::false_type {};
 template <class... U> struct is_variant<std::variant<U...>> : std::true_type {};
@@ -112,6 +116,12 @@ template <class T> void poison_leaves(T& value, const std::string& path, PoisonR
             value.emplace_back();
             poison_leaves(value.back(), path + "[]", registry);
         }
+    } else if constexpr (is_map<V>::value) {
+        // A keyed collection (`Tool.constrained_sampling.variants`): the values
+        // carry text; keys are structural identifiers, like JSON object keys.
+        value.clear();
+        auto inserted = value.emplace();
+        poison_leaves(inserted.first->second, path + "[]", registry);
     } else if constexpr (is_variant<V>::value) {
         std::visit([&](auto& alternative) { poison_leaves(alternative, path, registry); }, value);
     } else if constexpr (std::is_aggregate_v<V> && requires { glz::reflect<V>::size; }) {
