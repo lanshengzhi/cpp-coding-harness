@@ -5,6 +5,7 @@
 
 #include "support/Json.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <optional>
 #include <string>
@@ -12,9 +13,20 @@
 
 namespace cch::coding_agent::mcp {
 
-/// The MCP protocol version Pike requests on a connection (pi v1.0.4's
-/// default for the shipped transports).
-inline constexpr std::string_view kMcpProtocolVersion = "2025-06-18";
+/// The MCP protocol version Pike requests on a connection: pi
+/// `LATEST_PROTOCOL_VERSION` (`packages/mcp/src/protocol/types.ts`), the
+/// version the frozen bundle records under `protocol.latest`.
+inline constexpr std::string_view kMcpProtocolVersion = "2025-11-25";
+
+/// pi `SUPPORTED_PROTOCOL_VERSIONS`: the negotiated `initialize` result must
+/// select one of these, exactly like pi `client.ts` (the frozen bundle records
+/// the same list under `protocol.supported`).
+inline constexpr std::string_view kMcpSupportedProtocolVersions[] = {
+        "2025-11-25",
+        "2025-06-18",
+        "2025-03-26",
+        "2024-11-05",
+};
 
 /// Client identity sent in the `initialize` handshake.
 inline constexpr std::string_view kMcpClientName = "pike";
@@ -151,6 +163,33 @@ namespace detail {
     if (server_info == object->end() || server_info->second.get_if<support::JsonValue::object_t>() == nullptr) {
         return std::unexpected(support::make_error(
                 support::ErrorCode::Process, "MCP server '" + server + "' initialize result is missing serverInfo"));
+    }
+    // pi `validateInitializeResult`: the identity fields are strings.
+    const auto* server_info_object = server_info->second.get_if<support::JsonValue::object_t>();
+    const auto server_name = server_info_object->find("name");
+    if (server_name == server_info_object->end() || !server_name->second.holds<std::string>()) {
+        return std::unexpected(support::make_error(support::ErrorCode::Process,
+                "MCP server '" + server + "' initialize result has a serverInfo without a string name"));
+    }
+    const auto server_version = server_info_object->find("version");
+    if (server_version == server_info_object->end() || !server_version->second.holds<std::string>()) {
+        return std::unexpected(support::make_error(support::ErrorCode::Process,
+                "MCP server '" + server + "' initialize result has a serverInfo without a string version"));
+    }
+    const auto instructions = object->find("instructions");
+    if (instructions != object->end() && !instructions->second.holds<std::string>()) {
+        return std::unexpected(support::make_error(support::ErrorCode::Process,
+                "MCP server '" + server + "' initialize result has a non-string instructions"));
+    }
+    // pi `client.ts` connect: the negotiated version must be one pi speaks,
+    // rejected with pi's verbatim message.
+    const auto selected = protocol_version->second.get_string();
+    const bool supported = std::ranges::any_of(kMcpSupportedProtocolVersions, [&selected](std::string_view version) {
+        return version == selected;
+    });
+    if (!supported) {
+        return std::unexpected(support::make_error(support::ErrorCode::Process,
+                "MCP server selected unsupported protocol version " + selected));
     }
     return {};
 }
