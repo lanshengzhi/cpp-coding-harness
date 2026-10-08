@@ -83,9 +83,8 @@ public:
     void invalidate() override { ++invalidations; }
 
     [[nodiscard]] bool status_contains(std::string_view needle) const {
-        return std::ranges::any_of(statuses, [&](const std::string& line) {
-            return line.find(needle) != std::string::npos;
-        });
+        return std::ranges::any_of(
+                statuses, [&](const std::string& line) { return line.find(needle) != std::string::npos; });
     }
 
     std::shared_ptr<cch::tui::Component> slot;
@@ -146,8 +145,7 @@ public:
         return support::AsyncResult<support::JsonValue>{
                 support::JsonValue{support::JsonValue::object_t{{"resourceTemplates", support::JsonValue::array_t{}}}}};
     }
-    [[nodiscard]] support::AsyncResult<support::JsonValue> read_resource(
-            std::string, std::stop_token) override {
+    [[nodiscard]] support::AsyncResult<support::JsonValue> read_resource(std::string, std::stop_token) override {
         return support::AsyncResult<support::JsonValue>{
                 support::JsonValue{support::JsonValue::object_t{{"contents", support::JsonValue::array_t{}}}}};
     }
@@ -304,9 +302,7 @@ public:
 }
 
 [[nodiscard]] bool screen_contains(const std::vector<std::string>& screen, std::string_view needle) {
-    return std::ranges::any_of(screen, [&](const std::string& line) {
-        return line.find(needle) != std::string::npos;
-    });
+    return std::ranges::any_of(screen, [&](const std::string& line) { return line.find(needle) != std::string::npos; });
 }
 
 void press(cch::tui::InputHandler& handler, cch::tui::KeyEvent key) {
@@ -395,10 +391,8 @@ struct FlowFixture {
         dependencies.connections = fixture->factory;
         dependencies.tools = fixture->surface;
         dependencies.auth = fixture->auth;
-        fixture->manager = std::make_unique<McpSessionManager>(std::move(config),
-                "/home/u/.pi/agent",
-                std::vector<std::string>{},
-                std::move(dependencies));
+        fixture->manager = std::make_unique<McpSessionManager>(
+                std::move(config), "/home/u/.pi/agent", std::vector<std::string>{}, std::move(dependencies));
         for (auto& [name, connection] : connections) {
             connection->name = name;
             fixture->factory->outcomes[name] = std::move(connection);
@@ -415,29 +409,23 @@ struct FlowFixture {
         // closure (the engine's spawn_flow documents the same ADR 0040
         // mechanism).
         hooks.spawn_flow = [&io = fixture->flow_io](
-                                   std::move_only_function<boost::asio::awaitable<void>()> start,
-                                   std::string) {
-            auto owner =
-                    std::make_shared<std::move_only_function<boost::asio::awaitable<void>()>>(std::move(start));
-            boost::asio::co_spawn(io,
+                                   std::move_only_function<boost::asio::awaitable<void>()> start, std::string) {
+            auto owner = std::make_shared<std::move_only_function<boost::asio::awaitable<void>()>>(std::move(start));
+            boost::asio::co_spawn(
+                    io,
                     [owner]() mutable -> boost::asio::awaitable<void> { co_await (*owner)(); },
                     boost::asio::detached);
         };
-        hooks.mcp_manager = [fixture = fixture.get()]() -> McpSessionManager* {
-            return fixture->manager.get();
-        };
+        hooks.mcp_manager = [fixture = fixture.get()]() -> McpSessionManager* { return fixture->manager.get(); };
         hooks.live_theme = []() -> const coding_agent::tui::LiveTheme& {
             static const auto theme = test_theme();
             return theme;
         };
         hooks.is_live = [] { return true; };
         hooks.overlay_active = [] { return false; };
-        hooks.open_browser = [fixture = fixture.get()](std::string url) {
-            fixture->opened_urls.push_back(std::move(url));
-        };
-        hooks.copy_text = [fixture = fixture.get()](std::string text) {
-            fixture->copied.push_back(std::move(text));
-        };
+        hooks.open_browser = [fixture = fixture.get()](
+                                     std::string url) { fixture->opened_urls.push_back(std::move(url)); };
+        hooks.copy_text = [fixture = fixture.get()](std::string text) { fixture->copied.push_back(std::move(text)); };
         fixture->flow = std::make_shared<coding_agent::tui::McpManagerFlow>(fixture->flow_io.get_executor(),
                 fixture->presenter,
                 fixture->host_lifetime,
@@ -468,8 +456,7 @@ struct FlowFixture {
 
 } // namespace
 
-TEST_CASE("/mcp opens the servers menu panel and escape closes it",
-        "[coding_agent][tui][mcp][issue884][spec]") {
+TEST_CASE("/mcp opens the servers menu panel and escape closes it", "[coding_agent][tui][mcp][issue884][spec]") {
     auto connection = std::make_shared<TestConnection>();
     auto fixture = FlowFixture::make(config_with({stdio_entry("echo")}), {{"echo", connection}});
 
@@ -512,8 +499,7 @@ TEST_CASE("/mcp navigates into a server menu and runs pi's reconnect action",
     REQUIRE(fixture->wait_until([&] { return fixture->presenter.slot_restores == 1; }));
 }
 
-TEST_CASE("the open panel re-presents on a manager change",
-        "[coding_agent][tui][mcp][issue884][spec]") {
+TEST_CASE("the open panel re-presents on a manager change", "[coding_agent][tui][mcp][issue884][spec]") {
     auto connection = std::make_shared<TestConnection>();
     auto fixture = FlowFixture::make(config_with({stdio_entry("echo")}), {{"echo", connection}});
 
@@ -530,8 +516,7 @@ TEST_CASE("the open panel re-presents on a manager change",
     REQUIRE(fixture->wait_until([&] { return screen_contains(screen_of(*panel), "failed"); }));
 }
 
-TEST_CASE("/mcp reconnect reports pi's line and pi's pick errors",
-        "[coding_agent][tui][mcp][issue884][spec]") {
+TEST_CASE("/mcp reconnect reports pi's line and pi's pick errors", "[coding_agent][tui][mcp][issue884][spec]") {
     auto connection = std::make_shared<TestConnection>();
     connection->offered_tools = {
             McpLiveTool{.name = "alpha", .description = "a"},
@@ -539,16 +524,13 @@ TEST_CASE("/mcp reconnect reports pi's line and pi's pick errors",
     };
     auto fixture = FlowFixture::make(config_with({stdio_entry("echo")}), {{"echo", connection}});
     fixture->flow->run_reconnect("echo");
-    REQUIRE(fixture->wait_until([&] {
-        return fixture->presenter.status_contains("Reconnected to MCP server");
-    }));
+    REQUIRE(fixture->wait_until([&] { return fixture->presenter.status_contains("Reconnected to MCP server"); }));
     CHECK(connection->reconnect_calls == 1);
     CHECK(fixture->presenter.status_contains("Reconnected to MCP server \"echo\" (connected · 2 tools)."));
     CHECK(fixture->presenter.errors.empty());
 }
 
-TEST_CASE("/mcp reconnect with no name picks the single enabled server",
-        "[coding_agent][tui][mcp][issue884][spec]") {
+TEST_CASE("/mcp reconnect with no name picks the single enabled server", "[coding_agent][tui][mcp][issue884][spec]") {
     auto first = std::make_shared<TestConnection>();
     auto second = std::make_shared<TestConnection>();
     McpConfigLoad config;
@@ -584,8 +566,7 @@ TEST_CASE("/mcp login signs in through the redirect screen with pi's outcome lin
     // once the authorization URL arrives; the browser hook fired.
     REQUIRE(fixture->wait_until([&] { return fixture->view() != nullptr; }));
     REQUIRE(fixture->wait_until([&] {
-        return fixture->view()->title() == "Sign in to remote" &&
-                !fixture->view()->authorization_url().empty();
+        return fixture->view()->title() == "Sign in to remote" && !fixture->view()->authorization_url().empty();
     }));
     CHECK(fixture->opened_urls == std::vector<std::string>{"https://auth.example.com/authorize?client=scripted"});
     CHECK(screen_contains(screen_of(*fixture->view()), "Approve access in your browser"));
@@ -607,9 +588,10 @@ TEST_CASE("/mcp login of a non-OAuth server and the empty pick report pi's eligi
     auto fixture = FlowFixture::make(config_with({stdio_entry("echo")}), {{"echo", connection}});
 
     fixture->flow->run_login("");
-    REQUIRE(fixture->wait_until([&] { return fixture->presenter.status_contains(
-                                             "No enabled MCP server uses OAuth. Only HTTP servers without an "
-                                             "Authorization header do."); }));
+    REQUIRE(fixture->wait_until([&] {
+        return fixture->presenter.status_contains("No enabled MCP server uses OAuth. Only HTTP servers without an "
+                                                  "Authorization header do.");
+    }));
 
     fixture->flow->run_login("echo");
     REQUIRE(fixture->wait_until([&] { return !fixture->presenter.errors.empty(); }));
@@ -637,23 +619,20 @@ TEST_CASE("/mcp login with several needs-auth servers lists them with pi's run-l
     CHECK(fixture->view() == nullptr);
 }
 
-TEST_CASE("/mcp logout reports pi's stored-credentials lines",
-        "[coding_agent][tui][mcp][issue884][spec]") {
+TEST_CASE("/mcp logout reports pi's stored-credentials lines", "[coding_agent][tui][mcp][issue884][spec]") {
     auto connection = std::make_shared<TestConnection>();
     connection->oauth = true;
     auto fixture = FlowFixture::make(config_with({http_entry("remote")}), {{"remote", connection}});
 
     fixture->auth->credentials_removed = false;
     fixture->flow->run_logout("remote");
-    REQUIRE(fixture->wait_until([&] {
-        return fixture->presenter.status_contains("No stored credentials for MCP server \"remote\".");
-    }));
+    REQUIRE(fixture->wait_until(
+            [&] { return fixture->presenter.status_contains("No stored credentials for MCP server \"remote\"."); }));
 
     fixture->auth->credentials_removed = true;
     fixture->flow->run_logout("remote");
-    REQUIRE(fixture->wait_until([&] {
-        return fixture->presenter.status_contains("Signed out of MCP server \"remote\".");
-    }));
+    REQUIRE(fixture->wait_until(
+            [&] { return fixture->presenter.status_contains("Signed out of MCP server \"remote\"."); }));
     CHECK(fixture->auth->sign_out_calls == 2);
     CHECK(connection->sign_out_calls == 2);
 }
@@ -694,12 +673,11 @@ TEST_CASE("the discovery warning reaches the notification channel and the snapsh
     REQUIRE(fixture->wait_until([&] {
         const auto snapshot = fixture->flow->completion_snapshot();
         return !snapshot->servers.empty() && snapshot->servers.front().connection &&
-                snapshot->servers.front().connection->tools.size() == 2;
+               snapshot->servers.front().connection->tools.size() == 2;
     }));
 }
 
-TEST_CASE("/mcp without a manager prints pi's non-TUI status report",
-        "[coding_agent][tui][mcp][issue884][spec]") {
+TEST_CASE("/mcp without a manager prints pi's non-TUI status report", "[coding_agent][tui][mcp][issue884][spec]") {
     boost::asio::io_context flow_io;
     auto work = boost::asio::make_work_guard(flow_io);
     std::thread pump([&flow_io] { flow_io.run(); });
@@ -717,9 +695,9 @@ TEST_CASE("/mcp without a manager prints pi's non-TUI status report",
         boost::asio::post(flow_io, std::move(action));
     };
     hooks.spawn_flow = [&flow_io](std::move_only_function<boost::asio::awaitable<void>()> start, std::string) {
-        auto owner =
-                std::make_shared<std::move_only_function<boost::asio::awaitable<void>()>>(std::move(start));
-        boost::asio::co_spawn(flow_io,
+        auto owner = std::make_shared<std::move_only_function<boost::asio::awaitable<void>()>>(std::move(start));
+        boost::asio::co_spawn(
+                flow_io,
                 [owner]() mutable -> boost::asio::awaitable<void> { co_await (*owner)(); },
                 boost::asio::detached);
     };

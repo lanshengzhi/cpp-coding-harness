@@ -68,8 +68,8 @@ void write_global_mcp_json(const tests::TempWorkspace& workspace, std::string_vi
 
 /// The echo fixture as a persisted stdio server; `exposure` and
 /// `auto_enable_codemode` default to pi's (codemode / true).
-[[nodiscard]] std::string echo_mcp_json(std::optional<std::string_view> exposure = std::nullopt,
-        bool auto_enable_codemode = true) {
+[[nodiscard]] std::string echo_mcp_json(
+        std::optional<std::string_view> exposure = std::nullopt, bool auto_enable_codemode = true) {
     std::string json = "{\n  \"mcpServers\": {\n    \"echo\": {\n      \"command\": \"python3\",\n      \"args\": [\"" +
                        fixture_dir() + "/echo_server.py\"]";
     if (exposure) {
@@ -211,7 +211,8 @@ private:
 
 } // namespace
 
-TEST_CASE("a codemode-exposure server registers its tools undeclared, activates codemode, and renders the mcp_servers section",
+TEST_CASE("a codemode-exposure server registers its tools undeclared, activates codemode, and renders the mcp_servers "
+          "section",
         "[coding_agent][mcp][issue884][spec]") {
     tests::TempWorkspace workspace;
     const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
@@ -234,9 +235,8 @@ TEST_CASE("a codemode-exposure server registers its tools undeclared, activates 
     CHECK(section->find("- mcp__echo (codemode)") != std::string::npos);
 
     // The connect phase resolved before creation: the server is running.
-    const auto running = std::ranges::find_if(attempt.mcp_servers, [](const auto& status) {
-        return status.name == "echo";
-    });
+    const auto running =
+            std::ranges::find_if(attempt.mcp_servers, [](const auto& status) { return status.name == "echo"; });
     REQUIRE(running != attempt.mcp_servers.end());
     CHECK(running->state == coding_agent::mcp::McpServerState::Running);
 
@@ -257,17 +257,15 @@ TEST_CASE("a codemode-exposure MCP tool is reachable from a codemode script even
     // pi's codemode routing hands the guest the tool's structured details, or
     // its text: the echo fixture returns no structuredContent, so the script
     // sees the echoed text itself.
-    const std::string script =
-            "const r = await tools.mcp__echo__echo({ text: \"from-script\" });"
-            " text(\"echoed:\" + r);"
-            " return \"done\";";
+    const std::string script = "const r = await tools.mcp__echo__echo({ text: \"from-script\" });"
+                               " text(\"echoed:\" + r);"
+                               " return \"done\";";
     support::JsonValue arguments{support::JsonValue::object_t{{"code", script}}};
     auto raw = support::write_json(arguments);
     REQUIRE(raw.has_value());
     auto attempt = make_persisted_session(runtime,
             workspace,
-            std::make_shared<SingleCallProvider>(
-                    "codemode", std::move(arguments), std::move(*raw)));
+            std::make_shared<SingleCallProvider>("codemode", std::move(arguments), std::move(*raw)));
 
     REQUIRE(tests::run_awaitable(runtime, attempt.session->prompt("run the script")).has_value());
     const auto result = tool_result_text(*attempt.session, "codemode");
@@ -291,8 +289,7 @@ TEST_CASE("autoEnableCodemode false keeps codemode inactive and records pi's ver
 
     CHECK_FALSE(exposes_tool(*attempt.session, "codemode"));
     CHECK_FALSE(exposes_tool(*attempt.session, "mcp__echo__echo"));
-    auto* manager =
-            coding_agent::detail::AgentSessionInteractiveAccess::mcp_manager(*attempt.session);
+    auto* manager = coding_agent::detail::AgentSessionInteractiveAccess::mcp_manager(*attempt.session);
     REQUIRE(manager != nullptr);
     REQUIRE(manager->warnings().size() == 1);
     CHECK(manager->warnings().front() ==
@@ -344,9 +341,7 @@ TEST_CASE("a direct-exposure server declares its tools and the resource tools re
     auto attempt_call = make_persisted_session(runtime,
             workspace,
             std::make_shared<SingleCallProvider>(
-                    "list_mcp_resources",
-                    support::JsonValue{support::JsonValue::object_t{}},
-                    "{}"));
+                    "list_mcp_resources", support::JsonValue{support::JsonValue::object_t{}}, "{}"));
     REQUIRE(tests::run_awaitable(runtime, attempt_call.session->prompt("list resources")).has_value());
     const auto listed = tool_result_text(*attempt_call.session, "list_mcp_resources");
     REQUIRE(listed.has_value());
@@ -370,17 +365,15 @@ TEST_CASE("a codemode-exposure resource-bearing server keeps the resource tools 
 
     // The resource tool answers with the Codex-compatible JSON text; the
     // script surfaces it as-is.
-    const std::string script =
-            "const r = await tools.list_mcp_resources({ server: \"echo\" });"
-            " text(r);"
-            " return \"done\";";
+    const std::string script = "const r = await tools.list_mcp_resources({ server: \"echo\" });"
+                               " text(r);"
+                               " return \"done\";";
     support::JsonValue arguments{support::JsonValue::object_t{{"code", script}}};
     auto raw = support::write_json(arguments);
     REQUIRE(raw.has_value());
     auto attempt = make_persisted_session(runtime,
             workspace,
-            std::make_shared<SingleCallProvider>(
-                    "codemode", std::move(arguments), std::move(*raw)));
+            std::make_shared<SingleCallProvider>("codemode", std::move(arguments), std::move(*raw)));
 
     CHECK_FALSE(exposes_tool(*attempt.session, "list_mcp_resources"));
     REQUIRE(tests::run_awaitable(runtime, attempt.session->prompt("list resources through a script")).has_value());

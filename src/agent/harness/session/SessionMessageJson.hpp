@@ -707,8 +707,8 @@ template <typename Block, typename Convert>
             .description = dto.description,
             .parameters = support::json_from_glaze(dto.parameters),
             .output_schema = dto.outputSchema
-                                    ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.outputSchema)}
-                                    : std::nullopt,
+                                     ? std::optional<support::JsonValue>{support::json_from_glaze(*dto.outputSchema)}
+                                     : std::nullopt,
             .constrained_sampling = std::move(constrained_sampling),
     };
 }

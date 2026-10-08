@@ -59,7 +59,9 @@ struct Fixture {
                            "  \"mcpServers\": {\n"
                            "    \"echo\": {\n"
                            "      \"command\": \"python3\",\n"
-                           "      \"args\": [\"" + server.string() + "\"]\n"
+                           "      \"args\": [\"" +
+                           server.string() +
+                           "\"]\n"
                            "    }\n"
                            "  }";
         if (!auto_enable_codemode) {
@@ -84,9 +86,8 @@ struct Fixture {
         options.request_model = tests::scripted_request_model("fake", "fake-model");
         options.execution_runtime_target = runtime.make_target();
         auto models = tests::models_from_provider(tests::make_scripted_fake_provider());
-        auto created = runtime.run(coding_agent::create_agent_session_async(std::move(options),
-                std::nullopt,
-                tests::cli_fake_overrides(std::move(models))));
+        auto created = runtime.run(coding_agent::create_agent_session_async(
+                std::move(options), std::nullopt, tests::cli_fake_overrides(std::move(models))));
         REQUIRE(created.has_value());
 
         runtime_driver.emplace(runtime);
@@ -125,30 +126,30 @@ void start_interactive(Fixture& fixture, Running& running, bool auto_enable_code
 }
 
 [[nodiscard]] bool wait_for_text(Running& running, std::string_view text) {
-    return tests::pump_until(running.io,
+    return tests::pump_until(
+            running.io,
             [&running, text] { return visible_screen(running.terminal).find(text) != std::string::npos; },
             std::chrono::seconds{20});
 }
 
 [[nodiscard]] bool wait_for_text_to_disappear(Running& running, std::string_view text) {
-    return tests::pump_until(running.io,
+    return tests::pump_until(
+            running.io,
             [&running, text] { return visible_screen(running.terminal).find(text) == std::string::npos; },
             std::chrono::seconds{5});
 }
 
 void finish_interactive(Running& running) {
     REQUIRE(running.terminal.inject_input("\x04"));
-    REQUIRE(tests::pump_until(running.io,
-            [&running] { return running.run_result.has_value(); },
-            std::chrono::seconds{10}));
+    REQUIRE(tests::pump_until(
+            running.io, [&running] { return running.run_result.has_value(); }, std::chrono::seconds{10}));
     REQUIRE(running.run_result);
     CHECK(*running.run_result);
 }
 
 } // namespace
 
-TEST_CASE("/mcp opens the servers menu and Escape closes it",
-        "[coding_agent][tui][mcp][e2e][issue884][spec]") {
+TEST_CASE("/mcp opens the servers menu and Escape closes it", "[coding_agent][tui][mcp][e2e][issue884][spec]") {
     Fixture fixture;
     Running running;
     start_interactive(fixture, running);
@@ -164,8 +165,7 @@ TEST_CASE("/mcp opens the servers menu and Escape closes it",
     finish_interactive(running);
 }
 
-TEST_CASE("/mcp reconnect prints pi's server status line",
-        "[coding_agent][tui][mcp][e2e][issue884][spec]") {
+TEST_CASE("/mcp reconnect prints pi's server status line", "[coding_agent][tui][mcp][e2e][issue884][spec]") {
     Fixture fixture;
     Running running;
     start_interactive(fixture, running);
@@ -175,16 +175,14 @@ TEST_CASE("/mcp reconnect prints pi's server status line",
     REQUIRE(running.terminal.inject_input("/mcp reconnect echo\r\r"));
     // pi's describeState appends the resource count (the echo fixture
     // advertises two resources alongside its five tools).
-    constexpr std::string_view expected =
-            "Reconnected to MCP server \"echo\" (connected · 5 tools · 2 resources).";
+    constexpr std::string_view expected = "Reconnected to MCP server \"echo\" (connected · 5 tools · 2 resources).";
     REQUIRE(wait_for_text(running, expected));
     CHECK(visible_screen(running.terminal).find(expected) != std::string::npos);
 
     finish_interactive(running);
 }
 
-TEST_CASE("/mcp reports pi's usage warning for an unknown action",
-        "[coding_agent][tui][mcp][e2e][issue884][spec]") {
+TEST_CASE("/mcp reports pi's usage warning for an unknown action", "[coding_agent][tui][mcp][e2e][issue884][spec]") {
     Fixture fixture;
     Running running;
     start_interactive(fixture, running);
@@ -206,8 +204,7 @@ TEST_CASE("MCP boot warning is surfaced when codemode auto-enable is disabled",
 
     // The verbatim warning wraps across the 100-column screen, so assert the
     // head and the reason tail as single rendered lines.
-    constexpr std::string_view warning_head =
-            "MCP tools are only reachable from the codemode or tool_search tool,";
+    constexpr std::string_view warning_head = "MCP tools are only reachable from the codemode or tool_search tool,";
     constexpr std::string_view warning_tail = "(autoEnableCodemode is false); they cannot be called.";
     REQUIRE(wait_for_text(running, warning_tail));
     const std::string screen = visible_screen(running.terminal);

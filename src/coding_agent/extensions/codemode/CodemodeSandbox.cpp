@@ -925,16 +925,15 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                 },
                 boost::asio::detached);
 
-        auto worker = std::thread(
-                [this, link, script = std::move(script), tools = std::move(tools), limits, stop_token]() mutable {
-                    link->finish(run_engine(std::move(script),
-                            std::move(tools),
-                            limits,
-                            stop_token,
-                            *link,
-                            impl_->ast,
-                            impl_->configure));
-                });
+        auto worker = std::thread([this,
+                                          link,
+                                          script = std::move(script),
+                                          tools = std::move(tools),
+                                          limits,
+                                          stop_token]() mutable {
+            link->finish(run_engine(
+                    std::move(script), std::move(tools), limits, stop_token, *link, impl_->ast, impl_->configure));
+        });
 
         while (true) {
             auto requests = link->take_requests();

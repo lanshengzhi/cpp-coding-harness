@@ -53,8 +53,7 @@ struct ConnectedMcpTransport {
 class ProductionMcpConnection final : public McpLiveConnection {
 public:
     /// The factory's connect operation: one fresh transport with handshake.
-    using ConnectSource =
-            std::function<boost::asio::awaitable<support::Expected<ConnectedMcpTransport>>()>;
+    using ConnectSource = std::function<boost::asio::awaitable<support::Expected<ConnectedMcpTransport>>()>;
 
     /// `connected` carries the fresh transport, when the connect succeeded;
     /// the connection starts in `Connecting` and the factory runs `refresh()`
@@ -80,9 +79,7 @@ public:
     [[nodiscard]] const std::optional<std::string>& stderr_tail() const noexcept override { return stderr_tail_; }
     [[nodiscard]] bool uses_oauth() const noexcept override { return oauth_eligible_; }
     [[nodiscard]] const std::string& oauth_url() const noexcept override { return oauth_url_; }
-    [[nodiscard]] const std::optional<std::string>& instructions() const noexcept override {
-        return instructions_;
-    }
+    [[nodiscard]] const std::optional<std::string>& instructions() const noexcept override { return instructions_; }
 
     [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(
             std::string_view tool, support::JsonValue arguments, std::stop_token stop_token) override;

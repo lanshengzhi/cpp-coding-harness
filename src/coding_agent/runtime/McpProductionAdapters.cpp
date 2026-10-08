@@ -86,12 +86,9 @@ ProductionMcpConnection::ProductionMcpConnection(std::string server_name,
         ConnectedMcpTransport connected,
         bool oauth_eligible_value,
         std::string oauth_url)
-    : server_name_(std::move(server_name)),
-      connect_source_(std::move(connect_source)),
-      client_(std::move(connected.client)),
-      state_(client_ ? McpServerState::Connecting : McpServerState::Failed),
-      oauth_eligible_(oauth_eligible_value),
-      oauth_url_(std::move(oauth_url)),
+    : server_name_(std::move(server_name)), connect_source_(std::move(connect_source)),
+      client_(std::move(connected.client)), state_(client_ ? McpServerState::Connecting : McpServerState::Failed),
+      oauth_eligible_(oauth_eligible_value), oauth_url_(std::move(oauth_url)),
       instructions_(std::move(connected.instructions)) {}
 
 void ProductionMcpConnection::note_connect_error(support::Error error) noexcept {
@@ -157,9 +154,8 @@ support::AsyncResult<support::JsonValue> ProductionMcpConnection::resource_templ
 
 support::AsyncResult<support::JsonValue> ProductionMcpConnection::read_resource(
         std::string uri, std::stop_token stop_token) {
-    return request("resources/read",
-            support::JsonValue{support::JsonValue::object_t{{"uri", std::move(uri)}}},
-            stop_token);
+    return request(
+            "resources/read", support::JsonValue{support::JsonValue::object_t{{"uri", std::move(uri)}}}, stop_token);
 }
 
 support::AsyncResult<void> ProductionMcpConnection::refresh() {
@@ -173,7 +169,7 @@ support::AsyncResult<void> ProductionMcpConnection::refresh() {
             // An OAuth challenge (for example stale credentials after an
             // external sign-out) asks for a sign-in, not a failure.
             state_ = connected.error().code == support::ErrorCode::OAuth ? McpServerState::NeedsAuth
-                                                                        : McpServerState::Failed;
+                                                                         : McpServerState::Failed;
             error_ = connected.error().message;
             co_return std::unexpected(std::move(connected.error()));
         }
@@ -262,76 +258,80 @@ std::shared_ptr<mcp::McpAuthStore> ProductionMcpConnectionFactory::auth_store() 
 
 support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnectionFactory::connect(
         const mcp::McpConfigEntry& entry) {
-    return support::detail::make_async_result([this, entry]() mutable
-            -> boost::asio::awaitable<support::Expected<std::shared_ptr<McpLiveConnection>>> {
-        const std::string name = entry.name;
-        // The connect source the connection re-runs on reconnect: one fresh
-        // transport plus handshake. For an OAuth-eligible HTTP server the
-        // request-time token resolves from mcp-auth.json (pi shape), with the
-        // legacy auth.json record migrated on first need — best-effort, never
-        // vetoing the connect.
-        ProductionMcpConnection::ConnectSource source;
-        bool eligible = false;
-        std::string oauth_url;
-        if (const auto* http = std::get_if<mcp::McpHttpServerConfig>(&entry.config)) {
-            eligible = http->resolved_oauth.has_value() ||
-                       (http->oauth.has_value() && !http->auth_provider.has_value() && oauth_eligible(*http));
-            oauth_url = http->url;
-            std::shared_ptr<mcp::McpRequestAuthSource> request_auth;
-            if (eligible) {
-                const std::shared_ptr<mcp::McpAuthStore> store = auth_store();
-                if (http->resolved_oauth) {
-                    request_auth = std::make_shared<mcp::McpOAuthTokenResolver>(
-                            store, http->name, http->url,
-                            std::make_shared<mcp::McpOAuthProvider>(*http->resolved_oauth));
+    return support::detail::make_async_result(
+            [this, entry]() mutable -> boost::asio::awaitable<support::Expected<std::shared_ptr<McpLiveConnection>>> {
+                const std::string name = entry.name;
+                // The connect source the connection re-runs on reconnect: one fresh
+                // transport plus handshake. For an OAuth-eligible HTTP server the
+                // request-time token resolves from mcp-auth.json (pi shape), with the
+                // legacy auth.json record migrated on first need — best-effort, never
+                // vetoing the connect.
+                ProductionMcpConnection::ConnectSource source;
+                bool eligible = false;
+                std::string oauth_url;
+                if (const auto* http = std::get_if<mcp::McpHttpServerConfig>(&entry.config)) {
+                    eligible = http->resolved_oauth.has_value() ||
+                               (http->oauth.has_value() && !http->auth_provider.has_value() && oauth_eligible(*http));
+                    oauth_url = http->url;
+                    std::shared_ptr<mcp::McpRequestAuthSource> request_auth;
+                    if (eligible) {
+                        const std::shared_ptr<mcp::McpAuthStore> store = auth_store();
+                        if (http->resolved_oauth) {
+                            request_auth = std::make_shared<mcp::McpOAuthTokenResolver>(store,
+                                    http->name,
+                                    http->url,
+                                    std::make_shared<mcp::McpOAuthProvider>(*http->resolved_oauth));
+                        } else {
+                            (void)store->migrate_from_auth_json(agent_dir_ / "auth.json", http->name, http->url);
+                            request_auth = std::make_shared<mcp::McpOAuthFlowTokenResolver>(
+                                    store, http->name, http->url, *http->oauth);
+                        }
+                    }
+                    const mcp::McpHttpServerConfig config = *http;
+                    source = [config, request_auth]()
+                            -> boost::asio::awaitable<support::Expected<ConnectedMcpTransport>> {
+                        auto client = co_await mcp::McpHttpClient::connect(
+                                config, std::make_shared<ai::providers::BoostBeastStreamTransport>(), request_auth);
+                        if (!client) {
+                            co_return std::unexpected(std::move(client.error()));
+                        }
+                        ConnectedMcpTransport connected;
+                        connected.client = *client;
+                        connected.instructions = (*client)->server_instructions();
+                        co_return connected;
+                    };
                 } else {
-                    (void)store->migrate_from_auth_json(agent_dir_ / "auth.json", http->name, http->url);
-                    request_auth = std::make_shared<mcp::McpOAuthFlowTokenResolver>(
-                            store, http->name, http->url, *http->oauth);
+                    const mcp::McpStdioServerConfig config = std::get<mcp::McpStdioServerConfig>(entry.config);
+                    source = [config]() -> boost::asio::awaitable<support::Expected<ConnectedMcpTransport>> {
+                        auto client = co_await mcp::McpStdioClient::connect(config);
+                        if (!client) {
+                            co_return std::unexpected(std::move(client.error()));
+                        }
+                        ConnectedMcpTransport connected;
+                        connected.client = *client;
+                        connected.instructions = (*client)->server_instructions();
+                        co_return connected;
+                    };
                 }
-            }
-            const mcp::McpHttpServerConfig config = *http;
-            source = [config, request_auth]() -> boost::asio::awaitable<support::Expected<ConnectedMcpTransport>> {
-                auto client = co_await mcp::McpHttpClient::connect(
-                        config, std::make_shared<ai::providers::BoostBeastStreamTransport>(), request_auth);
-                if (!client) {
-                    co_return std::unexpected(std::move(client.error()));
+                auto connected = co_await source();
+                auto connection = std::make_shared<ProductionMcpConnection>(name,
+                        source,
+                        connected ? std::move(*connected) : ConnectedMcpTransport{},
+                        eligible,
+                        std::move(oauth_url));
+                if (!connected) {
+                    // pi: an OAuth challenge at connect is needs-auth (the panel
+                    // offers the sign-in action); anything else is failed. Either way
+                    // the connection is live enough to retry via reconnect().
+                    connection->note_connect_error(std::move(connected.error()));
+                    co_return std::shared_ptr<McpLiveConnection>{std::move(connection)};
                 }
-                ConnectedMcpTransport connected;
-                connected.client = *client;
-                connected.instructions = (*client)->server_instructions();
-                co_return connected;
-            };
-        } else {
-            const mcp::McpStdioServerConfig config = std::get<mcp::McpStdioServerConfig>(entry.config);
-            source = [config]() -> boost::asio::awaitable<support::Expected<ConnectedMcpTransport>> {
-                auto client = co_await mcp::McpStdioClient::connect(config);
-                if (!client) {
-                    co_return std::unexpected(std::move(client.error()));
-                }
-                ConnectedMcpTransport connected;
-                connected.client = *client;
-                connected.instructions = (*client)->server_instructions();
-                co_return connected;
-            };
-        }
-        auto connected = co_await source();
-        auto connection = std::make_shared<ProductionMcpConnection>(
-                name, source, connected ? std::move(*connected) : ConnectedMcpTransport{}, eligible,
-                std::move(oauth_url));
-        if (!connected) {
-            // pi: an OAuth challenge at connect is needs-auth (the panel
-            // offers the sign-in action); anything else is failed. Either way
-            // the connection is live enough to retry via reconnect().
-            connection->note_connect_error(std::move(connected.error()));
-            co_return std::shared_ptr<McpLiveConnection>{std::move(connection)};
-        }
-        // pi runtime `getClient()` after connect: list the tools and take the
-        // connected-time resource snapshot before the connection reports
-        // connected.
-        static_cast<void>(co_await support::detail::await_async_result(connection->refresh()));
-        co_return std::shared_ptr<McpLiveConnection>{std::move(connection)};
-    });
+                // pi runtime `getClient()` after connect: list the tools and take the
+                // connected-time resource snapshot before the connection reports
+                // connected.
+                static_cast<void>(co_await support::detail::await_async_result(connection->refresh()));
+                co_return std::shared_ptr<McpLiveConnection>{std::move(connection)};
+            });
 }
 
 // ── McpOAuthFlowSignInDriver ────────────────────────────────────────────────
@@ -341,30 +341,31 @@ McpOAuthFlowSignInDriver::McpOAuthFlowSignInDriver(std::filesystem::path agent_d
 
 support::AsyncResult<std::optional<std::string>> McpOAuthFlowSignInDriver::sign_in(
         const mcp::McpConfigEntry& entry, const McpSignInPrompt& prompt) {
-    return support::detail::make_async_result([this, entry, prompt]() mutable
-            -> boost::asio::awaitable<support::Expected<std::optional<std::string>>> {
-        const auto* http = std::get_if<mcp::McpHttpServerConfig>(&entry.config);
-        if (http == nullptr || !http->oauth.has_value() || http->auth_provider.has_value() ||
-                !oauth_eligible(*http)) {
-            co_return std::optional<std::string>{std::format("MCP server \"{}\" does not use OAuth.", entry.name)};
-        }
-        if (!auth_store_) {
-            auth_store_ = std::make_shared<mcp::McpAuthStore>(mcp::McpAuthStore::default_path(agent_dir_));
-        }
-        mcp::McpOAuthSignInRequest request;
-        request.store = auth_store_;
-        request.server_name = entry.name;
-        request.server_url = http->url;
-        request.oauth = *http->oauth;
-        mcp::McpOAuthSignInPrompt adapted;
-        adapted.show_authorization_url = [show = prompt.show_authorization_url](const std::string& url) {
-            if (show) {
-                show(url);
-            }
-        };
-        adapted.prompt_for_redirect_url =
-                [prompt_for_redirect = prompt.prompt_for_redirect_url](
-                        std::stop_token) -> support::AsyncResult<std::optional<std::string>> {
+    return support::detail::make_async_result(
+            [this, entry, prompt]() mutable -> boost::asio::awaitable<support::Expected<std::optional<std::string>>> {
+                const auto* http = std::get_if<mcp::McpHttpServerConfig>(&entry.config);
+                if (http == nullptr || !http->oauth.has_value() || http->auth_provider.has_value() ||
+                        !oauth_eligible(*http)) {
+                    co_return std::optional<std::string>{
+                            std::format("MCP server \"{}\" does not use OAuth.", entry.name)};
+                }
+                if (!auth_store_) {
+                    auth_store_ = std::make_shared<mcp::McpAuthStore>(mcp::McpAuthStore::default_path(agent_dir_));
+                }
+                mcp::McpOAuthSignInRequest request;
+                request.store = auth_store_;
+                request.server_name = entry.name;
+                request.server_url = http->url;
+                request.oauth = *http->oauth;
+                mcp::McpOAuthSignInPrompt adapted;
+                adapted.show_authorization_url = [show = prompt.show_authorization_url](const std::string& url) {
+                    if (show) {
+                        show(url);
+                    }
+                };
+                adapted.prompt_for_redirect_url =
+                        [prompt_for_redirect = prompt.prompt_for_redirect_url](
+                                std::stop_token) -> support::AsyncResult<std::optional<std::string>> {
                     if (!prompt_for_redirect) {
                         return support::AsyncResult<std::optional<std::string>>{std::nullopt};
                     }
@@ -374,40 +375,40 @@ support::AsyncResult<std::optional<std::string>> McpOAuthFlowSignInDriver::sign_
                                 co_return co_await prompt_for_redirect();
                             });
                 };
-        request.prompt = std::move(adapted);
-        auto outcome = co_await support::detail::await_async_result(sign_in_mcp_server(std::move(request)));
-        if (!outcome) {
-            // pi `signIn` returns the failure message (`string | undefined`).
-            co_return std::optional<std::string>{outcome.error().message};
-        }
-        co_return std::optional<std::string>{};
-    });
+                request.prompt = std::move(adapted);
+                auto outcome = co_await support::detail::await_async_result(sign_in_mcp_server(std::move(request)));
+                if (!outcome) {
+                    // pi `signIn` returns the failure message (`string | undefined`).
+                    co_return std::optional<std::string>{outcome.error().message};
+                }
+                co_return std::optional<std::string>{};
+            });
 }
 
 support::AsyncResult<bool> McpOAuthFlowSignInDriver::sign_out(const mcp::McpConfigEntry& entry) {
-    return support::detail::make_async_result([this, entry]() mutable
-            -> boost::asio::awaitable<support::Expected<bool>> {
-        const auto* http = std::get_if<mcp::McpHttpServerConfig>(&entry.config);
-        if (http == nullptr) {
-            co_return false;
-        }
-        if (!auth_store_) {
-            auth_store_ = std::make_shared<mcp::McpAuthStore>(mcp::McpAuthStore::default_path(agent_dir_));
-        }
-        auto removed = auth_store_->remove(entry.name, http->url);
-        if (!removed) {
-            co_return std::unexpected(std::move(removed.error()));
-        }
-        co_return support::Expected<bool>{*removed};
-    });
+    return support::detail::make_async_result(
+            [this, entry]() mutable -> boost::asio::awaitable<support::Expected<bool>> {
+                const auto* http = std::get_if<mcp::McpHttpServerConfig>(&entry.config);
+                if (http == nullptr) {
+                    co_return false;
+                }
+                if (!auth_store_) {
+                    auth_store_ = std::make_shared<mcp::McpAuthStore>(mcp::McpAuthStore::default_path(agent_dir_));
+                }
+                auto removed = auth_store_->remove(entry.name, http->url);
+                if (!removed) {
+                    co_return std::unexpected(std::move(removed.error()));
+                }
+                co_return support::Expected<bool>{*removed};
+            });
 }
 
 // ── AgentMcpToolSurface ─────────────────────────────────────────────────────
 
 AgentMcpToolSurface::AgentMcpToolSurface(agent::Agent& agent, std::vector<std::string> registered_names)
     : agent_(agent) {
-    known_names_.insert(std::make_move_iterator(registered_names.begin()),
-            std::make_move_iterator(registered_names.end()));
+    known_names_.insert(
+            std::make_move_iterator(registered_names.begin()), std::make_move_iterator(registered_names.end()));
 }
 
 void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
@@ -423,18 +424,17 @@ void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
     // serializes frames internally.
     extension.concurrency = agent::ToolConcurrency::ParallelSafe;
     auto call = std::move(tool.call);
-    extension.execute = [call = std::move(call), server](
-                                support::JsonValue arguments, std::stop_token stop_token) mutable
-            -> support::AsyncResult<extensions::ExtensionToolResult> {
+    extension.execute =
+            [call = std::move(call), server](support::JsonValue arguments,
+                    std::stop_token stop_token) mutable -> support::AsyncResult<extensions::ExtensionToolResult> {
         return support::detail::make_async_result(
                 [call = std::move(call), server, arguments = std::move(arguments), stop_token]() mutable
                         -> boost::asio::awaitable<support::Expected<extensions::ExtensionToolResult>> {
                     if (!call) {
-                        co_return std::unexpected(support::make_error(
-                                support::ErrorCode::Validation, "MCP tool from server '" + server + "' is not callable"));
+                        co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                                "MCP tool from server '" + server + "' is not callable"));
                     }
-                    auto result =
-                            co_await support::detail::await_async_result(call(std::move(arguments), stop_token));
+                    auto result = co_await support::detail::await_async_result(call(std::move(arguments), stop_token));
                     if (!result) {
                         co_return std::unexpected(std::move(result.error()));
                     }

@@ -59,11 +59,8 @@ McpManagerFlow::McpManagerFlow(boost::asio::any_io_executor executor,
         std::weak_ptr<void> host_lifetime,
         McpFlowHostHooks hooks,
         std::shared_ptr<SharedKeybindings> keybindings)
-    : executor_(std::move(executor)),
-      presenter_(&presenter),
-      host_lifetime_(std::move(host_lifetime)),
-      hooks_(std::move(hooks)),
-      keybindings_(std::move(keybindings)) {}
+    : executor_(std::move(executor)), presenter_(&presenter), host_lifetime_(std::move(host_lifetime)),
+      hooks_(std::move(hooks)), keybindings_(std::move(keybindings)) {}
 
 void McpManagerFlow::post(std::move_only_function<void()> action) {
     if (hooks_.post_on_executor) {
@@ -313,8 +310,8 @@ void McpManagerFlow::print_status_report() {
 
 void McpManagerFlow::show_status_lines(const std::vector<McpServerView>& servers) {
     auto* current = manager();
-    const auto report = mcp_format_status(
-            servers, current != nullptr ? current->config_errors() : std::vector<std::string>{},
+    const auto report = mcp_format_status(servers,
+            current != nullptr ? current->config_errors() : std::vector<std::string>{},
             current != nullptr ? current->overridden() : std::vector<std::string>{},
             current != nullptr ? current->agent_dir() : std::filesystem::path{});
     std::string line;
@@ -370,8 +367,7 @@ void McpManagerFlow::on_menu_confirm(std::string value) {
                         co_return;
                     }
                     McpManagerPresenter presenter(*current);
-                    auto saved = co_await support::detail::await_async_result(
-                            presenter.set_exposure(name, exposure));
+                    auto saved = co_await support::detail::await_async_result(presenter.set_exposure(name, exposure));
                     if (!saved) {
                         self->show_error(saved.error().message);
                     }
@@ -424,15 +420,13 @@ void McpManagerFlow::run_server_action(std::string name, McpServerAction action)
         return;
     }
     hooks_.spawn_flow(
-            [self, host_lifetime = std::move(host_lifetime), name, action]() mutable
-                    -> boost::asio::awaitable<void> {
+            [self, host_lifetime = std::move(host_lifetime), name, action]() mutable -> boost::asio::awaitable<void> {
                 auto* current = self->manager();
                 if (current == nullptr) {
                     co_return;
                 }
                 McpManagerPresenter presenter(*current);
-                auto outcome = co_await support::detail::await_async_result(
-                        presenter.run_action(name, action));
+                auto outcome = co_await support::detail::await_async_result(presenter.run_action(name, action));
                 if (!outcome) {
                     self->show_error(outcome.error().message);
                     self->present_server(name);
@@ -440,8 +434,7 @@ void McpManagerFlow::run_server_action(std::string name, McpServerAction action)
                 }
                 if (outcome->next_menu.has_value()) {
                     // `Tools` and `Exposure` return their sub-screen.
-                    self->panel_->screen =
-                            action == McpServerAction::Tools ? Screen::tools : Screen::exposure;
+                    self->panel_->screen = action == McpServerAction::Tools ? Screen::tools : Screen::exposure;
                     self->panel_->view->show_menu(std::move(*outcome->next_menu));
                     if (self->presenter_ != nullptr) {
                         self->presenter_->invalidate();
@@ -501,13 +494,10 @@ void McpManagerFlow::run_sign_in(std::string name, bool close_after) {
         }
     };
     prompt.prompt_for_redirect_url = [state]() -> boost::asio::awaitable<std::optional<std::string>> {
-        auto outcome = co_await support::detail::await_async_result(
-                support::AsyncResult<std::optional<std::string>>{
-                        support::AsyncProducer<std::optional<std::string>, support::Error>{
-                                [state](support::AsyncCompletion<std::optional<std::string>, support::Error>
-                                                completion) mutable noexcept {
-                                    state->pending = std::move(completion);
-                                }}});
+        auto outcome = co_await support::detail::await_async_result(support::AsyncResult<std::optional<std::string>>{
+                support::AsyncProducer<std::optional<std::string>, support::Error>{
+                        [state](support::AsyncCompletion<std::optional<std::string>, support::Error>
+                                        completion) mutable noexcept { state->pending = std::move(completion); }}});
         // A cancelled wait (the browser callback or the timeout won, or the
         // flow ended) resolves as no pasted URL.
         if (!outcome) {
@@ -522,15 +512,20 @@ void McpManagerFlow::run_sign_in(std::string name, bool close_after) {
         return;
     }
     hooks_.spawn_flow(
-            [self, host_lifetime = std::move(host_lifetime), name, title, prompt = std::move(prompt),
-                    state, close_after]() mutable -> boost::asio::awaitable<void> {
+            [self,
+                    host_lifetime = std::move(host_lifetime),
+                    name,
+                    title,
+                    prompt = std::move(prompt),
+                    state,
+                    close_after]() mutable -> boost::asio::awaitable<void> {
                 auto* running = self->manager();
                 if (running == nullptr) {
                     co_return;
                 }
                 McpManagerPresenter presenter(*running);
-                auto outcome =
-                        co_await support::detail::await_async_result(presenter.run_action(name, McpServerAction::SignIn, std::move(prompt)));
+                auto outcome = co_await support::detail::await_async_result(
+                        presenter.run_action(name, McpServerAction::SignIn, std::move(prompt)));
                 // Release the paste wait if it is still pending (the browser
                 // callback or the timeout won the race); the late completion
                 // is discarded.
@@ -615,9 +610,8 @@ std::optional<std::string> McpManagerFlow::pick_server(const std::string& name, 
         return options.eligible != nullptr && options.eligible(view);
     };
     if (!name.empty()) {
-        const auto found = std::ranges::find_if(servers, [&](const McpServerView& view) {
-            return view.entry.name == name;
-        });
+        const auto found =
+                std::ranges::find_if(servers, [&](const McpServerView& view) { return view.entry.name == name; });
         if (found == servers.end()) {
             show_error(no_server_named(name));
             return std::nullopt;
@@ -662,9 +656,7 @@ void McpManagerFlow::run_login(std::string name) {
     if (manager() == nullptr) {
         return;
     }
-    const auto oauth = [](const McpServerView& view) {
-        return view.connection.has_value() && view.connection->oauth;
-    };
+    const auto oauth = [](const McpServerView& view) { return view.connection.has_value() && view.connection->oauth; };
     const auto needs_auth = [](const McpServerView& view) {
         return view.connection.has_value() && view.connection->state == McpServerViewState::NeedsAuth;
     };
@@ -723,9 +715,7 @@ void McpManagerFlow::run_logout(std::string name) {
         return;
     }
     PickOptions options{
-            .eligible = [](const McpServerView& view) {
-                return view.connection.has_value() && view.connection->oauth;
-            },
+            .eligible = [](const McpServerView& view) { return view.connection.has_value() && view.connection->oauth; },
             .preferred = nullptr,
             .none_message = oauth_none_message(),
     };
@@ -739,14 +729,12 @@ void McpManagerFlow::run_logout(std::string name) {
         return;
     }
     hooks_.spawn_flow(
-            [self, host_lifetime = std::move(host_lifetime), name = *picked]() mutable
-                    -> boost::asio::awaitable<void> {
+            [self, host_lifetime = std::move(host_lifetime), name = *picked]() mutable -> boost::asio::awaitable<void> {
                 auto* running = self->manager();
                 if (running == nullptr) {
                     co_return;
                 }
-                const auto removed =
-                        co_await support::detail::await_async_result(running->sign_out(name));
+                const auto removed = co_await support::detail::await_async_result(running->sign_out(name));
                 if (!removed) {
                     self->show_error(removed.error().message);
                     co_return;
@@ -768,11 +756,12 @@ void McpManagerFlow::run_reconnect(std::string name) {
     }
     PickOptions options{
             .eligible = [](const McpServerView& view) { return view.connection.has_value(); },
-            .preferred = [](const McpServerView& view) {
-                return view.connection.has_value() &&
-                       (view.connection->state == McpServerViewState::Failed ||
-                               view.connection->state == McpServerViewState::Disconnected);
-            },
+            .preferred =
+                    [](const McpServerView& view) {
+                        return view.connection.has_value() &&
+                               (view.connection->state == McpServerViewState::Failed ||
+                                       view.connection->state == McpServerViewState::Disconnected);
+                    },
             .none_message = "No enabled MCP server to reconnect.",
     };
     const auto picked = pick_server(name, options);
@@ -785,14 +774,12 @@ void McpManagerFlow::run_reconnect(std::string name) {
         return;
     }
     hooks_.spawn_flow(
-            [self, host_lifetime = std::move(host_lifetime), name = *picked]() mutable
-                    -> boost::asio::awaitable<void> {
+            [self, host_lifetime = std::move(host_lifetime), name = *picked]() mutable -> boost::asio::awaitable<void> {
                 auto* running = self->manager();
                 if (running == nullptr) {
                     co_return;
                 }
-                const auto failure =
-                        co_await support::detail::await_async_result(running->reconnect(name));
+                const auto failure = co_await support::detail::await_async_result(running->reconnect(name));
                 if (!failure) {
                     self->show_error(failure.error().message);
                     co_return;

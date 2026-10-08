@@ -45,9 +45,7 @@ struct McpFlowHostHooks {
     std::move_only_function<void(std::move_only_function<void()>)> post_on_executor{nullptr};
     /// Spawn one detached flow coroutine on the host executor (the manager
     /// actions and the sign-in race); a failure is reported under the label.
-    std::move_only_function<void(
-            std::move_only_function<boost::asio::awaitable<void>()>,
-            std::string failure_label)>
+    std::move_only_function<void(std::move_only_function<boost::asio::awaitable<void>()>, std::string failure_label)>
             spawn_flow{nullptr};
     /// Resolve the live MCP manager at execution time (the session owns it).
     /// Null when the current session has none.
@@ -105,9 +103,7 @@ public:
     /// one subscriber own both the completion refresh and the panel's
     /// re-presentation).
     void refresh_completion();
-    [[nodiscard]] std::shared_ptr<const McpCompletionSnapshot> completion_snapshot() const {
-        return completion_;
-    }
+    [[nodiscard]] std::shared_ptr<const McpCompletionSnapshot> completion_snapshot() const { return completion_; }
 
 private:
     /// Which menu/screen the panel currently shows.
