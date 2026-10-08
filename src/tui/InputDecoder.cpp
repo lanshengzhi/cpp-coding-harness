@@ -133,8 +133,11 @@ std::optional<KeyEvent> make_key_event(
     unsigned int codepoint,
     ParsedModifiers modifiers,
     KeyEventType type,
-    std::optional<unsigned int> base_layout_key = std::nullopt) {
-    auto key = key_for_codepoint(codepoint, modifiers.shift);
+    std::optional<unsigned int> base_layout_key = std::nullopt,
+    std::optional<unsigned int> shifted_key = std::nullopt) {
+    auto key = modifiers.shift && shifted_key
+        ? key_for_codepoint(*shifted_key, modifiers.shift)
+        : key_for_codepoint(codepoint, modifiers.shift);
     const bool authoritative = key && key->size() == 1 &&
         (((*key)[0] >= 'a' && (*key)[0] <= 'z') || ((*key)[0] >= '0' && (*key)[0] <= '9') ||
          is_baseline_symbol((*key)[0]));
@@ -167,6 +170,13 @@ std::optional<KeyEvent> parse_kitty_csi_u(std::string_view sequence) {
     const auto codepoint = parse_number(key_parts[0]);
     if (!codepoint.valid) return std::nullopt;
 
+    std::optional<unsigned int> shifted_key;
+    if (key_parts.size() >= 2 && !key_parts[1].empty()) {
+        const auto parsed_shifted = parse_number(key_parts[1]);
+        if (!parsed_shifted.valid) return std::nullopt;
+        shifted_key = parsed_shifted.value;
+    }
+
     std::optional<unsigned int> base_layout_key;
     if (key_parts.size() == 3 && !key_parts[2].empty()) {
         const auto parsed_base = parse_number(key_parts[2]);
@@ -186,7 +196,7 @@ std::optional<KeyEvent> parse_kitty_csi_u(std::string_view sequence) {
     }
     const auto modifiers = parse_modifiers(modifier_value);
     if (!modifiers) return std::nullopt;
-    return make_key_event(codepoint.value, *modifiers, type, base_layout_key);
+    return make_key_event(codepoint.value, *modifiers, type, base_layout_key, shifted_key);
 }
 
 std::optional<KeyEvent> parse_modify_other_keys(std::string_view sequence) {

@@ -16,6 +16,17 @@
 
 using namespace cch;
 
+TEST_CASE("stream decoder prefers shifted key in Kitty CSI-u", "[tui][decoder][issue890][spec]") {
+    tui::detail::TerminalStreamDecoder decoder;
+    // CSI 49:33;2u -> codepoint 49 ('1'), shiftedKey 33 ('!'), modifier 2 (shift)
+    const auto result = decoder.feed("\x1b[49:33;2u");
+    REQUIRE(result.events.size() == 1);
+    const auto* key = std::get_if<tui::KeyEvent>(&result.events.front());
+    REQUIRE(key != nullptr);
+    CHECK(key->key == "!");
+    CHECK(key->shift);
+}
+
 TEST_CASE("stream decoder demuxes a cursor position report out of the byte stream", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
     const auto result = decoder.feed("a\x1b[8;3Rz");
