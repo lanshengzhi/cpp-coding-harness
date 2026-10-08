@@ -14,6 +14,7 @@
 // them against the frozen pi-v1.0.4 bundle.
 
 #include "coding_agent/mcp/McpConfigFile.hpp"
+#include "coding_agent/mcp/McpUrl.hpp"
 
 #include "coding_agent/mcp/McpNamespace.hpp"
 
@@ -106,52 +107,17 @@ struct ParsedUrl {
 };
 
 [[nodiscard]] ParsedUrl parse_url(std::string_view value) {
+    auto mcp_url = parse_mcp_url(value);
     ParsedUrl url;
-    const auto scheme_end = value.find("://");
-    if (scheme_end == std::string_view::npos || scheme_end == 0) {
+    if (!mcp_url.valid) {
         return url;
     }
-    url.protocol = std::string{value.substr(0, scheme_end)} + ":";
-    std::string_view rest = value.substr(scheme_end + 3);
-    const auto authority_end = rest.find_first_of("/?#");
-    std::string_view authority = authority_end == std::string_view::npos ? rest : rest.substr(0, authority_end);
-    std::string_view remainder =
-            authority_end == std::string_view::npos ? std::string_view{} : rest.substr(authority_end);
-    if (const auto userinfo = authority.rfind('@'); userinfo != std::string_view::npos) {
-        authority = authority.substr(userinfo + 1);
-    }
-    if (authority.empty()) {
-        return url;
-    }
-    if (authority.front() == '[') {
-        const auto close = authority.find(']');
-        if (close == std::string_view::npos) {
-            return url;
-        }
-        url.hostname = std::string{authority.substr(0, close + 1)};
-        std::string_view after = authority.substr(close + 1);
-        if (after.starts_with(':')) {
-            url.port = std::string{after.substr(1)};
-        }
-    } else if (const auto colon = authority.rfind(':'); colon != std::string_view::npos) {
-        url.hostname = std::string{authority.substr(0, colon)};
-        url.port = std::string{authority.substr(colon + 1)};
-    } else {
-        url.hostname = std::string{authority};
-    }
-    if (url.hostname.empty()) {
-        return url;
-    }
-    std::string_view path = remainder;
-    if (const auto hash_start = path.find('#'); hash_start != std::string_view::npos) {
-        url.hash = std::string{path.substr(hash_start)};
-        path = path.substr(0, hash_start);
-    }
-    if (const auto query_start = path.find('?'); query_start != std::string_view::npos) {
-        url.search = std::string{path.substr(query_start)};
-        path = path.substr(0, query_start);
-    }
-    url.pathname = path.empty() ? "/" : std::string{path};
+    url.protocol = mcp_url.scheme + ":";
+    url.hostname = std::move(mcp_url.host);
+    url.port = std::move(mcp_url.port);
+    url.pathname = std::move(mcp_url.path);
+    url.search = std::move(mcp_url.search);
+    url.hash = std::move(mcp_url.hash);
     url.valid = true;
     return url;
 }

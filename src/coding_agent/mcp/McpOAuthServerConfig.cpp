@@ -6,6 +6,7 @@
 // form the flow accepts, and it is never used to reach a remote host.
 
 #include "coding_agent/mcp/McpOAuthServerConfig.hpp"
+#include "coding_agent/mcp/McpUrl.hpp"
 
 #include <cch/support/Error.hpp>
 
@@ -24,32 +25,7 @@ namespace {
 
 /// The authority component of a URL (`scheme://authority/...`), lowercased and
 /// stripped of any userinfo and port. Empty when the URL has no authority.
-[[nodiscard]] std::string url_host(std::string_view url) {
-    const auto scheme_separator = url.find("://");
-    if (scheme_separator == std::string_view::npos) {
-        return {};
-    }
-    std::string_view authority = url.substr(scheme_separator + 3);
-    if (const auto path_start = authority.find('/'); path_start != std::string_view::npos) {
-        authority = authority.substr(0, path_start);
-    }
-    if (const auto userinfo = authority.rfind('@'); userinfo != std::string_view::npos) {
-        authority = authority.substr(userinfo + 1);
-    }
-    // A bracketed IPv6 literal keeps its brackets so `[::1]` compares equal.
-    if (!authority.empty() && authority.front() != '[') {
-        if (const auto port = authority.rfind(':'); port != std::string_view::npos) {
-            authority = authority.substr(0, port);
-        }
-    }
-    std::string host{authority};
-    for (char& character : host) {
-        if (character >= 'A' && character <= 'Z') {
-            character = static_cast<char>(character - 'A' + 'a');
-        }
-    }
-    return host;
-}
+[[nodiscard]] std::string url_host(std::string_view url) { return extract_mcp_host(url); }
 
 [[nodiscard]] support::ExpectedVoid validate_endpoint(std::string_view name, const std::string& url) {
     if (url.starts_with("https://")) {

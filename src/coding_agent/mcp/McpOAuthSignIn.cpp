@@ -8,6 +8,7 @@
 // the flow when an `oauth` block has no pre-resolved endpoints.
 
 #include "coding_agent/mcp/McpOAuthSignIn.hpp"
+#include "coding_agent/mcp/McpUrl.hpp"
 
 #include "coding_agent/mcp/McpNamespace.hpp"
 #include "coding_agent/mcp/McpOAuthFlow.hpp"
@@ -73,26 +74,15 @@ struct SplitUrl {
 };
 
 [[nodiscard]] std::optional<SplitUrl> split_url(std::string_view value) {
-    const auto scheme_end = value.find("://");
-    if (scheme_end == std::string_view::npos || scheme_end == 0) {
+    auto parsed = parse_mcp_url(value);
+    if (!parsed.valid) {
         return std::nullopt;
     }
-    std::string_view rest = value.substr(scheme_end + 3);
-    const auto path_start = rest.find_first_of("/?#");
-    std::string_view authority = path_start == std::string_view::npos ? rest : rest.substr(0, path_start);
-    SplitUrl split;
-    split.origin = std::string{value.substr(0, scheme_end + 3 + authority.size())};
-    split.authority = std::string{authority};
-    if (path_start == std::string_view::npos) {
-        split.path = "/";
-        return split;
-    }
-    std::string_view path = rest.substr(path_start);
-    if (const auto cut = path.find_first_of("#?"); cut != std::string_view::npos) {
-        path = path.substr(0, cut);
-    }
-    split.path = path.empty() ? std::string{"/"} : std::string{path};
-    return split;
+    return SplitUrl{
+            .origin = std::move(parsed.origin),
+            .authority = std::move(parsed.authority),
+            .path = std::move(parsed.path),
+    };
 }
 
 /// The host and optional port of an `authority`, brackets kept for an IPv6
@@ -103,37 +93,12 @@ struct HostPort {
 };
 
 [[nodiscard]] HostPort split_host_port(std::string_view authority) {
-    if (const auto userinfo = authority.rfind('@'); userinfo != std::string_view::npos) {
-        authority = authority.substr(userinfo + 1);
+    const std::string synthetic = "http://" + std::string{authority};
+    auto parsed = parse_mcp_url(synthetic);
+    if (!parsed.valid) {
+        return HostPort{std::string{authority}, std::nullopt};
     }
-    HostPort result;
-    std::string_view rest = authority;
-    if (!authority.empty() && authority.front() == '[') {
-        const auto close = authority.find(']');
-        if (close == std::string_view::npos) {
-            result.host = std::string{authority};
-            return result;
-        }
-        result.host = std::string{authority.substr(0, close + 1)};
-        rest = authority.substr(close + 1);
-    } else {
-        const auto colon = authority.rfind(':');
-        if (colon == std::string_view::npos) {
-            result.host = std::string{authority};
-            return result;
-        }
-        result.host = std::string{authority.substr(0, colon)};
-        rest = authority.substr(colon);
-    }
-    if (rest.starts_with(':')) {
-        std::uint16_t port = 0;
-        const auto text = rest.substr(1);
-        const auto converted = std::from_chars(text.data(), text.data() + text.size(), port);
-        if (converted.ec == std::errc{} && converted.ptr == text.data() + text.size()) {
-            result.port = port;
-        }
-    }
-    return result;
+    return HostPort{std::move(parsed.host), parsed.port_number};
 }
 
 /// A host as it appears in a redirect URI: an IPv6 literal gains its brackets.

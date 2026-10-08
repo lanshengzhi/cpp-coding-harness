@@ -7,6 +7,7 @@
 // a test scripts it without a network.
 
 #include "coding_agent/mcp/McpOAuthDiscovery.hpp"
+#include "coding_agent/mcp/McpUrl.hpp"
 
 #include "ai/JsonAccess.hpp"
 #include "ai/auth/OAuthHttpClient.hpp"
@@ -57,64 +58,13 @@ struct DiscoveryUrl {
 }
 
 [[nodiscard]] std::optional<DiscoveryUrl> parse_discovery_url(std::string_view value) {
-    const auto scheme_end = value.find("://");
-    if (scheme_end == std::string_view::npos || scheme_end == 0) {
+    auto parsed = parse_mcp_url(value);
+    if (!parsed.valid || is_forbidden_scheme(parsed.scheme)) {
         return std::nullopt;
-    }
-    std::string scheme{value.substr(0, scheme_end)};
-    for (char& character : scheme) {
-        character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
-    }
-    if (is_forbidden_scheme(scheme)) {
-        return std::nullopt;
-    }
-    std::string_view rest = value.substr(scheme_end + 3);
-    const auto authority_end = rest.find_first_of("/?#");
-    std::string_view authority = authority_end == std::string_view::npos ? rest : rest.substr(0, authority_end);
-    std::string_view remainder =
-            authority_end == std::string_view::npos ? std::string_view{} : rest.substr(authority_end);
-    if (const auto userinfo = authority.rfind('@'); userinfo != std::string_view::npos) {
-        authority = authority.substr(userinfo + 1);
-    }
-    if (authority.empty()) {
-        return std::nullopt;
-    }
-    std::string host{authority};
-    std::string port;
-    if (authority.front() == '[') {
-        const auto close = authority.find(']');
-        if (close == std::string_view::npos) {
-            return std::nullopt;
-        }
-        host = std::string{authority.substr(0, close + 1)};
-        if (authority.size() > close + 1) {
-            if (authority[close + 1] != ':') {
-                return std::nullopt;
-            }
-            port = std::string{authority.substr(close + 2)};
-        }
-    } else if (const auto colon = authority.rfind(':'); colon != std::string_view::npos) {
-        host = std::string{authority.substr(0, colon)};
-        port = std::string{authority.substr(colon + 1)};
-    }
-    if (host.empty()) {
-        return std::nullopt;
-    }
-    for (char& character : host) {
-        character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
-    }
-    // `new URL` drops a default port, so the same origin compares equal with or
-    // without it.
-    if ((scheme == "https" && port == "443") || (scheme == "http" && port == "80")) {
-        port.clear();
-    }
-    std::string_view path = remainder;
-    if (const auto cut = path.find_first_of("#?"); cut != std::string_view::npos) {
-        path = path.substr(0, cut);
     }
     return DiscoveryUrl{
-            .origin = scheme + "://" + host + (port.empty() ? std::string{} : ":" + port),
-            .path = path.empty() ? std::string{"/"} : std::string{path},
+            .origin = std::move(parsed.origin),
+            .path = std::move(parsed.path),
     };
 }
 
