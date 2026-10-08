@@ -714,6 +714,7 @@ TEST_CASE("Private protocol encoders expose meaningful bounded parameters", "[tu
     CHECK(iterm->find("inline=1") != std::string::npos);
     CHECK(iterm->find("width=2") != std::string::npos);
     CHECK(iterm->find("height=3") != std::string::npos);
+    CHECK(iterm->find("size=4") != std::string::npos);
     CHECK(iterm->find("name=bmFtZS5wbmc=") != std::string::npos);
     // pi's encodeITerm2 omits preserveAspectRatio when it keeps the default.
     CHECK(iterm->find("preserveAspectRatio") == std::string::npos);

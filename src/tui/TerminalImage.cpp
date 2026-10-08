@@ -186,10 +186,14 @@ constexpr std::string_view kCellSizeResponsePrefix{"\x1b[6;"};
 [[nodiscard]] std::string encode_iterm2(const TerminalImage& image) {
     // Pi's encodeITerm2 omits preserveAspectRatio when it keeps the default
     // (true); only `preserveAspectRatio=0` is emitted.
+    auto decoded_size = image.encoded_data.size() / 4 * 3;
+    if (image.encoded_data.ends_with("==")) decoded_size -= 2;
+    else if (image.encoded_data.ends_with('=')) --decoded_size;
     auto parameters = std::format(
-        "inline=1;width={};height={}",
+        "inline=1;width={};height={};size={}",
         image.region.columns,
-        image.region.rows);
+        image.region.rows,
+        decoded_size);
     if (image.filename) parameters += ";name=" + base64_encode(*image.filename);
     return std::format("\x1b]1337;File={}:{}\x07", parameters, image.encoded_data);
 }
