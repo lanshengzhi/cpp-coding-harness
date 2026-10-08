@@ -16,7 +16,8 @@
 
 using namespace cch;
 
-TEST_CASE("stream decoder differentiates newline from submit when Kitty protocol is active", "[tui][decoder][issue892][spec]") {
+TEST_CASE("stream decoder differentiates newline from submit when Kitty protocol is active",
+        "[tui][decoder][issue892][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     // Inactive Kitty protocol: both \n and \r resolve to enter
@@ -61,7 +62,8 @@ TEST_CASE("stream decoder differentiates newline from submit when Kitty protocol
     }
 }
 
-TEST_CASE("stream decoder suppresses redundant raw printable character following Kitty CSI-u", "[tui][decoder][issue891][spec]") {
+TEST_CASE("stream decoder suppresses redundant raw printable character following Kitty CSI-u",
+        "[tui][decoder][issue891][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
     // \x1b[97u (Kitty 'a') followed by raw 'a'
     const auto result = decoder.feed("\x1b[97ua");
@@ -101,7 +103,8 @@ TEST_CASE("stream decoder demuxes a cursor position report out of the byte strea
     CHECK(result.forwarded_input == "az");
 }
 
-TEST_CASE("stream decoder preserves Super modifiers across legacy and extended key formats", "[tui][decoder][issue888][spec]") {
+TEST_CASE("stream decoder preserves Super modifiers across legacy and extended key formats",
+        "[tui][decoder][issue888][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     const auto legacy = decoder.feed("k");

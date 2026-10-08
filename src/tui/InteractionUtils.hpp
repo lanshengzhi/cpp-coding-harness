@@ -22,16 +22,15 @@ namespace cch::tui::detail {
     if (event.ctrl || event.alt || event.super || event.key.empty()) return false;
     if (event.key == "space") return true;
     if (event.key.size() > 1 && event.key.front() == 'f' && event.key.size() <= 3 &&
-        std::all_of(event.key.begin() + 1, event.key.end(), [](char c) { return c >= '0' && c <= '9'; })) {
+            std::all_of(event.key.begin() + 1, event.key.end(), [](char c) { return c >= '0' && c <= '9'; })) {
         return false;
     }
-    return event.key != "enter" && event.key != "tab" && event.key != "escape" &&
-        event.key != "backspace" && event.key != "delete" && event.key != "insert" &&
-        event.key != "clear" && event.key != "home" && event.key != "end" &&
-        event.key != "pageUp" && event.key != "pageDown" && event.key != "up" &&
-        event.key != "down" && event.key != "left" && event.key != "right" &&
-        event.key != "menu" && event.key != "capsLock" && event.key != "numLock" &&
-        event.key != "scrollLock" && event.key != "pause" && event.key != "printScreen";
+    return event.key != "enter" && event.key != "tab" && event.key != "escape" && event.key != "backspace" &&
+           event.key != "delete" && event.key != "insert" && event.key != "clear" && event.key != "home" &&
+           event.key != "end" && event.key != "pageUp" && event.key != "pageDown" && event.key != "up" &&
+           event.key != "down" && event.key != "left" && event.key != "right" && event.key != "menu" &&
+           event.key != "capsLock" && event.key != "numLock" && event.key != "scrollLock" && event.key != "pause" &&
+           event.key != "printScreen";
 }
 
 /// The visible text a printable key event inserts ("space" renders as a

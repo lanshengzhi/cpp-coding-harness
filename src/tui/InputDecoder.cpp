@@ -66,10 +66,10 @@ std::optional<ParsedModifiers> parse_modifiers(unsigned int protocol_value) {
     const auto modifier = (protocol_value - 1) & ~kLockModifiers;
     if ((modifier & ~(kShiftModifier | kAltModifier | kCtrlModifier | kSuperModifier)) != 0) return std::nullopt;
     return ParsedModifiers{
-        .ctrl = (modifier & kCtrlModifier) != 0,
-        .shift = (modifier & kShiftModifier) != 0,
-        .alt = (modifier & kAltModifier) != 0,
-        .super = (modifier & kSuperModifier) != 0,
+            .ctrl = (modifier & kCtrlModifier) != 0,
+            .shift = (modifier & kShiftModifier) != 0,
+            .alt = (modifier & kAltModifier) != 0,
+            .super = (modifier & kSuperModifier) != 0,
     };
 }
 
@@ -129,27 +129,25 @@ std::optional<std::string> key_for_codepoint(unsigned int codepoint, bool shift)
     return encoded;
 }
 
-std::optional<KeyEvent> make_key_event(
-    unsigned int codepoint,
-    ParsedModifiers modifiers,
-    KeyEventType type,
-    std::optional<unsigned int> base_layout_key = std::nullopt,
-    std::optional<unsigned int> shifted_key = std::nullopt) {
-    auto key = modifiers.shift && shifted_key
-        ? key_for_codepoint(*shifted_key, modifiers.shift)
-        : key_for_codepoint(codepoint, modifiers.shift);
+std::optional<KeyEvent> make_key_event(unsigned int codepoint,
+        ParsedModifiers modifiers,
+        KeyEventType type,
+        std::optional<unsigned int> base_layout_key = std::nullopt,
+        std::optional<unsigned int> shifted_key = std::nullopt) {
+    auto key = modifiers.shift && shifted_key ? key_for_codepoint(*shifted_key, modifiers.shift)
+                                              : key_for_codepoint(codepoint, modifiers.shift);
     const bool authoritative = key && key->size() == 1 &&
         (((*key)[0] >= 'a' && (*key)[0] <= 'z') || ((*key)[0] >= '0' && (*key)[0] <= '9') ||
          is_baseline_symbol((*key)[0]));
     if (!authoritative && base_layout_key) key = key_for_codepoint(*base_layout_key, modifiers.shift);
     if (!key) return std::nullopt;
     return KeyEvent{
-        .key = std::move(*key),
-        .ctrl = modifiers.ctrl,
-        .shift = modifiers.shift,
-        .alt = modifiers.alt,
-        .super = modifiers.super,
-        .type = type,
+            .key = std::move(*key),
+            .ctrl = modifiers.ctrl,
+            .shift = modifiers.shift,
+            .alt = modifiers.alt,
+            .super = modifiers.super,
+            .type = type,
     };
 }
 
@@ -225,12 +223,12 @@ std::optional<KeyEvent> parse_kitty_navigation(std::string_view sequence) {
     const auto key = final == 'A' ? "up" : final == 'B' ? "down" : final == 'C' ? "right" :
         final == 'D' ? "left" : final == 'H' ? "home" : "end";
     return KeyEvent{
-        .key = key,
-        .ctrl = modifiers->ctrl,
-        .shift = modifiers->shift,
-        .alt = modifiers->alt,
-        .super = modifiers->super,
-        .type = type,
+            .key = key,
+            .ctrl = modifiers->ctrl,
+            .shift = modifiers->shift,
+            .alt = modifiers->alt,
+            .super = modifiers->super,
+            .type = type,
     };
 }
 
@@ -263,12 +261,12 @@ std::optional<KeyEvent> parse_kitty_functional(std::string_view sequence) {
     const auto modifiers = parse_modifiers(modifier_value);
     if (!modifiers) return std::nullopt;
     return KeyEvent{
-        .key = std::move(key),
-        .ctrl = modifiers->ctrl,
-        .shift = modifiers->shift,
-        .alt = modifiers->alt,
-        .super = modifiers->super,
-        .type = type,
+            .key = std::move(key),
+            .ctrl = modifiers->ctrl,
+            .shift = modifiers->shift,
+            .alt = modifiers->alt,
+            .super = modifiers->super,
+            .type = type,
     };
 }
 
@@ -857,7 +855,8 @@ void TerminalStreamDecoder::drain(StreamDecodeResult& result, bool end_of_feed) 
                 // If it's a Kitty CSI-u printable sequence without complex modifiers, record for suppression
                 const auto body = sequence.substr(2, sequence.size() - 3);
                 const auto semicolon = body.find(';');
-                if (semicolon == std::string_view::npos || body.substr(semicolon + 1) == "1" || body.substr(semicolon + 1).empty()) {
+                if (semicolon == std::string_view::npos || body.substr(semicolon + 1) == "1" ||
+                        body.substr(semicolon + 1).empty()) {
                     const auto key_part = body.substr(0, semicolon);
                     const auto key_parts = split(key_part, ':');
                     if (!key_parts.empty()) {
