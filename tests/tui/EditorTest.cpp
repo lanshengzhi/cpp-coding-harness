@@ -310,6 +310,15 @@ TEST_CASE("Editor routes enter to the open completion menu ahead of plain submit
     CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 3}));
 }
 
+TEST_CASE("Editor does not type named keys or modified printable events", "[tui][editor][issue889][spec]") {
+    cch::tui::Editor editor;
+    type(editor, "prompt");
+    for (int number = 1; number <= 12; ++number) {
+        key(editor, std::format("f{}", number));
+    }
+    CHECK(editor.text() == "prompt");
+}
+
 TEST_CASE("Editor resolves a key shared by two editing actions in dispatch order", "[tui][editor][spec]") {
     // f9 claims both deletion actions; the dispatch order — char deletion
     // ahead of word deletion (pi editor-component.ts) — decides.
