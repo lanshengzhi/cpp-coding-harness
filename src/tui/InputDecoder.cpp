@@ -312,7 +312,7 @@ std::optional<KeyEvent> parse_legacy_sequence(std::string_view sequence) {
     return std::nullopt;
 }
 
-std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence) {
+std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence, bool kitty_protocol_active = false) {
     if (auto parsed = parse_modify_other_keys(sequence)) return parsed;
     if (auto parsed = parse_kitty_csi_u(sequence)) return parsed;
     if (auto parsed = parse_kitty_navigation(sequence)) return parsed;
@@ -321,7 +321,12 @@ std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence) {
 
     if (sequence == "\x1b") return *parse_key_id("escape");
     if (sequence == "\t") return *parse_key_id("tab");
-    if (sequence == "\r" || sequence == "\n") return *parse_key_id("enter");
+    if (kitty_protocol_active) {
+        if (sequence == "\x1b\r" || sequence == "\n") return *parse_key_id("shift+enter");
+        if (sequence == "\r") return *parse_key_id("enter");
+    } else {
+        if (sequence == "\r" || sequence == "\n") return *parse_key_id("enter");
+    }
     // The `\x00` literal in a C++ string is empty, so compare the byte
     // explicitly (pi keys.ts: `data === "\x00"` → ctrl+space).
     if (sequence.size() == 1 && sequence.front() == '\0') {
@@ -364,7 +369,7 @@ std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence) {
     }
 
     if (sequence.size() >= 2 && sequence.front() == '\x1b') {
-        const auto key = parse_raw_sequence(sequence.substr(1));
+        const auto key = parse_raw_sequence(sequence.substr(1), kitty_protocol_active);
         if (!key) return std::nullopt;
         auto modified = *key;
         modified.alt = true;
@@ -761,7 +766,7 @@ StreamDecodeResult TerminalStreamDecoder::flush() {
             // fragment timeout) and byte-level consumers get the fragment
             // verbatim so no input byte is lost.
             if (pending_.front() == '\x1b') {
-                if (auto key = parse_raw_sequence(pending_)) {
+                if (auto key = parse_raw_sequence(pending_, kitty_protocol_active_)) {
                     result.events.emplace_back(std::move(*key));
                 }
             }
@@ -847,7 +852,7 @@ void TerminalStreamDecoder::drain(StreamDecodeResult& result, bool end_of_feed) 
             }
         }
         pending_kitty_printable_codepoint_.reset();
-        if (auto key = parse_raw_sequence(sequence)) {
+        if (auto key = parse_raw_sequence(sequence, kitty_protocol_active_)) {
             if (sequence.starts_with("\x1b[") && sequence.ends_with('u')) {
                 // If it's a Kitty CSI-u printable sequence without complex modifiers, record for suppression
                 const auto body = sequence.substr(2, sequence.size() - 3);

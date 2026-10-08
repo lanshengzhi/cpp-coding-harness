@@ -16,6 +16,51 @@
 
 using namespace cch;
 
+TEST_CASE("stream decoder differentiates newline from submit when Kitty protocol is active", "[tui][decoder][issue892][spec]") {
+    tui::detail::TerminalStreamDecoder decoder;
+
+    // Inactive Kitty protocol: both \n and \r resolve to enter
+    {
+        const auto newline_result = decoder.feed("\n");
+        REQUIRE(newline_result.events.size() == 1);
+        const auto* key = std::get_if<tui::KeyEvent>(&newline_result.events.front());
+        REQUIRE(key != nullptr);
+        CHECK(key->key == "enter");
+        CHECK_FALSE(key->shift);
+
+        const auto cr_result = decoder.feed("\r");
+        REQUIRE(cr_result.events.size() == 1);
+        const auto* cr_key = std::get_if<tui::KeyEvent>(&cr_result.events.front());
+        REQUIRE(cr_key != nullptr);
+        CHECK(cr_key->key == "enter");
+    }
+
+    // Active Kitty protocol: \n resolves to shift+enter, \r resolves to enter
+    decoder.set_kitty_protocol_active(true);
+    {
+        const auto newline_result = decoder.feed("\n");
+        REQUIRE(newline_result.events.size() == 1);
+        const auto* key = std::get_if<tui::KeyEvent>(&newline_result.events.front());
+        REQUIRE(key != nullptr);
+        CHECK(key->key == "enter");
+        CHECK(key->shift);
+
+        const auto esc_cr_result = decoder.feed("\x1b\r");
+        REQUIRE(esc_cr_result.events.size() == 1);
+        const auto* esc_cr_key = std::get_if<tui::KeyEvent>(&esc_cr_result.events.front());
+        REQUIRE(esc_cr_key != nullptr);
+        CHECK(esc_cr_key->key == "enter");
+        CHECK(esc_cr_key->shift);
+
+        const auto cr_result = decoder.feed("\r");
+        REQUIRE(cr_result.events.size() == 1);
+        const auto* cr_key = std::get_if<tui::KeyEvent>(&cr_result.events.front());
+        REQUIRE(cr_key != nullptr);
+        CHECK(cr_key->key == "enter");
+        CHECK_FALSE(cr_key->shift);
+    }
+}
+
 TEST_CASE("stream decoder suppresses redundant raw printable character following Kitty CSI-u", "[tui][decoder][issue891][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
     // \x1b[97u (Kitty 'a') followed by raw 'a'

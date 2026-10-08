@@ -94,6 +94,8 @@ public:
     [[nodiscard]] StreamDecodeResult feed(std::string_view input);
     [[nodiscard]] StreamDecodeResult flush();
     void reset();
+    void set_kitty_protocol_active(bool active) noexcept { kitty_protocol_active_ = active; }
+    [[nodiscard]] bool kitty_protocol_active() const noexcept { return kitty_protocol_active_; }
 
     /// True while an incomplete fragment is held for the fragment window.
     [[nodiscard]] bool holds_fragment() const noexcept { return !pending_.empty(); }
@@ -124,6 +126,7 @@ private:
     std::size_t paste_original_bytes_{0};
     std::size_t paste_lines_{1};
     std::optional<unsigned int> pending_kitty_printable_codepoint_;
+    bool kitty_protocol_active_{false};
 };
 
 } // namespace cch::tui::detail
