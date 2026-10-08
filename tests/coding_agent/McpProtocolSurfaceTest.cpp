@@ -45,10 +45,14 @@ namespace {
 
 } // namespace
 
-TEST_CASE("initialize requests the bundle's LATEST protocol version", "[coding_agent][mcp][issue884][spec]") {
+TEST_CASE("initialize requests the bundle's LATEST protocol version and advertises roots",
+        "[coding_agent][mcp][issue884][spec]") {
     const auto latest = bundle_protocol().get_object().at("protocol").get_object().at("latest").get_string();
     const auto params = coding_agent::mcp::detail::initialize_params();
     CHECK(params.get_object().at("protocolVersion").get_string() == latest);
+    const auto* capabilities = params.get_object().at("capabilities").get_if<support::JsonValue::object_t>();
+    REQUIRE(capabilities != nullptr);
+    CHECK(capabilities->contains("roots"));
 }
 
 TEST_CASE("initialize validation accepts every version the bundle supports", "[coding_agent][mcp][issue884][spec]") {

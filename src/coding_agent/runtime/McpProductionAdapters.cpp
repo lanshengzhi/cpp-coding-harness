@@ -100,14 +100,24 @@ support::AsyncResult<support::JsonValue> ProductionMcpConnection::request(std::s
         std::optional<support::JsonValue> params,
         mcp::McpServerConnection::RequestOptions options) {
     return support::detail::make_async_result(
-            [this, method = std::move(method), params = std::move(params), options = std::move(options)]() mutable
+            [this, method = std::move(method), params = std::move(params), stop_token = options.stop_token]() mutable
                     -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
                 if (!client_) {
                     co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
                             "MCP server '" + server_name_ + "' has no live connection"));
                 }
-                co_return co_await support::detail::await_async_result(
-                        client_->request(std::move(method), std::move(params), std::move(options)));
+                auto res = co_await support::detail::await_async_result(client_->request(
+                        method, params, mcp::McpServerConnection::RequestOptions{.stop_token = stop_token}));
+                // pi `withClient`: McpSessionExpiredError on 404 retried once on a fresh session
+                if (!res && res.error().message == "MCP session expired") {
+                    auto reconnected = co_await support::detail::await_async_result(reconnect());
+                    if (reconnected && client_) {
+                        res = co_await support::detail::await_async_result(client_->request(std::move(method),
+                                std::move(params),
+                                mcp::McpServerConnection::RequestOptions{.stop_token = stop_token}));
+                    }
+                }
+                co_return res;
             });
 }
 

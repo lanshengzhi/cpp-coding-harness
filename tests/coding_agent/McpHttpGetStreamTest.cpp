@@ -521,7 +521,8 @@ TEST_CASE("MCP GET stream: server ping is answered with an empty result", "[codi
 
 TEST_CASE("MCP GET stream: an unknown server request is answered -32601", "[coding_agent][mcp]") {
     auto transport = std::make_shared<ScriptedTransport>();
-    transport->set_default_get(live_stream({message_event(R"({"jsonrpc":"2.0","id":8,"method":"roots/list"})")}));
+    transport->set_default_get(
+            live_stream({message_event(R"({"jsonrpc":"2.0","id":8,"method":"unknown/custom_method"})")}));
     Loop loop;
     auto client = connect_client(loop, transport);
 
@@ -534,7 +535,32 @@ TEST_CASE("MCP GET stream: an unknown server request is answered -32601", "[codi
     const auto* error_object = error->second.get_if<support::JsonValue::object_t>();
     REQUIRE(error_object != nullptr);
     CHECK(error_object->at("code").get_number() == -32601);
-    CHECK(error_object->at("message").get_string() == "Method not found: roots/list");
+    CHECK(error_object->at("message").get_string() == "Method not found: unknown/custom_method");
+    client->close();
+}
+
+TEST_CASE("MCP GET stream: server request roots/list is answered with file://<cwd>", "[coding_agent][mcp]") {
+    auto transport = std::make_shared<ScriptedTransport>();
+    transport->set_default_get(live_stream({message_event(R"({"jsonrpc":"2.0","id":10,"method":"roots/list"})")}));
+    Loop loop;
+    auto client = connect_client(loop, transport);
+
+    REQUIRE(loop.pump_until([&] { return transport->posted_response(10).has_value(); }, 2s));
+    const auto response = transport->posted_response(10);
+    const auto* object = response->get_if<support::JsonValue::object_t>();
+    REQUIRE(object != nullptr);
+    const auto result = object->find("result");
+    REQUIRE(result != object->end());
+    const auto* result_object = result->second.get_if<support::JsonValue::object_t>();
+    REQUIRE(result_object != nullptr);
+    const auto roots = result_object->find("roots");
+    REQUIRE(roots != result_object->end());
+    const auto* roots_array = roots->second.get_if<support::JsonValue::array_t>();
+    REQUIRE(roots_array != nullptr);
+    REQUIRE(roots_array->size() == 1);
+    const auto* root_item = roots_array->front().get_if<support::JsonValue::object_t>();
+    REQUIRE(root_item != nullptr);
+    CHECK(root_item->at("uri").get_string().starts_with("file://"));
     client->close();
 }
 

@@ -59,12 +59,16 @@ namespace detail {
 }
 
 /// The `initialize` parameters (pi `client.ts` `connect`): the client's
-/// protocol version, empty capabilities, and identity. Shared by the initial
-/// handshake and a reconnect, and by both transports.
-[[nodiscard]] inline support::JsonValue initialize_params() {
+/// protocol version, capabilities (with roots when cwd is non-empty), and identity.
+/// Shared by the initial handshake and a reconnect, and by both transports.
+[[nodiscard]] inline support::JsonValue initialize_params(bool with_roots = true) {
+    support::JsonValue::object_t capabilities;
+    if (with_roots) {
+        capabilities["roots"] = support::JsonValue::object_t{};
+    }
     return support::JsonValue{support::JsonValue::object_t{
             {"protocolVersion", std::string{kMcpProtocolVersion}},
-            {"capabilities", support::JsonValue::object_t{}},
+            {"capabilities", support::JsonValue{std::move(capabilities)}},
             {"clientInfo",
                     support::JsonValue::object_t{
                             {"name", std::string{kMcpClientName}},

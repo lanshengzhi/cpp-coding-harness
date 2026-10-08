@@ -95,7 +95,7 @@ constexpr std::size_t kErrorBodyChars = 500;
 /// streamable-http is TLS-only (ADR 0054), so following `Location` could
 /// downgrade the connection to plaintext.
 [[nodiscard]] support::Error http_status_error(
-        const std::string& server, const ai::providers::StreamResponse& response) {
+        const std::string& server, const ai::providers::StreamResponse& response, bool session_known = false) {
     const int status = response.head.status_code;
     if (status == 401) {
         // A rejected credential is an explicit re-login error (never a silent
@@ -104,6 +104,13 @@ constexpr std::size_t kErrorBodyChars = 500;
         return support::make_error(support::ErrorCode::OAuth,
                 format_oauth_reauthenticate_message(mcp_oauth_provider_id(server)),
                 "MCP server '" + server + "' rejected the request (HTTP 401)");
+    }
+    if (status == 404 && session_known) {
+        // pi `McpSessionExpiredError`: 404 on a session that was previously
+        // assigned by the server.
+        return support::make_error(support::ErrorCode::Process,
+                "MCP session expired",
+                "MCP server '" + server + "' returned 404 for existing session");
     }
     if (status >= 300 && status < 400) {
         std::string detail = "MCP streamable-http is TLS-only (ADR 0054) and never follows a redirect";
@@ -336,6 +343,22 @@ McpHttpClient::McpHttpClient(ConstructionKey,
                     std::stop_token) -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
         co_return support::JsonValue{support::JsonValue::object_t{}};
     };
+    // pi `roots/list`: answer server-to-client roots requests with file://<cwd> root.
+    request_handlers_["roots/list"] =
+            [](const support::JsonValue&,
+                    std::stop_token) -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+        const auto cwd = std::filesystem::current_path();
+        const std::string uri = "file://" + cwd.string();
+        const std::string name = cwd.filename().string();
+        support::JsonValue::object_t root_item{
+                {"uri", uri},
+                {"name", name.empty() ? uri : name},
+        };
+        support::JsonValue::object_t result{
+                {"roots", support::JsonValue{support::JsonValue::array_t{support::JsonValue{std::move(root_item)}}}},
+        };
+        co_return support::JsonValue{std::move(result)};
+    };
 }
 
 boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> McpHttpClient::connect(
@@ -359,8 +382,33 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> McpHtt
             std::move(request_auth),
             std::move(get_stream_options));
 
-    auto initialized =
-            co_await support::detail::await_async_result(client->request("initialize", detail::initialize_params()));
+    // pi `CONNECT_RETRY_DELAYS_MS`: connect retries [250, 1000] ms for HTTP transient errors
+    // (408, 429, 5xx).
+    static constexpr std::chrono::milliseconds kConnectRetryDelays[] = {
+            std::chrono::milliseconds{250},
+            std::chrono::milliseconds{1000},
+    };
+    support::Expected<support::JsonValue> initialized{std::unexpected(support::Error{})};
+    for (std::size_t attempt = 0; attempt <= 2; ++attempt) {
+        initialized = co_await support::detail::await_async_result(
+                client->request("initialize", detail::initialize_params()));
+        if (initialized) {
+            break;
+        }
+        const auto& err = initialized.error();
+        // Check if transient: status 408, 429, or 5xx (except 501).
+        const bool is_transient = err.message.contains("HTTP 408") || err.message.contains("HTTP 429") ||
+                                  err.message.contains("HTTP 500") || err.message.contains("HTTP 502") ||
+                                  err.message.contains("HTTP 503") || err.message.contains("HTTP 504") ||
+                                  err.code == support::ErrorCode::Network;
+        if (!is_transient || attempt >= 2) {
+            break;
+        }
+        boost::asio::steady_timer retry_timer(client->executor_);
+        retry_timer.expires_after(kConnectRetryDelays[attempt]);
+        boost::system::error_code ec;
+        co_await retry_timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+    }
     if (!initialized) {
         co_return std::unexpected(std::move(initialized.error()));
     }
@@ -1036,7 +1084,7 @@ support::Expected<support::JsonValue> McpHttpClient::interpret_response(
         int id, const ai::providers::StreamResponse& response) const {
     const int status = response.head.status_code;
     if (status < 200 || status >= 300) {
-        return std::unexpected(http_status_error(config_.name, response));
+        return std::unexpected(http_status_error(config_.name, response, !session_id_.empty()));
     }
     if (status == 202 || status == 204) {
         return std::unexpected(transport_error(
@@ -1047,7 +1095,20 @@ support::Expected<support::JsonValue> McpHttpClient::interpret_response(
         return response_from_json_body(config_.name, id, response.body);
     }
     if (type == "text/event-stream") {
-        return response_from_sse_body(config_.name, id, response.body);
+        auto parsed_response = response_from_sse_body(config_.name, id, response.body);
+        if (!parsed_response) {
+            // pi `consumeResponseStream`: failure emits synthetic -32603 "MCP response stream failed: <reason>"
+            support::JsonValue::object_t err_obj{
+                    {"code", static_cast<double>(-32603)},
+                    {"message", "MCP response stream failed: " + parsed_response.error().message},
+            };
+            return support::JsonValue{support::JsonValue::object_t{
+                    {"jsonrpc", "2.0"},
+                    {"id", static_cast<double>(id)},
+                    {"error", support::JsonValue{std::move(err_obj)}},
+            }};
+        }
+        return parsed_response;
     }
     return std::unexpected(transport_error(
             config_.name, "sent an unsupported response content type", type.empty() ? "missing content-type" : type));
