@@ -254,11 +254,12 @@ TEST_CASE("a codemode-exposure MCP tool is reachable from a codemode script even
     write_global_mcp_json(workspace, echo_mcp_json());
     tests::RuntimeFixture runtime;
 
-    // pi's codemode routing hands the guest the tool's structured details, or
-    // its text: the echo fixture returns no structuredContent, so the script
-    // sees the echoed text itself.
+    // pi `toScriptValue`: every MCP tool declares the MCP result output
+    // schema, so the call resolves to pi `convertMcpResult`'s CallToolResult
+    // object — the script reads the echoed text out of `content` (the echo
+    // fixture returns no structuredContent of its own).
     const std::string script = "const r = await tools.mcp__echo__echo({ text: \"from-script\" });"
-                               " text(\"echoed:\" + r);"
+                               " text(\"echoed:\" + r.content[0].text);"
                                " return \"done\";";
     support::JsonValue arguments{support::JsonValue::object_t{{"code", script}}};
     auto raw = support::write_json(arguments);

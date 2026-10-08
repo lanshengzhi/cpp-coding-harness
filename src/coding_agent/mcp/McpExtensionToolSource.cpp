@@ -1,11 +1,14 @@
 // MCP Extension Tool Source (spec #865, tickets #869 stdio / #873
-// streamable-http): connect one MCP server at Session Assembly, list its
+// streamable-http; spec #882 activation routes the conversion through the
+// live manager): connect one MCP server at Session Assembly, list its
 // tools, and convert each into an extension Tool whose execution is
 // `tools/call` on the transport-independent `McpServerConnection`. The tool
 // conversion is pi `extensions/mcp/tools.ts` `createMcpToolDefinition`
-// narrowed to this slice's scope: name, description, input schema, and a
-// text/image result mapping. Output truncation, resource tools, exposure
-// policy, and OAuth are later slices.
+// narrowed to this file's scope: name, description, input/output schema, and
+// a text/image result mapping whose structured details are pi
+// `convertMcpResult`'s scriptResult (the whole CallToolResult minus `_meta`).
+// Output truncation beyond that mapping and pi's resource-link rendering are
+// recorded as a residual in ADR 0066 (spec #882 close-out).
 
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 
@@ -79,9 +82,18 @@ support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result
         }
     }
 
-    if (const auto structured = object->find("structuredContent"); structured != object->end()) {
-        outcome.details = structured->second;
+    // pi `convertMcpResult`: the script-visible structured content is the
+    // whole CallToolResult object minus `_meta` (content blocks, the tool's
+    // own `structuredContent`, `isError`) — codemode resolves a script call
+    // to exactly this object, error results included.
+    support::JsonValue::object_t script_result;
+    for (const auto& [key, value] : *object) {
+        if (key == "_meta") {
+            continue;
+        }
+        script_result.emplace(key, value);
     }
+    outcome.details = support::JsonValue{std::move(script_result)};
     if (const auto is_error = object->find("isError");
             is_error != object->end() && is_error->second.get_if<bool>() != nullptr) {
         outcome.is_error = *is_error->second.get_if<bool>();
