@@ -188,8 +188,7 @@ support::ExpectedVoid McpStdioClient::spawn() {
         entry += value;
         const auto existing = std::find_if(
                 environment_storage.begin(), environment_storage.end(), [&key](const std::string& candidate) {
-                    return candidate.size() > key.size() && candidate.compare(0, key.size(), key) == 0 &&
-                           candidate[key.size()] == '=';
+                    return candidate.size() > key.size() && candidate.starts_with(key) && candidate[key.size()] == '=';
                 });
         if (existing != environment_storage.end()) {
             *existing = std::move(entry);
