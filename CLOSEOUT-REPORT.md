@@ -75,3 +75,23 @@ tools, GET stream, exposure policy → #884).
 | `811e4cfdc` | `docs(adr): sweep ADR 0066 to the landed full-parity reality (issue 886)` |
 | `4e23dbe2e` | `docs(research): land the spec 882 acceptance table (issue 886)` |
 | (this file) | `docs: append the 886 close-out report (issue 886)` |
+
+## REVIEW-FIXES
+
+All 12 code-review findings identified during close-out have been addressed with dedicated TDD loops, individual conventional commits, and focused test verification:
+
+| Finding | Summary | Root Cause | Fix Commit | Test Evidence |
+|---|---|---|---|---|
+| **1 (spec)** | MCP `initialize` protocol version | Defaulted to outdated protocol without validating negotiated version against bundle | `6e5ea43b3` | `McpProtocolSurfaceTest.cpp` (4 test cases consuming bundle `mcp-protocol-surface.json`) |
+| **2 (spec)** | `tools/list` pagination bounds and guards | Unbounded pagination loop; missing duplicate cursor detection | `d21ffaab6` | `McpToolsListTest.cpp` (5 cases with scripted connection double; dup cursor hung red, passes green) |
+| **3 (spec)** | Tool-name length (64) & hash-suffix collision rule | `mcp_tool_name` truncated without hashing; order-dependent naming | `5fe290acb` | `McpToolNameTest.cpp` (5 cases reproducing bundle `mcp-tool-surface.json` examples) |
+| **4 (spec)** | Progress notifications & deadline re-arming | Requests lacked `_meta.progressToken`; no progress handler or timeout re-arming | `884298e30` | `McpProgressTest.cpp` (new file with 6 cases; progress update text formatting, token injection and extraction) |
+| **5 (spec)** | HTTP resilience (session expiry retry, connect backoff, SSE resume, roots) | Missing 404 session-expiry retry, connect retry [250, 1000]ms, synthetic -32603 on response stream break, roots capability & handler | `7aa91e16c` | `McpHttpGetStreamTest.cpp` (roots/list answered with file://<cwd>), `McpProtocolSurfaceTest.cpp` (capabilities advertises roots) |
+| **6 (P0)** | SSE retry field parsing with `std::from_chars` | Used `std::stoi` on server-controlled SSE `retry:` field which throws on overflow | `dc6a2d6c0` | `McpHttpGetStreamTest.cpp` ("out-of-range server retry field is ignored, never throws") |
+| **7 (P1)** | Coroutine lambda captures in `McpCommand.cpp` | Used implicit `[&]` captures across coroutine suspend points (§6.2) | `605765384` | `ctest -R 'mcp login\|mcp logout'` (13/13 passing) |
+| **8 (P1)** | Convert single-use hooks to `std::move_only_function` | Used `std::function` for single-use CLI callbacks (`McpSignInHook`, `open_browser`) | `5b7f2a580` | `ctest -R 'mcp login\|mcp logout'` (13/13 passing) |
+| **9 (P2)** | `compare(0, ...)` → `starts_with` | Did not use standard C++20 `starts_with` per §9.2 | `501faaf92` | Stdio focused tests |
+| **10 (P2)** | Hand-rolled 1ms poll → `tests::ReleaseGate` | Hand-rolled busy poll loop in test instead of synchronization primitive (§11.8) | `165d8abd5` | `McpHttpGetStreamTest.cpp` (10/10 passing) |
+| **11 (P1)** | 4× duplicated URL authority parser | Duplicate hand-rolled URL authority and host-port parsers across 4 MCP files | `1e291894b` | `McpUrl.hpp/cpp` extracted; `OAuth*` and `Config*` tests (61/61 passing) |
+| **12 (P2)** | Stale doc debt comment & paste-reader thread lifetime | Outdated comment about synchronous runs; detached thread could post to destroyed context | `7ccb287a3` | `CodemodeSandbox.hpp` updated; lifetime contract documented in `McpCommand.cpp` |
+
