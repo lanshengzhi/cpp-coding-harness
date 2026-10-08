@@ -854,8 +854,7 @@ struct ServerReport {
 /// that finishes after the race is lost posts into a live (no longer run)
 /// context whose handler is never drained — posting to a live io_context is
 /// always defined — instead of into a destroyed one.
-[[nodiscard]] support::AsyncResult<std::optional<std::string>> wait_for_redirect_url(
-        std::istream* input,
+[[nodiscard]] support::AsyncResult<std::optional<std::string>> wait_for_redirect_url(std::istream* input,
         std::ostream* error,
         bool interactive,
         std::shared_ptr<boost::asio::io_context> loop,
@@ -938,11 +937,12 @@ struct ServerReport {
         // Init-capture the fields the prompt reads so no reference to
         // `options` crosses into the stored operation (§6.2); `loop` is the
         // shared pump context the detached paste reader also owns.
-        request.prompt.prompt_for_redirect_url =
-                [input = options.input, error = options.error, interactive = options.stdin_is_terminal,
-                        loop = std::move(loop)](std::stop_token stop) mutable {
-                    return wait_for_redirect_url(input, error, interactive, std::move(loop), std::move(stop));
-                };
+        request.prompt.prompt_for_redirect_url = [input = options.input,
+                                                         error = options.error,
+                                                         interactive = options.stdin_is_terminal,
+                                                         loop = std::move(loop)](std::stop_token stop) mutable {
+            return wait_for_redirect_url(input, error, interactive, std::move(loop), std::move(stop));
+        };
     }
     return coding_agent::mcp::sign_in_mcp_server(std::move(request));
 }

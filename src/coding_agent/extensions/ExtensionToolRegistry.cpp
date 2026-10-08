@@ -33,13 +33,14 @@ agent::Tool convert_extension_tool(ExtensionTool tool) {
         agent_tool.execute = agent::ToolExecute{[execute = std::move(tool.context_execute), finish](
                                                         agent::ToolInvocation invocation,
                                                         std::stop_token stop_token,
-                                                        agent::ToolUpdateSink /*update_sink*/) mutable
+                                                        agent::ToolUpdateSink update_sink) mutable
                                                         -> agent::ToolExecuteResult {
             return agent::ToolExecuteResult{agent::ToolExecuteResult::producer_type{
                     [execute = std::move(execute),
                             arguments = std::move(invocation.arguments),
                             context = ExtensionToolContext{.nested_calls = invocation.nested_calls,
-                                    .call_id = std::move(invocation.call_id)},
+                                    .call_id = std::move(invocation.call_id),
+                                    .update_sink = std::move(update_sink)},
                             stop_token,
                             finish](agent::ToolExecuteResult::completion_type completion) mutable noexcept {
                         std::move(execute)(std::move(arguments), std::move(context), stop_token)

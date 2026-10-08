@@ -41,17 +41,17 @@ TEST_CASE("tool names within pi's length bound keep the sanitized form", "[codin
     const auto examples = bundle_tool_name().get_object().at("examples").get_array();
     const auto& short_example = examples.front().get_object();
     CHECK(coding_agent::mcp::mcp_tool_name(short_example.at("server").get_string(),
-                    short_example.at("tool").get_string()) == short_example.at("name").get_string());
+                  short_example.at("tool").get_string()) == short_example.at("name").get_string());
 }
 
 TEST_CASE("a tool name over pi's 64-char bound takes the sha256 suffix from the bundle example",
         "[coding_agent][mcp][issue884][spec]") {
     const auto examples = bundle_tool_name().get_object().at("examples").get_array();
     const auto& long_example = examples.back().get_object();
-    CHECK(long_example.at("name").get_string().size() == static_cast<std::size_t>(
-                bundle_tool_name().get_object().at("maxLength").get_number()));
+    CHECK(long_example.at("name").get_string().size() ==
+            static_cast<std::size_t>(bundle_tool_name().get_object().at("maxLength").get_number()));
     CHECK(coding_agent::mcp::mcp_tool_name(long_example.at("server").get_string(),
-                    long_example.at("tool").get_string()) == long_example.at("name").get_string());
+                  long_example.at("tool").get_string()) == long_example.at("name").get_string());
 }
 
 TEST_CASE("a taken tool name takes the sha256 suffix from the bundle collision example",
@@ -76,7 +76,11 @@ TEST_CASE("colliding tool names are assigned order-independently, every collidin
     CHECK(forward[0] != forward[1]);
 
     const auto backward = coding_agent::mcp::assign_mcp_tool_names("srv", {"a_b", "a-b"});
-    CHECK(backward == forward);
+    REQUIRE(backward.size() == 2);
+    // In backward order, the tools were passed as {"a_b", "a-b"}, so backward[0] is for "a_b"
+    // and backward[1] is for "a-b". forward[0] was for "a-b" and forward[1] was for "a_b".
+    CHECK(backward[0] == forward[1]);
+    CHECK(backward[1] == forward[0]);
 }
 
 TEST_CASE("distinct tool names under the bound are assigned unchanged", "[coding_agent][mcp][issue884][spec]") {

@@ -295,19 +295,32 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpStdioClient>>> McpSt
 }
 
 support::AsyncResult<support::JsonValue> McpStdioClient::request(
-        std::string method, std::optional<support::JsonValue> params, std::stop_token stop_token) {
+        std::string method, std::optional<support::JsonValue> params, RequestOptions options) {
+    const std::stop_token stop_token = options.stop_token;
     // A request made while the server is closed is still enqueued: the pump
     // reconnects a dead server before serving it (pi `connection.reconnect()`),
     // and reports an explicit error if the reconnect fails. Returning early
     // here would make every post-death call fail without ever trying.
     return support::AsyncResult<support::JsonValue>{support::AsyncProducer<support::JsonValue, support::Error>{
-            [self = shared_from_this(), method = std::move(method), params = std::move(params), stop_token](
+            [self = shared_from_this(),
+                    method = std::move(method),
+                    params = std::move(params),
+                    options = std::move(options),
+                    stop_token](
                     support::AsyncCompletion<support::JsonValue, support::Error> completion) mutable noexcept {
                 if (stop_token.stop_requested()) {
                     completion(std::unexpected(detail::cancelled_error(self->config_.name)));
                     return;
                 }
                 const int id = self->next_id_++;
+                // pi `requestInternal`: a progress-observed request advertises
+                // `_meta.progressToken` (the request id doubles as the token).
+                // The handler rides the frame: the serialized pump installs it
+                // while the response is awaited, so no per-request map is
+                // needed.
+                if (options.on_progress) {
+                    params = detail::with_progress_token(std::move(params), id);
+                }
                 // The stop callback bridges the caller's cancellation into the
                 // serialized domain: it only posts, so it is safe to run on
                 // whichever thread requests stop. A weak reference keeps the
@@ -322,8 +335,10 @@ support::AsyncResult<support::JsonValue> McpStdioClient::request(
                                 }
                             });
                 }
-                self->enqueue_frame(
-                        newline_frame(detail::build_request_body(id, method, params)), id, std::move(completion));
+                self->enqueue_frame(newline_frame(detail::build_request_body(id, method, params)),
+                        id,
+                        std::move(completion),
+                        std::move(options.on_progress));
             }}};
 }
 
@@ -373,12 +388,14 @@ void McpStdioClient::notify(std::string method, std::optional<support::JsonValue
 
 void McpStdioClient::enqueue_frame(std::string frame,
         int id,
-        std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion) {
+        std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
+        ProgressCallback on_progress) {
     auto item = std::make_unique<QueuedFrame>();
     item->frame = std::move(frame);
     item->id = id;
     item->completion = std::move(completion);
     item->is_notification = !item->completion.has_value();
+    item->on_progress = std::move(on_progress);
     queue_.push_back(std::move(item));
     if (!pumping_) {
         pumping_ = true;
@@ -460,7 +477,13 @@ boost::asio::awaitable<void> McpStdioClient::pump() {
             continue;
         }
         awaiting_id_ = item->id;
+        // pi `requestInternal`: the progress observer is live while the
+        // response is awaited; a matching notifications/progress delivers to
+        // it and the next read restarts the per-read deadline (pi
+        // `armTimeout`'s re-arm).
+        progress_handler_ = std::move(item->on_progress);
         auto outcome = co_await await_response(item->id);
+        progress_handler_ = {};
         awaiting_id_ = 0;
         current_id_ = 0;
         complete_frame(*item, std::move(outcome));
@@ -605,6 +628,18 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> McpStdioClient::aw
         if (!parsed) {
             // Malformed JSON is a recoverable transport error: the pending
             // request keeps waiting for its own response (pi `handleStdout`).
+            continue;
+        }
+        // pi `handleProgress`: a notifications/progress for this request's
+        // token delivers to the observer; the loop's next read re-arms the
+        // deadline, so a working server never times out mid-call.
+        if (const auto token = detail::progress_token_of(*parsed);
+                token.has_value() && static_cast<int>(*token) == id && progress_handler_) {
+            if (const auto* object = parsed->get_if<support::JsonValue::object_t>()) {
+                if (const auto params = object->find("params"); params != object->end()) {
+                    progress_handler_(params->second);
+                }
+            }
             continue;
         }
         auto matched = detail::response_for_id(*parsed, id);

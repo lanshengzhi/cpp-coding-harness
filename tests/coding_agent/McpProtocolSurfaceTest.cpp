@@ -23,8 +23,8 @@ using namespace cch;
 namespace {
 
 [[nodiscard]] support::JsonValue bundle_protocol() {
-    const std::filesystem::path path = std::filesystem::path{CCH_SOURCE_DIR} /
-            "fixtures/pi-ai/v1.0.4/mcp-codemode/mcp-protocol-surface.json";
+    const std::filesystem::path path =
+            std::filesystem::path{CCH_SOURCE_DIR} / "fixtures/pi-ai/v1.0.4/mcp-codemode/mcp-protocol-surface.json";
     std::ifstream input(path, std::ios::binary);
     std::ostringstream text;
     text << input.rdbuf();
@@ -51,8 +51,7 @@ TEST_CASE("initialize requests the bundle's LATEST protocol version", "[coding_a
     CHECK(params.get_object().at("protocolVersion").get_string() == latest);
 }
 
-TEST_CASE("initialize validation accepts every version the bundle supports",
-        "[coding_agent][mcp][issue884][spec]") {
+TEST_CASE("initialize validation accepts every version the bundle supports", "[coding_agent][mcp][issue884][spec]") {
     const auto supported = bundle_protocol().get_object().at("protocol").get_object().at("supported").get_array();
     REQUIRE(!supported.empty());
     for (const auto& version : supported) {

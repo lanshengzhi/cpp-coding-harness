@@ -119,8 +119,10 @@ public:
         return instructions_value;
     }
 
-    [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(
-            std::string_view tool, support::JsonValue arguments, std::stop_token) override {
+    [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(std::string_view tool,
+            support::JsonValue arguments,
+            std::stop_token,
+            coding_agent::mcp::McpServerConnection::ProgressCallback = {}) override {
         calls.push_back(Call{std::string{tool}, std::move(arguments)});
         return support::AsyncResult<support::JsonValue>{call_result};
     }
@@ -587,7 +589,7 @@ TEST_CASE("registered tools carry their input schema and execute tools/call on t
     // The runnable call executes one `tools/call` on the server's live
     // connection and returns the CallToolResult.
     auto outcome = runtime.run(
-            registration.call(support::JsonValue{support::JsonValue::object_t{{"text", "hi"}}}, std::stop_token{}));
+            registration.call(support::JsonValue{support::JsonValue::object_t{{"text", "hi"}}}, std::stop_token{}, {}));
     REQUIRE(outcome.has_value());
     REQUIRE(connection->calls.size() == 1);
     CHECK(connection->calls.front().tool == "echo");

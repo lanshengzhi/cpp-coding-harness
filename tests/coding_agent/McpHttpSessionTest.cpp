@@ -302,7 +302,7 @@ using cch::tests::wait_for;
                     params = tools_call_params(std::move(tool_name),
                             support::JsonValue::object_t{})]() mutable -> boost::asio::awaitable<void> {
                 first->emplace(co_await support::detail::await_async_result(
-                        client->request("tools/call", std::move(params), token)));
+                        client->request("tools/call", std::move(params), {.stop_token = token})));
                 co_return;
             },
             boost::asio::detached);
@@ -618,7 +618,7 @@ TEST_CASE("a request already cancelled before it is sent does not emit notificat
     const auto cancelled = tests::run_awaitable(runtime,
             support::detail::await_async_result(client->request("tools/call",
                     tools_call_params("echo", support::JsonValue::object_t{{"text", "never"}}),
-                    cancel.get_token())));
+                    {.stop_token = cancel.get_token()})));
     REQUIRE_FALSE(cancelled.has_value());
     CHECK(cancelled.error().code == support::ErrorCode::Cancelled);
     CHECK_FALSE(trace_contains(trace, "notifications/cancelled"));

@@ -383,8 +383,7 @@ TEST_CASE("MCP GET stream: a server retry field overrides the reconnect delay", 
     client->close();
 }
 
-TEST_CASE("MCP GET stream: an out-of-range server retry field is ignored, never throws",
-        "[coding_agent][mcp]") {
+TEST_CASE("MCP GET stream: an out-of-range server retry field is ignored, never throws", "[coding_agent][mcp]") {
     // The `retry:` field is server-controlled. pi adopts only /^\d+$/ values;
     // a digits-only value that does not fit the client's int range must fall
     // back to the client backoff instead of throwing (strict no-exceptions,

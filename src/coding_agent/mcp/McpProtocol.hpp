@@ -89,6 +89,57 @@ namespace detail {
     return serialized ? std::move(*serialized) : std::string{"{}"};
 }
 
+/// pi `requestInternal`: a request that observes progress carries
+/// `_meta.progressToken` in its params — the request id doubles as the token —
+/// merging any `_meta` the caller already set, exactly like pi.
+[[nodiscard]] inline support::JsonValue with_progress_token(std::optional<support::JsonValue> params, int id) {
+    support::JsonValue::object_t meta{{"progressToken", static_cast<double>(id)}};
+    support::JsonValue::object_t merged;
+    if (params) {
+        if (const auto* object = params->get_if<support::JsonValue::object_t>()) {
+            merged = *object;
+            if (const auto existing = object->find("_meta");
+                    existing != object->end() && existing->second.get_if<support::JsonValue::object_t>() != nullptr) {
+                meta = existing->second.get_object();
+                meta["progressToken"] = static_cast<double>(id);
+            }
+        }
+    }
+    merged["_meta"] = support::JsonValue{std::move(meta)};
+    return support::JsonValue{std::move(merged)};
+}
+
+/// The numeric progress token of one incoming `notifications/progress`, or
+/// nullopt for anything else. pi `handleProgress` accepts only a notification
+/// whose params carry a JSON-RPC-id token and a numeric `progress`; Pike's
+/// tokens are the numeric request ids, so a string token never matches.
+[[nodiscard]] inline std::optional<double> progress_token_of(const support::JsonValue& message) {
+    const auto* object = message.get_if<support::JsonValue::object_t>();
+    if (object == nullptr) {
+        return std::nullopt;
+    }
+    const auto method = object->find("method");
+    if (method == object->end() || !method->second.holds<std::string>() ||
+            method->second.get_string() != "notifications/progress") {
+        return std::nullopt;
+    }
+    const auto params = object->find("params");
+    if (params == object->end()) {
+        return std::nullopt;
+    }
+    const auto* params_object = params->second.get_if<support::JsonValue::object_t>();
+    if (params_object == nullptr) {
+        return std::nullopt;
+    }
+    const auto token = params_object->find("progressToken");
+    const auto progress = params_object->find("progress");
+    if (token == params_object->end() || !token->second.holds<double>() || progress == params_object->end() ||
+            !progress->second.holds<double>()) {
+        return std::nullopt;
+    }
+    return token->second.get_number();
+}
+
 /// One compact JSON-RPC notification body (no `id`, no response).
 [[nodiscard]] inline std::string build_notification_body(
         std::string_view method, const std::optional<support::JsonValue>& params) {
@@ -192,12 +243,11 @@ namespace detail {
     // pi `client.ts` connect: the negotiated version must be one pi speaks,
     // rejected with pi's verbatim message.
     const auto selected = protocol_version->second.get_string();
-    const bool supported = std::ranges::any_of(kMcpSupportedProtocolVersions, [&selected](std::string_view version) {
-        return version == selected;
-    });
+    const bool supported = std::ranges::any_of(
+            kMcpSupportedProtocolVersions, [&selected](std::string_view version) { return version == selected; });
     if (!supported) {
-        return std::unexpected(support::make_error(support::ErrorCode::Process,
-                "MCP server selected unsupported protocol version " + selected));
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Process, "MCP server selected unsupported protocol version " + selected));
     }
     return {};
 }

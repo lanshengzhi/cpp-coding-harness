@@ -96,31 +96,40 @@ void ProductionMcpConnection::note_connect_error(support::Error error) noexcept 
     error_ = std::move(error.message);
 }
 
-support::AsyncResult<support::JsonValue> ProductionMcpConnection::request(
-        std::string method, std::optional<support::JsonValue> params, std::stop_token stop_token) {
+support::AsyncResult<support::JsonValue> ProductionMcpConnection::request(std::string method,
+        std::optional<support::JsonValue> params,
+        mcp::McpServerConnection::RequestOptions options) {
     return support::detail::make_async_result(
-            [this, method = std::move(method), params = std::move(params), stop_token]() mutable
+            [this, method = std::move(method), params = std::move(params), options = std::move(options)]() mutable
                     -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
                 if (!client_) {
                     co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
                             "MCP server '" + server_name_ + "' has no live connection"));
                 }
                 co_return co_await support::detail::await_async_result(
-                        client_->request(std::move(method), std::move(params), stop_token));
+                        client_->request(std::move(method), std::move(params), std::move(options)));
             });
 }
 
-support::AsyncResult<support::JsonValue> ProductionMcpConnection::call_tool(
-        std::string_view tool, support::JsonValue arguments, std::stop_token stop_token) {
+support::AsyncResult<support::JsonValue> ProductionMcpConnection::call_tool(std::string_view tool,
+        support::JsonValue arguments,
+        std::stop_token stop_token,
+        mcp::McpServerConnection::ProgressCallback on_progress) {
     return support::detail::make_async_result(
-            [this, tool = std::string{tool}, arguments = std::move(arguments), stop_token]() mutable
-                    -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+            [this,
+                    tool = std::string{tool},
+                    arguments = std::move(arguments),
+                    stop_token,
+                    on_progress = std::move(
+                            on_progress)]() mutable -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
                 support::JsonValue params{support::JsonValue::object_t{
                         {"name", std::move(tool)},
                         {"arguments", std::move(arguments)},
                 }};
-                auto result = co_await support::detail::await_async_result(
-                        request("tools/call", std::move(params), stop_token));
+                auto result = co_await support::detail::await_async_result(request("tools/call",
+                        std::move(params),
+                        mcp::McpServerConnection::RequestOptions{
+                                .stop_token = stop_token, .on_progress = std::move(on_progress)}));
                 if (!result) {
                     // pi runtime: an OAuth challenge moves the connection to
                     // needs-auth so the panel offers the sign-in action.
@@ -140,7 +149,8 @@ support::AsyncResult<support::JsonValue> ProductionMcpConnection::resources_page
     if (cursor.has_value()) {
         params = support::JsonValue{support::JsonValue::object_t{{"cursor", std::move(*cursor)}}};
     }
-    return request("resources/list", std::move(params), stop_token);
+    return request(
+            "resources/list", std::move(params), mcp::McpServerConnection::RequestOptions{.stop_token = stop_token});
 }
 
 support::AsyncResult<support::JsonValue> ProductionMcpConnection::resource_templates_page(
@@ -149,13 +159,16 @@ support::AsyncResult<support::JsonValue> ProductionMcpConnection::resource_templ
     if (cursor.has_value()) {
         params = support::JsonValue{support::JsonValue::object_t{{"cursor", std::move(*cursor)}}};
     }
-    return request("resources/templates/list", std::move(params), stop_token);
+    return request("resources/templates/list",
+            std::move(params),
+            mcp::McpServerConnection::RequestOptions{.stop_token = stop_token});
 }
 
 support::AsyncResult<support::JsonValue> ProductionMcpConnection::read_resource(
         std::string uri, std::stop_token stop_token) {
-    return request(
-            "resources/read", support::JsonValue{support::JsonValue::object_t{{"uri", std::move(uri)}}}, stop_token);
+    return request("resources/read",
+            support::JsonValue{support::JsonValue::object_t{{"uri", std::move(uri)}}},
+            mcp::McpServerConnection::RequestOptions{.stop_token = stop_token});
 }
 
 support::AsyncResult<void> ProductionMcpConnection::refresh() {
@@ -430,17 +443,36 @@ void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
     // serializes frames internally.
     extension.concurrency = agent::ToolConcurrency::ParallelSafe;
     auto call = std::move(tool.call);
-    extension.execute =
+    // pi `createMcpToolDefinition`'s execute observes the call's progress and
+    // streams pi's "Progress <n>[/<total>]" updates through the run's update
+    // sink (the same conversion the assembly-time source uses).
+    extension.context_execute =
             [call = std::move(call), server](support::JsonValue arguments,
+                    extensions::ExtensionToolContext context,
                     std::stop_token stop_token) mutable -> support::AsyncResult<extensions::ExtensionToolResult> {
         return support::detail::make_async_result(
-                [call = std::move(call), server, arguments = std::move(arguments), stop_token]() mutable
+                [call = std::move(call),
+                        server,
+                        arguments = std::move(arguments),
+                        update_sink = std::move(context.update_sink),
+                        stop_token]() mutable
                         -> boost::asio::awaitable<support::Expected<extensions::ExtensionToolResult>> {
                     if (!call) {
                         co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
                                 "MCP tool from server '" + server + "' is not callable"));
                     }
-                    auto result = co_await support::detail::await_async_result(call(std::move(arguments), stop_token));
+                    mcp::McpServerConnection::ProgressCallback on_progress;
+                    if (update_sink) {
+                        on_progress = [update_sink = std::move(update_sink)](
+                                              const support::JsonValue& progress) mutable {
+                            (void)update_sink(agent::AsyncToolExecutionResult{
+                                    .content = std::vector<ai::Content>{ai::text_content(
+                                            mcp::progress_update_text(progress))},
+                            });
+                        };
+                    }
+                    auto result = co_await support::detail::await_async_result(
+                            call(std::move(arguments), stop_token, std::move(on_progress)));
                     if (!result) {
                         co_return std::unexpected(std::move(result.error()));
                     }

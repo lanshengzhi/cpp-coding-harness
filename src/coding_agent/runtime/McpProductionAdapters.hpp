@@ -81,8 +81,10 @@ public:
     [[nodiscard]] const std::string& oauth_url() const noexcept override { return oauth_url_; }
     [[nodiscard]] const std::optional<std::string>& instructions() const noexcept override { return instructions_; }
 
-    [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(
-            std::string_view tool, support::JsonValue arguments, std::stop_token stop_token) override;
+    [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(std::string_view tool,
+            support::JsonValue arguments,
+            std::stop_token stop_token,
+            mcp::McpServerConnection::ProgressCallback on_progress = {}) override;
     [[nodiscard]] support::AsyncResult<support::JsonValue> resources_page(
             std::optional<std::string> cursor, std::stop_token stop_token) override;
     [[nodiscard]] support::AsyncResult<support::JsonValue> resource_templates_page(
@@ -103,8 +105,9 @@ public:
     void set_resources_changed_listener(ResourcesChangedListener listener) override;
 
 private:
-    [[nodiscard]] support::AsyncResult<support::JsonValue> request(
-            std::string method, std::optional<support::JsonValue> params, std::stop_token stop_token);
+    [[nodiscard]] support::AsyncResult<support::JsonValue> request(std::string method,
+            std::optional<support::JsonValue> params,
+            mcp::McpServerConnection::RequestOptions options);
 
     std::string server_name_;
     ConnectSource connect_source_;

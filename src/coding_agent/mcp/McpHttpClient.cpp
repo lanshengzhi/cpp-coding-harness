@@ -28,12 +28,14 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/experimental/channel.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <charconv>
 #include <chrono>
@@ -386,20 +388,31 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> McpHtt
 }
 
 support::AsyncResult<support::JsonValue> McpHttpClient::request(
-        std::string method, std::optional<support::JsonValue> params, std::stop_token stop_token) {
+        std::string method, std::optional<support::JsonValue> params, RequestOptions options) {
+    const std::stop_token stop_token = options.stop_token;
     return support::AsyncResult<support::JsonValue>{support::AsyncProducer<support::JsonValue, support::Error>{
-            [self = shared_from_this(), method = std::move(method), params = std::move(params), stop_token](
+            [self = shared_from_this(),
+                    method = std::move(method),
+                    params = std::move(params),
+                    options = std::move(options),
+                    stop_token](
                     support::AsyncCompletion<support::JsonValue, support::Error> completion) mutable noexcept {
                 if (stop_token.stop_requested()) {
                     completion(std::unexpected(detail::cancelled_error(self->config_.name)));
                     return;
                 }
                 const int id = self->next_id_++;
+                // pi `requestInternal`: a progress-observed request advertises
+                // `_meta.progressToken` (the request id doubles as the token).
+                if (options.on_progress) {
+                    params = detail::with_progress_token(std::move(params), id);
+                }
                 self->enqueue_frame(detail::build_request_body(id, method, params),
                         id,
                         std::move(completion),
                         stop_token,
-                        /* cancellable */ method != "initialize");
+                        /* cancellable */ method != "initialize",
+                        std::move(options.on_progress));
             }}};
 }
 
@@ -411,7 +424,8 @@ void McpHttpClient::enqueue_frame(std::string frame,
         int id,
         std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
         std::stop_token stop_token,
-        bool cancellable) {
+        bool cancellable,
+        ProgressCallback on_progress) {
     auto item = std::make_unique<QueuedFrame>();
     item->frame = std::move(frame);
     item->id = id;
@@ -419,6 +433,7 @@ void McpHttpClient::enqueue_frame(std::string frame,
     item->is_notification = !item->completion.has_value();
     item->stop_token = stop_token;
     item->cancellable = cancellable;
+    item->on_progress = std::move(on_progress);
     queue_.push_back(std::move(item));
     if (!pumping_) {
         pumping_ = true;
@@ -442,7 +457,9 @@ boost::asio::awaitable<void> McpHttpClient::pump() {
             (void)co_await send_notification(item->frame);
             continue;
         }
-        complete_frame(*item, co_await send_request(item->frame, item->id, item->stop_token, item->cancellable));
+        complete_frame(*item,
+                co_await send_request(
+                        item->frame, item->id, item->stop_token, item->cancellable, std::move(item->on_progress)));
     }
     pumping_ = false;
 }
@@ -454,7 +471,7 @@ void McpHttpClient::complete_frame(QueuedFrame& frame, support::Expected<support
 }
 
 boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> McpHttpClient::post(
-        std::string_view body, std::stop_token stop_token) {
+        std::string_view body, std::stop_token stop_token, ai::providers::BodyChunkHandler on_body_chunk) {
     CCH_TRY(headers, co_await request_headers_for_call());
     ai::providers::StreamRequest request;
     request.method = "POST";
@@ -464,20 +481,160 @@ boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> McpHttp
     request.timeout = config_.request_timeout;
     // The reused transport resolves the token into its own Cancelled error, so
     // an aborted Agent Turn cancels the HTTPS request instead of waiting out
-    // the deadline.
+    // the deadline. The transport's own timeout bounds connection setup and
+    // response headers only; the MCP-layer request deadline lives in
+    // `send_request` so progress can re-arm it (pi `armTimeout`).
     request.stop_token = stop_token;
-    // An empty body handler buffers the whole response body, which is enough
-    // for the request path: a JSON reply, or the complete SSE response stream.
-    co_return co_await transport_->async_stream(request, {});
+    // An empty body handler just buffers the response body (a JSON reply, or
+    // the complete SSE response stream); an observed request additionally
+    // parses the stream incrementally for its progress events.
+    co_return co_await transport_->async_stream(request, std::move(on_body_chunk));
 }
 
 boost::asio::awaitable<support::Expected<support::JsonValue>> McpHttpClient::send_request(
-        std::string_view frame, int id, std::stop_token stop_token, bool cancellable) {
-    auto response = co_await post(frame, stop_token);
+        std::string_view frame, int id, std::stop_token stop_token, bool cancellable, ProgressCallback on_progress) {
+    // A request without a progress observer keeps the plain buffered POST:
+    // the transport's deadline covers connection and headers, and the body
+    // streams unbounded until completion or cancellation.
+    if (on_progress == nullptr) {
+        auto response = co_await post(frame, stop_token, {});
+        if (!response) {
+            // pi `cancelPending`: a cancellable request that is aborted or times
+            // out tells the server through `notifications/cancelled` (with the pi
+            // reason) before the call fails. `initialize` is never cancellable.
+            const support::ErrorCode code = response.error().code;
+            if (cancellable && (code == support::ErrorCode::Cancelled || code == support::ErrorCode::Timeout)) {
+                co_await notify_cancelled(id, code == support::ErrorCode::Timeout ? "Request timed out" : "Aborted");
+            }
+            co_return std::unexpected(std::move(response.error()));
+        }
+        capture_session(*response);
+        co_return interpret_response(id, *response);
+    }
+
+    // Observed request: race the POST against pi's request deadline. The
+    // producer (the POST) and the watcher (the deadline) settle exactly one
+    // outcome through the channel; progress on either stream re-arms the
+    // deadline. Everything runs on this client's executor: the pump
+    // serializes POSTs, so one progress registration serves the request, and
+    // the GET-stream dispatch may deliver progress too (pi `handleProgress`
+    // listens on every stream).
+    auto executor = co_await boost::asio::this_coro::executor;
+    using OutcomeChannel = boost::asio::experimental::channel<void(
+            boost::system::error_code, support::Expected<ai::providers::StreamResponse>)>;
+    auto outcome = std::make_shared<OutcomeChannel>(executor, 1);
+    auto settled = std::make_shared<std::atomic_bool>(false);
+    auto rearm = std::make_shared<std::atomic_bool>(false);
+    auto deadline = std::make_shared<boost::asio::steady_timer>(executor);
+    auto post_stop = std::make_shared<std::stop_source>();
+    // The caller's cancellation aborts the POST as before (ADR 0020).
+    std::stop_callback cancellation{stop_token, [post_stop] { post_stop->request_stop(); }};
+
+    progress_registration_ = ProgressRegistration{id, std::move(on_progress), rearm, deadline};
+
+    if (config_.request_timeout > std::chrono::milliseconds::zero()) {
+        const auto timeout = config_.request_timeout;
+        const std::string server = config_.name;
+        boost::asio::co_spawn(
+                executor,
+                [deadline, rearm, settled, outcome, post_stop, timeout, server]() -> boost::asio::awaitable<void> {
+                    for (;;) {
+                        deadline->expires_after(timeout);
+                        boost::system::error_code wait_error;
+                        co_await deadline->async_wait(
+                                boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+                        if (wait_error) {
+                            // operation_aborted: re-armed by progress (loop) or
+                            // torn down at completion — the flag tells them apart.
+                            if (rearm->exchange(false)) {
+                                continue;
+                            }
+                            co_return;
+                        }
+                        // pi `armTimeout`'s expiry fails the request and the
+                        // server is told with `notifications/cancelled`.
+                        if (settled->exchange(true)) {
+                            co_return;
+                        }
+                        post_stop->request_stop();
+                        co_await outcome->async_send(boost::system::error_code{},
+                                support::Expected<ai::providers::StreamResponse>{
+                                        std::unexpected(detail::timeout_error(server, timeout))},
+                                boost::asio::use_awaitable);
+                        co_return;
+                    }
+                },
+                boost::asio::detached);
+    }
+
+    boost::asio::co_spawn(
+            executor,
+            [self = shared_from_this(),
+                    body = std::string{frame},
+                    outcome,
+                    settled,
+                    post_stop,
+                    rearm,
+                    deadline,
+                    id]() mutable -> boost::asio::awaitable<void> {
+                // Incremental SSE parse of the response stream: a
+                // notifications/progress for this request's token re-arms the
+                // deadline and delivers to the observer (pi
+                // `consumeResponseStream`'s progress events).
+                auto reader = std::make_shared<GetStreamSseReader>();
+                auto buffered_body = std::make_shared<std::string>();
+                ai::providers::BodyChunkHandler chunk = [self, reader, rearm, deadline, id, buffered_body](
+                                                                std::string_view bytes) -> support::ExpectedVoid {
+                    buffered_body->append(bytes.data(), bytes.size());
+                    auto events = reader->append(bytes);
+                    if (!events) {
+                        return std::unexpected(std::move(events.error()));
+                    }
+                    for (const auto& event : *events) {
+                        auto parsed = support::read_json(event.data);
+                        if (!parsed) {
+                            continue;
+                        }
+                        const auto token = detail::progress_token_of(*parsed);
+                        if (!token.has_value() || static_cast<int>(*token) != id ||
+                                !self->progress_registration_.has_value() || !self->progress_registration_->callback) {
+                            continue;
+                        }
+                        rearm->store(true);
+                        deadline->cancel();
+                        const auto* object = parsed->get_if<support::JsonValue::object_t>();
+                        const auto params = object->find("params");
+                        self->progress_registration_->callback(params->second);
+                    }
+                    return support::ExpectedVoid{};
+                };
+                auto response = co_await self->post(std::move(body), post_stop->get_token(), std::move(chunk));
+                if (response && response->body.empty() && !buffered_body->empty()) {
+                    response->body = std::move(*buffered_body);
+                }
+                if (settled->exchange(true)) {
+                    // The deadline won and already settled the outcome; the
+                    // cancelled POST's result is dropped.
+                    co_return;
+                }
+                co_await outcome->async_send(
+                        boost::system::error_code{}, std::move(response), boost::asio::use_awaitable);
+            },
+            boost::asio::detached);
+
+    boost::system::error_code receive_error;
+    auto response =
+            co_await outcome->async_receive(boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
+    // Settle the watcher: aborted, it re-checks `rearm` (a late progress) and
+    // `settled` (already settled) and exits.
+    (void)settled->exchange(true);
+    deadline->cancel();
+    progress_registration_.reset();
+    if (receive_error) {
+        co_return std::unexpected(
+                support::make_error(support::ErrorCode::Process, "MCP request outcome channel closed"));
+    }
     if (!response) {
-        // pi `cancelPending`: a cancellable request that is aborted or times
-        // out tells the server through `notifications/cancelled` (with the pi
-        // reason) before the call fails. `initialize` is never cancellable.
         const support::ErrorCode code = response.error().code;
         if (cancellable && (code == support::ErrorCode::Cancelled || code == support::ErrorCode::Timeout)) {
             co_await notify_cancelled(id, code == support::ErrorCode::Timeout ? "Request timed out" : "Aborted");
@@ -626,6 +783,23 @@ void McpHttpClient::handle_stream_message(const support::JsonValue& message) {
     support::JsonValue params{support::JsonValue::object_t{}};
     if (const auto found = object->find("params"); found != object->end()) {
         params = found->second;
+    }
+    // pi `handleProgress` listens on every stream: a notifications/progress
+    // for the in-flight observed request re-arms its deadline and delivers to
+    // the observer, exactly like the response-stream path in `send_request`.
+    if (name == "notifications/progress") {
+        if (const auto token = detail::progress_token_of(message);
+                token.has_value() && progress_registration_.has_value() &&
+                static_cast<int>(*token) == progress_registration_->id && progress_registration_->callback) {
+            if (const auto rearm = progress_registration_->rearm) {
+                rearm->store(true);
+            }
+            if (const auto deadline = progress_registration_->deadline.lock()) {
+                deadline->cancel();
+            }
+            progress_registration_->callback(params);
+        }
+        return;
     }
     const auto id = object->find("id");
     if (id != object->end() && (id->second.holds<double>() || id->second.holds<std::string>())) {

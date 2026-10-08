@@ -70,9 +70,8 @@ struct McpToolDescriptor {
 /// name becomes the first 55 characters plus `_<8-hex-sha256>` over the RAW
 /// `${server}\0${tool}` pair (not the sanitized name), so colliding tools
 /// hash independently of which one kept the plain name.
-[[nodiscard]] std::string mcp_tool_name(std::string_view server,
-        std::string_view tool,
-        std::move_only_function<bool(const std::string&)> is_taken);
+[[nodiscard]] std::string mcp_tool_name(
+        std::string_view server, std::string_view tool, std::move_only_function<bool(const std::string&)> is_taken);
 
 /// pi `index.ts`'s order-independent assignment for one server's whole tool
 /// list: `plain` counts the sanitized names, and every tool whose plain name
@@ -81,6 +80,11 @@ struct McpToolDescriptor {
 /// Returns the assigned names, one per input, in input order.
 [[nodiscard]] std::vector<std::string> assign_mcp_tool_names(
         std::string_view server, const std::vector<std::string>& raw_tool_names);
+
+/// The model-visible text of one `notifications/progress` (pi `tools.ts`
+/// `onProgress`): the server's `message` when it carries one, else
+/// `Progress <n>[/<total>]`, the total omitted when absent.
+[[nodiscard]] std::string progress_update_text(const support::JsonValue& params);
 
 /// Extension Tool Source backed by one MCP server (spec #865). The one async
 /// boundary is the transport factory — `connect_stdio` (ticket #869) or

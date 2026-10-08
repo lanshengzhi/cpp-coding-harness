@@ -108,6 +108,25 @@ support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result
 /// pi `index.ts` assigns the Agent-visible names across the whole listing
 /// order-independently (colliding sanitized names all take the hash suffix),
 /// so the assignment happens once, after every page is collected.
+std::string progress_update_text(const support::JsonValue& params) {
+    const auto* object = params.get_if<support::JsonValue::object_t>();
+    if (object != nullptr) {
+        if (const auto message = object->find("message");
+                message != object->end() && message->second.holds<std::string>()) {
+            return message->second.get_string();
+        }
+        const auto progress = object->find("progress");
+        if (progress != object->end() && progress->second.holds<double>()) {
+            std::string text = "Progress " + std::to_string(static_cast<long long>(progress->second.get_number()));
+            if (const auto total = object->find("total"); total != object->end() && total->second.holds<double>()) {
+                text += "/" + std::to_string(static_cast<long long>(total->second.get_number()));
+            }
+            return text;
+        }
+    }
+    return {};
+}
+
 void assign_listing_names(std::string_view server, std::vector<McpToolDescriptor>& tools) {
     std::vector<std::string> raw_names;
     raw_names.reserve(tools.size());
@@ -189,12 +208,11 @@ boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_m
             break;
         }
         if (!cursors.insert(next_cursor).second) {
-            co_return std::unexpected(
-                    source_error("MCP tools/list returned duplicate cursor: " + next_cursor));
+            co_return std::unexpected(source_error("MCP tools/list returned duplicate cursor: " + next_cursor));
         }
         if (page_number + 1 >= kMcpMaxListPages) {
-            co_return std::unexpected(source_error(
-                    "MCP tools/list exceeded " + std::to_string(kMcpMaxListPages) + " pages"));
+            co_return std::unexpected(
+                    source_error("MCP tools/list exceeded " + std::to_string(kMcpMaxListPages) + " pages"));
         }
         cursor = std::move(next_cursor);
     }
@@ -202,13 +220,16 @@ boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_m
     co_return tools;
 }
 
-
-std::string mcp_tool_name(std::string_view server, std::string_view tool) {
+[[nodiscard]] std::string plain_mcp_tool_name(std::string_view server, std::string_view tool) {
     std::string name = "mcp__";
     name += sanitize_identifier(server);
     name += "__";
     name += sanitize_identifier(tool);
     return name;
+}
+
+std::string mcp_tool_name(std::string_view server, std::string_view tool) {
+    return mcp_tool_name(server, tool, nullptr);
 }
 
 /// pi `createMcpToolName`'s hash suffix: the first 8 hex characters of the
@@ -238,7 +259,7 @@ std::string mcp_tool_name(std::string_view server, std::string_view tool) {
 
 std::string mcp_tool_name(
         std::string_view server, std::string_view tool, std::move_only_function<bool(const std::string&)> is_taken) {
-    std::string name = mcp_tool_name(server, tool);
+    std::string name = plain_mcp_tool_name(server, tool);
     if (name.size() <= kMcpMaxToolNameLength && (is_taken == nullptr || !is_taken(name))) {
         return name;
     }
@@ -342,13 +363,24 @@ support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource
         auto connection = connection_;
         const std::string server_tool_name = descriptor.server_tool_name;
         const std::string server = server_name_;
-        tool.execute = [connection, server_tool_name, server](support::JsonValue arguments,
-                               std::stop_token stop_token) -> support::AsyncResult<extensions::ExtensionToolResult> {
+        // pi `createMcpToolDefinition`'s execute observes the call's progress
+        // (pi `McpRequestOptions.onProgress`), so the tool runs through the
+        // context form and streams "Progress <n>[/<total>]" updates through
+        // the run's update sink.
+        tool.context_execute =
+                [connection, server_tool_name, server](support::JsonValue arguments,
+                        extensions::ExtensionToolContext context,
+                        std::stop_token stop_token) -> support::AsyncResult<extensions::ExtensionToolResult> {
+            agent::ToolUpdateSink update_sink = std::move(context.update_sink);
             return support::AsyncResult<extensions::ExtensionToolResult>{
                     support::AsyncProducer<extensions::ExtensionToolResult, support::Error>{
-                            [connection, server_tool_name, server, arguments = std::move(arguments), stop_token](
-                                    support::AsyncCompletion<extensions::ExtensionToolResult, support::Error>
-                                            completion) mutable noexcept {
+                            [connection,
+                                    server_tool_name,
+                                    server,
+                                    arguments = std::move(arguments),
+                                    update_sink = std::move(update_sink),
+                                    stop_token](support::AsyncCompletion<extensions::ExtensionToolResult,
+                                    support::Error> completion) mutable noexcept {
                                 if (stop_token.stop_requested()) {
                                     completion(std::unexpected(
                                             support::make_error(support::ErrorCode::Cancelled, "Operation aborted")));
@@ -358,7 +390,21 @@ support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource
                                         {"name", server_tool_name},
                                         {"arguments", std::move(arguments)},
                                 }};
-                                connection->request("tools/call", std::move(params), stop_token)
+                                McpServerConnection::ProgressCallback on_progress;
+                                if (update_sink) {
+                                    on_progress = [update_sink = std::move(update_sink)](
+                                                          const support::JsonValue& progress) mutable {
+                                        (void)update_sink(agent::AsyncToolExecutionResult{
+                                                .content = std::vector<ai::Content>{ai::text_content(
+                                                        progress_update_text(progress))},
+                                        });
+                                    };
+                                }
+                                connection
+                                        ->request("tools/call",
+                                                std::move(params),
+                                                McpServerConnection::RequestOptions{.stop_token = stop_token,
+                                                        .on_progress = std::move(on_progress)})
                                         .start([server, completion = std::move(completion)](
                                                        support::Expected<support::JsonValue> outcome) mutable noexcept {
                                             if (!outcome) {

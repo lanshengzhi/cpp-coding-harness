@@ -41,11 +41,11 @@ public:
 
     [[nodiscard]] support::AsyncResult<support::JsonValue> request(std::string method,
             std::optional<support::JsonValue> params = std::nullopt,
-            std::stop_token stop_token = {}) override {
-        (void)stop_token;
+            RequestOptions options = {}) override {
+        (void)options;
         if (method != "tools/list" || page_for == nullptr) {
-            return support::AsyncResult<support::JsonValue>{support::Expected<support::JsonValue>{std::unexpected(
-                    support::make_error(support::ErrorCode::Process, "unexpected request"))}};
+            return support::AsyncResult<support::JsonValue>{support::Expected<support::JsonValue>{
+                    std::unexpected(support::make_error(support::ErrorCode::Process, "unexpected request"))}};
         }
         std::optional<std::string> cursor;
         if (params) {
@@ -124,8 +124,8 @@ TEST_CASE("tools/list treats a null or empty nextCursor as the end of pagination
     for (const char* label : {"null", "empty"}) {
         ScriptedListConnection connection;
         int calls = 0;
-        connection.page_for = [&calls, label](const std::optional<std::string>&)
-                -> support::Expected<support::JsonValue> {
+        connection.page_for = [&calls, label](
+                                      const std::optional<std::string>&) -> support::Expected<support::JsonValue> {
             ++calls;
             if (calls > 1) {
                 return std::unexpected(

@@ -220,7 +220,7 @@ private:
                     params = tools_call_params(std::move(tool_name),
                             support::JsonValue::object_t{})]() mutable -> boost::asio::awaitable<void> {
                 first->emplace(co_await support::detail::await_async_result(
-                        client->request("tools/call", std::move(params), token)));
+                        client->request("tools/call", std::move(params), {.stop_token = token})));
                 co_return;
             },
             boost::asio::detached);

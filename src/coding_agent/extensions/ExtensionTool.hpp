@@ -31,9 +31,12 @@ struct ExtensionToolResult {
 /// model-issued call id it runs under and the nested-call dispatcher
 /// (`ctx.executeTool`) when the host provides one. `nested_calls` is a
 /// non-owning pointer to the run's dispatcher, which outlives the execution.
+/// `update_sink` is the run's live tool-update publication (pi's `onUpdate`):
+/// long-running tools (MCP progress) stream partial results through it.
 struct ExtensionToolContext {
     agent::NestedToolCallRunner* nested_calls{nullptr};
     std::string call_id{};
+    agent::ToolUpdateSink update_sink{};
 };
 
 /// Move-only execute operation of one extension-provided Tool. `arguments` are

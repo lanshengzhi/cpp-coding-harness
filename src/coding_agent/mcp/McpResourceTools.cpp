@@ -702,8 +702,8 @@ support::AsyncResult<support::JsonValue> McpConnectionResourceServer::resources_
         if (cursor.has_value()) {
             params = support::JsonValue{support::JsonValue::object_t{{"cursor", *cursor}}};
         }
-        auto result = co_await support::detail::await_async_result(
-                connection->request("resources/list", std::move(params), stop_token));
+        auto result = co_await support::detail::await_async_result(connection->request(
+                "resources/list", std::move(params), McpServerConnection::RequestOptions{.stop_token = stop_token}));
         if (!result) {
             co_return std::unexpected(std::move(result.error()));
         }
@@ -735,8 +735,9 @@ support::AsyncResult<support::JsonValue> McpConnectionResourceServer::resource_t
         if (cursor.has_value()) {
             params = support::JsonValue{support::JsonValue::object_t{{"cursor", *cursor}}};
         }
-        auto result = co_await support::detail::await_async_result(
-                connection->request("resources/templates/list", std::move(params), stop_token));
+        auto result = co_await support::detail::await_async_result(connection->request("resources/templates/list",
+                std::move(params),
+                McpServerConnection::RequestOptions{.stop_token = stop_token}));
         if (!result) {
             if (is_method_not_found(result.error())) {
                 co_return support::JsonValue{
@@ -768,8 +769,9 @@ support::AsyncResult<support::JsonValue> McpConnectionResourceServer::read_resou
     auto connection = connection_;
     return support::detail::make_async_result([connection, uri = std::move(uri), stop_token]()
                                                       -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
-        co_return co_await support::detail::await_async_result(connection->request(
-                "resources/read", support::JsonValue{support::JsonValue::object_t{{"uri", uri}}}, stop_token));
+        co_return co_await support::detail::await_async_result(connection->request("resources/read",
+                support::JsonValue{support::JsonValue::object_t{{"uri", uri}}},
+                McpServerConnection::RequestOptions{.stop_token = stop_token}));
     });
 }
 

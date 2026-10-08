@@ -11,7 +11,9 @@
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/steady_timer.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <deque>
 #include <functional>
@@ -105,7 +107,7 @@ public:
     /// and fails the call with a cancellation error.
     [[nodiscard]] support::AsyncResult<support::JsonValue> request(std::string method,
             std::optional<support::JsonValue> params = std::nullopt,
-            std::stop_token stop_token = {}) override;
+            RequestOptions options = {}) override;
 
     /// One JSON-RPC notification (no `id`, no response). Ordered against
     /// requests through the same queue.
@@ -165,6 +167,23 @@ private:
         /// that is aborted or times out emits `notifications/cancelled` (pi
         /// `cancelPending`).
         bool cancellable{false};
+        /// pi `onProgress` of this request (pi `requestInternal`).
+        ProgressCallback on_progress{};
+    };
+
+    /// The registration of the one in-flight progress-observed request: the
+    /// pump serializes POSTs, so one slot serves every request. Shared with
+    /// the GET stream's dispatch, which can also carry `notifications/progress`
+    /// for an in-flight request (pi `handleProgress` listens on every stream).
+    struct ProgressRegistration {
+        int id{0};
+        ProgressCallback callback{};
+        /// pi `armTimeout` re-arm: set by either stream's progress delivery,
+        /// consumed by the deadline watcher in `send_request`.
+        std::shared_ptr<std::atomic_bool> rearm;
+        /// The deadline timer `rearm` cancels; owned by `send_request`'s
+        /// watcher while the request runs.
+        std::weak_ptr<boost::asio::steady_timer> deadline;
     };
 
     /// Serve the queued frames in order until the queue drains; one pump runs
@@ -173,9 +192,12 @@ private:
     /// POST one request body and interpret the response for `id`; `stop_token`
     /// cancels the in-flight HTTPS request. A `cancellable` request that the
     /// stop token aborts, or that times out, emits `notifications/cancelled`
-    /// (pi `cancelPending`) before completing.
+    /// (pi `cancelPending`) before completing. An observed request races the
+    /// POST against pi's request deadline: progress on either stream re-arms
+    /// it (pi `armTimeout`), and its expiry cancels the POST and fails with
+    /// pi's timeout, also emitting `notifications/cancelled` when cancellable.
     [[nodiscard]] boost::asio::awaitable<support::Expected<support::JsonValue>> send_request(
-            std::string_view frame, int id, std::stop_token stop_token, bool cancellable);
+            std::string_view frame, int id, std::stop_token stop_token, bool cancellable, ProgressCallback on_progress);
     /// POST one notification body; any 2xx is success and the body is ignored.
     [[nodiscard]] boost::asio::awaitable<std::optional<support::Error>> send_notification(std::string_view frame);
     /// Tell the server that `id` is cancelled (pi `cancelPending`'s
@@ -184,9 +206,10 @@ private:
     [[nodiscard]] boost::asio::awaitable<void> notify_cancelled(int id, std::string reason);
     /// One HTTPS POST through the reused transport, buffering the full
     /// response body (JSON or SSE). `stop_token` is carried on the request so
-    /// the transport can cancel it.
+    /// the transport can cancel it. `on_body_chunk` observes the response
+    /// stream as it arrives (pi `consumeResponseStream`'s progress events).
     [[nodiscard]] boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> post(
-            std::string_view body, std::stop_token stop_token);
+            std::string_view body, std::stop_token stop_token, ai::providers::BodyChunkHandler on_body_chunk = {});
 
     /// The disposition of one server-to-client GET stream attempt (pi
     /// `runGetStream`'s loop body).
@@ -266,7 +289,8 @@ private:
             int id,
             std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
             std::stop_token stop_token = {},
-            bool cancellable = false);
+            bool cancellable = false,
+            ProgressCallback on_progress = {});
     void complete_frame(QueuedFrame& frame, support::Expected<support::JsonValue> outcome);
 
     boost::asio::any_io_executor executor_;
@@ -293,6 +317,10 @@ private:
     /// request id the server chose, so `notifications/cancelled` can abort the
     /// matching handler (pi `incoming`).
     std::map<std::string, std::stop_source> incoming_handlers_;
+    /// The in-flight progress-observed request, if any (see
+    /// `ProgressRegistration`). Set by the pump around `send_request`, read by
+    /// the GET-stream dispatch.
+    std::optional<ProgressRegistration> progress_registration_;
 };
 
 } // namespace cch::coding_agent::mcp

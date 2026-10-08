@@ -79,7 +79,7 @@ public:
     /// before the call returns.
     [[nodiscard]] support::AsyncResult<support::JsonValue> request(std::string method,
             std::optional<support::JsonValue> params = std::nullopt,
-            std::stop_token stop_token = {}) override;
+            RequestOptions options = {}) override;
 
     /// One JSON-RPC notification (no `id`, no response). Ordered against
     /// requests through the same queue.
@@ -101,6 +101,9 @@ private:
         int id{0};
         std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion;
         bool is_notification{false};
+        /// pi `onProgress` of this request, installed while its response is
+        /// awaited (pi `requestInternal`/`armTimeout`).
+        ProgressCallback on_progress{};
     };
 
     [[nodiscard]] support::ExpectedVoid spawn();
@@ -136,7 +139,8 @@ private:
 
     void enqueue_frame(std::string frame,
             int id,
-            std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion);
+            std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
+            ProgressCallback on_progress = {});
     void complete_frame(QueuedFrame& frame, support::Expected<support::JsonValue> outcome);
     void teardown_process_group() noexcept;
     void close_transport() noexcept;
@@ -166,6 +170,11 @@ private:
     /// read is outstanding, so a cancellation wake targets the right read.
     int current_id_{0};
     int awaiting_id_{0};
+    /// pi `onProgress` of the in-flight request: the pump serves one request
+    /// at a time, so a single slot is the whole registration. Set while its
+    /// response is awaited; a matching `notifications/progress` delivers to it
+    /// and the next read restarts the deadline (pi `armTimeout` re-arm).
+    ProgressCallback progress_handler_;
     bool pumping_{false};
     bool closed_{false};
     /// The last `read_line` nullopt came from the deadline rather than EOF.

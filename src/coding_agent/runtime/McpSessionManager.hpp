@@ -97,8 +97,12 @@ public:
     [[nodiscard]] virtual const std::optional<std::string>& instructions() const noexcept = 0;
 
     /// pi `client.callTool`: one `tools/call` for `tool` on this connection.
-    [[nodiscard]] virtual support::AsyncResult<support::JsonValue> call_tool(
-            std::string_view tool, support::JsonValue arguments, std::stop_token stop_token) = 0;
+    /// `on_progress` observes the call's `notifications/progress` (pi
+    /// `McpRequestOptions.onProgress`); empty keeps the plain call.
+    [[nodiscard]] virtual support::AsyncResult<support::JsonValue> call_tool(std::string_view tool,
+            support::JsonValue arguments,
+            std::stop_token stop_token,
+            mcp::McpServerConnection::ProgressCallback on_progress = {}) = 0;
     /// pi `client.listResourcesPage`: one `resources/list` page.
     [[nodiscard]] virtual support::AsyncResult<support::JsonValue> resources_page(
             std::optional<std::string> cursor, std::stop_token stop_token) = 0;
@@ -169,9 +173,11 @@ public:
 /// pi `client.callTool`: one `tools/call` execution on a server's live
 /// connection, bound by the manager at registration. The surface turns it into
 /// the tool's execute operation; it stays bound when a withdrawn tool
-/// re-registers as hidden, exactly like pi's definition map.
-using McpToolCall = std::function<support::AsyncResult<support::JsonValue>(
-        support::JsonValue arguments, std::stop_token stop_token)>;
+/// re-registers as hidden, exactly like pi's definition map. The progress
+/// observer forwards pi `McpRequestOptions.onProgress`.
+using McpToolCall = std::function<support::AsyncResult<support::JsonValue>(support::JsonValue arguments,
+        std::stop_token stop_token,
+        mcp::McpServerConnection::ProgressCallback on_progress)>;
 
 /// One tool the manager registers on the session tool surface (pi
 /// `ToolDefinition` narrowed to the exposure decision, plus the schemas and

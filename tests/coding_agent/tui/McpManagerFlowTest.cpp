@@ -130,8 +130,10 @@ public:
     [[nodiscard]] const std::optional<std::string>& instructions() const noexcept override {
         return instructions_value;
     }
-    [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(
-            std::string_view, support::JsonValue, std::stop_token) override {
+    [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(std::string_view,
+            support::JsonValue,
+            std::stop_token,
+            coding_agent::mcp::McpServerConnection::ProgressCallback = {}) override {
         return support::AsyncResult<support::JsonValue>{
                 support::JsonValue{support::JsonValue::object_t{{"content", support::JsonValue::array_t{}}}}};
     }
