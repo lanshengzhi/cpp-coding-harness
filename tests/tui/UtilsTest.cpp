@@ -125,7 +125,7 @@ TEST_CASE("truncate_text wraps the ellipsis in pi's resets", "[tui][issue704][un
 
     const auto linked = truncate_text(kHyperlinkOpen + "abcdefgh" + kHyperlinkClose, 4, "...");
     REQUIRE(linked);
-    CHECK(*linked == kHyperlinkOpen + "a\x1b[0m...\x1b[0m");
+    CHECK(*linked == kHyperlinkOpen + "a" + kHyperlinkClose + "\x1b[0m...\x1b[0m");
 
     const auto colored = truncate_text("\x1b[31mabcdefgh", 4, "...");
     REQUIRE(colored);

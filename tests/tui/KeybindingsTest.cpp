@@ -67,7 +67,7 @@ TEST_CASE(
         "Invalid overrides retain defaults and key display follows the registry", "[tui][keybindings][issue57][spec]") {
     tui::KeybindingResolutionRequest request;
     request.definitions = tui::builtin_tui_keybinding_definitions();
-    request.overrides = {{.id = "tui.editor.cursorWordLeft", .keys = {"super+left"}}};
+    request.overrides = {{.id = "tui.editor.cursorWordLeft", .keys = {"invalidmodifier+left"}}};
 
     const auto resolved = tui::resolve_keybindings(std::move(request));
 

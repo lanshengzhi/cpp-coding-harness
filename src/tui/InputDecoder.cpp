@@ -23,12 +23,14 @@ constexpr std::size_t kMaxPendingBytes = 256;
 constexpr unsigned int kShiftModifier = 1;
 constexpr unsigned int kAltModifier = 2;
 constexpr unsigned int kCtrlModifier = 4;
+constexpr unsigned int kSuperModifier = 8;
 constexpr unsigned int kLockModifiers = 64 + 128;
 
 struct ParsedModifiers {
     bool ctrl{false};
     bool shift{false};
     bool alt{false};
+    bool super{false};
 };
 
 struct ParsedNumber {
@@ -62,11 +64,12 @@ std::vector<std::string_view> split(std::string_view text, char separator) {
 std::optional<ParsedModifiers> parse_modifiers(unsigned int protocol_value) {
     if (protocol_value == 0) return std::nullopt;
     const auto modifier = (protocol_value - 1) & ~kLockModifiers;
-    if ((modifier & ~(kShiftModifier | kAltModifier | kCtrlModifier)) != 0) return std::nullopt;
+    if ((modifier & ~(kShiftModifier | kAltModifier | kCtrlModifier | kSuperModifier)) != 0) return std::nullopt;
     return ParsedModifiers{
-        .ctrl = (modifier & kCtrlModifier) != 0,
-        .shift = (modifier & kShiftModifier) != 0,
-        .alt = (modifier & kAltModifier) != 0,
+            .ctrl = (modifier & kCtrlModifier) != 0,
+            .shift = (modifier & kShiftModifier) != 0,
+            .alt = (modifier & kAltModifier) != 0,
+            .super = (modifier & kSuperModifier) != 0,
     };
 }
 
@@ -126,23 +129,25 @@ std::optional<std::string> key_for_codepoint(unsigned int codepoint, bool shift)
     return encoded;
 }
 
-std::optional<KeyEvent> make_key_event(
-    unsigned int codepoint,
-    ParsedModifiers modifiers,
-    KeyEventType type,
-    std::optional<unsigned int> base_layout_key = std::nullopt) {
-    auto key = key_for_codepoint(codepoint, modifiers.shift);
+std::optional<KeyEvent> make_key_event(unsigned int codepoint,
+        ParsedModifiers modifiers,
+        KeyEventType type,
+        std::optional<unsigned int> base_layout_key = std::nullopt,
+        std::optional<unsigned int> shifted_key = std::nullopt) {
+    auto key = modifiers.shift && shifted_key ? key_for_codepoint(*shifted_key, modifiers.shift)
+                                              : key_for_codepoint(codepoint, modifiers.shift);
     const bool authoritative = key && key->size() == 1 &&
         (((*key)[0] >= 'a' && (*key)[0] <= 'z') || ((*key)[0] >= '0' && (*key)[0] <= '9') ||
          is_baseline_symbol((*key)[0]));
     if (!authoritative && base_layout_key) key = key_for_codepoint(*base_layout_key, modifiers.shift);
     if (!key) return std::nullopt;
     return KeyEvent{
-        .key = std::move(*key),
-        .ctrl = modifiers.ctrl,
-        .shift = modifiers.shift,
-        .alt = modifiers.alt,
-        .type = type,
+            .key = std::move(*key),
+            .ctrl = modifiers.ctrl,
+            .shift = modifiers.shift,
+            .alt = modifiers.alt,
+            .super = modifiers.super,
+            .type = type,
     };
 }
 
@@ -163,6 +168,13 @@ std::optional<KeyEvent> parse_kitty_csi_u(std::string_view sequence) {
     const auto codepoint = parse_number(key_parts[0]);
     if (!codepoint.valid) return std::nullopt;
 
+    std::optional<unsigned int> shifted_key;
+    if (key_parts.size() >= 2 && !key_parts[1].empty()) {
+        const auto parsed_shifted = parse_number(key_parts[1]);
+        if (!parsed_shifted.valid) return std::nullopt;
+        shifted_key = parsed_shifted.value;
+    }
+
     std::optional<unsigned int> base_layout_key;
     if (key_parts.size() == 3 && !key_parts[2].empty()) {
         const auto parsed_base = parse_number(key_parts[2]);
@@ -182,7 +194,7 @@ std::optional<KeyEvent> parse_kitty_csi_u(std::string_view sequence) {
     }
     const auto modifiers = parse_modifiers(modifier_value);
     if (!modifiers) return std::nullopt;
-    return make_key_event(codepoint.value, *modifiers, type, base_layout_key);
+    return make_key_event(codepoint.value, *modifiers, type, base_layout_key, shifted_key);
 }
 
 std::optional<KeyEvent> parse_modify_other_keys(std::string_view sequence) {
@@ -211,11 +223,12 @@ std::optional<KeyEvent> parse_kitty_navigation(std::string_view sequence) {
     const auto key = final == 'A' ? "up" : final == 'B' ? "down" : final == 'C' ? "right" :
         final == 'D' ? "left" : final == 'H' ? "home" : "end";
     return KeyEvent{
-        .key = key,
-        .ctrl = modifiers->ctrl,
-        .shift = modifiers->shift,
-        .alt = modifiers->alt,
-        .type = type,
+            .key = key,
+            .ctrl = modifiers->ctrl,
+            .shift = modifiers->shift,
+            .alt = modifiers->alt,
+            .super = modifiers->super,
+            .type = type,
     };
 }
 
@@ -248,11 +261,12 @@ std::optional<KeyEvent> parse_kitty_functional(std::string_view sequence) {
     const auto modifiers = parse_modifiers(modifier_value);
     if (!modifiers) return std::nullopt;
     return KeyEvent{
-        .key = std::move(key),
-        .ctrl = modifiers->ctrl,
-        .shift = modifiers->shift,
-        .alt = modifiers->alt,
-        .type = type,
+            .key = std::move(key),
+            .ctrl = modifiers->ctrl,
+            .shift = modifiers->shift,
+            .alt = modifiers->alt,
+            .super = modifiers->super,
+            .type = type,
     };
 }
 
@@ -296,7 +310,7 @@ std::optional<KeyEvent> parse_legacy_sequence(std::string_view sequence) {
     return std::nullopt;
 }
 
-std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence) {
+std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence, bool kitty_protocol_active = false) {
     if (auto parsed = parse_modify_other_keys(sequence)) return parsed;
     if (auto parsed = parse_kitty_csi_u(sequence)) return parsed;
     if (auto parsed = parse_kitty_navigation(sequence)) return parsed;
@@ -305,7 +319,12 @@ std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence) {
 
     if (sequence == "\x1b") return *parse_key_id("escape");
     if (sequence == "\t") return *parse_key_id("tab");
-    if (sequence == "\r" || sequence == "\n") return *parse_key_id("enter");
+    if (kitty_protocol_active) {
+        if (sequence == "\x1b\r" || sequence == "\n") return *parse_key_id("shift+enter");
+        if (sequence == "\r") return *parse_key_id("enter");
+    } else {
+        if (sequence == "\r" || sequence == "\n") return *parse_key_id("enter");
+    }
     // The `\x00` literal in a C++ string is empty, so compare the byte
     // explicitly (pi keys.ts: `data === "\x00"` → ctrl+space).
     if (sequence.size() == 1 && sequence.front() == '\0') {
@@ -348,7 +367,7 @@ std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence) {
     }
 
     if (sequence.size() >= 2 && sequence.front() == '\x1b') {
-        const auto key = parse_raw_sequence(sequence.substr(1));
+        const auto key = parse_raw_sequence(sequence.substr(1), kitty_protocol_active);
         if (!key) return std::nullopt;
         auto modified = *key;
         modified.alt = true;
@@ -745,7 +764,7 @@ StreamDecodeResult TerminalStreamDecoder::flush() {
             // fragment timeout) and byte-level consumers get the fragment
             // verbatim so no input byte is lost.
             if (pending_.front() == '\x1b') {
-                if (auto key = parse_raw_sequence(pending_)) {
+                if (auto key = parse_raw_sequence(pending_, kitty_protocol_active_)) {
                     result.events.emplace_back(std::move(*key));
                 }
             }
@@ -760,6 +779,7 @@ StreamDecodeResult TerminalStreamDecoder::flush() {
 
 void TerminalStreamDecoder::reset() {
     pending_.clear();
+    pending_kitty_printable_codepoint_.reset();
     discard_mode_ = EscapeDiscardMode::None;
     discard_saw_escape_ = false;
     paste_mode_ = false;
@@ -822,7 +842,33 @@ void TerminalStreamDecoder::drain(StreamDecodeResult& result, bool end_of_feed) 
             }
         }
         result.forwarded_input += sequence;
-        if (auto key = parse_raw_sequence(sequence)) result.events.emplace_back(std::move(*key));
+        if (sequence.size() == 1 && pending_kitty_printable_codepoint_.has_value()) {
+            const auto raw_codepoint = static_cast<unsigned char>(sequence.front());
+            if (raw_codepoint == *pending_kitty_printable_codepoint_) {
+                pending_kitty_printable_codepoint_.reset();
+                continue;
+            }
+        }
+        pending_kitty_printable_codepoint_.reset();
+        if (auto key = parse_raw_sequence(sequence, kitty_protocol_active_)) {
+            if (sequence.starts_with("\x1b[") && sequence.ends_with('u')) {
+                // If it's a Kitty CSI-u printable sequence without complex modifiers, record for suppression
+                const auto body = sequence.substr(2, sequence.size() - 3);
+                const auto semicolon = body.find(';');
+                if (semicolon == std::string_view::npos || body.substr(semicolon + 1) == "1" ||
+                        body.substr(semicolon + 1).empty()) {
+                    const auto key_part = body.substr(0, semicolon);
+                    const auto key_parts = split(key_part, ':');
+                    if (!key_parts.empty()) {
+                        const auto cp = parse_number(key_parts[0]);
+                        if (cp.valid && cp.value >= 32) {
+                            pending_kitty_printable_codepoint_ = cp.value;
+                        }
+                    }
+                }
+            }
+            result.events.emplace_back(std::move(*key));
+        }
     }
 }
 

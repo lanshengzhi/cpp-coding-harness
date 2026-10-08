@@ -113,7 +113,7 @@
       "width": 4,
       "ellipsis": "...",
       "pad": false,
-      "output": "\u001b]8;;u\u0007a\u001b[0m...\u001b[0m"
+      "output": "\u001b]8;;u\u0007a\u001b]8;;\u0007\u001b[0m...\u001b[0m"
     }
   ],
   "wrap": [

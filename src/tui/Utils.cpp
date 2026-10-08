@@ -388,6 +388,7 @@ support::Expected<std::string> truncate_text(
 
     std::string result;
     std::size_t collected_width = 0;
+    detail::AnsiStyleState style;
     // debt: a zero-width control immediately preceding the first non-fitting
     // grapheme is kept before the always-on reset, where pi holds it pending
     // and drops it (`truncate_text("\x1b[4ma\x1b[31mbcdef", 4, "...")` here is
@@ -398,12 +399,16 @@ support::Expected<std::string> truncate_text(
     for (const auto& token : *tokens) {
         if (token.kind != detail::TerminalTokenKind::Grapheme) {
             result += token.text;
+            style.process_ansi(token.text);
             continue;
         }
         if (collected_width + token.width > target_width) break;
         result += token.text;
         collected_width += token.width;
     }
+    // Close an OSC 8 hyperlink before the SGR reset so it cannot cover the
+    // ellipsis or subsequent terminal output.
+    if (!style.hyperlink.empty()) result += detail::kOsc8LinkClose;
     // pi's `finalizeTruncatedResult` is exactly
     // `prefix + "\x1b[0m" + ellipsis + "\x1b[0m"` (utils.ts at the frozen
     // baseline); the always-on resets close whatever the kept prefix left open.
