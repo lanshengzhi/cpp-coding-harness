@@ -324,9 +324,9 @@ private:
     std::optional<McpProbeResult> outcome;
     boost::asio::co_spawn(
             loop,
-            [&probe, &entry, &agent_dir, &outcome, &loop]() -> boost::asio::awaitable<void> {
-                outcome = co_await probe.probe(entry, agent_dir);
-                loop.stop();
+            [p = &probe, e = &entry, d = &agent_dir, out = &outcome, l = &loop]() -> boost::asio::awaitable<void> {
+                *out = co_await p->probe(*e, *d);
+                l->stop();
             },
             boost::asio::detached);
     loop.run();

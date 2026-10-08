@@ -277,14 +277,15 @@ std::vector<std::string> assign_mcp_tool_names(
     // colliding tool hashes and the result does not depend on list order.
     std::map<std::string, int> plain_counts;
     for (const auto& raw : raw_tool_names) {
-        ++plain_counts[mcp_tool_name(server, raw)];
+        ++plain_counts[plain_mcp_tool_name(server, raw)];
     }
     std::set<std::string> owners;
     std::vector<std::string> assigned;
     assigned.reserve(raw_tool_names.size());
     for (const auto& raw : raw_tool_names) {
         auto taken = [&](const std::string& candidate) {
-            return owners.contains(candidate) || plain_counts.find(candidate)->second > 1;
+            auto it = plain_counts.find(candidate);
+            return owners.contains(candidate) || (it != plain_counts.end() && it->second > 1);
         };
         std::string name = mcp_tool_name(server, raw, std::move(taken));
         assigned.push_back(name);
