@@ -32,6 +32,10 @@ inline constexpr std::string_view kMcpSupportedProtocolVersions[] = {
 /// before the server is rejected as unbounded.
 inline constexpr int kMcpMaxListPages = 1000;
 
+/// pi `MAX_TOOL_NAME_LENGTH` (`core/mcp-servers.ts`): the longest
+/// Agent-visible MCP tool name before the hash suffix rule applies.
+inline constexpr std::size_t kMcpMaxToolNameLength = 64;
+
 /// Client identity sent in the `initialize` handshake.
 inline constexpr std::string_view kMcpClientName = "pike";
 inline constexpr std::string_view kMcpClientVersion = "0.1.0";

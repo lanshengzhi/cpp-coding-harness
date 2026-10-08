@@ -12,9 +12,11 @@
 
 #include <boost/asio/awaitable.hpp>
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 #include <string_view>
 #include <vector>
 
@@ -59,8 +61,26 @@ struct McpToolDescriptor {
 
 /// The Agent-visible name of one server tool (pi `createMcpToolName`): a
 /// `mcp__<server>__<tool>` identifier with everything outside `[A-Za-z0-9_]`
-/// replaced by `_`, so the name is also a valid identifier.
+/// replaced by `_`, so the name is also a valid identifier. The plain form
+/// stands only while it fits pi's `MAX_TOOL_NAME_LENGTH` (64) bound.
 [[nodiscard]] std::string mcp_tool_name(std::string_view server, std::string_view tool);
+
+/// pi `createMcpToolName(server, tool, isTaken)`: when the sanitized name is
+/// over the 64-char bound or `is_taken` reports another tool owning it, the
+/// name becomes the first 55 characters plus `_<8-hex-sha256>` over the RAW
+/// `${server}\0${tool}` pair (not the sanitized name), so colliding tools
+/// hash independently of which one kept the plain name.
+[[nodiscard]] std::string mcp_tool_name(std::string_view server,
+        std::string_view tool,
+        std::move_only_function<bool(const std::string&)> is_taken);
+
+/// pi `index.ts`'s order-independent assignment for one server's whole tool
+/// list: `plain` counts the sanitized names, and every tool whose plain name
+/// is duplicated (or already owned) takes the hash suffix — so which tool
+/// would have kept the plain name never depends on the tools/list order.
+/// Returns the assigned names, one per input, in input order.
+[[nodiscard]] std::vector<std::string> assign_mcp_tool_names(
+        std::string_view server, const std::vector<std::string>& raw_tool_names);
 
 /// Extension Tool Source backed by one MCP server (spec #865). The one async
 /// boundary is the transport factory — `connect_stdio` (ticket #869) or

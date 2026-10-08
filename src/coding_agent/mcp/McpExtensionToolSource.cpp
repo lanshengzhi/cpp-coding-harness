@@ -17,6 +17,8 @@
 
 #include <cch/ai/Content.hpp>
 
+#include "ai/auth/Pkce.hpp"
+
 #include "ai/providers/BoostBeastStreamTransport.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
@@ -103,6 +105,21 @@ support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result
 }
 
 /// `tools/list`, following `nextCursor` to exhaustion (pi `listAll`).
+/// pi `index.ts` assigns the Agent-visible names across the whole listing
+/// order-independently (colliding sanitized names all take the hash suffix),
+/// so the assignment happens once, after every page is collected.
+void assign_listing_names(std::string_view server, std::vector<McpToolDescriptor>& tools) {
+    std::vector<std::string> raw_names;
+    raw_names.reserve(tools.size());
+    for (const auto& tool : tools) {
+        raw_names.push_back(tool.server_tool_name);
+    }
+    const std::vector<std::string> assigned = assign_mcp_tool_names(server, raw_names);
+    for (std::size_t index = 0; index < tools.size(); ++index) {
+        tools[index].full_name = assigned[index];
+    }
+}
+
 boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_mcp_server_tools(
         McpServerConnection& connection) {
     const std::string server = connection.server_name();
@@ -112,7 +129,7 @@ boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_m
     // pi `listAll`: follow nextCursor to at most MAX_LIST_PAGES, fail a
     // duplicate cursor explicitly, and let `null`/`""` end pagination — a
     // server that echoes either forever must not loop the client.
-    for (int page_number = 0; page_number < kMcpMaxListPages; ++page_number) {
+    for (int page_number = 0;; ++page_number) {
         std::optional<support::JsonValue> params;
         if (cursor.has_value()) {
             params = support::JsonValue{support::JsonValue::object_t{{"cursor", *cursor}}};
@@ -144,7 +161,6 @@ boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_m
             }
             McpToolDescriptor descriptor;
             descriptor.server_tool_name = name->second.get_string();
-            descriptor.full_name = mcp_tool_name(server, descriptor.server_tool_name);
             descriptor.parameters = schema->second;
             if (const auto description = entry_object->find("description");
                     description != entry_object->end() && description->second.holds<std::string>()) {
@@ -163,24 +179,29 @@ boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_m
         // non-string cursor is an explicit error.
         const auto next = object->find("nextCursor");
         if (next == object->end() || next->second.holds<support::JsonValue::null_t>()) {
-            co_return tools;
+            break;
         }
         if (!next->second.holds<std::string>()) {
             co_return std::unexpected(source_error("Invalid MCP tools/list cursor"));
         }
         std::string next_cursor = next->second.get_string();
         if (next_cursor.empty()) {
-            co_return tools;
+            break;
         }
         if (!cursors.insert(next_cursor).second) {
             co_return std::unexpected(
                     source_error("MCP tools/list returned duplicate cursor: " + next_cursor));
         }
+        if (page_number + 1 >= kMcpMaxListPages) {
+            co_return std::unexpected(source_error(
+                    "MCP tools/list exceeded " + std::to_string(kMcpMaxListPages) + " pages"));
+        }
         cursor = std::move(next_cursor);
     }
-    co_return std::unexpected(source_error(
-            "MCP tools/list exceeded " + std::to_string(kMcpMaxListPages) + " pages"));
+    assign_listing_names(server, tools);
+    co_return tools;
 }
+
 
 std::string mcp_tool_name(std::string_view server, std::string_view tool) {
     std::string name = "mcp__";
@@ -188,6 +209,67 @@ std::string mcp_tool_name(std::string_view server, std::string_view tool) {
     name += "__";
     name += sanitize_identifier(tool);
     return name;
+}
+
+/// pi `createMcpToolName`'s hash suffix: the first 8 hex characters of the
+/// sha256 of the RAW `${server}\0${tool}` pair (pi hashes before
+/// sanitizing, so two tools that sanitize to one name hash differently).
+[[nodiscard]] std::string tool_name_hash_suffix(std::string_view server, std::string_view tool) {
+    std::string input{server};
+    input.push_back('\0');
+    input += tool;
+    auto digest = ai::auth::sha256_digest(input);
+    if (!digest || digest->size() < 4) {
+        // pi cannot fail here; a digest failure degrades to the truncated
+        // plain name rather than failing tool registration.
+        return {};
+    }
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string suffix;
+    suffix.reserve(9);
+    suffix.push_back('_');
+    for (std::size_t index = 0; index < 4; ++index) {
+        const auto byte = static_cast<unsigned char>((*digest)[index]);
+        suffix.push_back(kHex[byte >> 4]);
+        suffix.push_back(kHex[byte & 0x0f]);
+    }
+    return suffix;
+}
+
+std::string mcp_tool_name(
+        std::string_view server, std::string_view tool, std::move_only_function<bool(const std::string&)> is_taken) {
+    std::string name = mcp_tool_name(server, tool);
+    if (name.size() <= kMcpMaxToolNameLength && (is_taken == nullptr || !is_taken(name))) {
+        return name;
+    }
+    // pi: `${name.slice(0, MAX_TOOL_NAME_LENGTH - hash.length - 1)}_${hash}`
+    // with an 8-hex hash — the kept prefix is 55 characters.
+    std::string suffixed = name.substr(0, kMcpMaxToolNameLength - 9);
+    suffixed += tool_name_hash_suffix(server, tool);
+    return suffixed;
+}
+
+std::vector<std::string> assign_mcp_tool_names(
+        std::string_view server, const std::vector<std::string>& raw_tool_names) {
+    // pi `index.ts`: `plain` counts the sanitized names; a candidate is taken
+    // when another tool owns it or its plain name is duplicated, so every
+    // colliding tool hashes and the result does not depend on list order.
+    std::map<std::string, int> plain_counts;
+    for (const auto& raw : raw_tool_names) {
+        ++plain_counts[mcp_tool_name(server, raw)];
+    }
+    std::set<std::string> owners;
+    std::vector<std::string> assigned;
+    assigned.reserve(raw_tool_names.size());
+    for (const auto& raw : raw_tool_names) {
+        auto taken = [&](const std::string& candidate) {
+            return owners.contains(candidate) || plain_counts.find(candidate)->second > 1;
+        };
+        std::string name = mcp_tool_name(server, raw, std::move(taken));
+        assigned.push_back(name);
+        owners.insert(std::move(name));
+    }
+    return assigned;
 }
 
 support::JsonValue create_mcp_result_schema(const std::optional<support::JsonValue>& structured_content_schema) {

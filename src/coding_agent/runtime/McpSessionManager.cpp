@@ -300,12 +300,24 @@ void McpSessionManager::register_tools(std::string_view server) {
     const std::string name = record->entry.name;
     const McpServerConfigBase& base = config_base(record->entry);
     const std::set<std::string> previous = server_tools_[name];
+    const auto& live_tools = record->connection->tools();
+    // pi `index.ts` assigns Agent-visible names order-independently across the
+    // whole listing: colliding sanitized names all take the hash suffix, so a
+    // re-registration (or a tools/list update) never reshuffles which tool
+    // owns which name.
+    std::vector<std::string> raw_names;
+    raw_names.reserve(live_tools.size());
+    for (const auto& tool : live_tools) {
+        raw_names.push_back(tool.name);
+    }
+    const std::vector<std::string> assigned = mcp::assign_mcp_tool_names(name, raw_names);
     std::set<std::string> current;
-    for (const auto& tool : record->connection->tools()) {
+    for (std::size_t index = 0; index < live_tools.size(); ++index) {
+        const auto& tool = live_tools[index];
         McpRegisteredTool registration;
         registration.server = name;
         registration.server_tool_name = tool.name;
-        registration.name = mcp::mcp_tool_name(name, tool.name);
+        registration.name = assigned[index];
         registration.description = tool.description;
         registration.exposure = mcp::get_mcp_tool_exposure(base.tool_exposure, base.exposure, tool.name);
         registration.input_schema = tool.input_schema;
