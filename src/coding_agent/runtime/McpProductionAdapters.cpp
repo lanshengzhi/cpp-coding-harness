@@ -378,8 +378,14 @@ support::AsyncResult<std::optional<std::string>> McpOAuthFlowSignInDriver::sign_
                 request.prompt = std::move(adapted);
                 auto outcome = co_await support::detail::await_async_result(sign_in_mcp_server(std::move(request)));
                 if (!outcome) {
-                    // pi `signIn` returns the failure message (`string | undefined`).
-                    co_return std::optional<std::string>{outcome.error().message};
+                    // pi `signIn` (extensions/mcp/index.ts): the cancelled
+                    // error is the info-level "Sign-in cancelled."; every
+                    // other failure stays an error, which the manager renders
+                    // with pi's "Sign-in failed: " prefix.
+                    if (outcome.error().code == support::ErrorCode::Cancelled) {
+                        co_return std::optional<std::string>{"Sign-in cancelled."};
+                    }
+                    co_return std::unexpected(std::move(outcome.error()));
                 }
                 co_return std::optional<std::string>{};
             });

@@ -400,7 +400,7 @@ TEST_CASE("mcp login reports a failed sign-in", "[cli][mcp][issue884]") {
     cli::McpProbeResult needs_auth;
     needs_auth.state = cli::McpProbeResult::State::NeedsAuth;
     cli::McpSignInHook sign_in = [](const coding_agent::mcp::McpHttpServerConfig&, std::chrono::milliseconds) {
-        return tests::failed_result<void>(support::make_error(support::ErrorCode::OAuth, "sign-in cancelled"));
+        return tests::failed_result<void>(support::make_error(support::ErrorCode::OAuth, "discovery failed"));
     };
     const auto run = run_direct(agent.path(),
             cwd.path(),
@@ -409,7 +409,30 @@ TEST_CASE("mcp login reports a failed sign-in", "[cli][mcp][issue884]") {
             std::move(sign_in));
 
     REQUIRE(run.exit_code == 1);
-    CHECK(run.stderr_text == "Sign-in to MCP server \"notion\" failed.\n");
+    // pi `login`'s catch renders the flow's message after "failed:".
+    CHECK(run.stderr_text == "Sign-in to MCP server \"notion\" failed: discovery failed\n");
+}
+
+TEST_CASE("mcp login reports a cancelled sign-in with pi's timeout bound", "[cli][mcp][issue884]") {
+    tests::TempWorkspace agent;
+    tests::TempWorkspace cwd;
+    agent.write("mcp.json", R"({"mcpServers":{"notion":{"url":"https://example.com/mcp","oauth":{}}}})");
+
+    cli::McpProbeResult needs_auth;
+    needs_auth.state = cli::McpProbeResult::State::NeedsAuth;
+    cli::McpSignInHook sign_in = [](const coding_agent::mcp::McpHttpServerConfig&, std::chrono::milliseconds) {
+        return tests::failed_result<void>(
+                support::make_error(support::ErrorCode::Cancelled, "MCP OAuth sign-in was cancelled or timed out"));
+    };
+    const auto run = run_direct(agent.path(),
+            cwd.path(),
+            {"login", "notion", "--timeout", "15"},
+            std::make_shared<SequenceProbe>(std::vector<cli::McpProbeResult>{needs_auth}),
+            std::move(sign_in));
+
+    REQUIRE(run.exit_code == 1);
+    // pi `login`'s catch: the cancelled error names the `--timeout` bound.
+    CHECK(run.stderr_text == "Sign-in to MCP server \"notion\" was cancelled or not completed within 15 seconds.\n");
 }
 
 TEST_CASE("mcp login reports an OAuth server with no oauth configuration", "[cli][mcp][issue884]") {

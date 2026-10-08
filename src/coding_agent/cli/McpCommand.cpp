@@ -40,6 +40,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <expected>
 #include <format>
 #include <map>
@@ -820,7 +821,11 @@ struct ServerReport {
             });
 }
 
-[[nodiscard]] int run_result_void(support::AsyncResult<void> operation) {
+/// Runs one sign-in operation and keeps its failure, so `login_or_logout`
+/// can render pi `login`'s exact lines (`extensions/mcp/cli.ts`): a
+/// cancellation names the `--timeout` bound, every other failure carries the
+/// flow's message.
+[[nodiscard]] std::optional<support::Error> run_result_failure(support::AsyncResult<void> operation) {
     boost::asio::io_context loop;
     std::optional<support::ExpectedVoid> outcome;
     boost::asio::co_spawn(
@@ -831,10 +836,10 @@ struct ServerReport {
             },
             boost::asio::detached);
     loop.run();
-    if (!outcome) {
-        return -1;
+    if (!outcome || *outcome) {
+        return std::nullopt;
     }
-    return *outcome ? 0 : 1;
+    return std::optional<support::Error>{std::move(outcome->error())};
 }
 
 /// The pasted redirect URL of `pike mcp login` (pi `waitForRedirectUrl`): a
@@ -1009,19 +1014,28 @@ struct ServerReport {
               << "header do.\n";
         return 1;
     }
-    int login_exit = 1;
+    std::optional<support::Error> sign_in_failure;
     if (options.sign_in) {
-        login_exit = run_result_void(options.sign_in(*http, timeout));
+        sign_in_failure = run_result_failure(options.sign_in(*http, timeout));
     } else if (http->resolved_oauth) {
-        login_exit = run_result_void(run_oauth_login(options, *entry, *url));
+        sign_in_failure = run_result_failure(run_oauth_login(options, *entry, *url));
     } else if (http->oauth) {
-        login_exit = run_result_void(run_flow_login(options, *http, *url, timeout));
+        sign_in_failure = run_result_failure(run_flow_login(options, *http, *url, timeout));
     } else {
         error << "MCP server \"" << name << "\" requires OAuth sign-in, but it has no oauth configuration.\n";
         return 1;
     }
-    if (login_exit != 0) {
-        error << "Sign-in to MCP server \"" << name << "\" failed.\n";
+    if (sign_in_failure.has_value()) {
+        // pi `login`'s catch (extensions/mcp/cli.ts): the cancelled error —
+        // the user aborted, or the `--timeout` lapsed — names the bound;
+        // every other failure carries the flow's message after "failed:".
+        if (sign_in_failure->code == support::ErrorCode::Cancelled) {
+            error << std::format("Sign-in to MCP server \"{}\" was cancelled or not completed within {} seconds.\n",
+                    name,
+                    std::lround(static_cast<double>(timeout.count()) / 1000.0));
+        } else {
+            error << std::format("Sign-in to MCP server \"{}\" failed: {}\n", name, sign_in_failure->message);
+        }
         return 1;
     }
     const McpProbeResult after = run_probe(probe, *entry, options.agent_dir);
