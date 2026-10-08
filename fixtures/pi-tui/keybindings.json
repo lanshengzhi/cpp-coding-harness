@@ -159,6 +159,16 @@
     "description": "Undo"
   },
   {
+    "id": "tui.editor.historyPrevious",
+    "defaultKeys": [],
+    "description": "Previous history item"
+  },
+  {
+    "id": "tui.editor.historyNext",
+    "defaultKeys": [],
+    "description": "Next history item"
+  },
+  {
     "id": "tui.input.newLine",
     "defaultKeys": [
       "shift+enter",

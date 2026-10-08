@@ -358,6 +358,19 @@ TEST_CASE("CombinedAutocompleteProvider applyCompletion performs pi's text surge
     CHECK(quoted.cursor_column == 15);
 }
 
+TEST_CASE("CombinedAutocompleteProvider completes paths after CJK punctuation", "[tui][autocomplete][issue900][spec]") {
+    cch::tests::TempWorkspace workspace;
+    workspace.write("README.md", "hello\n");
+    const auto fake_fd = write_fake_fd(workspace, "README.md\n");
+    auto provider = make_provider({}, workspace.path(), fake_fd);
+
+    const std::string line = "你好，@REA";
+    const auto result = request_suggestions(provider, {line}, 0, line.size());
+    REQUIRE(result);
+    REQUIRE_FALSE(result->items.empty());
+    CHECK(result->items[0].value == "@README.md");
+}
+
 TEST_CASE("CombinedAutocompleteProvider shouldTriggerFileCompletion defers to slash commands",
         "[tui][autocomplete][issue383][spec]") {
     cch::tests::TempWorkspace workspace;

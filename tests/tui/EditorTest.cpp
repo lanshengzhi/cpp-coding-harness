@@ -310,6 +310,24 @@ TEST_CASE("Editor routes enter to the open completion menu ahead of plain submit
     CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 3}));
 }
 
+TEST_CASE("Sticky column preserves preferred visual column across vertical movement", "[tui][editor][issue899][spec]") {
+    cch::tui::Editor editor;
+    editor.set_text("long first line\nshort\nlong third line");
+    // Initially cursor is at end of document (line 2). Move to line 0:
+    key(editor, "up");
+    key(editor, "up");
+    key(editor, "end");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 15}));
+
+    // Down to short line (clamped to 5)
+    key(editor, "down");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 1, .column = 5}));
+
+    // Down to third line (restores to col 15)
+    key(editor, "down");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 2, .column = 15}));
+}
+
 TEST_CASE("Editor does not type named keys or modified printable events", "[tui][editor][issue889][spec]") {
     cch::tui::Editor editor;
     type(editor, "prompt");

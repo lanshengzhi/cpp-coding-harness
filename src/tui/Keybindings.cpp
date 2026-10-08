@@ -355,6 +355,8 @@ std::vector<KeybindingDefinition> builtin_tui_keybinding_definitions() {
                     "Cycle through the deleted text after pasting",
                     8),
             make_definition("tui.editor.undo", {"ctrl+-"}, "Undo", "Editor kill ring", "Editing", "undo", "Undo", 9),
+            make_definition("tui.editor.historyPrevious", {}, "Previous history item", "Editor history"),
+            make_definition("tui.editor.historyNext", {}, "Next history item", "Editor history"),
             make_definition("tui.input.newLine",
                     {"shift+enter", "ctrl+j"},
                     "Insert newline",

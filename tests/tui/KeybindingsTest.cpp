@@ -9,6 +9,19 @@
 
 using namespace cch;
 
+TEST_CASE("Keybindings defines history navigation actions", "[tui][keybindings][issue898][spec]") {
+    const auto defs = cch::tui::builtin_tui_keybinding_definitions();
+    const auto prev =
+            std::find_if(defs.begin(), defs.end(), [](const auto& d) { return d.id == "tui.editor.historyPrevious"; });
+    REQUIRE(prev != defs.end());
+    CHECK(prev->default_keys.empty());
+
+    const auto next =
+            std::find_if(defs.begin(), defs.end(), [](const auto& d) { return d.id == "tui.editor.historyNext"; });
+    REQUIRE(next != defs.end());
+    CHECK(next->default_keys.empty());
+}
+
 TEST_CASE("Keybinding resolution replaces defaults with canonical user alternatives",
         "[tui][keybindings][issue57][spec]") {
     tui::KeybindingResolutionRequest request;
@@ -91,36 +104,38 @@ TEST_CASE("Builtin table is exactly the frozen pi default table at 83114817", "[
         std::string description;
     };
     const std::vector<FrozenEntry> kFrozenTable{
-        {"tui.editor.cursorUp", {"up"}, "Move cursor up"},
-        {"tui.editor.cursorDown", {"down"}, "Move cursor down"},
-        {"tui.editor.cursorLeft", {"left", "ctrl+b"}, "Move cursor left"},
-        {"tui.editor.cursorRight", {"right", "ctrl+f"}, "Move cursor right"},
-        {"tui.editor.cursorWordLeft", {"alt+left", "ctrl+left", "alt+b"}, "Move cursor word left"},
-        {"tui.editor.cursorWordRight", {"alt+right", "ctrl+right", "alt+f"}, "Move cursor word right"},
-        {"tui.editor.cursorLineStart", {"home", "ctrl+a"}, "Move to line start"},
-        {"tui.editor.cursorLineEnd", {"end", "ctrl+e"}, "Move to line end"},
-        {"tui.editor.jumpForward", {"ctrl+]"}, "Jump forward to character"},
-        {"tui.editor.jumpBackward", {"ctrl+alt+]"}, "Jump backward to character"},
-        {"tui.editor.pageUp", {"pageUp"}, "Page up"},
-        {"tui.editor.pageDown", {"pageDown"}, "Page down"},
-        {"tui.editor.deleteCharBackward", {"backspace"}, "Delete character backward"},
-        {"tui.editor.deleteCharForward", {"delete", "ctrl+d"}, "Delete character forward"},
-        {"tui.editor.deleteWordBackward", {"ctrl+w", "alt+backspace"}, "Delete word backward"},
-        {"tui.editor.deleteWordForward", {"alt+d", "alt+delete"}, "Delete word forward"},
-        {"tui.editor.deleteToLineStart", {"ctrl+u"}, "Delete to line start"},
-        {"tui.editor.deleteToLineEnd", {"ctrl+k"}, "Delete to line end"},
-        {"tui.editor.yank", {"ctrl+y"}, "Yank"},
-        {"tui.editor.yankPop", {"alt+y"}, "Yank pop"},
-        {"tui.editor.undo", {"ctrl+-"}, "Undo"},
-        {"tui.input.newLine", {"shift+enter", "ctrl+j"}, "Insert newline"},
-        {"tui.input.submit", {"enter"}, "Submit input"},
-        {"tui.input.tab", {"tab"}, "Tab / autocomplete"},
-        {"tui.select.up", {"up"}, "Move selection up"},
-        {"tui.select.down", {"down"}, "Move selection down"},
-        {"tui.select.pageUp", {"pageUp"}, "Selection page up"},
-        {"tui.select.pageDown", {"pageDown"}, "Selection page down"},
-        {"tui.select.confirm", {"enter"}, "Confirm selection"},
-        {"tui.select.cancel", {"escape", "ctrl+c"}, "Cancel selection"},
+            {"tui.editor.cursorUp", {"up"}, "Move cursor up"},
+            {"tui.editor.cursorDown", {"down"}, "Move cursor down"},
+            {"tui.editor.cursorLeft", {"left", "ctrl+b"}, "Move cursor left"},
+            {"tui.editor.cursorRight", {"right", "ctrl+f"}, "Move cursor right"},
+            {"tui.editor.cursorWordLeft", {"alt+left", "ctrl+left", "alt+b"}, "Move cursor word left"},
+            {"tui.editor.cursorWordRight", {"alt+right", "ctrl+right", "alt+f"}, "Move cursor word right"},
+            {"tui.editor.cursorLineStart", {"home", "ctrl+a"}, "Move to line start"},
+            {"tui.editor.cursorLineEnd", {"end", "ctrl+e"}, "Move to line end"},
+            {"tui.editor.jumpForward", {"ctrl+]"}, "Jump forward to character"},
+            {"tui.editor.jumpBackward", {"ctrl+alt+]"}, "Jump backward to character"},
+            {"tui.editor.pageUp", {"pageUp"}, "Page up"},
+            {"tui.editor.pageDown", {"pageDown"}, "Page down"},
+            {"tui.editor.deleteCharBackward", {"backspace"}, "Delete character backward"},
+            {"tui.editor.deleteCharForward", {"delete", "ctrl+d"}, "Delete character forward"},
+            {"tui.editor.deleteWordBackward", {"ctrl+w", "alt+backspace"}, "Delete word backward"},
+            {"tui.editor.deleteWordForward", {"alt+d", "alt+delete"}, "Delete word forward"},
+            {"tui.editor.deleteToLineStart", {"ctrl+u"}, "Delete to line start"},
+            {"tui.editor.deleteToLineEnd", {"ctrl+k"}, "Delete to line end"},
+            {"tui.editor.yank", {"ctrl+y"}, "Yank"},
+            {"tui.editor.yankPop", {"alt+y"}, "Yank pop"},
+            {"tui.editor.undo", {"ctrl+-"}, "Undo"},
+            {"tui.editor.historyPrevious", {}, "Previous history item"},
+            {"tui.editor.historyNext", {}, "Next history item"},
+            {"tui.input.newLine", {"shift+enter", "ctrl+j"}, "Insert newline"},
+            {"tui.input.submit", {"enter"}, "Submit input"},
+            {"tui.input.tab", {"tab"}, "Tab / autocomplete"},
+            {"tui.select.up", {"up"}, "Move selection up"},
+            {"tui.select.down", {"down"}, "Move selection down"},
+            {"tui.select.pageUp", {"pageUp"}, "Selection page up"},
+            {"tui.select.pageDown", {"pageDown"}, "Selection page down"},
+            {"tui.select.confirm", {"enter"}, "Confirm selection"},
+            {"tui.select.cancel", {"escape", "ctrl+c"}, "Cancel selection"},
     };
 
     const auto definitions = tui::builtin_tui_keybinding_definitions();
@@ -139,12 +154,12 @@ TEST_CASE("Builtin table is exactly the frozen pi default table at 83114817", "[
         if (definition.id.starts_with("tui.input.")) ++input;
         if (definition.id.starts_with("tui.select.")) ++select;
     }
-    CHECK(editor == 21);
+    CHECK(editor == 23);
     CHECK(input == 3);
     CHECK(select == 6);
 
     const auto registry = tui::default_tui_keybindings();
-    CHECK(registry->entries().size() == 30);
+    CHECK(registry->entries().size() == 32);
     for (const auto& entry : kFrozenTable) {
         CHECK(registry->keys(entry.id) == entry.keys);
     }
@@ -208,5 +223,5 @@ TEST_CASE("Known-but-unassembled overrides diagnose as unavailable, unknown ids 
     CHECK(resolved->registry->find("tui.input.copy") == nullptr);
     CHECK(resolved->registry->find("tui.altScreen.previousPrompt") == nullptr);
     CHECK(resolved->registry->find("future.action") == nullptr);
-    CHECK(resolved->registry->entries().size() == 30);
+    CHECK(resolved->registry->entries().size() == 32);
 }

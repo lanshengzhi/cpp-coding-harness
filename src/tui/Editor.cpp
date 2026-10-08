@@ -140,6 +140,7 @@ struct Editor::Impl {
     std::size_t layout_width{80};
     std::size_t layout_padding{0};
     std::size_t scroll_offset{0};
+    std::optional<std::size_t> preferred_visual_col_;
     std::size_t last_echo_line_count{0};
     std::size_t last_echo_width{0};
     enum class JumpDirection { Forward, Backward };
@@ -583,16 +584,19 @@ struct Editor::Impl {
     }
 
     void move_left() {
+        preferred_visual_col_.reset();
         buffer.move_left();
         if (autocomplete_menu.open) update_autocomplete();
     }
 
     void move_right() {
+        preferred_visual_col_.reset();
         buffer.move_right();
         if (autocomplete_menu.open) update_autocomplete();
     }
 
     void move_word(bool forward) {
+        preferred_visual_col_.reset();
         if (forward) {
             buffer.move_word_forward();
         } else {
@@ -684,10 +688,12 @@ struct Editor::Impl {
     }
 
     void move_to_line_start() {
+        preferred_visual_col_.reset();
         buffer.move_to_line_start();
     }
 
     void move_to_line_end() {
+        preferred_visual_col_.reset();
         buffer.move_to_line_end();
     }
 
@@ -777,7 +783,10 @@ struct Editor::Impl {
         const auto& from = visual[current];
         const auto& to = visual[static_cast<std::size_t>(static_cast<int>(current) + direction)];
         const auto target_line = to.logical_line;
-        const auto target_column = std::min(to.end, to.start + (cur.column - from.start));
+        if (!preferred_visual_col_) {
+            preferred_visual_col_ = cur.column - from.start;
+        }
+        const auto target_column = std::min(to.end, to.start + *preferred_visual_col_);
         buffer.set_cursor(detail::BufferCursor{.line = target_line, .column = target_column});
         if (autocomplete_menu.open) update_autocomplete();
     }

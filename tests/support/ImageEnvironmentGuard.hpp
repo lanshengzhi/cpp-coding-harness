@@ -35,6 +35,8 @@ private:
         if (name == "WARP_TERMINAL_SESSION_UUID") return &warp_terminal_session_uuid;
         if (name == "ITERM_SESSION_ID") return &iterm_session_id;
         if (name == "WT_SESSION") return &wt_session;
+        if (name == "PI_HYPERLINKS") return &pi_hyperlinks;
+        if (name == "PI_IMAGE_PROTOCOL") return &pi_image_protocol;
         return &cmux_workspace_id;
     }
 
@@ -51,6 +53,8 @@ private:
         iterm_session_id.unset();
         wt_session.unset();
         cmux_workspace_id.unset();
+        pi_hyperlinks.unset();
+        pi_image_protocol.unset();
     }
 
     EnvVarGuard term_program{"TERM_PROGRAM"};
@@ -65,6 +69,8 @@ private:
     EnvVarGuard iterm_session_id{"ITERM_SESSION_ID"};
     EnvVarGuard wt_session{"WT_SESSION"};
     EnvVarGuard cmux_workspace_id{"CMUX_WORKSPACE_ID"};
+    EnvVarGuard pi_hyperlinks{"PI_HYPERLINKS"};
+    EnvVarGuard pi_image_protocol{"PI_IMAGE_PROTOCOL"};
 };
 
 } // namespace cch::tests

@@ -283,7 +283,7 @@ TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS", "[tui][diff
     const auto& entries = fixture->get<support::JsonValue::array_t>();
 
     const auto definitions = tui::builtin_tui_keybinding_definitions();
-    REQUIRE(definitions.size() == 30);
+    REQUIRE(definitions.size() == 32);
     std::size_t assembled = 0;
     for (const auto& entry : entries) {
         const auto& object = entry.get<support::JsonValue::object_t>();
@@ -307,7 +307,7 @@ TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS", "[tui][diff
                 definition->default_keys[index] == keys[index].get_string());
         }
     }
-    CHECK(assembled == 30);
+    CHECK(assembled == 32);
 }
 
 TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][differential][issue386][compat-pi]") {
