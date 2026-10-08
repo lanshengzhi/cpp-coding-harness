@@ -101,16 +101,13 @@ struct CodemodeToolDescriptor {
 /// host routes to `text`/`image`/`console` output, the tool call handler, and
 /// `done`. There is no host shell or filesystem path into the guest.
 ///
-/// `run` is synchronous and drives the guest on the calling thread; the VM's
-/// interrupt import is polled so a `stop_token` or the timeout can end a
-/// runaway script. One sandbox owns one guest module; `run` instantiates a
+/// `run` is asynchronous and drives WasmEdge on a fresh worker thread per run
+/// (spec #882, #885 — pi `runtime/host.ts`'s "a fresh worker per run keeps
+/// termination simple"), so a runaway script never occupies its caller's
+/// executor; the VM's interrupt import is polled so a `stop_token` or the
+/// timeout can end it. One sandbox owns one guest module; `run` instantiates a
 /// fresh instance per call, so a crashed or interrupted guest never poisons a
 /// later run.
-///
-// debt: `run` drives the guest synchronously on the calling thread (a runaway
-// script occupies its executor up to the 300 s default timeout); upgrade to an
-// off-executor worker when a concurrent codemode run or a non-blocking Turn is
-// required.
 class CodemodeSandbox {
     struct Impl;
 

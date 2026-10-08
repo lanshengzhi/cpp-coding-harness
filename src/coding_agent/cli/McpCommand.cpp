@@ -825,17 +825,20 @@ struct ServerReport {
 /// can render pi `login`'s exact lines (`extensions/mcp/cli.ts`): a
 /// cancellation names the `--timeout` bound, every other failure carries the
 /// flow's message.
-[[nodiscard]] std::optional<support::Error> run_result_failure(support::AsyncResult<void> operation) {
-    boost::asio::io_context loop;
+[[nodiscard]] std::optional<support::Error> run_result_failure(
+        const std::shared_ptr<boost::asio::io_context>& loop, support::AsyncResult<void> operation) {
+    // `outcome` is borrowed from this frame, which outlives `run()` on this
+    // thread; the coroutine's `loop` copy only shares ownership with the
+    // detached paste reader (see `wait_for_redirect_url`).
     std::optional<support::ExpectedVoid> outcome;
     boost::asio::co_spawn(
-            loop,
-            [&]() -> boost::asio::awaitable<void> {
+            *loop,
+            [loop, &outcome, operation = std::move(operation)]() mutable -> boost::asio::awaitable<void> {
                 outcome = co_await support::detail::await_async_result(std::move(operation));
-                loop.stop();
+                loop->stop();
             },
             boost::asio::detached);
-    loop.run();
+    loop->run();
     if (!outcome || *outcome) {
         return std::nullopt;
     }
@@ -846,25 +849,39 @@ struct ServerReport {
 /// terminal gets the paste prompt, everything else waits until the callback or
 /// the timeout aborts the prompt. Resolves `std::nullopt` when aborted or when
 /// the input ends.
+/// `loop` is the shared pump context of the operation that runs this prompt.
+/// The detached reader thread below owns a strong reference to it, so a read
+/// that finishes after the race is lost posts into a live (no longer run)
+/// context whose handler is never drained — posting to a live io_context is
+/// always defined — instead of into a destroyed one.
 [[nodiscard]] support::AsyncResult<std::optional<std::string>> wait_for_redirect_url(
-        const McpCommandOptions& options, std::stop_token stop) {
-    std::istream* input = options.input;
-    std::ostream* error = options.error;
-    const bool interactive = options.stdin_is_terminal;
+        std::istream* input,
+        std::ostream* error,
+        bool interactive,
+        std::shared_ptr<boost::asio::io_context> loop,
+        std::stop_token stop) {
     return support::detail::make_async_result(
-            [input, error, interactive, stop]()
+            [input, error, interactive, loop = std::move(loop), stop]()
                     -> boost::asio::awaitable<support::Expected<std::optional<std::string>>> {
-                auto executor = co_await boost::asio::this_coro::executor;
                 using Channel =
                         boost::asio::experimental::channel<void(boost::system::error_code, std::optional<std::string>)>;
-                auto settled = std::make_shared<Channel>(executor, 1);
+                auto settled = std::make_shared<Channel>(co_await boost::asio::this_coro::executor, 1);
                 if (interactive && input != nullptr) {
                     *error << "If the browser cannot reach this machine, paste the URL it was redirected to: "
                            << std::flush;
-                    std::thread reader{[input, executor, settled]() {
+                    // Lifetime contract: the detached reader may outlive the
+                    // operation (the browser callback or the timeout can win
+                    // the race while `std::getline` is still blocked — it
+                    // cannot be cancelled portably). It touches only `input`
+                    // (process-lifetime stdin in production; a drained string
+                    // stream in tests) and posts through the `loop` copy it
+                    // owns, which keeps the io_context alive until the post
+                    // completes; a still-blocked reader is reaped by process
+                    // exit at the end of the command.
+                    std::thread reader{[input, loop, settled]() {
                         std::string line;
                         const bool read = static_cast<bool>(std::getline(*input, line));
-                        boost::asio::post(executor, [settled, line = std::move(line), read]() {
+                        boost::asio::post(*loop, [settled, line = std::move(line), read]() {
                             if (read) {
                                 settled->try_send(
                                         boost::system::error_code{}, std::optional<std::string>{std::move(line)});
@@ -876,9 +893,10 @@ struct ServerReport {
                     reader.detach();
                 }
                 // The losing side of the race (the callback or the timeout) aborts
-                // this prompt through its stop token.
-                std::stop_callback cancel{stop, [executor, settled] {
-                                              boost::asio::post(executor, [settled] {
+                // this prompt through its stop token. This callback runs on
+                // whichever thread requests stop, so it only posts (§6.2).
+                std::stop_callback cancel{stop, [loop, settled] {
+                                              boost::asio::post(*loop, [settled] {
                                                   settled->try_send(
                                                           boost::system::error_code{}, std::optional<std::string>{});
                                               });
@@ -899,7 +917,8 @@ struct ServerReport {
 [[nodiscard]] support::AsyncResult<void> run_flow_login(const McpCommandOptions& options,
         const McpHttpServerConfig& http,
         const std::string& url,
-        std::chrono::milliseconds timeout) {
+        std::chrono::milliseconds timeout,
+        std::shared_ptr<boost::asio::io_context> loop) {
     auto store = std::make_shared<coding_agent::mcp::McpAuthStore>(
             coding_agent::mcp::McpAuthStore::default_path(options.agent_dir));
     (void)store->migrate_from_auth_json(options.agent_dir / "auth.json", http.name, url);
@@ -916,9 +935,14 @@ struct ServerReport {
         }
     };
     if (options.stdin_is_terminal) {
-        request.prompt.prompt_for_redirect_url = [&options](std::stop_token stop) {
-            return wait_for_redirect_url(options, std::move(stop));
-        };
+        // Init-capture the fields the prompt reads so no reference to
+        // `options` crosses into the stored operation (§6.2); `loop` is the
+        // shared pump context the detached paste reader also owns.
+        request.prompt.prompt_for_redirect_url =
+                [input = options.input, error = options.error, interactive = options.stdin_is_terminal,
+                        loop = std::move(loop)](std::stop_token stop) mutable {
+                    return wait_for_redirect_url(input, error, interactive, std::move(loop), std::move(stop));
+                };
     }
     return coding_agent::mcp::sign_in_mcp_server(std::move(request));
 }
@@ -1014,13 +1038,17 @@ struct ServerReport {
               << "header do.\n";
         return 1;
     }
+    // The pump context is shared (not stack-owned) so the detached paste
+    // reader in `wait_for_redirect_url` can keep it alive past this frame; the
+    // leftover strong reference is reaped when the reader's read returns.
+    auto loop = std::make_shared<boost::asio::io_context>();
     std::optional<support::Error> sign_in_failure;
     if (options.sign_in) {
-        sign_in_failure = run_result_failure(options.sign_in(*http, timeout));
+        sign_in_failure = run_result_failure(loop, options.sign_in(*http, timeout));
     } else if (http->resolved_oauth) {
-        sign_in_failure = run_result_failure(run_oauth_login(options, *entry, *url));
+        sign_in_failure = run_result_failure(loop, run_oauth_login(options, *entry, *url));
     } else if (http->oauth) {
-        sign_in_failure = run_result_failure(run_flow_login(options, *http, *url, timeout));
+        sign_in_failure = run_result_failure(loop, run_flow_login(options, *http, *url, timeout, std::move(loop)));
     } else {
         error << "MCP server \"" << name << "\" requires OAuth sign-in, but it has no oauth configuration.\n";
         return 1;
