@@ -10,6 +10,7 @@
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
 
 #include "support/Json.hpp"
+#include "support/ReleaseGate.hpp"
 
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
@@ -84,7 +85,8 @@ class ScriptedTransport final : public ai::providers::StreamTransport {
 public:
     void push_get(GetScript script) { get_scripts_.push_back(std::move(script)); }
     void set_default_get(GetScript script) { default_get_ = std::move(script); }
-    void release() { released_ = true; }
+    /// End a held stream early (§11.8 counted, latched release).
+    void release() { gate_.release(); }
 
     [[nodiscard]] const std::vector<RecordedRequest>& requests() const { return requests_; }
 
@@ -181,11 +183,14 @@ public:
                 }
             }
             if (script.hold_open) {
-                boost::asio::steady_timer timer(executor);
-                while (!stop.stop_requested() && !released_) {
-                    timer.expires_after(1ms);
-                    boost::system::error_code error;
-                    co_await timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                // tests::ReleaseGate (CODING_STANDARDS §11.8), not a
+                // hand-rolled poll: interrupt() wakes the wait when the
+                // client closes the stream, without recording a permit; the
+                // stop check precedes wait() because an interrupt delivered
+                // before the gate is armed does not linger.
+                std::stop_callback cancellation{stop, [this] { gate_.interrupt(); }};
+                if (!stop.stop_requested()) {
+                    co_await gate_.wait();
                 }
                 if (stop.stop_requested()) {
                     co_return std::unexpected(stream_cancelled());
@@ -242,7 +247,7 @@ private:
     std::deque<GetScript> get_scripts_;
     GetScript default_get_{};
     std::vector<RecordedRequest> requests_;
-    bool released_{false};
+    tests::ReleaseGate gate_;
 };
 
 /// A test-driven `io_context`: `run` advances a coroutine to completion and
