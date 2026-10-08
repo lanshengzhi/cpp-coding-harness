@@ -35,6 +35,34 @@ TEST_CASE("stream decoder demuxes a cursor position report out of the byte strea
     CHECK(result.forwarded_input == "az");
 }
 
+TEST_CASE("stream decoder preserves Super modifiers across legacy and extended key formats", "[tui][decoder][issue888][spec]") {
+    tui::detail::TerminalStreamDecoder decoder;
+
+    const auto legacy = decoder.feed("k");
+    REQUIRE(legacy.events.size() == 1);
+    const auto* legacy_key = std::get_if<tui::KeyEvent>(&legacy.events.front());
+    REQUIRE(legacy_key != nullptr);
+    CHECK(legacy_key->key == "k");
+    CHECK_FALSE(legacy_key->super);
+
+    const auto modify_other_keys = decoder.feed("\x1b[27;9;99~");
+    REQUIRE(modify_other_keys.events.size() == 1);
+    const auto* modify_other_keys_key = std::get_if<tui::KeyEvent>(&modify_other_keys.events.front());
+    REQUIRE(modify_other_keys_key != nullptr);
+    CHECK(modify_other_keys_key->key == "c");
+    CHECK(modify_other_keys_key->super);
+    CHECK(cch::tui::matches_key(*modify_other_keys_key, "super+c"));
+
+    const auto kitty = decoder.feed("\x1b[107;13u");
+    REQUIRE(kitty.events.size() == 1);
+    const auto* kitty_key = std::get_if<tui::KeyEvent>(&kitty.events.front());
+    REQUIRE(kitty_key != nullptr);
+    CHECK(kitty_key->key == "k");
+    CHECK(kitty_key->ctrl);
+    CHECK(kitty_key->super);
+    CHECK(cch::tui::matches_key(*kitty_key, "ctrl+super+k"));
+}
+
 TEST_CASE("stream decoder demuxes a cell-size response without leaking bytes", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
     const auto result = decoder.feed("\x1b[6;20;10t");

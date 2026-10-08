@@ -20,6 +20,7 @@ struct KeyEvent {
     bool ctrl{false};
     bool shift{false};
     bool alt{false};
+    bool super{false};
     KeyEventType type{KeyEventType::Press};
 
     bool operator==(const KeyEvent&) const = default;

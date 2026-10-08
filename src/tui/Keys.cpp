@@ -67,6 +67,7 @@ support::Expected<KeyEvent> parse_key_id(std::string_view identifier) {
         if (part == "ctrl" && !event.ctrl) event.ctrl = true;
         else if (part == "shift" && !event.shift) event.shift = true;
         else if (part == "alt" && !event.alt) event.alt = true;
+        else if (part == "super" && !event.super) event.super = true;
         else {
             return std::unexpected(support::make_error(
                 support::ErrorCode::Validation,
@@ -86,6 +87,7 @@ std::string key_id(const KeyEvent& event) {
     if (event.shift) identifier += "shift+";
     if (event.ctrl) identifier += "ctrl+";
     if (event.alt) identifier += "alt+";
+    if (event.super) identifier += "super+";
     identifier += event.key;
     return identifier;
 }
@@ -93,7 +95,7 @@ std::string key_id(const KeyEvent& event) {
 bool matches_key(const KeyEvent& event, std::string_view identifier) {
     const auto parsed = parse_key_id(identifier);
     return parsed && parsed->key == event.key && parsed->ctrl == event.ctrl && parsed->shift == event.shift &&
-        parsed->alt == event.alt;
+        parsed->alt == event.alt && parsed->super == event.super;
 }
 
 } // namespace cch::tui

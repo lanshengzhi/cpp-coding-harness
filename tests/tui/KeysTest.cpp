@@ -31,10 +31,25 @@ TEST_CASE("baseline key vocabulary accepts letters digits symbols and special na
     for (const auto key : kSymbols) CHECK(cch::tui::parse_key_id(std::string_view(&key, 1)));
 }
 
+TEST_CASE("Super key identifiers parse format and match all modifier combinations", "[tui][input][issue888][spec]") {
+    const auto parsed = cch::tui::parse_key_id("ctrl+super+c");
+
+    REQUIRE(parsed);
+    CHECK(parsed->ctrl);
+    CHECK(parsed->super);
+    CHECK_FALSE(parsed->shift);
+    CHECK_FALSE(parsed->alt);
+    CHECK(cch::tui::key_id(*parsed) == "ctrl+super+c");
+    CHECK(cch::tui::matches_key(*parsed, "super+ctrl+c"));
+    CHECK_FALSE(cch::tui::matches_key(*parsed, "ctrl+c"));
+    CHECK(*parsed == cch::tui::KeyEvent{.key = "c", .ctrl = true, .super = true});
+}
+
 TEST_CASE("invalid canonical key identifiers fail without partial matches", "[tui][input][issue47][spec]") {
     CHECK_FALSE(cch::tui::parse_key_id(""));
     CHECK_FALSE(cch::tui::parse_key_id("ctrl+ctrl+c"));
-    CHECK_FALSE(cch::tui::parse_key_id("super+c"));
+    CHECK(cch::tui::parse_key_id("super+c"));
+    CHECK_FALSE(cch::tui::parse_key_id("super+super+c"));
     CHECK_FALSE(cch::tui::parse_key_id("ctrl+unknown"));
     CHECK_FALSE(cch::tui::parse_key_id("ctrl+"));
 

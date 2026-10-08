@@ -23,12 +23,14 @@ constexpr std::size_t kMaxPendingBytes = 256;
 constexpr unsigned int kShiftModifier = 1;
 constexpr unsigned int kAltModifier = 2;
 constexpr unsigned int kCtrlModifier = 4;
+constexpr unsigned int kSuperModifier = 8;
 constexpr unsigned int kLockModifiers = 64 + 128;
 
 struct ParsedModifiers {
     bool ctrl{false};
     bool shift{false};
     bool alt{false};
+    bool super{false};
 };
 
 struct ParsedNumber {
@@ -62,11 +64,12 @@ std::vector<std::string_view> split(std::string_view text, char separator) {
 std::optional<ParsedModifiers> parse_modifiers(unsigned int protocol_value) {
     if (protocol_value == 0) return std::nullopt;
     const auto modifier = (protocol_value - 1) & ~kLockModifiers;
-    if ((modifier & ~(kShiftModifier | kAltModifier | kCtrlModifier)) != 0) return std::nullopt;
+    if ((modifier & ~(kShiftModifier | kAltModifier | kCtrlModifier | kSuperModifier)) != 0) return std::nullopt;
     return ParsedModifiers{
         .ctrl = (modifier & kCtrlModifier) != 0,
         .shift = (modifier & kShiftModifier) != 0,
         .alt = (modifier & kAltModifier) != 0,
+        .super = (modifier & kSuperModifier) != 0,
     };
 }
 
@@ -142,6 +145,7 @@ std::optional<KeyEvent> make_key_event(
         .ctrl = modifiers.ctrl,
         .shift = modifiers.shift,
         .alt = modifiers.alt,
+        .super = modifiers.super,
         .type = type,
     };
 }
@@ -215,6 +219,7 @@ std::optional<KeyEvent> parse_kitty_navigation(std::string_view sequence) {
         .ctrl = modifiers->ctrl,
         .shift = modifiers->shift,
         .alt = modifiers->alt,
+        .super = modifiers->super,
         .type = type,
     };
 }
@@ -252,6 +257,7 @@ std::optional<KeyEvent> parse_kitty_functional(std::string_view sequence) {
         .ctrl = modifiers->ctrl,
         .shift = modifiers->shift,
         .alt = modifiers->alt,
+        .super = modifiers->super,
         .type = type,
     };
 }
