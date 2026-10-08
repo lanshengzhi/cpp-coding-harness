@@ -776,6 +776,7 @@ StreamDecodeResult TerminalStreamDecoder::flush() {
 
 void TerminalStreamDecoder::reset() {
     pending_.clear();
+    pending_kitty_printable_codepoint_.reset();
     discard_mode_ = EscapeDiscardMode::None;
     discard_saw_escape_ = false;
     paste_mode_ = false;
@@ -838,7 +839,32 @@ void TerminalStreamDecoder::drain(StreamDecodeResult& result, bool end_of_feed) 
             }
         }
         result.forwarded_input += sequence;
-        if (auto key = parse_raw_sequence(sequence)) result.events.emplace_back(std::move(*key));
+        if (sequence.size() == 1 && pending_kitty_printable_codepoint_.has_value()) {
+            const auto raw_codepoint = static_cast<unsigned char>(sequence.front());
+            if (raw_codepoint == *pending_kitty_printable_codepoint_) {
+                pending_kitty_printable_codepoint_.reset();
+                continue;
+            }
+        }
+        pending_kitty_printable_codepoint_.reset();
+        if (auto key = parse_raw_sequence(sequence)) {
+            if (sequence.starts_with("\x1b[") && sequence.ends_with('u')) {
+                // If it's a Kitty CSI-u printable sequence without complex modifiers, record for suppression
+                const auto body = sequence.substr(2, sequence.size() - 3);
+                const auto semicolon = body.find(';');
+                if (semicolon == std::string_view::npos || body.substr(semicolon + 1) == "1" || body.substr(semicolon + 1).empty()) {
+                    const auto key_part = body.substr(0, semicolon);
+                    const auto key_parts = split(key_part, ':');
+                    if (!key_parts.empty()) {
+                        const auto cp = parse_number(key_parts[0]);
+                        if (cp.valid && cp.value >= 32) {
+                            pending_kitty_printable_codepoint_ = cp.value;
+                        }
+                    }
+                }
+            }
+            result.events.emplace_back(std::move(*key));
+        }
     }
 }
 

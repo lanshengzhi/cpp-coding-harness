@@ -16,6 +16,16 @@
 
 using namespace cch;
 
+TEST_CASE("stream decoder suppresses redundant raw printable character following Kitty CSI-u", "[tui][decoder][issue891][spec]") {
+    tui::detail::TerminalStreamDecoder decoder;
+    // \x1b[97u (Kitty 'a') followed by raw 'a'
+    const auto result = decoder.feed("\x1b[97ua");
+    REQUIRE(result.events.size() == 1);
+    const auto* key = std::get_if<tui::KeyEvent>(&result.events.front());
+    REQUIRE(key != nullptr);
+    CHECK(key->key == "a");
+}
+
 TEST_CASE("stream decoder prefers shifted key in Kitty CSI-u", "[tui][decoder][issue890][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
     // CSI 49:33;2u -> codepoint 49 ('1'), shiftedKey 33 ('!'), modifier 2 (shift)
