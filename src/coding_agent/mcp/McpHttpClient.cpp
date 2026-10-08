@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <chrono>
 #include <map>
 #include <optional>
@@ -277,9 +278,16 @@ private:
                 last_event_id_ = std::string{value};
             }
         } else if (field == "retry") {
-            if (!value.empty() &&
-                    std::ranges::all_of(value, [](unsigned char character) { return std::isdigit(character) != 0; })) {
-                retry_ms_ = std::stoi(std::string{value});
+            // pi adopts only /^\d+$/ values. §9.3 parses with std::from_chars
+            // (never std::stoi, which would throw on a server-controlled
+            // overflow and terminate under strict no-exceptions, §5.7); a
+            // digits-only value outside the int range, like a non-digits one,
+            // is ignored and the client backoff stays in effect.
+            int delay_ms = 0;
+            const auto* const first = value.data();
+            const auto parsed = std::from_chars(first, first + value.size(), delay_ms);
+            if (parsed.ec == std::errc{} && parsed.ptr == first + value.size() && delay_ms >= 0) {
+                retry_ms_ = delay_ms;
             }
         }
     }

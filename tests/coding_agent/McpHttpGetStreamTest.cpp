@@ -378,6 +378,34 @@ TEST_CASE("MCP GET stream: a server retry field overrides the reconnect delay", 
     client->close();
 }
 
+TEST_CASE("MCP GET stream: an out-of-range server retry field is ignored, never throws",
+        "[coding_agent][mcp]") {
+    // The `retry:` field is server-controlled. pi adopts only /^\d+$/ values;
+    // a digits-only value that does not fit the client's int range must fall
+    // back to the client backoff instead of throwing (strict no-exceptions,
+    // CODING_STANDARDS §5.7/§9.3 — std::stoi would terminate the process).
+    auto transport = std::make_shared<ScriptedTransport>();
+    GetScript first;
+    first.chunks = {"retry: 99999999999999999999999999\nid: 1\n" +
+                    message_event(R"({"jsonrpc":"2.0","method":"notifications/message","params":{"level":"info"}})")};
+    transport->push_get(std::move(first));
+    transport->push_get(live_stream({}));
+
+    McpHttpGetStreamOptions options;
+    options.initial_delay = 20ms;
+    options.max_delay = 20ms;
+    Loop loop;
+    auto client = connect_client(loop, transport, options);
+
+    // The huge delay was rejected: the reconnect follows the 20 ms client
+    // backoff (a 1e25 ms delay would never arrive within the pump bound).
+    REQUIRE(loop.pump_until([&] { return transport->get_call_count() >= 2; }, 5s));
+    const auto gets = transport->get_requests();
+    CHECK(gets.size() == 2);
+    CHECK(gets[1]->headers.at("last-event-id") == "1");
+    client->close();
+}
+
 TEST_CASE("MCP GET stream: exhausted retries report the dropped-stream error", "[coding_agent][mcp]") {
     auto transport = std::make_shared<ScriptedTransport>();
     // A stream that opens and immediately ends, with no event: every attempt is
