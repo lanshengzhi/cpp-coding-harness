@@ -67,13 +67,8 @@ support::Expected<RenderResult> Text::render(std::size_t width) {
         cache_valid_ = true;
         return RenderResult{.lines = cached_lines_};
     }
-    if (padding_x_ >= width || padding_x_ >= width - padding_x_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "TUI Text width is too small for padding",
-            std::format("width {} padding_x {}", width, padding_x_)));
-    }
-    const auto content_width = width - padding_x_ - padding_x_;
+    const auto effective_padding_x = width > 1 ? std::min(padding_x_, (width - 1) / 2) : 0;
+    const auto content_width = std::max<std::size_t>(1, width - effective_padding_x - effective_padding_x);
     auto wrapped = wrap_text(text_, content_width);
     if (!wrapped) return std::unexpected(wrapped.error());
 
@@ -96,8 +91,8 @@ support::Expected<RenderResult> Text::render(std::size_t width) {
     for (const auto& line : *wrapped) {
         auto prepared_content = detail::prepare_rendered_line(line, width);
         if (!prepared_content) return std::unexpected(prepared_content.error());
-        auto prepared =
-                make_line(std::string(padding_x_, ' ') + prepared_content->text, padding_x_ + prepared_content->width);
+        auto prepared = make_line(std::string(effective_padding_x, ' ') + prepared_content->text,
+                effective_padding_x + prepared_content->width);
         if (!prepared) return std::unexpected(prepared.error());
         result.push_back(std::move(*prepared));
     }

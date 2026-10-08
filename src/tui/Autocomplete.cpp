@@ -105,6 +105,9 @@ struct FdEntry {
 [[nodiscard]] std::optional<std::size_t> find_last_delimiter(std::string_view text) {
     for (std::size_t index = text.size(); index-- > 0;) {
         if (kPathDelimiters.find(text[index]) != std::string::npos) return index;
+        const auto byte = static_cast<unsigned char>(text[index]);
+        // Trail or lead byte of non-ASCII UTF-8 boundary (e.g. CJK punctuation)
+        if (byte >= 0x80) return index;
     }
     return std::nullopt;
 }
@@ -120,8 +123,20 @@ struct FdEntry {
     return in_quotes ? quote_start : std::nullopt;
 }
 
+// Opening wrappers that may precede a path in prose, mapped to their closing counterpart.
+bool is_path_wrapper(char c) { return c == '(' || c == '[' || c == '{' || c == '<' || c == '`'; }
+
 [[nodiscard]] bool is_token_start(std::string_view text, std::size_t index) {
-    return index == 0 || kPathDelimiters.find(text[index - 1]) != std::string::npos;
+    std::size_t start = index;
+    while (start > 0 && is_path_wrapper(text[start - 1])) {
+        --start;
+    }
+    if (start == 0) return true;
+    const unsigned char prev = static_cast<unsigned char>(text[start - 1]);
+    if (kPathDelimiters.find(static_cast<char>(prev)) != std::string::npos) return true;
+    // Non-ASCII UTF-8 trail bytes (e.g. CJK punctuation) also serve as boundaries
+    if (prev >= 0x80) return true;
+    return false;
 }
 
 [[nodiscard]] std::optional<std::string_view> extract_quoted_prefix(std::string_view text) {

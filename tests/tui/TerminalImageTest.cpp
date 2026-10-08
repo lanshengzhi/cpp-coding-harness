@@ -63,6 +63,30 @@ TEST_CASE(
     CHECK_FALSE(blocked.hyperlinks);
 }
 
+TEST_CASE("Zed is detected as hyperlink capable and PI_* overrides force capabilities",
+        "[tui][image][terminal-image][issue896][spec]") {
+    {
+        ImageEnvironmentGuard env;
+        env.set("TERM_PROGRAM", "zed");
+        const auto zed_caps = cch::tui::detect_image_capabilities();
+        CHECK(zed_caps.hyperlinks);
+        CHECK(zed_caps.images == cch::tui::InlineImageProtocol::None);
+    }
+    {
+        ImageEnvironmentGuard env;
+        env.set("PI_IMAGE_PROTOCOL", "kitty");
+        const auto kitty_override = cch::tui::detect_image_capabilities();
+        CHECK(kitty_override.images == cch::tui::InlineImageProtocol::Kitty);
+    }
+    {
+        ImageEnvironmentGuard env;
+        env.set("TERM_PROGRAM", "ghostty");
+        env.set("PI_HYPERLINKS", "0");
+        const auto no_links = cch::tui::detect_image_capabilities();
+        CHECK_FALSE(no_links.hyperlinks);
+    }
+}
+
 TEST_CASE("detect_image_capabilities forces hyperlinks off under screen",
         "[tui][image][terminal-image][issue385][spec]") {
     ImageEnvironmentGuard environment;

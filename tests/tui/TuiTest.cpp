@@ -475,6 +475,16 @@ TEST_CASE("Tui rejects a null Component attachment", "[tui][issue45][spec]") {
     CHECK(result.error().message == "TUI cannot attach a null Component");
 }
 
+TEST_CASE("Text renders gracefully in narrow widths by clamping padding", "[tui][text][issue897][spec]") {
+    cch::tui::Text text("hello", 2, 0);
+    const auto rendered = text.render(2);
+    CHECK(rendered.has_value());
+    if (!rendered) {
+        FAIL(rendered.error().message);
+    }
+    CHECK(rendered->lines.size() >= 1);
+}
+
 TEST_CASE("Text accepts Unicode characters", "[tui][issue46][unicode][spec]") {
     cch::tui::Text text("\xc3\xa9", 0, 0); // é in UTF-8
 

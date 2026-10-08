@@ -325,53 +325,75 @@ DetectedImageCapabilities detect_image_capabilities(
     const auto terminal_emulator = lowercase_environment("TERMINAL_EMULATOR");
     const auto term = lowercase_environment("TERM");
 
-    // Emit OSC 8 hyperlinks only when tmux confirms it forwards. Image
-    // protocols are unreliable under tmux, so images stay disabled.
-    if (environment_present("TMUX") || term.starts_with("tmux")) {
-        return {
-            .images = InlineImageProtocol::None,
-            .hyperlinks = tmux_forwards_hyperlink ? tmux_forwards_hyperlink() : false,
-        };
-    }
-    // screen does not forward OSC 8 hyperlinks.
-    if (term.starts_with("screen")) {
-        return {
-            .images = InlineImageProtocol::None,
-            .hyperlinks = false,
-        };
-    }
+    auto detected = [&]() -> DetectedImageCapabilities {
+        // Emit OSC 8 hyperlinks only when tmux confirms it forwards. Image
+        // protocols are unreliable under tmux, so images stay disabled.
+        if (environment_present("TMUX") || term.starts_with("tmux")) {
+            return {
+                    .images = InlineImageProtocol::None,
+                    .hyperlinks = tmux_forwards_hyperlink ? tmux_forwards_hyperlink() : false,
+            };
+        }
+        // screen does not forward OSC 8 hyperlinks.
+        if (term.starts_with("screen")) {
+            return {
+                    .images = InlineImageProtocol::None,
+                    .hyperlinks = false,
+            };
+        }
 
-    if (environment_present("KITTY_WINDOW_ID") || term_program == "kitty") {
-        return {.images = InlineImageProtocol::Kitty, .hyperlinks = true};
-    }
-    if (term_program == "ghostty" || term.find("ghostty") != std::string::npos ||
-        environment_present("GHOSTTY_RESOURCES_DIR")) {
-        return {.images = InlineImageProtocol::Kitty, .hyperlinks = true};
-    }
-    if (environment_present("WEZTERM_PANE") || term_program == "wezterm") {
-        return {.images = InlineImageProtocol::Kitty, .hyperlinks = true};
-    }
-    if (term_program == "warpterminal" || environment_present("WARP_SESSION_ID") ||
-        environment_present("WARP_TERMINAL_SESSION_UUID")) {
-        return {.images = InlineImageProtocol::Kitty, .hyperlinks = true};
-    }
-    if (environment_present("ITERM_SESSION_ID") || term_program == "iterm.app") {
-        return {.images = InlineImageProtocol::ITerm2, .hyperlinks = true};
-    }
-    if (environment_present("WT_SESSION")) {
-        return {.images = InlineImageProtocol::None, .hyperlinks = true};
-    }
-    if (term_program == "vscode") {
-        return {.images = InlineImageProtocol::None, .hyperlinks = true};
-    }
-    if (term_program == "alacritty") {
-        return {.images = InlineImageProtocol::None, .hyperlinks = true};
-    }
-    if (terminal_emulator == "jetbrains-jediterm") {
+        if (environment_present("KITTY_WINDOW_ID") || term_program == "kitty") {
+            return {.images = InlineImageProtocol::Kitty, .hyperlinks = true};
+        }
+        if (term_program == "ghostty" || term.find("ghostty") != std::string::npos ||
+                environment_present("GHOSTTY_RESOURCES_DIR")) {
+            return {.images = InlineImageProtocol::Kitty, .hyperlinks = true};
+        }
+        if (environment_present("WEZTERM_PANE") || term_program == "wezterm") {
+            return {.images = InlineImageProtocol::Kitty, .hyperlinks = true};
+        }
+        if (term_program == "warpterminal" || environment_present("WARP_SESSION_ID") ||
+                environment_present("WARP_TERMINAL_SESSION_UUID")) {
+            return {.images = InlineImageProtocol::Kitty, .hyperlinks = true};
+        }
+        if (environment_present("ITERM_SESSION_ID") || term_program == "iterm.app") {
+            return {.images = InlineImageProtocol::ITerm2, .hyperlinks = true};
+        }
+        if (environment_present("WT_SESSION")) {
+            return {.images = InlineImageProtocol::None, .hyperlinks = true};
+        }
+        if (term_program == "vscode") {
+            return {.images = InlineImageProtocol::None, .hyperlinks = true};
+        }
+        if (term_program == "alacritty") {
+            return {.images = InlineImageProtocol::None, .hyperlinks = true};
+        }
+        if (term_program == "zed") {
+            return {.images = InlineImageProtocol::None, .hyperlinks = true};
+        }
+        if (terminal_emulator == "jetbrains-jediterm") {
+            return {.images = InlineImageProtocol::None, .hyperlinks = false};
+        }
+        // Unknown terminal: be conservative, exactly like pi.
         return {.images = InlineImageProtocol::None, .hyperlinks = false};
-    }
-    // Unknown terminal: be conservative, exactly like pi.
-    return {.images = InlineImageProtocol::None, .hyperlinks = false};
+    }();
+
+    // Standard manual overrides from pi terminal-image.ts
+    const auto pi_hyperlinks = lowercase_environment("PI_HYPERLINKS");
+    if (pi_hyperlinks == "1")
+        detected.hyperlinks = true;
+    else if (pi_hyperlinks == "0")
+        detected.hyperlinks = false;
+
+    const auto pi_image_protocol = lowercase_environment("PI_IMAGE_PROTOCOL");
+    if (pi_image_protocol == "kitty")
+        detected.images = InlineImageProtocol::Kitty;
+    else if (pi_image_protocol == "iterm2")
+        detected.images = InlineImageProtocol::ITerm2;
+    else if (pi_image_protocol == "none" || pi_image_protocol == "0")
+        detected.images = InlineImageProtocol::None;
+
+    return detected;
 }
 
 DetectedImageCapabilities get_image_capabilities() {
