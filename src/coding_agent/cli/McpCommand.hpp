@@ -49,8 +49,9 @@ public:
 };
 
 /// The injectable `pike mcp login` sign-in (pi `signInMcpServer`), narrowed to
-/// what the command observes: the server and the `--timeout`.
-using McpSignInHook = std::function<support::AsyncResult<void>(
+/// what the command observes: the server and the `--timeout`. Stored per
+/// run_mcp_command call, so move-only (§3.3/§6.2).
+using McpSignInHook = std::move_only_function<support::AsyncResult<void>(
         const coding_agent::mcp::McpHttpServerConfig&, std::chrono::milliseconds)>;
 
 /// Inputs `run_mcp_command` needs from the environment. `probe` and
@@ -76,7 +77,7 @@ struct McpCommandOptions {
     std::shared_ptr<McpServerProbe> probe{nullptr};
     /// pi `openBrowser`: opens the authorization URL. Null leaves the URL to
     /// the user (the production CLI passes the platform opener).
-    std::function<void(std::string_view)> open_browser{nullptr};
+    std::move_only_function<void(std::string_view)> open_browser{nullptr};
     /// The OAuth sign-in `pike mcp login` drives (pi `signInMcpServer`). Null
     /// runs the production loopback-callback flow; tests inject a scripted one
     /// that observes the timeout and the requested server.

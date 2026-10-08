@@ -778,22 +778,24 @@ struct ServerReport {
     return http->url;
 }
 
-[[nodiscard]] support::AsyncResult<void> run_oauth_login(
-        const McpCommandOptions& options, const McpConfigEntry& entry, const std::string& url) {
+[[nodiscard]] support::AsyncResult<void> run_oauth_login(const McpCommandOptions& options,
+        const std::shared_ptr<std::move_only_function<void(std::string_view)>>& open_browser,
+        const McpConfigEntry& entry,
+        const std::string& url) {
     const auto* http = std::get_if<McpHttpServerConfig>(&entry.config);
     auto store = std::make_shared<coding_agent::mcp::McpAuthStore>(
             coding_agent::mcp::McpAuthStore::default_path(options.agent_dir));
     (void)store->migrate_from_auth_json(options.agent_dir / "auth.json", entry.name, url);
     auto provider = std::make_shared<coding_agent::mcp::McpOAuthProvider>(*http->resolved_oauth);
     ai::AuthInteraction interaction;
-    interaction.notify = [&options, name = entry.name](const ai::AuthEvent& event) {
+    interaction.notify = [&options, open_browser, name = entry.name](const ai::AuthEvent& event) {
         std::ostream& output = *options.output;
         if (const auto* progress = std::get_if<ai::AuthProgress>(&event.kind)) {
             output << progress->message << '\n';
         } else if (const auto* auth_url = std::get_if<ai::AuthUrl>(&event.kind)) {
             output << "Sign in to MCP server \"" << name << "\" in your browser:\n" << auth_url->url << '\n';
-            if (options.open_browser) {
-                options.open_browser(auth_url->url);
+            if (open_browser && *open_browser) {
+                (*open_browser)(auth_url->url);
             }
         }
     };
@@ -914,6 +916,7 @@ struct ServerReport {
 /// registration happen inside the flow, the loopback callback races the pasted
 /// redirect URL, and the tokens land in `mcp-auth.json`.
 [[nodiscard]] support::AsyncResult<void> run_flow_login(const McpCommandOptions& options,
+        const std::shared_ptr<std::move_only_function<void(std::string_view)>>& open_browser,
         const McpHttpServerConfig& http,
         const std::string& url,
         std::chrono::milliseconds timeout,
@@ -927,14 +930,13 @@ struct ServerReport {
     request.server_url = url;
     request.oauth = *http.oauth;
     request.timeout = timeout;
-    request.prompt.show_authorization_url =
-            [output = options.output, open_browser = options.open_browser, name = http.name](
-                    const std::string& authorization_url) {
-                *output << "Sign in to MCP server \"" << name << "\" in your browser:\n" << authorization_url << '\n';
-                if (open_browser) {
-                    open_browser(authorization_url);
-                }
-            };
+    request.prompt.show_authorization_url = [output = options.output, open_browser, name = http.name](
+                                                    const std::string& authorization_url) {
+        *output << "Sign in to MCP server \"" << name << "\" in your browser:\n" << authorization_url << '\n';
+        if (open_browser && *open_browser) {
+            (*open_browser)(authorization_url);
+        }
+    };
     if (options.stdin_is_terminal) {
         // Init-capture the fields the prompt reads so no reference to
         // `options` crosses into the stored operation (§6.2); `loop` is the
@@ -951,7 +953,7 @@ struct ServerReport {
 
 [[nodiscard]] int login_or_logout(const std::string& command,
         const std::vector<std::string>& args,
-        const McpCommandOptions& options,
+        McpCommandOptions& options,
         const std::string& project_config) {
     std::ostream& output = *options.output;
     std::ostream& error = *options.error;
@@ -1047,13 +1049,18 @@ struct ServerReport {
     std::optional<support::Error> sign_in_failure;
     if (options.sign_in) {
         sign_in_failure = run_result_failure(loop, options.sign_in(*http, timeout));
-    } else if (http->resolved_oauth) {
-        sign_in_failure = run_result_failure(loop, run_oauth_login(options, *entry, *url));
-    } else if (http->oauth) {
-        sign_in_failure = run_result_failure(loop, run_flow_login(options, *http, *url, timeout, std::move(loop)));
     } else {
-        error << "MCP server \"" << name << "\" requires OAuth sign-in, but it has no oauth configuration.\n";
-        return 1;
+        auto shared_open_browser =
+                std::make_shared<std::move_only_function<void(std::string_view)>>(std::move(options.open_browser));
+        if (http->resolved_oauth) {
+            sign_in_failure = run_result_failure(loop, run_oauth_login(options, shared_open_browser, *entry, *url));
+        } else if (http->oauth) {
+            sign_in_failure = run_result_failure(
+                    loop, run_flow_login(options, shared_open_browser, *http, *url, timeout, std::move(loop)));
+        } else {
+            error << "MCP server \"" << name << "\" requires OAuth sign-in, but it has no oauth configuration.\n";
+            return 1;
+        }
     }
     if (sign_in_failure.has_value()) {
         // pi `login`'s catch (extensions/mcp/cli.ts): the cancelled error —
