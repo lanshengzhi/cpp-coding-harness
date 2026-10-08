@@ -778,7 +778,7 @@ TEST_CASE("Tui recovers after invalid unsupported and overlong input", "[tui][in
     REQUIRE(tui.start());
     REQUIRE(tui.set_focus(component_pointer));
 
-    REQUIRE(terminal.inject_input("\x1b[999999999999999999999;5u\x1b[99;9u"));
+    REQUIRE(terminal.inject_input("\x1b[999999999999999999999;5u\x1b[99;99u"));
     REQUIRE(terminal.inject_input("\x1b[" + std::string(300, '1')));
     REQUIRE(terminal.inject_input("\x1b[A"));
     REQUIRE(terminal.inject_input("\xc3"));

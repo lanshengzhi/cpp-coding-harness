@@ -1425,7 +1425,7 @@ TEST_CASE("Process Terminal iTerm2 placement omits default preserveAspectRatio a
     const auto placed = terminal.place_image(image);
     REQUIRE(placed);
     const auto placed_output = cch::tests::read_available(pty->master.get());
-    CHECK(placed_output.find("\x1b]1337;File=inline=1;width=1;height=1:QUFBQQ==\x07") != std::string::npos);
+    CHECK(placed_output.find("inline=1;width=1;height=1;size=4:QUFBQQ==") != std::string::npos);
     CHECK(placed_output.find("preserveAspectRatio") == std::string::npos);
 
     REQUIRE(terminal.remove_image(*placed, image.region));
