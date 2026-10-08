@@ -22,6 +22,7 @@
 #include "support/Json.hpp"
 
 #include <optional>
+#include <set>
 #include <stop_token>
 #include <utility>
 
@@ -106,8 +107,12 @@ boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_m
         McpServerConnection& connection) {
     const std::string server = connection.server_name();
     std::vector<McpToolDescriptor> tools;
+    std::set<std::string> cursors;
     std::optional<std::string> cursor;
-    for (;;) {
+    // pi `listAll`: follow nextCursor to at most MAX_LIST_PAGES, fail a
+    // duplicate cursor explicitly, and let `null`/`""` end pagination — a
+    // server that echoes either forever must not loop the client.
+    for (int page_number = 0; page_number < kMcpMaxListPages; ++page_number) {
         std::optional<support::JsonValue> params;
         if (cursor.has_value()) {
             params = support::JsonValue{support::JsonValue::object_t{{"cursor", *cursor}}};
@@ -154,13 +159,27 @@ boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_m
             }
             tools.push_back(std::move(descriptor));
         }
+        // pi `validateListPage`: `null` and `""` end pagination; any other
+        // non-string cursor is an explicit error.
         const auto next = object->find("nextCursor");
-        if (next == object->end() || !next->second.holds<std::string>()) {
-            break;
+        if (next == object->end() || next->second.holds<support::JsonValue::null_t>()) {
+            co_return tools;
         }
-        cursor = next->second.get_string();
+        if (!next->second.holds<std::string>()) {
+            co_return std::unexpected(source_error("Invalid MCP tools/list cursor"));
+        }
+        std::string next_cursor = next->second.get_string();
+        if (next_cursor.empty()) {
+            co_return tools;
+        }
+        if (!cursors.insert(next_cursor).second) {
+            co_return std::unexpected(
+                    source_error("MCP tools/list returned duplicate cursor: " + next_cursor));
+        }
+        cursor = std::move(next_cursor);
     }
-    co_return tools;
+    co_return std::unexpected(source_error(
+            "MCP tools/list exceeded " + std::to_string(kMcpMaxListPages) + " pages"));
 }
 
 std::string mcp_tool_name(std::string_view server, std::string_view tool) {

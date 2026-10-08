@@ -28,6 +28,10 @@ inline constexpr std::string_view kMcpSupportedProtocolVersions[] = {
         "2024-11-05",
 };
 
+/// pi `MAX_LIST_PAGES`: the most `tools/list` pages one listing walk follows
+/// before the server is rejected as unbounded.
+inline constexpr int kMcpMaxListPages = 1000;
+
 /// Client identity sent in the `initialize` handshake.
 inline constexpr std::string_view kMcpClientName = "pike";
 inline constexpr std::string_view kMcpClientVersion = "0.1.0";

@@ -76,6 +76,7 @@ include_guard(GLOBAL)
         tests/coding_agent/McpSessionManagerTest.cpp
         tests/coding_agent/McpAuthStoreTest.cpp
         tests/coding_agent/McpProtocolSurfaceTest.cpp
+        tests/coding_agent/McpToolsListTest.cpp
         tests/coding_agent/McpConfigSurfaceTest.cpp
         tests/coding_agent/McpConfigWriteTest.cpp
         tests/coding_agent/McpServersSectionTest.cpp
