@@ -104,8 +104,13 @@ Decided **2026-10-07**, authorized by the spec flow of
 [#865](https://github.com/lanshengzhi/cpp-coding-harness/issues/865), in the same attributed manner
 as the transport rulings above. This ruling covers **persistence and lifecycle only**: the TUI `/mcp`
 manager and `pi mcp` CLI subcommands, live in-session tool add/remove, and the exposure/timeout
-fields stay `No decision`. **MCP OAuth** credential semantics were later decided in the #875 ruling
-below, which leaves only the `mcp.json` `auth` block and its sign-in trigger as a recorded follow-up.
+fields stay `No decision` at this ruling. **Update (spec #882, #884):** the `/mcp` manager surface
+(TUI panel + `pi mcp` CLI subcommands, including the write half of `mcp.json`) and the
+exposure/timeout fields were absorbed by spec #882 and delivered by #884 (see the #884 implementation
+record below); live in-session tool add/remove outside the manager's actions remains unimplemented.
+**MCP OAuth** credential semantics were later decided in the #875 ruling below, which leaves only
+the `mcp.json` `auth` block and its sign-in trigger as a recorded follow-up (both absorbed by spec
+#882 and delivered by #884).
 
 | Capability | pi source | Pike status | Scope of this ruling |
 |---|---|---|---|
@@ -154,12 +159,17 @@ the rulings above. This ruling covers **the MCP OAuth credential slice only**.
 
 **Intentional divergence:** pi stores MCP OAuth state in a separate `<agent-dir>/mcp-auth.json`; the
 spec binds Pike to the existing AuthStorage/`auth.json` semantics instead, so there is no second
-credential store and the user learns no second credential story. **Deferred by this ruling:** RFC 9728
-authorization-server discovery and dynamic client registration (the endpoints and the pre-registered
-`client_id` are configuration), and **the user-visible sign-in trigger** — nothing in #875 opens a
-browser flow on its own; the trigger (a future `/mcp` surface or CLI command) is a follow-up decision,
-and #876's `mcp.json` server entry gaining an `auth: "oauth"` block is the natural handshake point.
-MCP **resource tools**, the server-to-client GET stream, and exposure policy remain `No decision`.
+credential store and the user learns no second credential story. **The full-parity ruling below
+superseded this divergence** (credentials moved to `mcp-auth.json` with the `auth.json` migration).
+**Deferred by this ruling:** RFC 9728 authorization-server discovery and dynamic client registration
+(the endpoints and the pre-registered `client_id` are configuration), and **the user-visible sign-in
+trigger** — nothing in #875 opens a browser flow on its own; the trigger (a future `/mcp` surface or
+CLI command) is a follow-up decision, and #876's `mcp.json` server entry gaining an `auth: "oauth"`
+block is the natural handshake point. **These deferrals were absorbed by spec #882 and delivered by
+#884** (RFC 9728 discovery + DCR/CIMD, the `mcp-auth.json` store, and the `/mcp` + `pi mcp` sign-in
+triggers — see the #884 implementation record below). MCP **resource tools**, the server-to-client GET
+stream, and exposure policy, recorded as `No decision` here, were likewise absorbed by spec #882 and
+delivered by #884.
 
 The transport and credential resolution stay private under `src/coding_agent/mcp/` and add no Owner
 Interface.
@@ -170,7 +180,9 @@ The scope close-out of [spec #865](https://github.com/lanshengzhi/cpp-coding-har
 verified that every capability the spec names is either an owner decision (the rows above) or an
 explicitly **recorded follow-up**. The MCP capabilities the spec did not name — the server-to-client
 GET stream, **resource tools**, and **exposure policy** — and the spec's out-of-scope rows below stay
-`No decision`, untouched by this close-out.
+`No decision` at this close-out. **Spec #882 absorbed the first three into the full-parity scope and
+#884 delivered them** (see the #884 implementation record below); the out-of-scope rows (`packages/env`,
+`packages/server`/`protocol`/`telemetry`) remain `No decision`.
 
 | Follow-up | Why it is deferred | Record |
 |---|---|---|
@@ -223,16 +235,20 @@ lane** only (the codemode lane is #885). Every delivered behaviour diffs against
 | `mcp-auth.json` credential store + `auth.json` `mcp__<server>` migration | `extensions/mcp/oauth.ts` | **In the subset (#884)** — `McpAuthStore`, the request-time `McpOAuthFlowTokenResolver`, and the one-way migration. |
 
 **Remaining MCP gaps, and the seam each needs.** Recorded so a later slice starts here rather than
-from a grep:
+from a grep. The table below is the **2026-10-08 close-out (#886) sweep**: the two presentation
+gaps the 2026-10-07 record still carried (the `/mcp` panel host wiring and the OAuth login trigger
+presentation) were delivered by the #884 slash-wiring slice later that day and are recorded in the
+next revision; every row that remains carries its exact pi pointer.
 
-| Gap | Blocking seam |
+| Gap | pi pointer and the blocking seam |
 |---|---|
-| `/mcp` panel host wiring in the interactive engine | the panel view (`McpManagerView`) and the manager-driven presenter (`McpManagerPresenter`) are landed; the interactive engine must open the panel over `AgentSessionInteractiveAccess::mcp_manager` and drive the sign-in prompt |
 | `deferred` exposure is unreachable (tool_search Deferred) | pi's `tool_search` tool (`packages/coding-agent/src/extensions/tool-search/tool.ts` `TOOL_SEARCH_TOOL_NAME`, BM25 over deferred tool metadata, registered `defaultActive: false`) has no Pike counterpart; the row is recorded below — a membership ruling, not a seam |
-| stdio stderr tail on failed servers | the stdio transport deliberately discards stderr (`McpStdioClient`'s slice note); pi keeps the last 2000 chars (`connection.stderrTail`) |
-| External sign-in pickup (`turn_start` `reconnectSignedIn`) | pi compares stored tokens each turn to notice `pi mcp login` in another process; Pike's manager reconnects on its own sign-in action only |
-| pi's background connect + first-prompt wait | pi connects in the background and lets the first prompt wait up to `DEFAULT_STARTUP_WAIT_MS` (10 s) for `direct` servers; Pike awaits the connect phase at assembly, which keeps the #876 creation-result contract synchronous |
-| OAuth login trigger presentation | the flow, store, and driver are landed; the interactive sign-in screen is part of the panel host wiring above |
+| stdio stderr tail on failed servers | pi keeps the last 2000 chars of a failed stdio server's stderr (`packages/coding-agent/src/extensions/mcp/runtime.ts` `stderrTail`, fed by the 64 KB ring in `packages/mcp/src/transports/stdio.ts`). The manager seam carries `stderr_tail` (`McpSessionManager` snapshot-tested); the production stdio source still drains stderr to `/dev/null` (`McpStdioClient`), so the tail is always absent |
+| External sign-in pickup (`turn_start` `reconnectSignedIn`) | pi compares the stored OAuth tokens at every turn start to notice a `pi mcp login` run by another process (`packages/coding-agent/src/extensions/mcp/index.ts` `turn_start` handler, `tokensAtSignIn` snapshot). Pike's manager reconnects on its own sign-in action only; closing this needs a per-turn token-snapshot hook in the session lifecycle |
+| pi's background connect + first-prompt wait | pi connects in the background and lets the first prompt wait up to `DEFAULT_STARTUP_WAIT_MS` (10 s) for `direct` servers (`packages/coding-agent/src/extensions/mcp/index.ts` `session_start`). Pike awaits the connect phase at assembly, which keeps the #876 creation-result contract synchronous — a deliberate architecture trade, not an oversight |
+| Multi-candidate server selection | pi's `pickServer` shows an interactive `ui.select` over the candidates (`packages/coding-agent/src/extensions/mcp/index.ts` `pickServer`). Pike lists the candidates with the `run /mcp login <name>` status shape instead; an inline select in the command flow is the missing piece |
+| Sign-in timeout bound and classification (TUI) | pi's TUI sign-in is bounded by the loopback callback server's own 5-minute expiry, which is an **error** (`packages/mcp/src/oauth/callback.ts` "OAuth callback timed out" → pi's `Sign-in failed: …`), while the CLI's `--timeout` aborts the paste prompt and is classified as **cancellation** (`packages/coding-agent/src/extensions/mcp/cli.ts` `waitForRedirectUrl` → `McpSignInCancelledError`). Pike applies one 300 s request timer to both surfaces and classifies its expiry as cancellation. The #886 close-out reconciled the wording (driver: pi's info-level `Sign-in cancelled.`, `extensions/mcp/index.ts:628`; CLI: pi's `was cancelled or not completed within N seconds.`); the TUI timeout's classification (cancellation info vs callback-expiry error) and the 300 s-vs-5-minute bound remain |
+| MCP result conversion presentation | pi middle-truncates combined tool text over 20 KB into a `0o600` temp file with pi's warning shape (`extensions/mcp/tools.ts` `limitMcpContent`; `core/tools/truncate.ts` `truncateMiddle`; `utils/output-files.ts` `writeOutputFile`), renders resource links as `[Resource <uri> …]` text and saves binary resources to files (`extensions/mcp/tools.ts` `toModelContent`), and keeps a renderer-facing details channel `{server, tool, fullOutputPath}` beside the script channel (`convertMcpResult`). Pike maps text/image blocks and, since the #886 close-out, hands codemode the whole CallToolResult object exactly like pi's `structuredContent`; the 20 KB truncation + temp file, the resource-link/binary rendering, and the renderer-details channel are not ported |
 
 ### MCP activation model and the tool_search deferral (2026-10-08, #884 activation slice)
 
@@ -271,10 +287,79 @@ and declares it. `7f03d3409`'s test expectations revert to the four-tool declare
 |---|---|---|
 | `tool_search`: the deferred-tool discovery tool (`TOOL_SEARCH_TOOL_NAME`, BM25 search over deferred tool metadata, declares the matches for the next model call) | `packages/coding-agent/src/extensions/tool-search/tool.ts` (`TOOL_SEARCH_TOOL_NAME`, `TOOL_SEARCH_DESCRIPTION`), `index.ts` (registered `defaultActive: false`) | **Deferred.** Pike has no `tool_search` tool, so a server configured `exposure: "deferred"` registers its tools but nothing can declare them: the manager activates nothing, and pi's verbatim reachability warning fires when `codemode` is inactive too (exact pi semantics with `hasToolSearch` false). The `mcp_servers` section still lists a deferred server with pi's `(tool_search)` spelling — the renderer is the landed, bundle-diffed pi port; the tools remain unreachable until a membership ruling promotes this row. Not decided against: a later proposal starts from this row. |
 
-**Settings keys Pike cannot carry (Deferred, not decided against).** pi's `settings.json` MCP/codemode
-keys with no Pike counterpart: `codemode` (`mode`, `inlineBudget`) and `defaultTools` — both are the
-codemode lane's (#885) — and `autoEnableCodemode`, which Pike reads from `mcp.json` (pi's own location
-for it), not `settings.json`.
+### MCP `/mcp` panel and slash wiring (2026-10-08, #884 slash-wiring slice)
+
+Recorded as a regular new-evidence revision of the #884 implementation record (the full-parity ruling
+is unchanged): the panel host wiring and the OAuth login trigger presentation the 2026-10-07 record
+carried as gaps are **delivered**. The interactive engine routes `/mcp` (`SlashCommandId::Mcp` with
+pi's catalog entry and argument completions) and hosts the manager panel over the live manager
+through `AgentSessionInteractiveAccess::mcp_manager`:
+
+- `McpManagerFlow` (pi `registerCommand("mcp")` handler): `pickServer` with pi's
+  eligibility/preferred/none paths, the manager loop (pi's `serversMenu`/`serverMenu` row texts and
+  attention ordering), the verbatim login/logout/reconnect status lines (pi's dynamic pluralization
+  included), the sign-in screen with pi's paste-redirect-URL fallback, the non-TUI `formatStatus`
+  report, and the completion/warning refresh on manager change.
+- The engine dispatches the modal slash command and drains latched discovery warnings only after the
+  view exists (bind-existing boot order regression fix `52621ff8b`).
+- Headless flow coverage (`McpManagerFlowTest`, 41 cases), the autocomplete catalog case
+  (`EditorAutocompleteTest`), and the e2e virtual-terminal cases over a live session with the scripted
+  echo server (`McpSlashCommandInteractiveTest`) land the evidence.
+
+Two presentation nuances surfaced by that slice are dispositioned by the #886 close-out sweep below:
+the OAuth cancellation wording (fixed) and the multi-candidate selection (recorded Deferred).
+
+### Codemode parity implementation — spec #882 (#885)
+
+Implemented **2026-10-07** (`883db3d59`, `74a1f8315`, merged `d53cee25b`), authorized by the spec
+flow of [#882](https://github.com/lanshengzhi/cpp-coding-harness/issues/882). This record covers the
+**codemode lane**. Every delivered behaviour diffs against the frozen `pi-v1.0.4` bundle captured in
+#883, not self-captured goldens. The #870 disk-declaration divergence (recorded above) is reversed:
+the loader, trust gating, fixtures, and tests were **physically removed**, with the tool-surface
+checked against pi as removal evidence (`a stray .pi/codemode declaration adds nothing to the session
+tool surface`).
+
+| Capability | pi source at `7c10bd43` | Pike status |
+|---|---|---|
+| Model-facing inline `codemode` tool (name, `model-only` exposure, the single `code` argument, the verbatim description/globals text, prompt snippet and guideline, lazy execute) | `extensions/codemode/tool.ts` (`createCodemodeToolDefinition`) | **In the subset (#885)** — `codemode_tool_definition()`; the whole definition (name, description literal, parameters, prompt contribution) diffs against `codemode-tool.json` in `CodemodeParityTest`. |
+| Grammar constraint emission (`constrainedSampling.variants.openai_lark` = pi's frozen `CODEMODE_SOURCE_GRAMMAR`) | `packages/codemode/src/source.ts`, `tool.ts:504-506`; `packages/ai/src/api/constrained-sampling.ts` | **In the subset (#885)** — `ai::Tool.constrained_sampling` plus `CodemodeSource`'s grammar constant; the byte-exact grammar diffs against `codemode-source-grammar.lark`; ADR 0033's three grammar rows flipped to Supported (`74a1f8315`). |
+| `source.ts` `@options` parsing (`max_output_tokens`, `timeout_ms`, pi's error shape) | `packages/codemode/src/source.ts` | **In the subset (#885)** — `parse_codemode_source`. |
+| Script → session-tool routing (`tools.<jsName>`/`tools["raw"]` binding, `ALL_TOOLS`, `searchTools`/`describeTool`/`describeNamespace`, nested-call seam with pi's `{callerId}/{n}` records) | `core/nested-tool-calls.ts`, `agent-session.ts` `ctx.executeTool`, `prelude-source.ts` | **In the subset (#885)** — `NestedToolCallRunner` on the Agent Owner Interface and the `CodemodeToolSource` host closures; `CodemodeRoutingTest` covers the routing, both name bindings, the explicit rejection of unlisted names, and the nested-call record shape. |
+| Worker-thread execution (fresh worker per run, interrupt flag + deadline cancellation) | `packages/codemode/src/runtime/host.ts` | **In the subset (#885)** — `CodemodeSandbox::run` drives WasmEdge on a fresh worker thread per run. |
+| Guest-wasm install packaging (`share/pike/codemode/quickjs.wasm` next to the installed executable, no resolution environment variable) | `coding-agent` `config.ts` `getQuickJSWasmPath` | **In the subset (#885)** — `74a1f8315`; the staged-install exact-file list gates any packaging regression. |
+| Output items `text`/`image` and the result header (`Script completed`/`Script failed`, wall time) | `packages/codemode/src/types.ts`, `execute.ts:471-472` | **In the subset (#885)** — `CodemodeSandboxTest`, `CodemodeOutputPresentationTest`. |
+| Script-value shape of a nested call (pi `toScriptValue` + `convertMcpResult`) | `extensions/codemode/execute.ts` `toScriptValue`; `extensions/mcp/tools.ts` `convertMcpResult` | **In the subset (#886 close-out)** — a call resolves to the whole CallToolResult object minus `_meta` when the tool declares an output schema (error results included, `isError` preserved), otherwise to the text; a failure rejects with the text or pi's `Tool "<name>" failed` fallback. Fixed in the #886 sweep; `CodemodeRoutingTest` carries the four separation cases and `convert_mcp_tools_call_result` builds pi's `scriptResult`.
+
+**Remaining codemode gaps, and the seam each needs** (2026-10-08 #886 sweep):
+
+| Gap | pi pointer and the blocking seam |
+|---|---|
+| Dynamic `Nested tools:` description catalog | pi builds the codemode description per prompt: callable tools (excluding active `direct` ones in the default `on` mode) rendered as TS samples under namespace headings, with the `Shared MCP Types:` preamble when an MCP result schema is listed, budget-capped by `inlineBudget` (`extensions/codemode/tool.ts` `createCodemodeDescription`/`prepareCodemodeLoadout`; `packages/codemode/src/declarations.ts` `renderDeclarations`/`selectCatalog`). Pike's description is the frozen intro+globals literal (exactly pi's **empty-catalog** text, which is what the bundle captured); it never lists the callable catalog. This is also why `codemode.mode`/`codemode.inlineBudget` have no consuming surface in Pike today. The prompt-build seam that renders `mcp_servers` at prompt time is the natural host |
+| `models.*` globals and the description's models line | pi exposes `models.classify`/`models.generateImages` and the `` `models`: classifiers and image generation `` globals line only when those model kinds exist (`extensions/codemode/execute.ts:572-675`, `tool.ts` `describeGlobals`). Pike has no classifier or image-generation models (the `No decision` rows below), so Pike's globals text matches pi's no-models configuration; the line appears only if those rows are ever promoted |
+
+### Full-parity close-out sweep (2026-10-08, #886)
+
+Recorded as a regular new-evidence revision of the #882 full-parity ruling: the ADR was swept row by
+row against the landed branch (`pike/mcp-codemode-882`), the frozen bundle, and the implementation
+notes. **Fixed in the sweep** (small, focused):
+
+- **OAuth sign-in cancellation wording** (residual of the #884 slash-wiring slice): the production
+  driver now returns pi's info-level `Sign-in cancelled.` for the cancelled error and leaves every
+  other failure to the manager's pi-verbatim `Sign-in failed: <message>` (`extensions/mcp/index.ts:628`
+  and `:990`); the `pike mcp login` CLI renders pi's two failure lines (`was cancelled or not
+  completed within N seconds.` for the cancelled error, `failed: <message>` otherwise —
+  `extensions/mcp/cli.ts` `login`).
+- **Codemode script-value shape** (ACTIVATION-REPORT residual 6): recorded in the #885 table above.
+
+**Recorded as Deferred** (each row above carries its exact pi pointer): the ACTIVATION-REPORT
+residuals stdio stderr tail, external sign-in pickup, and the background-connect nuance; the
+slash-wiring multi-candidate selection and TUI sign-in timeout classification; the MCP result
+conversion presentation; the `tool_search` membership row; the dynamic codemode description catalog;
+and the settings keys below. No unrecorded MCP/codemode behaviour difference remains against the
+`pi-v1.0.4` notes and frozen bundle.
+
+**Settings keys Pike cannot carry (Deferred, not decided against).** Swept 2026-10-08 (#886):
+`codemode.mode`/`codemode.inlineBudget` are **parsed with pi's shape** (`packages/coding-agent/src/core/settings-manager.ts:93-107`, `:178`; `UserCodemodeSettings` + the merged-view accessors in Pike's `SettingsManager`) but have **no consuming surface** — pi's consumers are the `on`/`only` declaration hiding and the budget-capped catalog of the dynamic codemode description (`extensions/codemode/tool.ts` `prepareCodemodeLoadout`, `declarations.ts` `selectCatalog`), both recorded as a codemode-lane gap above; Pike's description is the frozen empty-catalog literal. `defaultTools` has no Pike counterpart at all (pi `settings-manager.ts:168`, merged/resolved at `:214-253`, consumed at `:1433-1435` — the initial tool selection with `+name`/`-name` modifiers; Pike's initial selection is the fixed default four plus `--tools`). `autoEnableCodemode` is not a divergence: pi keeps it in `mcp.json` too, and Pike reads it from there exactly like pi.
 
 ## Finding: not a decision
 
@@ -363,7 +448,7 @@ Pike's counterpart is therefore `src/agent/harness/`, not that path.
 | pi package or capability | Size | Status |
 |---|---|---|
 | `packages/mcp` (whole package) | 20 files / 3,179 LOC (`client.ts` 21KB, `protocol/`, `transports/`, `oauth/`) | **Decided in part.** The **stdio** and **streamable-HTTP** transports, the `initialize`/`tools/list`/`tools/call` client, MCP-tool-to-extension-Tool conversion, **OAuth credential semantics**, **server management/persistence**, the **server-to-client GET stream**, **resource tools**, and **exposure policy** are an owner decision — see the Owner decisions section above (spec #865, #869, #873, #875, #876; spec #882, #884 for the last three). pi's separate **`tool_search`** discovery tool, which the exposure policy's `deferred` mode activates, is **Deferred** — the row is recorded in the activation-model revision above. |
-| `packages/codemode` (whole package) | 11 files / 1,655 LOC (`declarations.ts` 13KB, `runtime/`) | **Decided in part.** Project-local codemode declarations and source loading (#870), the sandboxed `runtime/` + `wasm.ts` execution path (#874), and output presentation through the existing tool-renderer registry (#877) are owner decisions — see the Owner decisions section above (spec #865). Routing a script's `tools.*` calls to the session's tools remains **No decision** and is recorded as a follow-up (spec #865 close-out, #879). |
+| `packages/codemode` (whole package) | 11 files / 1,655 LOC (`declarations.ts` 13KB, `runtime/`) | **Decided in part.** Project-local codemode declarations and source loading (#870 — **superseded and physically removed by #885**), the sandboxed `runtime/` + `wasm.ts` execution path (#874, reshaped to pi's worker model by #885), and output presentation through the existing tool-renderer registry (#877) are owner decisions — see the Owner decisions section above (spec #865). Routing a script's `tools.*` calls to the session's tools, recorded as a follow-up by the #865 close-out (#879), was **absorbed by spec #882 and delivered by #885** — see the #885 implementation record above. The remaining recorded gaps are the dynamic codemode description catalog and the `models.*` globals (both pi-pointered in the #885 record). |
 | Image generation (in-package capability, `packages/ai`) | `packages/ai/src/image-models.ts` (50 lines), `images-api-registry.ts` (53), `images.ts` (26) | **No decision.** Pike has image *input* handling (`ImageInput.cpp`); upstream image *generation* is a separate outbound API surface. |
 | Classifier models (in-package capability) | `packages/ai/src/types.ts:1161` (`ModelTypeMap.classifier: ClassifierModel<ClassifierApi>`), `models.ts` (`classify()` declarations at :228/:348/:966), `api/llama-cpp-classify.ts` (458 lines) + `.lazy.ts` (6), `coding-agent/src/core/model-registry.ts:77` (`findOfType("classifier", …)`) | **No decision.** Scope is the classifier model kind only: at this baseline `ModelTypeMap` has exactly `chat`, `image`, and `classifier`. Pike has no `ClassifierModel`, `classify()`, or `findOfType` equivalent. |
 | Durable execution layer (in-package capability of `packages/durable`) | scheduler 1,337 · generation 677 · output 288 · view 237 · submissions 207 · task-graph 222 · live 175 · inbox 132 · registry 114 · define 44 — the 10 listed files are 3,433 lines; `packages/durable` totals 15,483 | **No decision.** Subset membership not yet ruled per capability. |
@@ -413,16 +498,22 @@ All pi sizes above are measured at the pi baseline; all Pike sizes at the Pike c
   the subset and diff against the `pi-v1.0.4` bundle; the live in-session manager (connections,
   `/mcp` actions, exposure-aware re-registration, the resource tools, RFC 9728 discovery, the
   `mcp-auth.json` store, the server→client GET stream, and the OAuth flow) is in the subset too —
-  the remaining recorded gaps are the panel host wiring, the `tool_search` deferral, and the named
-  presentation nuances in the #884 implementation record above.
+  the `/mcp` panel and slash wiring (including the OAuth sign-in screen) shipped in the 2026-10-08
+  slash-wiring slice; the recorded gaps after the #886 close-out sweep are the `tool_search`
+  membership row and the pi-pointered rows in the #884/#885 records above (stdio stderr tail,
+  external sign-in pickup, background connect, multi-candidate selection, TUI sign-in timeout
+  classification, MCP result conversion presentation, dynamic codemode description catalog,
+  `codemode.mode`/`inlineBudget` consumers, `defaultTools`).
 - `pi-v1.0.4` (`7c10bd4337495ee613f2224843ecdf349b80d1df`) is registered by name with no captured bundle; a future capture is new evidence per ADR 0065 and needs its own step, not a silent edit.
 - The MCP **OAuth** credential slice (spec #865, #875) and codemode **sandboxed execution** (#874)
   and **output presentation** (#877) are attributed owner decisions reached through the same spec
   flow; their rows above state the slices' boundaries.
-- A future proposal to add a remaining MCP capability (server-to-client stream, resources, exposure)
-  or codemode script-to-session-tool routing, or any other **No decision** row, starts from those
-  rows and needs its own membership ruling plus implementation record; this ADR claims no such
-  coverage.
+- A future proposal to add a remaining MCP capability or codemode surface, or any other **No
+  decision** row, starts from those rows and needs its own membership ruling plus implementation
+  record; this ADR claims no such coverage. (Update, spec #882: the server-to-client stream,
+  resource tools, exposure policy, and codemode script-to-session routing named here are delivered —
+  see the #884/#885 implementation records; the recorded gaps they leave are the pi-pointered
+  Deferred rows in those records.)
 
 ## References
 
