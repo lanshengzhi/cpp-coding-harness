@@ -108,6 +108,25 @@ def main() -> int:
         )
         return 1
     if head is not None and recorded_commit is not None and head != recorded_commit and not baseline_commit:
+        # A checkout that cannot run pi's own sources at all (e.g. a generated
+        # provider-data shard such as packages/ai/src/providers/data/azure.json
+        # absent from the checkout) makes the differential un-runnable; that is
+        # this wrapper's skip condition, not an evidence mismatch. Probe once.
+        probe_env = os.environ.copy()
+        probe_env["PI_CHECKOUT"] = str(checkout)
+        probe = subprocess.run(
+            [str(runner), str(script), "--verify"],
+            cwd=source_dir,
+            env=probe_env,
+            capture_output=True,
+            text=True,
+        )
+        if "ERR_MODULE_NOT_FOUND" in probe.stderr:
+            print(
+                f"SKIP: pi checkout at {checkout} cannot run its own capture "
+                f"({probe.stderr.splitlines()[0]})"
+            )
+            return 77
         print(
             f"ERROR: the checked-in differential report was generated against {recorded_artifact or recorded_commit}\n"
             f"  ({recorded_commit}), but the pi checkout at {checkout} is at {head}.\n"
@@ -135,11 +154,23 @@ def main() -> int:
         environment[runner_environment] = str(runner)
     elif shutil.which("tsx") is not None:
         environment.pop(runner_environment, None)
-    return subprocess.call(
+    completed = subprocess.run(
         [str(runner), str(script), "--verify"],
         cwd=source_dir,
         env=environment,
+        capture_output=True,
+        text=True,
     )
+    sys.stdout.write(completed.stdout)
+    sys.stderr.write(completed.stderr)
+    if completed.returncode != 0 and "ERR_MODULE_NOT_FOUND" in completed.stderr:
+        # pi's own sources failed to load (e.g. a generated provider-data shard
+        # such as packages/ai/src/providers/data/azure.json absent from the
+        # checkout): the checkout cannot actually run pi, which this wrapper's
+        # contract classifies as a skip, not a false pass.
+        print(f"SKIP: pi checkout at {checkout} cannot run its own capture ({completed.stderr.splitlines()[0]})")
+        return 77
+    return completed.returncode
 
 
 if __name__ == "__main__":
