@@ -324,7 +324,7 @@ private:
     std::optional<McpProbeResult> outcome;
     boost::asio::co_spawn(
             loop,
-            [&]() -> boost::asio::awaitable<void> {
+            [&probe, &entry, &agent_dir, &outcome, &loop]() -> boost::asio::awaitable<void> {
                 outcome = co_await probe.probe(entry, agent_dir);
                 loop.stop();
             },
@@ -927,12 +927,14 @@ struct ServerReport {
     request.server_url = url;
     request.oauth = *http.oauth;
     request.timeout = timeout;
-    request.prompt.show_authorization_url = [&options, name = http.name](const std::string& authorization_url) {
-        *options.output << "Sign in to MCP server \"" << name << "\" in your browser:\n" << authorization_url << '\n';
-        if (options.open_browser) {
-            options.open_browser(authorization_url);
-        }
-    };
+    request.prompt.show_authorization_url =
+            [output = options.output, open_browser = options.open_browser, name = http.name](
+                    const std::string& authorization_url) {
+                *output << "Sign in to MCP server \"" << name << "\" in your browser:\n" << authorization_url << '\n';
+                if (open_browser) {
+                    open_browser(authorization_url);
+                }
+            };
     if (options.stdin_is_terminal) {
         // Init-capture the fields the prompt reads so no reference to
         // `options` crosses into the stored operation (§6.2); `loop` is the
