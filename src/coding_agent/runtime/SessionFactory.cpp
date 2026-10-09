@@ -22,6 +22,7 @@
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/extensions/ExtensionToolRegistry.hpp"
 #include "coding_agent/extensions/codemode/CodemodeToolSource.hpp"
+#include "coding_agent/extensions/tool_search/ToolSearchToolSource.hpp"
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpConfigFile.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
@@ -1776,6 +1777,10 @@ struct PreparedAssemblyTarget final {
     // project-local resource to trust-gate. The guest module loads on the
     // first call, not at assembly.
     plan.extension_tool_sources.push_back(std::make_unique<extensions::CodemodeToolSource>());
+    plan.extension_tool_sources.push_back(std::make_unique<extensions::ToolSearchToolSource>(
+            [manager = mcp_manager](
+                    std::string_view query, std::size_t limit) { return manager->search_tools(query, limit); },
+            [manager = mcp_manager](std::vector<std::string> names) { manager->activate_tools(std::move(names)); }));
 
     // pi `defaultActive: false` registrations collected while the extension
     // sources load (today only the codemode tool). The session excludes these

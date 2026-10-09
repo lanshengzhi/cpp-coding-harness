@@ -18,6 +18,9 @@ cch_parity_declare_target(
         src/coding_agent/AuthStorage.cpp
         src/coding_agent/compat/pi/PiImport.cpp
         src/coding_agent/extensions/ExtensionToolRegistry.cpp
+        src/coding_agent/extensions/tool_search/ToolSearch.cpp
+        src/coding_agent/extensions/tool_search/ToolSearchToolSource.cpp
+        src/coding_agent/extensions/tool_search/ToolSearchToolSource.cpp
         src/coding_agent/mcp/McpAuthStore.cpp
         src/coding_agent/mcp/McpConfigFile.cpp
         src/coding_agent/mcp/McpConfigWrite.cpp

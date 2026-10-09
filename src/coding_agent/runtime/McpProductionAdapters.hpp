@@ -201,6 +201,8 @@ private:
     std::set<std::string> known_names_;
     /// pi `definitions`: the last exposure under each registered name.
     std::map<std::string, mcp::McpExposure, std::less<>> exposures_;
+    std::map<std::string, std::string, std::less<>> descriptions_;
+    std::map<std::string, std::string, std::less<>> namespaces_;
 };
 
 } // namespace cch::coding_agent::runtime

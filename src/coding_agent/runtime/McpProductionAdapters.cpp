@@ -445,6 +445,7 @@ void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
     const std::string name = tool.name;
     const mcp::McpExposure exposure = tool.exposure;
     const std::string server = tool.server;
+    const std::string description = tool.description;
     extensions::ExtensionTool extension;
     extension.definition.name = name;
     extension.definition.description = std::move(tool.description);
@@ -492,6 +493,8 @@ void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
     };
     static_cast<void>(agent_.register_tool(extensions::convert_extension_tool(std::move(extension))));
     known_names_.insert(name);
+    descriptions_[name] = description;
+    namespaces_[name] = server;
     apply_exposure(name, exposure);
     exposures_[name] = exposure;
     refresh_codemode_description();
@@ -501,8 +504,11 @@ void AgentMcpToolSurface::register_resource_tools(
         mcp::McpExposure exposure, std::vector<std::shared_ptr<mcp::McpResourceServer>> servers) {
     for (auto& tool : mcp::create_mcp_resource_tools(std::move(servers))) {
         const std::string name = tool.definition.name;
+        const std::string description = tool.definition.description;
         static_cast<void>(agent_.register_tool(extensions::convert_extension_tool(std::move(tool))));
         known_names_.insert(name);
+        descriptions_[name] = description;
+        namespaces_[name] = "mcp";
         apply_exposure(name, exposure);
         exposures_[name] = exposure;
     }
@@ -520,9 +526,13 @@ std::vector<McpSurfaceTool> AgentMcpToolSurface::all_tools() const {
     tools.reserve(known_names_.size());
     for (const auto& name : known_names_) {
         const auto exposure = exposures_.find(name);
+        const auto description = descriptions_.find(name);
+        const auto namespace_name = namespaces_.find(name);
         tools.push_back(McpSurfaceTool{
-                name,
-                exposure != exposures_.end() ? exposure->second : mcp::McpExposure::Hidden,
+                .name = name,
+                .exposure = exposure != exposures_.end() ? exposure->second : mcp::McpExposure::Hidden,
+                .description = description != descriptions_.end() ? description->second : std::string{},
+                .namespace_name = namespace_name != namespaces_.end() ? namespace_name->second : std::string{},
         });
     }
     return tools;
