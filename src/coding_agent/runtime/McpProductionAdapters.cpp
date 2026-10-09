@@ -8,6 +8,7 @@
 
 #include <cch/ai/BoostBeastStreamTransport.hpp>
 #include "coding_agent/extensions/ExtensionToolRegistry.hpp"
+#include "coding_agent/extensions/codemode/CodemodeTool.hpp"
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpConfigFile.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
@@ -493,6 +494,7 @@ void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
     known_names_.insert(name);
     apply_exposure(name, exposure);
     exposures_[name] = exposure;
+    refresh_codemode_description();
 }
 
 void AgentMcpToolSurface::register_resource_tools(
@@ -504,6 +506,7 @@ void AgentMcpToolSurface::register_resource_tools(
         apply_exposure(name, exposure);
         exposures_[name] = exposure;
     }
+    refresh_codemode_description();
 }
 
 void AgentMcpToolSurface::set_active_tools(std::vector<std::string> names) {
@@ -523,6 +526,18 @@ std::vector<McpSurfaceTool> AgentMcpToolSurface::all_tools() const {
         });
     }
     return tools;
+}
+
+void AgentMcpToolSurface::refresh_codemode_description() {
+    std::vector<ai::Tool> callable;
+    for (auto& definition : agent_.tool_definitions()) {
+        if (definition.name == extensions::kCodemodeToolName) continue;
+        const auto exposure = exposures_.find(definition.name);
+        if (exposure != exposures_.end() && exposure->second == mcp::McpExposure::Hidden) continue;
+        callable.push_back(std::move(definition));
+    }
+    static_cast<void>(
+            agent_.update_tool_description(extensions::kCodemodeToolName, extensions::codemode_description(callable)));
 }
 
 void AgentMcpToolSurface::apply_exposure(const std::string& name, mcp::McpExposure exposure) {

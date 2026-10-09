@@ -162,6 +162,14 @@ public:
     /// pi `getActiveTools`: the declared tool names.
     [[nodiscard]] std::vector<std::string> active_tools() const;
 
+    /// Return definitions for every tool in the live registry, including tools
+    /// that are not currently declared to the model.
+    [[nodiscard]] std::vector<ai::Tool> tool_definitions() const;
+
+    /// Replace the description of one registered tool without changing its
+    /// execution capability.
+    bool update_tool_description(std::string_view name, std::string description);
+
     /// Remove all pending steering messages.
     [[nodiscard]] support::ExpectedVoid clear_steering_queue();
 

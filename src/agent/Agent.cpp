@@ -400,6 +400,14 @@ std::vector<std::string> Agent::active_tools() const {
     return impl_ ? impl_->state.active_tool_names : std::vector<std::string>{};
 }
 
+std::vector<ai::Tool> Agent::tool_definitions() const {
+    return impl_ ? impl_->run_policy.registry.definitions() : std::vector<ai::Tool>{};
+}
+
+bool Agent::update_tool_description(std::string_view name, std::string description) {
+    return impl_ && impl_->run_policy.registry.update_description(name, std::move(description));
+}
+
 support::ExpectedVoid Agent::clear_steering_queue() {
     if (!impl_) {
         return std::unexpected(agent_not_initialized());

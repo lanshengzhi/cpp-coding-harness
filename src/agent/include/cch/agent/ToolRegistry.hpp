@@ -58,6 +58,13 @@ public:
         return it == tools_.end() ? nullptr : &it->second;
     }
 
+    bool update_description(std::string_view name, std::string description) {
+        auto it = tools_.find(std::string{name});
+        if (it == tools_.end()) return false;
+        it->second.definition.description = std::move(description);
+        return true;
+    }
+
     /// Remove one tool from the registry (pi re-registers a withdrawn tool as
     /// `hidden`, which is the same effect on the declared set). Returns whether
     /// a tool was removed.

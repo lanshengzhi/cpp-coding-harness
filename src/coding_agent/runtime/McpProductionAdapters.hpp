@@ -193,6 +193,7 @@ private:
     /// pi `_isActivatedOnRegistration`: a direct tool enters the declared set;
     /// a non-direct re-registration of a declared tool leaves it.
     void apply_exposure(const std::string& name, mcp::McpExposure exposure);
+    void refresh_codemode_description();
 
     agent::Agent& agent_;
     /// Every tool name known on the surface: the assembly-time registrations
