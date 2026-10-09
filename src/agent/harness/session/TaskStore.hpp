@@ -18,6 +18,7 @@ struct DurableTask {
     std::string state;
     std::string checkpoint;
     std::string owner_session;
+    std::string parent_task_id;
     std::int64_t definition_version{0};
     std::int64_t created_at{0};
     std::int64_t updated_at{0};
@@ -51,6 +52,7 @@ public:
             std::string_view next_state,
             std::string_view checkpoint);
     [[nodiscard]] support::ExpectedVoid request_abort(std::string_view id);
+    [[nodiscard]] support::Expected<std::vector<std::string>> task_descendants(std::string_view id);
     [[nodiscard]] support::ExpectedVoid finish_aborted(std::string_view id, std::string_view checkpoint);
     [[nodiscard]] support::Expected<std::vector<DurableTask>> recover_tasks();
     [[nodiscard]] support::Expected<DurableTask> load_task(std::string_view id);

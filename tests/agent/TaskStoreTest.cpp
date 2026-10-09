@@ -39,7 +39,7 @@ TEST_CASE("TaskStore persists transitions, checkpoints, abort marks, and recover
     CHECK(completed->checkpoint == "{\"step\":3}");
     auto aborted = store->load_task("task-3");
     REQUIRE(aborted);
-    CHECK(aborted->state == "running");
+    CHECK(aborted->state == "aborted");
     CHECK(aborted->abort_requested);
 }
 
@@ -72,6 +72,55 @@ TEST_CASE("TaskStore deduplicates submissions across reopen", "[agent][durable][
         CHECK(second->kind == "transcript_export");
     }
     std::filesystem::remove(path);
+}
+
+TEST_CASE("TaskStore aborts descendants and fails joined children with their parent",
+        "[agent][durable][task][issue933]") {
+    auto store = agent::session::TaskStore::open_memory();
+    REQUIRE(store);
+    REQUIRE(store->create_task({.id = "parent", .kind = "work", .state = "pending"}));
+    REQUIRE(store->create_task({.id = "child", .kind = "work", .state = "pending", .parent_task_id = "parent"}));
+    REQUIRE(store->create_task({.id = "grandchild", .kind = "work", .state = "pending", .parent_task_id = "child"}));
+    REQUIRE(store->request_abort("parent"));
+    for (const auto& id : {"parent", "child", "grandchild"}) {
+        auto task = store->load_task(id);
+        REQUIRE(task);
+        CHECK(task->abort_requested);
+        CHECK(task->state == "aborted");
+    }
+
+    REQUIRE(store->create_task({.id = "failed-parent", .kind = "work", .state = "running"}));
+    REQUIRE(store->create_task(
+            {.id = "joined-child", .kind = "work", .state = "running", .parent_task_id = "failed-parent"}));
+    REQUIRE(store->transition("failed-parent", "running", "completing", ""));
+    REQUIRE(store->transition("failed-parent", "completing", "failed", ""));
+    auto child = store->load_task("joined-child");
+    REQUIRE(child);
+    CHECK(child->state == "failed");
+}
+
+TEST_CASE("TaskStore migrates task ownership and recovers parents first", "[agent][durable][task][issue933]") {
+    auto db = agent::session::SqliteDatabase::open_memory();
+    REQUIRE(db);
+    REQUIRE(db->execute(
+            "CREATE TABLE tasks (id TEXT PRIMARY KEY, kind TEXT NOT NULL, state TEXT NOT NULL, "
+            "checkpoint TEXT NOT NULL, owner_session TEXT NOT NULL, definition_version INTEGER NOT NULL, "
+            "created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, abort_requested INTEGER NOT NULL DEFAULT 0);"));
+    REQUIRE(db->execute("INSERT INTO tasks VALUES ('child','work','running','','',0,1,1,0), "
+                        "('parent','work','running','','',0,1,1,0);"));
+    agent::session::TaskStore store(std::move(*db));
+    REQUIRE(store.init_schema());
+    auto child = store.load_task("child");
+    REQUIRE(child);
+    CHECK(child->parent_task_id.empty());
+    REQUIRE(store.db_for_test().execute("UPDATE tasks SET parent_task_id = 'parent' WHERE id = 'child';"));
+    REQUIRE(store.create_task({.id = "new-child", .kind = "work", .state = "running", .parent_task_id = "child"}));
+    auto recovered = store.recover_tasks();
+    REQUIRE(recovered);
+    REQUIRE(recovered->size() == 3);
+    CHECK((*recovered)[0].id == "parent");
+    CHECK((*recovered)[1].id == "child");
+    CHECK((*recovered)[2].id == "new-child");
 }
 
 TEST_CASE("TaskStore rolls back state and checkpoint on a failed transition", "[agent][durable][task]") {

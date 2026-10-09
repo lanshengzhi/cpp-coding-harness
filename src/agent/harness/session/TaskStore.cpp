@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     definition_version INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    abort_requested INTEGER NOT NULL DEFAULT 0 CHECK (abort_requested IN (0, 1))
+    abort_requested INTEGER NOT NULL DEFAULT 0 CHECK (abort_requested IN (0, 1)),
+    parent_task_id TEXT REFERENCES tasks(id)
 );
 CREATE TABLE IF NOT EXISTS submissions (
     id TEXT PRIMARY KEY,
@@ -55,6 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_state ON tasks(state);
             .state = stmt.column_text(2),
             .checkpoint = stmt.column_text(3),
             .owner_session = stmt.column_text(4),
+            .parent_task_id = stmt.column_text(9),
             .definition_version = stmt.column_int64(5),
             .created_at = stmt.column_int64(6),
             .updated_at = stmt.column_int64(7),
@@ -62,7 +64,8 @@ CREATE INDEX IF NOT EXISTS idx_tasks_state ON tasks(state);
 }
 
 constexpr std::string_view kTaskColumns =
-        "id, kind, state, checkpoint, owner_session, definition_version, created_at, updated_at, abort_requested";
+        "id, kind, state, checkpoint, owner_session, definition_version, created_at, updated_at, abort_requested, "
+        "parent_task_id";
 
 } // namespace
 
@@ -86,19 +89,38 @@ support::ExpectedVoid TaskStore::init_schema() {
     SqliteTransactionGuard transaction(db_);
     if (auto result = db_.begin_transaction(); !result) return result;
     if (auto result = db_.execute(kSchemaSql); !result) return result;
+    auto columns = db_.prepare("PRAGMA table_info(tasks);");
+    if (!columns) return std::unexpected(columns.error());
+    bool has_parent_task_id = false;
+    while (true) {
+        auto row = columns->step();
+        if (!row) return std::unexpected(row.error());
+        if (!*row) break;
+        has_parent_task_id = has_parent_task_id || columns->column_text(1) == "parent_task_id";
+    }
+    if (!has_parent_task_id) {
+        if (auto result = db_.execute("ALTER TABLE tasks ADD COLUMN parent_task_id TEXT REFERENCES tasks(id);");
+                !result)
+            return result;
+    }
     return transaction.commit();
 }
 
 support::ExpectedVoid TaskStore::create_task(const DurableTask& task) {
     const auto now = now_ms();
     auto stmt = db_.prepare("INSERT INTO tasks (id, kind, state, checkpoint, owner_session, definition_version, "
-                            "created_at, updated_at, abort_requested) "
-                            "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9);");
+                            "created_at, updated_at, abort_requested, parent_task_id) "
+                            "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10);");
     if (!stmt) return std::unexpected(stmt.error());
     auto normalized = task;
     normalized.created_at = task.created_at == 0 ? now : task.created_at;
     normalized.updated_at = task.updated_at == 0 ? now : task.updated_at;
     if (auto result = bind_task(*stmt, normalized); !result) return result;
+    if (normalized.parent_task_id.empty()) {
+        if (auto result = stmt->bind_null(10); !result) return result;
+    } else if (auto result = stmt->bind_text(10, normalized.parent_task_id); !result) {
+        return result;
+    }
     if (auto result = stmt->step(); !result) return std::unexpected(result.error());
     return {};
 }
@@ -178,7 +200,9 @@ support::ExpectedVoid TaskStore::transition(std::string_view id,
     SqliteTransactionGuard transaction(db_);
     if (auto result = db_.begin_transaction(); !result) return result;
     auto stmt = db_.prepare("UPDATE tasks SET state = ?1, checkpoint = ?2, updated_at = ?3 "
-                            "WHERE id = ?4 AND state = ?5 AND abort_requested = 0;");
+                            "WHERE id = ?4 AND state = ?5 AND abort_requested = 0 "
+                            "AND (?1 != 'completing' OR NOT EXISTS (SELECT 1 FROM tasks AS ancestor "
+                            "WHERE ancestor.id = tasks.parent_task_id AND ancestor.state = 'failed'));");
     if (!stmt) return std::unexpected(stmt.error());
     if (auto result = stmt->bind_text(1, next_state); !result) return result;
     if (auto result = stmt->bind_text(2, checkpoint); !result) return result;
@@ -192,20 +216,70 @@ support::ExpectedVoid TaskStore::transition(std::string_view id,
     }
     if (next_state == "completed" || next_state == "failed" || next_state == "aborted") {
         if (auto result = update_submission_state(id, "done"); !result) return result;
+        if (next_state == "failed") {
+            auto children =
+                    db_.prepare("WITH RECURSIVE descendants(id) AS (SELECT id FROM tasks WHERE parent_task_id = ?1 "
+                                "UNION ALL SELECT tasks.id FROM tasks JOIN descendants ON tasks.parent_task_id = "
+                                "descendants.id) UPDATE tasks SET state = 'failed', updated_at = ?2 "
+                                "WHERE id IN (SELECT id FROM descendants) AND state NOT IN "
+                                "('completed', 'failed', 'aborted');");
+            if (!children) return std::unexpected(children.error());
+            if (auto result = children->bind_text(1, id); !result) return result;
+            if (auto result = children->bind_int64(2, now_ms()); !result) return result;
+            if (auto result = children->step(); !result) return std::unexpected(result.error());
+            auto submissions =
+                    db_.prepare("UPDATE submissions SET state = 'done' WHERE task_id IN "
+                                "(WITH RECURSIVE descendants(id) AS (SELECT id FROM tasks WHERE parent_task_id = "
+                                "?1 UNION ALL SELECT tasks.id FROM tasks JOIN descendants ON "
+                                "tasks.parent_task_id = descendants.id) SELECT id FROM descendants);");
+            if (!submissions) return std::unexpected(submissions.error());
+            if (auto result = submissions->bind_text(1, id); !result) return result;
+            if (auto result = submissions->step(); !result) return std::unexpected(result.error());
+        }
     }
     return transaction.commit();
 }
 
-support::ExpectedVoid TaskStore::request_abort(std::string_view id) {
-    auto stmt = db_.prepare("UPDATE tasks SET abort_requested = 1, updated_at = ?1 WHERE id = ?2;");
+support::Expected<std::vector<std::string>> TaskStore::task_descendants(std::string_view id) {
+    auto stmt = db_.prepare("WITH RECURSIVE descendants(id) AS (SELECT id FROM tasks WHERE id = ?1 UNION ALL "
+                            "SELECT tasks.id FROM tasks JOIN descendants ON tasks.parent_task_id = descendants.id) "
+                            "SELECT id FROM descendants;");
     if (!stmt) return std::unexpected(stmt.error());
-    if (auto result = stmt->bind_int64(1, now_ms()); !result) return result;
-    if (auto result = stmt->bind_text(2, id); !result) return result;
-    if (auto result = stmt->step(); !result) return std::unexpected(result.error());
-    if (sqlite3_changes(db_.handle()) != 1) {
-        return std::unexpected(support::make_error(support::ErrorCode::Validation, "Task does not exist"));
+    if (auto result = stmt->bind_text(1, id); !result) return std::unexpected(result.error());
+    std::vector<std::string> ids;
+    while (true) {
+        auto row = stmt->step();
+        if (!row) return std::unexpected(row.error());
+        if (!*row) break;
+        ids.push_back(stmt->column_text(0));
     }
-    return {};
+    if (ids.empty()) return std::unexpected(support::make_error(support::ErrorCode::Validation, "Task does not exist"));
+    return ids;
+}
+
+support::ExpectedVoid TaskStore::request_abort(std::string_view id) {
+    SqliteTransactionGuard transaction(db_);
+    if (auto result = db_.begin_transaction(); !result) return result;
+    auto ids = task_descendants(id);
+    if (!ids) return std::unexpected(ids.error());
+    auto stmt = db_.prepare("WITH RECURSIVE descendants(id) AS (SELECT id FROM tasks WHERE id = ?1 UNION ALL "
+                            "SELECT tasks.id FROM tasks JOIN descendants ON tasks.parent_task_id = descendants.id) "
+                            "UPDATE tasks SET abort_requested = 1, state = CASE WHEN state IN ('pending', 'running') "
+                            "THEN 'aborted' ELSE state END, updated_at = ?2 WHERE id IN (SELECT id FROM descendants);");
+    if (!stmt) return std::unexpected(stmt.error());
+    if (auto result = stmt->bind_text(1, id); !result) return result;
+    if (auto result = stmt->bind_int64(2, now_ms()); !result) return result;
+    if (auto result = stmt->step(); !result) return std::unexpected(result.error());
+    auto submissions = db_.prepare("WITH RECURSIVE descendants(id) AS (SELECT id FROM tasks WHERE id = ?1 UNION ALL "
+                                   "SELECT tasks.id FROM tasks JOIN descendants ON tasks.parent_task_id = "
+                                   "descendants.id) UPDATE submissions SET state = 'unanswered' WHERE task_id IN "
+                                   "(SELECT id FROM descendants WHERE id != ?1 AND (SELECT state FROM tasks WHERE "
+                                   "tasks.id = descendants.id) = 'aborted') OR task_id = ?1 AND "
+                                   "(SELECT state FROM tasks WHERE id = ?1) = 'aborted';");
+    if (!submissions) return std::unexpected(submissions.error());
+    if (auto result = submissions->bind_text(1, id); !result) return result;
+    if (auto result = submissions->step(); !result) return std::unexpected(result.error());
+    return transaction.commit();
 }
 
 support::ExpectedVoid TaskStore::finish_aborted(std::string_view id, std::string_view checkpoint) {
@@ -228,8 +302,16 @@ support::ExpectedVoid TaskStore::finish_aborted(std::string_view id, std::string
 support::Expected<std::vector<DurableTask>> TaskStore::recover_tasks() {
     SqliteTransactionGuard transaction(db_);
     if (auto result = db_.begin_transaction(); !result) return std::unexpected(result.error());
-    auto query = db_.prepare(
-            std::format("SELECT {} FROM tasks WHERE state = 'running' ORDER BY created_at, id;", kTaskColumns));
+    auto query = db_.prepare(std::format("WITH RECURSIVE ancestry(id, depth) AS (SELECT id, 0 FROM tasks WHERE "
+                                         "parent_task_id IS NULL OR parent_task_id = '' UNION ALL SELECT tasks.id, "
+                                         "ancestry.depth + 1 FROM tasks JOIN ancestry ON tasks.parent_task_id = "
+                                         "ancestry.id) SELECT {} FROM tasks LEFT JOIN (SELECT id, MIN(depth) AS "
+                                         "depth FROM ancestry GROUP BY id) AS ordering ON ordering.id = tasks.id WHERE "
+                                         "tasks.state = 'running' ORDER BY COALESCE(ordering.depth, 2147483647), "
+                                         "tasks.created_at, tasks.id;",
+            "tasks.id, tasks.kind, tasks.state, tasks.checkpoint, "
+            "tasks.owner_session, tasks.definition_version, tasks.created_at, "
+            "tasks.updated_at, tasks.abort_requested, tasks.parent_task_id"));
     if (!query) return std::unexpected(query.error());
     std::vector<DurableTask> recovered;
     while (true) {

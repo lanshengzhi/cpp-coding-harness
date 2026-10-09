@@ -47,15 +47,21 @@ ExpectedVoid TaskScheduler::enqueue(durable_session::DurableTask task, Handler h
 }
 
 ExpectedVoid TaskScheduler::request_abort(std::string_view id) {
+    std::vector<std::string> affected;
     {
         std::lock_guard lock(store_mutex_);
+        auto descendants = store_.task_descendants(id);
+        if (!descendants) return std::unexpected(descendants.error());
+        affected = std::move(*descendants);
         if (auto result = store_.request_abort(id); !result) return result;
     }
     std::lock_guard lock(mutex_);
-    const auto active = std::ranges::find_if(active_, [&](const auto& work) { return work->task.id == id; });
-    if (active != active_.end()) (*active)->stop.request_stop();
-    const auto queued = std::ranges::find_if(queue_, [&](const auto& work) { return work->task.id == id; });
-    if (queued != queue_.end()) (*queued)->stop.request_stop();
+    for (const auto& work : active_) {
+        if (std::ranges::find(affected, work->task.id) != affected.end()) work->stop.request_stop();
+    }
+    std::erase_if(
+            queue_, [&](const auto& work) { return std::ranges::find(affected, work->task.id) != affected.end(); });
+    std::erase_if(recovered_, [&](const auto& task) { return std::ranges::find(affected, task.id) != affected.end(); });
     ready_.notify_one();
     return {};
 }
