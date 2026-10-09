@@ -1,4 +1,4 @@
-#include "ai/providers/BoostBeastStreamTransport.hpp"
+#include <cch/ai/BoostBeastStreamTransport.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>

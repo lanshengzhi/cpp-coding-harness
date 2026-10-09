@@ -21,7 +21,7 @@
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
-#include "ai/providers/SseParser.hpp"
+#include <cch/ai/SseParser.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"

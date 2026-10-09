@@ -14,7 +14,7 @@
 // success, a non-TLS redirect is refused, and an HTTP error status surfaces.
 
 #include "ai/ModelStreamBridge.hpp"
-#include "ai/providers/BoostBeastStreamTransport.hpp"
+#include <cch/ai/BoostBeastStreamTransport.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 #include "coding_agent/mcp/McpHttpClient.hpp"

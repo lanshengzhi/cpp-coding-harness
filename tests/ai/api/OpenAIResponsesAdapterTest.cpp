@@ -1,5 +1,5 @@
 #include <cch/ai/Models.hpp>
-#include "ai/providers/StreamTransport.hpp"
+#include <cch/ai/StreamTransport.hpp>
 #include "ai/api/OpenAIResponsesAdapter.hpp"
 #include "support/AiScenarioKit.hpp"
 #include "support/ScriptedProvider.hpp"

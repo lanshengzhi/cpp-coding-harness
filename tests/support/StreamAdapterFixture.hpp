@@ -4,7 +4,7 @@
 #include <cch/ai/Message.hpp>
 #include <cch/ai/Model.hpp>
 #include <cch/ai/StreamEvent.hpp>
-#include "ai/providers/StreamTransport.hpp"
+#include <cch/ai/StreamTransport.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 

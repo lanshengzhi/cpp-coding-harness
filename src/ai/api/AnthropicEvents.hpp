@@ -2,7 +2,7 @@
 
 #include "ai/api/Termination.hpp"
 #include "ai/providers/Provider.hpp"
-#include "ai/providers/SseParser.hpp"
+#include <cch/ai/SseParser.hpp>
 
 #include <cch/ai/InferenceFailure.hpp>
 #include <cch/ai/Message.hpp>

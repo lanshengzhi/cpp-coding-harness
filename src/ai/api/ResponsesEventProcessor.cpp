@@ -1,6 +1,6 @@
 #include "ResponsesEventProcessor.hpp"
 
-#include "ai/JsonAccess.hpp"
+#include <cch/ai/JsonAccess.hpp>
 #include <cch/ai/Timestamps.hpp>
 #include "ai/api/PartialJson.hpp"
 #include "ai/api/Termination.hpp"

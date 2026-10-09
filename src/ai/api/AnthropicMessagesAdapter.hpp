@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ai/providers/Provider.hpp"
-#include "ai/providers/StreamTransport.hpp"
+#include <cch/ai/StreamTransport.hpp>
 
 #include <memory>
 

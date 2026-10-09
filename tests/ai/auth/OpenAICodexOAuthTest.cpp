@@ -1,11 +1,11 @@
 #include "ai/auth/DevicePoll.hpp"
 #include "support/AsyncResultBridge.hpp"
-#include "ai/auth/OAuthCallbackServer.hpp"
-#include "ai/auth/OAuthHttpClient.hpp"
+#include <cch/ai/OAuthCallbackServer.hpp>
+#include <cch/ai/OAuthHttpClient.hpp>
 #include "support/FakeOAuthHttpClient.hpp"
 #include "ai/auth/OpenAICodexOAuth.hpp"
 #include "ai/auth/OauthPage.hpp"
-#include "ai/auth/Pkce.hpp"
+#include <cch/ai/Pkce.hpp>
 #include "support/EnvVarGuard.hpp"
 #include "support/PiFixture.hpp"
 #include "support/ExpectedMacros.hpp"

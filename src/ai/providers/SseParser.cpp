@@ -1,4 +1,4 @@
-#include "ai/providers/SseParser.hpp"
+#include <cch/ai/SseParser.hpp>
 
 #include <algorithm>
 

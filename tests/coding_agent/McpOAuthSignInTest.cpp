@@ -13,9 +13,9 @@
 // request with the shared re-login error rather than reach the server
 // unauthenticated.
 
-#include "ai/JsonAccess.hpp"
-#include "ai/auth/OAuthHttpClient.hpp"
-#include "ai/auth/Pkce.hpp"
+#include <cch/ai/JsonAccess.hpp>
+#include <cch/ai/OAuthHttpClient.hpp>
+#include <cch/ai/Pkce.hpp>
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpOAuthSignIn.hpp"
 #include "support/AsyncResultBridge.hpp"

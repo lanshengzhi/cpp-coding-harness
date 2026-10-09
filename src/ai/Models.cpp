@@ -4,7 +4,7 @@
 #include "ai/Headers.hpp"
 #include "ai/ModelStreamBridge.hpp"
 #include <cch/ai/Timestamps.hpp>
-#include "ai/providers/BoostBeastStreamTransport.hpp"
+#include <cch/ai/BoostBeastStreamTransport.hpp>
 #include "ai/providers/BoostBeastWebSocketTransport.hpp"
 #include "ai/providers/ComposedProvider.hpp"
 #include "ai/providers/ProviderTestAccess.hpp"

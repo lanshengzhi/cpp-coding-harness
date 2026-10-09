@@ -13,10 +13,10 @@
 // second attempt (not a loop), and a server configured without OAuth is never
 // sent a credential.
 
-#include "ai/JsonAccess.hpp"
-#include "ai/auth/OAuthHttpClient.hpp"
-#include "ai/auth/Pkce.hpp"
-#include "ai/providers/BoostBeastStreamTransport.hpp"
+#include <cch/ai/JsonAccess.hpp>
+#include <cch/ai/OAuthHttpClient.hpp>
+#include <cch/ai/Pkce.hpp>
+#include <cch/ai/BoostBeastStreamTransport.hpp>
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpHttpClient.hpp"
 #include "coding_agent/mcp/McpOAuthProvider.hpp"

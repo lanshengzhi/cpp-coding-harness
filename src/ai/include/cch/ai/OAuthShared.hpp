@@ -1,6 +1,6 @@
 #pragma once
 
-#include "OAuthHttpClient.hpp"
+#include <cch/ai/OAuthHttpClient.hpp>
 #include "support/AsyncResultBridge.hpp"
 
 #include <cch/ai/Auth.hpp>
@@ -70,8 +70,9 @@ template <typename Impl> [[nodiscard]] ai::OAuthAuth bind_oauth_auth(std::string
     ai::OAuthAuth auth;
     auth.name = std::move(name);
     if constexpr (OAuthLoginAcceptsOptions<Impl>) {
-        auth.login = [impl](ai::AuthInteraction interaction,
-                             std::optional<ai::LoginOptions> options) -> cch::support::AsyncResult<ai::OAuthCredential> {
+        auth.login =
+                [impl](ai::AuthInteraction interaction,
+                        std::optional<ai::LoginOptions> options) -> cch::support::AsyncResult<ai::OAuthCredential> {
             return cch::support::detail::make_async_result(
                     [impl, interaction = std::move(interaction), options = std::move(options)]() mutable
                             -> boost::asio::awaitable<support::Expected<ai::OAuthCredential>> {
