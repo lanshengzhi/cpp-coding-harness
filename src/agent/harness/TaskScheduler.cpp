@@ -43,6 +43,23 @@ ExpectedVoid TaskScheduler::register_handler(
     return {};
 }
 
+void TaskScheduler::register_before_hook(BeforeHook hook) {
+    if (!hook) return;
+    std::lock_guard lock(mutex_);
+    before_hooks_.push_back(std::move(hook));
+}
+
+void TaskScheduler::register_after_hook(AfterHook hook) {
+    if (!hook) return;
+    std::lock_guard lock(mutex_);
+    after_hooks_.push_back(std::move(hook));
+}
+
+void TaskScheduler::set_diagnostics_sink(DiagnosticsSink sink) {
+    std::lock_guard lock(mutex_);
+    diagnostics_sink_ = std::move(sink);
+}
+
 ExpectedVoid TaskScheduler::enqueue(durable_session::DurableTask task) {
     if (task.state != "pending") {
         return std::unexpected(
@@ -127,6 +144,7 @@ void TaskScheduler::close() noexcept {
         std::lock_guard lock(mutex_);
         if (closing_) return;
         closing_ = true;
+        worker_.request_stop();
         for (const auto& work : active_)
             work->stop.request_stop();
         queue_.clear();
@@ -148,27 +166,71 @@ void TaskScheduler::run() noexcept {
             active_.push_back(work);
         }
 
+        std::vector<BeforeHook> before_hooks;
+        std::vector<AfterHook> after_hooks;
+        DiagnosticsSink diagnostics_sink;
+        {
+            std::lock_guard lock(mutex_);
+            before_hooks = before_hooks_;
+            after_hooks = after_hooks_;
+            diagnostics_sink = diagnostics_sink_;
+        }
+        const auto report_hook_failure = [&](const durable_session::DurableTask& task, const support::Error& error) {
+            if (!diagnostics_sink) return;
+            (void)diagnostics_sink(task, error);
+        };
         ExpectedVoid reserved;
         {
             std::lock_guard lock(store_mutex_);
             reserved = store_.transition(work->task.id, "pending", "running", work->task.checkpoint);
         }
         if (reserved) {
+            std::stop_callback close_cancellation(worker_.get_stop_token(), [work] { work->stop.request_stop(); });
+            {
+                std::lock_guard lock(mutex_);
+                if (closing_) work->stop.request_stop();
+            }
+            for (const auto& hook : before_hooks) {
+                auto hook_result = hook(work->task);
+                if (!hook_result) report_hook_failure(work->task, hook_result.error());
+                std::lock_guard lock(mutex_);
+                if (closing_) work->stop.request_stop();
+            }
+            {
+                std::lock_guard lock(store_mutex_);
+                auto current = store_.load_task(work->task.id);
+                if (current && current->abort_requested) work->stop.request_stop();
+            }
             auto result = work->stop.stop_requested()
                                   ? Expected<std::string>{std::unexpected(support::make_error(
                                             support::ErrorCode::Validation, "Task aborted before execution"))}
                                   : work->handler(work->stop.get_token());
             const bool abort_requested = work->stop.stop_requested();
             const auto checkpoint = result ? *result : work->task.checkpoint;
-            std::lock_guard lock(store_mutex_);
-            if (abort_requested) {
-                if (store_.finish_aborted(work->task.id, checkpoint)) {
-                    (void)store_.update_submission_state(work->task.id, "unanswered");
+            {
+                std::lock_guard lock(store_mutex_);
+                if (abort_requested) {
+                    if (store_.finish_aborted(work->task.id, checkpoint)) {
+                        (void)store_.update_submission_state(work->task.id, "unanswered");
+                    } else {
+                        auto current = store_.load_task(work->task.id);
+                        if (current && current->abort_requested && current->state == "aborted") {
+                            (void)store_.transition(work->task.id, "aborted", "aborted", checkpoint);
+                            (void)store_.update_submission_state(work->task.id, "unanswered");
+                        }
+                    }
+                } else if (store_.transition(work->task.id, "running", "completing", checkpoint)) {
+                    const auto terminal_state = result ? "completed" : "failed";
+                    if (store_.transition(work->task.id, "completing", terminal_state, checkpoint)) {
+                        (void)store_.update_submission_state(work->task.id, "done");
+                    }
                 }
-            } else if (store_.transition(work->task.id, "running", "completing", checkpoint)) {
-                const auto terminal_state = result ? "completed" : "failed";
-                if (store_.transition(work->task.id, "completing", terminal_state, checkpoint)) {
-                    (void)store_.update_submission_state(work->task.id, "done");
+            }
+            auto terminal = store_.load_task(work->task.id);
+            if (terminal) {
+                for (const auto& hook : after_hooks) {
+                    auto hook_result = hook(*terminal);
+                    if (!hook_result) report_hook_failure(*terminal, hook_result.error());
                 }
             }
         }

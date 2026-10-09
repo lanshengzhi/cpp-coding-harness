@@ -303,6 +303,112 @@ TEST_CASE("TaskScheduler cascades abort to active and queued descendants", "[age
     }
 }
 
+TEST_CASE("TaskScheduler isolates hook failures and runs hooks around terminalization",
+        "[agent][task][durable][issue936]") {
+    auto store = agent::session::TaskStore::open_memory();
+    REQUIRE(store);
+    const agent::session::DurableTask task{.id = "hooks-936", .kind = "work", .state = "pending"};
+    REQUIRE(store->create_task(task));
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool done = false;
+    std::vector<std::string> events;
+    std::vector<std::string> diagnostics;
+    harness::TaskScheduler scheduler(*store);
+    scheduler.set_diagnostics_sink([&](const auto&, const auto& error) -> support::ExpectedVoid {
+        diagnostics.push_back(error.message);
+        return {};
+    });
+    scheduler.register_before_hook([&](const auto& snapshot) -> support::ExpectedVoid {
+        CHECK(snapshot.state == "pending");
+        events.push_back("before1");
+        return std::unexpected(support::make_error(support::ErrorCode::Unknown, "before failed"));
+    });
+    scheduler.register_before_hook([&](const auto&) -> support::ExpectedVoid {
+        events.push_back("before2");
+        return {};
+    });
+    scheduler.register_after_hook([&](const auto& snapshot) -> support::ExpectedVoid {
+        events.push_back("after1:" + snapshot.state);
+        return std::unexpected(support::make_error(support::ErrorCode::Unknown, "after failed"));
+    });
+    scheduler.register_after_hook([&](const auto& snapshot) -> support::ExpectedVoid {
+        events.push_back("after2:" + snapshot.state);
+        {
+            std::lock_guard lock(mutex);
+            done = true;
+        }
+        changed.notify_all();
+        return {};
+    });
+    REQUIRE(scheduler.register_handler(task, [&](std::stop_token) -> support::Expected<std::string> {
+        events.push_back("handler");
+        return "ok";
+    }));
+    REQUIRE(scheduler.enqueue(task));
+    scheduler.resume();
+    {
+        std::unique_lock lock(mutex);
+        REQUIRE(changed.wait_for(lock, 2s, [&] { return done; }));
+    }
+    scheduler.close();
+    CHECK(events == std::vector<std::string>{"before1", "before2", "handler", "after1:completed", "after2:completed"});
+    CHECK(diagnostics.size() == 2);
+    auto terminal = store->load_task(task.id);
+    REQUIRE(terminal);
+    CHECK(terminal->state == "completed");
+}
+
+TEST_CASE("TaskScheduler abort during before hook reaches handler stop token", "[agent][task][durable][issue936]") {
+    auto store = agent::session::TaskStore::open_memory();
+    REQUIRE(store);
+    const agent::session::DurableTask task{.id = "abort-hook-936", .kind = "work", .state = "pending"};
+    REQUIRE(store->create_task(task));
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool hook_started = false;
+    bool release_hook = false;
+    bool handler_started = false;
+    std::string after_state;
+    harness::TaskScheduler scheduler(*store);
+    scheduler.register_before_hook([&](const auto&) -> support::ExpectedVoid {
+        {
+            std::lock_guard lock(mutex);
+            hook_started = true;
+        }
+        changed.notify_all();
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [&] { return release_hook; });
+        return {};
+    });
+    scheduler.register_after_hook([&](const auto& snapshot) -> support::ExpectedVoid {
+        after_state = snapshot.state;
+        return {};
+    });
+    REQUIRE(scheduler.register_handler(task, [&](std::stop_token) -> support::Expected<std::string> {
+        handler_started = true;
+        return "unexpected";
+    }));
+    REQUIRE(scheduler.enqueue(task));
+    scheduler.resume();
+    {
+        std::unique_lock lock(mutex);
+        REQUIRE(changed.wait_for(lock, 2s, [&] { return hook_started; }));
+    }
+    REQUIRE(scheduler.request_abort(task.id));
+    {
+        std::lock_guard lock(mutex);
+        release_hook = true;
+    }
+    changed.notify_all();
+    scheduler.close();
+    CHECK_FALSE(handler_started);
+    CHECK(after_state == "aborted");
+    auto terminal = store->load_task(task.id);
+    REQUIRE(terminal);
+    CHECK(terminal->state == "aborted");
+}
+
 TEST_CASE("TaskScheduler propagates durable abort and close waits for terminalization", "[agent][task][durable]") {
     auto store = agent::session::TaskStore::open_memory();
     REQUIRE(store);
