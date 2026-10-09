@@ -45,7 +45,7 @@ inline constexpr std::string_view kCodemodePromptSnippet = "Run JavaScript that 
 /// blank line, then the globals block. This is the description the frozen
 /// `pi-v1.0.4` evidence bundle captured, so a differential test compares it
 /// byte for byte.
-[[nodiscard]] std::string codemode_description();
+[[nodiscard]] std::string codemode_description(const std::vector<ai::Tool>& nested_tools = {});
 
 /// pi `codemodeSchema.parameters`: one required `code` string argument.
 [[nodiscard]] support::JsonValue codemode_parameters();
