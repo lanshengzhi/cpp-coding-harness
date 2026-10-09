@@ -21,6 +21,7 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
@@ -55,6 +56,8 @@ namespace {
 constexpr std::chrono::milliseconds kCloseGrace{500};
 /// pi `close`: after SIGTERM wait this long before SIGKILL.
 constexpr std::chrono::milliseconds kTerminateGrace{2000};
+constexpr std::size_t kStderrBufferBytes = 64u * 1024u;
+constexpr std::size_t kStderrTailCharacters = 2000;
 
 using detail::initialize_params;
 using detail::transport_error;
@@ -130,7 +133,9 @@ struct OwnedPipe {
 
 McpStdioClient::McpStdioClient(ConstructionKey, boost::asio::any_io_executor executor, McpStdioServerConfig config)
     : executor_(std::move(executor)), config_(std::move(config)), stdin_pipe_(executor_), stdout_pipe_(executor_),
-      stderr_pipe_(executor_) {}
+      stderr_pipe_(executor_), stderr_drained_(executor_) {
+    stderr_drained_.expires_at(std::chrono::steady_clock::time_point::max());
+}
 
 McpStdioClient::~McpStdioClient() {
     close_transport();
@@ -252,9 +257,15 @@ support::ExpectedVoid McpStdioClient::spawn() {
 
     assign_error.clear();
     stderr_pipe_.assign(stderr_fds->source.get(), assign_error);
-    if (!assign_error) {
-        (void)stderr_fds->source.release();
+    if (assign_error) {
+        close_transport();
+        ::kill(child, SIGKILL);
+        int status = 0;
+        (void)::waitpid(child, &status, 0);
+        child_pid_ = -1;
+        return std::unexpected(transport_error(config_.name, "stderr pipe setup failed", assign_error.message()));
     }
+    (void)stderr_fds->source.release();
 
     child_pid_ = child;
     process_group_ = child;
@@ -287,7 +298,46 @@ support::ExpectedVoid McpStdioClient::spawn() {
         close_transport();
         return std::unexpected(transport_error(config_.name, "could not be launched", std::strerror(setup_error)));
     }
+    stderr_tail_.clear();
+    std::weak_ptr<McpStdioClient> weak = weak_from_this();
+    boost::asio::co_spawn(
+            executor_,
+            [weak]() -> boost::asio::awaitable<void> {
+                if (auto self = weak.lock()) {
+                    co_await self->drain_stderr();
+                }
+            },
+            boost::asio::detached);
     return {};
+}
+
+boost::asio::awaitable<void> McpStdioClient::drain_stderr() {
+    std::array<char, 4096> chunk{};
+    while (stderr_pipe_.is_open()) {
+        const auto [error, count] = co_await stderr_pipe_.async_read_some(
+                boost::asio::buffer(chunk), boost::asio::as_tuple(boost::asio::use_awaitable));
+        if (error || count == 0) {
+            stderr_eof_ = true;
+            (void)stderr_drained_.cancel();
+            co_return;
+        }
+        stderr_tail_.append(chunk.data(), count);
+        if (stderr_tail_.size() > kStderrBufferBytes) {
+            stderr_tail_.erase(0, stderr_tail_.size() - kStderrBufferBytes);
+        }
+    }
+}
+
+support::Error McpStdioClient::failure_with_stderr_tail(support::Error error) const {
+    if (!stderr_tail_.empty()) {
+        const std::string tail = stderr_tail_.substr(
+                stderr_tail_.size() > kStderrTailCharacters ? stderr_tail_.size() - kStderrTailCharacters : 0);
+        error.message += "\nstderrTail: ";
+        error.message += tail;
+        error.detail += "\nstderrTail: ";
+        error.detail += tail;
+    }
+    return error;
 }
 
 boost::asio::awaitable<support::Expected<std::shared_ptr<McpStdioClient>>> McpStdioClient::connect(
@@ -639,7 +689,11 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> McpStdioClient::aw
                 co_await write_cancellation(id);
                 co_return std::unexpected(detail::timeout_error(config_.name, config_.request_timeout));
             }
-            co_return std::unexpected(closed_error(config_.name));
+            if (!stderr_eof_) {
+                boost::system::error_code ignored;
+                co_await stderr_drained_.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, ignored));
+            }
+            co_return std::unexpected(failure_with_stderr_tail(closed_error(config_.name)));
         }
         auto parsed = support::read_json(*line);
         if (!parsed) {
@@ -678,6 +732,7 @@ void McpStdioClient::close_transport() noexcept {
         stdout_pipe_.close(ignored);
     }
     if (stderr_pipe_.is_open()) {
+        stderr_pipe_.cancel(ignored);
         stderr_pipe_.close(ignored);
     }
 }
