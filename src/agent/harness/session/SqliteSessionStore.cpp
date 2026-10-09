@@ -51,6 +51,19 @@ support::Expected<SqliteSessionStore> SqliteSessionStore::open_memory() {
 
 support::ExpectedVoid SqliteSessionStore::init_schema() { return db_.execute(kSchemaSql); }
 
+support::ExpectedVoid SqliteSessionStore::create_conversation(std::string_view session_id) {
+    const auto now =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count();
+    auto stmt = db_.prepare("INSERT INTO conversations (session_id, created_at, updated_at) "
+                            "VALUES (?1, ?2, ?2) ON CONFLICT(session_id) DO NOTHING;");
+    if (!stmt) return std::unexpected(stmt.error());
+    if (auto result = stmt->bind_text(1, session_id); !result) return result;
+    if (auto result = stmt->bind_int64(2, now); !result) return result;
+    if (auto step = stmt->step(); !step) return std::unexpected(step.error());
+    return {};
+}
+
 support::ExpectedVoid SqliteSessionStore::append_entry(std::string_view session_id,
         std::string_view entry_id,
         std::optional<std::string_view> parent_id,
@@ -74,15 +87,15 @@ support::ExpectedVoid SqliteSessionStore::append_batch(
     SqliteTransactionGuard txn(db_);
     if (auto res = db_.begin_transaction(); !res) return res;
 
-    for (const auto& entry : entries) {
-        auto conv_stmt = db_.prepare("INSERT INTO conversations (session_id, created_at, updated_at) "
-                                     "VALUES (?1, ?2, ?2) "
-                                     "ON CONFLICT(session_id) DO UPDATE SET updated_at = ?2;");
-        if (!conv_stmt) return std::unexpected(conv_stmt.error());
-        if (auto result = conv_stmt->bind_text(1, session_id); !result) return result;
-        if (auto result = conv_stmt->bind_int64(2, now); !result) return result;
-        if (auto step = conv_stmt->step(); !step) return std::unexpected(step.error());
+    auto conv = db_.prepare("INSERT INTO conversations (session_id, created_at, updated_at) "
+                            "VALUES (?1, ?2, ?2) "
+                            "ON CONFLICT(session_id) DO UPDATE SET updated_at = ?2;");
+    if (!conv) return std::unexpected(conv.error());
+    if (auto result = conv->bind_text(1, session_id); !result) return result;
+    if (auto result = conv->bind_int64(2, now); !result) return result;
+    if (auto step = conv->step(); !step) return std::unexpected(step.error());
 
+    for (const auto& entry : entries) {
         auto entry_stmt =
                 db_.prepare("INSERT INTO entries (id, session_id, parent_id, entry_type, payload, created_at) "
                             "VALUES (?1, ?2, ?3, ?4, ?5, ?6);");
@@ -103,15 +116,25 @@ support::ExpectedVoid SqliteSessionStore::append_batch(
 }
 
 support::Expected<std::shared_ptr<SessionTree>> SqliteSessionStore::load_session_tree(std::string_view session_id) {
-    auto stmt = db_.prepare("SELECT payload FROM entries WHERE session_id = ?1 ORDER BY created_at ASC;");
+    auto stmt = db_.prepare("SELECT payload FROM entries WHERE session_id = ?1 ORDER BY rowid ASC;");
     if (!stmt) return std::unexpected(stmt.error());
-    (void)stmt->bind_text(1, session_id);
+    if (auto bound = stmt->bind_text(1, session_id); !bound) return std::unexpected(bound.error());
 
     std::vector<std::string> lines;
     // Add dummy header to satisfy parser
-    lines.push_back(std::format(
-            R"({{"type":"session","version":3,"id":"{}","timestamp":"2026-10-09T00:00:00.000Z","cwd":"/tmp"}})",
-            session_id));
+    auto header_stmt =
+            db_.prepare("SELECT entry_type, payload FROM entries WHERE session_id = ?1 ORDER BY rowid ASC LIMIT 1;");
+    if (!header_stmt) return std::unexpected(header_stmt.error());
+    if (auto bound = header_stmt->bind_text(1, session_id); !bound) return std::unexpected(bound.error());
+    auto has_header = header_stmt->step();
+    if (!has_header) return std::unexpected(has_header.error());
+    if (*has_header && header_stmt->column_text(0) == "session") {
+        lines.push_back(header_stmt->column_text(1));
+    } else {
+        lines.push_back(std::format(
+                R"({{"type":"session","version":3,"id":"{}","timestamp":"2026-10-09T00:00:00.000Z","cwd":"/tmp"}})",
+                session_id));
+    }
 
     while (true) {
         auto has_row = stmt->step();
@@ -126,6 +149,26 @@ support::Expected<std::shared_ptr<SessionTree>> SqliteSessionStore::load_session
     if (!parsed) return std::unexpected(parsed.error());
 
     return std::make_shared<SessionTree>(std::move(*parsed));
+}
+
+support::Expected<SessionMetadata> SqliteSessionStore::load_metadata(std::string_view session_id) {
+    auto stmt =
+            db_.prepare("SELECT entry_type, payload FROM entries WHERE session_id = ?1 ORDER BY rowid ASC LIMIT 1;");
+    if (!stmt) return std::unexpected(stmt.error());
+    if (auto bound = stmt->bind_text(1, session_id); !bound) return std::unexpected(bound.error());
+    auto has_row = stmt->step();
+    if (!has_row) return std::unexpected(has_row.error());
+    if (!*has_row) {
+        return std::unexpected(support::make_error(support::ErrorCode::Session, "SQLite session does not exist"));
+    }
+    if (stmt->column_text(0) != "session") {
+        return std::unexpected(support::make_error(support::ErrorCode::Session, "SQLite session header is missing"));
+    }
+    std::vector<std::string> header{stmt->column_text(1)};
+    cch::harness::session::EntrySerializer serializer;
+    auto parsed = serializer.parse_lines(header);
+    if (!parsed) return std::unexpected(parsed.error());
+    return parsed->metadata;
 }
 
 support::ExpectedVoid SqliteSessionStore::import_jsonl(const std::filesystem::path& jsonl_path) {

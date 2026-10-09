@@ -2,6 +2,7 @@
 
 #include "agent/harness/session/EntrySerializer.hpp"
 #include "agent/harness/session/JsonlSessionStore.hpp"
+#include "agent/harness/session/SqliteSessionStore.hpp"
 
 #include <mutex>
 #include <utility>
@@ -14,6 +15,8 @@ struct SessionStore::Impl {
     /// The persistence alternative, engaged only for JSONL sessions; an
     /// in-memory session has no journal and no durable append position.
     std::optional<JsonlSessionStore> persistence;
+    std::optional<agent::session::SqliteSessionStore> sqlite;
+    std::string session_id;
     SessionTree tree;
     // Serializes appends and tree queries between Runtime worker threads
     // (Session Event Commitment channel) and the Session loop (session-
@@ -31,6 +34,18 @@ struct SessionStore::Impl {
         for (auto& entry : *outcome) {
             record(std::move(entry));
         }
+        return {};
+    }
+
+    [[nodiscard]] support::ExpectedVoid commit_sqlite(EntrySerializer::SerializationResult serialized) {
+        const std::vector<agent::session::SqliteSessionStore::EntryPayload> batch{{
+                .entry_id = serialized.entry.entry_id,
+                .parent_id = serialized.entry.parent_id,
+                .type = "entry",
+                .payload_json = std::move(serialized.line),
+        }};
+        if (auto committed = sqlite->append_batch(session_id, batch); !committed) return committed;
+        record(std::move(serialized.entry));
         return {};
     }
 
@@ -55,6 +70,48 @@ support::Expected<SessionStore> SessionStore::create_new(
     empty.metadata = std::move(metadata);
     auto impl = std::make_unique<Impl>(SessionTree(std::move(empty)));
     impl->persistence = std::move(*jsonl);
+    return SessionStore(std::move(impl));
+}
+
+support::Expected<SessionStore> SessionStore::create_sqlite(
+        const std::filesystem::path& db_path, SessionMetadata metadata) {
+    auto sqlite = agent::session::SqliteSessionStore::open(db_path);
+    if (!sqlite) return std::unexpected(sqlite.error());
+    if (auto created = sqlite->create_conversation(metadata.session_id); !created) {
+        return std::unexpected(created.error());
+    }
+    auto header = EntrySerializer{}.serialize_header(metadata);
+    if (!header) return std::unexpected(header.error());
+    const std::vector<agent::session::SqliteSessionStore::EntryPayload> header_batch{
+            {.entry_id = "header:" + metadata.session_id,
+                    .parent_id = std::nullopt,
+                    .type = "session",
+                    .payload_json = std::move(*header)}};
+    if (auto committed = sqlite->append_batch(metadata.session_id, header_batch); !committed) {
+        return std::unexpected(committed.error());
+    }
+    LoadedSession empty;
+    empty.metadata = std::move(metadata);
+    auto impl = std::make_unique<Impl>(SessionTree(std::move(empty)));
+    impl->session_id = impl->tree.metadata().session_id;
+    impl->sqlite = std::move(*sqlite);
+    return SessionStore(std::move(impl));
+}
+
+support::Expected<SessionStore> SessionStore::open_sqlite(
+        const std::filesystem::path& db_path, std::string session_id) {
+    auto sqlite = agent::session::SqliteSessionStore::open(db_path);
+    if (!sqlite) return std::unexpected(sqlite.error());
+    auto loaded_tree = sqlite->load_session_tree(session_id);
+    if (!loaded_tree) return std::unexpected(loaded_tree.error());
+    auto metadata = sqlite->load_metadata(session_id);
+    if (!metadata) return std::unexpected(metadata.error());
+    LoadedSession loaded;
+    loaded.metadata = std::move(*metadata);
+    loaded.entries = (*loaded_tree)->entries();
+    auto impl = std::make_unique<Impl>(SessionTree(std::move(loaded)));
+    impl->session_id = std::move(session_id);
+    impl->sqlite = std::move(*sqlite);
     return SessionStore(std::move(impl));
 }
 
@@ -98,8 +155,39 @@ SessionStore::SessionStore(SessionStore&&) noexcept = default;
 SessionStore& SessionStore::operator=(SessionStore&&) noexcept = default;
 SessionStore::~SessionStore() = default;
 
+support::ExpectedVoid SessionStore::commit_batch(std::vector<SessionEntry> entries) {
+    std::lock_guard lock(impl_->mutex);
+    if (!impl_->sqlite)
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Session, "commit_batch requires a SQLite backed session"));
+    EntrySerializer serializer;
+    std::vector<agent::session::SqliteSessionStore::EntryPayload> payloads;
+    payloads.reserve(entries.size());
+    for (const auto& entry : entries) {
+        if (entry.kind == SessionEntryKind::Header || entry.kind == SessionEntryKind::Unknown) {
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Session, "batch contains an unsupported session entry"));
+        }
+        auto json = serializer.serialize_entry(entry);
+        if (!json) return std::unexpected(json.error());
+        payloads.push_back({.entry_id = entry.entry_id,
+                .parent_id = entry.parent_id,
+                .type = "entry",
+                .payload_json = std::move(*json)});
+    }
+    if (auto committed = impl_->sqlite->append_batch(impl_->session_id, payloads); !committed) return committed;
+    for (auto& entry : entries)
+        impl_->record(std::move(entry));
+    return {};
+}
+
 support::ExpectedVoid SessionStore::append(const ai::MessageVariant& message) {
     std::lock_guard lock(impl_->mutex);
+    if (impl_->sqlite) {
+        auto serialized = EntrySerializer{}.serialize_message_entry(message, impl_->leaf_parent());
+        if (!serialized) return std::unexpected(serialized.error());
+        return impl_->commit_sqlite(std::move(*serialized));
+    }
     if (auto& jsonl = impl_->persistence) {
         // The message is durable before its leaf marker, so a marker failure
         // must not leave the live tree behind the file.
@@ -121,6 +209,12 @@ support::ExpectedVoid SessionStore::append_model_change(
     std::string provider,
     std::string model_id) {
     std::lock_guard lock(impl_->mutex);
+    if (impl_->sqlite) {
+        auto serialized = EntrySerializer{}.serialize_model_change(
+                std::move(parent_id), std::move(provider), std::move(model_id));
+        if (!serialized) return std::unexpected(serialized.error());
+        return impl_->commit_sqlite(std::move(*serialized));
+    }
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(
                 jsonl->append_model_change(std::move(parent_id), std::move(provider), std::move(model_id)));
@@ -134,6 +228,12 @@ support::ExpectedVoid SessionStore::append_thinking_level_change(
     std::optional<std::string> parent_id,
     std::string thinking_level) {
     std::lock_guard lock(impl_->mutex);
+    if (impl_->sqlite) {
+        auto serialized =
+                EntrySerializer{}.serialize_thinking_level_change(std::move(parent_id), std::move(thinking_level));
+        if (!serialized) return std::unexpected(serialized.error());
+        return impl_->commit_sqlite(std::move(*serialized));
+    }
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(
                 jsonl->append_thinking_level_change(std::move(parent_id), std::move(thinking_level)));
@@ -147,6 +247,12 @@ support::ExpectedVoid SessionStore::append_label_change(
     std::string target_id,
     std::optional<std::string> label) {
     std::lock_guard lock(impl_->mutex);
+    if (impl_->sqlite) {
+        auto serialized =
+                EntrySerializer{}.serialize_label_change(std::move(parent_id), std::move(target_id), std::move(label));
+        if (!serialized) return std::unexpected(serialized.error());
+        return impl_->commit_sqlite(std::move(*serialized));
+    }
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(
                 jsonl->append_label_change(std::move(parent_id), std::move(target_id), std::move(label)));
@@ -160,6 +266,11 @@ support::ExpectedVoid SessionStore::append_compaction(
     std::optional<std::string> parent_id,
     CompactionEntryValue value) {
     std::lock_guard lock(impl_->mutex);
+    if (impl_->sqlite) {
+        auto serialized = EntrySerializer{}.serialize_compaction(std::move(parent_id), std::move(value));
+        if (!serialized) return std::unexpected(serialized.error());
+        return impl_->commit_sqlite(std::move(*serialized));
+    }
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(jsonl->append_compaction(std::move(parent_id), std::move(value)));
     }
@@ -174,6 +285,16 @@ support::ExpectedVoid SessionStore::append_branch_summary(std::optional<std::str
         std::optional<bool> from_hook,
         std::optional<ai::Usage> usage) {
     std::lock_guard lock(impl_->mutex);
+    if (impl_->sqlite) {
+        auto serialized = EntrySerializer{}.serialize_branch_summary(std::move(parent_id),
+                std::move(from_id),
+                std::move(summary),
+                std::move(details),
+                from_hook,
+                std::move(usage));
+        if (!serialized) return std::unexpected(serialized.error());
+        return impl_->commit_sqlite(std::move(*serialized));
+    }
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(jsonl->append_branch_summary(std::move(parent_id),
                 std::move(from_id),
@@ -195,6 +316,11 @@ support::ExpectedVoid SessionStore::append_session_info(
     std::optional<std::string> parent_id,
     std::string name) {
     std::lock_guard lock(impl_->mutex);
+    if (impl_->sqlite) {
+        auto serialized = EntrySerializer{}.serialize_session_info(std::move(parent_id), std::move(name));
+        if (!serialized) return std::unexpected(serialized.error());
+        return impl_->commit_sqlite(std::move(*serialized));
+    }
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(jsonl->append_session_info(std::move(parent_id), std::move(name)));
     }
@@ -206,6 +332,11 @@ support::ExpectedVoid SessionStore::append_leaf(
     std::optional<std::string> parent_id,
     std::optional<std::string> target_id) {
     std::lock_guard lock(impl_->mutex);
+    if (impl_->sqlite) {
+        auto serialized = EntrySerializer{}.serialize_leaf(std::move(parent_id), std::move(target_id));
+        if (!serialized) return std::unexpected(serialized.error());
+        return impl_->commit_sqlite(std::move(*serialized));
+    }
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(jsonl->append_leaf(std::move(parent_id), std::move(target_id)));
     }
