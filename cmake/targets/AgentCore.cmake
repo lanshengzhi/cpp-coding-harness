@@ -43,6 +43,7 @@ cch_parity_declare_target(
         Threads::Threads@threads
         glaze::glaze@glaze
         utf8proc::utf8proc@utf8proc
+        unofficial::sqlite3::sqlite3@sqlite3
     INTERFACE_DEPENDS
         cch_ai
         cch_support
