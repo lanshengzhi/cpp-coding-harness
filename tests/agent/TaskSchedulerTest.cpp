@@ -168,6 +168,54 @@ TEST_CASE("TaskScheduler recovers transcript export and makes the file effect id
     std::filesystem::remove(destination);
 }
 
+TEST_CASE("TaskScheduler cascades abort to active and queued descendants", "[agent][task][durable][issue933]") {
+    auto store = agent::session::TaskStore::open_memory();
+    REQUIRE(store);
+    const agent::session::DurableTask parent{.id = "parent-933", .kind = "work", .state = "pending"};
+    const agent::session::DurableTask child{
+            .id = "child-933", .kind = "work", .state = "pending", .parent_task_id = parent.id};
+    const agent::session::DurableTask grandchild{
+            .id = "grandchild-933", .kind = "work", .state = "pending", .parent_task_id = child.id};
+    REQUIRE(store->create_task(parent));
+    REQUIRE(store->create_task(child));
+    REQUIRE(store->create_task(grandchild));
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool child_started = false;
+    bool child_stopped = false;
+    std::atomic_bool grandchild_started{false};
+    harness::TaskScheduler scheduler(*store);
+    REQUIRE(scheduler.enqueue(child, [&](std::stop_token token) -> support::Expected<std::string> {
+        {
+            std::lock_guard lock(mutex);
+            child_started = true;
+        }
+        changed.notify_all();
+        while (!token.stop_requested())
+            std::this_thread::sleep_for(1ms);
+        child_stopped = true;
+        return "cancelled";
+    }));
+    REQUIRE(scheduler.enqueue(grandchild, [&](std::stop_token) -> support::Expected<std::string> {
+        grandchild_started.store(true);
+        return "unexpected";
+    }));
+    scheduler.resume();
+    {
+        std::unique_lock lock(mutex);
+        REQUIRE(changed.wait_for(lock, 2s, [&] { return child_started; }));
+    }
+    REQUIRE(scheduler.request_abort(parent.id));
+    scheduler.close();
+    CHECK(child_stopped);
+    CHECK_FALSE(grandchild_started.load());
+    for (const auto& id : {parent.id, child.id, grandchild.id}) {
+        auto task = store->load_task(id);
+        REQUIRE(task);
+        CHECK(task->state == "aborted");
+    }
+}
+
 TEST_CASE("TaskScheduler propagates durable abort and close waits for terminalization", "[agent][task][durable]") {
     auto store = agent::session::TaskStore::open_memory();
     REQUIRE(store);
