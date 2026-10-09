@@ -5,7 +5,7 @@
 
 namespace cch::harness {
 
-TaskScheduler::TaskScheduler(session::TaskStore& store) : store_(store) {
+TaskScheduler::TaskScheduler(durable_session::TaskStore& store) : store_(store) {
     auto recovered = store_.recover_tasks();
     if (recovered) recovered_ = std::move(*recovered);
     worker_ = std::jthread([this](std::stop_token) { run(); });
@@ -13,7 +13,7 @@ TaskScheduler::TaskScheduler(session::TaskStore& store) : store_(store) {
 
 TaskScheduler::~TaskScheduler() { close(); }
 
-ExpectedVoid TaskScheduler::register_handler(session::DurableTask task, Handler handler) {
+ExpectedVoid TaskScheduler::register_handler(durable_session::DurableTask task, Handler handler) {
     if (!handler) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation, "Scheduler requires a handler"));
     }
@@ -29,7 +29,7 @@ ExpectedVoid TaskScheduler::register_handler(session::DurableTask task, Handler 
     return {};
 }
 
-ExpectedVoid TaskScheduler::enqueue(session::DurableTask task, Handler handler) {
+ExpectedVoid TaskScheduler::enqueue(durable_session::DurableTask task, Handler handler) {
     if (task.state != "pending" || !handler) {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "Scheduler requires a pending task and handler"));
@@ -115,9 +115,14 @@ void TaskScheduler::run() noexcept {
             const auto checkpoint = result ? *result : work->task.checkpoint;
             std::lock_guard lock(store_mutex_);
             if (abort_requested) {
-                (void)store_.finish_aborted(work->task.id, checkpoint);
+                if (store_.finish_aborted(work->task.id, checkpoint)) {
+                    (void)store_.update_submission_state(work->task.id, "unanswered");
+                }
             } else if (store_.transition(work->task.id, "running", "completing", checkpoint)) {
-                (void)store_.transition(work->task.id, "completing", result ? "completed" : "failed", checkpoint);
+                const auto terminal_state = result ? "completed" : "failed";
+                if (store_.transition(work->task.id, "completing", terminal_state, checkpoint)) {
+                    (void)store_.update_submission_state(work->task.id, "done");
+                }
             }
         }
         {

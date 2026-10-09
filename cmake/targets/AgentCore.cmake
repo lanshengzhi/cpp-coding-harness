@@ -22,6 +22,7 @@ cch_parity_declare_target(
         src/agent/harness/Process.cpp
         src/agent/harness/RuntimeRoot.cpp
         src/agent/harness/TaskScheduler.cpp
+        src/agent/harness/TranscriptExport.cpp
         src/agent/harness/ShellResolver.cpp
         src/agent/harness/WorkspaceFileSystemFdWalk.cpp
         src/agent/harness/WorkspaceFileOperations.cpp

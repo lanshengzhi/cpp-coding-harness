@@ -1,9 +1,13 @@
 #include "agent/harness/TaskScheduler.hpp"
+#include "agent/harness/TranscriptExport.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <condition_variable>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <mutex>
 
 using namespace cch;
@@ -103,12 +107,73 @@ TEST_CASE("TaskScheduler does not run a handler when reservation storage fails",
     CHECK(loaded->checkpoint == "before");
 }
 
+TEST_CASE("TaskScheduler recovers transcript export and makes the file effect idempotent",
+        "[agent][task][durable][issue928]") {
+    const auto database = std::filesystem::temp_directory_path() / "cch-task-export-928.sqlite";
+    const auto destination = std::filesystem::temp_directory_path() / "cch-task-export-928.jsonl";
+    std::filesystem::remove(database);
+    std::filesystem::remove(destination);
+    auto transcript = harness::session::SessionStore::in_memory();
+    {
+        auto store = agent::session::TaskStore::open(database);
+        REQUIRE(store);
+        const agent::session::DurableTask task{.id = "export-928",
+                .kind = "transcript_export",
+                .state = "pending",
+                .checkpoint = "",
+                .owner_session = "session"};
+        auto submission = store->submit(task, "request-export-928", "transcript_export", "{}");
+        REQUIRE(submission);
+        REQUIRE(store->transition(task.id, "pending", "running", ""));
+        const auto effect = harness::transcript_export_handler(transcript, destination.string())({});
+        REQUIRE(effect);
+        auto durable = store->load_task(task.id);
+        REQUIRE(durable);
+        CHECK(durable->state == "running");
+    }
+    std::ifstream input(destination);
+    const std::string first((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    {
+        auto store = agent::session::TaskStore::open(database);
+        REQUIRE(store);
+        harness::TaskScheduler scheduler(*store);
+        const agent::session::DurableTask recovered{.id = "export-928",
+                .kind = "transcript_export",
+                .state = "running",
+                .checkpoint = "",
+                .owner_session = "session"};
+        REQUIRE(scheduler.register_handler(
+                recovered, harness::transcript_export_handler(transcript, destination.string())));
+        scheduler.resume();
+        bool completed = false;
+        for (int attempt = 0; attempt < 2000; ++attempt) {
+            auto durable = store->load_task("export-928");
+            REQUIRE(durable);
+            if (durable->state == "completed") {
+                completed = true;
+                break;
+            }
+            std::this_thread::sleep_for(1ms);
+        }
+        CHECK(completed);
+        scheduler.close();
+        auto resolved = store->load_submission("request-export-928");
+        REQUIRE(resolved);
+        CHECK(resolved->state == "done");
+    }
+    std::ifstream replayed_input(destination);
+    const std::string replayed((std::istreambuf_iterator<char>(replayed_input)), std::istreambuf_iterator<char>());
+    CHECK(replayed == first);
+    std::filesystem::remove(database);
+    std::filesystem::remove(destination);
+}
+
 TEST_CASE("TaskScheduler propagates durable abort and close waits for terminalization", "[agent][task][durable]") {
     auto store = agent::session::TaskStore::open_memory();
     REQUIRE(store);
     const agent::session::DurableTask task{
             .id = "abortable", .kind = "work", .state = "pending", .checkpoint = "", .owner_session = ""};
-    REQUIRE(store->create_task(task));
+    REQUIRE(store->submit(task, "abort-request", "work", "{}"));
     std::mutex mutex;
     std::condition_variable changed;
     bool started = false;
@@ -137,4 +202,7 @@ TEST_CASE("TaskScheduler propagates durable abort and close waits for terminaliz
     REQUIRE(loaded);
     CHECK(loaded->abort_requested);
     CHECK(loaded->state == "aborted");
+    auto submission = store->load_submission("abort-request");
+    REQUIRE(submission);
+    CHECK(submission->state == "unanswered");
 }

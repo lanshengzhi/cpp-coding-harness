@@ -15,7 +15,8 @@ TEST_CASE("TaskStore persists transitions, checkpoints, abort marks, and recover
             .owner_session = "session-1",
             .definition_version = 1};
     REQUIRE(store->create_task(task));
-    REQUIRE(store->add_submission({.id = "submission-1", .task_id = task.id, .payload = "{}"}));
+    REQUIRE(store->add_submission(
+            {.id = "submission-1", .task_id = task.id, .kind = "build", .payload = "{}", .state = "queued"}));
     REQUIRE(store->transition(task.id, "pending", "running", "{\"step\":1}"));
     REQUIRE(store->transition(task.id, "running", "completing", "{\"step\":2}"));
     REQUIRE(store->transition(task.id, "completing", "completed", "{\"step\":3}"));
@@ -40,6 +41,37 @@ TEST_CASE("TaskStore persists transitions, checkpoints, abort marks, and recover
     REQUIRE(aborted);
     CHECK(aborted->state == "running");
     CHECK(aborted->abort_requested);
+}
+
+TEST_CASE("TaskStore deduplicates submissions across reopen", "[agent][durable][task][issue928]") {
+    const auto path = std::filesystem::temp_directory_path() / "cch-task-submission-928.sqlite";
+    std::filesystem::remove(path);
+    {
+        auto store = agent::session::TaskStore::open(path);
+        REQUIRE(store);
+        const agent::session::DurableTask task{.id = "task-request-928",
+                .kind = "transcript_export",
+                .state = "pending",
+                .checkpoint = "",
+                .owner_session = "session"};
+        auto first = store->submit(task, "request-928", "transcript_export", "{\\\"path\\\":\\\"transcript.jsonl\\\"}");
+        REQUIRE(first);
+        CHECK(first->state == "queued");
+    }
+    {
+        auto store = agent::session::TaskStore::open(path);
+        REQUIRE(store);
+        const agent::session::DurableTask duplicate{.id = "different-task-id",
+                .kind = "other",
+                .state = "pending",
+                .checkpoint = "",
+                .owner_session = "session"};
+        auto second = store->submit(duplicate, "request-928", "other", "{}");
+        REQUIRE(second);
+        CHECK(second->task_id == "task-request-928");
+        CHECK(second->kind == "transcript_export");
+    }
+    std::filesystem::remove(path);
 }
 
 TEST_CASE("TaskStore rolls back state and checkpoint on a failed transition", "[agent][durable][task]") {
