@@ -21,6 +21,9 @@ using cch::support::ExpectedVoid;
 class TaskScheduler final {
 public:
     using Handler = std::function<Expected<std::string>(std::stop_token)>;
+    using BeforeHook = std::function<ExpectedVoid(const durable_session::DurableTask&)>;
+    using AfterHook = std::function<ExpectedVoid(const durable_session::DurableTask&)>;
+    using DiagnosticsSink = std::function<ExpectedVoid(const durable_session::DurableTask&, const support::Error&)>;
 
     explicit TaskScheduler(durable_session::TaskStore& store);
     ~TaskScheduler();
@@ -29,6 +32,9 @@ public:
 
     [[nodiscard]] ExpectedVoid register_handler(
             durable_session::DurableTask task, Handler handler, std::int64_t definition_version = 0);
+    void register_before_hook(BeforeHook hook);
+    void register_after_hook(AfterHook hook);
+    void set_diagnostics_sink(DiagnosticsSink sink);
     [[nodiscard]] ExpectedVoid enqueue(durable_session::DurableTask task);
     [[nodiscard]] ExpectedVoid migrate_task(std::string_view id, std::int64_t definition_version);
     [[nodiscard]] ExpectedVoid request_abort(std::string_view id);
@@ -52,6 +58,9 @@ private:
     std::vector<std::shared_ptr<Work>> queue_;
     std::vector<std::shared_ptr<Work>> active_;
     std::vector<std::shared_ptr<Work>> handlers_;
+    std::vector<BeforeHook> before_hooks_;
+    std::vector<AfterHook> after_hooks_;
+    DiagnosticsSink diagnostics_sink_;
     std::vector<durable_session::DurableTask> recovered_;
     std::jthread worker_;
     bool resumed_{false};
