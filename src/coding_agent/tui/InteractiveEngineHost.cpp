@@ -17,7 +17,10 @@
 #include "coding_agent/tui/SettingsFlowController.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/SlashCommandEffects.hpp"
+#include "agent/harness/TranscriptExport.hpp"
 #include "support/AsyncResultBridge.hpp"
+
+#include <cch/agent/harness/session/SessionStore.hpp>
 
 #include <cctype>
 #include <csignal>
@@ -332,6 +335,29 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(
         }
         handle_name_command(invocation.argument);
         return {};
+    case SlashCommandId::Export: {
+        if (session_ == nullptr) {
+            return std::unexpected(support::make_error(support::ErrorCode::Session, "No active session for /export"));
+        }
+        if (invocation.argument.empty()) {
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "/export requires a destination path"));
+        }
+        const auto session_path = session_->session_path();
+        if (!session_path) {
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Session, "Cannot export an in-memory session"));
+        }
+        auto store = harness::session::SessionStore::open_existing(*session_path);
+        if (!store) return std::unexpected(store.error());
+        auto handler = harness::transcript_export_handler(*store, invocation.argument);
+        auto exported = handler({});
+        if (!exported) return std::unexpected(exported.error());
+        if (view_ != nullptr) {
+            view_->append_status_message(std::format("Transcript exported to {}", *exported));
+        }
+        return {};
+    }
     case SlashCommandId::Model:
     case SlashCommandId::Models:
     case SlashCommandId::Thinking:
@@ -432,6 +458,7 @@ void InteractiveEngine::dispatch_modal_slash_command(SlashCommandInvocation invo
     case SlashCommandId::Settings:
     case SlashCommandId::Help:
     case SlashCommandId::Name:
+    case SlashCommandId::Export:
         show_error(
             "Immediate slash command was routed as a modal command");
         return;

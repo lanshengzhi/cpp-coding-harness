@@ -40,6 +40,7 @@ const std::vector<BuiltinSlashCommand>& builtin_slash_commands() {
             {"mcp",
                     "Manage MCP servers: sign in, reconnect, enable or disable, and change exposure",
                     "[action] [server]"},
+            {"export", "Export session transcript", "<path>"},
     };
     return kCommands;
 }
