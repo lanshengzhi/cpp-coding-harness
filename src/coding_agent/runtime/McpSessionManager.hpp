@@ -20,6 +20,7 @@
 #include "coding_agent/mcp/McpConfigWrite.hpp"
 #include "coding_agent/mcp/McpExposure.hpp"
 #include "coding_agent/mcp/McpResourceTools.hpp"
+#include "coding_agent/extensions/tool_search/ToolSearch.hpp"
 
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
@@ -200,6 +201,8 @@ struct McpRegisteredTool {
 struct McpSurfaceTool {
     std::string name;
     mcp::McpExposure exposure{mcp::McpExposure::Codemode};
+    std::string description;
+    std::string namespace_name;
 };
 
 /// The session tool surface the manager re-registers tools on (pi
@@ -308,6 +311,8 @@ public:
     /// session constructs the manager before the Agent exists, so the surface
     /// arrives here; it must be attached before `start()`.
     void attach_tool_surface(std::shared_ptr<McpToolSurface> surface);
+    [[nodiscard]] std::vector<extensions::ToolSearchCandidate> search_tools(std::string_view query, std::size_t limit);
+    void activate_tools(std::vector<std::string> names);
 
     /// pi `ctx.ui.notify(..., "warning")`: install (or replace) the host's
     /// warning sink. The interactive host installs its notification channel

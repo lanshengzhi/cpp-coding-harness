@@ -234,11 +234,11 @@ public:
     [[nodiscard]] std::vector<McpSurfaceTool> all_tools() const override {
         std::vector<McpSurfaceTool> tools;
         for (const auto& [name, exposure] : surface) {
-            tools.push_back(McpSurfaceTool{name, exposure});
+            tools.push_back(McpSurfaceTool{.name = name, .exposure = exposure});
         }
         if (codemode_registered &&
                 std::ranges::none_of(tools, [](const McpSurfaceTool& tool) { return tool.name == "codemode"; })) {
-            tools.push_back(McpSurfaceTool{"codemode", McpExposure::Codemode});
+            tools.push_back(McpSurfaceTool{.name = "codemode", .exposure = McpExposure::Codemode});
         }
         return tools;
     }

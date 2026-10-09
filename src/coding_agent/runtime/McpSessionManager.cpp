@@ -9,6 +9,7 @@
 #include "coding_agent/runtime/McpSessionManager.hpp"
 
 #include "coding_agent/extensions/codemode/CodemodeTool.hpp"
+#include "coding_agent/extensions/tool_search/ToolSearch.hpp"
 #include "coding_agent/mcp/McpConfigWrite.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 #include "coding_agent/mcp/McpNamespace.hpp"
@@ -212,6 +213,30 @@ std::vector<McpServerSnapshot> McpSessionManager::servers() const {
 
 void McpSessionManager::attach_tool_surface(std::shared_ptr<McpToolSurface> surface) {
     dependencies_.tools = std::move(surface);
+}
+
+std::vector<extensions::ToolSearchCandidate> McpSessionManager::search_tools(
+        std::string_view query, std::size_t limit) {
+    if (!dependencies_.tools) return {};
+    const auto active = dependencies_.tools->active_tools();
+    std::vector<extensions::ToolSearchCandidate> candidates;
+    for (const auto& item : dependencies_.tools->all_tools()) {
+        candidates.push_back({.name = item.name,
+                .description = item.description,
+                .namespace_name = item.namespace_name,
+                .exposure = item.exposure,
+                .active = std::ranges::find(active, item.name) != active.end()});
+    }
+    return extensions::rank_tool_search_candidates(std::move(candidates), query, limit);
+}
+
+void McpSessionManager::activate_tools(std::vector<std::string> names) {
+    if (!dependencies_.tools || names.empty()) return;
+    auto active = dependencies_.tools->active_tools();
+    for (auto& name : names) {
+        if (std::ranges::find(active, name) == active.end()) active.push_back(std::move(name));
+    }
+    dependencies_.tools->set_active_tools(std::move(active));
 }
 
 void McpSessionManager::set_notify_warning_sink(std::function<void(std::string_view message)> sink) {
