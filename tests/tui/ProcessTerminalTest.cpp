@@ -381,45 +381,39 @@ TEST_CASE("Process Terminal one-row scroll margins park the dock below the trans
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal reports synchronized output conservatively", "[tui][terminal][issue54][spec]") {
+TEST_CASE("Process Terminal enables synchronized output for common and unknown terminals",
+        "[tui][terminal][issue813][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ScopedEnvironmentVariable terminal_environment("TERM");
     ScopedEnvironmentVariable program_environment("TERM_PROGRAM");
     program_environment.unset();
 
-    terminal_environment.set("xterm-unknown");
-    cch::tui::ProcessTerminal generic_terminal({
+    cch::tui::ProcessTerminal terminal({
             .input_fd = pty->slave.get(),
             .output_fd = pty->slave.get(),
     });
-    REQUIRE(generic_terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
-            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
-    CHECK_FALSE(generic_terminal.capabilities().synchronized_output);
-    REQUIRE(generic_terminal.stop());
-    (void)cch::tests::read_available(pty->master.get());
+    const auto check_terminal = [&](std::string_view term) {
+        if (term.empty()) {
+            terminal_environment.unset();
+        } else {
+            terminal_environment.set(term);
+        }
+        REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+                [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+        CHECK(terminal.capabilities().synchronized_output);
+        REQUIRE(terminal.begin_synchronized_update());
+        REQUIRE(terminal.end_synchronized_update());
+        const auto output = cch::tests::read_available(pty->master.get());
+        CHECK(output.find("\x1b[?2026h") != std::string::npos);
+        CHECK(output.find("\x1b[?2026l") != std::string::npos);
+        REQUIRE(terminal.stop());
+        (void)cch::tests::read_available(pty->master.get());
+    };
 
-    terminal_environment.set("football");
-    REQUIRE(generic_terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
-            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
-    CHECK_FALSE(generic_terminal.capabilities().synchronized_output);
-    REQUIRE(generic_terminal.stop());
-    (void)cch::tests::read_available(pty->master.get());
-
-    terminal_environment.set("xterm-unknown");
-    program_environment.set("WezTerm");
-    REQUIRE(generic_terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
-            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
-    CHECK(generic_terminal.capabilities().synchronized_output);
-    REQUIRE(generic_terminal.stop());
-    (void)cch::tests::read_available(pty->master.get());
-
-    terminal_environment.set("xterm-kitty");
-    program_environment.unset();
-    REQUIRE(generic_terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
-            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
-    CHECK(generic_terminal.capabilities().synchronized_output);
-    REQUIRE(generic_terminal.stop());
+    check_terminal("xterm-256color");
+    check_terminal("");
+    check_terminal("xterm-kitty");
 }
 
 TEST_CASE("Process Terminal delivers pseudo-terminal input and resize", "[tui][terminal][issue54][spec]") {
