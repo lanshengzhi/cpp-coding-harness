@@ -88,7 +88,13 @@ support::ExpectedVoid RenderPipeline::stop(std::optional<CursorPosition> stop_cu
     previous_dock_lines_.clear();
 
     support::ExpectedVoid exit_result;
-    if (!previous_lines_.empty()) {
+    for (std::size_t row = dimensions.rows - visible_dock_height; row < dimensions.rows; ++row) {
+        if (auto cleared = clear_row(terminal_, row, dimensions.columns); !cleared) {
+            exit_result = std::unexpected(cleared.error());
+            break;
+        }
+    }
+    if (exit_result && !previous_lines_.empty()) {
         if (auto written = terminal_.write(" "); !written) {
             exit_result = std::unexpected(written.error());
         } else if (dock_height == 0) {
