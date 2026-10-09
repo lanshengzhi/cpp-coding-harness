@@ -29,6 +29,18 @@ CREATE TABLE IF NOT EXISTS entries (
 
 CREATE INDEX IF NOT EXISTS idx_entries_session ON entries(session_id);
 CREATE INDEX IF NOT EXISTS idx_entries_parent ON entries(parent_id);
+
+CREATE TABLE IF NOT EXISTS inbox (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('steer', 'follow_up', 'write')),
+    payload TEXT NOT NULL,
+    boundary_entry_id TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'placed', 'done')),
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY(session_id) REFERENCES conversations(session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_inbox_pending ON inbox(session_id, state, created_at, id);
 )SQL";
 
 } // namespace
@@ -80,6 +92,13 @@ support::ExpectedVoid SqliteSessionStore::append_entry(std::string_view session_
 
 support::ExpectedVoid SqliteSessionStore::append_batch(
         std::string_view session_id, const std::vector<EntryPayload>& entries) {
+    return commit_batch_with_inbox(session_id, entries, {});
+}
+
+support::ExpectedVoid SqliteSessionStore::commit_batch_with_inbox(std::string_view session_id,
+        const std::vector<EntryPayload>& entries,
+        const std::vector<InboxPayload>& inbox,
+        bool fail_after_entries) {
     const auto now =
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
                     .count();
@@ -112,7 +131,58 @@ support::ExpectedVoid SqliteSessionStore::append_batch(
         if (auto result = entry_stmt->bind_int64(6, now); !result) return result;
         if (auto step = entry_stmt->step(); !step) return std::unexpected(step.error());
     }
+    if (fail_after_entries) {
+        return std::unexpected(support::make_error(support::ErrorCode::Session, "injected failure after entry write"));
+    }
+
+    for (const auto& item : inbox) {
+        auto inbox_stmt =
+                db_.prepare("INSERT INTO inbox (id, session_id, kind, payload, boundary_entry_id, state, created_at) "
+                            "VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6);");
+        if (!inbox_stmt) return std::unexpected(inbox_stmt.error());
+        const auto kind = item.kind == InboxKind::Steer      ? "steer"
+                          : item.kind == InboxKind::FollowUp ? "follow_up"
+                                                             : "write";
+        if (auto result = inbox_stmt->bind_text(1, item.id); !result) return result;
+        if (auto result = inbox_stmt->bind_text(2, session_id); !result) return result;
+        if (auto result = inbox_stmt->bind_text(3, kind); !result) return result;
+        if (auto result = inbox_stmt->bind_text(4, item.payload); !result) return result;
+        if (auto result = inbox_stmt->bind_text(5, item.boundary_entry_id); !result) return result;
+        if (auto result = inbox_stmt->bind_int64(6, now); !result) return result;
+        if (auto step = inbox_stmt->step(); !step) return std::unexpected(step.error());
+    }
     return txn.commit();
+}
+
+support::ExpectedVoid SqliteSessionStore::enqueue_inbox(std::string_view session_id, InboxPayload inbox) {
+    return commit_batch_with_inbox(session_id, {}, {inbox});
+}
+
+support::Expected<std::vector<SqliteSessionStore::InboxItem>> SqliteSessionStore::claim_pending_inbox(
+        std::string_view session_id) {
+    SqliteTransactionGuard txn(db_);
+    if (auto begun = db_.begin_transaction(); !begun) return std::unexpected(begun.error());
+    auto stmt = db_.prepare("UPDATE inbox SET state = 'placed' WHERE id IN ("
+                            "SELECT id FROM inbox WHERE session_id = ?1 AND state = 'pending' ORDER BY created_at, id"
+                            ") AND state = 'pending' RETURNING id, kind, payload, boundary_entry_id, created_at;");
+    if (!stmt) return std::unexpected(stmt.error());
+    if (auto bound = stmt->bind_text(1, session_id); !bound) return std::unexpected(bound.error());
+    std::vector<InboxItem> claimed;
+    while (true) {
+        auto row = stmt->step();
+        if (!row) return std::unexpected(row.error());
+        if (!*row) break;
+        const auto kind = stmt->column_text(1);
+        claimed.push_back({.id = stmt->column_text(0),
+                .kind = kind == "steer"       ? InboxKind::Steer
+                        : kind == "follow_up" ? InboxKind::FollowUp
+                                              : InboxKind::Write,
+                .payload = stmt->column_text(2),
+                .boundary_entry_id = stmt->column_text(3),
+                .created_at = stmt->column_int64(4)});
+    }
+    if (auto committed = txn.commit(); !committed) return std::unexpected(committed.error());
+    return claimed;
 }
 
 support::Expected<std::shared_ptr<SessionTree>> SqliteSessionStore::load_session_tree(std::string_view session_id) {

@@ -27,6 +27,23 @@ public:
         std::string payload_json;
     };
 
+    enum class InboxKind { Steer, FollowUp, Write };
+
+    struct InboxPayload {
+        std::string id;
+        InboxKind kind{InboxKind::Steer};
+        std::string payload;
+        std::string boundary_entry_id;
+    };
+
+    struct InboxItem {
+        std::string id;
+        InboxKind kind{InboxKind::Steer};
+        std::string payload;
+        std::string boundary_entry_id;
+        std::int64_t created_at{0};
+    };
+
     explicit SqliteSessionStore(SqliteDatabase db) : db_(std::move(db)) {}
 
     /// Open or create the database and apply schema migrations.
@@ -51,6 +68,16 @@ public:
     /// Append all entries in one transaction; a failure rolls back the complete batch.
     [[nodiscard]] support::ExpectedVoid append_batch(
             std::string_view session_id, const std::vector<EntryPayload>& entries);
+
+    /// Commit session entries and their admission inbox records atomically.
+    [[nodiscard]] support::ExpectedVoid commit_batch_with_inbox(std::string_view session_id,
+            const std::vector<EntryPayload>& entries,
+            const std::vector<InboxPayload>& inbox,
+            bool fail_after_entries = false);
+    /// Persist an inbox item without an associated admission batch.
+    [[nodiscard]] support::ExpectedVoid enqueue_inbox(std::string_view session_id, InboxPayload inbox);
+    /// Claim all pending inbox items in creation order, transitioning them once.
+    [[nodiscard]] support::Expected<std::vector<InboxItem>> claim_pending_inbox(std::string_view session_id);
 
     /// Load the full SessionTree for a conversation.
     [[nodiscard]] support::Expected<std::shared_ptr<SessionTree>> load_session_tree(std::string_view session_id);
