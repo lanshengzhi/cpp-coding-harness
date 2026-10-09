@@ -14,6 +14,7 @@
 
 namespace cch::agent::session {
 
+using cch::harness::session::SessionMetadata;
 using cch::harness::session::SessionTree;
 
 /// Session store implemented on SQLite, mirroring pi-durable's relational backing.
@@ -44,12 +45,16 @@ public:
             std::string_view type,
             std::string_view payload_json);
 
+    /// Ensure one conversation exists, including before its first entry.
+    [[nodiscard]] support::ExpectedVoid create_conversation(std::string_view session_id);
+
     /// Append all entries in one transaction; a failure rolls back the complete batch.
     [[nodiscard]] support::ExpectedVoid append_batch(
             std::string_view session_id, const std::vector<EntryPayload>& entries);
 
     /// Load the full SessionTree for a conversation.
     [[nodiscard]] support::Expected<std::shared_ptr<SessionTree>> load_session_tree(std::string_view session_id);
+    [[nodiscard]] support::Expected<SessionMetadata> load_metadata(std::string_view session_id);
 
     /// Import an entire existing JSONL transcript file atomically into SQLite.
     [[nodiscard]] support::ExpectedVoid import_jsonl(const std::filesystem::path& jsonl_path);

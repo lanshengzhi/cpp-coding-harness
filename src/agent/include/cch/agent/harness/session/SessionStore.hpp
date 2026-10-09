@@ -51,6 +51,12 @@ public:
     /// exactly once here to build the live tree (pi `SessionManager.open`).
     [[nodiscard]] static support::Expected<SessionStore> open_existing(
         const std::filesystem::path& path);
+    /// Create or open a SQLite backed session database for the supplied metadata.
+    [[nodiscard]] static support::Expected<SessionStore> create_sqlite(
+            const std::filesystem::path& db_path, SessionMetadata metadata);
+    /// Open one SQLite conversation and rebuild its live tree.
+    [[nodiscard]] static support::Expected<SessionStore> open_sqlite(
+            const std::filesystem::path& db_path, std::string session_id);
     /// The in-memory alternative: appends update the live tree without disk
     /// I/O and path() is empty (in-memory sessions are not resumable, #409).
     [[nodiscard]] static SessionStore in_memory(SessionMetadata metadata = {});
@@ -78,6 +84,8 @@ public:
 
     /// Append one completed Session Entry message (pi `appendEntry`).
     [[nodiscard]] support::ExpectedVoid append(const ai::MessageVariant& message);
+    /// Atomically persist entries and mirror them into the live tree on success.
+    [[nodiscard]] support::ExpectedVoid commit_batch(std::vector<SessionEntry> entries);
 
     // --- v3 tree entry appends; they persist (JSONL sessions) and advance
     // the live tree in one locked step ---

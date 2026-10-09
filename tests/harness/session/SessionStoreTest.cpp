@@ -51,6 +51,40 @@ TEST_CASE("Session Store facade is a closed concrete move-only value", "[harness
     SUCCEED();
 }
 
+TEST_CASE("SQLite Session Store factory appends and commits batches atomically",
+        "[harness][session][store][issue922][durable]") {
+    tests::TempWorkspace workspace;
+    auto created =
+            harness::session::SessionStore::create_sqlite(workspace.path() / "session.db", metadata_for(workspace));
+    REQUIRE(created);
+    auto store = std::move(*created);
+
+    REQUIRE(store.append(user_message("first")).has_value());
+    REQUIRE(store.append_thinking_level_change(std::nullopt, "high"));
+    CHECK(store.build_context().messages.size() == 1);
+    CHECK(store.build_context().thinking_level == "high");
+    const auto initial_count = store.entries().size();
+
+    std::vector<harness::session::SessionEntry> batch;
+    auto entry = harness::session::SessionEntry{};
+    entry.kind = harness::session::SessionEntryKind::SessionInfo;
+    entry.entry_id = "batch-info";
+    entry.value = harness::session::SessionInfoEntryValue{.name = "committed"};
+    batch.push_back(entry);
+    REQUIRE(store.commit_batch(batch));
+    CHECK(store.entries().size() == initial_count + 1);
+    CHECK(store.get_session_name() == "committed");
+
+    auto reopened = harness::session::SessionStore::open_sqlite(workspace.path() / "session.db", "session-store-test");
+    REQUIRE(reopened);
+    CHECK(reopened->get_session_name() == "committed");
+
+    batch.front().entry_id = store.entries().front().entry_id;
+    const auto before_failed_commit = store.entries().size();
+    CHECK_FALSE(store.commit_batch(batch));
+    CHECK(store.entries().size() == before_failed_commit);
+}
+
 TEST_CASE("in-memory Session Store defaults the session metadata", "[harness][session][store][issue494][spec]") {
     // The zero-argument form mints an empty SessionMetadata header.
     auto store = harness::session::SessionStore::in_memory();
