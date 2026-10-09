@@ -47,6 +47,7 @@ public:
             const DurableTask& task, std::string request_id, std::string kind, std::string payload);
     [[nodiscard]] support::Expected<TaskSubmission> load_submission(std::string_view request_id);
     [[nodiscard]] support::ExpectedVoid update_submission_state(std::string_view task_id, std::string_view state);
+    [[nodiscard]] support::ExpectedVoid migrate_task(std::string_view id, std::int64_t definition_version);
     [[nodiscard]] support::ExpectedVoid transition(std::string_view id,
             std::string_view expected_state,
             std::string_view next_state,

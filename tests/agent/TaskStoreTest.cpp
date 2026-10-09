@@ -123,6 +123,26 @@ TEST_CASE("TaskStore migrates task ownership and recovers parents first", "[agen
     CHECK((*recovered)[2].id == "new-child");
 }
 
+TEST_CASE("TaskStore migrates only pending task definitions", "[agent][durable][task][issue934]") {
+    auto store = agent::session::TaskStore::open_memory();
+    REQUIRE(store);
+    REQUIRE(store->create_task(
+            {.id = "pending-migration", .kind = "work", .state = "pending", .definition_version = 1}));
+    REQUIRE(store->migrate_task("pending-migration", 2));
+    auto migrated = store->load_task("pending-migration");
+    REQUIRE(migrated);
+    CHECK(migrated->definition_version == 2);
+
+    REQUIRE(store->create_task(
+            {.id = "running-migration", .kind = "work", .state = "running", .definition_version = 1}));
+    auto rejected = store->migrate_task("running-migration", 2);
+    REQUIRE_FALSE(rejected);
+    CHECK(rejected.error().code == support::ErrorCode::Validation);
+    auto unchanged = store->load_task("running-migration");
+    REQUIRE(unchanged);
+    CHECK(unchanged->definition_version == 1);
+}
+
 TEST_CASE("TaskStore rolls back state and checkpoint on a failed transition", "[agent][durable][task]") {
     auto db = agent::session::SqliteDatabase::open_memory();
     REQUIRE(db);

@@ -13,36 +13,75 @@ TaskScheduler::TaskScheduler(durable_session::TaskStore& store) : store_(store) 
 
 TaskScheduler::~TaskScheduler() { close(); }
 
-ExpectedVoid TaskScheduler::register_handler(durable_session::DurableTask task, Handler handler) {
-    if (!handler) {
-        return std::unexpected(support::make_error(support::ErrorCode::Validation, "Scheduler requires a handler"));
+ExpectedVoid TaskScheduler::register_handler(
+        durable_session::DurableTask task, Handler handler, std::int64_t definition_version) {
+    if (!handler || definition_version < 0) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "Scheduler handler is invalid"));
     }
-    auto work = std::make_shared<Work>(Work{std::move(task), std::move(handler), {}});
+    auto work = std::make_shared<Work>(Work{std::move(task), std::move(handler), definition_version, {}});
     std::lock_guard lock(mutex_);
     if (closing_) return std::unexpected(support::make_error(support::ErrorCode::Validation, "Scheduler is closed"));
-    handlers_.push_back(work);
-    const auto recovered = std::ranges::find_if(recovered_, [&](const auto& item) { return item.id == work->task.id; });
+    const auto registered =
+            std::ranges::find_if(handlers_, [&](const auto& item) { return item->task.kind == work->task.kind; });
+    if (registered != handlers_.end()) {
+        if (definition_version <= (*registered)->definition_version) {
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "Task definition version must increase"));
+        }
+        *registered = work;
+    } else {
+        handlers_.push_back(work);
+    }
+    const auto recovered = std::ranges::find_if(recovered_, [&](const auto& item) {
+        return item.kind == work->task.kind && item.definition_version == definition_version;
+    });
     if (recovered != recovered_.end()) {
-        queue_.push_back(std::make_shared<Work>(Work{*recovered, work->handler, {}}));
+        queue_.push_back(std::make_shared<Work>(Work{*recovered, work->handler, definition_version, {}}));
         recovered_.erase(recovered);
+        ready_.notify_one();
     }
     return {};
 }
 
-ExpectedVoid TaskScheduler::enqueue(durable_session::DurableTask task, Handler handler) {
-    if (task.state != "pending" || !handler) {
+ExpectedVoid TaskScheduler::enqueue(durable_session::DurableTask task) {
+    if (task.state != "pending") {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "Scheduler requires a pending task and handler"));
     }
-    auto work = std::make_shared<Work>(Work{std::move(task), std::move(handler), {}});
     std::lock_guard lock(mutex_);
     if (closing_) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation, "Scheduler is closed"));
     }
+    const auto registered =
+            std::ranges::find_if(handlers_, [&](const auto& item) { return item->task.kind == task.kind; });
+    if (registered == handlers_.end() || (*registered)->definition_version != task.definition_version) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Task kind or definition version is unknown"));
+    }
+    auto work = std::make_shared<Work>(
+            Work{std::move(task), (*registered)->handler, (*registered)->definition_version, {}});
     const auto id = work->task.id;
     queue_.push_back(std::move(work));
     std::erase_if(recovered_, [&](const auto& item) { return item.id == id; });
     ready_.notify_one();
+    return {};
+}
+
+ExpectedVoid TaskScheduler::migrate_task(std::string_view id, std::int64_t definition_version) {
+    std::lock_guard store_lock(store_mutex_);
+    auto loaded = store_.load_task(id);
+    if (!loaded) return std::unexpected(loaded.error());
+    {
+        std::lock_guard lock(mutex_);
+        const auto registered = std::ranges::find_if(handlers_, [&](const auto& item) {
+            return item->task.kind == loaded->kind && item->definition_version == definition_version;
+        });
+        if (registered == handlers_.end()) {
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "Task kind or definition version is unknown"));
+        }
+    }
+    if (auto result = store_.migrate_task(id, definition_version); !result) return result;
     return {};
 }
 
@@ -69,12 +108,14 @@ ExpectedVoid TaskScheduler::request_abort(std::string_view id) {
 void TaskScheduler::resume() noexcept {
     std::lock_guard lock(mutex_);
     for (const auto& recovered : recovered_) {
-        const auto registered =
-                std::ranges::find_if(handlers_, [&](const auto& work) { return work->task.id == recovered.id; });
+        const auto registered = std::ranges::find_if(handlers_, [&](const auto& work) {
+            return work->task.kind == recovered.kind && work->definition_version == recovered.definition_version;
+        });
         const auto queued =
                 std::ranges::find_if(queue_, [&](const auto& work) { return work->task.id == recovered.id; });
         if (registered != handlers_.end() && queued == queue_.end()) {
-            queue_.push_back(std::make_shared<Work>(Work{recovered, (*registered)->handler, {}}));
+            queue_.push_back(std::make_shared<Work>(
+                    Work{recovered, (*registered)->handler, (*registered)->definition_version, {}}));
         }
     }
     resumed_ = true;

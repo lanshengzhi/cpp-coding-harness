@@ -23,7 +23,7 @@ TEST_CASE("TaskScheduler requires resume and commits running before handler exec
     std::condition_variable changed;
     bool started = false;
     harness::TaskScheduler scheduler(*store);
-    REQUIRE(scheduler.enqueue(task, [&](std::stop_token) -> support::Expected<std::string> {
+    REQUIRE(scheduler.register_handler(task, [&](std::stop_token) -> support::Expected<std::string> {
         auto loaded = store->load_task("deferred");
         REQUIRE(loaded);
         REQUIRE(loaded->state == "running");
@@ -34,6 +34,7 @@ TEST_CASE("TaskScheduler requires resume and commits running before handler exec
         changed.notify_all();
         return "done";
     }));
+    REQUIRE(scheduler.enqueue(task));
     std::this_thread::sleep_for(20ms);
     CHECK_FALSE(started);
     scheduler.resume();
@@ -46,6 +47,89 @@ TEST_CASE("TaskScheduler requires resume and commits running before handler exec
     REQUIRE(completed);
     CHECK(completed->state == "completed");
     CHECK(completed->checkpoint == "done");
+}
+
+TEST_CASE("TaskScheduler replaces future definitions without taking over running work",
+        "[agent][task][durable][issue934]") {
+    auto store = agent::session::TaskStore::open_memory();
+    REQUIRE(store);
+    const agent::session::DurableTask running{
+            .id = "running-old", .kind = "versioned", .state = "pending", .definition_version = 1};
+    const agent::session::DurableTask pending{
+            .id = "pending-old", .kind = "versioned", .state = "pending", .definition_version = 1};
+    REQUIRE(store->create_task(running));
+    REQUIRE(store->create_task(pending));
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool old_started = false;
+    bool release_old = false;
+    bool new_finished = false;
+    std::string running_result;
+    std::string pending_result;
+    harness::TaskScheduler scheduler(*store);
+    REQUIRE(scheduler.register_handler(
+            running,
+            [&](std::stop_token) -> support::Expected<std::string> {
+                std::unique_lock lock(mutex);
+                old_started = true;
+                changed.notify_all();
+                changed.wait(lock, [&] { return release_old; });
+                running_result = "old";
+                return running_result;
+            },
+            1));
+    REQUIRE(scheduler.enqueue(running));
+    scheduler.resume();
+    {
+        std::unique_lock lock(mutex);
+        REQUIRE(changed.wait_for(lock, 2s, [&] { return old_started; }));
+    }
+    REQUIRE(scheduler.register_handler(
+            running,
+            [&](std::stop_token) -> support::Expected<std::string> {
+                {
+                    std::lock_guard lock(mutex);
+                    pending_result = "new";
+                    new_finished = true;
+                }
+                changed.notify_all();
+                return pending_result;
+            },
+            2));
+    REQUIRE(scheduler.migrate_task(pending.id, 2));
+    auto migrated_pending = store->load_task(pending.id);
+    REQUIRE(migrated_pending);
+    REQUIRE(scheduler.enqueue(*migrated_pending));
+    {
+        std::lock_guard lock(mutex);
+        release_old = true;
+    }
+    changed.notify_all();
+    {
+        std::unique_lock lock(mutex);
+        REQUIRE(changed.wait_for(lock, 2s, [&] { return new_finished; }));
+    }
+    scheduler.close();
+    CHECK(running_result == "old");
+    CHECK(pending_result == "new");
+    auto migrated = store->load_task(pending.id);
+    REQUIRE(migrated);
+    CHECK(migrated->definition_version == 2);
+}
+
+TEST_CASE("TaskScheduler rejects unknown kinds and version regression", "[agent][task][durable][issue934]") {
+    auto store = agent::session::TaskStore::open_memory();
+    REQUIRE(store);
+    harness::TaskScheduler scheduler(*store);
+    const agent::session::DurableTask task{.id = "version-errors", .kind = "versioned", .state = "pending"};
+    auto unknown = scheduler.enqueue(task);
+    REQUIRE_FALSE(unknown);
+    CHECK(unknown.error().code == support::ErrorCode::Validation);
+    REQUIRE(scheduler.register_handler(task, [](std::stop_token) -> support::Expected<std::string> { return "x"; }, 2));
+    auto regression = scheduler.register_handler(
+            task, [](std::stop_token) -> support::Expected<std::string> { return "old"; }, 1);
+    REQUIRE_FALSE(regression);
+    CHECK(regression.error().code == support::ErrorCode::Validation);
 }
 
 TEST_CASE("TaskScheduler recovery dispatches registered work only after resume", "[agent][task][durable]") {
@@ -94,10 +178,11 @@ TEST_CASE("TaskScheduler does not run a handler when reservation storage fails",
                                         "RAISE(ABORT, 'injected reservation failure'); END;"));
     bool started = false;
     harness::TaskScheduler scheduler(store);
-    REQUIRE(scheduler.enqueue(task, [&](std::stop_token) -> support::Expected<std::string> {
+    REQUIRE(scheduler.register_handler(task, [&](std::stop_token) -> support::Expected<std::string> {
         started = true;
         return "unexpected";
     }));
+    REQUIRE(scheduler.enqueue(task));
     scheduler.resume();
     scheduler.close();
     CHECK_FALSE(started);
@@ -143,7 +228,7 @@ TEST_CASE("TaskScheduler recovers transcript export and makes the file effect id
                 .checkpoint = "",
                 .owner_session = "session"};
         REQUIRE(scheduler.register_handler(
-                recovered, harness::transcript_export_handler(transcript, destination.string())));
+                recovered, harness::transcript_export_handler(transcript, destination.string()), 0));
         scheduler.resume();
         bool completed = false;
         for (int attempt = 0; attempt < 2000; ++attempt) {
@@ -175,7 +260,7 @@ TEST_CASE("TaskScheduler cascades abort to active and queued descendants", "[age
     const agent::session::DurableTask child{
             .id = "child-933", .kind = "work", .state = "pending", .parent_task_id = parent.id};
     const agent::session::DurableTask grandchild{
-            .id = "grandchild-933", .kind = "work", .state = "pending", .parent_task_id = child.id};
+            .id = "grandchild-933", .kind = "other-work", .state = "pending", .parent_task_id = child.id};
     REQUIRE(store->create_task(parent));
     REQUIRE(store->create_task(child));
     REQUIRE(store->create_task(grandchild));
@@ -185,7 +270,7 @@ TEST_CASE("TaskScheduler cascades abort to active and queued descendants", "[age
     bool child_stopped = false;
     std::atomic_bool grandchild_started{false};
     harness::TaskScheduler scheduler(*store);
-    REQUIRE(scheduler.enqueue(child, [&](std::stop_token token) -> support::Expected<std::string> {
+    REQUIRE(scheduler.register_handler(child, [&](std::stop_token token) -> support::Expected<std::string> {
         {
             std::lock_guard lock(mutex);
             child_started = true;
@@ -196,10 +281,12 @@ TEST_CASE("TaskScheduler cascades abort to active and queued descendants", "[age
         child_stopped = true;
         return "cancelled";
     }));
-    REQUIRE(scheduler.enqueue(grandchild, [&](std::stop_token) -> support::Expected<std::string> {
+    REQUIRE(scheduler.enqueue(child));
+    REQUIRE(scheduler.register_handler(grandchild, [&](std::stop_token) -> support::Expected<std::string> {
         grandchild_started.store(true);
         return "unexpected";
     }));
+    REQUIRE(scheduler.enqueue(grandchild));
     scheduler.resume();
     {
         std::unique_lock lock(mutex);
@@ -227,7 +314,7 @@ TEST_CASE("TaskScheduler propagates durable abort and close waits for terminaliz
     bool started = false;
     bool stopped = false;
     harness::TaskScheduler scheduler(*store);
-    REQUIRE(scheduler.enqueue(task, [&](std::stop_token token) -> support::Expected<std::string> {
+    REQUIRE(scheduler.register_handler(task, [&](std::stop_token token) -> support::Expected<std::string> {
         {
             std::lock_guard lock(mutex);
             started = true;
@@ -238,6 +325,7 @@ TEST_CASE("TaskScheduler propagates durable abort and close waits for terminaliz
         stopped = true;
         return "cancelled";
     }));
+    REQUIRE(scheduler.enqueue(task));
     scheduler.resume();
     {
         std::unique_lock lock(mutex);
