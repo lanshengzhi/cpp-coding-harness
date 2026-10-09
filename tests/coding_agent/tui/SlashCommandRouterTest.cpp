@@ -53,6 +53,8 @@ TEST_CASE("Slash command parsing trims input and resolves aliases", "[coding_age
             {.text = "/mcp", .command = Mcp, .argument = {}},
             {.text = "/mcp login remote", .command = Mcp, .argument = "login remote"},
             {.text = "/mcp   reconnect echo  ", .command = Mcp, .argument = "reconnect echo"},
+            {.text = "/export", .command = Export, .argument = {}},
+            {.text = "/export  /tmp/transcript.jsonl  ", .command = Export, .argument = "/tmp/transcript.jsonl"},
     };
 
     for (const auto& test : cases) {
@@ -108,9 +110,15 @@ TEST_CASE("Slash command routing executes every immediate command synchronously"
     };
     tui::SlashCommandRouter router;
 
-    const std::vector<std::string_view> commands{
-        "/clear", "/quit", "/copy", "/session", "/hotkeys", "/settings", "/help",
-        "/name renamed"};
+    const std::vector<std::string_view> commands{"/clear",
+            "/quit",
+            "/copy",
+            "/session",
+            "/hotkeys",
+            "/settings",
+            "/help",
+            "/name renamed",
+            "/export /tmp/transcript.jsonl"};
     for (const auto& command : commands) {
         auto result = router.route(command, context);
         const auto* immediate = std::get_if<tui::SlashCommandImmediateResult>(&result);
@@ -126,6 +134,7 @@ TEST_CASE("Slash command routing executes every immediate command synchronously"
     CHECK(executed[5] == Settings);
     CHECK(executed[6] == Help);
     CHECK(executed[7] == Name);
+    CHECK(executed[8] == Export);
 }
 
 TEST_CASE("Slash command routing returns structured modal requests with arguments",

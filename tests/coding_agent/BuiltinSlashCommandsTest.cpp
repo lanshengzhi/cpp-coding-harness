@@ -11,7 +11,7 @@ TEST_CASE(
         "builtin slash autocomplete carries pi's verbatim entries", "[coding_agent][slash-commands][issue419][spec]") {
     const auto& commands = coding_agent::prompt::builtin_slash_commands();
 
-    // The 19 autocomplete entries of pi's 22-command catalog; `thinking` is
+    // The 20 autocomplete entries of pi's 22-command catalog; `thinking` is
     // pi's own entry (issue #791) and `mcp` is pi's extension-registered entry
     // (issue #884). Router-only spellings (`/clear`, `/help`,
     // `/commands`, `/exit`, `/q`, `/models`) come from the router's spelling
@@ -36,6 +36,7 @@ TEST_CASE(
             "reload",
             "quit",
             "mcp",
+            "export",
     };
     REQUIRE(commands.size() == expected_names.size());
     for (std::size_t index = 0; index < expected_names.size(); ++index) {
@@ -77,6 +78,11 @@ TEST_CASE(
     const auto* quit = by_name("quit");
     REQUIRE(quit != nullptr);
     CHECK(quit->description == "Quit pike");
+
+    const auto* export_command = by_name("export");
+    REQUIRE(export_command != nullptr);
+    CHECK(export_command->description == "Export session transcript");
+    CHECK(export_command->argument_hint == "<path>");
 }
 
 TEST_CASE("unported and router-only commands are absent from the autocomplete catalog",
@@ -84,7 +90,6 @@ TEST_CASE("unported and router-only commands are absent from the autocomplete ca
     const auto& commands = coding_agent::prompt::builtin_slash_commands();
     for (const auto& command : commands) {
         const std::string_view name = command.name;
-        CHECK(name != "export");
         CHECK(name != "import");
         CHECK(name != "share");
         // pi added `bug` to its catalog after the 83114817 baseline; it is

@@ -39,6 +39,7 @@ enum class SlashCommandId {
     Name,
     Trust,
     Mcp,
+    Export,
 };
 
 /// The command and its already-trimmed argument. Arguments are optional for
