@@ -141,11 +141,9 @@ struct WriteAttempt {
 }
 
 [[nodiscard]] bool supports_synchronized_output() {
-    const auto terminal = environment("TERM");
-    const auto program = environment("TERM_PROGRAM");
-    return terminal == "xterm-kitty" || terminal == "alacritty" || terminal == "foot" || terminal == "foot-extra" ||
-           terminal == "wezterm" || terminal == "ghostty" || program == "iTerm.app" || program == "WezTerm" ||
-           program == "ghostty";
+    // DEC 2026 is a private mode; terminals without support safely ignore it.
+    // Follow pi's conservative default so unknown TERM values still avoid frame flicker.
+    return true;
 }
 
 [[nodiscard]] TerminalColorCapability detect_color_capability() {
