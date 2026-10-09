@@ -19,6 +19,13 @@ using cch::harness::session::SessionTree;
 /// Session store implemented on SQLite, mirroring pi-durable's relational backing.
 class SqliteSessionStore final {
 public:
+    struct EntryPayload {
+        std::string entry_id;
+        std::optional<std::string> parent_id;
+        std::string type;
+        std::string payload_json;
+    };
+
     explicit SqliteSessionStore(SqliteDatabase db) : db_(std::move(db)) {}
 
     /// Open or create the database and apply schema migrations.
@@ -36,6 +43,10 @@ public:
             std::optional<std::string_view> parent_id,
             std::string_view type,
             std::string_view payload_json);
+
+    /// Append all entries in one transaction; a failure rolls back the complete batch.
+    [[nodiscard]] support::ExpectedVoid append_batch(
+            std::string_view session_id, const std::vector<EntryPayload>& entries);
 
     /// Load the full SessionTree for a conversation.
     [[nodiscard]] support::Expected<std::shared_ptr<SessionTree>> load_session_tree(std::string_view session_id);

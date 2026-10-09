@@ -56,6 +56,17 @@ support::ExpectedVoid SqliteSessionStore::append_entry(std::string_view session_
         std::optional<std::string_view> parent_id,
         std::string_view type,
         std::string_view payload_json) {
+    const EntryPayload entry{
+            .entry_id = std::string(entry_id),
+            .parent_id = parent_id ? std::optional<std::string>(*parent_id) : std::nullopt,
+            .type = std::string(type),
+            .payload_json = std::string(payload_json),
+    };
+    return append_batch(session_id, std::vector<EntryPayload>{entry});
+}
+
+support::ExpectedVoid SqliteSessionStore::append_batch(
+        std::string_view session_id, const std::vector<EntryPayload>& entries) {
     const auto now =
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
                     .count();
@@ -63,30 +74,31 @@ support::ExpectedVoid SqliteSessionStore::append_entry(std::string_view session_
     SqliteTransactionGuard txn(db_);
     if (auto res = db_.begin_transaction(); !res) return res;
 
-    // Ensure conversation exists
-    auto conv_stmt = db_.prepare("INSERT INTO conversations (session_id, created_at, updated_at) "
-                                 "VALUES (?1, ?2, ?2) "
-                                 "ON CONFLICT(session_id) DO UPDATE SET updated_at = ?2;");
-    if (!conv_stmt) return std::unexpected(conv_stmt.error());
-    (void)conv_stmt->bind_text(1, session_id);
-    (void)conv_stmt->bind_int64(2, now);
-    if (auto step = conv_stmt->step(); !step) return std::unexpected(step.error());
+    for (const auto& entry : entries) {
+        auto conv_stmt = db_.prepare("INSERT INTO conversations (session_id, created_at, updated_at) "
+                                     "VALUES (?1, ?2, ?2) "
+                                     "ON CONFLICT(session_id) DO UPDATE SET updated_at = ?2;");
+        if (!conv_stmt) return std::unexpected(conv_stmt.error());
+        if (auto result = conv_stmt->bind_text(1, session_id); !result) return result;
+        if (auto result = conv_stmt->bind_int64(2, now); !result) return result;
+        if (auto step = conv_stmt->step(); !step) return std::unexpected(step.error());
 
-    // Insert entry
-    auto entry_stmt = db_.prepare("INSERT INTO entries (id, session_id, parent_id, entry_type, payload, created_at) "
-                                  "VALUES (?1, ?2, ?3, ?4, ?5, ?6);");
-    if (!entry_stmt) return std::unexpected(entry_stmt.error());
-    (void)entry_stmt->bind_text(1, entry_id);
-    (void)entry_stmt->bind_text(2, session_id);
-    if (parent_id)
-        (void)entry_stmt->bind_text(3, *parent_id);
-    else
-        (void)entry_stmt->bind_null(3);
-    (void)entry_stmt->bind_text(4, type);
-    (void)entry_stmt->bind_text(5, payload_json);
-    (void)entry_stmt->bind_int64(6, now);
-
-    if (auto step = entry_stmt->step(); !step) return std::unexpected(step.error());
+        auto entry_stmt =
+                db_.prepare("INSERT INTO entries (id, session_id, parent_id, entry_type, payload, created_at) "
+                            "VALUES (?1, ?2, ?3, ?4, ?5, ?6);");
+        if (!entry_stmt) return std::unexpected(entry_stmt.error());
+        if (auto result = entry_stmt->bind_text(1, entry.entry_id); !result) return result;
+        if (auto result = entry_stmt->bind_text(2, session_id); !result) return result;
+        if (entry.parent_id) {
+            if (auto result = entry_stmt->bind_text(3, *entry.parent_id); !result) return result;
+        } else if (auto result = entry_stmt->bind_null(3); !result) {
+            return result;
+        }
+        if (auto result = entry_stmt->bind_text(4, entry.type); !result) return result;
+        if (auto result = entry_stmt->bind_text(5, entry.payload_json); !result) return result;
+        if (auto result = entry_stmt->bind_int64(6, now); !result) return result;
+        if (auto step = entry_stmt->step(); !step) return std::unexpected(step.error());
+    }
     return txn.commit();
 }
 

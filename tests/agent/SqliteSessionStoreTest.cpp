@@ -54,6 +54,45 @@ TEST_CASE("SqliteDatabase manages transactions and statements cleanly", "[agent]
     }
 }
 
+TEST_CASE("SqliteSessionStore commits batches atomically", "[agent][durable][sqlite][spec]") {
+    auto store = agent::session::SqliteSessionStore::open_memory();
+    REQUIRE(store);
+
+    const std::vector<agent::session::SqliteSessionStore::EntryPayload> batch{
+            {.entry_id = "batch-root",
+                    .parent_id = std::nullopt,
+                    .type = "user",
+                    .payload_json =
+                            R"({"id":"batch-root","parentId":null,"type":"message","message":{"role":"user","content":[{"type":"text","text":"hello"}]}})"},
+            {.entry_id = "batch-leaf",
+                    .parent_id = "batch-root",
+                    .type = "assistant",
+                    .payload_json =
+                            R"({"id":"batch-leaf","parentId":"batch-root","type":"message","message":{"role":"assistant","content":[{"type":"text","text":"hi"}],"api":"chat","provider":"openai","model":"gpt-4","stopReason":"stop","timestamp":1700000000000,"usage":{"input":10,"output":20,"cacheRead":0,"cacheWrite":0,"totalTokens":30,"cost":{"input":0.0,"output":0.0,"cacheRead":0.0,"cacheWrite":0.0,"total":0.0}}}})"},
+    };
+    REQUIRE(store->append_batch("batch-session", batch));
+    auto tree = store->load_session_tree("batch-session");
+    REQUIRE(tree);
+    REQUIRE(*tree);
+    CHECK((*tree)->entries().size() == 2);
+
+    const std::vector<agent::session::SqliteSessionStore::EntryPayload> failing_batch{
+            {.entry_id = "would-rollback",
+                    .parent_id = std::nullopt,
+                    .type = "user",
+                    .payload_json = batch.front().payload_json},
+            {.entry_id = "batch-root",
+                    .parent_id = std::nullopt,
+                    .type = "user",
+                    .payload_json = batch.front().payload_json},
+    };
+    CHECK_FALSE(store->append_batch("rollback-session", failing_batch));
+    auto rollback_tree = store->load_session_tree("rollback-session");
+    REQUIRE(rollback_tree);
+    REQUIRE(*rollback_tree);
+    CHECK((*rollback_tree)->entries().empty());
+}
+
 TEST_CASE("SqliteSessionStore appends and replays SessionTree identically", "[agent][durable][sqlite][spec]") {
     auto store = agent::session::SqliteSessionStore::open_memory();
     REQUIRE(store);
