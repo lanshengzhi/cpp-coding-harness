@@ -186,6 +186,25 @@ support::ExpectedVoid TaskStore::update_submission_state(std::string_view task_i
     return {};
 }
 
+support::ExpectedVoid TaskStore::migrate_task(std::string_view id, std::int64_t definition_version) {
+    if (definition_version < 0) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Task definition version is invalid"));
+    }
+    auto stmt = db_.prepare("UPDATE tasks SET definition_version = ?1, updated_at = ?2 "
+                            "WHERE id = ?3 AND state = 'pending' AND definition_version < ?1;");
+    if (!stmt) return std::unexpected(stmt.error());
+    if (auto result = stmt->bind_int64(1, definition_version); !result) return result;
+    if (auto result = stmt->bind_int64(2, now_ms()); !result) return result;
+    if (auto result = stmt->bind_text(3, id); !result) return result;
+    if (auto result = stmt->step(); !result) return std::unexpected(result.error());
+    if (sqlite3_changes(db_.handle()) != 1) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Task is not pending or definition version would regress"));
+    }
+    return {};
+}
+
 support::ExpectedVoid TaskStore::transition(std::string_view id,
         std::string_view expected_state,
         std::string_view next_state,

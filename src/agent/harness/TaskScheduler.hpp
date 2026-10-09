@@ -27,8 +27,10 @@ public:
     TaskScheduler(const TaskScheduler&) = delete;
     TaskScheduler& operator=(const TaskScheduler&) = delete;
 
-    [[nodiscard]] ExpectedVoid register_handler(durable_session::DurableTask task, Handler handler);
-    [[nodiscard]] ExpectedVoid enqueue(durable_session::DurableTask task, Handler handler);
+    [[nodiscard]] ExpectedVoid register_handler(
+            durable_session::DurableTask task, Handler handler, std::int64_t definition_version = 0);
+    [[nodiscard]] ExpectedVoid enqueue(durable_session::DurableTask task);
+    [[nodiscard]] ExpectedVoid migrate_task(std::string_view id, std::int64_t definition_version);
     [[nodiscard]] ExpectedVoid request_abort(std::string_view id);
     void resume() noexcept;
     void close() noexcept;
@@ -37,6 +39,7 @@ private:
     struct Work final {
         durable_session::DurableTask task;
         Handler handler;
+        std::int64_t definition_version{0};
         std::stop_source stop;
     };
 
