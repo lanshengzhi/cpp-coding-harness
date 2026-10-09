@@ -9,6 +9,7 @@ include_guard(GLOBAL)
         tests/agent/AgentTest.cpp
         tests/agent/SqliteSessionStoreTest.cpp
         tests/agent/TaskStoreTest.cpp
+        tests/agent/TaskSchedulerTest.cpp
         tests/agent/AgentBehaviorTest.cpp
         tests/agent/ModelRuntimeSeamTest.cpp
         tests/agent/ToolCallExecutorTest.cpp

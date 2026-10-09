@@ -155,6 +155,22 @@ support::ExpectedVoid TaskStore::request_abort(std::string_view id) {
     return {};
 }
 
+support::ExpectedVoid TaskStore::finish_aborted(std::string_view id, std::string_view checkpoint) {
+    SqliteTransactionGuard transaction(db_);
+    if (auto result = db_.begin_transaction(); !result) return result;
+    auto stmt = db_.prepare("UPDATE tasks SET state = 'aborted', checkpoint = ?1, updated_at = ?2 "
+                            "WHERE id = ?3 AND state = 'running' AND abort_requested = 1;");
+    if (!stmt) return std::unexpected(stmt.error());
+    if (auto result = stmt->bind_text(1, checkpoint); !result) return result;
+    if (auto result = stmt->bind_int64(2, now_ms()); !result) return result;
+    if (auto result = stmt->bind_text(3, id); !result) return result;
+    if (auto result = stmt->step(); !result) return std::unexpected(result.error());
+    if (sqlite3_changes(db_.handle()) != 1) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "Task is not abortable"));
+    }
+    return transaction.commit();
+}
+
 support::Expected<std::vector<DurableTask>> TaskStore::recover_tasks() {
     SqliteTransactionGuard transaction(db_);
     if (auto result = db_.begin_transaction(); !result) return std::unexpected(result.error());

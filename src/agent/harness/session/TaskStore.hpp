@@ -45,6 +45,7 @@ public:
             std::string_view next_state,
             std::string_view checkpoint);
     [[nodiscard]] support::ExpectedVoid request_abort(std::string_view id);
+    [[nodiscard]] support::ExpectedVoid finish_aborted(std::string_view id, std::string_view checkpoint);
     [[nodiscard]] support::Expected<std::vector<DurableTask>> recover_tasks();
     [[nodiscard]] support::Expected<DurableTask> load_task(std::string_view id);
 
