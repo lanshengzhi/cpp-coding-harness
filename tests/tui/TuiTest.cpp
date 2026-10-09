@@ -1037,7 +1037,7 @@ TEST_CASE("Tui stop scrolls the exit flow through the terminal scrollback on a f
     CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 2});
     CHECK(terminal.modes().cursor_visible);
 }
-TEST_CASE("Tui stop places the shell prompt below the bottom dock", "[tui][terminal][issue476][spec]") {
+TEST_CASE("Tui stop clears the bottom dock before placing the shell prompt", "[tui][terminal][issue832][spec]") {
     class DockedExitComponent final : public cch::tui::Component {
     public:
         [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
@@ -1059,11 +1059,12 @@ TEST_CASE("Tui stop places the shell prompt below the bottom dock", "[tui][termi
     REQUIRE(tui.stop());
 
     CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 4});
-    CHECK(terminal.screen()[1].starts_with("editor"));
-    CHECK(terminal.screen()[2].starts_with("footer"));
+    CHECK(terminal.screen()[1].find("editor") == std::string::npos);
+    CHECK(terminal.screen()[2].find("footer") == std::string::npos);
+    CHECK(terminal.scrollback().size() >= 2);
 }
 
-TEST_CASE("Tui stop moves focused dock cursor below the bottom dock", "[tui][terminal][issue476][spec]") {
+TEST_CASE("Tui stop moves focused dock cursor below the bottom dock", "[tui][terminal][issue832][spec]") {
     class FocusableDockedExitComponent final : public cch::tui::Component, public cch::tui::Focusable {
     public:
         [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
@@ -1098,6 +1099,6 @@ TEST_CASE("Tui stop moves focused dock cursor below the bottom dock", "[tui][ter
     REQUIRE(tui.stop());
 
     CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 4});
-    CHECK(terminal.screen()[2].starts_with("editor"));
-    CHECK(terminal.screen()[3].starts_with("footer"));
+    CHECK(terminal.screen()[2].find("editor") == std::string::npos);
+    CHECK(terminal.screen()[3].find("footer") == std::string::npos);
 }
