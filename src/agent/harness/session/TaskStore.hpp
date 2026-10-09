@@ -27,7 +27,9 @@ struct DurableTask {
 struct TaskSubmission {
     std::string id;
     std::string task_id;
+    std::string kind;
     std::string payload;
+    std::string state;
     std::int64_t created_at{0};
 };
 
@@ -40,6 +42,10 @@ public:
     [[nodiscard]] support::ExpectedVoid init_schema();
     [[nodiscard]] support::ExpectedVoid create_task(const DurableTask& task);
     [[nodiscard]] support::ExpectedVoid add_submission(const TaskSubmission& submission);
+    [[nodiscard]] support::Expected<TaskSubmission> submit(
+            const DurableTask& task, std::string request_id, std::string kind, std::string payload);
+    [[nodiscard]] support::Expected<TaskSubmission> load_submission(std::string_view request_id);
+    [[nodiscard]] support::ExpectedVoid update_submission_state(std::string_view task_id, std::string_view state);
     [[nodiscard]] support::ExpectedVoid transition(std::string_view id,
             std::string_view expected_state,
             std::string_view next_state,

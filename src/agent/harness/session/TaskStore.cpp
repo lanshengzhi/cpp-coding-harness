@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS submissions (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL REFERENCES tasks(id),
     payload TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued', 'placed', 'done', 'unanswered')),
     created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_state ON tasks(state);
@@ -102,14 +104,62 @@ support::ExpectedVoid TaskStore::create_task(const DurableTask& task) {
 }
 
 support::ExpectedVoid TaskStore::add_submission(const TaskSubmission& submission) {
-    auto stmt = db_.prepare("INSERT INTO submissions (id, task_id, payload, created_at) VALUES (?1, ?2, ?3, ?4);");
+    auto stmt = db_.prepare("INSERT INTO submissions (id, task_id, payload, kind, state, created_at) "
+                            "VALUES (?1, ?2, ?3, ?4, ?5, ?6);");
     if (!stmt) return std::unexpected(stmt.error());
     if (auto result = stmt->bind_text(1, submission.id); !result) return result;
     if (auto result = stmt->bind_text(2, submission.task_id); !result) return result;
     if (auto result = stmt->bind_text(3, submission.payload); !result) return result;
-    if (auto result = stmt->bind_int64(4, submission.created_at == 0 ? now_ms() : submission.created_at); !result) {
+    if (auto result = stmt->bind_text(4, submission.kind); !result) return result;
+    if (auto result = stmt->bind_text(5, submission.state.empty() ? "queued" : submission.state); !result)
+        return result;
+    if (auto result = stmt->bind_int64(6, submission.created_at == 0 ? now_ms() : submission.created_at); !result) {
         return result;
     }
+    if (auto result = stmt->step(); !result) return std::unexpected(result.error());
+    return {};
+}
+
+support::Expected<TaskSubmission> TaskStore::submit(
+        const DurableTask& task, std::string request_id, std::string kind, std::string payload) {
+    SqliteTransactionGuard transaction(db_);
+    if (auto result = db_.begin_transaction(); !result) return std::unexpected(result.error());
+    auto existing = load_submission(request_id);
+    if (existing) {
+        if (auto result = transaction.commit(); !result) return std::unexpected(result.error());
+        return existing;
+    }
+    if (auto result = create_task(task); !result) return std::unexpected(result.error());
+    TaskSubmission submission{.id = std::move(request_id),
+            .task_id = task.id,
+            .kind = std::move(kind),
+            .payload = std::move(payload),
+            .state = "queued"};
+    if (auto result = add_submission(submission); !result) return std::unexpected(result.error());
+    if (auto result = transaction.commit(); !result) return std::unexpected(result.error());
+    return submission;
+}
+
+support::Expected<TaskSubmission> TaskStore::load_submission(std::string_view request_id) {
+    auto stmt = db_.prepare("SELECT id, task_id, kind, payload, state, created_at FROM submissions WHERE id = ?1;");
+    if (!stmt) return std::unexpected(stmt.error());
+    if (auto result = stmt->bind_text(1, request_id); !result) return std::unexpected(result.error());
+    auto row = stmt->step();
+    if (!row) return std::unexpected(row.error());
+    if (!*row) return std::unexpected(support::make_error(support::ErrorCode::Validation, "Submission does not exist"));
+    return TaskSubmission{.id = stmt->column_text(0),
+            .task_id = stmt->column_text(1),
+            .kind = stmt->column_text(2),
+            .payload = stmt->column_text(3),
+            .state = stmt->column_text(4),
+            .created_at = stmt->column_int64(5)};
+}
+
+support::ExpectedVoid TaskStore::update_submission_state(std::string_view task_id, std::string_view state) {
+    auto stmt = db_.prepare("UPDATE submissions SET state = ?1 WHERE task_id = ?2;");
+    if (!stmt) return std::unexpected(stmt.error());
+    if (auto result = stmt->bind_text(1, state); !result) return result;
+    if (auto result = stmt->bind_text(2, task_id); !result) return result;
     if (auto result = stmt->step(); !result) return std::unexpected(result.error());
     return {};
 }
@@ -140,6 +190,9 @@ support::ExpectedVoid TaskStore::transition(std::string_view id,
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "Task state changed or task is missing"));
     }
+    if (next_state == "completed" || next_state == "failed" || next_state == "aborted") {
+        if (auto result = update_submission_state(id, "done"); !result) return result;
+    }
     return transaction.commit();
 }
 
@@ -168,6 +221,7 @@ support::ExpectedVoid TaskStore::finish_aborted(std::string_view id, std::string
     if (sqlite3_changes(db_.handle()) != 1) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation, "Task is not abortable"));
     }
+    if (auto result = update_submission_state(id, "unanswered"); !result) return result;
     return transaction.commit();
 }
 
