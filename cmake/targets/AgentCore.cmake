@@ -31,6 +31,8 @@ cch_parity_declare_target(
         src/agent/harness/session/EntryRedaction.cpp
         src/agent/harness/session/EntrySerializer.cpp
         src/agent/harness/session/JsonlSessionStore.cpp
+        src/agent/harness/session/SqliteDatabase.cpp
+        src/agent/harness/session/SqliteSessionStore.cpp
         src/agent/harness/session/SessionStore.cpp
         src/agent/harness/session/SessionResume.cpp
         src/agent/harness/session/SessionTree.cpp
@@ -43,6 +45,7 @@ cch_parity_declare_target(
         Threads::Threads@threads
         glaze::glaze@glaze
         utf8proc::utf8proc@utf8proc
+        unofficial::sqlite3::sqlite3@sqlite3
     INTERFACE_DEPENDS
         cch_ai
         cch_support

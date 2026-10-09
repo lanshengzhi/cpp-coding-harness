@@ -12,6 +12,7 @@
     "openssl",
     "catch2",
     "utf8proc",
+    "sqlite3",
     {
       "$comment": "codemode sandbox runtime (spec #865, ticket #874): WasmEdge 0.13.5 from the pinned baseline via the in-tree overlay port cmake/vcpkg-ports/wasmedge, which carries gcc16-demote-warnings.patch. Default features (tools) are off; only the static library and headers are consumed.",
       "name": "wasmedge",
