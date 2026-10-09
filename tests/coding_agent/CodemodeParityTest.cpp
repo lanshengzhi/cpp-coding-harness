@@ -101,6 +101,7 @@ TEST_CASE("codemode description formats nested tools catalog dynamically", "[cod
     CHECK(desc.find("Nested tools:") != std::string::npos);
     CHECK(desc.find("tools.sample_tool") != std::string::npos);
     CHECK(desc.find("A sample tool description") != std::string::npos);
+    CHECK(desc.find("tools.sample_tool({ limit, path })") != std::string::npos);
 }
 
 TEST_CASE("the codemode grammar variant is pi's frozen CODEMODE_SOURCE_GRAMMAR",
