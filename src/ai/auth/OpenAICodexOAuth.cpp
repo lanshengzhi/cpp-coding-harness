@@ -1,10 +1,10 @@
 #include "OpenAICodexOAuth.hpp"
 
 #include "OpenAICodexOAuthWire.hpp"
-#include "OAuthCallbackServer.hpp"
-#include "OAuthShared.hpp"
-#include "Pkce.hpp"
-#include "ai/JsonAccess.hpp"
+#include <cch/ai/OAuthCallbackServer.hpp>
+#include <cch/ai/OAuthShared.hpp>
+#include <cch/ai/Pkce.hpp>
+#include <cch/ai/JsonAccess.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
 #include "support/ExpectedMacros.hpp"

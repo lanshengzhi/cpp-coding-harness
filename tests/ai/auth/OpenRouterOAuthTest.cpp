@@ -1,6 +1,6 @@
 #include "ai/auth/OpenRouterOAuth.hpp"
-#include "ai/auth/Pkce.hpp"
-#include "ai/JsonAccess.hpp"
+#include <cch/ai/Pkce.hpp>
+#include <cch/ai/JsonAccess.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/FakeOAuthHttpClient.hpp"

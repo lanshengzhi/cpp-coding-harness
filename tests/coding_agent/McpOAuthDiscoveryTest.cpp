@@ -7,8 +7,8 @@
 // that missed, and an issuer that does not match the authorization server URL
 // must be rejected rather than accepted as metadata.
 
-#include "ai/JsonAccess.hpp"
-#include "ai/auth/OAuthHttpClient.hpp"
+#include <cch/ai/JsonAccess.hpp>
+#include <cch/ai/OAuthHttpClient.hpp>
 #include "coding_agent/mcp/McpOAuthDiscovery.hpp"
 #include "support/FakeOAuthHttpClient.hpp"
 #include "support/Json.hpp"

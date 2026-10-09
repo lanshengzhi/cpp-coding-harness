@@ -11,7 +11,7 @@
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/ai/Tool.hpp>
 #include <cch/ai/Usage.hpp>
-#include "ai/providers/StreamTransport.hpp"
+#include <cch/ai/StreamTransport.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/Settings.hpp>

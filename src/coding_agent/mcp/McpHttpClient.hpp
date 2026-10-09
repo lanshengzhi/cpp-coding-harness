@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ai/providers/StreamTransport.hpp"
+#include <cch/ai/StreamTransport.hpp>
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
 #include "coding_agent/mcp/McpRequestAuthSource.hpp"
 #include "coding_agent/mcp/McpServerConnection.hpp"

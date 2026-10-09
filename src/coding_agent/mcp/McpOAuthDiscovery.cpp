@@ -9,8 +9,8 @@
 #include "coding_agent/mcp/McpOAuthDiscovery.hpp"
 #include "coding_agent/mcp/McpUrl.hpp"
 
-#include "ai/JsonAccess.hpp"
-#include "ai/auth/OAuthHttpClient.hpp"
+#include <cch/ai/JsonAccess.hpp>
+#include <cch/ai/OAuthHttpClient.hpp>
 
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"

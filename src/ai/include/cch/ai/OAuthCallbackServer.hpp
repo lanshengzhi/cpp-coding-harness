@@ -64,9 +64,8 @@ private:
 public:
     /// Binds the acceptor. On any listen failure the returned server still
     /// reports `wait_for_code` as `std::nullopt` (manual-input-only degrade).
-    [[nodiscard]] static boost::asio::awaitable<
-        support::Expected<std::shared_ptr<OAuthCallbackServer>>>
-    start(OAuthCallbackServerOptions options);
+    [[nodiscard]] static boost::asio::awaitable<support::Expected<std::shared_ptr<OAuthCallbackServer>>> start(
+            OAuthCallbackServerOptions options);
 
     ~OAuthCallbackServer();
     OAuthCallbackServer(const OAuthCallbackServer&) = delete;
@@ -83,8 +82,7 @@ public:
     /// the Expected error channel. Resolves with an empty result when the
     /// wait is cancelled (manual prompt won, listen failure, server closed).
     /// Safe to await once.
-    [[nodiscard]] boost::asio::awaitable<support::Expected<OAuthCallbackResult>>
-    wait_for_code();
+    [[nodiscard]] boost::asio::awaitable<support::Expected<OAuthCallbackResult>> wait_for_code();
 
     /// Settle a pending `wait_for_code` with `std::nullopt` (idempotent).
     void cancel_wait();

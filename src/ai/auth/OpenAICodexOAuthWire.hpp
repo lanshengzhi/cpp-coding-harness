@@ -1,8 +1,8 @@
 #pragma once
 
 #include "DevicePoll.hpp"
-#include "OAuthHttpClient.hpp"
-#include "OAuthShared.hpp"
+#include <cch/ai/OAuthHttpClient.hpp>
+#include <cch/ai/OAuthShared.hpp>
 #include "OpenAICodexOAuth.hpp"
 
 #include <cch/ai/Auth.hpp>

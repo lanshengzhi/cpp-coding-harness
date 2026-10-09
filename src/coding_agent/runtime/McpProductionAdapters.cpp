@@ -6,7 +6,7 @@
 
 #include "coding_agent/runtime/McpProductionAdapters.hpp"
 
-#include "ai/providers/BoostBeastStreamTransport.hpp"
+#include <cch/ai/BoostBeastStreamTransport.hpp>
 #include "coding_agent/extensions/ExtensionToolRegistry.hpp"
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpConfigFile.hpp"

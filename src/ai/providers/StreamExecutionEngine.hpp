@@ -4,8 +4,8 @@
 #include "ai/providers/Provider.hpp"
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/support/Error.hpp>
-#include "ai/providers/SseParser.hpp"
-#include "ai/providers/StreamTransport.hpp"
+#include <cch/ai/SseParser.hpp>
+#include <cch/ai/StreamTransport.hpp>
 
 #include <boost/asio/awaitable.hpp>
 

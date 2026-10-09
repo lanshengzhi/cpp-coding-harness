@@ -54,8 +54,7 @@ public:
     /// `io_context` executor (`cch::ai::TransportExecutor`, ADR 0054) and do
     /// not run `async_stream` on the same transport from two threads.
     [[nodiscard]] virtual boost::asio::awaitable<support::Expected<StreamResponse>> async_stream(
-        const StreamRequest& request,
-        BodyChunkHandler on_body_chunk) = 0;
+            const StreamRequest& request, BodyChunkHandler on_body_chunk) = 0;
 };
 
 } // namespace cch::ai::providers

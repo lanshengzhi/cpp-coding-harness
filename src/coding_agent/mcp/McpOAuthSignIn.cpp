@@ -14,9 +14,9 @@
 #include "coding_agent/mcp/McpOAuthFlow.hpp"
 #include "coding_agent/mcp/McpOAuthProvider.hpp"
 
-#include "ai/auth/OAuthCallbackServer.hpp"
-#include "ai/auth/OAuthHttpClient.hpp"
-#include "ai/auth/Pkce.hpp"
+#include <cch/ai/OAuthCallbackServer.hpp>
+#include <cch/ai/OAuthHttpClient.hpp>
+#include <cch/ai/Pkce.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 

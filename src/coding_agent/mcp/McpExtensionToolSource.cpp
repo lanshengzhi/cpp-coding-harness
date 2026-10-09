@@ -17,9 +17,9 @@
 
 #include <cch/ai/Content.hpp>
 
-#include "ai/auth/Pkce.hpp"
+#include <cch/ai/Pkce.hpp>
 
-#include "ai/providers/BoostBeastStreamTransport.hpp"
+#include <cch/ai/BoostBeastStreamTransport.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
 

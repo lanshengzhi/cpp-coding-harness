@@ -14,11 +14,11 @@
 
 #include "coding_agent/mcp/McpNamespace.hpp"
 
-#include "ai/JsonAccess.hpp"
-#include "ai/auth/OAuthCallbackServer.hpp"
-#include "ai/auth/OAuthHttpClient.hpp"
-#include "ai/auth/OAuthShared.hpp"
-#include "ai/auth/Pkce.hpp"
+#include <cch/ai/JsonAccess.hpp>
+#include <cch/ai/OAuthCallbackServer.hpp>
+#include <cch/ai/OAuthHttpClient.hpp>
+#include <cch/ai/OAuthShared.hpp>
+#include <cch/ai/Pkce.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"

@@ -5,10 +5,10 @@
 #include <cch/ai/Timestamps.hpp>
 #include "ai/api/PartialJson.hpp"
 #include "ai/api/ResponsesEventProcessor.hpp"
-#include "ai/auth/Pkce.hpp"
+#include <cch/ai/Pkce.hpp>
 #include "ai/providers/ProviderError.hpp"
 #include "ai/providers/RetryPolicy.hpp"
-#include "ai/providers/SseParser.hpp"
+#include <cch/ai/SseParser.hpp>
 #include "ai/providers/StreamEmit.hpp"
 #include "ai/providers/StreamExecutionEngine.hpp"
 #include "support/ExpectedMacros.hpp"

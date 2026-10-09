@@ -1,7 +1,7 @@
-#include "OAuthCallbackServer.hpp"
+#include <cch/ai/OAuthCallbackServer.hpp>
 
 #include "OauthPage.hpp"
-#include "Pkce.hpp"
+#include <cch/ai/Pkce.hpp>
 #include "ai/TransportExecutor.hpp"
 #include "support/ExpectedMacros.hpp"
 

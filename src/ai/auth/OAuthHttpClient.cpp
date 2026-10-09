@@ -1,4 +1,4 @@
-#include "OAuthHttpClient.hpp"
+#include <cch/ai/OAuthHttpClient.hpp>
 
 #include "ai/CancellationBridge.hpp"
 #include "ai/TransportExecutor.hpp"

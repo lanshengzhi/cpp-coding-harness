@@ -8,9 +8,9 @@
 
 #include "coding_agent/mcp/McpOAuthFlow.hpp"
 
-#include "ai/JsonAccess.hpp"
-#include "ai/auth/OAuthHttpClient.hpp"
-#include "ai/auth/Pkce.hpp"
+#include <cch/ai/JsonAccess.hpp>
+#include <cch/ai/OAuthHttpClient.hpp>
+#include <cch/ai/Pkce.hpp>
 
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"

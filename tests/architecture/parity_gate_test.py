@@ -261,53 +261,15 @@ class ManifestSchemaTest(unittest.TestCase):
         self.assertEqual(clause.source_prefixes, ("src/agent/",))
         self.assertEqual(clause.forbidden_include_prefixes, ("ai/", "src/ai/"))
 
-    def test_checked_in_manifest_covers_coding_agent_ai_private_reach_through(self):
-        # Spec #865 / ADR 0066: the MCP transports reuse the ai outbound
-        # transport and OAuth helpers, which is a cross-Owner reach-through.
-        # The rule pins the boundary and the dated, source-scoped exceptions
-        # record the migration (pi-parity.md), so a new unlisted include is
-        # rejected rather than silently tolerated. #881 removes both when the
-        # narrow ai interface lands.
+    def test_checked_in_manifest_has_no_coding_agent_ai_private_exceptions(self):
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
         manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
-        rules = {rule.rule_id: rule for rule in manifest.architecture_contract.rules}
-        clause = rules["coding-agent-no-ai-private-includes"]
-        self.assertEqual(clause.source_prefixes, ("src/coding_agent/",))
-        self.assertEqual(clause.excluded_source_prefixes, ())
-        self.assertEqual(clause.forbidden_include_prefixes, ("ai/", "src/ai/"))
-
-        # The checked-in convention this suite uses is an exact set comparison:
-        # every exception the manifest records for the rule is named here, so a
-        # newly added reach-through source must be recorded in this assertion in
-        # the same change. The OAuth discovery/flow sources joined the set with
-        # the RFC 9728 / DCR slice (#882), which also reuses the shared ai OAuth
-        # seam, and the manifest is the machine-readable authority (the test
-        # agrees with the landed reality rather than the earlier four-source
-        # list).
-        exceptions = {
-            exception.source: exception
+        exceptions = [
+            exception
             for exception in manifest.architecture_contract.exceptions
             if exception.rule_id == "coding-agent-no-ai-private-includes"
-        }
-        self.assertEqual(
-            set(exceptions),
-            {
-                "src/coding_agent/mcp/McpHttpClient.hpp",
-                "src/coding_agent/mcp/McpHttpClient.cpp",
-                "src/coding_agent/mcp/McpExtensionToolSource.cpp",
-                "src/coding_agent/mcp/McpOAuthDiscovery.cpp",
-                "src/coding_agent/mcp/McpOAuthFlow.cpp",
-                "src/coding_agent/mcp/McpOAuthProvider.cpp",
-                "src/coding_agent/mcp/McpOAuthFlow.cpp",
-                "src/coding_agent/mcp/McpOAuthDiscovery.cpp",
-                "src/coding_agent/mcp/McpOAuthSignIn.cpp",
-                "src/coding_agent/runtime/McpProductionAdapters.cpp",
-            },
-        )
-        for exception in exceptions.values():
-            self.assertEqual(exception.owner, "cch_coding_agent")
-            self.assertEqual(exception.removal_ticket, "#881")
-            self.assertEqual(exception.expires, "2027-06-30")
+        ]
+        self.assertEqual(exceptions, [])
 
     def test_checked_in_manifest_closes_the_private_reach_through_paths(self):
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
@@ -1364,13 +1326,9 @@ class ArchitectureContractTest(unittest.TestCase):
                 self.assertEqual(diagnostics[0].target, "cch_agent_core")
                 self.assertEqual(diagnostics[0].dependency, include_path)
 
-    def test_coding_agent_ai_private_reach_through_is_rejected_except_for_listed_sources(self):
-        # The migration rule and its dated exceptions are pinned against the
-        # checked-in manifest: a NEW application source that includes an ai
-        # private header is rejected, while the four #881-listed MCP sources are
-        # allowed. The separation case is the difference between the rule
-        # (property) and the exception list (record): the property this proves
-        # is that only named sources can reach through.
+    def test_coding_agent_ai_private_reach_through_is_rejected_and_owner_interface_is_allowed(self):
+        # The migration records are gone; a source still cannot reach through
+        # the private root, while a canonical Owner Interface include is legal.
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
         manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
         with tempfile.TemporaryDirectory() as tmp:
@@ -1386,23 +1344,20 @@ class ArchitectureContractTest(unittest.TestCase):
         self.assertIn("coding-agent-no-ai-private-includes", diagnostics[0].message)
         self.assertEqual(diagnostics[0].dependency, "ai/providers/StreamTransport.hpp")
 
-        for listed_source in (
-            "coding_agent/mcp/McpHttpClient.hpp",
-            "coding_agent/mcp/McpHttpClient.cpp",
-            "coding_agent/mcp/McpExtensionToolSource.cpp",
-            "coding_agent/mcp/McpOAuthProvider.cpp",
-        ):
-            with self.subTest(source=listed_source):
-                with tempfile.TemporaryDirectory() as tmp:
-                    diagnostics = run_include_case(
-                        tmp,
-                        "cch_coding_agent",
-                        listed_source,
-                        "ai/providers/StreamTransport.hpp",
-                        spelling="quote",
-                        manifest=manifest,
-                    )
-                self.assertEqual(diagnostics, [])
+        with tempfile.TemporaryDirectory() as tmp:
+            project_root = make_project_tree(tmp)
+            header = project_root / "src/ai/include/cch/ai/StreamTransport.hpp"
+            header.parent.mkdir(parents=True, exist_ok=True)
+            header.write_text("#pragma once\\n")
+            diagnostics = run_include_case(
+                tmp,
+                "cch_coding_agent",
+                "coding_agent/mcp/McpHttpClient.hpp",
+                "cch/ai/StreamTransport.hpp",
+                spelling="angle",
+                manifest=manifest,
+            )
+        self.assertEqual(diagnostics, [])
 
     def test_application_source_cannot_include_agent_private_header(self):
         # The text-limiting, compaction, and session-serialization seams moved

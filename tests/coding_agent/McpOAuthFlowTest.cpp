@@ -8,9 +8,9 @@
 // dead refresh token must invalidate the tokens and re-authorize instead of
 // looping, and a code from another issuer must never reach the token endpoint.
 
-#include "ai/JsonAccess.hpp"
-#include "ai/auth/OAuthHttpClient.hpp"
-#include "ai/auth/Pkce.hpp"
+#include <cch/ai/JsonAccess.hpp>
+#include <cch/ai/OAuthHttpClient.hpp>
+#include <cch/ai/Pkce.hpp>
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpOAuthFlow.hpp"
 #include "support/FakeOAuthHttpClient.hpp"

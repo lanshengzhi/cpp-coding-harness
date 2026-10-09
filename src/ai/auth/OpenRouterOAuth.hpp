@@ -1,6 +1,6 @@
 #pragma once
 
-#include "OAuthHttpClient.hpp"
+#include <cch/ai/OAuthHttpClient.hpp>
 
 #include <cch/ai/Auth.hpp>
 

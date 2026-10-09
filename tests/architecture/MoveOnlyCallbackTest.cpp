@@ -5,7 +5,7 @@
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/ai/StreamEvent.hpp>
-#include "ai/providers/StreamTransport.hpp"
+#include <cch/ai/StreamTransport.hpp>
 
 #include <memory>
 #include <type_traits>

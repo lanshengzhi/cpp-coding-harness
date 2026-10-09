@@ -1,7 +1,7 @@
 #include <cch/ai/Models.hpp>
+#include <cch/ai/JsonAccess.hpp>
 
 #include "DefaultModelsJson.hpp"
-#include "ai/JsonAccess.hpp"
 #include "support/Json.hpp"
 #include "ai/auth/OpenAIChatGPTOAuth.hpp"
 #include "ai/auth/OpenAICodexOAuth.hpp"
