@@ -101,6 +101,7 @@ struct OwnedPipe {
         const std::vector<char*>& envp,
         int stdin_read,
         int stdout_write,
+        int stderr_write,
         int error_write) noexcept {
     auto fail = [&](int stage_error) {
         (void)::write(error_write, &stage_error, sizeof(stage_error));
@@ -115,12 +116,10 @@ struct OwnedPipe {
     if (::dup2(stdout_write, STDOUT_FILENO) == -1) {
         fail(errno);
     }
-    // The server's stderr never affects framing (pi captures it into a bounded
-    // ring; this slice discards it) and must be drained to /dev/null so a
-    // chatty server cannot block on a full pipe.
-    const int devnull = ::open("/dev/null", O_WRONLY | O_CLOEXEC);
-    if (devnull >= 0) {
-        (void)::dup2(devnull, STDERR_FILENO);
+    // The server's stderr is captured into a bounded ring buffer (matching pi's
+    // 64 KB ring and stderrTail diagnostics).
+    if (::dup2(stderr_write, STDERR_FILENO) == -1) {
+        fail(errno);
     }
     ::execvpe(command.c_str(), argv.data(), envp.data());
     fail(errno);
@@ -130,7 +129,8 @@ struct OwnedPipe {
 } // namespace
 
 McpStdioClient::McpStdioClient(ConstructionKey, boost::asio::any_io_executor executor, McpStdioServerConfig config)
-    : executor_(std::move(executor)), config_(std::move(config)), stdin_pipe_(executor_), stdout_pipe_(executor_) {}
+    : executor_(std::move(executor)), config_(std::move(config)), stdin_pipe_(executor_), stdout_pipe_(executor_),
+      stderr_pipe_(executor_) {}
 
 McpStdioClient::~McpStdioClient() {
     close_transport();
@@ -161,6 +161,10 @@ support::ExpectedVoid McpStdioClient::spawn() {
     auto error_fds = make_pipe();
     if (!error_fds) {
         return std::unexpected(transport_error(config_.name, "setup pipe creation failed", std::strerror(errno)));
+    }
+    auto stderr_fds = make_pipe();
+    if (!stderr_fds) {
+        return std::unexpected(transport_error(config_.name, "stderr pipe creation failed", std::strerror(errno)));
     }
 
     std::vector<std::string> argument_storage;
@@ -208,13 +212,20 @@ support::ExpectedVoid McpStdioClient::spawn() {
         return std::unexpected(transport_error(config_.name, "fork failed", std::strerror(errno)));
     }
     if (child == 0) {
-        run_child(config_.command, argv, envp, stdin_fds->source.get(), stdout_fds->sink.get(), error_fds->sink.get());
+        run_child(config_.command,
+                argv,
+                envp,
+                stdin_fds->source.get(),
+                stdout_fds->sink.get(),
+                stderr_fds->sink.get(),
+                error_fds->sink.get());
     }
 
     // The parent keeps only the ends it drives; the child's ends are still
     // owned by `UniqueFd` and close on return.
     (void)stdin_fds->source.close();
     (void)stdout_fds->sink.close();
+    (void)stderr_fds->sink.close();
     (void)error_fds->sink.close();
 
     boost::system::error_code assign_error;
@@ -238,6 +249,12 @@ support::ExpectedVoid McpStdioClient::spawn() {
         return std::unexpected(transport_error(config_.name, "stdout pipe setup failed", assign_error.message()));
     }
     (void)stdout_fds->source.release();
+
+    assign_error.clear();
+    stderr_pipe_.assign(stderr_fds->source.get(), assign_error);
+    if (!assign_error) {
+        (void)stderr_fds->source.release();
+    }
 
     child_pid_ = child;
     process_group_ = child;
@@ -659,6 +676,9 @@ void McpStdioClient::close_transport() noexcept {
     }
     if (stdout_pipe_.is_open()) {
         stdout_pipe_.close(ignored);
+    }
+    if (stderr_pipe_.is_open()) {
+        stderr_pipe_.close(ignored);
     }
 }
 

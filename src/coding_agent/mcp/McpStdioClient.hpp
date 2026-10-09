@@ -154,6 +154,8 @@ private:
     McpStdioServerConfig config_;
     boost::asio::posix::stream_descriptor stdin_pipe_;
     boost::asio::posix::stream_descriptor stdout_pipe_;
+    boost::asio::posix::stream_descriptor stderr_pipe_;
+    std::string stderr_tail_;
     std::deque<std::unique_ptr<QueuedFrame>> queue_;
     /// Request ids a caller cancelled while they were still pending. Entries
     /// live only while the request is pending.

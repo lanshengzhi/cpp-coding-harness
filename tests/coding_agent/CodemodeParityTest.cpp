@@ -83,6 +83,26 @@ namespace extensions = cch::coding_agent::extensions;
 
 } // namespace
 
+TEST_CASE("codemode description formats nested tools catalog dynamically", "[coding_agent][codemode][issue903][spec]") {
+    ai::Tool tool1;
+    tool1.name = "sample_tool";
+    tool1.description = "A sample tool description";
+    tool1.parameters = support::JsonValue::object_t{
+            {"type", "object"},
+            {"properties",
+                    support::JsonValue::object_t{
+                            {"path", support::JsonValue::object_t{{"type", "string"}}},
+                            {"limit", support::JsonValue::object_t{{"type", "number"}}},
+                    }},
+    };
+
+    const auto desc = extensions::codemode_description({tool1});
+    INFO("desc: " + desc);
+    CHECK(desc.find("Nested tools:") != std::string::npos);
+    CHECK(desc.find("tools.sample_tool") != std::string::npos);
+    CHECK(desc.find("A sample tool description") != std::string::npos);
+}
+
 TEST_CASE("the codemode grammar variant is pi's frozen CODEMODE_SOURCE_GRAMMAR",
         "[coding_agent][codemode][issue885][spec]") {
     const std::string fixture = read_text(bundle_root() / "codemode-source-grammar.lark");

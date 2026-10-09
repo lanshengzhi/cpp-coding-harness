@@ -87,6 +87,34 @@ public:
 
 } // namespace
 
+TEST_CASE("truncate_middle_mcp truncates text longer than 20 KiB and records spill",
+        "[coding_agent][mcp][issue904][spec]") {
+    const std::string large_text(25 * 1024, 'a');
+    support::JsonValue result{support::JsonValue::object_t{
+            {"content",
+                    support::JsonValue::array_t{
+                            support::JsonValue::object_t{
+                                    {"type", "text"},
+                                    {"text", large_text},
+                            },
+                    }},
+    }};
+
+    const auto converted = coding_agent::mcp::convert_mcp_tools_call_result("test-server", result);
+    REQUIRE(converted);
+    REQUIRE_FALSE(converted->content.empty());
+    const auto* text = std::get_if<ai::TextContent>(&converted->content.front());
+    REQUIRE(text != nullptr);
+    CHECK(text->text.size() < large_text.size());
+    CHECK(text->text.find("... [truncated] ...") != std::string::npos);
+    CHECK(text->text.find("Full output saved to:") != std::string::npos);
+
+    REQUIRE(converted->details);
+    const auto* details_obj = converted->details->get_if<support::JsonValue::object_t>();
+    REQUIRE(details_obj != nullptr);
+    CHECK(details_obj->contains("fullOutputPath"));
+}
+
 TEST_CASE("tools/list pagination follows a nextCursor across pages", "[coding_agent][mcp][issue884][spec]") {
     ScriptedListConnection connection;
     int calls = 0;

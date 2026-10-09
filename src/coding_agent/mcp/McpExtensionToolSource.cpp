@@ -23,6 +23,9 @@
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
 
+#include <filesystem>
+#include <format>
+#include <fstream>
 #include <optional>
 #include <set>
 #include <stop_token>
@@ -33,6 +36,19 @@ namespace {
 
 [[nodiscard]] support::Error source_error(std::string message, std::string detail = {}) {
     return support::make_error(support::ErrorCode::Process, std::move(message), std::move(detail));
+}
+
+constexpr std::size_t kMcpOutputMaxBytes = 20 * 1024;
+
+[[nodiscard]] std::string truncate_middle_mcp(std::string_view text, std::size_t max_bytes) {
+    if (text.size() <= max_bytes) return std::string{text};
+    const std::size_t keep = max_bytes / 2;
+    std::string result;
+    result.reserve(max_bytes + 64);
+    result.append(text.substr(0, keep));
+    result.append("\n... [truncated] ...\n");
+    result.append(text.substr(text.size() - keep));
+    return result;
 }
 
 [[nodiscard]] std::string sanitize_identifier(std::string_view value) {
@@ -96,6 +112,32 @@ support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result
         }
         script_result.emplace(key, value);
     }
+    // pi limitMcpContent: text outputs > 20 KiB are middle-truncated, spilled to a temp file,
+    // and fullOutputPath is recorded in details.
+    std::string combined_text;
+    for (const auto& item : outcome.content) {
+        if (const auto* text = std::get_if<ai::TextContent>(&item)) {
+            combined_text += text->text;
+        }
+    }
+
+    if (combined_text.size() > kMcpOutputMaxBytes) {
+        std::error_code ec;
+        auto temp_dir = std::filesystem::temp_directory_path(ec);
+        if (!ec) {
+            auto temp_file = temp_dir / std::format("mcp-{}-{}.txt", server, ::getpid());
+            std::ofstream out(temp_file, std::ios::binary);
+            if (out.is_open()) {
+                out << combined_text;
+                out.close();
+                script_result.emplace("fullOutputPath", temp_file.string());
+                outcome.content.clear();
+                outcome.content.push_back(ai::text_content(truncate_middle_mcp(combined_text, kMcpOutputMaxBytes) +
+                                                           "\n\nFull output saved to: " + temp_file.string()));
+            }
+        }
+    }
+
     outcome.details = support::JsonValue{std::move(script_result)};
     if (const auto is_error = object->find("isError");
             is_error != object->end() && is_error->second.get_if<bool>() != nullptr) {

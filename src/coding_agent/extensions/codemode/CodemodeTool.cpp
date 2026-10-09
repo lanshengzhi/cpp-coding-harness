@@ -40,7 +40,31 @@ std::string_view codemode_description_intro() { return kDescriptionIntro; }
 
 std::string codemode_globals_text() { return std::string{kGlobals}; }
 
-std::string codemode_description() { return std::string{kDescriptionIntro} + "\n\n" + std::string{kGlobals}; }
+std::string codemode_description(const std::vector<ai::Tool>& nested_tools) {
+    std::string desc = std::string{kDescriptionIntro} + "\n\n" + std::string{kGlobals};
+    if (nested_tools.empty()) return desc;
+
+    desc += "\n\nNested tools:\n";
+    for (const auto& tool : nested_tools) {
+        desc += "- `tools." + tool.name + "(";
+        if (tool.parameters.holds<support::JsonValue::object_t>()) {
+            const auto& obj = tool.parameters.get<support::JsonValue::object_t>();
+            if (const auto props = obj.find("properties");
+                    props != obj.end() && props->second.holds<support::JsonValue::object_t>()) {
+                desc += "{ ";
+                bool first = true;
+                for (const auto& [prop_name, _] : props->second.get<support::JsonValue::object_t>()) {
+                    if (!first) desc += ", ";
+                    desc += prop_name;
+                    first = false;
+                }
+                desc += " }";
+            }
+        }
+        desc += ")`: " + tool.description + "\n";
+    }
+    return desc;
+}
 
 support::JsonValue codemode_parameters() {
     // pi `codemodeSchema` (TypeBox `Type.Object({ code: Type.String({...}) })`).
