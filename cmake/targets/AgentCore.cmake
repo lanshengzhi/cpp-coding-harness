@@ -33,6 +33,7 @@ cch_parity_declare_target(
         src/agent/harness/session/JsonlSessionStore.cpp
         src/agent/harness/session/SqliteDatabase.cpp
         src/agent/harness/session/SqliteSessionStore.cpp
+        src/agent/harness/session/TaskStore.cpp
         src/agent/harness/session/SessionStore.cpp
         src/agent/harness/session/SessionResume.cpp
         src/agent/harness/session/SessionTree.cpp
