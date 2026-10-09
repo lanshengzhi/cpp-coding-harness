@@ -11,6 +11,7 @@
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/posix/stream_descriptor.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -112,6 +113,8 @@ private:
     /// failure through the shared error channel, leaving the client closed so
     /// the next call tries once more.
     [[nodiscard]] boost::asio::awaitable<std::optional<support::Error>> reconnect_transport();
+    [[nodiscard]] boost::asio::awaitable<void> drain_stderr();
+    [[nodiscard]] support::Error failure_with_stderr_tail(support::Error error) const;
     /// Serve the queued frames in order until the queue drains; one pump runs
     /// at a time and is restarted by the next enqueue.
     [[nodiscard]] boost::asio::awaitable<void> pump();
@@ -156,6 +159,8 @@ private:
     boost::asio::posix::stream_descriptor stdout_pipe_;
     boost::asio::posix::stream_descriptor stderr_pipe_;
     std::string stderr_tail_;
+    boost::asio::steady_timer stderr_drained_;
+    bool stderr_eof_{false};
     std::deque<std::unique_ptr<QueuedFrame>> queue_;
     /// Request ids a caller cancelled while they were still pending. Entries
     /// live only while the request is pending.

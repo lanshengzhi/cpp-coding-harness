@@ -319,6 +319,27 @@ TEST_CASE("a tool-level MCP error result is reported as an error but the Turn co
     session->close();
 }
 
+TEST_CASE("an MCP process failure includes a bounded stderr tail", "[coding_agent][mcp][issue911]") {
+    tests::TempWorkspace workspace;
+    const auto script = workspace.path() / "stderr_server.py";
+    {
+        std::ofstream output(script);
+        output << "import os, sys\n"
+                  "sys.stderr.write('x' * 70000 + 'TAIL_MARKER')\n"
+                  "sys.stderr.flush()\n"
+                  "os._exit(3)\n";
+    }
+    auto config = echo_server_config();
+    config.args = {script.string()};
+    tests::RuntimeFixture runtime;
+
+    auto connected = tests::run_awaitable(runtime, coding_agent::mcp::McpStdioClient::connect(std::move(config)));
+
+    REQUIRE_FALSE(connected.has_value());
+    CHECK(connected.error().message.find("TAIL_MARKER") != std::string::npos);
+    CHECK(connected.error().message.find(std::string(2001, 'x')) == std::string::npos);
+}
+
 TEST_CASE("a malformed server frame is a recoverable transport error", "[coding_agent][mcp][issue869][protocol]") {
     tests::TempWorkspace workspace;
     const tests::EnvVarGuard home{"HOME", (workspace.path() / "agent").string()};
