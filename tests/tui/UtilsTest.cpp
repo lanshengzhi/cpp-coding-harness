@@ -6,10 +6,86 @@
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <limits>
 #include <string>
 #include <vector>
 
 using namespace cch::tui;
+
+TEST_CASE("colors parse indexed and RGB values from frozen pi observations", "[tui][colors][issue988][spec]") {
+    const auto indexed = cch::tui::parse_color(42);
+    REQUIRE(indexed);
+    REQUIRE(std::holds_alternative<cch::tui::IndexedColor>(*indexed));
+    CHECK(std::get<cch::tui::IndexedColor>(*indexed).index == 42);
+
+    const auto bright_red = cch::tui::color_to_rgb(cch::tui::Color{cch::tui::IndexedColor{.index = 9}});
+    REQUIRE(bright_red);
+    CHECK(*bright_red == cch::tui::RgbColor{.red = 255, .green = 0, .blue = 0});
+
+    const auto rgb = cch::tui::parse_color("#12aBcD");
+    REQUIRE(rgb);
+    REQUIRE(std::holds_alternative<cch::tui::RgbColor>(*rgb));
+    CHECK(std::get<cch::tui::RgbColor>(*rgb) == cch::tui::RgbColor{.red = 18, .green = 171, .blue = 205});
+
+    const auto short_hex = cch::tui::parse_color("#aB3");
+    REQUIRE(short_hex);
+    CHECK(std::get<cch::tui::RgbColor>(*short_hex) == cch::tui::RgbColor{.red = 170, .green = 187, .blue = 51});
+
+    const auto black = cch::tui::color_to_rgb(cch::tui::Color{cch::tui::IndexedColor{.index = 0}});
+    REQUIRE(black);
+    CHECK(*black == cch::tui::RgbColor{.red = 0, .green = 0, .blue = 0});
+    const auto cube = cch::tui::color_to_rgb(cch::tui::Color{cch::tui::IndexedColor{.index = 17}});
+    REQUIRE(cube);
+    CHECK(*cube == cch::tui::RgbColor{.red = 0, .green = 0, .blue = 95});
+    const auto cube_white = cch::tui::color_to_rgb(cch::tui::Color{cch::tui::IndexedColor{.index = 231}});
+    REQUIRE(cube_white);
+    CHECK(*cube_white == cch::tui::RgbColor{.red = 255, .green = 255, .blue = 255});
+    const auto first_gray = cch::tui::color_to_rgb(cch::tui::Color{cch::tui::IndexedColor{.index = 232}});
+    REQUIRE(first_gray);
+    CHECK(*first_gray == cch::tui::RgbColor{.red = 8, .green = 8, .blue = 8});
+    const auto last_gray = cch::tui::color_to_rgb(cch::tui::Color{cch::tui::IndexedColor{.index = 255}});
+    REQUIRE(last_gray);
+    CHECK(*last_gray == cch::tui::RgbColor{.red = 238, .green = 238, .blue = 238});
+    const auto indexed_rgb = cch::tui::color_to_rgb(*indexed);
+    REQUIRE(indexed_rgb);
+    const auto indexed_hex = cch::tui::color_to_hex(*indexed_rgb);
+    REQUIRE(indexed_hex);
+    CHECK(*indexed_hex == "#00d787");
+    const auto short_hex_result = cch::tui::color_to_hex(*short_hex);
+    REQUIRE(short_hex_result);
+    CHECK(*short_hex_result == "#aabb33");
+
+    const auto fractional_rgb = cch::tui::rgb_color(18.5, 52.4, 86.5);
+    REQUIRE(fractional_rgb);
+    const auto fractional_hex = cch::tui::color_to_hex(cch::tui::Color{*fractional_rgb});
+    REQUIRE(fractional_hex);
+    CHECK(*fractional_hex == "#133457");
+}
+
+TEST_CASE("color parsing rejects invalid indexed and hex values", "[tui][colors][issue988][spec]") {
+    for (const auto index : {-1, 256}) {
+        CHECK_FALSE(cch::tui::parse_color(index));
+    }
+    CHECK_FALSE(cch::tui::parse_color(1.5));
+    CHECK_FALSE(cch::tui::rgb_color(-1, 0, 0));
+    CHECK_FALSE(cch::tui::rgb_color(0, 256, 0));
+    CHECK_FALSE(cch::tui::rgb_color(0, 0, std::numeric_limits<double>::infinity()));
+    for (const auto value : {"", "red", "#12", "#ggg", " #fff", "#12345", "#1234567"}) {
+        CHECK_FALSE(cch::tui::parse_color(value));
+    }
+}
+
+TEST_CASE("colors format frozen foreground and background ANSI modes", "[tui][colors][issue988][spec]") {
+    const auto red = cch::tui::parse_color("#ff0000");
+    REQUIRE(red);
+    CHECK(*cch::tui::foreground_ansi(*red, cch::tui::TerminalColorMode::TrueColor) == "\x1b[38;2;255;0;0m");
+    CHECK(*cch::tui::foreground_ansi(*red, cch::tui::TerminalColorMode::Xterm256) == "\x1b[38;5;196m");
+    CHECK(*cch::tui::background_ansi(cch::tui::Color{cch::tui::IndexedColor{.index = 42}},
+                  cch::tui::TerminalColorMode::TrueColor) == "\x1b[48;5;42m");
+    const cch::tui::Color fractional_rgb{cch::tui::RgbColor{.red = 18.5, .green = 52.4, .blue = 86.5}};
+    CHECK(*cch::tui::foreground_ansi(fractional_rgb, cch::tui::TerminalColorMode::TrueColor) == "\x1b[38;2;19;52;87m");
+    CHECK(*cch::tui::foreground_ansi(fractional_rgb, cch::tui::TerminalColorMode::Xterm256) == "\x1b[38;5;23m");
+}
 
 TEST_CASE("visible_width measures ASCII without tokenizing", "[tui][unicode][issue709][spec]") {
     const auto measurement = cch::tui::detail::measure_visible_width("hello world");

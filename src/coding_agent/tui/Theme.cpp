@@ -5,6 +5,8 @@
 #include "support/Json.hpp"
 
 #include <cch/support/Error.hpp>
+#include <cch/tui/Utils.hpp>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -13,7 +15,6 @@
 #include <exception>
 #include <format>
 #include <fstream>
-#include <limits>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -144,41 +145,21 @@ struct SchemaErrorLine {
     return std::nullopt;
 }
 
-[[nodiscard]] std::optional<int> hex_digit(char value) {
-    if (value >= '0' && value <= '9') return value - '0';
-    if (value >= 'a' && value <= 'f') return 10 + value - 'a';
-    if (value >= 'A' && value <= 'F') return 10 + value - 'A';
-    return std::nullopt;
-}
-
 [[nodiscard]] support::Expected<RgbThemeColor> parse_rgb(std::string_view value) {
-    // Mirrors pi's hexToRgb (theme.ts): exactly six characters after '#', with
-    // each channel pair parsed like parseInt(pair, 16) — the first character
-    // must be a hex digit, and a non-hex second character ends the parse.
-    // pi's sign/whitespace prefixes would yield channel values outside the
-    // uint8_t color model and are rejected here as C++ hardening.
-    if (value.size() != 7) {
+    auto color = cch::tui::parse_color(value);
+    if (!color || !std::holds_alternative<cch::tui::RgbColor>(*color)) {
         return std::unexpected(verbatim_validation_error(
             support::ErrorCode::Validation,
             "Invalid hex color: " + bounded_redacted_presentation(std::string(value))));
     }
-    const auto channel = [&](std::size_t offset) -> std::optional<std::uint8_t> {
-        const auto high = hex_digit(value[offset]);
-        if (!high) return std::nullopt;
-        if (const auto low = hex_digit(value[offset + 1])) {
-            return static_cast<std::uint8_t>(*high * 16 + *low);
-        }
-        return static_cast<std::uint8_t>(*high);
+    const auto& rgb = std::get<cch::tui::RgbColor>(*color);
+    const auto checked = cch::tui::rgb_color(rgb.red, rgb.green, rgb.blue);
+    if (!checked) return std::unexpected(checked.error());
+    return RgbThemeColor{
+            .red = static_cast<std::uint8_t>(checked->red),
+            .green = static_cast<std::uint8_t>(checked->green),
+            .blue = static_cast<std::uint8_t>(checked->blue),
     };
-    const auto red = channel(1);
-    const auto green = channel(3);
-    const auto blue = channel(5);
-    if (!red || !green || !blue) {
-        return std::unexpected(verbatim_validation_error(
-            support::ErrorCode::Validation,
-            "Invalid hex color: " + bounded_redacted_presentation(std::string(value))));
-    }
-    return RgbThemeColor{.red = *red, .green = *green, .blue = *blue};
 }
 
 [[nodiscard]] support::Expected<ResolvedThemeColor> resolve_color(
@@ -214,89 +195,16 @@ struct SchemaErrorLine {
     }
 }
 
-[[nodiscard]] int closest_index(int value, std::span<const int> candidates) {
-    int best_index = 0;
-    int best_distance = std::numeric_limits<int>::max();
-    for (std::size_t index = 0; index < candidates.size(); ++index) {
-        const auto distance = std::abs(value - candidates[index]);
-        if (distance < best_distance) {
-            best_distance = distance;
-            best_index = static_cast<int>(index);
-        }
-    }
-    return best_index;
-}
-
-[[nodiscard]] double color_distance(
-    int red,
-    int green,
-    int blue,
-    int candidate_red,
-    int candidate_green,
-    int candidate_blue) {
-    const auto red_delta = red - candidate_red;
-    const auto green_delta = green - candidate_green;
-    const auto blue_delta = blue - candidate_blue;
-    return red_delta * red_delta * 0.299 +
-        green_delta * green_delta * 0.587 +
-        blue_delta * blue_delta * 0.114;
-}
-
-[[nodiscard]] int rgb_to_xterm(const RgbThemeColor& color) {
-    constexpr std::array<int, 6> cube{0, 95, 135, 175, 215, 255};
-    constexpr std::array<int, 24> gray{
-        8, 18, 28, 38, 48, 58, 68, 78, 88, 98, 108, 118,
-        128, 138, 148, 158, 168, 178, 188, 198, 208, 218, 228, 238,
-    };
-    const auto red = static_cast<int>(color.red);
-    const auto green = static_cast<int>(color.green);
-    const auto blue = static_cast<int>(color.blue);
-    const auto red_index = closest_index(red, cube);
-    const auto green_index = closest_index(green, cube);
-    const auto blue_index = closest_index(blue, cube);
-    const auto cube_index = 16 + 36 * red_index + 6 * green_index + blue_index;
-    const auto cube_distance = color_distance(
-        red,
-        green,
-        blue,
-        cube[static_cast<std::size_t>(red_index)],
-        cube[static_cast<std::size_t>(green_index)],
-        cube[static_cast<std::size_t>(blue_index)]);
-    const auto neutral = static_cast<int>(std::round(0.299 * red + 0.587 * green + 0.114 * blue));
-    const auto gray_offset = closest_index(neutral, gray);
-    const auto gray_value = gray[static_cast<std::size_t>(gray_offset)];
-    const auto gray_distance = color_distance(red, green, blue, gray_value, gray_value, gray_value);
-    const auto spread = std::max({red, green, blue}) - std::min({red, green, blue});
-    return spread < 10 && gray_distance < cube_distance ? 232 + gray_offset : cube_index;
-}
-
-[[nodiscard]] std::string ansi_prefix(
-    const ResolvedThemeColor& color,
-    cch::tui::TerminalColorCapability capability,
-    bool background) {
-    const auto channel = background ? 48 : 38;
-    const auto reset = background ? 49 : 39;
-    if (std::holds_alternative<TerminalDefaultThemeColor>(color)) {
-        return std::format("\x1b[{}m", reset);
-    }
-    if (const auto* xterm = std::get_if<XtermThemeColor>(&color)) {
-        return std::format("\x1b[{};5;{}m", channel, xterm->index);
-    }
-    const auto& rgb = std::get<RgbThemeColor>(color);
-    if (capability == cch::tui::TerminalColorCapability::TrueColor) {
-        return std::format("\x1b[{};2;{};{};{}m", channel, rgb.red, rgb.green, rgb.blue);
-    }
-    return std::format("\x1b[{};5;{}m", channel, rgb_to_xterm(rgb));
-}
-
 [[nodiscard]] ResolvedTheme required_builtin(std::string_view label, std::string_view json) {
     auto result = parse_theme_json(label, json);
     if (!result) std::terminate();
     return std::move(*result);
 }
 
-[[nodiscard]] std::string attribute_style(int begin, int end, std::string text) {
-    return std::format("\x1b[{}m{}\x1b[{}m", begin, text, end);
+[[nodiscard]] std::string attribute_style(cch::tui::TextStyle style, std::string text) {
+    auto styled = cch::tui::style_text(text, style, cch::tui::TerminalColorMode::TrueColor);
+    if (!styled) std::terminate();
+    return std::move(*styled);
 }
 
 } // namespace
@@ -538,8 +446,36 @@ std::string LiveTheme::apply_style(
     std::string text,
     bool background) {
     std::lock_guard lock(impl->mutex);
-    const auto prefix = ansi_prefix(color_for(impl->theme, token), impl->capability, background);
-    return prefix + text + (background ? "\x1b[49m" : "\x1b[39m");
+    const auto& resolved = color_for(impl->theme, token);
+    std::optional<cch::tui::Color> foreground;
+    std::optional<cch::tui::Color> background_color;
+    if (const auto* rgb = std::get_if<RgbThemeColor>(&resolved)) {
+        const cch::tui::RgbColor value{
+                .red = static_cast<double>(rgb->red),
+                .green = static_cast<double>(rgb->green),
+                .blue = static_cast<double>(rgb->blue),
+        };
+        (background ? background_color : foreground) = value;
+    } else if (const auto* indexed = std::get_if<XtermThemeColor>(&resolved)) {
+        const cch::tui::IndexedColor value{.index = indexed->index};
+        (background ? background_color : foreground) = value;
+    }
+    cch::tui::TextStyle style{
+            .foreground = std::move(foreground),
+            .background = std::move(background_color),
+    };
+    if (std::holds_alternative<TerminalDefaultThemeColor>(resolved)) {
+        return cch::tui::style_text_with_ansi(text,
+                background ? std::nullopt : std::optional<std::string_view>{"\x1b[39m"},
+                background ? std::optional<std::string_view>{"\x1b[49m"} : std::nullopt,
+                style);
+    }
+    auto styled = cch::tui::style_text(text,
+            style,
+            impl->capability == cch::tui::TerminalColorCapability::TrueColor ? cch::tui::TerminalColorMode::TrueColor
+                                                                             : cch::tui::TerminalColorMode::Xterm256);
+    if (!styled) std::terminate();
+    return std::move(*styled);
 }
 
 LiveTheme::LiveTheme(
@@ -589,10 +525,26 @@ cch::tui::MarkdownStyleConfig LiveTheme::markdown_style() const {
     // fg("userMessageText"), custom-message.ts fg("customMessageText"),
     // thinking runs use thinkingText italic).
     style.heading = foreground_hook(ThemeToken::MdHeading);
-    style.emphasis = [](std::string text) { return attribute_style(3, 23, std::move(text)); };
-    style.strong = [](std::string text) { return attribute_style(1, 22, std::move(text)); };
-    style.underline = [](std::string text) { return attribute_style(4, 24, std::move(text)); };
-    style.strikethrough = [](std::string text) { return attribute_style(9, 29, std::move(text)); };
+    style.emphasis = [](std::string text) {
+        return attribute_style(
+                cch::tui::TextStyle{.foreground = std::nullopt, .background = std::nullopt, .italic = true},
+                std::move(text));
+    };
+    style.strong = [](std::string text) {
+        return attribute_style(
+                cch::tui::TextStyle{.foreground = std::nullopt, .background = std::nullopt, .bold = true},
+                std::move(text));
+    };
+    style.underline = [](std::string text) {
+        return attribute_style(
+                cch::tui::TextStyle{.foreground = std::nullopt, .background = std::nullopt, .underline = true},
+                std::move(text));
+    };
+    style.strikethrough = [](std::string text) {
+        return attribute_style(
+                cch::tui::TextStyle{.foreground = std::nullopt, .background = std::nullopt, .strikethrough = true},
+                std::move(text));
+    };
     style.inline_code = foreground_hook(ThemeToken::MdCode);
     style.code_block = foreground_hook(ThemeToken::MdCodeBlock);
     style.code_block_border = foreground_hook(ThemeToken::MdCodeBlockBorder);

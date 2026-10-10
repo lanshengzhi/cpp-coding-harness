@@ -50,6 +50,48 @@ constexpr std::string_view kCosmeticReopenCase{"link-cjk-styled-span"};
 
 } // namespace
 
+TEST_CASE("style_text composes colors and attributes around ANSI and hyperlink content",
+        "[tui][colors][issue988][spec]") {
+    // Independently evaluated with pi-v1.0.4 at 7c10bd4337495ee613f2224843ecdf349b80d1df:
+    // styleText emits colors first, attributes in declaration order, preserves the content bytes,
+    // then closes attributes and colors in reverse order. A cell-equivalent renderer would miss
+    // both the existing red SGR inside the style and the OSC 8 link's exact location.
+    const cch::tui::TextStyle style{
+            .foreground = cch::tui::Color{cch::tui::RgbColor{.red = 18, .green = 52, .blue = 86}},
+            .background = cch::tui::Color{cch::tui::IndexedColor{.index = 9}},
+            .bold = true,
+            .dim = true,
+            .italic = true,
+            .underline = true,
+            .inverse = true,
+            .strikethrough = true,
+    };
+    CHECK(cch::tui::style_text("\x1b[31mR\x1b[39m", style, cch::tui::TerminalColorMode::TrueColor) ==
+            "\x1b[38;2;18;52;86m\x1b[48;5;9m\x1b[1m\x1b[2m\x1b[3m\x1b[4m\x1b[7m\x1b[9m"
+            "\x1b[31mR\x1b[39m\x1b[29m\x1b[27m\x1b[24m\x1b[23m\x1b[22m\x1b[49m\x1b[39m");
+
+    const std::string linked = std::string{kBelLinkOpen} + "x" + std::string{kBelLinkClose};
+    const cch::tui::TextStyle rgb_style{
+            .foreground = cch::tui::Color{cch::tui::RgbColor{.red = 12.5, .green = 34.5, .blue = 56.5}},
+            .background = cch::tui::Color{cch::tui::IndexedColor{.index = 42}},
+            .bold = true,
+            .italic = true,
+    };
+    CHECK(cch::tui::style_text(linked, rgb_style, cch::tui::TerminalColorMode::TrueColor) ==
+            "\x1b[38;2;13;35;57m\x1b[48;5;42m\x1b[1m\x1b[3m" + linked + "\x1b[23m\x1b[22m\x1b[49m\x1b[39m");
+}
+
+TEST_CASE("style_text leaves unspecified colors untouched and resets selected attributes",
+        "[tui][colors][issue988][spec]") {
+    const std::string linked = std::string{kBelLinkOpen} + "x" + std::string{kBelLinkClose};
+    CHECK(cch::tui::style_text(linked, {}, cch::tui::TerminalColorMode::TrueColor) == linked);
+
+    const cch::tui::TextStyle attributes{
+            .foreground = std::nullopt, .background = std::nullopt, .bold = true, .dim = true, .underline = true};
+    CHECK(cch::tui::style_text(linked, attributes, cch::tui::TerminalColorMode::Xterm256) ==
+            "\x1b[1m\x1b[2m\x1b[4m" + linked + "\x1b[24m\x1b[22m");
+}
+
 TEST_CASE("wrap_text reproduces the frozen wrap boundary order", "[tui][issue957][ansi][wrap][spec]") {
     const auto scenario = ansi_evidence_scenario();
     REQUIRE(scenario);

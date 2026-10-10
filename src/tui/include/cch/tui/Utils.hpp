@@ -3,12 +3,76 @@
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace cch::tui {
+
+struct IndexedColor {
+    std::uint8_t index{0};
+
+    bool operator==(const IndexedColor&) const = default;
+};
+
+struct RgbColor {
+    double red{0};
+    double green{0};
+    double blue{0};
+
+    bool operator==(const RgbColor&) const = default;
+};
+
+using Color = std::variant<IndexedColor, RgbColor>;
+
+enum class TerminalColorMode {
+    Xterm256,
+    TrueColor,
+};
+
+/// SGR attributes and optional terminal colors for one styled text span.
+struct TextStyle {
+    std::optional<Color> foreground;
+    std::optional<Color> background;
+    bool bold{false};
+    bool dim{false};
+    bool italic{false};
+    bool underline{false};
+    bool inverse{false};
+    bool strikethrough{false};
+};
+
+/// Indexed palette channels match frozen pi's `colors.ts` BASIC_COLORS for indexes 0-15.
+[[nodiscard]] support::Expected<IndexedColor> indexed_color(int index);
+
+/// Construct an RGB color after checking each frozen pi 0..255 channel range.
+[[nodiscard]] support::Expected<RgbColor> rgb_color(double red, double green, double blue);
+
+/// Parse an indexed color or a #RGB/#RRGGBB hexadecimal string (pi `parseColor`).
+[[nodiscard]] support::Expected<Color> parse_color(int index);
+[[nodiscard]] support::Expected<Color> parse_color(double index);
+[[nodiscard]] support::Expected<Color> parse_color(std::string_view value);
+
+/// Convert a validated color to sRGB channels or canonical lowercase hex.
+[[nodiscard]] support::Expected<RgbColor> color_to_rgb(const Color& color);
+[[nodiscard]] support::Expected<std::string> color_to_hex(const Color& color);
+
+/// Format a foreground/background SGR sequence for the terminal's color mode.
+[[nodiscard]] support::Expected<std::string> foreground_ansi(const Color& color, TerminalColorMode mode);
+[[nodiscard]] support::Expected<std::string> background_ansi(const Color& color, TerminalColorMode mode);
+
+/// Apply colors and SGR attributes around text, retaining existing ANSI and OSC 8 bytes.
+[[nodiscard]] support::Expected<std::string> style_text(
+        std::string_view text, const TextStyle& style, TerminalColorMode mode);
+
+/// Apply precomputed foreground/background SGR sequences. The colors in style are ignored.
+[[nodiscard]] std::string style_text_with_ansi(std::string_view text,
+        std::optional<std::string_view> foreground,
+        std::optional<std::string_view> background,
+        const TextStyle& style = {});
 
 /// Visible terminal width of `text` in columns. Tabs count as 3 columns; ANSI,
 /// OSC 8 hyperlinks, and combining marks contribute nothing; newlines contribute
