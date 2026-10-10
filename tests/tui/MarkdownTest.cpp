@@ -1,6 +1,7 @@
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
+#include <cch/tui/Utils.hpp>
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -540,6 +541,134 @@ TEST_CASE("Markdown applies configured padding and background to every cell", "[
         for (const auto& cell : row) CHECK(cell.style.bg_color == "44");
     }
     CHECK(terminal.final_style() == tui::TerminalStyle{});
+}
+
+TEST_CASE("Markdown renders GFM table borders and bold headers", "[tui][markdown][issue972][spec]") {
+    tui::Markdown markdown("| Name | Value |\n| --- | --- |\n| a | b |", 0, 0);
+
+    const auto lines = markdown.render(20);
+
+    REQUIRE(lines);
+    REQUIRE(lines->lines.size() == 5);
+    CHECK(lines->lines[0].starts_with("┌─"));
+    CHECK(lines->lines[1].find("Name") != std::string::npos);
+    CHECK(lines->lines[1].find("Value") != std::string::npos);
+    CHECK(lines->lines[2].starts_with("├─"));
+    CHECK(lines->lines[3].find("a") != std::string::npos);
+    CHECK(lines->lines[3].find("b") != std::string::npos);
+    CHECK(lines->lines[4].starts_with("└─"));
+    for (const auto& line : lines->lines)
+        CHECK(tui::visible_width(line) == 20);
+}
+
+TEST_CASE("Markdown allocates unequal GFM table column widths", "[tui][markdown][issue972][spec]") {
+    tui::Markdown markdown("| X | Description |\n| --- | --- |\n| a | long value |", 0, 0);
+
+    const auto lines = markdown.render(30);
+
+    REQUIRE(lines);
+    REQUIRE(lines->lines.size() == 5);
+    CHECK(lines->lines[0].starts_with("┌───┬─"));
+    CHECK(lines->lines[1].find("Description") != std::string::npos);
+    CHECK(lines->lines[3].find("long value") != std::string::npos);
+}
+
+TEST_CASE("Markdown wraps narrow GFM table cells within frozen borders", "[tui][markdown][issue972][spec]") {
+    tui::Markdown markdown("| A | B |\n| --- | --- |\n| longword | another |", 0, 0);
+
+    const auto lines = markdown.render(14);
+
+    REQUIRE(lines);
+    REQUIRE(lines->lines.size() > 5);
+    for (const auto& line : lines->lines)
+        CHECK(tui::visible_width(line) <= 14);
+    const auto text = rendered_text(*lines, 14);
+    CHECK(text.find("long") != std::string::npos);
+    CHECK(text.find("word") != std::string::npos);
+    CHECK(text.find("ano") != std::string::npos);
+    CHECK(text.find("the") != std::string::npos);
+}
+
+TEST_CASE("Markdown measures CJK GFM table cells by terminal columns", "[tui][markdown][issue972][spec]") {
+    tui::Markdown markdown("| 地域 | 名前 |\n| --- | --- |\n| 東京 | 大阪 |", 0, 0);
+
+    const auto lines = markdown.render(24);
+
+    REQUIRE(lines);
+    REQUIRE(lines->lines.size() == 5);
+    for (const auto& line : lines->lines)
+        CHECK(tui::visible_width(line) == 24);
+    const auto text = rendered_text(*lines, 24);
+    CHECK(text.find("東京") != std::string::npos);
+    CHECK(text.find("大阪") != std::string::npos);
+}
+
+TEST_CASE("Markdown preserves linked GFM table cell styles", "[tui][markdown][issue972][spec]") {
+    auto style = ansi_style();
+    style.link_text = [](std::string text) { return "\x1b[34m" + text + "\x1b[39m"; };
+    tui::Markdown markdown(
+            "| Label | Link |\n| --- | --- |\n| value | [site](https://example.com) |", 0, 0, std::move(style));
+    const tests::ImageCapabilitiesGuard capabilities({.images = tui::InlineImageProtocol::None, .hyperlinks = true});
+
+    const auto lines = markdown.render(40);
+
+    REQUIRE(lines);
+    tui::VirtualTerminal terminal({.columns = 40, .rows = lines->lines.size()});
+    REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
+            [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
+    write_lines(terminal, *lines);
+    const auto* link = find_cell(terminal, "s");
+    REQUIRE(link != nullptr);
+    CHECK(link->style.hyperlink == "https://example.com");
+    CHECK(link->style.fg_color == "34");
+    const auto* header = find_cell(terminal, "L");
+    REQUIRE(header != nullptr);
+    CHECK(header->style.bold);
+    CHECK(terminal.final_style() == tui::TerminalStyle{});
+}
+
+TEST_CASE("Markdown falls back to raw GFM table text below border width", "[tui][markdown][issue972][spec]") {
+    tui::Markdown markdown("| A | B |\n| --- | --- |\n| x | y |", 0, 0);
+
+    const auto lines = markdown.render(8);
+
+    REQUIRE(lines);
+    REQUIRE_FALSE(lines->lines.empty());
+    const auto text = rendered_text(*lines, 8);
+    CHECK(text.find("|") != std::string::npos);
+    CHECK(text.find("┌") == std::string::npos);
+}
+
+TEST_CASE("Markdown separates a table from following content", "[tui][markdown][issue972][spec]") {
+    tui::Markdown markdown("| A | B |\n| --- | --- |\n| x | y |\nAfter table", 0, 0);
+
+    const auto lines = markdown.render(24);
+
+    REQUIRE(lines);
+    const auto bottom = std::find_if(
+            lines->lines.begin(), lines->lines.end(), [](const auto& line) { return line.starts_with("└─"); });
+    REQUIRE(bottom != lines->lines.end());
+    REQUIRE(std::distance(bottom, lines->lines.end()) >= 3);
+    CHECK(std::all_of(
+            std::next(bottom)->begin(), std::next(bottom)->end(), [](char character) { return character == ' '; }));
+    CHECK(std::next(bottom, 2)->find("After table") != std::string::npos);
+}
+
+TEST_CASE("Markdown renders GFM table rows as streamed chunks complete", "[tui][markdown][issue972][spec]") {
+    tui::Markdown markdown("| A | B |\n| --- | --- |\n| par", 0, 0);
+
+    const auto partial = markdown.render(24);
+
+    REQUIRE(partial);
+    CHECK(rendered_text(*partial, 24).find("par") != std::string::npos);
+    markdown.set_text("| A | B |\n| --- | --- |\n| partial | done |");
+
+    const auto complete = markdown.render(24);
+
+    REQUIRE(complete);
+    const auto text = rendered_text(*complete, 24);
+    CHECK(text.find("partial") != std::string::npos);
+    CHECK(text.find("done") != std::string::npos);
 }
 
 TEST_CASE("Markdown background survives inline styling and code blocks on every cell",

@@ -8,12 +8,14 @@
 
 #include <cch/support/Error.hpp>
 #include <md4c.h>
+#include <utf8proc.h>
 
 #include <algorithm>
 #include <cctype>
 #include <exception>
 #include <format>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -35,6 +37,12 @@ enum class BlockKind {
     Code,
     Html,
     Paragraph,
+    Table,
+    TableHead,
+    TableBody,
+    TableRow,
+    TableHeaderCell,
+    TableCell,
 };
 
 enum class InlineKind {
@@ -71,12 +79,14 @@ struct BlockNode {
     BlockKind kind{BlockKind::Document};
     unsigned heading_level{0};
     unsigned ordered_start{1};
+    unsigned column_count{0};
     char list_marker{'-'};
     char ordered_delimiter{'.'};
     bool tight_list{true};
     bool task_item{false};
     bool task_checked{false};
     std::string language;
+    std::string raw;
     std::string text;
     std::vector<std::unique_ptr<InlineNode>> inlines;
     std::vector<std::unique_ptr<BlockNode>> children;
@@ -87,6 +97,8 @@ struct ParseState {
     std::vector<BlockNode*> blocks; // point into root and must not outlive the synchronous parse
     std::vector<InlineNode*> inlines; // point into root and must not outlive the synchronous parse
     std::vector<bool> strict_strikethrough;
+    std::vector<std::string> table_raw;
+    std::size_t table_index{0};
     std::size_t strikethrough_index{0};
     bool failed{false};
 };
@@ -167,13 +179,19 @@ struct ParseState {
         case MD_BLOCK_HTML:
             return BlockKind::Html;
         case MD_BLOCK_P:
-        case MD_BLOCK_TABLE:
-        case MD_BLOCK_THEAD:
-        case MD_BLOCK_TBODY:
-        case MD_BLOCK_TR:
-        case MD_BLOCK_TH:
-        case MD_BLOCK_TD:
             return BlockKind::Paragraph;
+        case MD_BLOCK_TABLE:
+            return BlockKind::Table;
+        case MD_BLOCK_THEAD:
+            return BlockKind::TableHead;
+        case MD_BLOCK_TBODY:
+            return BlockKind::TableBody;
+        case MD_BLOCK_TR:
+            return BlockKind::TableRow;
+        case MD_BLOCK_TH:
+            return BlockKind::TableHeaderCell;
+        case MD_BLOCK_TD:
+            return BlockKind::TableCell;
     }
     return BlockKind::Paragraph;
 }
@@ -211,6 +229,14 @@ int enter_block(MD_BLOCKTYPE type, void* detail, void* userdata) noexcept {
         auto node = std::make_unique<BlockNode>();
         node->kind = block_kind(type);
         switch (type) {
+        case MD_BLOCK_TABLE: {
+            node->column_count = static_cast<MD_BLOCK_TABLE_DETAIL*>(detail)->col_count;
+            if (state.table_index < state.table_raw.size()) {
+                node->raw = std::move(state.table_raw[state.table_index]);
+            }
+            ++state.table_index;
+            break;
+        }
             case MD_BLOCK_H:
                 node->heading_level = static_cast<MD_BLOCK_H_DETAIL*>(detail)->level;
                 break;
@@ -315,20 +341,97 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
         return 0;
 }
 
+struct MarkdownFence {
+    char marker{'\0'};
+    std::size_t length{0};
+};
+
+[[nodiscard]] bool update_markdown_fence(std::string_view line, MarkdownFence& fence) {
+    while (!line.empty() && line.front() == ' ')
+        line.remove_prefix(1);
+    if (line.empty() || (line.front() != '`' && line.front() != '~')) return fence.marker != '\0';
+    const auto marker = line.front();
+    std::size_t length = 0;
+    while (length < line.size() && line[length] == marker)
+        ++length;
+    if (fence.marker == '\0') {
+        if (length >= 3) fence = {.marker = marker, .length = length};
+        return fence.marker != '\0';
+    }
+    if (marker == fence.marker && length >= fence.length &&
+            std::all_of(line.begin() + static_cast<std::ptrdiff_t>(length), line.end(), [](char character) {
+                return character == ' ' || character == '\t' || character == '\r';
+            })) {
+        fence = {};
+    }
+    return true;
+}
+
+[[nodiscard]] bool is_table_delimiter(std::string_view line) {
+    bool has_pipe = false;
+    bool has_dash = false;
+    for (const auto character : line) {
+        if (character == '|') {
+            has_pipe = true;
+        } else if (character == '-') {
+            has_dash = true;
+        } else if (character != ':' && character != ' ' && character != '\t' && character != '\r') {
+            return false;
+        }
+    }
+    return has_pipe && has_dash;
+}
+
+[[nodiscard]] std::vector<std::string> raw_tables(std::string_view text) {
+    std::vector<std::string> tables;
+    std::vector<std::string_view> lines;
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        const auto end = text.find('\n', start);
+        lines.push_back(text.substr(start, end == std::string_view::npos ? text.size() - start : end - start));
+        if (end == std::string_view::npos) break;
+        start = end + 1;
+    }
+
+    MarkdownFence fence;
+    std::vector<bool> fenced(lines.size(), false);
+    for (std::size_t index = 0; index < lines.size(); ++index)
+        fenced[index] = update_markdown_fence(lines[index], fence);
+
+    for (std::size_t index = 0; index + 1 < lines.size(); ++index) {
+        if (fenced[index] || fenced[index + 1] || lines[index].find('|') == std::string_view::npos ||
+                !is_table_delimiter(lines[index + 1])) {
+            continue;
+        }
+        std::string table;
+        auto row = index;
+        while (row < lines.size() && !fenced[row] && lines[row].find('|') != std::string_view::npos &&
+                !lines[row].empty()) {
+            if (!table.empty()) table += '\n';
+            table += lines[row];
+            ++row;
+        }
+        tables.push_back(std::move(table));
+        index = row > index ? row - 1 : index;
+    }
+    return tables;
+}
+
 [[nodiscard]] support::Expected<BlockNode> parse_markdown(std::string_view text) {
     ParseState state;
     state.root.kind = BlockKind::Document;
     state.strict_strikethrough = scan_strikethrough_delimiters(text);
+    state.table_raw = raw_tables(text);
     const MD_PARSER parser{
-        .abi_version = 0,
-        .flags = MD_FLAG_PERMISSIVEAUTOLINKS | MD_FLAG_STRIKETHROUGH | MD_FLAG_TASKLISTS,
-        .enter_block = enter_block,
-        .leave_block = leave_block,
-        .enter_span = enter_span,
-        .leave_span = leave_span,
-        .text = append_text,
-        .debug_log = nullptr,
-        .syntax = nullptr,
+            .abi_version = 0,
+            .flags = MD_FLAG_PERMISSIVEAUTOLINKS | MD_FLAG_STRIKETHROUGH | MD_FLAG_TASKLISTS | MD_FLAG_TABLES,
+            .enter_block = enter_block,
+            .leave_block = leave_block,
+            .enter_span = enter_span,
+            .leave_span = leave_span,
+            .text = append_text,
+            .debug_log = nullptr,
+            .syntax = nullptr,
     };
     const auto parse_result = md_parse(
         text.data(),
@@ -529,18 +632,271 @@ using RenderedLines = support::Expected<std::vector<std::string>>;
 
 [[nodiscard]] RenderedLines render_block(const BlockNode& block, std::size_t width, RenderContext context);
 
+[[nodiscard]] std::size_t longest_word_width(std::string_view text, std::size_t max_width) {
+    auto tokens = detail::tokenize_terminal_output(text);
+    if (!tokens) return 0;
+    std::size_t longest = 0;
+    std::size_t word_width = 0;
+    for (const auto& token : *tokens) {
+        if (token.kind == detail::TerminalTokenKind::Newline) {
+            longest = std::max(longest, word_width);
+            word_width = 0;
+            continue;
+        }
+        if (token.kind != detail::TerminalTokenKind::Grapheme) continue;
+        const auto [codepoint, bytes] = detail::decode_utf8(token.text, 0);
+        const auto category =
+                bytes == 0 ? UTF8PROC_CATEGORY_CN : utf8proc_category(static_cast<utf8proc_int32_t>(codepoint));
+        const auto is_space = codepoint == ' ' || category == UTF8PROC_CATEGORY_ZS ||
+                              category == UTF8PROC_CATEGORY_ZL || category == UTF8PROC_CATEGORY_ZP ||
+                              codepoint == '\t' || codepoint == '\n' || codepoint == '\r' || codepoint == '\f' ||
+                              codepoint == '\v';
+        if (is_space) {
+            longest = std::max(longest, word_width);
+            word_width = 0;
+        } else {
+            word_width += token.width;
+        }
+    }
+    return std::min(std::max(longest, word_width), max_width);
+}
+
+[[nodiscard]] RenderedLines wrap_cell_text(
+        std::string_view text, std::size_t column_width, std::size_t padded_width, std::string_view style_prefix) {
+    if (auto wrapped = wrap_text(text, std::max<std::size_t>(1, column_width)); wrapped) {
+        constexpr std::string_view kStyleReset{"\x1b[22;23;24;25;27;28;29;39m"};
+        std::vector<std::string> result;
+        result.reserve(wrapped->size());
+        for (std::size_t index = 0; index < wrapped->size(); ++index) {
+            auto line = std::move((*wrapped)[index]);
+            if (index + 1 < wrapped->size()) line += kStyleReset;
+            line += style_prefix;
+            const auto line_width = visible_width(line);
+            if (line_width < padded_width) line.append(padded_width - line_width, ' ');
+            result.push_back(std::move(line));
+        }
+        return result;
+    } else {
+        return std::unexpected(wrapped.error());
+    }
+}
+
+[[nodiscard]] RenderedLines render_table(const BlockNode& table, std::size_t width, RenderContext context) {
+    const auto num_columns = static_cast<std::size_t>(table.column_count);
+    if (num_columns == 0) return std::vector<std::string>{};
+
+    const auto border_overhead = 3 * num_columns + 1;
+    const auto available_for_cells = width - std::min(width, border_overhead);
+    if (available_for_cells < num_columns) {
+        if (table.raw.empty()) return std::vector<std::string>{};
+        return wrap_text(table.raw, width);
+    }
+
+    constexpr std::size_t kMaxUnbrokenWordWidth = 30;
+    const BlockNode* header_row = nullptr;
+    const BlockNode* body = nullptr;
+    for (const auto& section : table.children) {
+        if (section->kind == BlockKind::TableHead && !section->children.empty())
+            header_row = section->children.front().get();
+        if (section->kind == BlockKind::TableBody) body = section.get();
+    }
+    if (header_row == nullptr || header_row->children.empty()) return std::vector<std::string>{};
+
+    std::vector<std::vector<const BlockNode*>> table_rows;
+    table_rows.push_back({});
+    for (const auto& cell : header_row->children)
+        table_rows.front().push_back(cell.get());
+    if (body != nullptr) {
+        for (const auto& row : body->children) {
+            if (row->kind != BlockKind::TableRow) continue;
+            std::vector<const BlockNode*> cells;
+            for (const auto& cell : row->children)
+                cells.push_back(cell.get());
+            table_rows.push_back(std::move(cells));
+        }
+    }
+
+    const auto cell_text = [&](const BlockNode* cell) {
+        return cell == nullptr
+                       ? std::string{}
+                       : render_inline_children(cell->inlines, block_roles(false, context.quote_depth), context.style);
+    };
+    std::vector<std::size_t> natural_widths(num_columns, 0);
+    std::vector<std::size_t> min_word_widths(num_columns, 1);
+    for (const auto& row : table_rows) {
+        for (std::size_t column = 0; column < std::min(num_columns, row.size()); ++column) {
+            const auto text = cell_text(row[column]);
+            natural_widths[column] = std::max(natural_widths[column], visible_width(text));
+            min_word_widths[column] =
+                    std::max(min_word_widths[column], longest_word_width(text, kMaxUnbrokenWordWidth));
+        }
+    }
+
+    auto min_column_widths = min_word_widths;
+    auto min_cells_width = std::accumulate(min_column_widths.begin(), min_column_widths.end(), std::size_t{0});
+    if (min_cells_width > available_for_cells) {
+        min_column_widths.assign(num_columns, 1);
+        const auto remaining = available_for_cells - num_columns;
+        if (remaining > 0) {
+            std::size_t total_weight = 0;
+            for (const auto min_word_width : min_word_widths)
+                total_weight += min_word_width - 1;
+            std::vector<std::size_t> growth(num_columns, 0);
+            if (total_weight > 0) {
+                for (std::size_t column = 0; column < num_columns; ++column) {
+                    growth[column] = ((min_word_widths[column] - 1) * remaining) / total_weight;
+                    min_column_widths[column] += growth[column];
+                }
+            }
+            const auto allocated = std::accumulate(growth.begin(), growth.end(), std::size_t{0});
+            for (auto leftover = remaining - allocated; leftover > 0; --leftover) {
+                ++min_column_widths[remaining - allocated - leftover];
+            }
+        }
+        min_cells_width = std::accumulate(min_column_widths.begin(), min_column_widths.end(), std::size_t{0});
+    }
+
+    const auto total_natural_width =
+            std::accumulate(natural_widths.begin(), natural_widths.end(), std::size_t{0}) + border_overhead;
+    std::vector<std::size_t> column_widths;
+    if (total_natural_width <= width) {
+        column_widths.resize(num_columns);
+        for (std::size_t column = 0; column < num_columns; ++column) {
+            column_widths[column] = std::max(natural_widths[column], min_column_widths[column]);
+        }
+    } else {
+        std::size_t total_grow_potential = 0;
+        for (std::size_t column = 0; column < num_columns; ++column) {
+            total_grow_potential += natural_widths[column] > min_column_widths[column]
+                                            ? natural_widths[column] - min_column_widths[column]
+                                            : 0;
+        }
+        const auto extra_width = available_for_cells > min_cells_width ? available_for_cells - min_cells_width : 0;
+        column_widths.resize(num_columns);
+        for (std::size_t column = 0; column < num_columns; ++column) {
+            const auto delta = natural_widths[column] > min_column_widths[column]
+                                       ? natural_widths[column] - min_column_widths[column]
+                                       : 0;
+            const auto grow = total_grow_potential > 0 ? (delta * extra_width) / total_grow_potential : 0;
+            column_widths[column] = min_column_widths[column] + grow;
+        }
+        auto allocated = std::accumulate(column_widths.begin(), column_widths.end(), std::size_t{0});
+        auto remaining = available_for_cells - allocated;
+        while (remaining > 0) {
+            bool grew = false;
+            for (std::size_t column = 0; column < num_columns && remaining > 0; ++column) {
+                if (column_widths[column] < natural_widths[column]) {
+                    ++column_widths[column];
+                    --remaining;
+                    grew = true;
+                }
+            }
+            if (!grew) break;
+        }
+    }
+
+    const auto append_rule = [](std::string& line, std::size_t width) {
+        for (std::size_t index = 0; index < width; ++index)
+            line += "─";
+    };
+    const auto top_border = [&] {
+        std::string line{"┌─"};
+        for (std::size_t column = 0; column < num_columns; ++column) {
+            if (column > 0) line += "─┬─";
+            append_rule(line, column_widths[column]);
+        }
+        return line + "─┐";
+    };
+    const auto separator = [&] {
+        std::string line{"├─"};
+        for (std::size_t column = 0; column < num_columns; ++column) {
+            if (column > 0) line += "─┼─";
+            append_rule(line, column_widths[column]);
+        }
+        return line + "─┤";
+    };
+    const auto bottom_border = [&] {
+        std::string line{"└─"};
+        for (std::size_t column = 0; column < num_columns; ++column) {
+            if (column > 0) line += "─┴─";
+            append_rule(line, column_widths[column]);
+        }
+        return line + "─┘";
+    };
+
+    std::vector<std::string> lines{top_border()};
+    const auto style_prefix = role_style_prefix(block_roles(false, context.quote_depth), context.style);
+    for (std::size_t row_index = 0; row_index < table_rows.size(); ++row_index) {
+        std::vector<std::vector<std::string>> wrapped_cells;
+        wrapped_cells.reserve(num_columns);
+        for (std::size_t column = 0; column < num_columns; ++column) {
+            const auto* cell = column < table_rows[row_index].size() ? table_rows[row_index][column] : nullptr;
+            const auto text = cell_text(cell);
+            if (auto wrapped = wrap_cell_text(text, column_widths[column], column_widths[column], style_prefix);
+                    wrapped) {
+                wrapped_cells.push_back(std::move(*wrapped));
+            } else {
+                return std::unexpected(wrapped.error());
+            }
+        }
+        std::size_t row_line_count = 1;
+        for (const auto& cell : wrapped_cells)
+            row_line_count = std::max(row_line_count, cell.size());
+        for (std::size_t line_index = 0; line_index < row_line_count; ++line_index) {
+            std::string line{"│ "};
+            for (std::size_t column = 0; column < num_columns; ++column) {
+                if (column > 0) line += " │ ";
+                auto text = line_index < wrapped_cells[column].size() ? wrapped_cells[column][line_index]
+                                                                      : std::string(column_widths[column], ' ');
+                if (row_index == 0) {
+                    if (context.style.strong) text = apply_style_hook(context.style.strong, std::move(text));
+                    text = "\x1b[1m" + text + "\x1b[22m";
+                }
+                line += text;
+            }
+            line += " │";
+            lines.push_back(std::move(line));
+        }
+        if (row_index == 0)
+            lines.push_back(separator());
+        else if (row_index + 1 < table_rows.size())
+            lines.push_back(separator());
+    }
+    lines.push_back(bottom_border());
+    return lines;
+}
+
 [[nodiscard]] RenderedLines render_sequence(
     const std::vector<std::unique_ptr<BlockNode>>& blocks,
     std::size_t width,
     RenderContext context,
     bool separated) {
     std::vector<std::string> result;
-    for (const auto& block : blocks) {
+    for (std::size_t index = 0; index < blocks.size(); ++index) {
+        const auto& block = blocks[index];
+        if (block->kind == BlockKind::Table) {
+            if (auto rendered = render_table(*block, width, context); rendered) {
+                if (separated && !result.empty() && !rendered->empty() && !result.back().empty()) {
+                    result.push_back({});
+                }
+                result.insert(result.end(), rendered->begin(), rendered->end());
+                if (!separated && index + 1 < blocks.size() && !result.empty() && !result.back().empty()) {
+                    result.push_back({});
+                }
+            } else {
+                return std::unexpected(rendered.error());
+            }
+            continue;
+        }
         if (auto rendered = render_block(*block, width, context); rendered) {
             if (separated && !result.empty() && !rendered->empty() && !result.back().empty()) {
                 result.push_back({});
             }
             result.insert(result.end(), rendered->begin(), rendered->end());
+            if (!separated && block->kind == BlockKind::Table && index + 1 < blocks.size() && !result.empty() &&
+                    !result.back().empty()) {
+                result.push_back({});
+            }
         } else {
             return std::unexpected(rendered.error());
         }
@@ -727,6 +1083,18 @@ using RenderedLines = support::Expected<std::vector<std::string>>;
                     render_inline_children(block.inlines, block_roles(false, context.quote_depth), context.style);
             return wrap_text(text, width);
         }
+        case BlockKind::Table:
+            return render_table(block, width, context);
+        case BlockKind::TableHead:
+        case BlockKind::TableBody:
+        case BlockKind::TableRow:
+            return render_sequence(block.children, width, context, false);
+        case BlockKind::TableHeaderCell:
+        case BlockKind::TableCell: {
+            const auto text =
+                    render_inline_children(block.inlines, block_roles(false, context.quote_depth), context.style);
+            return wrap_text(text, width);
+        }
         case BlockKind::Heading: {
             auto roles = block_roles(true, context.quote_depth);
             roles.push_back(StyleRole::Strong);
@@ -864,6 +1232,45 @@ struct FenceRun {
     return text;
 }
 
+[[nodiscard]] std::string separate_table_following_content(std::string_view text) {
+    std::vector<std::string_view> lines;
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        const auto end = text.find('\n', start);
+        lines.push_back(text.substr(start, end == std::string_view::npos ? text.size() - start : end - start));
+        if (end == std::string_view::npos) break;
+        start = end + 1;
+    }
+
+    std::vector<bool> insert_blank_before(lines.size(), false);
+    MarkdownFence fence;
+    std::vector<bool> fenced(lines.size(), false);
+    for (std::size_t index = 0; index < lines.size(); ++index)
+        fenced[index] = update_markdown_fence(lines[index], fence);
+
+    for (std::size_t index = 0; index + 1 < lines.size(); ++index) {
+        if (fenced[index] || fenced[index + 1] || lines[index].find('|') == std::string_view::npos ||
+                !is_table_delimiter(lines[index + 1])) {
+            continue;
+        }
+        auto row = index + 2;
+        while (row < lines.size() && !fenced[row] && !lines[row].empty() &&
+                lines[row].find('|') != std::string_view::npos) {
+            ++row;
+        }
+        if (row < lines.size() && !lines[row].empty()) insert_blank_before[row] = true;
+        index = row > index ? row - 1 : index;
+    }
+
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (index > 0) result += '\n';
+        if (insert_blank_before[index]) result += '\n';
+        result += lines[index];
+    }
+    return result;
+}
+
 [[nodiscard]] std::string normalize_markdown_input(std::string_view input) {
     std::string normalized;
     normalized.reserve(input.size());
@@ -874,7 +1281,7 @@ struct FenceRun {
             normalized += character;
         }
     }
-    return trim_partial_closing_fence(std::move(normalized));
+    return trim_partial_closing_fence(separate_table_following_content(normalized));
 }
 
 } // namespace
