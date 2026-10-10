@@ -52,7 +52,6 @@ const src = (relative: string) => pathToFileURL(path.join(pi, "packages/tui", re
 const { parseKey, isKeyRepeat, isKeyRelease, setKittyProtocolActive } = await import(src("src/keys.ts"));
 const { visibleWidth, wrapTextWithAnsi, sliceByColumn, truncateToWidth, getOsc8LinkAtColumn } =
 	await import(src("src/utils.ts"));
-const { visibleWidth } = await import(src("src/utils.ts"));
 const { fuzzyMatch, fuzzyFilter } = await import(src("src/fuzzy.ts"));
 const { Input } = await import(src("src/components/input.ts"));
 const { Text } = await import(src("src/components/text.ts"));
@@ -533,7 +532,6 @@ const artifacts = [
 ["keys-kitty-text.json", "keys-kitty-text", kittyArtifact],
 	["utils-ansi.json", "utils-ansi", utilsAnsiArtifact],
 	["fuzzy.json", "fuzzy", fuzzyArtifact],
-["keys-kitty-text.json", "keys-kitty-text", kittyArtifact],
 	["latex.json", "latex", latexArtifact],
 ] as const;
 const records = artifacts.map(([file, family, artifact]) => {

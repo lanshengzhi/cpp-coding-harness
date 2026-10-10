@@ -2,7 +2,7 @@
   "schema": "pike/tui-evidence/1",
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-10T06:25:12.161Z",
+  "capturedAt": "2026-10-10T08:16:04.958Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -28,14 +28,14 @@
   },
   "generator": {
     "path": "capture/capture-named-tui.mts",
-    "sha256": "9d44fdeff5d8338d7df6807c9776f85b377e84867f5c5fcd084b9f2ac1cb0e79"
+    "sha256": "f513c8e0299ed070c3f076eff18cd5995eee9c998ee5b885798d5bffb75494db"
   },
   "artifacts": [
     {
       "path": "input.json",
       "family": "input",
       "bytes": 1697,
-      "sha256": "b9b200f284810124158270458019ad9aabc1e348b5a78a6c706f0e95649462c1",
+      "sha256": "2d968f3b358aeceaa8987b53496dc7dd62bea97274cf3af4fd59031b837438e4",
       "sourceEndpoints": [
         "packages/tui/src/keys.ts:parseKey,isKeyRepeat,isKeyRelease",
         "packages/tui/src/components/input.ts:handleInput,getValue,onSubmit"
@@ -45,7 +45,7 @@
       "path": "component.json",
       "family": "component",
       "bytes": 1239,
-      "sha256": "4cd76c22cf067b5bfd1db8637376cadcb63db161257de6a759ec556024165620",
+      "sha256": "15e9033693f38b82b0e9df1a03700a3a668a78850a8c3d15e4d04b96c8b402e7",
       "sourceEndpoints": [
         "packages/tui/src/components/text.ts:render,setText"
       ]
@@ -54,7 +54,7 @@
       "path": "screen-state.json",
       "family": "screen-state",
       "bytes": 113420,
-      "sha256": "36e63f9ed0437e59dd81acb0ee7baa4b0e0d758ef774efb67c62494ffbf2612c",
+      "sha256": "62202c61d2ca7fcb9bdc29ea5958e78799ce017e0f80e14fe6409a9e903f9dbd",
       "sourceEndpoints": [
         "packages/tui/src/tui-main-screen.ts:TuiMainScreen.renderNow",
         "packages/tui/src/tui.ts:setFocus,CURSOR_MARKER",
@@ -66,7 +66,7 @@
       "path": "capability-ledger.json",
       "family": "capability-ledger",
       "bytes": 13980,
-      "sha256": "756ffeb740390c53ab111e607dc72efaf07d52dd84ef939cc67252bb080888f7",
+      "sha256": "a61dcca15940128d644b3bd97ff4b6a58114013f1dfdb8d573bab536e3565091",
       "sourceEndpoints": [
         "packages/tui/src/index.ts:export-surface"
       ]
@@ -75,7 +75,7 @@
       "path": "utils-width.json",
       "family": "utils-width",
       "bytes": 3110,
-      "sha256": "3966ff5278646b5f37e100d4aa58e8a864581d1831e34df1991f9cb902d31f67",
+      "sha256": "a029386d88bed54ce075dcf0785212429662c2b563b4dda9dcd34b2b95ba1f54",
       "sourceEndpoints": [
         "packages/tui/src/utils.ts:visibleWidth",
         "packages/tui/src/components/text.ts:render",
@@ -83,10 +83,41 @@
       ]
     },
     {
+      "path": "keys-kitty-text.json",
+      "family": "keys-kitty-text",
+      "bytes": 2466,
+      "sha256": "b4c3397606fd80d018a2218b22915c10e88acb546670f940a09e69e7494d3e32",
+      "sourceEndpoints": [
+        "packages/tui/src/keys.ts:parseKey,decodeKittyPrintable",
+        "packages/tui/src/components/input.ts:handleInput,getValue"
+      ]
+    },
+    {
+      "path": "utils-ansi.json",
+      "family": "utils-ansi",
+      "bytes": 10150,
+      "sha256": "f1ba81aaa316e2b3799767056bbc73c43a0aece907fef746f105d41786a7e0f0",
+      "sourceEndpoints": [
+        "packages/tui/src/utils.ts:wrapTextWithAnsi",
+        "packages/tui/src/utils.ts:sliceByColumn",
+        "packages/tui/src/utils.ts:truncateToWidth",
+        "packages/tui/src/utils.ts:getOsc8LinkAtColumn"
+      ]
+    },
+    {
+      "path": "fuzzy.json",
+      "family": "fuzzy",
+      "bytes": 8095,
+      "sha256": "5e5e6e8465eac7b3d1d2a1c28077bfdae0517cccaaddfb570d5a4883a490467f",
+      "sourceEndpoints": [
+        "packages/tui/src/fuzzy.ts:fuzzyMatch,fuzzyFilter"
+      ]
+    },
+    {
       "path": "latex.json",
       "family": "latex",
-      "sha256": "036fb44f8818bf6936a91fc618f1dae810f3f546a99e022d160e27261ce72452",
-      "bytes": 14600,
+      "bytes": 14183,
+      "sha256": "82f45e5aa4a6b48ccf8b7c99e69141f5c238b58dad2c18161fd898db59279875",
       "sourceEndpoints": [
         "packages/tui/src/latex.ts:renderLatex,RenderLatexOptions"
       ]

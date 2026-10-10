@@ -1,7 +1,7 @@
 {
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-10T06:25:12.161Z",
+  "capturedAt": "2026-10-10T08:16:04.958Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -28,13 +28,6 @@
   "sourceEndpoints": [
     "packages/tui/src/latex.ts:renderLatex,RenderLatexOptions"
   ],
-  "recapture": {
-    "recapturedAt": "2026-10-10T07:57:46.663Z",
-    "sourceBuild": "@earendil-works/pi-tui@1.0.4",
-    "sourceBuildDist": "dist/latex.js",
-    "sourceBuildSha256": "9a2055efaee483b038b2f0f663588eb4128153bedaa3c8c314248da00807c5bf",
-    "note": "Observed by executing the pinned published build of the frozen baseline on the envelope's environment; expectations are never regenerated from Pike."
-  },
   "scenarios": [
     {
       "name": "inline-grammar",

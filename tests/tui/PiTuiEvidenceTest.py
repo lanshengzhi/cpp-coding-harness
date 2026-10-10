@@ -31,7 +31,7 @@ def fixture(root):
         "generator": {"path": "capture/capture-named-tui.mts", "sha256": "0" * 64},
         "artifacts": [],
     }
-    for family in ("input", "component", "screen-state", "capability-ledger", "utils-width", "fuzzy", "latex"):
+    for family in ("input", "component", "screen-state", "capability-ledger", "utils-width", "utils-ansi", "fuzzy", "keys-kitty-text", "latex"):
     for family in ("input", "component", "screen-state", "capability-ledger", "utils-width", "latex"):
         artifact = {
             "baseline": "pi-v1.0.4", "revision": REVISION, "capturedAt": captured,

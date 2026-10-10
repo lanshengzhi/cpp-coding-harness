@@ -98,7 +98,7 @@ def verify(root: Path, baseline: str | None) -> dict[str, bytes]:
             require(all(type(dimensions.get(key)) is int and dimensions[key] > 0 for key in ("columns", "rows")), "invalid scenario dimensions")
             require(isinstance(scenario.get("inputs"), (dict, list)) and "expected" in scenario and scenario["expected"] is not None, "missing scenario inputs/observation")
         artifacts[record["path"]] = payload
-    for key in ("input", "component", "screen-state", "capability-ledger", "utils-width", "fuzzy", "latex"):
+    for key in ("input", "component", "screen-state", "capability-ledger", "utils-width", "utils-ansi", "fuzzy", "keys-kitty-text", "latex"):
         require(key in families, f"missing required evidence family: {key}")
     for key in ("input", "component", "screen-state", "capability-ledger", "utils-width", "latex"):
         require(key in families, f"missing required evidence family: {key}")
