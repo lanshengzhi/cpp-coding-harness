@@ -191,6 +191,16 @@ public:
     /// interactive boot does with setTitle.
     [[nodiscard]] virtual support::ExpectedVoid set_title(std::string_view title) = 0;
 
+    /// Apply a cell-size reply (`ESC [ 6 ; height ; width t`) that survived
+    /// the raw-input listener stage (pi terminal-image.ts
+    /// consumeCellSizeResponse, pi tui.ts onLateReply). This is the downstream
+    /// cell-size consumer: it refines TerminalCapabilities::cell_pixels and
+    /// notifies the resize sink, so image placement follows the reported
+    /// pixels. Implementations ignore non-positive dimensions, which leave the
+    /// reported cell size unchanged, and the default implementation ignores the
+    /// reply entirely for terminals that never query the cell size.
+    [[nodiscard]] virtual support::ExpectedVoid apply_cell_pixel_dimensions(CellPixelDimensions pixels);
+
     /// Present or clear the progress indicator (OSC 9;4). While active, the
     /// sequence is re-emitted on pi's 1-second keepalive so the indicator
     /// survives terminal redraws and timeouts; stop() clears an active

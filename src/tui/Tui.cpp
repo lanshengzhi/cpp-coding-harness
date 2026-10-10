@@ -14,6 +14,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace cch::tui {
@@ -38,12 +39,28 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
             describe_error(rollback)));
 }
 
+/// The downstream consumer of the replies that survive the raw-input listener
+/// stage (pi tui.ts onLateReply): a cell-size reply refines the terminal's
+/// reported cell pixels here, after every listener has had its say. Consuming
+/// or rewriting the bytes in a listener is what suppresses this update.
+void apply_late_replies(Terminal& terminal, const std::vector<detail::TerminalResponseVariant>& responses) {
+    for (const auto& response : responses) {
+        const auto* cell_size = std::get_if<detail::CellSizeResponse>(&response);
+        if (cell_size == nullptr) continue;
+        (void)terminal.apply_cell_pixel_dimensions(CellPixelDimensions{
+                .width = cell_size->width_px,
+                .height = cell_size->height_px,
+        });
+    }
+}
+
 } // namespace
 
 Tui::Tui(Terminal& terminal)
     : terminal_(terminal), stream_decoder_(std::make_unique<detail::TerminalStreamDecoder>()),
       compositor_(std::make_unique<detail::OverlayCompositor>()),
-      render_pipeline_(std::make_unique<detail::RenderPipeline>(terminal)) {}
+      render_pipeline_(std::make_unique<detail::RenderPipeline>(terminal)),
+      raw_listeners_(std::make_shared<RawInputListenerChain>()) {}
 
 Tui::~Tui() { (void)stop(); }
 
@@ -53,6 +70,18 @@ support::Expected<std::reference_wrapper<Component>> Tui::add_child(std::unique_
 
 support::Expected<std::reference_wrapper<Overlay>> Tui::add_overlay(std::unique_ptr<Overlay> overlay) {
     return compositor_->add_overlay(std::move(overlay));
+}
+
+RawInputListenerHandle Tui::add_raw_input_listener(RawInputListener listener) {
+    return raw_listeners_->add_owned(std::move(listener));
+}
+
+support::ExpectedVoid Tui::remove_raw_input_listener(RawInputListenerId id) {
+    if (!raw_listeners_->remove(id)) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Raw-input listener is not registered with this TUI"));
+    }
+    return {};
 }
 
 support::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
@@ -321,9 +350,20 @@ void Tui::handle_input(std::string input) {
         return;
     }
 
-    for (std::size_t offset = 0; offset < input.size(); offset += kInputDecodeChunkBytes) {
-        const auto chunk = std::string_view(input).substr(offset, kInputDecodeChunkBytes);
-        for (const auto& event : stream_decoder_->feed(chunk).events) dispatch_input(event);
+    // Frozen raw-input listener stage (pi tui.ts handleInput inputListeners):
+    // listeners observe the raw bytes in registration order and may consume
+    // them or replace them for the rest of the chain. Consumption - and a
+    // surviving empty text - stop typed dispatch without reaching the
+    // downstream reply consumer either.
+    const auto dispatched = raw_listeners_->dispatch(input);
+    if (dispatched.consumed || dispatched.input.empty()) return;
+
+    for (std::size_t offset = 0; offset < dispatched.input.size(); offset += kInputDecodeChunkBytes) {
+        const auto chunk = std::string_view(dispatched.input).substr(offset, kInputDecodeChunkBytes);
+        auto decoded = stream_decoder_->feed(chunk);
+        apply_late_replies(terminal_, decoded.responses);
+        for (const auto& event : decoded.events)
+            dispatch_input(event);
     }
 }
 

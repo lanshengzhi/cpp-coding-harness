@@ -72,6 +72,10 @@ public:
     [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override;
     [[nodiscard]] support::ExpectedVoid end_synchronized_update() override;
     [[nodiscard]] support::ExpectedVoid set_title(std::string_view title) override;
+    /// The downstream cell-size consumer: injected input is delivered verbatim
+    /// so the host's raw-input listener stage observes a `CSI 6 ; h ; w t`
+    /// reply before this call refines the reported cell pixels (#952).
+    [[nodiscard]] support::ExpectedVoid apply_cell_pixel_dimensions(CellPixelDimensions pixels) override;
     [[nodiscard]] support::ExpectedVoid set_progress(bool active) override;
     [[nodiscard]] support::ExpectedVoid drain_input(
         std::chrono::milliseconds max_ms = kDrainInputMaxMs,

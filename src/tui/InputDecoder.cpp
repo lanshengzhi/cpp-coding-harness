@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 
 namespace cch::tui::detail {
 namespace {
@@ -882,7 +883,17 @@ void TerminalStreamDecoder::drain(StreamDecodeResult& result, bool end_of_feed) 
         if (sequence.front() == '\x1b') {
             auto scan = scan_terminal_response(sequence);
             if (scan.consumed) {
-                if (scan.response) result.responses.push_back(std::move(*scan.response));
+                if (scan.response) {
+                    result.responses.push_back(std::move(*scan.response));
+                    // A cell-size reply stays visible to byte-level consumers:
+                    // the frozen raw-input listener stage runs before the
+                    // downstream cell-size consumer (pi tui.ts inputListeners
+                    // precede onLateReply), so the reply must still reach the
+                    // host instead of being consumed here. Color,
+                    // keyboard-negotiation and CPR answers keep their own
+                    // stages and never reach the listener chain.
+                    if (std::holds_alternative<CellSizeResponse>(*scan.response)) result.forwarded_input += sequence;
+                }
                 continue;
             }
             if (is_mouse_control_sequence(sequence)) continue;
