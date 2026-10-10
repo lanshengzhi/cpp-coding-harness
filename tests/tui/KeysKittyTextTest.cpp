@@ -66,15 +66,15 @@ TEST_CASE("shifted, supplementary and legacy printables keep their own character
     // while the identity stays the base-layout key. NOTE (verified against
     // frozen pi 7c10bd43 `decodeKittyPrintable`): pi does NOT substitute the
     // shifted keycode into the text path — `ESC[1060:1040:97;2u` inserts
-    // U+0410 (А, the reported codepoint), even though group 2 carries 1040.
-    // pi's `formatParsedKey` uses the shifted key only for the shortcut
-    // identity, not for insertion text.
+    // U+0424 (Ф, the reported codepoint 1060), even though group 2 carries
+    // 1040 (U+0410, А). pi's `formatParsedKey` uses the shifted key only for
+    // the shortcut identity, not for insertion text.
     const auto shifted_cyrillic = kitty("\x1b[1060:1040:97;2u");
     REQUIRE(shifted_cyrillic);
     CHECK(shifted_cyrillic->key == "a");
     CHECK(shifted_cyrillic->shift);
-    CHECK(shifted_cyrillic->text == "\xd0\x90");
-    CHECK(tui::printable_text(*shifted_cyrillic) == std::optional<std::string>{"\xd0\x90"});
+    CHECK(shifted_cyrillic->text == "\xd0\xa4");
+    CHECK(tui::printable_text(*shifted_cyrillic) == std::optional<std::string>{"\xd0\xa4"});
 
     // The legacy paths still type what the terminal sent: the identifier is
     // canonical, the inserted text keeps the typed case and non-ASCII bytes.

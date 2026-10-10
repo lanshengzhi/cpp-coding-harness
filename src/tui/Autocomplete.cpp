@@ -2,7 +2,7 @@
 
 #include <cch/tui/Fuzzy.hpp>
 
-#include "tui/InteractionUtils.hpp"
+#include "tui/CompletionContext.hpp"
 #include "support/UniqueFd.hpp"
 
 #include <algorithm>
@@ -34,8 +34,6 @@ namespace {
 constexpr std::size_t kFdMaxResults = 100;
 constexpr std::size_t kFdTopResults = 20;
 
-const std::string kPathDelimiters = " \t\"'=";
-
 struct PathPrefix {
     std::string raw_prefix;
     bool is_at_prefix{false};
@@ -61,7 +59,8 @@ struct FdEntry {
 [[nodiscard]] std::string to_display_path(std::string_view value) {
     std::string result;
     result.reserve(value.size());
-    for (const char ch : value) result.push_back(ch == '\\' ? '/' : ch);
+    for (const char ch : value)
+        result.push_back(ch == '\\' ? '/' : ch);
     return result;
 }
 
@@ -102,16 +101,6 @@ struct FdEntry {
     return pattern;
 }
 
-[[nodiscard]] std::optional<std::size_t> find_last_delimiter(std::string_view text) {
-    for (std::size_t index = text.size(); index-- > 0;) {
-        if (kPathDelimiters.find(text[index]) != std::string::npos) return index;
-        const auto byte = static_cast<unsigned char>(text[index]);
-        // Trail or lead byte of non-ASCII UTF-8 boundary (e.g. CJK punctuation)
-        if (byte >= 0x80) return index;
-    }
-    return std::nullopt;
-}
-
 [[nodiscard]] std::optional<std::size_t> find_unclosed_quote_start(std::string_view text) {
     bool in_quotes = false;
     std::optional<std::size_t> quote_start;
@@ -123,31 +112,15 @@ struct FdEntry {
     return in_quotes ? quote_start : std::nullopt;
 }
 
-// Opening wrappers that may precede a path in prose, mapped to their closing counterpart.
-bool is_path_wrapper(char c) { return c == '(' || c == '[' || c == '{' || c == '<' || c == '`'; }
-
-[[nodiscard]] bool is_token_start(std::string_view text, std::size_t index) {
-    std::size_t start = index;
-    while (start > 0 && is_path_wrapper(text[start - 1])) {
-        --start;
-    }
-    if (start == 0) return true;
-    const unsigned char prev = static_cast<unsigned char>(text[start - 1]);
-    if (kPathDelimiters.find(static_cast<char>(prev)) != std::string::npos) return true;
-    // Non-ASCII UTF-8 trail bytes (e.g. CJK punctuation) also serve as boundaries
-    if (prev >= 0x80) return true;
-    return false;
-}
-
 [[nodiscard]] std::optional<std::string_view> extract_quoted_prefix(std::string_view text) {
     const auto quote_start = find_unclosed_quote_start(text);
     if (!quote_start) return std::nullopt;
 
     if (*quote_start > 0 && text[*quote_start - 1] == '@') {
-        if (!is_token_start(text, *quote_start - 1)) return std::nullopt;
+        if (!detail::is_completion_token_start(text, *quote_start - 1)) return std::nullopt;
         return text.substr(*quote_start - 1);
     }
-    if (!is_token_start(text, *quote_start)) return std::nullopt;
+    if (!detail::is_completion_token_start(text, *quote_start)) return std::nullopt;
     return text.substr(*quote_start);
 }
 
@@ -164,11 +137,10 @@ bool is_path_wrapper(char c) { return c == '(' || c == '[' || c == '{' || c == '
     return {.raw_prefix = std::string{prefix}, .is_at_prefix = false, .is_quoted_prefix = false};
 }
 
-[[nodiscard]] std::string build_completion_value(
-    std::string_view path,
-    bool is_at_prefix,
-    bool is_quoted_prefix) {
-    const bool needs_quotes = is_quoted_prefix || path.find(' ') != std::string_view::npos;
+[[nodiscard]] std::string build_completion_value(std::string_view path, bool is_at_prefix, bool is_quoted_prefix) {
+    // pi quotes a value when the token was already quoted or when the path
+    // contains a separator code point (whitespace or CJK punctuation).
+    const bool needs_quotes = is_quoted_prefix || detail::contains_completion_separator(path);
     const std::string prefix = is_at_prefix ? "@" : "";
     if (!needs_quotes) return prefix + std::string{path};
     return prefix + "\"" + std::string{path} + "\"";
@@ -228,8 +200,7 @@ struct ScopedQuery {
 };
 
 [[nodiscard]] std::optional<ScopedQuery> resolve_scoped_fuzzy_query(
-    const std::filesystem::path& base_path,
-    std::string_view raw_query) {
+        const std::filesystem::path& base_path, std::string_view raw_query) {
     const auto normalized = to_display_path(raw_query);
     const auto slash_index = normalized.rfind('/');
     if (slash_index == std::string::npos) return std::nullopt;
@@ -260,31 +231,30 @@ struct ScopedQuery {
 /// Walk the directory tree with an `fd` child process (pi's
 /// `walkDirectoryWithFd`). Runs on the caller's thread; the child is killed
 /// when `stop_token` is requested.
-[[nodiscard]] std::vector<FdEntry> walk_directory_with_fd(
-    const std::filesystem::path& base_dir,
-    const std::filesystem::path& fd_path,
-    std::string_view query,
-    std::size_t max_results,
-    std::stop_token stop_token) {
+[[nodiscard]] std::vector<FdEntry> walk_directory_with_fd(const std::filesystem::path& base_dir,
+        const std::filesystem::path& fd_path,
+        std::string_view query,
+        std::size_t max_results,
+        std::stop_token stop_token) {
     if (stop_token.stop_requested()) return {};
 
     std::vector<std::string> args{
-        "--base-directory",
-        base_dir.string(),
-        "--max-results",
-        std::to_string(max_results),
-        "--type",
-        "f",
-        "--type",
-        "d",
-        "--follow",
-        "--hidden",
-        "--exclude",
-        ".git",
-        "--exclude",
-        ".git/*",
-        "--exclude",
-        ".git/**",
+            "--base-directory",
+            base_dir.string(),
+            "--max-results",
+            std::to_string(max_results),
+            "--type",
+            "f",
+            "--type",
+            "d",
+            "--follow",
+            "--hidden",
+            "--exclude",
+            ".git",
+            "--exclude",
+            ".git/*",
+            "--exclude",
+            ".git/**",
     };
     if (to_display_path(query).find('/') != std::string::npos) {
         args.push_back("--full-path");
@@ -307,7 +277,8 @@ struct ScopedQuery {
         std::vector<char*> argv;
         argv.reserve(args.size() + 2);
         argv.push_back(const_cast<char*>(fd_path.c_str()));
-        for (auto& arg : args) argv.push_back(arg.data());
+        for (auto& arg : args)
+            argv.push_back(arg.data());
         argv.push_back(nullptr);
         execvp(argv[0], argv.data());
         _exit(127);
@@ -347,10 +318,10 @@ struct ScopedQuery {
         const auto display_line = to_display_path(line);
         const bool has_trailing_separator = display_line.ends_with('/');
         const std::string_view normalized_path =
-            has_trailing_separator ? std::string_view{display_line}.substr(0, display_line.size() - 1)
-                                   : std::string_view{display_line};
+                has_trailing_separator ? std::string_view{display_line}.substr(0, display_line.size() - 1)
+                                       : std::string_view{display_line};
         if (normalized_path == ".git" || normalized_path.starts_with(".git/") ||
-            normalized_path.find("/.git/") != std::string_view::npos) {
+                normalized_path.find("/.git/") != std::string_view::npos) {
             continue;
         }
         results.push_back({.path = display_line, .is_directory = has_trailing_separator});
@@ -378,182 +349,179 @@ struct ScopedQuery {
     }
 
     double score = 0;
-    if (lower_file_name == lower_query) score = 100;
-    else if (lower_file_name.starts_with(lower_query)) score = 80;
-    else if (lower_file_name.find(lower_query) != std::string::npos) score = 50;
-    else if (lower_path.find(lower_query) != std::string::npos) score = 30;
+    if (lower_file_name == lower_query)
+        score = 100;
+    else if (lower_file_name.starts_with(lower_query))
+        score = 80;
+    else if (lower_file_name.find(lower_query) != std::string::npos)
+        score = 50;
+    else if (lower_path.find(lower_query) != std::string::npos)
+        score = 30;
 
     if (is_directory && score > 0) score += 10;
     return score;
 }
 
 [[nodiscard]] std::vector<AutocompleteItem> get_file_suggestions(
-    const std::filesystem::path& base_path,
-    std::string_view prefix) {
+        const std::filesystem::path& base_path, std::string_view prefix) {
     const auto parsed = parse_path_prefix(prefix);
-        const auto& raw_prefix = parsed.raw_prefix;
-        auto expanded_prefix = raw_prefix;
-        if (expanded_prefix.starts_with('~')) expanded_prefix = expand_home_path(expanded_prefix);
+    const auto& raw_prefix = parsed.raw_prefix;
+    auto expanded_prefix = raw_prefix;
+    if (expanded_prefix.starts_with('~')) expanded_prefix = expand_home_path(expanded_prefix);
 
-        const bool is_root_prefix = raw_prefix.empty() || raw_prefix == "./" || raw_prefix == "../" ||
-            raw_prefix == "~" || raw_prefix == "~/" || raw_prefix == "/" ||
-            (parsed.is_at_prefix && raw_prefix.empty());
+    const bool is_root_prefix = raw_prefix.empty() || raw_prefix == "./" || raw_prefix == "../" || raw_prefix == "~" ||
+                                raw_prefix == "~/" || raw_prefix == "/" || (parsed.is_at_prefix && raw_prefix.empty());
 
-        std::filesystem::path search_dir;
-        std::string search_prefix;
-        if (is_root_prefix) {
-            if (raw_prefix.starts_with('~') || expanded_prefix.starts_with('/')) {
-                search_dir = expanded_prefix;
-            } else {
-                search_dir = join_path(base_path.string(), expanded_prefix);
-            }
-            search_prefix = "";
-        } else if (raw_prefix.ends_with('/')) {
-            if (raw_prefix.starts_with('~') || expanded_prefix.starts_with('/')) {
-                search_dir = expanded_prefix;
-            } else {
-                search_dir = join_path(base_path.string(), expanded_prefix);
-            }
-            search_prefix = "";
+    std::filesystem::path search_dir;
+    std::string search_prefix;
+    if (is_root_prefix) {
+        if (raw_prefix.starts_with('~') || expanded_prefix.starts_with('/')) {
+            search_dir = expanded_prefix;
         } else {
-            const auto dir = dirname_of(expanded_prefix);
-            const auto file = basename_of(expanded_prefix);
-            if (raw_prefix.starts_with('~') || expanded_prefix.starts_with('/')) {
-                search_dir = std::filesystem::path{dir};
-            } else {
-                search_dir = join_path(base_path.string(), dir);
-            }
-            search_prefix = std::string{file};
+            search_dir = join_path(base_path.string(), expanded_prefix);
+        }
+        search_prefix = "";
+    } else if (raw_prefix.ends_with('/')) {
+        if (raw_prefix.starts_with('~') || expanded_prefix.starts_with('/')) {
+            search_dir = expanded_prefix;
+        } else {
+            search_dir = join_path(base_path.string(), expanded_prefix);
+        }
+        search_prefix = "";
+    } else {
+        const auto dir = dirname_of(expanded_prefix);
+        const auto file = basename_of(expanded_prefix);
+        if (raw_prefix.starts_with('~') || expanded_prefix.starts_with('/')) {
+            search_dir = std::filesystem::path{dir};
+        } else {
+            search_dir = join_path(base_path.string(), dir);
+        }
+        search_prefix = std::string{file};
+    }
+
+    std::vector<AutocompleteItem> suggestions;
+    std::error_code error;
+    auto iterator = std::filesystem::directory_iterator(
+            search_dir, std::filesystem::directory_options::skip_permission_denied, error);
+    if (error) return {};
+    for (;;) {
+        if (iterator == std::filesystem::directory_iterator{}) break;
+        const auto& entry = *iterator;
+        const auto& name = entry.path().filename().string();
+        std::error_code entry_error;
+        if (!starts_with_case_insensitive(name, search_prefix)) {
+            iterator.increment(entry_error);
+            if (entry_error) return {};
+            continue;
         }
 
-        std::vector<AutocompleteItem> suggestions;
-        std::error_code error;
-        auto iterator = std::filesystem::directory_iterator(
-            search_dir, std::filesystem::directory_options::skip_permission_denied, error);
-        if (error) return {};
-        for (;;) {
-            if (iterator == std::filesystem::directory_iterator{}) break;
-            const auto& entry = *iterator;
-            const auto& name = entry.path().filename().string();
-            std::error_code entry_error;
-            if (!starts_with_case_insensitive(name, search_prefix)) {
-                iterator.increment(entry_error);
-                if (entry_error) return {};
-                continue;
-            }
-
-            bool is_directory = entry.is_directory(entry_error);
+        bool is_directory = entry.is_directory(entry_error);
+        if (entry_error) {
+            // Permission error - treat as file.
+            is_directory = false;
+        }
+        if (!is_directory && entry.is_symlink(entry_error)) {
+            is_directory = std::filesystem::is_directory(entry.path(), entry_error);
             if (entry_error) {
-                // Permission error - treat as file.
+                // Broken symlink or permission error - treat as file.
                 is_directory = false;
             }
-            if (!is_directory && entry.is_symlink(entry_error)) {
-                is_directory = std::filesystem::is_directory(entry.path(), entry_error);
-                if (entry_error) {
-                    // Broken symlink or permission error - treat as file.
-                    is_directory = false;
+        }
+
+        std::string relative_path;
+        const auto& display_prefix = raw_prefix;
+        if (display_prefix.ends_with('/')) {
+            relative_path = display_prefix + name;
+        } else if (display_prefix.find('/') != std::string::npos || display_prefix.find('\\') != std::string::npos) {
+            if (display_prefix.starts_with("~/")) {
+                const auto home_relative_dir = std::string_view{display_prefix}.substr(2);
+                const auto dir = dirname_of(home_relative_dir);
+                relative_path = dir == "." ? "~/" + name : "~/" + join_path(dir, name);
+            } else if (display_prefix.starts_with('/')) {
+                const auto dir = dirname_of(display_prefix);
+                relative_path = dir == "/" ? "/" + name : join_path(dir, name);
+            } else {
+                relative_path = join_path(dirname_of(display_prefix), name);
+                if (display_prefix.starts_with("./") && !relative_path.starts_with("./")) {
+                    relative_path = "./" + relative_path;
                 }
             }
+        } else {
+            relative_path = display_prefix.starts_with('~') ? "~/" + name : name;
+        }
 
-                std::string relative_path;
-                const auto& display_prefix = raw_prefix;
-                if (display_prefix.ends_with('/')) {
-                    relative_path = display_prefix + name;
-                } else if (display_prefix.find('/') != std::string::npos ||
-                           display_prefix.find('\\') != std::string::npos) {
-                    if (display_prefix.starts_with("~/")) {
-                        const auto home_relative_dir = std::string_view{display_prefix}.substr(2);
-                        const auto dir = dirname_of(home_relative_dir);
-                        relative_path = dir == "." ? "~/" + name : "~/" + join_path(dir, name);
-                    } else if (display_prefix.starts_with('/')) {
-                        const auto dir = dirname_of(display_prefix);
-                        relative_path = dir == "/" ? "/" + name : join_path(dir, name);
-                    } else {
-                        relative_path = join_path(dirname_of(display_prefix), name);
-                        if (display_prefix.starts_with("./") && !relative_path.starts_with("./")) {
-                            relative_path = "./" + relative_path;
-                        }
-                    }
-                } else {
-                    relative_path = display_prefix.starts_with('~') ? "~/" + name : name;
-                }
+        relative_path = to_display_path(relative_path);
+        const auto path_value = is_directory ? relative_path + "/" : relative_path;
+        const auto value = build_completion_value(path_value, parsed.is_at_prefix, parsed.is_quoted_prefix);
 
-                relative_path = to_display_path(relative_path);
-                const auto path_value = is_directory ? relative_path + "/" : relative_path;
-                const auto value = build_completion_value(
-                    path_value,
-                    parsed.is_at_prefix,
-                    parsed.is_quoted_prefix);
-
-            suggestions.push_back({
+        suggestions.push_back({
                 .value = value,
                 .label = name + (is_directory ? "/" : ""),
                 .description = {},
-            });
-            iterator.increment(entry_error);
-            if (entry_error) return {};
-        }
-
-        std::stable_sort(suggestions.begin(), suggestions.end(), [](const AutocompleteItem& left, const AutocompleteItem& right) {
-            const bool left_dir = left.value.ends_with('/');
-            const bool right_dir = right.value.ends_with('/');
-            if (left_dir != right_dir) return left_dir;
-            return left.label < right.label;
         });
-        return suggestions;
+        iterator.increment(entry_error);
+        if (entry_error) return {};
+    }
+
+    std::stable_sort(
+            suggestions.begin(), suggestions.end(), [](const AutocompleteItem& left, const AutocompleteItem& right) {
+                const bool left_dir = left.value.ends_with('/');
+                const bool right_dir = right.value.ends_with('/');
+                if (left_dir != right_dir) return left_dir;
+                return left.label < right.label;
+            });
+    return suggestions;
 }
 
-[[nodiscard]] std::vector<AutocompleteItem> get_fuzzy_file_suggestions(
-    const std::filesystem::path& base_path,
-    const std::filesystem::path& fd_path,
-    std::string_view query,
-    bool is_quoted_prefix,
-    std::stop_token stop_token) {
+[[nodiscard]] std::vector<AutocompleteItem> get_fuzzy_file_suggestions(const std::filesystem::path& base_path,
+        const std::filesystem::path& fd_path,
+        std::string_view query,
+        bool is_quoted_prefix,
+        std::stop_token stop_token) {
     if (stop_token.stop_requested()) return {};
 
-        const auto scoped_query = resolve_scoped_fuzzy_query(base_path, query);
-        const auto fd_base_dir = scoped_query ? scoped_query->base_dir : base_path;
-        const auto fd_query = scoped_query ? scoped_query->query : std::string{query};
-        const auto entries = walk_directory_with_fd(fd_base_dir, fd_path, fd_query, kFdMaxResults, stop_token);
-        if (stop_token.stop_requested()) return {};
+    const auto scoped_query = resolve_scoped_fuzzy_query(base_path, query);
+    const auto fd_base_dir = scoped_query ? scoped_query->base_dir : base_path;
+    const auto fd_query = scoped_query ? scoped_query->query : std::string{query};
+    const auto entries = walk_directory_with_fd(fd_base_dir, fd_path, fd_query, kFdMaxResults, stop_token);
+    if (stop_token.stop_requested()) return {};
 
-        struct ScoredEntry {
-            std::string path;
-            bool is_directory{false};
-            double score{0};
-        };
-        std::vector<ScoredEntry> scored;
-        for (const auto& entry : entries) {
-            const auto score = fd_query.empty() ? 1.0 : score_entry(entry.path, fd_query, entry.is_directory);
-            if (score <= 0) continue;
-            scored.push_back({.path = entry.path, .is_directory = entry.is_directory, .score = score});
-        }
+    struct ScoredEntry {
+        std::string path;
+        bool is_directory{false};
+        double score{0};
+    };
+    std::vector<ScoredEntry> scored;
+    for (const auto& entry : entries) {
+        const auto score = fd_query.empty() ? 1.0 : score_entry(entry.path, fd_query, entry.is_directory);
+        if (score <= 0) continue;
+        scored.push_back({.path = entry.path, .is_directory = entry.is_directory, .score = score});
+    }
 
-        std::stable_sort(scored.begin(), scored.end(), [](const ScoredEntry& left, const ScoredEntry& right) {
-            return left.score > right.score;
-        });
-        if (scored.size() > kFdTopResults) scored.resize(kFdTopResults);
+    std::stable_sort(scored.begin(), scored.end(), [](const ScoredEntry& left, const ScoredEntry& right) {
+        return left.score > right.score;
+    });
+    if (scored.size() > kFdTopResults) scored.resize(kFdTopResults);
 
-        std::vector<AutocompleteItem> suggestions;
-        suggestions.reserve(scored.size());
-        for (const auto& entry : scored) {
-            const auto path_without_slash = entry.is_directory && entry.path.ends_with('/')
-                ? std::string_view{entry.path}.substr(0, entry.path.size() - 1)
-                : std::string_view{entry.path};
-            const auto display_path = scoped_query
-                ? scoped_path_for_display(scoped_query->display_base, path_without_slash)
-                : std::string{path_without_slash};
-            const auto entry_name = basename_of(path_without_slash);
-            const auto completion_path = entry.is_directory ? display_path + "/" : display_path;
-            const auto value = build_completion_value(completion_path, true, is_quoted_prefix);
+    std::vector<AutocompleteItem> suggestions;
+    suggestions.reserve(scored.size());
+    for (const auto& entry : scored) {
+        const auto path_without_slash = entry.is_directory && entry.path.ends_with('/')
+                                                ? std::string_view{entry.path}.substr(0, entry.path.size() - 1)
+                                                : std::string_view{entry.path};
+        const auto display_path = scoped_query ? scoped_path_for_display(scoped_query->display_base, path_without_slash)
+                                               : std::string{path_without_slash};
+        const auto entry_name = basename_of(path_without_slash);
+        const auto completion_path = entry.is_directory ? display_path + "/" : display_path;
+        const auto value = build_completion_value(completion_path, true, is_quoted_prefix);
 
-            suggestions.push_back({
+        suggestions.push_back({
                 .value = value,
                 .label = std::string{entry_name} + (entry.is_directory ? "/" : ""),
                 .description = display_path,
-            });
-        }
-        return suggestions;
+        });
+    }
+    return suggestions;
 }
 
 /// Extract the `@` prefix for fuzzy file suggestions (pi `extractAtPrefix`).
@@ -563,36 +531,34 @@ struct ScopedQuery {
         return quoted_prefix;
     }
 
-    const auto last_delimiter_index = find_last_delimiter(text);
-    const auto token_start = last_delimiter_index ? *last_delimiter_index + 1 : 0U;
-    const auto token = detail::strip_leading_wrappers(text.substr(token_start));
+    const auto last_delimiter = detail::find_last_completion_delimiter(text);
+    const auto token = detail::strip_leading_completion_wrappers(text.substr(last_delimiter.token_start()));
     if (token.starts_with('@')) return token;
     return std::nullopt;
 }
 
 /// Extract a path-like prefix from the text before cursor (pi
 /// `extractPathPrefix`).
-[[nodiscard]] std::optional<std::string_view> extract_path_prefix(
-    std::string_view text,
-    bool force_extract) {
+[[nodiscard]] std::optional<std::string_view> extract_path_prefix(std::string_view text, bool force_extract) {
     const auto quoted_prefix = extract_quoted_prefix(text);
     if (quoted_prefix) {
         return quoted_prefix;
     }
 
-    const auto last_delimiter_index = find_last_delimiter(text);
-    const auto path_prefix =
-            detail::strip_leading_wrappers(last_delimiter_index ? text.substr(*last_delimiter_index + 1) : text);
+    const auto last_delimiter = detail::find_last_completion_delimiter(text);
+    const auto path_prefix = detail::strip_leading_completion_wrappers(text.substr(last_delimiter.token_start()));
 
     if (force_extract) {
         return path_prefix;
     }
 
     if (path_prefix.find('/') != std::string_view::npos || path_prefix.starts_with('.') ||
-        path_prefix.starts_with("~/")) {
+            path_prefix.starts_with("~/")) {
         return path_prefix;
     }
-    if (path_prefix.empty() && !text.empty() && text.back() == ' ') {
+    // An empty token is a natural path context only directly after a separator,
+    // never on an empty line (pi's empty-after-separator rule).
+    if (path_prefix.empty() && !text.empty() && detail::ends_at_completion_boundary(text)) {
         return path_prefix;
     }
     return std::nullopt;
@@ -613,26 +579,24 @@ struct CombinedAutocompleteProvider::Impl {
 };
 
 CombinedAutocompleteProvider::CombinedAutocompleteProvider(
-    std::vector<std::variant<SlashCommand, AutocompleteItem>> commands,
-    std::filesystem::path base_path,
-    std::optional<std::filesystem::path> fd_path)
+        std::vector<std::variant<SlashCommand, AutocompleteItem>> commands,
+        std::filesystem::path base_path,
+        std::optional<std::filesystem::path> fd_path)
     : impl_(std::make_unique<Impl>(Impl{
-          .commands = std::move(commands),
-          .base_path = std::move(base_path),
-          .fd_path = std::move(fd_path),
+              .commands = std::move(commands),
+              .base_path = std::move(base_path),
+              .fd_path = std::move(fd_path),
       })) {}
 
 CombinedAutocompleteProvider::~CombinedAutocompleteProvider() = default;
 CombinedAutocompleteProvider::CombinedAutocompleteProvider(CombinedAutocompleteProvider&&) noexcept = default;
-CombinedAutocompleteProvider& CombinedAutocompleteProvider::operator=(CombinedAutocompleteProvider&&) noexcept =
-    default;
+CombinedAutocompleteProvider& CombinedAutocompleteProvider::operator=(
+        CombinedAutocompleteProvider&&) noexcept = default;
 
-void CombinedAutocompleteProvider::get_suggestions(
-    const AutocompleteRequest& request,
-    AutocompleteResultSink sink) {
-    const auto current_line =
-        request.cursor_line < request.lines.size() ? std::string_view{request.lines[request.cursor_line]}
-                                                   : std::string_view{};
+void CombinedAutocompleteProvider::get_suggestions(const AutocompleteRequest& request, AutocompleteResultSink sink) {
+    const auto current_line = request.cursor_line < request.lines.size()
+                                      ? std::string_view{request.lines[request.cursor_line]}
+                                      : std::string_view{};
     const auto text_before_cursor = current_line.substr(0, std::min(request.cursor_column, current_line.size()));
 
     // `@` attachment prefix: fuzzy fd-backed completion (pi's at-prefix branch).
@@ -648,24 +612,29 @@ void CombinedAutocompleteProvider::get_suggestions(
         const auto base_path = impl_->base_path;
         const auto fd_path = *impl_->fd_path;
         const auto stop_token = request.stop_token;
-        std::thread([base_path, fd_path, raw_prefix, is_quoted_prefix, at_prefix_copy, stop_token,
-                     sink = std::move(sink)]() mutable {
+        std::thread([base_path,
+                            fd_path,
+                            raw_prefix,
+                            is_quoted_prefix,
+                            at_prefix_copy,
+                            stop_token,
+                            sink = std::move(sink)]() mutable {
             const auto suggestions =
-                get_fuzzy_file_suggestions(base_path, fd_path, raw_prefix, is_quoted_prefix, stop_token);
+                    get_fuzzy_file_suggestions(base_path, fd_path, raw_prefix, is_quoted_prefix, stop_token);
             if (suggestions.empty()) {
                 (void)sink(std::nullopt);
                 return;
             }
             (void)sink(AutocompleteSuggestions{
-                .items = std::move(suggestions),
-                .prefix = at_prefix_copy,
+                    .items = std::move(suggestions),
+                    .prefix = at_prefix_copy,
             });
         }).detach();
         return;
     }
 
     // Slash commands (not on a forced request; pi's `!options.force` gate).
-    const auto command_text = detail::trim_start_ascii(text_before_cursor);
+    const auto command_text = detail::trim_start_completion_whitespace(text_before_cursor);
     if (!request.force && command_text.starts_with('/')) {
         const auto space_index = command_text.find(' ');
         if (space_index == std::string_view::npos) {
@@ -675,33 +644,32 @@ void CombinedAutocompleteProvider::get_suggestions(
             command_items.reserve(impl_->commands.size());
             for (const auto& command : impl_->commands) {
                 std::visit(
-                    [&command_items](const auto& command_value) {
-                        using T = std::decay_t<decltype(command_value)>;
-                        if constexpr (std::is_same_v<T, SlashCommand>) {
-                            const auto hint = command_value.argument_hint;
-                            const auto desc = command_value.description;
-                            const auto full_desc =
-                                !hint.empty() ? (desc.empty() ? hint : hint + " \u2014 " + desc) : desc;
-                            command_items.push_back({
-                                .name = command_value.name,
-                                .label = command_value.name,
-                                .description = full_desc,
-                            });
-                        } else {
-                            command_items.push_back({
-                                .name = command_value.value,
-                                .label = command_value.label,
-                                .description = command_value.description,
-                            });
-                        }
-                    },
-                    command);
+                        [&command_items](const auto& command_value) {
+                            using T = std::decay_t<decltype(command_value)>;
+                            if constexpr (std::is_same_v<T, SlashCommand>) {
+                                const auto hint = command_value.argument_hint;
+                                const auto desc = command_value.description;
+                                const auto full_desc =
+                                        !hint.empty() ? (desc.empty() ? hint : hint + " \u2014 " + desc) : desc;
+                                command_items.push_back({
+                                        .name = command_value.name,
+                                        .label = command_value.name,
+                                        .description = full_desc,
+                                });
+                            } else {
+                                command_items.push_back({
+                                        .name = command_value.value,
+                                        .label = command_value.label,
+                                        .description = command_value.description,
+                                });
+                            }
+                        },
+                        command);
             }
 
-            const auto filtered = fuzzy_filter(
-                std::move(command_items),
-                prefix,
-                [](const CommandEntry& entry) -> const std::string& { return entry.name; });
+            const auto filtered = fuzzy_filter(std::move(command_items),
+                    prefix,
+                    [](const CommandEntry& entry) -> const std::string& { return entry.name; });
             if (filtered.empty()) {
                 (void)sink(std::nullopt);
                 return;
@@ -710,9 +678,9 @@ void CombinedAutocompleteProvider::get_suggestions(
             items.reserve(filtered.size());
             for (const auto& entry : filtered) {
                 items.push_back({
-                    .value = entry.name,
-                    .label = entry.label,
-                    .description = entry.description,
+                        .value = entry.name,
+                        .label = entry.label,
+                        .description = entry.description,
                 });
             }
             (void)sink(AutocompleteSuggestions{
@@ -738,8 +706,8 @@ void CombinedAutocompleteProvider::get_suggestions(
                 return;
             }
             (void)sink(AutocompleteSuggestions{
-                .items = *std::move(argument_suggestions),
-                .prefix = std::string{argument_text},
+                    .items = *std::move(argument_suggestions),
+                    .prefix = std::string{argument_text},
             });
             return;
         }
@@ -759,17 +727,16 @@ void CombinedAutocompleteProvider::get_suggestions(
         return;
     }
     (void)sink(AutocompleteSuggestions{
-        .items = suggestions,
-        .prefix = std::string{*path_match},
+            .items = suggestions,
+            .prefix = std::string{*path_match},
     });
 }
 
-AutocompleteApplyResult CombinedAutocompleteProvider::apply_completion(
-    const std::vector<std::string>& lines,
-    std::size_t cursor_line,
-    std::size_t cursor_column,
-    const AutocompleteItem& item,
-    std::string_view prefix) {
+AutocompleteApplyResult CombinedAutocompleteProvider::apply_completion(const std::vector<std::string>& lines,
+        std::size_t cursor_line,
+        std::size_t cursor_column,
+        const AutocompleteItem& item,
+        std::string_view prefix) {
     if (cursor_line >= lines.size()) {
         return {.lines = lines, .cursor_line = cursor_line, .cursor_column = cursor_column};
     }
@@ -780,24 +747,24 @@ AutocompleteApplyResult CombinedAutocompleteProvider::apply_completion(
     const bool is_quoted_prefix = prefix.starts_with('"') || prefix.starts_with("@\"");
     const bool has_leading_quote_after_cursor = after_cursor.starts_with('"');
     const bool has_trailing_quote_in_item = item.value.ends_with('"');
-    const auto adjusted_after_cursor =
-        is_quoted_prefix && has_trailing_quote_in_item && has_leading_quote_after_cursor
-        ? after_cursor.substr(1)
-        : after_cursor;
+    const auto adjusted_after_cursor = is_quoted_prefix && has_trailing_quote_in_item && has_leading_quote_after_cursor
+                                               ? after_cursor.substr(1)
+                                               : after_cursor;
 
     auto new_lines = lines;
     auto& new_line = new_lines[cursor_line];
 
     // Slash command name completion: prefix starts with "/" but is NOT a file
     // path (commands sit at the start of the line with no path separators).
-    const bool is_slash_command = prefix.starts_with('/') && cch::tui::detail::trim_start_ascii(before_prefix).empty() &&
-        prefix.substr(1).find('/') == std::string_view::npos;
+    const bool is_slash_command = prefix.starts_with('/') &&
+                                  detail::trim_completion_whitespace(before_prefix).empty() &&
+                                  prefix.substr(1).find('/') == std::string_view::npos;
     if (is_slash_command) {
         new_line = before_prefix + "/" + item.value + " " + adjusted_after_cursor;
         return {
-            .lines = std::move(new_lines),
-            .cursor_line = cursor_line,
-            .cursor_column = before_prefix.size() + item.value.size() + 2,  // "/" and the trailing space
+                .lines = std::move(new_lines),
+                .cursor_line = cursor_line,
+                .cursor_column = before_prefix.size() + item.value.size() + 2, // "/" and the trailing space
         };
     }
 
@@ -810,9 +777,9 @@ AutocompleteApplyResult CombinedAutocompleteProvider::apply_completion(
         const bool has_trailing_quote = item.value.ends_with('"');
         const auto cursor_offset = is_directory && has_trailing_quote ? item.value.size() - 1 : item.value.size();
         return {
-            .lines = std::move(new_lines),
-            .cursor_line = cursor_line,
-            .cursor_column = before_prefix.size() + cursor_offset + suffix.size(),
+                .lines = std::move(new_lines),
+                .cursor_line = cursor_line,
+                .cursor_column = before_prefix.size() + cursor_offset + suffix.size(),
         };
     }
 
@@ -824,9 +791,9 @@ AutocompleteApplyResult CombinedAutocompleteProvider::apply_completion(
         const bool has_trailing_quote = item.value.ends_with('"');
         const auto cursor_offset = is_directory && has_trailing_quote ? item.value.size() - 1 : item.value.size();
         return {
-            .lines = std::move(new_lines),
-            .cursor_line = cursor_line,
-            .cursor_column = before_prefix.size() + cursor_offset,
+                .lines = std::move(new_lines),
+                .cursor_line = cursor_line,
+                .cursor_column = before_prefix.size() + cursor_offset,
         };
     }
 
@@ -836,31 +803,20 @@ AutocompleteApplyResult CombinedAutocompleteProvider::apply_completion(
     const bool has_trailing_quote = item.value.ends_with('"');
     const auto cursor_offset = is_directory && has_trailing_quote ? item.value.size() - 1 : item.value.size();
     return {
-        .lines = std::move(new_lines),
-        .cursor_line = cursor_line,
-        .cursor_column = before_prefix.size() + cursor_offset,
+            .lines = std::move(new_lines),
+            .cursor_line = cursor_line,
+            .cursor_column = before_prefix.size() + cursor_offset,
     };
 }
 
 bool CombinedAutocompleteProvider::should_trigger_file_completion(
-    const std::vector<std::string>& lines,
-    std::size_t cursor_line,
-    std::size_t cursor_column) const {
-    const auto current_line =
-        cursor_line < lines.size() ? std::string_view{lines[cursor_line]} : std::string_view{};
+        const std::vector<std::string>& lines, std::size_t cursor_line, std::size_t cursor_column) const {
+    const auto current_line = cursor_line < lines.size() ? std::string_view{lines[cursor_line]} : std::string_view{};
     const auto text_before_cursor = current_line.substr(0, std::min(cursor_column, current_line.size()));
-    // pi trims both ends (JS trim()): "/cmd " with a trailing space is still a
-    // bare slash command and must not trigger file completion.
-    const auto first = std::find_if_not(text_before_cursor.begin(), text_before_cursor.end(), [](unsigned char ch) {
-        return std::isspace(ch) != 0;
-    });
-    const auto last = std::find_if_not(text_before_cursor.rbegin(), text_before_cursor.rend(), [](unsigned char ch) {
-        return std::isspace(ch) != 0;
-    }).base();
-    if (first >= last) return true;
-    const auto trimmed = text_before_cursor.substr(
-        static_cast<std::size_t>(first - text_before_cursor.begin()),
-        static_cast<std::size_t>(last - first));
+    // pi trims both ends (JS trim(), Unicode whitespace): "/cmd " with a
+    // trailing space is still a bare slash command and must not trigger file
+    // completion.
+    const auto trimmed = detail::trim_completion_whitespace(text_before_cursor);
     if (trimmed.starts_with('/') && trimmed.find(' ') == std::string_view::npos) {
         return false;
     }
@@ -868,7 +824,7 @@ bool CombinedAutocompleteProvider::should_trigger_file_completion(
 }
 
 std::vector<std::string> CombinedAutocompleteProvider::trigger_characters() const {
-    return {};  // pi's CombinedAutocompleteProvider sets none; the editor defaults apply
+    return {}; // pi's CombinedAutocompleteProvider sets none; the editor defaults apply
 }
 
 } // namespace cch::tui

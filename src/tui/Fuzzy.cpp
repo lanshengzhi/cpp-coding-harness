@@ -241,15 +241,30 @@ struct FoldedText {
     return score;
 }
 
-/// pi's `^(?<letters>[a-z]+)(?<digits>[0-9]+)$` fallback over the lowercased
-/// query, returning the swapped order or `std::nullopt`.
+/// pi's `^(?<letters>[a-z]+)(?<digits>[0-9]+)$` or
+/// `^(?<digits>[0-9]+)(?<letters>[a-z]+)$` fallback over the lowercased query,
+/// returning the swapped order or `std::nullopt`.
 [[nodiscard]] std::optional<std::vector<char16_t>> swapped_alpha_numeric(const std::vector<char16_t>& query) {
+    if (query.empty()) return std::nullopt;
+    const bool starts_with_letters = query.front() >= u'a' && query.front() <= u'z';
+    const bool starts_with_digits = query.front() >= u'0' && query.front() <= u'9';
+    if (!starts_with_letters && !starts_with_digits) return std::nullopt;
+
     std::size_t split = 0;
-    while (split < query.size() && query[split] >= u'a' && query[split] <= u'z')
-        ++split;
-    if (split == 0 || split == query.size()) return std::nullopt;
-    for (std::size_t index = split; index < query.size(); ++index) {
-        if (query[index] < u'0' || query[index] > u'9') return std::nullopt;
+    if (starts_with_letters) {
+        while (split < query.size() && query[split] >= u'a' && query[split] <= u'z')
+            ++split;
+        if (split == query.size()) return std::nullopt;
+        for (std::size_t index = split; index < query.size(); ++index) {
+            if (query[index] < u'0' || query[index] > u'9') return std::nullopt;
+        }
+    } else {
+        while (split < query.size() && query[split] >= u'0' && query[split] <= u'9')
+            ++split;
+        if (split == query.size()) return std::nullopt;
+        for (std::size_t index = split; index < query.size(); ++index) {
+            if (query[index] < u'a' || query[index] > u'z') return std::nullopt;
+        }
     }
     std::vector<char16_t> swapped;
     swapped.reserve(query.size());
@@ -314,9 +329,7 @@ FuzzyMatch fuzzy_match(std::string_view query, std::string_view text) {
     return FuzzyMatch{.matches = true, .score = *score};
 }
 
-std::optional<std::vector<std::size_t>> fuzzy_match_indices(
-    std::string_view query,
-    std::string_view text) {
+std::optional<std::vector<std::size_t>> fuzzy_match_indices(std::string_view query, std::string_view text) {
     if (query.empty()) return std::vector<std::size_t>{};
     const auto folded_query = to_utf16_units(lowercase_characters(query));
     const auto folded_text = to_utf16_units(lowercase_characters(text));

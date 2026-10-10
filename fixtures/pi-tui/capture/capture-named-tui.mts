@@ -5,8 +5,9 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -59,6 +60,9 @@ const { TuiMainScreen } = await import(src("src/tui-main-screen.ts"));
 const { CURSOR_MARKER } = await import(src("src/tui.ts"));
 const { VirtualTerminal } = await import(src("test/virtual-terminal.ts"));
 const { renderLatex } = await import(src("src/latex.ts"));
+const { CombinedAutocompleteProvider } = await import(src("src/autocomplete.ts"));
+const { Editor } = await import(src("src/components/editor.ts"));
+const { defaultEditorTheme } = await import(pathToFileURL(path.join(pi, "packages/tui/test/test-themes.ts")).href);
 const { Terminal: XtermTerminal } = requirePi("@xterm/headless");
 
 function envelope(sourceEndpoints: string[], scenarios: unknown[]) {
@@ -520,6 +524,248 @@ const latexArtifact = envelope(["packages/tui/src/latex.ts:renderLatex,RenderLat
   },
 ]);
 
+// Completion context: which code points separate a completion token from the
+// prose before it, and what prefix the provider completes and applies.
+const completionRoot = mkdtempSync(path.join(tmpdir(), "pi-capture-completion-"));
+const writeFixture = (relative: string, contents: string): void => {
+	const target = path.join(completionRoot, relative);
+	mkdirSync(path.dirname(target), { recursive: true });
+	writeFileSync(target, contents);
+};
+
+const completionCommands = [
+	{
+		name: "model",
+		description: "Switch model",
+		getArgumentCompletions: (argumentPrefix: string) =>
+			argumentPrefix.startsWith("g") ? [{ value: "gpt", label: "gpt" }] : [],
+	},
+	{ name: "settings", description: "Open settings" },
+];
+
+const separatorProbes = [
+	"\t", "\n", "\v", "\f", "\r", " ", "\u00a0", "\u00b7", "\u1680", "\u2000", "\u2001",
+	"\u2002", "\u2003", "\u2004", "\u2005", "\u2006", "\u2007", "\u2008", "\u2009",
+	"\u200a", "\u2028", "\u2029", "\u202f", "\u205f", "\u3000", "\ufeff",
+	"\uff0c", "\uff0e", "\uff1a", "\uff1b", "\uff01", "\uff1f", "\uff08", "\uff09",
+	"\uff3b", "\uff3d", "\uff5b", "\uff5d", "\u201c", "\u201d", "\u2018", "\u2019",
+	"\u2026", "\u2014", "\u3002", "\u3001", "\u3003", "\u3008", "\u3009", "\u300c", "\u300d", "\u300e", "\u300f",
+	"\u300a", "\u300b", "\u3010", "\u3011", "\u3014", "\u3015", "\u3016", "\u3017",
+	"\u3018", "\u3019", "\u301a", "\u301b", "\u301c", "\u301d", "\u301e", "\u301f",
+	"\u3030", "\u303d", "\u30a0", "\u30fb", "\ufe45", "\ufe46", "\uff61", "\uff62",
+	"\uff63", "\uff64", "\uff65", "\u{16FE2}",
+];
+const delimiterProbes = ['"', "'", "="];
+const tokenProbes = ["a", "Z", "7", "_", "-", "é", "ß", "文", "あ", "ア", "한", "ㄅ", "\u{20bb7}", "々", "Ａ"];
+
+const classificationProbes = [
+	...separatorProbes.map((character) => ({ character, kind: "separator" as const })),
+	...delimiterProbes.map((character) => ({ character, kind: "pathDelimiter" as const })),
+	...tokenProbes.map((character) => ({ character, kind: "token" as const })),
+];
+for (const probe of classificationProbes) {
+	writeFixture(`boundary/${probe.character}说明.md`, "probe");
+}
+writeFixture("boundary/说明.md", "boundary");
+
+writeFixture("cjk-path/中文/文档.txt", "text");
+writeFixture("cjk-path/文档/说明.md", "text");
+writeFixture("empty-prefix/说明.md", "text");
+writeFixture("quoted/my folder/main.ts", "text");
+writeFixture("quoted/资料，归档/说明.md", "text");
+writeFixture("wrapped/src/main.cc", "text");
+writeFixture("wrapped/(group)/layout.cc", "text");
+writeFixture("wrapped/[slug]/page.tsx", "text");
+
+const captureSuggestions = (
+	provider: CombinedAutocompleteProvider,
+	line: string,
+	cursorCol: number,
+	force: boolean,
+) => provider.getSuggestions([line], 0, cursorCol, { signal: new AbortController().signal, force });
+
+const completionCases: Array<{
+	name: string;
+	base: string;
+	line: string;
+	cursorCol?: number;
+	force: boolean;
+}> = [
+	{ name: "cjk-local-file", base: "cjk-path", line: "./中文/文", force: true },
+	{ name: "cjk-local-dir-forced", base: "cjk-path", line: "./中文/", force: true },
+	{ name: "cjk-local-dir-natural", base: "cjk-path", line: "./中文/", force: false },
+	{ name: "cjk-bare-dir-natural", base: "cjk-path", line: "文档/", force: false },
+	{ name: "empty-prefix-ideographic-comma", base: "empty-prefix", line: "查看，", force: false },
+	{ name: "empty-prefix-ideographic-space", base: "empty-prefix", line: "查看　", force: false },
+	{ name: "empty-prefix-space", base: "empty-prefix", line: "查看 ", force: false },
+	{ name: "empty-prefix-empty-line", base: "empty-prefix", line: "", force: false },
+	{ name: "quote-space-directory", base: "quoted", line: "my", force: true },
+	{ name: "quote-cjk-punctuation-directory", base: "quoted", line: "资料", force: true },
+	{ name: "quoted-unclosed-token", base: "quoted", line: "查看，\"资料，归档/说", force: false },
+	{
+		name: "quoted-token-with-tail",
+		base: "quoted",
+		line: "查看，\"资料，归档/说\"后文",
+		cursorCol: "查看，\"资料，归档/说".length,
+		force: false,
+	},
+	{ name: "wrapper-open", base: "wrapped", line: "see (src/ma", force: true },
+	{ name: "wrapper-closed", base: "wrapped", line: "(group)/la", force: true },
+	{ name: "wrapper-bracket", base: "wrapped", line: "see [slug]/pa", force: true },
+	{ name: "wrapper-quoted", base: "quoted", line: "see (\"my folder/ma", force: true },
+	{ name: "slash-after-ascii-space", base: "empty-prefix", line: " /set", force: false },
+	{ name: "slash-after-ideographic-space", base: "empty-prefix", line: "　/set", force: false },
+	{ name: "slash-after-no-break-space", base: "empty-prefix", line: " /set", force: false },
+	{ name: "argument-after-ideographic-space", base: "empty-prefix", line: "　/model g", force: false },
+];
+for (const probe of classificationProbes) {
+	completionCases.push({
+		name: `boundary-${probe.kind}-u${probe.character.codePointAt(0)!.toString(16)}`,
+		base: "boundary",
+		line: `${probe.character}说`,
+		force: true,
+	});
+}
+
+const completionObservation = [];
+for (const testCase of completionCases) {
+	const provider = new CombinedAutocompleteProvider(
+		completionCommands,
+		path.join(completionRoot, testCase.base),
+		null,
+	);
+	const cursorCol = testCase.cursorCol ?? testCase.line.length;
+	const result = await captureSuggestions(provider, testCase.line, cursorCol, testCase.force);
+	const applied = result ? provider.applyCompletion([testCase.line], 0, cursorCol, result.items[0]!, result.prefix) : null;
+	completionObservation.push({
+		name: testCase.name,
+		base: testCase.base,
+		prefix: result?.prefix ?? null,
+		values: result ? result.items.map((item) => item.value) : null,
+		appliedLines: applied?.lines ?? null,
+		appliedCursorCol: applied?.cursorCol ?? null,
+	});
+}
+
+const quotedProvider = new CombinedAutocompleteProvider(completionCommands, path.join(completionRoot, "quoted"), null);
+const quotedStart = (await captureSuggestions(quotedProvider, "资料", 2, true))!;
+const quotedApplied = quotedProvider.applyCompletion(["资料"], 0, 2, quotedStart.items[0]!, quotedStart.prefix);
+const quotedContinued = await captureSuggestions(
+	quotedProvider,
+	quotedApplied.lines[0]!,
+	quotedApplied.cursorCol,
+	true,
+);
+completionObservation.push({
+	name: "quoted-directory-continuation",
+	base: "quoted",
+	prefix: quotedContinued?.prefix ?? null,
+	values: quotedContinued ? quotedContinued.items.map((item) => item.value) : null,
+	appliedLines: quotedApplied.lines,
+	appliedCursorCol: quotedApplied.cursorCol,
+});
+
+const triggerProvider = new CombinedAutocompleteProvider(completionCommands, path.join(completionRoot, "empty-prefix"), null);
+const forcedTriggerCases = [
+	{ name: "slash-command-ascii-space", line: " /model" },
+	{ name: "slash-command-ideographic-space", line: "　/model" },
+	{ name: "slash-command-no-break-space", line: " /model" },
+	{ name: "slash-command-trailing-space", line: "　/model " },
+	{ name: "slash-command-argument", line: "　/model x" },
+	{ name: "bare-text", line: "hello" },
+];
+const forcedTriggerObservation = forcedTriggerCases.map((triggerCase) => ({
+	name: triggerCase.name,
+	line: triggerCase.line,
+	triggers: triggerProvider.shouldTriggerFileCompletion([triggerCase.line], 0, triggerCase.line.length),
+}));
+
+rmSync(completionRoot, { recursive: true, force: true });
+
+const completionArtifact = envelope([
+	"packages/tui/src/utils.ts:autocompleteSeparatorRegex,autocompleteBoundaryRegex",
+	"packages/tui/src/autocomplete.ts:CombinedAutocompleteProvider.getSuggestions,extractPathPrefix,extractAtPrefix,applyCompletion,shouldTriggerFileCompletion",
+], [{
+	name: "completion-contexts",
+	dimensions: { columns: 80, rows: 24 },
+	inputs: {
+		classification: classificationProbes.map((probe) => ({ character: probe.character, kind: probe.kind })),
+		cases: completionCases.map((testCase) => ({
+			name: testCase.name,
+			base: testCase.base,
+			line: testCase.line,
+			cursorCol: testCase.cursorCol ?? testCase.line.length,
+			force: testCase.force,
+		})),
+		continuation: { name: "quoted-directory-continuation", base: "quoted", line: "资料", cursorCol: 2, force: true },
+		forcedTriggers: forcedTriggerCases.map((triggerCase) => ({
+			name: triggerCase.name,
+			line: triggerCase.line,
+			cursorCol: triggerCase.line.length,
+		})),
+	},
+	expected: {
+		cases: completionObservation,
+		forcedTriggers: forcedTriggerObservation,
+	},
+}]);
+
+const editorTriggerCases = [
+	{ name: "at-after-ideographic-comma", input: "查看，@" },
+	{ name: "at-after-ideographic-space", input: "　@" },
+	{ name: "at-after-no-break-space", input: " @" },
+	{ name: "at-after-space", input: " @" },
+	{ name: "at-after-wrapper", input: "(@" },
+	{ name: "at-after-cjk-letter", input: "查看@" },
+	{ name: "at-after-ascii-letter", input: "user@" },
+	{ name: "at-after-katakana-letter", input: "カ@" },
+	{ name: "slash-command-name", input: "/set" },
+	{ name: "slash-command-after-space", input: " /set" },
+	{ name: "cjk-letter-inside-attachment", input: "@说" },
+	{ name: "tab-after-ideographic-comma", input: "查看，\t" },
+	{ name: "tab-after-cjk-letter", input: "查看\t" },
+	{ name: "tab-inside-slash-command", input: "/set\t" },
+];
+
+const editorTriggerObservation = [];
+for (const triggerCase of editorTriggerCases) {
+	const editor = new Editor(new TuiMainScreen(new VirtualTerminal(80, 24)), defaultEditorTheme);
+	const requests: Array<{ force: boolean; text: string }> = [];
+	editor.setAutocompleteProvider({
+		getSuggestions: async (lines, _cursorLine, cursorCol, options) => {
+			requests.push({ force: options?.force === true, text: (lines[0] || "").slice(0, cursorCol) });
+			return null;
+		},
+		applyCompletion: (lines, cursorLine, cursorCol, item, prefix) => ({
+			lines,
+			cursorLine,
+			cursorCol: cursorCol - prefix.length + item.value.length,
+		}),
+		shouldTriggerFileCompletion: () => true,
+	});
+	for (const character of triggerCase.input) editor.handleInput(character);
+	await new Promise((resolve) => setTimeout(resolve, 60));
+	await new Promise((resolve) => setImmediate(resolve));
+	editorTriggerObservation.push({
+		name: triggerCase.name,
+		input: triggerCase.input,
+		text: editor.getText(),
+		requests,
+	});
+}
+
+const editorTriggerArtifact = envelope([
+	"packages/tui/src/components/editor.ts:Editor.insertCharacter,handleTabCompletion,setAutocompleteProvider",
+	"packages/tui/src/autocomplete.ts:AutocompleteProvider.getSuggestions",
+	"packages/tui/src/components/editor.ts:Editor",
+	"packages/tui/test/virtual-terminal.ts:VirtualTerminal",
+], [{
+	name: "editor-completion-triggers",
+	dimensions: { columns: 80, rows: 24 },
+	inputs: editorTriggerCases.map((triggerCase) => ({ name: triggerCase.name, input: triggerCase.input })),
+	expected: { cases: editorTriggerObservation },
+}]);
+
 // No output is touched before source guards and all observations complete.
 const bundle = path.join(root, selected.bundle);
 mkdirSync(bundle, { recursive: true });
@@ -529,10 +775,12 @@ const artifacts = [
 	["screen-state.json", "screen-state", screenArtifact],
 	["capability-ledger.json", "capability-ledger", capabilityArtifact],
 	["utils-width.json", "utils-width", utilsWidthArtifact],
-["keys-kitty-text.json", "keys-kitty-text", kittyArtifact],
+	["keys-kitty-text.json", "keys-kitty-text", kittyArtifact],
 	["utils-ansi.json", "utils-ansi", utilsAnsiArtifact],
 	["fuzzy.json", "fuzzy", fuzzyArtifact],
 	["latex.json", "latex", latexArtifact],
+	["autocomplete.json", "autocomplete", completionArtifact],
+	["editor-autocomplete.json", "editor-autocomplete", editorTriggerArtifact],
 ] as const;
 const records = artifacts.map(([file, family, artifact]) => {
 	const bytes = Buffer.from(JSON.stringify(artifact, null, 2) + "\n");

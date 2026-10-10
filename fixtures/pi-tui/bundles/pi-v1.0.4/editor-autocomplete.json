@@ -1,0 +1,244 @@
+{
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-10T12:10:15.942Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v24.3.0",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/components/editor.ts:Editor.insertCharacter,handleTabCompletion,setAutocompleteProvider",
+    "packages/tui/src/autocomplete.ts:AutocompleteProvider.getSuggestions",
+    "packages/tui/src/components/editor.ts:Editor",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal"
+  ],
+  "scenarios": [
+    {
+      "name": "editor-completion-triggers",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": [
+        {
+          "name": "at-after-ideographic-comma",
+          "input": "查看，@"
+        },
+        {
+          "name": "at-after-ideographic-space",
+          "input": "　@"
+        },
+        {
+          "name": "at-after-no-break-space",
+          "input": " @"
+        },
+        {
+          "name": "at-after-space",
+          "input": " @"
+        },
+        {
+          "name": "at-after-wrapper",
+          "input": "(@"
+        },
+        {
+          "name": "at-after-cjk-letter",
+          "input": "查看@"
+        },
+        {
+          "name": "at-after-ascii-letter",
+          "input": "user@"
+        },
+        {
+          "name": "at-after-katakana-letter",
+          "input": "カ@"
+        },
+        {
+          "name": "slash-command-name",
+          "input": "/set"
+        },
+        {
+          "name": "slash-command-after-space",
+          "input": " /set"
+        },
+        {
+          "name": "cjk-letter-inside-attachment",
+          "input": "@说"
+        },
+        {
+          "name": "tab-after-ideographic-comma",
+          "input": "查看，\t"
+        },
+        {
+          "name": "tab-after-cjk-letter",
+          "input": "查看\t"
+        },
+        {
+          "name": "tab-inside-slash-command",
+          "input": "/set\t"
+        }
+      ],
+      "expected": {
+        "cases": [
+          {
+            "name": "at-after-ideographic-comma",
+            "input": "查看，@",
+            "text": "查看，@",
+            "requests": [
+              {
+                "force": false,
+                "text": "查看，@"
+              }
+            ]
+          },
+          {
+            "name": "at-after-ideographic-space",
+            "input": "　@",
+            "text": "　@",
+            "requests": [
+              {
+                "force": false,
+                "text": "　@"
+              }
+            ]
+          },
+          {
+            "name": "at-after-no-break-space",
+            "input": " @",
+            "text": " @",
+            "requests": [
+              {
+                "force": false,
+                "text": " @"
+              }
+            ]
+          },
+          {
+            "name": "at-after-space",
+            "input": " @",
+            "text": " @",
+            "requests": [
+              {
+                "force": false,
+                "text": " @"
+              }
+            ]
+          },
+          {
+            "name": "at-after-wrapper",
+            "input": "(@",
+            "text": "(@",
+            "requests": [
+              {
+                "force": false,
+                "text": "(@"
+              }
+            ]
+          },
+          {
+            "name": "at-after-cjk-letter",
+            "input": "查看@",
+            "text": "查看@",
+            "requests": []
+          },
+          {
+            "name": "at-after-ascii-letter",
+            "input": "user@",
+            "text": "user@",
+            "requests": []
+          },
+          {
+            "name": "at-after-katakana-letter",
+            "input": "カ@",
+            "text": "カ@",
+            "requests": []
+          },
+          {
+            "name": "slash-command-name",
+            "input": "/set",
+            "text": "/set",
+            "requests": [
+              {
+                "force": false,
+                "text": "/set"
+              }
+            ]
+          },
+          {
+            "name": "slash-command-after-space",
+            "input": " /set",
+            "text": " /set",
+            "requests": [
+              {
+                "force": false,
+                "text": " /set"
+              }
+            ]
+          },
+          {
+            "name": "cjk-letter-inside-attachment",
+            "input": "@说",
+            "text": "@说",
+            "requests": [
+              {
+                "force": false,
+                "text": "@说"
+              }
+            ]
+          },
+          {
+            "name": "tab-after-ideographic-comma",
+            "input": "查看，\t",
+            "text": "查看，",
+            "requests": [
+              {
+                "force": true,
+                "text": "查看，"
+              }
+            ]
+          },
+          {
+            "name": "tab-after-cjk-letter",
+            "input": "查看\t",
+            "text": "查看",
+            "requests": [
+              {
+                "force": true,
+                "text": "查看"
+              }
+            ]
+          },
+          {
+            "name": "tab-inside-slash-command",
+            "input": "/set\t",
+            "text": "/set",
+            "requests": [
+              {
+                "force": false,
+                "text": "/set"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

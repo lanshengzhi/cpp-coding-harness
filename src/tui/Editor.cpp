@@ -1,6 +1,7 @@
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/Utils.hpp>
+#include "tui/CompletionContext.hpp"
 #include "tui/EditorCompletionSession.hpp"
 #include "tui/EditorLayout.hpp"
 #include "tui/InteractionUtils.hpp"
@@ -90,9 +91,8 @@ constexpr std::array<std::string_view, 24> kEditorActions = {
 }
 
 [[nodiscard]] std::string trim_outer_whitespace(std::string text) {
-    const auto first = std::find_if_not(text.begin(), text.end(), [](unsigned char value) {
-        return std::isspace(value) != 0;
-    });
+    const auto first =
+            std::find_if_not(text.begin(), text.end(), [](unsigned char value) { return std::isspace(value) != 0; });
     const auto last = std::find_if_not(text.rbegin(), text.rend(), [](unsigned char value) {
         return std::isspace(value) != 0;
     }).base();
@@ -154,23 +154,17 @@ struct Editor::Impl {
 
     /// Rows reserved for the optional top/bottom border (pi's editor always
     /// renders both border lines; an empty hook renders none).
-    [[nodiscard]] std::size_t border_rows() const {
-        return theme.border ? 2 : 0;
-    }
+    [[nodiscard]] std::size_t border_rows() const { return theme.border ? 2 : 0; }
 
     /// Rendered rows above the first content row: only the top border. The
     /// bottom border sits below the content, so it never shifts the cursor
     /// row (passing border_rows() here parks the hardware cursor one row too
     /// low, on the bottom-border line).
-    [[nodiscard]] std::size_t top_border_rows() const {
-        return border_rows() != 0 ? 1 : 0;
-    }
+    [[nodiscard]] std::size_t top_border_rows() const { return border_rows() != 0 ? 1 : 0; }
 
     /// Content rows available inside the border, at least 1.
     [[nodiscard]] std::size_t content_height() const {
-        const auto bordered = available_height > border_rows()
-            ? available_height - border_rows()
-            : 1;
+        const auto bordered = available_height > border_rows() ? available_height - border_rows() : 1;
         return std::max<std::size_t>(1, std::min(options.max_visible_lines, bordered));
     }
 
@@ -183,25 +177,15 @@ struct Editor::Impl {
         }
     }
 
-    [[nodiscard]] std::string text() const {
-        return buffer.text();
-    }
+    [[nodiscard]] std::string text() const { return buffer.text(); }
 
-    [[nodiscard]] std::string expanded() const {
-        return buffer.expanded_text();
-    }
+    [[nodiscard]] std::string expanded() const { return buffer.expanded_text(); }
 
-    [[nodiscard]] std::size_t cursor_byte_offset() const {
-        return buffer.cursor_byte_offset();
-    }
+    [[nodiscard]] std::size_t cursor_byte_offset() const { return buffer.cursor_byte_offset(); }
 
-    [[nodiscard]] std::string line_prefix_before_cursor() const {
-        return buffer.line_prefix_before_cursor();
-    }
+    [[nodiscard]] std::string line_prefix_before_cursor() const { return buffer.line_prefix_before_cursor(); }
 
-    [[nodiscard]] std::vector<std::string> line_strings() const {
-        return buffer.line_strings();
-    }
+    [[nodiscard]] std::vector<std::string> line_strings() const { return buffer.line_strings(); }
 
     [[nodiscard]] detail::EditorCompletionView completion_view() const {
         const auto current_cursor = buffer.cursor();
@@ -294,55 +278,23 @@ struct Editor::Impl {
         }
     }
 
-    /// Whether the text before the cursor ends in a token starting with one
-    /// of the trigger characters (pi buildTriggerPattern/buildDebouncePattern;
-    /// the two patterns coincide on single-line editor text).
+    /// Whether the text before the cursor ends in a trigger token that starts
+    /// at a completion token boundary (pi's buildTriggerPattern; the debounce
+    /// pattern matches the same text).
     [[nodiscard]] bool autocomplete_pattern_matches(std::string_view text_before_cursor) const {
-        if (autocomplete_trigger_characters.empty()) return false;
-        std::size_t token_start = 0;
-        for (std::size_t index = 0; index < text_before_cursor.size(); ++index) {
-            if (text_before_cursor[index] == ' ' || text_before_cursor[index] == '\t') token_start = index + 1;
-        }
-        if (token_start >= text_before_cursor.size()) return false;
-        const auto token = detail::strip_leading_wrappers(text_before_cursor.substr(token_start));
-        for (const auto& trigger : autocomplete_trigger_characters) {
-            if (token.starts_with(trigger)) return true;
-        }
-        return false;
+        return detail::matches_completion_trigger(text_before_cursor, autocomplete_trigger_characters);
     }
 
-    /// Whether an attachment request deserves the 20 ms debounce (pi
-    /// buildDebouncePattern): an unclosed `@"..."` quoted path may contain
-    /// spaces, so the plain token test alone misses it.
-    [[nodiscard]] bool autocomplete_debounce_matches(std::string_view text_before_cursor) const {
-        bool in_quotes = false;
-        std::optional<std::size_t> quote_start;
-        for (std::size_t index = 0; index < text_before_cursor.size(); ++index) {
-            if (text_before_cursor[index] != '"') continue;
-            in_quotes = !in_quotes;
-            quote_start = index;
-        }
-        if (in_quotes && *quote_start > 0 && text_before_cursor[*quote_start - 1] == '@') {
-            const auto at_index = *quote_start - 1;
-            if (at_index == 0 || text_before_cursor[at_index - 1] == ' ' || text_before_cursor[at_index - 1] == '\t') {
-                return true;
-            }
-        }
-        return autocomplete_pattern_matches(text_before_cursor);
-    }
-
-    [[nodiscard]] bool is_slash_menu_allowed() const {
-        return buffer.cursor().line == 0;
-    }
+    [[nodiscard]] bool is_slash_menu_allowed() const { return buffer.cursor().line == 0; }
 
     [[nodiscard]] bool is_at_start_of_message() const {
         if (!is_slash_menu_allowed()) return false;
-        const auto trimmed = trim_outer_whitespace(line_prefix_before_cursor());
+        const auto trimmed = detail::trim_completion_whitespace(line_prefix_before_cursor());
         return trimmed.empty() || trimmed == "/";
     }
 
     [[nodiscard]] bool in_slash_command_context(std::string_view text_before_cursor) const {
-        return is_slash_menu_allowed() && detail::trim_start_ascii(text_before_cursor).starts_with('/');
+        return is_slash_menu_allowed() && detail::trim_start_completion_whitespace(text_before_cursor).starts_with('/');
     }
 
     [[nodiscard]] bool is_trigger_character(char ch) const {
@@ -352,16 +304,16 @@ struct Editor::Impl {
         return false;
     }
 
-    [[nodiscard]] static bool is_word_character(char ch) {
-        return std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '.' || ch == '_' || ch == '-';
+    [[nodiscard]] static bool is_word_character(char32_t codepoint) {
+        return detail::is_completion_word_codepoint(codepoint);
     }
 
     void set_autocomplete_trigger_characters(const std::vector<std::string>& characters) {
         auto next = std::vector<std::string>{"@", "#"};
         for (const auto& character : characters) {
             if (character.size() != 1 || character == "/" ||
-                std::isspace(static_cast<unsigned char>(character[0])) != 0 ||
-                std::find(next.begin(), next.end(), character) != next.end()) {
+                    std::isspace(static_cast<unsigned char>(character[0])) != 0 ||
+                    std::find(next.begin(), next.end(), character) != next.end()) {
                 continue;
             }
             next.push_back(character);
@@ -371,9 +323,8 @@ struct Editor::Impl {
 
     [[nodiscard]] std::chrono::milliseconds get_autocomplete_debounce_ms(bool force, bool explicit_tab) const {
         if (explicit_tab || force) return {};
-        return autocomplete_debounce_matches(line_prefix_before_cursor())
-            ? std::chrono::milliseconds{20}
-            : std::chrono::milliseconds{};
+        return autocomplete_pattern_matches(line_prefix_before_cursor()) ? std::chrono::milliseconds{20}
+                                                                         : std::chrono::milliseconds{};
     }
 
     void request_autocomplete(bool force, bool explicit_tab) {
@@ -408,31 +359,25 @@ struct Editor::Impl {
 
     /// pi insertCharacter's autocomplete tail: auto-trigger on slash at
     /// message start, trigger characters at token boundaries, and word
-    /// characters inside a slash or attachment context; an open menu instead
-    /// re-queries with its force mode.
-    void maybe_trigger_autocomplete(char last_char) {
+    /// characters (ASCII or CJK) inside a slash or attachment context; an open
+    /// menu instead re-queries with its force mode.
+    void maybe_trigger_autocomplete(char32_t last_codepoint) {
         if (autocomplete_menu.open) {
             update_autocomplete();
             return;
         }
         const auto text_before_cursor = line_prefix_before_cursor();
-        if (last_char == '/' && is_at_start_of_message()) {
+        if (last_codepoint == U'/' && is_at_start_of_message()) {
             try_trigger_autocomplete();
             return;
         }
-        if (is_trigger_character(last_char)) {
-            const auto length = text_before_cursor.size();
-            std::size_t token_start = 0;
-            for (std::size_t index = 0; index + 1 < length; ++index) {
-                if (text_before_cursor[index] == ' ' || text_before_cursor[index] == '\t') token_start = index + 1;
-            }
-            const auto before_trigger = text_before_cursor.substr(token_start, length - token_start - 1);
-            if (detail::strip_leading_wrappers(before_trigger).empty()) {
+        if (last_codepoint < 128 && is_trigger_character(static_cast<char>(last_codepoint))) {
+            if (autocomplete_pattern_matches(text_before_cursor)) {
                 try_trigger_autocomplete();
             }
             return;
         }
-        if (is_word_character(last_char)) {
+        if (is_word_character(last_codepoint)) {
             if (in_slash_command_context(text_before_cursor) || autocomplete_pattern_matches(text_before_cursor)) {
                 try_trigger_autocomplete();
             }
@@ -455,7 +400,7 @@ struct Editor::Impl {
         const bool was_open = autocomplete_menu.open;
         const auto text_before_cursor = line_prefix_before_cursor();
         if (in_slash_command_context(text_before_cursor) &&
-            detail::trim_start_ascii(text_before_cursor).find(' ') == std::string_view::npos) {
+                detail::trim_start_completion_whitespace(text_before_cursor).find(' ') == std::string_view::npos) {
             request_autocomplete(false, true);
         } else {
             request_autocomplete(true, true);
@@ -520,29 +465,26 @@ struct Editor::Impl {
         // unclosed quoted prefix the item already carries the closing quote,
         // so the typed leading quote after the cursor is dropped.
         const bool is_quoted_prefix = prefix.starts_with('"') || prefix.starts_with("@\"");
-        const bool has_trailing_quote_in_item =
-            result_cursor > start_bytes && result_line[result_cursor - 1] == '"';
+        const bool has_trailing_quote_in_item = result_cursor > start_bytes && result_line[result_cursor - 1] == '"';
         const bool has_leading_quote_after_cursor =
-            cursor_segment_value < line.size() && line[cursor_segment_value].text == "\"";
-        const auto after_begin = cursor_segment_value +
-            ((is_quoted_prefix && has_trailing_quote_in_item && has_leading_quote_after_cursor) ? 1 : 0);
+                cursor_segment_value < line.size() && line[cursor_segment_value].text == "\"";
+        const auto after_begin =
+                cursor_segment_value +
+                ((is_quoted_prefix && has_trailing_quote_in_item && has_leading_quote_after_cursor) ? 1 : 0);
 
         const auto original_after = current_line_text.substr(cursor_bytes);
         const auto expected_after = result_line.substr(result_cursor);
-        const bool quote_adjusted =
-            (is_quoted_prefix && has_trailing_quote_in_item && has_leading_quote_after_cursor);
+        const bool quote_adjusted = (is_quoted_prefix && has_trailing_quote_in_item && has_leading_quote_after_cursor);
         if (result_line.substr(0, start_bytes) != current_line_text.substr(0, start_bytes)) return;
-        if (expected_after != (quote_adjusted && !original_after.empty() ? original_after.substr(1)
-                                                                         : original_after)) {
+        if (expected_after != (quote_adjusted && !original_after.empty() ? original_after.substr(1) : original_after)) {
             return;
         }
 
-        buffer.apply_completion_edit(
-            result.cursor_line,
-            start_segment_value,
-            after_begin,
-            result_line.substr(start_bytes, result_cursor - start_bytes),
-            result_line.substr(0, result_cursor));
+        buffer.apply_completion_edit(result.cursor_line,
+                start_segment_value,
+                after_begin,
+                result_line.substr(start_bytes, result_cursor - start_bytes),
+                result_line.substr(0, result_cursor));
     }
 
     void apply_completion_application(detail::EditorCompletionApplication application) {
@@ -554,20 +496,22 @@ struct Editor::Impl {
 
     void insert_character(std::string_view text) {
         if (text.empty()) return;
+        const auto last_codepoint = detail::last_codepoint_of(text);
         exit_history_browsing();
         buffer.insert_character(text);
         notify_change();
-        maybe_trigger_autocomplete(text.back());
+        maybe_trigger_autocomplete(last_codepoint);
         echo_local();
     }
 
     void insert_text(std::string text, bool record_undo, bool update_autocomplete = true) {
         text = normalize_input(std::move(text));
         if (text.empty()) return;
+        const auto last_codepoint = detail::last_codepoint_of(text);
         exit_history_browsing();
         buffer.insert_text(text, record_undo);
         notify_change();
-        if (update_autocomplete) maybe_trigger_autocomplete(text.back());
+        if (update_autocomplete) maybe_trigger_autocomplete(last_codepoint);
         echo_local();
     }
 
@@ -661,9 +605,7 @@ struct Editor::Impl {
         history_draft.reset();
     }
 
-    [[nodiscard]] bool editor_is_empty() const {
-        return buffer.empty();
-    }
+    [[nodiscard]] bool editor_is_empty() const { return buffer.empty(); }
 
     using VisualLine = detail::EditorVisualLine;
 
@@ -671,7 +613,7 @@ struct Editor::Impl {
         const auto cur = buffer.cursor();
         for (std::size_t index = 0; index < visual.size(); ++index) {
             if (visual[index].logical_line == cur.line && cur.column >= visual[index].start &&
-                cur.column <= visual[index].end) {
+                    cur.column <= visual[index].end) {
                 return index;
             }
         }
@@ -711,7 +653,7 @@ struct Editor::Impl {
         if (history.empty()) return;
 
         const auto current = history_index ? static_cast<int>(*history_index) : -1;
-        const auto new_index = current - direction;  // Up(-1) increases index, Down(1) decreases
+        const auto new_index = current - direction; // Up(-1) increases index, Down(1) decreases
         if (new_index < -1 || new_index >= static_cast<int>(history.size())) return;
 
         // Capture state when first entering history browsing mode.
@@ -773,7 +715,7 @@ struct Editor::Impl {
         std::size_t current = 0;
         for (std::size_t index = 0; index < visual.size(); ++index) {
             if (visual[index].logical_line == cur.line && cur.column >= visual[index].start &&
-                cur.column <= visual[index].end) {
+                    cur.column <= visual[index].end) {
                 current = index;
                 break;
             }
@@ -905,9 +847,7 @@ Editor::Editor(EditorOptions options, EditorChangeSink on_change, EditorSubmitSi
             });
 }
 
-Editor::Editor(Editor&& other) noexcept : impl_(std::move(other.impl_)) {
-    other.impl_.reset();
-}
+Editor::Editor(Editor&& other) noexcept : impl_(std::move(other.impl_)) { other.impl_.reset(); }
 
 void Editor::release_autocomplete_cycles() noexcept {
     auto owner = impl_;
@@ -926,9 +866,7 @@ Editor& Editor::operator=(Editor&& other) noexcept {
     return *this;
 }
 
-Editor::~Editor() {
-    release_autocomplete_cycles();
-}
+Editor::~Editor() { release_autocomplete_cycles(); }
 
 std::string Editor::text() const {
     auto operation = impl_->serialized_operation(impl_);

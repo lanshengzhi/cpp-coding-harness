@@ -1,0 +1,2787 @@
+{
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-10T12:10:15.942Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v24.3.0",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/utils.ts:autocompleteSeparatorRegex,autocompleteBoundaryRegex",
+    "packages/tui/src/autocomplete.ts:CombinedAutocompleteProvider.getSuggestions,extractPathPrefix,extractAtPrefix,applyCompletion,shouldTriggerFileCompletion"
+  ],
+  "scenarios": [
+    {
+      "name": "completion-contexts",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "classification": [
+          {
+            "character": "\t",
+            "kind": "separator"
+          },
+          {
+            "character": "\n",
+            "kind": "separator"
+          },
+          {
+            "character": "\u000b",
+            "kind": "separator"
+          },
+          {
+            "character": "\f",
+            "kind": "separator"
+          },
+          {
+            "character": "\r",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": "·",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": " ",
+            "kind": "separator"
+          },
+          {
+            "character": "　",
+            "kind": "separator"
+          },
+          {
+            "character": "﻿",
+            "kind": "separator"
+          },
+          {
+            "character": "，",
+            "kind": "separator"
+          },
+          {
+            "character": "．",
+            "kind": "separator"
+          },
+          {
+            "character": "：",
+            "kind": "separator"
+          },
+          {
+            "character": "；",
+            "kind": "separator"
+          },
+          {
+            "character": "！",
+            "kind": "separator"
+          },
+          {
+            "character": "？",
+            "kind": "separator"
+          },
+          {
+            "character": "（",
+            "kind": "separator"
+          },
+          {
+            "character": "）",
+            "kind": "separator"
+          },
+          {
+            "character": "［",
+            "kind": "separator"
+          },
+          {
+            "character": "］",
+            "kind": "separator"
+          },
+          {
+            "character": "｛",
+            "kind": "separator"
+          },
+          {
+            "character": "｝",
+            "kind": "separator"
+          },
+          {
+            "character": "“",
+            "kind": "separator"
+          },
+          {
+            "character": "”",
+            "kind": "separator"
+          },
+          {
+            "character": "‘",
+            "kind": "separator"
+          },
+          {
+            "character": "’",
+            "kind": "separator"
+          },
+          {
+            "character": "…",
+            "kind": "separator"
+          },
+          {
+            "character": "—",
+            "kind": "separator"
+          },
+          {
+            "character": "。",
+            "kind": "separator"
+          },
+          {
+            "character": "、",
+            "kind": "separator"
+          },
+          {
+            "character": "〃",
+            "kind": "separator"
+          },
+          {
+            "character": "〈",
+            "kind": "separator"
+          },
+          {
+            "character": "〉",
+            "kind": "separator"
+          },
+          {
+            "character": "「",
+            "kind": "separator"
+          },
+          {
+            "character": "」",
+            "kind": "separator"
+          },
+          {
+            "character": "『",
+            "kind": "separator"
+          },
+          {
+            "character": "』",
+            "kind": "separator"
+          },
+          {
+            "character": "《",
+            "kind": "separator"
+          },
+          {
+            "character": "》",
+            "kind": "separator"
+          },
+          {
+            "character": "【",
+            "kind": "separator"
+          },
+          {
+            "character": "】",
+            "kind": "separator"
+          },
+          {
+            "character": "〔",
+            "kind": "separator"
+          },
+          {
+            "character": "〕",
+            "kind": "separator"
+          },
+          {
+            "character": "〖",
+            "kind": "separator"
+          },
+          {
+            "character": "〗",
+            "kind": "separator"
+          },
+          {
+            "character": "〘",
+            "kind": "separator"
+          },
+          {
+            "character": "〙",
+            "kind": "separator"
+          },
+          {
+            "character": "〚",
+            "kind": "separator"
+          },
+          {
+            "character": "〛",
+            "kind": "separator"
+          },
+          {
+            "character": "〜",
+            "kind": "separator"
+          },
+          {
+            "character": "〝",
+            "kind": "separator"
+          },
+          {
+            "character": "〞",
+            "kind": "separator"
+          },
+          {
+            "character": "〟",
+            "kind": "separator"
+          },
+          {
+            "character": "〰",
+            "kind": "separator"
+          },
+          {
+            "character": "〽",
+            "kind": "separator"
+          },
+          {
+            "character": "゠",
+            "kind": "separator"
+          },
+          {
+            "character": "・",
+            "kind": "separator"
+          },
+          {
+            "character": "﹅",
+            "kind": "separator"
+          },
+          {
+            "character": "﹆",
+            "kind": "separator"
+          },
+          {
+            "character": "｡",
+            "kind": "separator"
+          },
+          {
+            "character": "｢",
+            "kind": "separator"
+          },
+          {
+            "character": "｣",
+            "kind": "separator"
+          },
+          {
+            "character": "､",
+            "kind": "separator"
+          },
+          {
+            "character": "･",
+            "kind": "separator"
+          },
+          {
+            "character": "𖿢",
+            "kind": "separator"
+          },
+          {
+            "character": "\"",
+            "kind": "pathDelimiter"
+          },
+          {
+            "character": "'",
+            "kind": "pathDelimiter"
+          },
+          {
+            "character": "=",
+            "kind": "pathDelimiter"
+          },
+          {
+            "character": "a",
+            "kind": "token"
+          },
+          {
+            "character": "Z",
+            "kind": "token"
+          },
+          {
+            "character": "7",
+            "kind": "token"
+          },
+          {
+            "character": "_",
+            "kind": "token"
+          },
+          {
+            "character": "-",
+            "kind": "token"
+          },
+          {
+            "character": "é",
+            "kind": "token"
+          },
+          {
+            "character": "ß",
+            "kind": "token"
+          },
+          {
+            "character": "文",
+            "kind": "token"
+          },
+          {
+            "character": "あ",
+            "kind": "token"
+          },
+          {
+            "character": "ア",
+            "kind": "token"
+          },
+          {
+            "character": "한",
+            "kind": "token"
+          },
+          {
+            "character": "ㄅ",
+            "kind": "token"
+          },
+          {
+            "character": "𠮷",
+            "kind": "token"
+          },
+          {
+            "character": "々",
+            "kind": "token"
+          },
+          {
+            "character": "Ａ",
+            "kind": "token"
+          }
+        ],
+        "cases": [
+          {
+            "name": "cjk-local-file",
+            "base": "cjk-path",
+            "line": "./中文/文",
+            "cursorCol": 6,
+            "force": true
+          },
+          {
+            "name": "cjk-local-dir-forced",
+            "base": "cjk-path",
+            "line": "./中文/",
+            "cursorCol": 5,
+            "force": true
+          },
+          {
+            "name": "cjk-local-dir-natural",
+            "base": "cjk-path",
+            "line": "./中文/",
+            "cursorCol": 5,
+            "force": false
+          },
+          {
+            "name": "cjk-bare-dir-natural",
+            "base": "cjk-path",
+            "line": "文档/",
+            "cursorCol": 3,
+            "force": false
+          },
+          {
+            "name": "empty-prefix-ideographic-comma",
+            "base": "empty-prefix",
+            "line": "查看，",
+            "cursorCol": 3,
+            "force": false
+          },
+          {
+            "name": "empty-prefix-ideographic-space",
+            "base": "empty-prefix",
+            "line": "查看　",
+            "cursorCol": 3,
+            "force": false
+          },
+          {
+            "name": "empty-prefix-space",
+            "base": "empty-prefix",
+            "line": "查看 ",
+            "cursorCol": 3,
+            "force": false
+          },
+          {
+            "name": "empty-prefix-empty-line",
+            "base": "empty-prefix",
+            "line": "",
+            "cursorCol": 0,
+            "force": false
+          },
+          {
+            "name": "quote-space-directory",
+            "base": "quoted",
+            "line": "my",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "quote-cjk-punctuation-directory",
+            "base": "quoted",
+            "line": "资料",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "quoted-unclosed-token",
+            "base": "quoted",
+            "line": "查看，\"资料，归档/说",
+            "cursorCol": 11,
+            "force": false
+          },
+          {
+            "name": "quoted-token-with-tail",
+            "base": "quoted",
+            "line": "查看，\"资料，归档/说\"后文",
+            "cursorCol": 11,
+            "force": false
+          },
+          {
+            "name": "wrapper-open",
+            "base": "wrapped",
+            "line": "see (src/ma",
+            "cursorCol": 11,
+            "force": true
+          },
+          {
+            "name": "wrapper-closed",
+            "base": "wrapped",
+            "line": "(group)/la",
+            "cursorCol": 10,
+            "force": true
+          },
+          {
+            "name": "wrapper-bracket",
+            "base": "wrapped",
+            "line": "see [slug]/pa",
+            "cursorCol": 13,
+            "force": true
+          },
+          {
+            "name": "wrapper-quoted",
+            "base": "quoted",
+            "line": "see (\"my folder/ma",
+            "cursorCol": 18,
+            "force": true
+          },
+          {
+            "name": "slash-after-ascii-space",
+            "base": "empty-prefix",
+            "line": " /set",
+            "cursorCol": 5,
+            "force": false
+          },
+          {
+            "name": "slash-after-ideographic-space",
+            "base": "empty-prefix",
+            "line": "　/set",
+            "cursorCol": 5,
+            "force": false
+          },
+          {
+            "name": "slash-after-no-break-space",
+            "base": "empty-prefix",
+            "line": " /set",
+            "cursorCol": 5,
+            "force": false
+          },
+          {
+            "name": "argument-after-ideographic-space",
+            "base": "empty-prefix",
+            "line": "　/model g",
+            "cursorCol": 9,
+            "force": false
+          },
+          {
+            "name": "boundary-separator-u9",
+            "base": "boundary",
+            "line": "\t说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-ua",
+            "base": "boundary",
+            "line": "\n说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-ub",
+            "base": "boundary",
+            "line": "\u000b说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uc",
+            "base": "boundary",
+            "line": "\f说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-ud",
+            "base": "boundary",
+            "line": "\r说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u20",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-ua0",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-ub7",
+            "base": "boundary",
+            "line": "·说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u1680",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2000",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2001",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2002",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2003",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2004",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2005",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2006",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2007",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2008",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2009",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u200a",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2028",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2029",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u202f",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u205f",
+            "base": "boundary",
+            "line": " 说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3000",
+            "base": "boundary",
+            "line": "　说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-ufeff",
+            "base": "boundary",
+            "line": "﻿说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff0c",
+            "base": "boundary",
+            "line": "，说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff0e",
+            "base": "boundary",
+            "line": "．说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff1a",
+            "base": "boundary",
+            "line": "：说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff1b",
+            "base": "boundary",
+            "line": "；说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff01",
+            "base": "boundary",
+            "line": "！说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff1f",
+            "base": "boundary",
+            "line": "？说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff08",
+            "base": "boundary",
+            "line": "（说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff09",
+            "base": "boundary",
+            "line": "）说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff3b",
+            "base": "boundary",
+            "line": "［说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff3d",
+            "base": "boundary",
+            "line": "］说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff5b",
+            "base": "boundary",
+            "line": "｛说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff5d",
+            "base": "boundary",
+            "line": "｝说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u201c",
+            "base": "boundary",
+            "line": "“说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u201d",
+            "base": "boundary",
+            "line": "”说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2018",
+            "base": "boundary",
+            "line": "‘说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2019",
+            "base": "boundary",
+            "line": "’说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2026",
+            "base": "boundary",
+            "line": "…说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u2014",
+            "base": "boundary",
+            "line": "—说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3002",
+            "base": "boundary",
+            "line": "。说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3001",
+            "base": "boundary",
+            "line": "、说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3003",
+            "base": "boundary",
+            "line": "〃说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3008",
+            "base": "boundary",
+            "line": "〈说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3009",
+            "base": "boundary",
+            "line": "〉说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u300c",
+            "base": "boundary",
+            "line": "「说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u300d",
+            "base": "boundary",
+            "line": "」说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u300e",
+            "base": "boundary",
+            "line": "『说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u300f",
+            "base": "boundary",
+            "line": "』说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u300a",
+            "base": "boundary",
+            "line": "《说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u300b",
+            "base": "boundary",
+            "line": "》说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3010",
+            "base": "boundary",
+            "line": "【说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3011",
+            "base": "boundary",
+            "line": "】说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3014",
+            "base": "boundary",
+            "line": "〔说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3015",
+            "base": "boundary",
+            "line": "〕说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3016",
+            "base": "boundary",
+            "line": "〖说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3017",
+            "base": "boundary",
+            "line": "〗说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3018",
+            "base": "boundary",
+            "line": "〘说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3019",
+            "base": "boundary",
+            "line": "〙说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u301a",
+            "base": "boundary",
+            "line": "〚说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u301b",
+            "base": "boundary",
+            "line": "〛说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u301c",
+            "base": "boundary",
+            "line": "〜说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u301d",
+            "base": "boundary",
+            "line": "〝说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u301e",
+            "base": "boundary",
+            "line": "〞说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u301f",
+            "base": "boundary",
+            "line": "〟说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u3030",
+            "base": "boundary",
+            "line": "〰说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u303d",
+            "base": "boundary",
+            "line": "〽说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u30a0",
+            "base": "boundary",
+            "line": "゠说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u30fb",
+            "base": "boundary",
+            "line": "・说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-ufe45",
+            "base": "boundary",
+            "line": "﹅说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-ufe46",
+            "base": "boundary",
+            "line": "﹆说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff61",
+            "base": "boundary",
+            "line": "｡说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff62",
+            "base": "boundary",
+            "line": "｢说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff63",
+            "base": "boundary",
+            "line": "｣说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff64",
+            "base": "boundary",
+            "line": "､说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-uff65",
+            "base": "boundary",
+            "line": "･说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-separator-u16fe2",
+            "base": "boundary",
+            "line": "𖿢说",
+            "cursorCol": 3,
+            "force": true
+          },
+          {
+            "name": "boundary-pathDelimiter-u22",
+            "base": "boundary",
+            "line": "\"说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-pathDelimiter-u27",
+            "base": "boundary",
+            "line": "'说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-pathDelimiter-u3d",
+            "base": "boundary",
+            "line": "=说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-u61",
+            "base": "boundary",
+            "line": "a说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-u5a",
+            "base": "boundary",
+            "line": "Z说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-u37",
+            "base": "boundary",
+            "line": "7说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-u5f",
+            "base": "boundary",
+            "line": "_说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-u2d",
+            "base": "boundary",
+            "line": "-说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-ue9",
+            "base": "boundary",
+            "line": "é说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-udf",
+            "base": "boundary",
+            "line": "ß说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-u6587",
+            "base": "boundary",
+            "line": "文说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-u3042",
+            "base": "boundary",
+            "line": "あ说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-u30a2",
+            "base": "boundary",
+            "line": "ア说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-ud55c",
+            "base": "boundary",
+            "line": "한说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-u3105",
+            "base": "boundary",
+            "line": "ㄅ说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-u20bb7",
+            "base": "boundary",
+            "line": "𠮷说",
+            "cursorCol": 3,
+            "force": true
+          },
+          {
+            "name": "boundary-token-u3005",
+            "base": "boundary",
+            "line": "々说",
+            "cursorCol": 2,
+            "force": true
+          },
+          {
+            "name": "boundary-token-uff21",
+            "base": "boundary",
+            "line": "Ａ说",
+            "cursorCol": 2,
+            "force": true
+          }
+        ],
+        "continuation": {
+          "name": "quoted-directory-continuation",
+          "base": "quoted",
+          "line": "资料",
+          "cursorCol": 2,
+          "force": true
+        },
+        "forcedTriggers": [
+          {
+            "name": "slash-command-ascii-space",
+            "line": " /model",
+            "cursorCol": 7
+          },
+          {
+            "name": "slash-command-ideographic-space",
+            "line": "　/model",
+            "cursorCol": 7
+          },
+          {
+            "name": "slash-command-no-break-space",
+            "line": " /model",
+            "cursorCol": 7
+          },
+          {
+            "name": "slash-command-trailing-space",
+            "line": "　/model ",
+            "cursorCol": 8
+          },
+          {
+            "name": "slash-command-argument",
+            "line": "　/model x",
+            "cursorCol": 9
+          },
+          {
+            "name": "bare-text",
+            "line": "hello",
+            "cursorCol": 5
+          }
+        ]
+      },
+      "expected": {
+        "cases": [
+          {
+            "name": "cjk-local-file",
+            "base": "cjk-path",
+            "prefix": "./中文/文",
+            "values": [
+              "./中文/文档.txt"
+            ],
+            "appliedLines": [
+              "./中文/文档.txt"
+            ],
+            "appliedCursorCol": 11
+          },
+          {
+            "name": "cjk-local-dir-forced",
+            "base": "cjk-path",
+            "prefix": "./中文/",
+            "values": [
+              "./中文/文档.txt"
+            ],
+            "appliedLines": [
+              "./中文/文档.txt"
+            ],
+            "appliedCursorCol": 11
+          },
+          {
+            "name": "cjk-local-dir-natural",
+            "base": "cjk-path",
+            "prefix": "./中文/",
+            "values": [
+              "./中文/文档.txt"
+            ],
+            "appliedLines": [
+              "./中文/文档.txt"
+            ],
+            "appliedCursorCol": 11
+          },
+          {
+            "name": "cjk-bare-dir-natural",
+            "base": "cjk-path",
+            "prefix": "文档/",
+            "values": [
+              "文档/说明.md"
+            ],
+            "appliedLines": [
+              "文档/说明.md"
+            ],
+            "appliedCursorCol": 8
+          },
+          {
+            "name": "empty-prefix-ideographic-comma",
+            "base": "empty-prefix",
+            "prefix": "",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "查看，说明.md"
+            ],
+            "appliedCursorCol": 8
+          },
+          {
+            "name": "empty-prefix-ideographic-space",
+            "base": "empty-prefix",
+            "prefix": "",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "查看　说明.md"
+            ],
+            "appliedCursorCol": 8
+          },
+          {
+            "name": "empty-prefix-space",
+            "base": "empty-prefix",
+            "prefix": "",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "查看 说明.md"
+            ],
+            "appliedCursorCol": 8
+          },
+          {
+            "name": "empty-prefix-empty-line",
+            "base": "empty-prefix",
+            "prefix": null,
+            "values": null,
+            "appliedLines": null,
+            "appliedCursorCol": null
+          },
+          {
+            "name": "quote-space-directory",
+            "base": "quoted",
+            "prefix": "my",
+            "values": [
+              "\"my folder/\""
+            ],
+            "appliedLines": [
+              "\"my folder/\""
+            ],
+            "appliedCursorCol": 11
+          },
+          {
+            "name": "quote-cjk-punctuation-directory",
+            "base": "quoted",
+            "prefix": "资料",
+            "values": [
+              "\"资料，归档/\""
+            ],
+            "appliedLines": [
+              "\"资料，归档/\""
+            ],
+            "appliedCursorCol": 7
+          },
+          {
+            "name": "quoted-unclosed-token",
+            "base": "quoted",
+            "prefix": "\"资料，归档/说",
+            "values": [
+              "\"资料，归档/说明.md\""
+            ],
+            "appliedLines": [
+              "查看，\"资料，归档/说明.md\""
+            ],
+            "appliedCursorCol": 16
+          },
+          {
+            "name": "quoted-token-with-tail",
+            "base": "quoted",
+            "prefix": "\"资料，归档/说",
+            "values": [
+              "\"资料，归档/说明.md\""
+            ],
+            "appliedLines": [
+              "查看，\"资料，归档/说明.md\"后文"
+            ],
+            "appliedCursorCol": 16
+          },
+          {
+            "name": "wrapper-open",
+            "base": "wrapped",
+            "prefix": "src/ma",
+            "values": [
+              "src/main.cc"
+            ],
+            "appliedLines": [
+              "see (src/main.cc"
+            ],
+            "appliedCursorCol": 16
+          },
+          {
+            "name": "wrapper-closed",
+            "base": "wrapped",
+            "prefix": "(group)/la",
+            "values": [
+              "(group)/layout.cc"
+            ],
+            "appliedLines": [
+              "(group)/layout.cc"
+            ],
+            "appliedCursorCol": 17
+          },
+          {
+            "name": "wrapper-bracket",
+            "base": "wrapped",
+            "prefix": "[slug]/pa",
+            "values": [
+              "[slug]/page.tsx"
+            ],
+            "appliedLines": [
+              "see [slug]/page.tsx"
+            ],
+            "appliedCursorCol": 19
+          },
+          {
+            "name": "wrapper-quoted",
+            "base": "quoted",
+            "prefix": "\"my folder/ma",
+            "values": [
+              "\"my folder/main.ts\""
+            ],
+            "appliedLines": [
+              "see (\"my folder/main.ts\""
+            ],
+            "appliedCursorCol": 24
+          },
+          {
+            "name": "slash-after-ascii-space",
+            "base": "empty-prefix",
+            "prefix": "/set",
+            "values": [
+              "settings"
+            ],
+            "appliedLines": [
+              " /settings "
+            ],
+            "appliedCursorCol": 11
+          },
+          {
+            "name": "slash-after-ideographic-space",
+            "base": "empty-prefix",
+            "prefix": "/set",
+            "values": [
+              "settings"
+            ],
+            "appliedLines": [
+              "　/settings "
+            ],
+            "appliedCursorCol": 11
+          },
+          {
+            "name": "slash-after-no-break-space",
+            "base": "empty-prefix",
+            "prefix": "/set",
+            "values": [
+              "settings"
+            ],
+            "appliedLines": [
+              " /settings "
+            ],
+            "appliedCursorCol": 11
+          },
+          {
+            "name": "argument-after-ideographic-space",
+            "base": "empty-prefix",
+            "prefix": "g",
+            "values": [
+              "gpt"
+            ],
+            "appliedLines": [
+              "　/model gpt"
+            ],
+            "appliedCursorCol": 11
+          },
+          {
+            "name": "boundary-separator-u9",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "\t说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-ua",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "\n说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-ub",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "\u000b说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uc",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "\f说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-ud",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "\r说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u20",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-ua0",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-ub7",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "·说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u1680",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2000",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2001",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2002",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2003",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2004",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2005",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2006",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2007",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2008",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2009",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u200a",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2028",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2029",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u202f",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u205f",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              " 说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3000",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "　说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-ufeff",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "﻿说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff0c",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "，说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff0e",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "．说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff1a",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "：说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff1b",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "；说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff01",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "！说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff1f",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "？说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff08",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "（说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff09",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "）说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff3b",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "［说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff3d",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "］说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff5b",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "｛说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff5d",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "｝说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u201c",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "“说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u201d",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "”说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2018",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "‘说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2019",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "’说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2026",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "…说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u2014",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "—说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3002",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "。说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3001",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "、说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3003",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〃说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3008",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〈说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3009",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〉说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u300c",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "「说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u300d",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "」说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u300e",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "『说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u300f",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "』说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u300a",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "《说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u300b",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "》说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3010",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "【说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3011",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "】说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3014",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〔说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3015",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〕说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3016",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〖说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3017",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〗说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3018",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〘说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3019",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〙说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u301a",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〚说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u301b",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〛说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u301c",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〜说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u301d",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〝说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u301e",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〞说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u301f",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〟说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u3030",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〰说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u303d",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "〽说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u30a0",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "゠说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u30fb",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "・说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-ufe45",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "﹅说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-ufe46",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "﹆说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff61",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "｡说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff62",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "｢说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff63",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "｣说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff64",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "､说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-uff65",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "･说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-separator-u16fe2",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "𖿢说明.md"
+            ],
+            "appliedCursorCol": 7
+          },
+          {
+            "name": "boundary-pathDelimiter-u22",
+            "base": "boundary",
+            "prefix": "\"说",
+            "values": [
+              "\"说明.md\""
+            ],
+            "appliedLines": [
+              "\"说明.md\""
+            ],
+            "appliedCursorCol": 7
+          },
+          {
+            "name": "boundary-pathDelimiter-u27",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "'说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-pathDelimiter-u3d",
+            "base": "boundary",
+            "prefix": "说",
+            "values": [
+              "说明.md"
+            ],
+            "appliedLines": [
+              "=说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-u61",
+            "base": "boundary",
+            "prefix": "a说",
+            "values": [
+              "a说明.md"
+            ],
+            "appliedLines": [
+              "a说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-u5a",
+            "base": "boundary",
+            "prefix": "Z说",
+            "values": [
+              "Z说明.md"
+            ],
+            "appliedLines": [
+              "Z说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-u37",
+            "base": "boundary",
+            "prefix": "7说",
+            "values": [
+              "7说明.md"
+            ],
+            "appliedLines": [
+              "7说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-u5f",
+            "base": "boundary",
+            "prefix": "_说",
+            "values": [
+              "_说明.md"
+            ],
+            "appliedLines": [
+              "_说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-u2d",
+            "base": "boundary",
+            "prefix": "-说",
+            "values": [
+              "-说明.md"
+            ],
+            "appliedLines": [
+              "-说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-ue9",
+            "base": "boundary",
+            "prefix": "é说",
+            "values": [
+              "é说明.md"
+            ],
+            "appliedLines": [
+              "é说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-udf",
+            "base": "boundary",
+            "prefix": "ß说",
+            "values": [
+              "ß说明.md"
+            ],
+            "appliedLines": [
+              "ß说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-u6587",
+            "base": "boundary",
+            "prefix": "文说",
+            "values": [
+              "文说明.md"
+            ],
+            "appliedLines": [
+              "文说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-u3042",
+            "base": "boundary",
+            "prefix": "あ说",
+            "values": [
+              "あ说明.md"
+            ],
+            "appliedLines": [
+              "あ说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-u30a2",
+            "base": "boundary",
+            "prefix": "ア说",
+            "values": [
+              "ア说明.md"
+            ],
+            "appliedLines": [
+              "ア说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-ud55c",
+            "base": "boundary",
+            "prefix": "한说",
+            "values": [
+              "한说明.md"
+            ],
+            "appliedLines": [
+              "한说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-u3105",
+            "base": "boundary",
+            "prefix": "ㄅ说",
+            "values": [
+              "ㄅ说明.md"
+            ],
+            "appliedLines": [
+              "ㄅ说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-u20bb7",
+            "base": "boundary",
+            "prefix": "𠮷说",
+            "values": [
+              "𠮷说明.md"
+            ],
+            "appliedLines": [
+              "𠮷说明.md"
+            ],
+            "appliedCursorCol": 7
+          },
+          {
+            "name": "boundary-token-u3005",
+            "base": "boundary",
+            "prefix": "々说",
+            "values": [
+              "々说明.md"
+            ],
+            "appliedLines": [
+              "々说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "boundary-token-uff21",
+            "base": "boundary",
+            "prefix": "Ａ说",
+            "values": [
+              "Ａ说明.md"
+            ],
+            "appliedLines": [
+              "Ａ说明.md"
+            ],
+            "appliedCursorCol": 6
+          },
+          {
+            "name": "quoted-directory-continuation",
+            "base": "quoted",
+            "prefix": "\"资料，归档/",
+            "values": [
+              "\"资料，归档/说明.md\""
+            ],
+            "appliedLines": [
+              "\"资料，归档/\""
+            ],
+            "appliedCursorCol": 7
+          }
+        ],
+        "forcedTriggers": [
+          {
+            "name": "slash-command-ascii-space",
+            "line": " /model",
+            "triggers": false
+          },
+          {
+            "name": "slash-command-ideographic-space",
+            "line": "　/model",
+            "triggers": false
+          },
+          {
+            "name": "slash-command-no-break-space",
+            "line": " /model",
+            "triggers": false
+          },
+          {
+            "name": "slash-command-trailing-space",
+            "line": "　/model ",
+            "triggers": false
+          },
+          {
+            "name": "slash-command-argument",
+            "line": "　/model x",
+            "triggers": true
+          },
+          {
+            "name": "bare-text",
+            "line": "hello",
+            "triggers": true
+          }
+        ]
+      }
+    }
+  ]
+}

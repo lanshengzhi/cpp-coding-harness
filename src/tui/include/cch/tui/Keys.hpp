@@ -18,12 +18,12 @@ enum class KeyEventType {
 
 struct KeyEvent {
     /// Shortcut identity: the key name a binding matches (pi `Key.id`).
-    std::string key;
+    std::string key{};
     /// The original printable text the terminal produced, kept apart from the
     /// shortcut identity (pi `Key.text`). A non-Latin Kitty layout keeps its
     /// own character here while `key` stays the base-layout key a shortcut
     /// matches; empty when the event carries no printable character.
-    std::string text;
+    std::string text{};
     bool ctrl{false};
     bool shift{false};
     bool alt{false};
@@ -36,7 +36,7 @@ struct KeyEvent {
 inline constexpr std::size_t kMaxPasteBytes = 1024 * 1024;
 
 struct PasteEvent {
-    std::string text;
+    std::string text{};
     std::size_t original_bytes{0};
     std::size_t lines{1};
     bool truncated{false};

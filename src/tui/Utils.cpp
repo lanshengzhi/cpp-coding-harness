@@ -1,5 +1,6 @@
 #include <cch/tui/Utils.hpp>
 
+#include "tui/CjkBreakRanges.hpp"
 #include "tui/UnicodeWidth.hpp"
 
 #include <cch/support/Error.hpp>
@@ -17,30 +18,6 @@
 
 namespace cch::tui {
 namespace {
-
-/// One closed code-point range of pi's CJK line-break set.
-struct CjkBreakRange {
-    char32_t first{0};
-    char32_t last{0};
-};
-
-/// pi's CJK line-break code points as generated range data: utf8proc exposes
-/// no Script_Extensions property, so the set cannot be re-derived here. The
-/// generated include carries pi's regex text, the pinned revision, and its
-/// generator command.
-constexpr CjkBreakRange kCjkBreakRanges[]{
-#define CCH_CJK_BREAK_RANGE(range_first, range_last) {.first = range_first, .last = range_last},
-#include "tui/CjkBreakRanges.inc"
-#undef CCH_CJK_BREAK_RANGE
-};
-
-/// True when the code point is in pi's CJK break set. The generated ranges are
-/// sorted and non-overlapping, so the first one ending at or after the code
-/// point is the only candidate.
-[[nodiscard]] bool is_cjk_break_codepoint(char32_t codepoint) {
-    const auto range = std::ranges::lower_bound(kCjkBreakRanges, codepoint, {}, &CjkBreakRange::last);
-    return range != std::end(kCjkBreakRanges) && codepoint >= range->first;
-}
 
 /// True when the code point is whitespace: the separator class the wrap path
 /// breaks on and the trailing class pi's `wrapSingleLine` removes with
@@ -75,7 +52,7 @@ void trim_end_whitespace(std::string& text) {
     while (position < cluster.size()) {
         const auto [codepoint, bytes] = detail::decode_utf8(cluster, position);
         if (bytes == 0) break;
-        if (is_cjk_break_codepoint(codepoint)) return true;
+        if (detail::is_cjk_break_codepoint(codepoint)) return true;
         position += bytes;
     }
     return false;

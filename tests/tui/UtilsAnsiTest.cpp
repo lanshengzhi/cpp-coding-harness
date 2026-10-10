@@ -90,7 +90,7 @@ TEST_CASE("wrap_text leaves a staged control off the row a wrap break pushes", "
     const std::vector<std::string> expected_underlined{"中文", "\x1b[4mABCD\x1b[24m", "\x1b[4mEFGH"};
     CHECK(*underlined == expected_underlined);
 
-    const auto linked = tui::wrap_text(std::string{kBelLinkOpen} + "中文ABCDEFGH", 4);
+    const auto linked = tui::wrap_text("中文" + std::string{kBelLinkOpen} + "ABCDEFGH", 4);
     REQUIRE(linked);
     const std::vector<std::string> expected_linked{
             "中文",
@@ -99,7 +99,7 @@ TEST_CASE("wrap_text leaves a staged control off the row a wrap break pushes", "
     };
     CHECK(*linked == expected_linked);
 
-    const auto st_linked = tui::wrap_text(std::string{kStLinkOpen} + "中文ABCDEFGH", 4);
+    const auto st_linked = tui::wrap_text("中文" + std::string{kStLinkOpen} + "ABCDEFGH", 4);
     REQUIRE(st_linked);
     const std::vector<std::string> expected_st_linked{
             "中文",
@@ -290,10 +290,11 @@ TEST_CASE("wrapped and truncated lines keep the frozen cells, styles and links a
     CHECK(cells[1][1].style.fg_color == "31");
     // The row behind the styled span is outside the link and the foreground:
     // pi writes the reopened codes and closes them again within the row.
-    CHECK(cells[2][0].grapheme == " ");
+    // The whitespace separating "中文" and "cd" is consumed at the wrap break.
+    CHECK(cells[2][0].grapheme == "c");
     CHECK(cells[2][0].style.hyperlink.empty());
     CHECK(cells[2][0].style.fg_color.empty());
-    CHECK(cells[2][1].grapheme == "c");
+    CHECK(cells[2][1].grapheme == "d");
     CHECK(terminal.final_style() == tui::TerminalStyle{});
 
     // The wrapped row reports the frozen link at each covered cell column.
@@ -304,7 +305,7 @@ TEST_CASE("wrapped and truncated lines keep the frozen cells, styles and links a
     // A truncated hyperlink closes before the ellipsis, so the ellipsis cell
     // carries no link while the kept cells do.
     const auto truncated = tui::truncate_text("\x1b]8;;https://x\x07"
-                                              "abcdef\x1b]8;;\x07",
+                                              "abcdefg\x1b]8;;\x07",
             6,
             ".");
     REQUIRE(truncated);
@@ -325,5 +326,6 @@ TEST_CASE("wrapped and truncated lines keep the frozen cells, styles and links a
 TEST_CASE("strip_terminal_sequences removes the OSC 8 and OSC title bytes pi removes", "[tui][issue957][ansi][spec]") {
     CHECK(tui::strip_terminal_sequences("\x1b]8;;https://x\x07link\x1b]8;;\x07") == "link");
     CHECK(tui::strip_terminal_sequences("\x1b]8;;https://x\x1b\\link\x1b]8;;\x1b\\") == "link");
-    CHECK(tui::strip_terminal_sequences("\x1b]0;title\x07body") == "body");
+    CHECK(tui::strip_terminal_sequences("\x1b]0;title\x07"
+                                        "body") == "body");
 }

@@ -1,13 +1,13 @@
 {
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-10T08:16:04.958Z",
+  "capturedAt": "2026-10-10T12:10:15.942Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
     "libc": "glibc",
     "glibcVersion": "2.44",
-    "node": "v26.11.1",
+    "node": "v24.3.0",
     "TERM": "xterm-256color",
     "disabledVariables": [
       "TERM_PROGRAM",
