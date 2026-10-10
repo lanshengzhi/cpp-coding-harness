@@ -8,6 +8,11 @@ include_guard(GLOBAL)
     set_tests_properties(cch_tui_named_evidence_boundary PROPERTIES
         LABELS "tui;differential;issue947;compat-pi")
 
+    add_test(NAME cch_tui_capability_ledger
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/tui/TuiCapabilityLedgerTest.py)
+    set_tests_properties(cch_tui_capability_ledger PROPERTIES
+        LABELS "tui;differential;issue948;compat-pi")
+
     # TUI
     add_executable(cch_tests_tui
         tests/Catch2Main.cpp
