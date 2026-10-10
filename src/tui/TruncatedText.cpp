@@ -5,7 +5,6 @@
 #include "tui/UnicodeWidth.hpp"
 
 #include <cch/support/Error.hpp>
-#include <format>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -30,25 +29,13 @@ std::string_view TruncatedText::text() const {
 }
 
 support::Expected<RenderResult> TruncatedText::render(std::size_t width) {
-    if (width == 0) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "TUI TruncatedText requires a positive visible width"));
-    }
-    if (padding_x_ >= width || padding_x_ >= width - padding_x_) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "TUI TruncatedText width is too small for padding",
-            std::format("width {} padding_x {}", width, padding_x_)));
-    }
-
     auto normalized = detail::normalize_terminal_output(text_);
     if (!normalized) return std::unexpected(normalized.error());
     const auto newline_position = normalized->find('\n');
     const auto single_line = std::string_view(*normalized).substr(0, newline_position);
-    const auto available_width = width - padding_x_ - padding_x_;
-    // Hard cut at the width boundary: no ellipsis (pi `TruncatedText`).
-    auto truncated = truncate_text(single_line, available_width, "");
+    const auto horizontal_padding = padding_x_ * 2;
+    const auto available_width = width > horizontal_padding ? width - horizontal_padding : std::size_t{1};
+    auto truncated = truncate_text(single_line, available_width);
     if (!truncated) return std::unexpected(truncated.error());
 
     std::vector<std::string> result;
@@ -58,13 +45,10 @@ support::Expected<RenderResult> TruncatedText::render(std::size_t width) {
 
     std::string padded(padding_x_, ' ');
     padded += *truncated;
-    auto prepared = detail::prepare_rendered_line(padded, width);
-    if (!prepared) return std::unexpected(prepared.error());
-    if (prepared->width < width) {
-        prepared->text.append(width - prepared->width, ' ');
-        prepared->width = width;
-    }
-    result.push_back(std::move(prepared->text));
+    padded.append(padding_x_, ' ');
+    const auto line_width = visible_width(padded);
+    if (line_width < width) padded.append(width - line_width, ' ');
+    result.push_back(std::move(padded));
 
     for (std::size_t index = 0; index < padding_y_; ++index) {
         result.emplace_back(width, ' ');

@@ -5,9 +5,9 @@
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
-#include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -34,6 +34,8 @@ public:
 
     [[nodiscard]] support::Expected<std::reference_wrapper<Component>> add_child(
         std::unique_ptr<Component> component);
+    /// Detach a child by identity and return its ownership, or null when absent.
+    [[nodiscard]] std::unique_ptr<Component> remove_child(const Component* component);
     /// Remove all children (pi `Container.clear`); used by streaming
     /// components that rebuild their content on update.
     void clear();
@@ -61,6 +63,8 @@ public:
 
     [[nodiscard]] support::Expected<std::reference_wrapper<Component>> add_child(
         std::unique_ptr<Component> component);
+    /// Detach a child by identity and return its ownership, or null when absent.
+    [[nodiscard]] std::unique_ptr<Component> remove_child(const Component* component);
     void clear();
     /// Replace the background hook (pi `Box.setBgFn`); used by tool
     /// execution to transition pending/success/error backgrounds.
@@ -73,18 +77,15 @@ private:
     friend std::size_t detail::testing::box_tokenize_terminal_output_call_count(const Box& box) noexcept;
 
     void clear_cache();
-    void mark_children_changed();
 
     std::vector<std::unique_ptr<Component>> children_;
     std::size_t padding_x_;
     std::size_t padding_y_;
     BackgroundHook background_hook_;
     RenderResult cached_result_;
+    std::vector<std::string> cached_child_lines_;
+    std::optional<std::string> cached_background_sample_;
     std::size_t cached_width_{0};
-    std::uint64_t cached_children_revision_{0};
-    std::uint64_t cached_background_hook_revision_{0};
-    std::uint64_t children_revision_{0};
-    std::uint64_t background_hook_revision_{0};
     std::size_t last_render_tokenize_calls_{0};
     bool cache_valid_{false};
 };

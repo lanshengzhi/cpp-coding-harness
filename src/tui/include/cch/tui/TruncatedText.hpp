@@ -12,9 +12,8 @@ namespace cch::tui {
 /// A single-line text component that truncates to fit within the supplied width.
 ///
 /// Renders at most one line of text. If the text is wider than the available
-/// space, it is hard-cut at the width boundary with no ellipsis (pi
-/// `TruncatedText`). Handles ANSI escape sequences and Unicode display
-/// widths correctly.
+/// space, it appends pi's default `...` ellipsis. Handles ANSI escape sequences
+/// and Unicode display widths correctly.
 class TruncatedText final : public Component {
 public:
     /// @param text       Text content (only first line is shown)
