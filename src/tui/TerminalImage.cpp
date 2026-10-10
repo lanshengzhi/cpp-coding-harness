@@ -11,7 +11,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <format>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -34,9 +33,6 @@
 
 namespace cch::tui {
 namespace {
-
-std::mutex g_image_capabilities_mutex;
-std::optional<DetectedImageCapabilities> g_image_capabilities;
 
 constexpr std::size_t kKittyChunkSize = 4096;
 constexpr std::size_t kCellSizePendingMax = 64;
@@ -319,66 +315,65 @@ bool detail::probe_tmux_hyperlinks() {
     return features_include_hyperlinks(output);
 }
 
-DetectedImageCapabilities detect_image_capabilities(
-    TmuxHyperlinkProbe tmux_forwards_hyperlink) {
+DetectedImageCapabilities detect_image_capabilities(TmuxHyperlinkProbe tmux_forwards_hyperlink) {
     const auto term_program = lowercase_environment("TERM_PROGRAM");
     const auto terminal_emulator = lowercase_environment("TERMINAL_EMULATOR");
     const auto term = lowercase_environment("TERM");
+    const auto color_term = lowercase_environment("COLORTERM");
+    const auto true_color_hint = color_term == "truecolor" || color_term == "24bit" || term.ends_with("-direct");
+    const auto pi_true_color = lowercase_environment("PI_TRUE_COLOR");
 
     auto detected = [&]() -> DetectedImageCapabilities {
-        // Emit OSC 8 hyperlinks only when tmux confirms it forwards. Image
-        // protocols are unreliable under tmux, so images stay disabled.
+        const auto color = true_color_hint ? TerminalColorCapability::TrueColor : TerminalColorCapability::Xterm256;
         if (environment_present("TMUX") || term.starts_with("tmux")) {
-            return {
-                    .images = InlineImageProtocol::None,
+            return {.images = InlineImageProtocol::None,
                     .hyperlinks = tmux_forwards_hyperlink ? tmux_forwards_hyperlink() : false,
-            };
+                    .color = color};
         }
-        // screen does not forward OSC 8 hyperlinks.
         if (term.starts_with("screen")) {
-            return {
-                    .images = InlineImageProtocol::None,
-                    .hyperlinks = false,
-            };
+            return {.images = InlineImageProtocol::None, .hyperlinks = false, .color = color};
         }
-
         if (environment_present("KITTY_WINDOW_ID") || term_program == "kitty") {
-            return {.images = InlineImageProtocol::Kitty, .hyperlinks = true};
+            return {.images = InlineImageProtocol::Kitty,
+                    .hyperlinks = true,
+                    .color = TerminalColorCapability::TrueColor};
         }
         if (term_program == "ghostty" || term.find("ghostty") != std::string::npos ||
                 environment_present("GHOSTTY_RESOURCES_DIR")) {
-            return {.images = InlineImageProtocol::Kitty, .hyperlinks = true};
+            return {.images = InlineImageProtocol::Kitty,
+                    .hyperlinks = true,
+                    .color = TerminalColorCapability::TrueColor};
         }
         if (environment_present("WEZTERM_PANE") || term_program == "wezterm") {
-            return {.images = InlineImageProtocol::Kitty, .hyperlinks = true};
+            return {.images = InlineImageProtocol::Kitty,
+                    .hyperlinks = true,
+                    .color = TerminalColorCapability::TrueColor};
         }
         if (term_program == "warpterminal" || environment_present("WARP_SESSION_ID") ||
                 environment_present("WARP_TERMINAL_SESSION_UUID")) {
-            return {.images = InlineImageProtocol::Kitty, .hyperlinks = true};
+            return {.images = InlineImageProtocol::Kitty,
+                    .hyperlinks = true,
+                    .color = TerminalColorCapability::TrueColor};
         }
         if (environment_present("ITERM_SESSION_ID") || term_program == "iterm.app") {
-            return {.images = InlineImageProtocol::ITerm2, .hyperlinks = true};
+            return {.images = InlineImageProtocol::ITerm2,
+                    .hyperlinks = true,
+                    .color = TerminalColorCapability::TrueColor};
         }
-        if (environment_present("WT_SESSION")) {
-            return {.images = InlineImageProtocol::None, .hyperlinks = true};
-        }
-        if (term_program == "vscode") {
-            return {.images = InlineImageProtocol::None, .hyperlinks = true};
-        }
-        if (term_program == "alacritty") {
-            return {.images = InlineImageProtocol::None, .hyperlinks = true};
-        }
-        if (term_program == "zed") {
-            return {.images = InlineImageProtocol::None, .hyperlinks = true};
+        if (environment_present("WT_SESSION") || term_program == "vscode" || term_program == "alacritty" ||
+                term_program == "zed") {
+            return {.images = InlineImageProtocol::None,
+                    .hyperlinks = true,
+                    .color = TerminalColorCapability::TrueColor};
         }
         if (terminal_emulator == "jetbrains-jediterm") {
-            return {.images = InlineImageProtocol::None, .hyperlinks = false};
+            return {.images = InlineImageProtocol::None,
+                    .hyperlinks = false,
+                    .color = TerminalColorCapability::TrueColor};
         }
-        // Unknown terminal: be conservative, exactly like pi.
-        return {.images = InlineImageProtocol::None, .hyperlinks = false};
+        return {.images = InlineImageProtocol::None, .hyperlinks = false, .color = color};
     }();
 
-    // Standard manual overrides from pi terminal-image.ts
     const auto pi_hyperlinks = lowercase_environment("PI_HYPERLINKS");
     if (pi_hyperlinks == "1")
         detected.hyperlinks = true;
@@ -393,23 +388,11 @@ DetectedImageCapabilities detect_image_capabilities(
     else if (pi_image_protocol == "none" || pi_image_protocol == "0")
         detected.images = InlineImageProtocol::None;
 
+    if (pi_true_color == "1")
+        detected.color = TerminalColorCapability::TrueColor;
+    else if (pi_true_color == "0")
+        detected.color = TerminalColorCapability::Xterm256;
     return detected;
-}
-
-DetectedImageCapabilities get_image_capabilities() {
-    std::lock_guard lock(g_image_capabilities_mutex);
-    if (!g_image_capabilities) g_image_capabilities = detect_image_capabilities();
-    return *g_image_capabilities;
-}
-
-void set_image_capabilities(DetectedImageCapabilities capabilities) {
-    std::lock_guard lock(g_image_capabilities_mutex);
-    g_image_capabilities = capabilities;
-}
-
-void reset_image_capabilities_cache() {
-    std::lock_guard lock(g_image_capabilities_mutex);
-    g_image_capabilities.reset();
 }
 
 std::string hyperlink(std::string_view text, std::string_view url) {
@@ -535,12 +518,19 @@ support::Expected<std::string> encode_terminal_image_removal(
     InlineImageProtocol protocol,
     TerminalImageHandle handle) {
     if (protocol == InlineImageProtocol::Kitty) {
-        return std::format("\x1b_Ga=d,d=I,i={},q=2\x1b\\", handle.value);
+        return delete_kitty_image(handle);
     }
     if (protocol == InlineImageProtocol::ITerm2) return std::string{};
     return std::unexpected(support::make_error(
         support::ErrorCode::Validation,
         "Terminal does not support inline images"));
+}
+
+support::Expected<std::string> encode_terminal_image_removal_all(InlineImageProtocol protocol) {
+    if (protocol == InlineImageProtocol::Kitty) return delete_all_kitty_images();
+    if (protocol == InlineImageProtocol::ITerm2) return std::string{};
+    return std::unexpected(
+            support::make_error(support::ErrorCode::Validation, "Terminal does not support inline images"));
 }
 
 } // namespace detail

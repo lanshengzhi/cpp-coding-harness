@@ -15,6 +15,8 @@ cch_parity_declare_target(
         src/tui/EditorLayout.cpp
         src/tui/Fuzzy.cpp
         src/tui/Image.cpp
+        src/tui/ImageDimensions.cpp
+        src/tui/ImageGeometry.cpp
         src/tui/Input.cpp
         src/tui/InputDecoder.cpp
         src/tui/Keybindings.cpp
@@ -31,6 +33,8 @@ cch_parity_declare_target(
         src/tui/SettingsList.cpp
         src/tui/StdinBuffer.cpp
         src/tui/TerminalImage.cpp
+        src/tui/TerminalImageHelpers.cpp
+        src/tui/TerminalImageState.cpp
         src/tui/Terminal.cpp
         src/tui/Text.cpp
         src/tui/TextBuffer.cpp

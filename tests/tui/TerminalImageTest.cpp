@@ -193,6 +193,57 @@ TEST_CASE("image capability cache mirrors pi getCapabilities set and reset",
     cch::tui::reset_image_capabilities_cache();
 }
 
+TEST_CASE("frozen capability overrides preserve direct color and override each detected value",
+        "[tui][image][terminal-image][issue994][compat-pi]") {
+    {
+        ImageEnvironmentGuard environment;
+        environment.set("TERM", "xterm-direct");
+        const auto caps = cch::tui::detect_image_capabilities();
+        CHECK(caps.color == cch::tui::TerminalColorCapability::TrueColor);
+    }
+    {
+        ImageEnvironmentGuard environment;
+        environment.set("TERM_PROGRAM", "ghostty");
+        environment.set("PI_IMAGE_PROTOCOL", "iterm2");
+        environment.set("PI_HYPERLINKS", "0");
+        environment.set("PI_TRUE_COLOR", "0");
+        const auto caps = cch::tui::detect_image_capabilities();
+        CHECK(caps.images == cch::tui::InlineImageProtocol::ITerm2);
+        CHECK_FALSE(caps.hyperlinks);
+        CHECK(caps.color == cch::tui::TerminalColorCapability::Xterm256);
+    }
+}
+
+TEST_CASE("image capability overrides reset to environment detection", "[tui][image][terminal-image][issue994]") {
+    ImageEnvironmentGuard environment;
+    environment.set("TERM_PROGRAM", "ghostty");
+    cch::tui::reset_image_capabilities_cache();
+
+    cch::tui::set_image_capabilities({
+            .images = cch::tui::InlineImageProtocol::None,
+            .hyperlinks = false,
+    });
+    CHECK(cch::tui::get_image_capabilities().images == cch::tui::InlineImageProtocol::None);
+
+    cch::tui::reset_image_capabilities_cache();
+    CHECK(cch::tui::get_image_capabilities().images == cch::tui::InlineImageProtocol::Kitty);
+}
+
+TEST_CASE("Kitty helper allocation and deletion commands map metadata lifecycle helpers",
+        "[tui][image][terminal-image][issue994][compat-pi]") {
+    const auto first = cch::tui::allocate_image_id();
+    const auto second = cch::tui::allocate_image_id();
+    CHECK(first.value != 0);
+    CHECK(second.value != 0);
+    CHECK(first != second);
+
+    CHECK(cch::tui::delete_kitty_image(first) == "\x1b_Ga=d,d=I,i=" + std::to_string(first.value) + ",q=2\x1b\\");
+    CHECK(cch::tui::delete_all_kitty_images() == "\x1b_Ga=d,d=A,q=2\x1b\\");
+    CHECK(cch::tui::delete_all_kitty_placements() == "\x1b_Ga=d,d=a,q=2\x1b\\");
+    CHECK_FALSE(cch::tui::is_image_line("ordinary text"));
+    CHECK(cch::tui::is_image_line("prefix\x1b_Ga=T;data\x1b\\"));
+}
+
 TEST_CASE("hyperlink emits pi-exact OSC 8 sequences", "[tui][image][terminal-image][issue385][compat-pi]") {
     CHECK(cch::tui::hyperlink("click me", "https://example.com") ==
         "\x1b]8;;https://example.com\x1b\\click me\x1b]8;;\x1b\\");

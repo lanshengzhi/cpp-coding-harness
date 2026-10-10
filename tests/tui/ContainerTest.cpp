@@ -10,6 +10,7 @@
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "support/ImageCapabilitiesGuard.hpp"
 #include "support/RenderedScreen.hpp"
 #include "tui/ContainerTestHooks.hpp"
 
@@ -159,8 +160,9 @@ TEST_CASE(
     CHECK(cch::tui::detail::testing::box_tokenize_terminal_output_call_count(box) == 0);
 }
 
-TEST_CASE(
-        "Box cache keeps public Image sidecars current when lines are unchanged", "[tui][box][image][issue966][spec]") {
+TEST_CASE("Box cache keeps public Image sidecars current when lines are unchanged",
+        "[tui][box][image][issue966][spec][issue994]") {
+    cch::tests::ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::Box box(1, 0);
     auto image = std::make_unique<cch::tui::Image>(
             cch::tui::ImageContent{.encoded_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAElFTkSuQmCC",
@@ -298,6 +300,8 @@ TEST_CASE("Container removes and reattaches a nonterminal child", "[tui][contain
 }
 
 TEST_CASE("Box removes re-adds and renders retained component capabilities", "[tui][box][issue966][spec]") {
+    cch::tests::ImageCapabilitiesGuard capabilities(
+            cch::tui::DetectedImageCapabilities{.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::Box box(1, 1);
     auto input = std::make_unique<cch::tui::Input>();
     auto* input_ptr = input.get();
@@ -352,7 +356,7 @@ TEST_CASE("Box removes re-adds and renders retained component capabilities", "[t
     CHECK(rendered->images[0].filename == std::optional<std::string>{"retained.png"});
     CHECK(rendered->images[0].region.row == 5);
     CHECK(rendered->images[0].region.column == 1);
-    REQUIRE(rendered->lines.size() == 7);
+    REQUIRE(rendered->lines.size() == 8);
     CHECK(rendered->lines[4] == " abc\x1b[0m...\x1b[0m ");
     REQUIRE(input_ptr->cursor_location());
     CHECK(input_ptr->cursor_location()->column > 0);

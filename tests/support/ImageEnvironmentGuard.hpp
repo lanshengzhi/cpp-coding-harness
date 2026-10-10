@@ -27,6 +27,7 @@ private:
         if (name == "TERM_PROGRAM") return &term_program;
         if (name == "TERMINAL_EMULATOR") return &terminal_emulator;
         if (name == "TERM") return &term;
+        if (name == "COLORTERM") return &color_term;
         if (name == "TMUX") return &tmux;
         if (name == "KITTY_WINDOW_ID") return &kitty_window_id;
         if (name == "GHOSTTY_RESOURCES_DIR") return &ghostty_resources_dir;
@@ -37,6 +38,7 @@ private:
         if (name == "WT_SESSION") return &wt_session;
         if (name == "PI_HYPERLINKS") return &pi_hyperlinks;
         if (name == "PI_IMAGE_PROTOCOL") return &pi_image_protocol;
+        if (name == "PI_TRUE_COLOR") return &pi_true_color;
         return &cmux_workspace_id;
     }
 
@@ -44,6 +46,7 @@ private:
         term_program.unset();
         terminal_emulator.unset();
         term.unset();
+        color_term.unset();
         tmux.unset();
         kitty_window_id.unset();
         ghostty_resources_dir.unset();
@@ -55,11 +58,13 @@ private:
         cmux_workspace_id.unset();
         pi_hyperlinks.unset();
         pi_image_protocol.unset();
+        pi_true_color.unset();
     }
 
     EnvVarGuard term_program{"TERM_PROGRAM"};
     EnvVarGuard terminal_emulator{"TERMINAL_EMULATOR"};
     EnvVarGuard term{"TERM"};
+    EnvVarGuard color_term{"COLORTERM"};
     EnvVarGuard tmux{"TMUX"};
     EnvVarGuard kitty_window_id{"KITTY_WINDOW_ID"};
     EnvVarGuard ghostty_resources_dir{"GHOSTTY_RESOURCES_DIR"};
@@ -71,6 +76,7 @@ private:
     EnvVarGuard cmux_workspace_id{"CMUX_WORKSPACE_ID"};
     EnvVarGuard pi_hyperlinks{"PI_HYPERLINKS"};
     EnvVarGuard pi_image_protocol{"PI_IMAGE_PROTOCOL"};
+    EnvVarGuard pi_true_color{"PI_TRUE_COLOR"};
 };
 
 } // namespace cch::tests

@@ -7,7 +7,6 @@
 
 #include <cch/support/Error.hpp>
 #include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <exception>
 #include <string>
@@ -180,16 +179,6 @@ void append_trailing_columns(ComposedRow& row, const std::vector<TerminalToken>&
     return std::move(row.text);
 }
 
-[[nodiscard]] std::size_t nearest_cell_count(long double ideal, std::size_t upper) {
-    if (upper <= 1) return upper;
-    const auto lower = upper - 1;
-    const auto score = [ideal](std::size_t count) {
-        const auto value = static_cast<long double>(count);
-        return std::max(value / ideal, ideal / value);
-    };
-    return score(lower) < score(upper) ? lower : upper;
-}
-
 } // namespace
 
 support::Expected<std::reference_wrapper<Overlay>> OverlayCompositor::add_overlay(
@@ -251,7 +240,7 @@ RenderResult OverlayCompositor::materialize_images(
         return left.region.row < right.region.row;
     });
 
-    std::size_t added_rows = 0;
+    std::ptrdiff_t row_adjustment = 0;
     for (auto& image : candidates) {
         if (!protocol_supports_mime(capabilities.inline_images, image.mime_type) ||
             image.pixel_width == 0 || image.pixel_height == 0 ||
@@ -264,46 +253,47 @@ RenderResult OverlayCompositor::materialize_images(
         const auto max_width = std::max<std::size_t>(
             1,
             std::min(available_width, image.max_width.value_or(default_width)));
-        const auto& cells = *capabilities.cell_pixels;
+        const auto cells = *capabilities.cell_pixels;
         const auto default_height = std::max<std::size_t>(
             1,
             (max_width * cells.width + cells.height - 1) / cells.height);
         const auto max_height = std::max<std::size_t>(1, image.max_height.value_or(default_height));
-        const auto width_scale =
-            static_cast<long double>(max_width * cells.width) / image.pixel_width;
-        const auto height_scale =
-            static_cast<long double>(max_height * cells.height) / image.pixel_height;
-        const auto scale = std::min(width_scale, height_scale);
-        auto rows = std::max<std::size_t>(1,
-                std::min(max_height,
-                        static_cast<std::size_t>(
-                                std::ceil(static_cast<long double>(image.pixel_height) * scale / cells.height))));
-        auto columns = std::max<std::size_t>(1,
-                std::min(max_width,
-                        static_cast<std::size_t>(
-                                std::ceil(static_cast<long double>(image.pixel_width) * scale / cells.width))));
-        if (capabilities.inline_images == InlineImageProtocol::Kitty) {
-            if (width_scale <= height_scale) {
-                const auto ideal_rows = static_cast<long double>(columns) * cells.width * image.pixel_height /
-                                        (static_cast<long double>(image.pixel_width) * cells.height);
-                rows = nearest_cell_count(ideal_rows, rows);
-            } else {
-                const auto ideal_columns = static_cast<long double>(rows) * cells.height * image.pixel_width /
-                                           (static_cast<long double>(image.pixel_height) * cells.width);
-                columns = nearest_cell_count(ideal_columns, columns);
-            }
-        }
-        const auto target_row = image.region.row + added_rows;
-        if (target_row >= available_rows || rows > available_rows - target_row) continue;
+        const auto size = calculate_image_cell_size({.width = image.pixel_width, .height = image.pixel_height},
+                max_width,
+                max_height,
+                cells,
+                capabilities.inline_images == InlineImageProtocol::Kitty);
+        const auto columns = size.columns;
+        const auto rows = size.rows;
+        const auto adjusted_row = static_cast<std::ptrdiff_t>(image.region.row) + row_adjustment;
+        if (adjusted_row < 0) continue;
+        const auto target_row = static_cast<std::size_t>(adjusted_row);
+        if (target_row >= output.lines.size()) continue;
 
-        output.lines[target_row] = std::string(image.region.column + columns, ' ');
-        if (rows > 1) {
-            output.lines.insert(
-                output.lines.begin() + static_cast<std::ptrdiff_t>(target_row + 1),
-                rows - 1,
-                std::string{});
-            added_rows += rows - 1;
+        const auto source_rows = image.rows_reserved_in_lines
+                                         ? std::min(image.region.rows, output.lines.size() - target_row)
+                                         : std::size_t{1};
+        if (target_row >= available_rows || rows > available_rows - target_row) {
+            output.lines[target_row] = image.fallback_text;
+            if (source_rows > 1) {
+                output.lines.erase(output.lines.begin() + static_cast<std::ptrdiff_t>(target_row + 1),
+                        output.lines.begin() + static_cast<std::ptrdiff_t>(target_row + source_rows));
+                row_adjustment -= static_cast<std::ptrdiff_t>(source_rows - 1);
+            }
+            continue;
         }
+
+        if (rows < source_rows) {
+            output.lines.erase(output.lines.begin() + static_cast<std::ptrdiff_t>(target_row + rows),
+                    output.lines.begin() + static_cast<std::ptrdiff_t>(target_row + source_rows));
+            row_adjustment -= static_cast<std::ptrdiff_t>(source_rows - rows);
+        } else if (rows > source_rows) {
+            output.lines.insert(output.lines.begin() + static_cast<std::ptrdiff_t>(target_row + source_rows),
+                    rows - source_rows,
+                    std::string{});
+            row_adjustment += static_cast<std::ptrdiff_t>(rows - source_rows);
+        }
+        output.lines[target_row] = std::string(image.region.column + columns, ' ');
         image.region.columns = columns;
         image.region.rows = rows;
         image.region.row = target_row;

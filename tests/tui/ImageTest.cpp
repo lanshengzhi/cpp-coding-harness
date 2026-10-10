@@ -6,6 +6,9 @@
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "support/ImageCapabilitiesGuard.hpp"
+#include "support/ImageEnvironmentGuard.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -17,6 +20,9 @@
 #include <vector>
 
 namespace {
+
+using cch::tests::ImageCapabilitiesGuard;
+using cch::tests::ImageEnvironmentGuard;
 
 std::string base64_encode(const std::vector<std::uint8_t>& bytes) {
     constexpr std::string_view kAlphabet =
@@ -125,7 +131,8 @@ cch::tui::Image make_image(
 
 } // namespace
 
-TEST_CASE("Image reports private PNG JPEG GIF and WebP dimensions", "[tui][image][issue53][spec]") {
+TEST_CASE("Image reports PNG JPEG GIF and WebP dimensions", "[tui][image][issue53][issue994][spec]") {
+    ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::ITerm2});
     struct Fixture {
         std::string mime_type;
         std::vector<std::uint8_t> bytes;
@@ -146,14 +153,25 @@ TEST_CASE("Image reports private PNG JPEG GIF and WebP dimensions", "[tui][image
         REQUIRE(rendered->images.size() == 1);
         CHECK(rendered->images[0].pixel_width == fixture.width);
         CHECK(rendered->images[0].pixel_height == fixture.height);
-        CHECK(rendered->lines[0].find(std::to_string(fixture.width) + "x" +
-                                      std::to_string(fixture.height)) != std::string::npos);
+        CHECK(rendered->images[0].fallback_text.find(
+                      std::to_string(fixture.width) + "x" + std::to_string(fixture.height)) != std::string::npos);
     }
 }
 
-TEST_CASE("Truncated supported formats use fallback instead of native transport", "[tui][image][issue53][spec]") {
+TEST_CASE("Frozen image sniffers retain dimensions from incomplete format headers",
+        "[tui][image][issue53][issue994][compat-pi]") {
+    ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::ITerm2});
+    const auto supplied_data = base64_encode(png_header(320, 200));
+    cch::tui::Image supplied({.encoded_data = supplied_data, .mime_type = "image/png"},
+            {.dimensions = cch::tui::ImagePixelSize{.width = 17, .height = 11}});
+    const auto supplied_render = supplied.render(80);
+    REQUIRE(supplied_render);
+    REQUIRE(supplied_render->images.size() == 1);
+    CHECK(supplied_render->images[0].pixel_width == 17);
+    CHECK(supplied_render->images[0].pixel_height == 11);
+
     auto jpeg = jpeg_header(640, 480);
-    jpeg.resize(jpeg.size() - 2);
+    jpeg.resize(10);
     auto gif = gif_header(40, 30);
     gif.pop_back();
     auto webp_bad_riff_size = webp_vp8x_header(1024, 512);
@@ -166,11 +184,12 @@ TEST_CASE("Truncated supported formats use fallback instead of native transport"
         std::vector<std::uint8_t> bytes;
     };
     const std::vector<Fixture> fixtures{
-        {.mime_type = "image/png", .bytes = truncated_png_header(320, 200)},
-        {.mime_type = "image/jpeg", .bytes = std::move(jpeg)},
-        {.mime_type = "image/gif", .bytes = std::move(gif)},
-        {.mime_type = "image/webp", .bytes = std::move(webp_bad_riff_size)},
-        {.mime_type = "image/webp", .bytes = std::move(webp_bad_chunk_size)},
+            {.mime_type = "image/png", .bytes = truncated_png_header(320, 200)},
+            {.mime_type = "image/jpeg", .bytes = std::move(jpeg)},
+            {.mime_type = "image/gif", .bytes = std::move(gif)},
+            {.mime_type = "image/webp", .bytes = std::move(webp_bad_riff_size)},
+            {.mime_type = "image/webp", .bytes = std::move(webp_bad_chunk_size)},
+            {.mime_type = "image/png", .bytes = {'n', 'o', 't', ' ', 'a', 'n', ' ', 'i', 'm', 'a', 'g', 'e'}},
     };
 
     for (const auto& fixture : fixtures) {
@@ -178,15 +197,92 @@ TEST_CASE("Truncated supported formats use fallback instead of native transport"
         const auto rendered = image.render(80);
 
         REQUIRE(rendered);
-        CHECK(rendered->images.empty());
-        REQUIRE(rendered->lines.size() == 1);
-        // Pi-exact fallback: pi's Image component defaults unsniffable
-        // dimensions to 800x600, so the WxH segment is always present.
-        CHECK(rendered->lines[0].find("truncated.img [" + fixture.mime_type + "] 800x600") != std::string::npos);
+        REQUIRE(rendered->images.size() == 1);
+        CHECK(rendered->lines.front().empty());
+        CHECK(rendered->lines.back().empty());
+        const auto sniffed_dimensions = cch::tui::get_image_dimensions(base64_encode(fixture.bytes), fixture.mime_type);
+        const auto expected_dimensions =
+                sniffed_dimensions.value_or(cch::tui::ImagePixelSize{.width = 800, .height = 600});
+        CHECK(rendered->images[0].pixel_width == expected_dimensions.width);
+        CHECK(rendered->images[0].pixel_height == expected_dimensions.height);
+        CHECK(rendered->images[0].region.columns > 0);
+        CHECK(rendered->images[0].region.rows > 0);
+        CHECK(rendered->images[0].fallback_text.find(std::to_string(expected_dimensions.width) + "x" +
+                                                     std::to_string(expected_dimensions.height)) != std::string::npos);
+        if (!sniffed_dimensions) CHECK(rendered->images[0].pixel_width == 800);
     }
 }
 
-TEST_CASE("Unsupported and malformed images render bounded themed fallback", "[tui][image][issue53][spec]") {
+TEST_CASE("Image helpers and Image rendering share dimensions, cell geometry, and capability overrides",
+        "[tui][image][issue994][compat-pi]") {
+    ImageEnvironmentGuard environment;
+    ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
+    cch::tui::set_image_capabilities({
+            .images = cch::tui::InlineImageProtocol::Kitty,
+            .hyperlinks = true,
+    });
+    cch::tui::set_cell_dimensions({.width = 9, .height = 18});
+
+    const auto dimensions = cch::tui::get_image_dimensions(base64_encode(png_header(1, 6)), "image/png");
+    REQUIRE(dimensions);
+    CHECK(*dimensions == (cch::tui::ImagePixelSize{.width = 1, .height = 6}));
+    CHECK(cch::tui::get_cell_dimensions() == (cch::tui::CellPixelDimensions{.width = 9, .height = 18}));
+    const auto helper_size =
+            cch::tui::calculate_image_cell_size(*dimensions, 10, 10, cch::tui::get_cell_dimensions(), true);
+    CHECK(helper_size == (cch::tui::ImageCellSize{.columns = 3, .rows = 10}));
+    CHECK(cch::tui::calculate_image_rows(*dimensions, 2) == 6);
+    const auto distorted_size = cch::tui::calculate_image_cell_size({.width = 1, .height = 6}, 10, 10, {9, 18}, false);
+    const auto optimized_size = cch::tui::calculate_image_cell_size({.width = 1, .height = 6}, 10, 10, {9, 18}, true);
+    CHECK(distorted_size == (cch::tui::ImageCellSize{.columns = 4, .rows = 10}));
+    CHECK(optimized_size == (cch::tui::ImageCellSize{.columns = 3, .rows = 10}));
+
+    cch::tui::Image image(
+            {
+                    .encoded_data = base64_encode(png_header(1, 6)),
+                    .mime_type = "image/png",
+            },
+            {.constraints = {.max_width = 10, .max_height = 10}});
+    const auto rendered = image.render(12);
+    REQUIRE(rendered);
+    REQUIRE(rendered->images.size() == 1);
+    CHECK(rendered->images[0].region.columns == helper_size.columns);
+    CHECK(rendered->images[0].region.rows == helper_size.rows);
+    const auto constrained_render = image.render(12);
+    REQUIRE(constrained_render);
+    CHECK(constrained_render->images[0].max_width == 10);
+
+    cch::tui::set_cell_dimensions({.width = 1, .height = 1});
+    const auto changed = image.render(4);
+    REQUIRE(changed);
+    REQUIRE(changed->images.size() == 1);
+    CHECK(changed->images[0].region.columns == 2);
+    CHECK(changed->images[0].region.rows == 10);
+    CHECK(changed->lines.size() == changed->images[0].region.rows);
+
+    cch::tui::set_image_capability_overrides({
+            .images = cch::tui::InlineImageProtocol::ITerm2,
+            .hyperlinks = false,
+    });
+    const auto iterm2_size =
+            cch::tui::calculate_image_cell_size(*dimensions, 10, 10, cch::tui::get_cell_dimensions(), false);
+    const auto iterm2_render = image.render(12);
+    REQUIRE(iterm2_render);
+    CHECK(iterm2_render->images[0].region.columns == iterm2_size.columns);
+    CHECK(iterm2_render->images[0].region.rows == iterm2_size.rows);
+    CHECK(iterm2_render->images[0].region.columns != helper_size.columns);
+    CHECK(iterm2_render->lines[0].find("\x1b]8;;") == std::string::npos);
+
+    cch::tui::reset_image_capability_overrides();
+    cch::tui::reset_image_capabilities_cache();
+    CHECK(cch::tui::get_image_capabilities().images == cch::tui::InlineImageProtocol::None);
+
+    cch::tui::reset_cell_dimensions();
+    cch::tui::reset_image_capabilities_cache();
+    cch::tui::reset_image_capability_overrides();
+}
+
+TEST_CASE("Unsupported and malformed images render bounded themed fallback", "[tui][image][issue53][issue994][spec]") {
+    ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::ImageOptions options;
     options.fallback_style = [](std::string text) { return "\x1b[33m" + text + "\x1b[0m"; };
     cch::tui::Image image(
@@ -207,7 +303,8 @@ TEST_CASE("Unsupported and malformed images render bounded themed fallback", "[t
     CHECK(rendered->lines[0].find("\x1b_G") == std::string::npos);
 }
 
-TEST_CASE("Terminal without image capability shows semantic fallback", "[tui][image][issue53][spec]") {
+TEST_CASE("Terminal without image capability shows semantic fallback", "[tui][image][issue53][issue994][spec]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::None});
     cch::tui::VirtualTerminal terminal({.columns = 40, .rows = 2});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Image>(make_image(
@@ -223,7 +320,8 @@ TEST_CASE("Terminal without image capability shows semantic fallback", "[tui][im
 }
 
 TEST_CASE("Cell-size math defaults to pi's 9x18 cells and applies CSI 16 t updates downstream of the listener stage",
-        "[tui][image][issue385][issue952][spec]") {
+        "[tui][image][issue385][issue952][issue994][spec]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::VirtualTerminal terminal({
         .columns = 20,
         .rows = 3,
@@ -259,7 +357,8 @@ TEST_CASE("Cell-size math defaults to pi's 9x18 cells and applies CSI 16 t updat
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("Unchanged re-renders keep the same image placement handle", "[tui][image][issue385][spec]") {
+TEST_CASE("Unchanged re-renders keep the same image placement handle", "[tui][image][issue385][spec][issue994]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::VirtualTerminal terminal({
         .columns = 8,
         .rows = 3,
@@ -287,7 +386,9 @@ TEST_CASE("Unchanged re-renders keep the same image placement handle", "[tui][im
     CHECK(terminal.images().empty());
 }
 
-TEST_CASE("Animation frames update the same placement with protocol-id reuse", "[tui][image][issue385][spec]") {
+TEST_CASE(
+        "Animation frames update the same placement with protocol-id reuse", "[tui][image][issue385][spec][issue994]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::VirtualTerminal terminal({
         .columns = 8,
         .rows = 4,
@@ -331,7 +432,8 @@ TEST_CASE("Animation frames update the same placement with protocol-id reuse", "
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("Kitty and iTerm2 images stay inside TUI-owned rows", "[tui][image][issue53][spec]") {
+TEST_CASE("Kitty and iTerm2 images stay inside TUI-owned rows", "[tui][image][issue53][spec][issue994]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     const auto data = base64_encode(png_header(20, 20));
     for (const auto protocol : {cch::tui::InlineImageProtocol::Kitty, cch::tui::InlineImageProtocol::ITerm2}) {
         cch::tui::VirtualTerminal terminal({
@@ -361,7 +463,8 @@ TEST_CASE("Kitty and iTerm2 images stay inside TUI-owned rows", "[tui][image][is
     }
 }
 
-TEST_CASE("Image replacement removal resize and stop clear stale regions", "[tui][image][issue53][spec]") {
+TEST_CASE("Image replacement removal resize and stop clear stale regions", "[tui][image][issue53][spec][issue994]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::VirtualTerminal terminal({
         .columns = 8,
         .rows = 4,
@@ -411,7 +514,8 @@ TEST_CASE("Image replacement removal resize and stop clear stale regions", "[tui
     CHECK(terminal.images().empty());
 }
 
-TEST_CASE("Kitty uses PNG only while iTerm2 accepts validated named formats", "[tui][image][issue53][spec]") {
+TEST_CASE("Kitty uses PNG only while iTerm2 accepts validated named formats", "[tui][image][issue53][spec][issue994]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     const auto jpeg = base64_encode(jpeg_header(20, 20));
     cch::tui::VirtualTerminal kitty({
         .columns = 20,
@@ -429,6 +533,7 @@ TEST_CASE("Kitty uses PNG only while iTerm2 accepts validated named formats", "[
     CHECK(kitty.images().empty());
     CHECK(kitty.screen()[0].find("Image") != std::string::npos);
 
+    cch::tui::set_image_capabilities({.images = cch::tui::InlineImageProtocol::ITerm2});
     struct ITermFixture {
         std::string mime_type;
         std::string encoded_data;
@@ -455,6 +560,7 @@ TEST_CASE("Kitty uses PNG only while iTerm2 accepts validated named formats", "[
             fixture.mime_type,
             std::nullopt,
             {.max_width = 2, .max_height = 2}))));
+        cch::tui::set_image_capabilities({.images = cch::tui::InlineImageProtocol::ITerm2});
         REQUIRE(iterm_tui.start());
         REQUIRE(iterm_tui.render());
         REQUIRE(iterm.images().size() == 1);
@@ -462,8 +568,9 @@ TEST_CASE("Kitty uses PNG only while iTerm2 accepts validated named formats", "[
     }
 }
 
-TEST_CASE(
-        "Overlay image materialization respects the overlay width allocation", "[tui][image][overlay][issue53][spec]") {
+TEST_CASE("Overlay image materialization respects the overlay width allocation",
+        "[tui][image][overlay][issue53][spec][issue994]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::VirtualTerminal terminal({
         .columns = 30,
         .rows = 3,
@@ -488,7 +595,9 @@ TEST_CASE(
     CHECK(terminal.images()[0].region.columns <= 10);
 }
 
-TEST_CASE("Narrow overlays preserve lower images outside their allocation", "[tui][image][overlay][issue53][spec]") {
+TEST_CASE("Narrow overlays preserve lower images outside their allocation",
+        "[tui][image][overlay][issue53][spec][issue994]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::VirtualTerminal terminal({
         .columns = 30,
         .rows = 2,
@@ -520,7 +629,8 @@ TEST_CASE("Narrow overlays preserve lower images outside their allocation", "[tu
     CHECK(terminal.images()[0].filename == std::optional<std::string>{"lower.png"});
 }
 
-TEST_CASE("Container and Box translate nested image regions", "[tui][image][issue53][spec]") {
+TEST_CASE("Container and Box translate nested image regions", "[tui][image][issue53][spec][issue994]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::VirtualTerminal terminal({
         .columns = 8,
         .rows = 5,
@@ -546,7 +656,8 @@ TEST_CASE("Container and Box translate nested image regions", "[tui][image][issu
     CHECK(terminal.images()[0].region.row == 1);
 }
 
-TEST_CASE("Replacing one image preserves an unaffected image handle", "[tui][image][issue53][spec]") {
+TEST_CASE("Replacing one image preserves an unaffected image handle", "[tui][image][issue53][spec][issue994]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::VirtualTerminal terminal({
         .columns = 8,
         .rows = 3,
@@ -589,7 +700,9 @@ TEST_CASE("Replacing one image preserves an unaffected image handle", "[tui][ima
     CHECK(second->handle == second_handle);
 }
 
-TEST_CASE("VirtualTerminal enforces targeted image region ownership", "[tui][image][terminal][issue53][spec]") {
+TEST_CASE(
+        "VirtualTerminal enforces targeted image region ownership", "[tui][image][terminal][issue53][issue994][spec]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::VirtualTerminal terminal({
         .columns = 4,
         .rows = 2,
@@ -624,7 +737,9 @@ TEST_CASE("VirtualTerminal enforces targeted image region ownership", "[tui][ima
     CHECK(terminal.images().empty());
 }
 
-TEST_CASE("Hiding and restoring an image overlay reconciles owned regions", "[tui][image][overlay][issue53][spec]") {
+TEST_CASE("Hiding and restoring an image overlay reconciles owned regions",
+        "[tui][image][overlay][issue53][spec][issue994]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::VirtualTerminal terminal({
         .columns = 8,
         .rows = 4,
@@ -659,8 +774,9 @@ TEST_CASE("Hiding and restoring an image overlay reconciles owned regions", "[tu
     CHECK(terminal.images()[0].filename == std::optional<std::string>{"overlay.png"});
 }
 
-TEST_CASE(
-        "Clipped overlay images show fallback inside the visible allocation", "[tui][image][overlay][issue53][spec]") {
+TEST_CASE("Clipped overlay images show fallback inside the visible allocation",
+        "[tui][image][overlay][issue53][spec][issue994]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::VirtualTerminal terminal({
         .columns = 30,
         .rows = 3,
@@ -688,7 +804,8 @@ TEST_CASE(
     CHECK(terminal.screen()[2].find("Image") != std::string::npos);
 }
 
-TEST_CASE("Private protocol encoders expose meaningful bounded parameters", "[tui][image][protocol][issue53][spec]") {
+TEST_CASE("Private protocol encoders expose meaningful bounded parameters",
+        "[tui][image][protocol][issue53][issue994][spec]") {
     const cch::tui::TerminalImage image{
         .encoded_data = "QUFBQQ==",
         .mime_type = "image/png",

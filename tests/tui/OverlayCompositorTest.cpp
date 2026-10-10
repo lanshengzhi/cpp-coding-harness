@@ -257,7 +257,7 @@ TEST_CASE("OverlayCompositor clips base images intersecting overlaid regions", "
     CHECK(output.images[0].resource_id == 2);
 }
 
-TEST_CASE("OverlayCompositor picks the nearest cell aspect for Kitty images", "[tui][overlay][spec]") {
+TEST_CASE("OverlayCompositor picks the nearest cell aspect for Kitty images", "[tui][overlay][spec][issue994]") {
     const auto materialize = [](tui::InlineImageProtocol protocol) {
         auto capabilities = kitty_capabilities();
         capabilities.inline_images = protocol;

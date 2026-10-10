@@ -2,6 +2,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Style.hpp>
+#include <cch/tui/TerminalImage.hpp>
 
 #include <cch/support/Error.hpp>
 
@@ -25,6 +26,7 @@ struct ImageCellConstraints {
 
 struct ImageOptions {
     ImageCellConstraints constraints{};
+    std::optional<ImagePixelSize> dimensions{std::nullopt};
     TextStyleHook fallback_style{};
 };
 

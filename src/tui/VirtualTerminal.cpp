@@ -333,7 +333,7 @@ support::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, Termi
     // Protocol-aware recording of pi's startup cell-size query (tui.ts
     // queryCellSize): emitted only when inline images are supported.
     if (impl_->capabilities.inline_images != InlineImageProtocol::None) {
-        impl_->output.push_back(std::string(detail::kCellSizeQuery));
+        impl_->output.push_back(std::string(kCellSizeQuery));
     }
     return {};
 }

@@ -1290,7 +1290,7 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
         // Query cell size in pixels (CSI 16 t) exactly as pi's TUI does at
         // startup when images are supported; the response updates
         // capabilities().cell_pixels and triggers a re-render.
-        auto cell_size_query = attempt_write_all(impl_->options.output_fd, detail::kCellSizeQuery);
+        auto cell_size_query = attempt_write_all(impl_->options.output_fd, kCellSizeQuery);
         if (!cell_size_query.result) {
             return fail_startup(cell_size_query.result.error());
         }

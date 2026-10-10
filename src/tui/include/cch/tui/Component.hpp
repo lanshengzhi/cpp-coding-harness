@@ -29,6 +29,7 @@ struct InlineImageRenderRegion {
     std::optional<std::size_t> max_height{std::nullopt};
     std::string fallback_text{};
     CellRegion region{};
+    bool rows_reserved_in_lines{false};
 };
 
 /// One passive Component frame: validated text backing plus relative image sidecars.

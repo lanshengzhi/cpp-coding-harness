@@ -22,6 +22,8 @@
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "support/ImageCapabilitiesGuard.hpp"
+#include "support/ImageEnvironmentGuard.hpp"
 #include "support/Json.hpp"
 #include "support/PiTuiEvidence.hpp"
 
@@ -441,6 +443,8 @@ public:
         return outcome;
     }
     if (name == "scrollback-image-follows-content") {
+        tests::ImageEnvironmentGuard environment;
+        tests::ImageCapabilitiesGuard image_capabilities({.images = tui::InlineImageProtocol::Kitty});
         tui::VirtualTerminal terminal({
             .columns = columns,
             .rows = rows,
@@ -492,7 +496,7 @@ public:
 } // namespace
 
 TEST_CASE("VirtualTerminal screen-state goldens match the committed snapshots",
-        "[tui][differential][issue386][compat-pi][historical-pi]") {
+        "[tui][differential][issue386][compat-pi][historical-pi][issue994]") {
     const auto fixture = read_historical_screen_state();
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
