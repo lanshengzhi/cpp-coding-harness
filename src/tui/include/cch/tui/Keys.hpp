@@ -33,8 +33,6 @@ struct KeyEvent {
     bool operator==(const KeyEvent&) const = default;
 };
 
-inline constexpr std::size_t kMaxPasteBytes = 1024 * 1024;
-
 struct PasteEvent {
     std::string text{};
     std::size_t original_bytes{0};

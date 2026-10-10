@@ -1,3 +1,4 @@
+#include <cch/tui/Editor.hpp>
 #include <cch/tui/Keys.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Tui.hpp>
@@ -9,6 +10,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -260,6 +262,26 @@ public:
 
     std::size_t line_count{5};
 };
+
+constexpr std::string_view kIssue954PasteSegment = "\xce\xb1\tprotocol \x1b[?997;1n \x1b[A\r\n";
+
+[[nodiscard]] std::string issue954_large_paste_body() {
+    std::string body;
+    body.reserve(1024 * 1024 + kIssue954PasteSegment.size() * 100);
+    while (body.size() <= 1024 * 1024)
+        body += kIssue954PasteSegment;
+    body += "paste-suffix-954";
+    return body;
+}
+
+[[nodiscard]] std::uint64_t issue954_digest(std::string_view text) {
+    std::uint64_t hash = 14695981039346656037ULL;
+    for (const unsigned char byte : text) {
+        hash ^= byte;
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
 
 class FocusableInputComponent final
     : public cch::tui::Component,
@@ -719,29 +741,72 @@ TEST_CASE(
     CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[2]).key == "b");
 }
 
-TEST_CASE("Tui bounds large paste payloads and preserves deterministic metadata", "[tui][input][issue47][spec]") {
+TEST_CASE("Tui preserves and submits a complete paste larger than one MiB", "[tui][input][issue954][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
-    auto component = std::make_unique<FocusableInputComponent>();
-    auto* component_pointer = component.get();
-    REQUIRE(tui.add_child(std::move(component)));
+    std::vector<std::string> submitted;
+    auto editor = std::make_unique<cch::tui::Editor>(cch::tui::EditorOptions{},
+            cch::tui::EditorChangeSink{},
+            [&submitted](std::string text) -> cch::support::ExpectedVoid {
+                submitted.push_back(std::move(text));
+                return {};
+            });
+    auto* editor_pointer = editor.get();
+    REQUIRE(tui.add_child(std::move(editor)));
     REQUIRE(tui.start());
-    REQUIRE(tui.set_focus(component_pointer));
+    REQUIRE(tui.set_focus(editor_pointer));
 
-    std::string content(cch::tui::kMaxPasteBytes + 5, 'x');
-    content[10] = '\n';
-    REQUIRE(terminal.inject_input("\x1b[200~" + content + "\x1b[201~q"));
+    const auto raw = issue954_large_paste_body();
+    const auto normalized = cch::tui::normalize_pasted_text(raw, {.multiline = true});
+    REQUIRE(raw.size() > 1024 * 1024);
+    REQUIRE(terminal.inject_input("\x1b[200~"));
+    for (std::size_t offset = 0; offset < raw.size(); offset += 4093) {
+        REQUIRE(terminal.inject_input(raw.substr(offset, 4093)));
+    }
+    REQUIRE(terminal.inject_input("\x1b[201~"));
+    REQUIRE(terminal.inject_input("q"));
 
-    REQUIRE(component_pointer->received_input.size() == 2);
-    const auto& paste = std::get<cch::tui::PasteEvent>(component_pointer->received_input[0]);
-    CHECK(paste.text.size() == cch::tui::kMaxPasteBytes);
-    CHECK(paste.original_bytes == content.size());
-    CHECK(paste.lines == 2);
-    CHECK(paste.truncated);
-    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[1]).key == "q");
+    const auto expanded = editor_pointer->expanded_text();
+    CHECK(expanded == normalized + "q");
+    CHECK(expanded.substr(0, 48) == (normalized + "q").substr(0, 48));
+    CHECK(expanded.substr(expanded.size() / 2, 48) == (normalized + "q").substr((normalized.size() + 1) / 2, 48));
+    CHECK(expanded.substr(expanded.size() - 48) == (normalized + "q").substr(normalized.size() + 1 - 48));
+    CHECK(issue954_digest(expanded) == issue954_digest(normalized + "q"));
+    CHECK(submitted.empty());
+
+    REQUIRE(terminal.inject_input("\r"));
+    REQUIRE(submitted.size() == 1);
+    CHECK(submitted.front() == normalized + "q");
+    CHECK(issue954_digest(submitted.front()) == issue954_digest(normalized + "q"));
+    REQUIRE(tui.stop());
 }
 
-TEST_CASE("Tui abandons incomplete paste safely when the terminal flushes input", "[tui][input][issue47][spec]") {
+TEST_CASE("Tui keeps a bracketed paste active across fragment flushes", "[tui][input][issue954][spec]") {
+    cch::tui::VirtualTerminal terminal;
+    cch::tui::Tui tui(terminal);
+    auto editor = std::make_unique<cch::tui::Editor>();
+    auto* editor_pointer = editor.get();
+    REQUIRE(tui.add_child(std::move(editor)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(editor_pointer));
+
+    const auto raw = issue954_large_paste_body();
+    const auto normalized = cch::tui::normalize_pasted_text(raw, {.multiline = true});
+    REQUIRE(terminal.inject_input("\x1b[200~"));
+    REQUIRE(terminal.inject_input(raw.substr(0, 4093)));
+    REQUIRE(terminal.flush_input());
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    REQUIRE(terminal.inject_input(raw.substr(4093)));
+    REQUIRE(terminal.inject_input("\x1b[201~"));
+    REQUIRE(terminal.inject_input("q"));
+
+    const auto expanded = editor_pointer->expanded_text();
+    CHECK(expanded == normalized + "q");
+    CHECK(issue954_digest(expanded) == issue954_digest(normalized + "q"));
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("Tui cancels an incomplete paste on stop without submitting it", "[tui][input][issue954][spec]") {
     cch::tui::VirtualTerminal terminal;
     cch::tui::Tui tui(terminal);
     auto component = std::make_unique<FocusableInputComponent>();
@@ -751,12 +816,17 @@ TEST_CASE("Tui abandons incomplete paste safely when the terminal flushes input"
     REQUIRE(tui.set_focus(component_pointer));
 
     REQUIRE(terminal.inject_input("\x1b[200~unfinished\n\x1b[A"));
-    CHECK(component_pointer->received_input.empty());
     REQUIRE(terminal.flush_input());
-    REQUIRE(terminal.inject_input("q"));
+    CHECK(component_pointer->received_input.empty());
+    REQUIRE(tui.stop());
+    CHECK(component_pointer->received_input.empty());
 
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+    REQUIRE(terminal.inject_input("q"));
     REQUIRE(component_pointer->received_input.size() == 1);
     CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[0]).key == "q");
+    REQUIRE(tui.stop());
 }
 
 TEST_CASE("Tui discards overlong terminal control payloads through their terminators", "[tui][input][issue47][spec]") {

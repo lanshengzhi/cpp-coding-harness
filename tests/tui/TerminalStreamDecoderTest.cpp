@@ -392,6 +392,40 @@ TEST_CASE("stream decoder protects response-shaped bytes inside bracketed paste"
     CHECK(paste->text == "line \x1b[?997;1n text");
 }
 
+TEST_CASE("stream decoder preserves a large active paste across deterministic flushes",
+        "[tui][decoder][issue954][spec]") {
+    tui::detail::TerminalStreamDecoder decoder;
+    constexpr std::string_view segment = "\xce\xb1\tprotocol \x1b[?997;1n \x1b[A\r\n";
+    std::string body;
+    body.reserve(1024 * 1024 + segment.size() * 100);
+    while (body.size() <= 1024 * 1024)
+        body += segment;
+    body += "paste-suffix-954";
+
+    std::vector<tui::PasteEvent> pastes;
+    const auto collect = [&pastes](const tui::detail::StreamDecodeResult& result) {
+        for (const auto& event : result.events) {
+            if (const auto* paste = std::get_if<tui::PasteEvent>(&event)) pastes.push_back(*paste);
+        }
+    };
+    collect(decoder.feed("\x1b[200~"));
+    for (std::size_t offset = 0; offset < body.size(); offset += 4093) {
+        collect(decoder.feed(std::string_view(body).substr(offset, 4093)));
+        if (offset == 0 || offset == body.size() / 2) {
+            const auto flushed = decoder.flush();
+            CHECK(flushed.events.empty());
+            CHECK(flushed.forwarded_input.empty());
+        }
+        CHECK(pastes.empty());
+    }
+
+    collect(decoder.feed("\x1b[201~"));
+    REQUIRE(pastes.size() == 1);
+    CHECK(pastes.front().text == body);
+    CHECK(pastes.front().original_bytes == body.size());
+    CHECK_FALSE(pastes.front().truncated);
+}
+
 TEST_CASE("stream decoder reset clears a buffered fragment", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 

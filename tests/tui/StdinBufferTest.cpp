@@ -39,6 +39,17 @@ IoContextRunner& issue949_io() {
     return runner;
 }
 
+constexpr std::string_view kIssue954PasteSegment = "\xce\xb1\tprotocol \x1b[?997;1n \x1b[A\r\n";
+
+[[nodiscard]] std::string issue954_large_paste_body() {
+    std::string body;
+    body.reserve(1024 * 1024 + kIssue954PasteSegment.size() * 100);
+    while (body.size() <= 1024 * 1024)
+        body += kIssue954PasteSegment;
+    body += "paste-suffix-954";
+    return body;
+}
+
 } // namespace
 
 TEST_CASE("stream decoder keeps ESC[M !! as one legacy mouse frame with no printable leak",
@@ -64,6 +75,28 @@ TEST_CASE("stream decoder keeps ESC[M !! as one legacy mouse frame with no print
     // Current incomplete CSI-M framing leaks space/! into forwarded_input as separate chars.
     CHECK(forwarded.find(' ') == std::string::npos);
     CHECK(forwarded.find('!') == std::string::npos);
+}
+
+TEST_CASE(
+        "StdinBuffer preserves a large active paste through fragment flushes", "[tui][stdin-buffer][issue954][spec]") {
+    tui::StdinBuffer buffer;
+    std::vector<std::string> pastes;
+    std::vector<std::string> data;
+    buffer.set_paste_handler([&pastes](std::string text) { pastes.push_back(std::move(text)); });
+    buffer.set_data_handler([&data](std::string text) { data.push_back(std::move(text)); });
+
+    const auto body = issue954_large_paste_body();
+    buffer.process("\x1b[200~");
+    for (std::size_t offset = 0; offset < body.size(); offset += 4093) {
+        buffer.process(std::string_view(body).substr(offset, 4093));
+        if (offset == 0 || offset == body.size() / 2) CHECK(buffer.flush().empty());
+        CHECK(pastes.empty());
+    }
+
+    buffer.process("\x1b[201~q");
+    REQUIRE(pastes.size() == 1);
+    CHECK(pastes.front() == body);
+    REQUIRE(data == std::vector<std::string>{"q"});
 }
 
 TEST_CASE("StdinBuffer emits one complete ESC[M !! frame across every byte boundary",

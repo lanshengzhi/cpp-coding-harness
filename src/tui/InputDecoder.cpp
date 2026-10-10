@@ -845,7 +845,6 @@ bool TerminalStreamDecoder::discard_escape_byte(char byte) {
 StreamDecodeResult TerminalStreamDecoder::flush() {
     StreamDecodeResult result;
     if (paste_mode_) {
-        reset();
         return result;
     }
     if (!pending_.empty()) {
@@ -997,10 +996,10 @@ void TerminalStreamDecoder::consume_paste_byte(char byte, StreamDecodeResult& re
     if (paste_end_candidate_ != kPasteEnd) return;
 
     result.events.emplace_back(PasteEvent{
-        .text = std::move(paste_text_),
-        .original_bytes = paste_original_bytes_,
-        .lines = paste_lines_,
-        .truncated = paste_original_bytes_ > kMaxPasteBytes,
+            .text = std::move(paste_text_),
+            .original_bytes = paste_original_bytes_,
+            .lines = paste_lines_,
+            .truncated = false,
     });
     paste_mode_ = false;
     paste_text_.clear();
@@ -1012,7 +1011,7 @@ void TerminalStreamDecoder::consume_paste_byte(char byte, StreamDecodeResult& re
 void TerminalStreamDecoder::commit_paste_byte(char byte) {
     if (paste_original_bytes_ != std::numeric_limits<std::size_t>::max()) ++paste_original_bytes_;
     if (byte == '\n' && paste_lines_ != std::numeric_limits<std::size_t>::max()) ++paste_lines_;
-    if (paste_text_.size() < kMaxPasteBytes) paste_text_.push_back(byte);
+    paste_text_.push_back(byte);
 }
 
 } // namespace cch::tui::detail

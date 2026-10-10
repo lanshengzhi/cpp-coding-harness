@@ -1,5 +1,7 @@
+#include <cch/tui/Editor.hpp>
 #include <cch/tui/ProcessTerminal.hpp>
 #include <cch/tui/Tui.hpp>
+#include <cch/tui/Utils.hpp>
 
 #include "support/ImageEnvironmentGuard.hpp"
 #include "support/UniqueFd.hpp"
@@ -19,7 +21,9 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <format>
@@ -145,6 +149,37 @@ IoContextRunner& test_io() {
     return runner;
 }
 
+constexpr std::string_view kIssue954PasteSegment = "\xce\xb1\tprotocol \x1b[?997;1n \x1b[A\r\n";
+
+[[nodiscard]] std::string issue954_large_paste_body() {
+    std::string body;
+    body.reserve(1024 * 1024 + kIssue954PasteSegment.size() * 100);
+    while (body.size() <= 1024 * 1024)
+        body += kIssue954PasteSegment;
+    body += "paste-suffix-954";
+    return body;
+}
+
+[[nodiscard]] std::uint64_t issue954_digest(std::string_view text) {
+    std::uint64_t hash = 14695981039346656037ULL;
+    for (const unsigned char byte : text) {
+        hash ^= byte;
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+[[nodiscard]] bool write_all(int descriptor, std::string_view bytes) {
+    std::size_t offset = 0;
+    while (offset < bytes.size()) {
+        const auto written = ::write(descriptor, bytes.data() + offset, bytes.size() - offset);
+        if (written < 0 && errno == EINTR) continue;
+        if (written <= 0) return false;
+        offset += static_cast<std::size_t>(written);
+    }
+    return true;
+}
+
 /// Releases an input read the test parked by clearing `O_NONBLOCK` on the
 /// shared description: restores the flag and feeds one byte, so a failing
 /// assertion above cannot leave the terminal's mutex held by that read when
@@ -251,6 +286,174 @@ TEST_CASE("Process Terminal rejects non-TTY descriptors before changing modes", 
     CHECK(result.error().message == "Process Terminal requires TTY input and output descriptors");
     CHECK(result.error().detail.size() < 256);
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
+}
+
+TEST_CASE(
+        "Process Terminal delivers a complete large paste across timeout flushes", "[tui][terminal][issue954][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tests::ImageEnvironmentGuard environment;
+
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    cch::tui::Tui tui(terminal);
+    std::mutex submitted_mutex;
+    std::vector<std::string> submitted;
+    auto editor = std::make_unique<cch::tui::Editor>(
+            cch::tui::EditorOptions{},
+            [](std::string) -> cch::support::ExpectedVoid {
+                std::this_thread::sleep_for(std::chrono::milliseconds(80));
+                return {};
+            },
+            [&submitted, &submitted_mutex](std::string text) -> cch::support::ExpectedVoid {
+                std::lock_guard lock(submitted_mutex);
+                submitted.push_back(std::move(text));
+                return {};
+            });
+    auto* editor_pointer = editor.get();
+    REQUIRE(tui.add_child(std::move(editor)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(editor_pointer));
+    (void)cch::tests::read_available(pty->master.get());
+
+    const auto raw = issue954_large_paste_body();
+    const auto normalized = cch::tui::normalize_pasted_text(raw, {.multiline = true});
+    REQUIRE(raw.size() > 1024 * 1024);
+    REQUIRE(write_all(pty->master.get(), "\x1b[200~"));
+    REQUIRE(write_all(pty->master.get(), std::string_view(raw).substr(0, 4093)));
+    REQUIRE(cch::tests::wait_until([&] { return terminal.modes().started; }));
+    std::this_thread::sleep_for(std::chrono::milliseconds(80));
+    for (std::size_t offset = 4093; offset < raw.size(); offset += 4093) {
+        REQUIRE(write_all(pty->master.get(), std::string_view(raw).substr(offset, 4093)));
+    }
+    REQUIRE(write_all(pty->master.get(), "\x1b[201~q\r"));
+
+    REQUIRE(cch::tests::wait_until(
+            [&] {
+                std::lock_guard lock(submitted_mutex);
+                return submitted.size() == 1;
+            },
+            std::chrono::seconds(10)));
+    std::string submitted_text;
+    {
+        std::lock_guard lock(submitted_mutex);
+        submitted_text = submitted.front();
+    }
+    CHECK(submitted_text == normalized + "q");
+    CHECK(submitted_text.substr(0, 48) == (normalized + "q").substr(0, 48));
+    CHECK(submitted_text.substr(submitted_text.size() / 2, 48) ==
+            (normalized + "q").substr((normalized.size() + 1) / 2, 48));
+    CHECK(submitted_text.substr(submitted_text.size() - 48) == (normalized + "q").substr(normalized.size() + 1 - 48));
+    CHECK(issue954_digest(submitted_text) == issue954_digest(normalized + "q"));
+    CHECK(editor_pointer->expanded_text().empty());
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("Process Terminal reports explicit Busy for a slow complete paste delivery",
+        "[tui][terminal][issue954][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tests::ImageEnvironmentGuard environment;
+
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    std::mutex input_mutex;
+    std::string delivered;
+    bool rejected = false;
+    REQUIRE(terminal.start(
+            [&](std::string input) -> cch::support::ExpectedVoid {
+                std::this_thread::sleep_for(std::chrono::milliseconds(80));
+                std::lock_guard lock(input_mutex);
+                delivered = std::move(input);
+                rejected = true;
+                return std::unexpected(cch::support::make_error(
+                        cch::support::ErrorCode::Busy, "large paste was refused by the input sink"));
+            },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    const auto body = issue954_large_paste_body();
+    REQUIRE(write_all(pty->master.get(), "\x1b[200~"));
+    REQUIRE(write_all(pty->master.get(), body));
+    REQUIRE(write_all(pty->master.get(), "\x1b[201~"));
+    REQUIRE(cch::tests::wait_until(
+            [&] {
+                std::lock_guard lock(input_mutex);
+                return rejected;
+            },
+            std::chrono::seconds(10)));
+
+    std::string complete_delivery;
+    {
+        std::lock_guard lock(input_mutex);
+        complete_delivery = delivered;
+    }
+    CHECK(complete_delivery.starts_with("\x1b[200~"));
+    CHECK(complete_delivery.ends_with("\x1b[201~"));
+    CHECK(complete_delivery.size() ==
+            body.size() + std::string_view{"\x1b[200~"}.size() + std::string_view{"\x1b[201~"}.size());
+    CHECK(complete_delivery.substr(6, body.size()) == body);
+    CHECK(complete_delivery.substr(6 + body.size() / 2, 48) == body.substr(body.size() / 2, 48));
+    CHECK(complete_delivery.substr(6 + body.size() - 48, 48) == body.substr(body.size() - 48));
+
+    const auto stopped = terminal.stop();
+    REQUIRE_FALSE(stopped);
+    CHECK(stopped.error().code == cch::support::ErrorCode::Busy);
+}
+
+TEST_CASE(
+        "Process Terminal cancellation during paste never submits a partial body", "[tui][terminal][issue954][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tests::ImageEnvironmentGuard environment;
+
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    cch::tui::Tui tui(terminal);
+    std::mutex submitted_mutex;
+    std::vector<std::string> submitted;
+    auto editor = std::make_unique<cch::tui::Editor>(cch::tui::EditorOptions{},
+            cch::tui::EditorChangeSink{},
+            [&submitted, &submitted_mutex](std::string text) -> cch::support::ExpectedVoid {
+                std::lock_guard lock(submitted_mutex);
+                submitted.push_back(std::move(text));
+                return {};
+            });
+    auto* editor_pointer = editor.get();
+    REQUIRE(tui.add_child(std::move(editor)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(editor_pointer));
+    (void)cch::tests::read_available(pty->master.get());
+
+    REQUIRE(write_all(pty->master.get(), "\x1b[200~"));
+    const std::string incomplete_body(128 * 1024, 'p');
+    REQUIRE(write_all(pty->master.get(), incomplete_body));
+    REQUIRE(cch::tests::wait_until(
+            [&] {
+                int queued_bytes = -1;
+                return ::ioctl(pty->slave.get(), FIONREAD, &queued_bytes) == 0 && queued_bytes == 0;
+            },
+            std::chrono::seconds(2)));
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    REQUIRE(tui.stop());
+    {
+        std::lock_guard lock(submitted_mutex);
+        CHECK(submitted.empty());
+    }
+    CHECK(editor_pointer->expanded_text().empty());
+
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(editor_pointer));
+    REQUIRE(write_all(pty->master.get(), "q\r"));
+    REQUIRE(cch::tests::wait_until([&] {
+        std::lock_guard lock(submitted_mutex);
+        return submitted.size() == 1;
+    }));
+    {
+        std::lock_guard lock(submitted_mutex);
+        CHECK(submitted.front() == "q");
+    }
+    REQUIRE(tui.stop());
 }
 
 TEST_CASE("Process Terminal restores raw paste cursor and pending render modes", "[tui][terminal][issue54][spec]") {
