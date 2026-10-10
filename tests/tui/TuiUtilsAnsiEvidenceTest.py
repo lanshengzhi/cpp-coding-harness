@@ -44,7 +44,18 @@ class TuiUtilsAnsiEvidenceTest(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("verified 6 TUI artifacts", result.stdout)
+        # The family set grows with every ticket that appends evidence, so this
+        # asserts the verified bundle reports a family count and still serves the
+        # utils-ansi artifact rather than pinning one number.
+        self.assertRegex(result.stdout, r"^verified [1-9][0-9]* TUI artifacts\n$")
+        served = subprocess.run(
+            [sys.executable, str(RUNNER), "read", "--baseline", "pi-v1.0.4", "--artifact", "utils-ansi.json"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(served.returncode, 0, served.stderr)
+        self.assertEqual(served.stdout, BUNDLE.read_text())
 
     def test_wrong_baseline_is_rejected(self) -> None:
         result = subprocess.run(

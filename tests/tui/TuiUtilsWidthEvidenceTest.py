@@ -30,7 +30,6 @@ class TuiUtilsWidthEvidenceTest(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("verified 6 TUI artifacts", result.stdout)
         # The family set grows with every ticket that appends evidence, so this
         # asserts the verified bundle reports a family count and still serves the
         # utils-width artifact rather than pinning one number.

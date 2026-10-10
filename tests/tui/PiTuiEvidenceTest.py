@@ -32,7 +32,6 @@ def fixture(root):
         "artifacts": [],
     }
     for family in ("input", "component", "screen-state", "capability-ledger", "utils-width", "utils-ansi", "fuzzy", "keys-kitty-text", "latex"):
-    for family in ("input", "component", "screen-state", "capability-ledger", "utils-width", "latex"):
         artifact = {
             "baseline": "pi-v1.0.4", "revision": REVISION, "capturedAt": captured,
             "environment": environment, "sourceEndpoints": ["packages/tui/src/keys.ts:parseKey"],
