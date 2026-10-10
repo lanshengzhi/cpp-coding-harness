@@ -142,33 +142,113 @@ TEST_CASE(
     CHECK(frame->lines.front() == *rendered + std::string(kWidth - tui::visible_width(*rendered), ' '));
 }
 
-TEST_CASE("render_latex reports the frozen failure value for the deferred display layout",
-        "[tui][latex][issue973][compat-pi]") {
-    const auto bundle = tests::read_pi_tui_evidence("latex.json");
-    REQUIRE(bundle);
-    const auto* scenario = find_scenario(*bundle, "display-option");
-    REQUIRE(scenario != nullptr);
-    const auto& rows = scenario->at("expected").at("display").get_array();
-    REQUIRE(rows.size() >= 3);
-    for (const auto& row : rows) {
-        CAPTURE(row.at("name").get_string());
-        // The frozen pi display output is multi-line; #974 owns that layout.
-        // This slice must report the failure value rather than the inline one.
-        CHECK_FALSE(tui::render_latex(row.at("source").get_string(), {.display = true}).has_value());
+TEST_CASE("render_latex matches frozen display rows and baseline alignment", "[tui][latex][issue974][compat-pi]") {
+    const auto observations = named_observations("display-option", "display");
+    REQUIRE(observations);
+    REQUIRE(observations->size() == 3);
+    for (const auto& [name, observation] : *observations) {
+        CAPTURE(name);
+        REQUIRE(observation.output);
+        const auto rendered = tui::render_latex(observation.source, {.display = true});
+        REQUIRE(rendered);
+        CHECK(*rendered == *observation.output);
     }
-    const tui::LatexOptions display{.display = true};
-    CHECK_FALSE(tui::render_latex("\\frac{1}{2}", display).has_value());
-    CHECK(tui::render_latex("\\frac{1}{2}").has_value());
+
+    const auto fraction = tui::render_latex("\\frac{1}{2}", {.display = true});
+    REQUIRE(fraction);
+    CHECK(*fraction == "1\n─\n2");
+    CHECK(tui::visible_width("1") == 1);
+    CHECK(tui::visible_width("─") == 1);
+    CHECK(tui::visible_width("2") == 1);
+    CHECK(tui::render_latex("\\frac{1}{2}") == "1/2");
+
+    const auto nested = tui::render_latex("\\frac{\\frac{1}{2}}{3}", {.display = true});
+    REQUIRE(nested);
+    CHECK(*nested == "1/2\n───\n 3");
+    CHECK(tui::visible_width("1/2") == 3);
+    CHECK(tui::visible_width("───") == 3);
+    CHECK(tui::visible_width(" 3") == 2);
+
+    const auto limits = tui::render_latex("\\sum_{i=1}^{n}", {.display = true});
+    REQUIRE(limits);
+    CHECK(*limits == " n\n ∑\ni=1");
+    CHECK(tui::render_latex("\\sum_{i=1}^{n}") == "∑ᵢ₌₁ⁿ");
 }
 
-TEST_CASE("render_latex leaves the frozen pi display observation replayable for #974",
-        "[tui][latex][issue973][compat-pi]") {
-    const auto bundle = tests::read_pi_tui_evidence("latex.json");
-    REQUIRE(bundle);
-    const auto* scenario = find_scenario(*bundle, "display-option");
-    REQUIRE(scenario != nullptr);
-    const auto& fraction = scenario->at("expected").at("display").get_array().front();
-    REQUIRE(fraction.at("output").get_string() == "1\n─\n2");
-    CHECK(tui::visible_width(fraction.at("output").get_string()) == 3);
-    CHECK(tui::render_latex(fraction.at("source").get_string(), {.display = true}) == std::nullopt);
+// These additional layout rows were independently evaluated against pi's latex.ts at
+// 7c10bd4337495ee613f2224843ecdf349b80d1df; complete rows distinguish baseline and padding behavior.
+TEST_CASE("render_latex preserves nested display fraction root and script rows", "[tui][latex][issue974][compat-pi]") {
+    const auto root_fraction = tui::render_latex("\\frac{\\sqrt{x^2+1}}{\\sqrt{y}}", {.display = true});
+    REQUIRE(root_fraction);
+    CHECK(*root_fraction == "√(x²+1)\n───────\n  √y");
+    CHECK(tui::visible_width("√(x²+1)") == 7);
+    CHECK(tui::visible_width("───────") == 7);
+    CHECK(tui::visible_width("  √y") == 4);
+
+    const auto scripted_fraction = tui::render_latex("\\frac{x^{AB}}{\\sqrt{y}}", {.display = true});
+    REQUIRE(scripted_fraction);
+    CHECK(*scripted_fraction == " AB\n x\n───\n√y");
+    CHECK(tui::visible_width(" AB") == 3);
+    CHECK(tui::visible_width(" x") == 2);
+    CHECK(tui::visible_width("───") == 3);
+    CHECK(tui::visible_width("√y") == 2);
+
+    const auto aligned_text = tui::render_latex("x + \\frac{1}{2}", {.display = true});
+    REQUIRE(aligned_text);
+    CHECK(*aligned_text == "    1\nx + ─\n    2");
+    CHECK(tui::visible_width("    1") == 5);
+    CHECK(tui::visible_width("x + ─") == 5);
+    CHECK(tui::visible_width("    2") == 5);
+
+    const auto aligned_fractions = tui::render_latex("\\frac{1}{2} + \\frac{3}{4}", {.display = true});
+    REQUIRE(aligned_fractions);
+    CHECK(*aligned_fractions == "1   3\n─ + ─\n2   4");
+    CHECK(tui::visible_width("1   3") == 5);
+    CHECK(tui::visible_width("─ + ─") == 5);
+    CHECK(tui::visible_width("2   4") == 5);
+}
+
+// Additional option observations were independently evaluated against pi's latex.ts at
+// 7c10bd4337495ee613f2224843ecdf349b80d1df.
+TEST_CASE("render_latex follows frozen display fraction and operator options", "[tui][latex][issue974][compat-pi]") {
+    CHECK(tui::render_latex("\\frac{1}{2}", {.display = true}) == "1\n─\n2");
+    CHECK(tui::render_latex("\\dfrac{1}{2}", {.display = true}) == "1\n─\n2");
+    CHECK(tui::render_latex("\\tfrac{1}{2}", {.display = true}) == "1/2");
+
+    CHECK(tui::render_latex("\\sum\\nolimits_{i=1}^{n}", {.display = true}) == "∑ᵢ₌₁ⁿ");
+    const auto sum_limits = tui::render_latex("\\sum\\limits_{i=1}^{n}", {.display = true});
+    REQUIRE(sum_limits);
+    CHECK(*sum_limits == " n\n ∑\ni=1");
+    CHECK(tui::visible_width(" n") == 2);
+    CHECK(tui::visible_width(" ∑") == 2);
+    CHECK(tui::visible_width("i=1") == 3);
+
+    const auto lim_limits = tui::render_latex("\\lim_{n\\to\\infty}", {.display = true});
+    REQUIRE(lim_limits);
+    CHECK(*lim_limits == "lim\nn→∞");
+    CHECK(tui::visible_width("lim") == 3);
+    CHECK(tui::visible_width("n→∞") == 3);
+    CHECK(tui::render_latex("\\lim_{n\\to\\infty}") == "lim[n→∞]");
+
+    const auto named_limits = tui::render_latex("\\operatorname*{argmax}_{x} f(x)", {.display = true});
+    REQUIRE(named_limits);
+    CHECK(*named_limits == "argmax f(x)\n  x");
+    CHECK(tui::visible_width("argmax f(x)") == 11);
+    CHECK(tui::visible_width("  x") == 3);
+}
+
+TEST_CASE("render_latex reports frozen failures for malformed nested display syntax",
+        "[tui][latex][issue974][compat-pi]") {
+    CHECK_FALSE(tui::render_latex("\\frac{\\sqrt{x}}", {.display = true}).has_value());
+    CHECK_FALSE(tui::render_latex("x^{\\frac{1}{2}", {.display = true}).has_value());
+    CHECK_FALSE(tui::render_latex("\\sum_{i=1}}", {.display = true}).has_value());
+
+    const auto inline_formula = tui::render_latex("E = mc^{2}");
+    REQUIRE(inline_formula);
+    CHECK(*inline_formula == "E = mc²");
+    tui::Text text(*inline_formula, 0, 0);
+    const auto frame = text.render(12);
+    REQUIRE(frame);
+    REQUIRE(frame->lines.size() == 1);
+    CHECK(frame->lines.front() == *inline_formula + std::string(12 - tui::visible_width(*inline_formula), ' '));
 }

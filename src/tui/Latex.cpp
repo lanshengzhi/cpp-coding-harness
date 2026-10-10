@@ -1,10 +1,12 @@
 #include <cch/tui/Latex.hpp>
 
+#include <cch/tui/Utils.hpp>
 #include "tui/UnicodeWidth.hpp"
 
 #include <utf8proc.h>
 
 #include <algorithm>
+#include <charconv>
 #include <cstddef>
 #include <optional>
 #include <regex>
@@ -931,11 +933,80 @@ enum class InlineLowerStyle {
     Script,
 };
 
+enum class LayoutNodeKind {
+    Fraction,
+    Operator,
+    Script,
+};
+
+struct LayoutNode {
+    LayoutNodeKind kind{LayoutNodeKind::Fraction};
+    std::string numerator;
+    std::string denominator;
+    std::string operator_name;
+    std::optional<std::string> lower;
+    std::optional<std::string> upper;
+};
+
+struct Layout {
+    std::vector<std::string> lines;
+    std::size_t width{0};
+    std::size_t baseline{0};
+};
+
+constexpr std::string_view kLayoutMarkerStart{"\xf3\xb0\x80\x80"};
+constexpr std::string_view kLayoutMarkerEnd{"\xf3\xb0\x80\x81"};
+
+[[nodiscard]] std::string layout_marker(std::size_t index) {
+    return std::string{kLayoutMarkerStart} + std::to_string(index) + std::string{kLayoutMarkerEnd};
+}
+
+[[nodiscard]] std::string pad_layout_line(std::string_view line, std::size_t width, bool centered = false) {
+    const std::size_t padding = width > visible_width(line) ? width - visible_width(line) : 0;
+    const std::size_t left = centered ? padding / 2 : 0;
+    return std::string(left, ' ') + std::string{line} + std::string(padding - left, ' ');
+}
+
+[[nodiscard]] Layout join_layouts(const std::vector<Layout>& layouts) {
+    if (layouts.empty()) return Layout{.lines = {""}, .width = 0, .baseline = 0};
+
+    std::size_t baseline = 0;
+    std::size_t below = 0;
+    std::size_t total_width = 0;
+    for (const auto& layout : layouts) {
+        baseline = std::max(baseline, layout.baseline);
+        below = std::max(below, layout.lines.size() - layout.baseline - 1);
+        total_width += layout.width;
+    }
+
+    std::vector<std::string> lines;
+    for (std::size_t row = 0; row <= baseline + below; ++row) {
+        std::string line;
+        for (const auto& layout : layouts) {
+            const auto source_row = static_cast<std::ptrdiff_t>(row) - static_cast<std::ptrdiff_t>(baseline) +
+                                    static_cast<std::ptrdiff_t>(layout.baseline);
+            if (source_row >= 0 && static_cast<std::size_t>(source_row) < layout.lines.size()) {
+                line += pad_layout_line(layout.lines[static_cast<std::size_t>(source_row)], layout.width);
+            } else {
+                line += std::string(layout.width, ' ');
+            }
+        }
+        while (!line.empty() && line.back() == ' ')
+            line.pop_back();
+        lines.push_back(std::move(line));
+    }
+    return Layout{.lines = std::move(lines), .width = total_width, .baseline = baseline};
+}
+
+[[nodiscard]] Layout render_layout(std::string_view source, const std::vector<LayoutNode>& nodes);
+
 /// pi's `LatexParser`. Per-instance parse state; the immutable grammar tables
 /// above are the only shared data.
 class LatexParser final {
 public:
-    explicit LatexParser(std::string_view source) : source_(source) {}
+    LatexParser(
+            std::string_view source, bool display, std::vector<LayoutNode>& layout_nodes, bool stack_fractions = true)
+        : source_(source), display_(display), stack_fractions_(stack_fractions), layout_nodes_(layout_nodes) {}
 
     [[nodiscard]] std::optional<std::string> render() {
         std::string rendered = parse_sequence('\0');
@@ -1016,7 +1087,9 @@ private:
         std::optional<std::string> sup;
         std::vector<char> order;
         const auto parse = [&](char marker) {
-            (marker == '_' ? sub : sup) = parse_required_argument();
+            ++script_depth_;
+            (marker == '_' ? sub : sup) = parse_required_argument(false);
+            --script_depth_;
             order.push_back(marker);
         };
         parse(initial_marker);
@@ -1030,6 +1103,29 @@ private:
         }
         const auto sub_unicode = sub ? format_unicode_script(*sub, ScriptKind::Sub) : std::nullopt;
         const auto sup_unicode = sup ? format_unicode_script(*sup, ScriptKind::Sup) : std::nullopt;
+        const auto can_use_layout = [](const std::optional<std::string>& value) {
+            if (!value) return true;
+            const bool contains_layout_marker = value->find(kLayoutMarkerStart) != std::string::npos;
+            const bool has_single_line_marker = std::ranges::any_of(*value, [](char character) {
+                return (character >= 'A' && character <= 'Z') || character == '*';
+            }) || value->find("∗") != std::string::npos;
+            const bool complex_script =
+                    !contains_layout_marker && count_code_points(*value) > 1 && !has_single_line_marker;
+            return value->find('/') == std::string::npos && !complex_script;
+        };
+        const bool needs_layout = display_ && can_use_layout(sub) && can_use_layout(sup) &&
+                                  (script_depth_ > 0 || (sub && !sub_unicode) || (sup && !sup_unicode));
+        if (needs_layout) {
+            LayoutNode node{.kind = LayoutNodeKind::Script,
+                    .numerator = {},
+                    .denominator = {},
+                    .operator_name = {},
+                    .lower = sub ? std::optional{normalize_output(*sub)} : std::nullopt,
+                    .upper = sup ? std::optional{normalize_output(*sup)} : std::nullopt};
+            const std::size_t index = layout_nodes_.size();
+            layout_nodes_.push_back(std::move(node));
+            return layout_marker(index);
+        }
         std::string result;
         for (const char kind : order) {
             if (kind == '_') {
@@ -1084,11 +1180,11 @@ private:
         if (command == "|") return "‖";
         if (command == "not") return parse_negation();
         if (contains(limit_operators(), command)) {
-            return parse_operator(command, InlineLowerStyle::Bracket, true);
+            return parse_operator(command, InlineLowerStyle::Bracket, true, true);
         }
         if (const auto found = symbols().find(command); found != std::end(symbols())) {
             if (contains(display_limit_symbols(), command)) {
-                return parse_operator(std::string{found->second}, InlineLowerStyle::Script, false);
+                return parse_operator(std::string{found->second}, InlineLowerStyle::Script, false, true);
             }
             const bool spaced = command == "cdot" || command == "times" || contains(relation_commands(), command);
             return spaced ? " " + std::string{found->second} + " " : std::string{found->second};
@@ -1102,8 +1198,20 @@ private:
             return {};
         }
         if (command == "frac" || command == "dfrac" || command == "tfrac") {
-            const std::string numerator = parse_required_argument();
-            const std::string denominator = parse_required_argument();
+            const bool should_stack = display_ && stack_fractions_ && command != "tfrac";
+            const std::string numerator = parse_required_argument(!should_stack);
+            const std::string denominator = parse_required_argument(!should_stack);
+            if (should_stack) {
+                LayoutNode node{.kind = LayoutNodeKind::Fraction,
+                        .numerator = normalize_output(numerator),
+                        .denominator = normalize_output(denominator),
+                        .operator_name = {},
+                        .lower = std::nullopt,
+                        .upper = std::nullopt};
+                const std::size_t index = layout_nodes_.size();
+                layout_nodes_.push_back(std::move(node));
+                return layout_marker(index);
+            }
             return format_fraction(numerator, denominator);
         }
         if (command == "sqrt") return parse_sqrt();
@@ -1179,7 +1287,7 @@ private:
         const bool starred = position_ < source_.size() && source_[position_] == '*';
         if (starred) ++position_;
         const std::string operator_name{trim(normalize_output(parse_required_argument()))};
-        return parse_operator(operator_name, InlineLowerStyle::Bracket, true);
+        return parse_operator(operator_name, InlineLowerStyle::Bracket, true, starred);
     }
 
     [[nodiscard]] std::string parse_sqrt() {
@@ -1192,8 +1300,9 @@ private:
         return format_script(trimmed_degree, ScriptKind::Sup) + format_root(value, "√");
     }
 
-    [[nodiscard]] std::string parse_operator(std::string operator_name, InlineLowerStyle lower_style, bool spaced) {
-        consume_limits_modifier();
+    [[nodiscard]] std::string parse_operator(
+            std::string operator_name, InlineLowerStyle lower_style, bool spaced, bool display_limits = false) {
+        const bool use_display_limits = consume_limits_modifier(display_limits);
         std::optional<std::string> lower;
         std::optional<std::string> upper;
         while (true) {
@@ -1203,7 +1312,7 @@ private:
             const char kind = script_position < source_.size() ? source_[script_position] : '\0';
             if (kind != '_' && kind != '^') break;
             position_ = script_position + 1;
-            const std::string rendered = normalize_output(parse_required_argument());
+            const std::string rendered = normalize_output(parse_required_argument(false));
             const std::string value{replace_all(rendered, " ", "")};
             if (kind == '_') {
                 if (lower) supported_ = false;
@@ -1212,6 +1321,18 @@ private:
                 if (upper) supported_ = false;
                 upper = value;
             }
+        }
+        const bool should_stack = display_ && use_display_limits && (lower || upper);
+        if (should_stack) {
+            LayoutNode node{.kind = LayoutNodeKind::Operator,
+                    .numerator = {},
+                    .denominator = {},
+                    .operator_name = std::move(operator_name),
+                    .lower = std::move(lower),
+                    .upper = std::move(upper)};
+            const std::size_t index = layout_nodes_.size();
+            layout_nodes_.push_back(std::move(node));
+            return layout_marker(index);
         }
         std::string rendered = std::move(operator_name);
         if (lower) {
@@ -1222,9 +1343,9 @@ private:
         return spaced ? " " + rendered + " " : rendered;
     }
 
-    /// pi consumes a `\limits`/`\nolimits` modifier where it stands; inline
-    /// rendering never stacks limits, so only the consumed span is observable.
-    void consume_limits_modifier() {
+    /// pi consumes a `\limits`/`\nolimits` modifier where it stands and uses
+    /// the explicit modifier, when present, for display stacking.
+    [[nodiscard]] bool consume_limits_modifier(bool default_limits) {
         std::size_t modifier_position = position_;
         while (modifier_position < source_.size() && is_space_or_tab(source_[modifier_position])) {
             ++modifier_position;
@@ -1238,22 +1359,37 @@ private:
             modifier = candidate;
             break;
         }
-        if (!modifier.empty()) position_ = modifier_position + modifier.size();
+        if (!modifier.empty()) {
+            position_ = modifier_position + modifier.size();
+            return modifier == "\\limits";
+        }
+        return display_ && default_limits;
     }
 
-    [[nodiscard]] std::string parse_required_argument() {
+    [[nodiscard]] std::string parse_required_argument(bool stack_fractions = true) {
+        const bool previous_stack_fractions = stack_fractions_;
+        stack_fractions_ = stack_fractions_ && stack_fractions;
         while (position_ < source_.size() && is_ascii_space(source_[position_]))
             ++position_;
         if (position_ >= source_.size()) {
             supported_ = false;
+            stack_fractions_ = previous_stack_fractions;
             return {};
         }
         if (source_[position_] == '{') {
             ++position_;
-            return parse_sequence('}');
+            std::string result = parse_sequence('}');
+            stack_fractions_ = previous_stack_fractions;
+            return result;
         }
-        if (source_[position_] == '\\') return parse_command();
-        return std::string{take_code_point(source_, position_)};
+        if (source_[position_] == '\\') {
+            std::string result = parse_command();
+            stack_fractions_ = previous_stack_fractions;
+            return result;
+        }
+        std::string result{take_code_point(source_, position_)};
+        stack_fractions_ = previous_stack_fractions;
+        return result;
     }
 
     [[nodiscard]] std::optional<std::string> parse_optional_argument() {
@@ -1319,7 +1455,7 @@ private:
     }
 
     [[nodiscard]] std::string render_nested(std::string_view source) {
-        auto rendered = LatexParser(source).render();
+        auto rendered = LatexParser(source, display_, layout_nodes_).render();
         if (!rendered) {
             supported_ = false;
             return std::string{source};
@@ -1341,18 +1477,146 @@ private:
     }
 
     std::string_view source_;
+    bool display_{false};
+    bool stack_fractions_{true};
+    std::vector<LayoutNode>& layout_nodes_;
     std::size_t position_{0};
+    std::size_t script_depth_{0};
     bool supported_{true};
 };
+
+[[nodiscard]] Layout render_layout(std::string_view source, const std::vector<LayoutNode>& nodes) {
+    std::vector<std::string> rendered_lines;
+    std::size_t first_baseline = 0;
+    std::size_t line_start = 0;
+    while (line_start <= source.size()) {
+        const std::size_t line_end = source.find('\n', line_start);
+        const std::string_view source_line = source.substr(
+                line_start, line_end == std::string_view::npos ? source.size() - line_start : line_end - line_start);
+        std::vector<Layout> layouts;
+        std::size_t position = 0;
+        bool previous_node = false;
+        while (position < source_line.size()) {
+            const std::size_t marker_start = source_line.find(kLayoutMarkerStart, position);
+            if (marker_start == std::string_view::npos) break;
+            const std::size_t digits_start = marker_start + kLayoutMarkerStart.size();
+            const std::size_t marker_end = source_line.find(kLayoutMarkerEnd, digits_start);
+            if (marker_end == std::string_view::npos) break;
+            std::size_t node_index = 0;
+            const auto [parsed_end, error] =
+                    std::from_chars(source_line.data() + digits_start, source_line.data() + marker_end, node_index);
+            if (error != std::errc{} || parsed_end != source_line.data() + marker_end || node_index >= nodes.size()) {
+                position = marker_end + kLayoutMarkerEnd.size();
+                continue;
+            }
+            if (marker_start > position) {
+                std::string text{source_line.substr(position, marker_start - position)};
+                if (previous_node) {
+                    const std::size_t first = text.find_first_not_of(" \t\r\n\v\f");
+                    text = first == std::string::npos ? std::string{} : text.substr(first);
+                }
+                while (!text.empty() && is_ascii_space(text.back()))
+                    text.pop_back();
+                if (!text.empty())
+                    layouts.push_back(Layout{.lines = {text}, .width = visible_width(text), .baseline = 0});
+            }
+
+            const LayoutNode& node = nodes[node_index];
+            if (node.kind == LayoutNodeKind::Fraction) {
+                const Layout numerator = render_layout(node.numerator, nodes);
+                const Layout denominator = render_layout(node.denominator, nodes);
+                const std::size_t content_width = std::max({numerator.width, denominator.width, std::size_t{1}});
+                const std::size_t width = content_width + 2;
+                std::vector<std::string> lines;
+                for (const auto& line : numerator.lines)
+                    lines.push_back(pad_layout_line(line, width, true));
+                std::string fraction_bar{" "};
+                for (std::size_t index = 0; index < content_width; ++index)
+                    fraction_bar += "─";
+                fraction_bar += ' ';
+                lines.push_back(std::move(fraction_bar));
+                for (const auto& line : denominator.lines)
+                    lines.push_back(pad_layout_line(line, width, true));
+                layouts.push_back(
+                        Layout{.lines = std::move(lines), .width = width, .baseline = numerator.lines.size()});
+            } else if (node.kind == LayoutNodeKind::Operator) {
+                const std::size_t content_width = std::max({visible_width(node.operator_name),
+                        node.lower ? visible_width(*node.lower) : std::size_t{0},
+                        node.upper ? visible_width(*node.upper) : std::size_t{0}});
+                std::vector<std::string> lines;
+                if (node.upper) lines.push_back(pad_layout_line(*node.upper, content_width, true) + " ");
+                lines.push_back(pad_layout_line(node.operator_name, content_width, true) + " ");
+                if (node.lower) lines.push_back(pad_layout_line(*node.lower, content_width, true) + " ");
+                layouts.push_back(Layout{
+                        .lines = std::move(lines), .width = content_width + 1, .baseline = node.upper ? 1U : 0U});
+            } else {
+                const std::optional<Layout> upper =
+                        node.upper ? std::optional{render_layout(*node.upper, nodes)} : std::nullopt;
+                const std::optional<Layout> lower =
+                        node.lower ? std::optional{render_layout(*node.lower, nodes)} : std::nullopt;
+                const std::size_t width = std::max(upper ? upper->width : 0U, lower ? lower->width : 0U);
+                std::vector<std::string> lines;
+                if (upper) {
+                    for (const auto& line : upper->lines)
+                        lines.push_back(pad_layout_line(line, width));
+                }
+                lines.emplace_back(width, ' ');
+                if (lower) {
+                    for (const auto& line : lower->lines)
+                        lines.push_back(pad_layout_line(line, width));
+                }
+                layouts.push_back(
+                        Layout{.lines = std::move(lines), .width = width, .baseline = upper ? upper->lines.size() : 0});
+            }
+            position = marker_end + kLayoutMarkerEnd.size();
+            previous_node = true;
+        }
+        if (position < source_line.size()) {
+            std::string text{source_line.substr(position)};
+            if (previous_node) {
+                const auto first = text.find_first_not_of(" \t\r\n\v\f");
+                text = first == std::string::npos ? std::string{} : text.substr(first);
+            }
+            if (!text.empty()) layouts.push_back(Layout{.lines = {text}, .width = visible_width(text), .baseline = 0});
+        }
+        const Layout line_layout = join_layouts(layouts);
+        if (rendered_lines.empty()) first_baseline = line_layout.baseline;
+        rendered_lines.insert(rendered_lines.end(), line_layout.lines.begin(), line_layout.lines.end());
+        if (line_end == std::string_view::npos) break;
+        line_start = line_end + 1;
+    }
+    std::size_t width = 0;
+    for (const auto& line : rendered_lines)
+        width = std::max(width, visible_width(line));
+    return Layout{.lines = std::move(rendered_lines), .width = width, .baseline = first_baseline};
+}
 
 } // namespace
 
 std::optional<std::string> render_latex(std::string_view source, const LatexOptions& options) {
-    // The vertical display layout is #974 and the display environments are #975;
-    // until both stages exist the option reports the frozen failure value rather
-    // than a formula that silently lost its layout.
-    if (options.display) return std::nullopt;
-    return LatexParser(source).render();
+    std::vector<LayoutNode> layout_nodes;
+    const auto rendered = LatexParser(source, options.display, layout_nodes).render();
+    if (!rendered) return std::nullopt;
+    if (!options.display || layout_nodes.empty()) return rendered;
+
+    Layout layout = render_layout(*rendered, layout_nodes);
+    std::size_t indentation = std::string::npos;
+    for (const auto& line : layout.lines) {
+        const std::size_t first = line.find_first_not_of(' ');
+        if (first != std::string::npos) indentation = std::min(indentation, first);
+    }
+    if (indentation == std::string::npos) indentation = 0;
+    std::string result;
+    for (const auto& line : layout.lines) {
+        if (!result.empty()) result += '\n';
+        const std::string_view dedented =
+                line.size() >= indentation ? std::string_view{line}.substr(indentation) : std::string_view{};
+        std::size_t end = dedented.size();
+        while (end > 0 && is_ascii_space(dedented[end - 1]))
+            --end;
+        result.append(dedented.substr(0, end));
+    }
+    return result;
 }
 
 } // namespace cch::tui
