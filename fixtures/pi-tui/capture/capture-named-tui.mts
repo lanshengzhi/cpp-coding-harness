@@ -51,6 +51,7 @@ const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex
 const src = (relative: string) => pathToFileURL(path.join(pi, "packages/tui", relative)).href;
 const { parseKey, isKeyRepeat, isKeyRelease, setKittyProtocolActive } = await import(src("src/keys.ts"));
 const { visibleWidth } = await import(src("src/utils.ts"));
+const { fuzzyMatch, fuzzyFilter } = await import(src("src/fuzzy.ts"));
 const { Input } = await import(src("src/components/input.ts"));
 const { Text } = await import(src("src/components/text.ts"));
 const { TuiMainScreen } = await import(src("src/tui-main-screen.ts"));
@@ -268,6 +269,72 @@ const utilsWidthArtifact = envelope([
 	},
 }]);
 
+// Fuzzy scoring, filtering and the lowercasing they observe (#958). Scored
+// positions are pi's UTF-16 indices, so the row records both index spaces:
+// byte-indexed scoring cannot reproduce these scores.
+const fuzzyMatchRows = [
+	{ name: "empty-query", query: "", text: "anything" },
+	{ name: "ascii-run", query: "abc", text: "xxabcxx" },
+	{ name: "consecutive-run", query: "abc", text: "aabbcc" },
+	{ name: "nonmatch-order", query: "abc", text: "ac" },
+	{ name: "sharp-s-query", query: "ss", text: "\u00df" },
+	{ name: "sharp-s-text", query: "\u00df", text: "ss" },
+	{ name: "accented-prefix", query: "a", text: "\u00e9a" },
+	{ name: "ascii-prefix", query: "a", text: "xxa" },
+	{ name: "supplementary-prefix", query: "a", text: "\u{1f600}a" },
+	{ name: "dotted-capital-prefix", query: "a", text: "\u0130a" },
+	{ name: "sharp-s-prefix", query: "a", text: "\u00dfa" },
+	{ name: "combining-prefix", query: "a", text: "e\u0301a" },
+	{ name: "accented-pair", query: "ab", text: "\u00e9ab" },
+	{ name: "no-break-space-boundary", query: "b", text: "a\u00a0b" },
+	{ name: "final-sigma-terminal", query: "\u03c3", text: "\u0391\u03a3" },
+	{ name: "final-sigma-initial", query: "\u03c3", text: "\u03a3\u0391" },
+	{ name: "sigma-alone", query: "\u03c3", text: "\u03a3" },
+	{ name: "non-ascii-uppercase", query: "a", text: "\u00c9A" },
+];
+const fuzzyFilterRows = [
+	{
+		name: "utf16-rank-with-ties",
+		items: ["xxa", "\u00e9a", "\u{1f600}a", "a", "aa"],
+		query: "a",
+	},
+	{
+		name: "non-ascii-membership",
+		items: ["xxa", "\u00e9a", "\u{1f600}a", "SS", "\u00df"],
+		query: "a",
+	},
+	{
+		name: "final-sigma-filter",
+		items: ["\u0391\u03a3", "\u03a3\u0391"],
+		query: "\u03c3",
+	},
+	{ name: "no-break-space-token", items: ["a/b/c"], query: "a\u00a0c" },
+	{ name: "no-break-space-trim", items: ["alpha", "beta"], query: "\u00a0alpha" },
+];
+const fuzzyArtifact = envelope(["packages/tui/src/fuzzy.ts:fuzzyMatch,fuzzyFilter"], [{
+	name: "fuzzy-scoring-and-ranking",
+	dimensions: { columns: 24, rows: 6 },
+	inputs: {
+		match: fuzzyMatchRows.map((row) => ({
+			name: row.name,
+			query: row.query,
+			text: row.text,
+			utf16Length: row.text.length,
+			utf8Length: Buffer.byteLength(row.text),
+		})),
+		filter: fuzzyFilterRows.map((row) => ({
+			name: row.name, items: row.items, query: row.query,
+		})),
+	},
+	expected: {
+		match: fuzzyMatchRows.map((row) => ({ name: row.name, ...fuzzyMatch(row.query, row.text) })),
+		filter: fuzzyFilterRows.map((row) => ({
+			name: row.name,
+			output: fuzzyFilter(row.items, row.query, (item) => item),
+		})),
+	},
+}]);
+
 // No output is touched before source guards and all observations complete.
 const bundle = path.join(root, selected.bundle);
 mkdirSync(bundle, { recursive: true });
@@ -277,6 +344,7 @@ const artifacts = [
 	["screen-state.json", "screen-state", screenArtifact],
 	["capability-ledger.json", "capability-ledger", capabilityArtifact],
 	["utils-width.json", "utils-width", utilsWidthArtifact],
+	["fuzzy.json", "fuzzy", fuzzyArtifact],
 ] as const;
 const records = artifacts.map(([file, family, artifact]) => {
 	const bytes = Buffer.from(JSON.stringify(artifact, null, 2) + "\n");

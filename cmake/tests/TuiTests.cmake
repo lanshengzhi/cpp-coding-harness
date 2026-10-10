@@ -18,6 +18,11 @@ include_guard(GLOBAL)
     set_tests_properties(cch_tui_utils_width_evidence PROPERTIES
         LABELS "tui;differential;issue956;compat-pi")
 
+    add_test(NAME cch_tui_fuzzy_evidence
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/tui/TuiFuzzyEvidenceTest.py)
+    set_tests_properties(cch_tui_fuzzy_evidence PROPERTIES
+        LABELS "tui;differential;issue958;compat-pi")
+
     # TUI
     add_executable(cch_tests_tui
         tests/Catch2Main.cpp

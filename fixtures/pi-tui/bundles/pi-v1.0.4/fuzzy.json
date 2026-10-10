@@ -1,0 +1,349 @@
+{
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-10T07:44:52.086Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/fuzzy.ts:fuzzyMatch,fuzzyFilter"
+  ],
+  "scenarios": [
+    {
+      "name": "fuzzy-scoring-and-ranking",
+      "dimensions": {
+        "columns": 24,
+        "rows": 6
+      },
+      "inputs": {
+        "match": [
+          {
+            "name": "empty-query",
+            "query": "",
+            "text": "anything",
+            "utf16Length": 8,
+            "utf8Length": 8
+          },
+          {
+            "name": "ascii-run",
+            "query": "abc",
+            "text": "xxabcxx",
+            "utf16Length": 7,
+            "utf8Length": 7
+          },
+          {
+            "name": "consecutive-run",
+            "query": "abc",
+            "text": "aabbcc",
+            "utf16Length": 6,
+            "utf8Length": 6
+          },
+          {
+            "name": "nonmatch-order",
+            "query": "abc",
+            "text": "ac",
+            "utf16Length": 2,
+            "utf8Length": 2
+          },
+          {
+            "name": "sharp-s-query",
+            "query": "ss",
+            "text": "ß",
+            "utf16Length": 1,
+            "utf8Length": 2
+          },
+          {
+            "name": "sharp-s-text",
+            "query": "ß",
+            "text": "ss",
+            "utf16Length": 2,
+            "utf8Length": 2
+          },
+          {
+            "name": "accented-prefix",
+            "query": "a",
+            "text": "éa",
+            "utf16Length": 2,
+            "utf8Length": 3
+          },
+          {
+            "name": "ascii-prefix",
+            "query": "a",
+            "text": "xxa",
+            "utf16Length": 3,
+            "utf8Length": 3
+          },
+          {
+            "name": "supplementary-prefix",
+            "query": "a",
+            "text": "😀a",
+            "utf16Length": 3,
+            "utf8Length": 5
+          },
+          {
+            "name": "dotted-capital-prefix",
+            "query": "a",
+            "text": "İa",
+            "utf16Length": 2,
+            "utf8Length": 3
+          },
+          {
+            "name": "sharp-s-prefix",
+            "query": "a",
+            "text": "ßa",
+            "utf16Length": 2,
+            "utf8Length": 3
+          },
+          {
+            "name": "combining-prefix",
+            "query": "a",
+            "text": "éa",
+            "utf16Length": 3,
+            "utf8Length": 4
+          },
+          {
+            "name": "accented-pair",
+            "query": "ab",
+            "text": "éab",
+            "utf16Length": 3,
+            "utf8Length": 4
+          },
+          {
+            "name": "no-break-space-boundary",
+            "query": "b",
+            "text": "a b",
+            "utf16Length": 3,
+            "utf8Length": 4
+          },
+          {
+            "name": "final-sigma-terminal",
+            "query": "σ",
+            "text": "ΑΣ",
+            "utf16Length": 2,
+            "utf8Length": 4
+          },
+          {
+            "name": "final-sigma-initial",
+            "query": "σ",
+            "text": "ΣΑ",
+            "utf16Length": 2,
+            "utf8Length": 4
+          },
+          {
+            "name": "sigma-alone",
+            "query": "σ",
+            "text": "Σ",
+            "utf16Length": 1,
+            "utf8Length": 2
+          },
+          {
+            "name": "non-ascii-uppercase",
+            "query": "a",
+            "text": "ÉA",
+            "utf16Length": 2,
+            "utf8Length": 3
+          }
+        ],
+        "filter": [
+          {
+            "name": "utf16-rank-with-ties",
+            "items": [
+              "xxa",
+              "éa",
+              "😀a",
+              "a",
+              "aa"
+            ],
+            "query": "a"
+          },
+          {
+            "name": "non-ascii-membership",
+            "items": [
+              "xxa",
+              "éa",
+              "😀a",
+              "SS",
+              "ß"
+            ],
+            "query": "a"
+          },
+          {
+            "name": "final-sigma-filter",
+            "items": [
+              "ΑΣ",
+              "ΣΑ"
+            ],
+            "query": "σ"
+          },
+          {
+            "name": "no-break-space-token",
+            "items": [
+              "a/b/c"
+            ],
+            "query": "a c"
+          },
+          {
+            "name": "no-break-space-trim",
+            "items": [
+              "alpha",
+              "beta"
+            ],
+            "query": " alpha"
+          }
+        ]
+      },
+      "expected": {
+        "match": [
+          {
+            "name": "empty-query",
+            "matches": true,
+            "score": 0
+          },
+          {
+            "name": "ascii-run",
+            "matches": true,
+            "score": -14.1
+          },
+          {
+            "name": "consecutive-run",
+            "matches": true,
+            "score": -10.4
+          },
+          {
+            "name": "nonmatch-order",
+            "matches": false,
+            "score": 0
+          },
+          {
+            "name": "sharp-s-query",
+            "matches": false,
+            "score": 0
+          },
+          {
+            "name": "sharp-s-text",
+            "matches": false,
+            "score": 0
+          },
+          {
+            "name": "accented-prefix",
+            "matches": true,
+            "score": 0.1
+          },
+          {
+            "name": "ascii-prefix",
+            "matches": true,
+            "score": 0.2
+          },
+          {
+            "name": "supplementary-prefix",
+            "matches": true,
+            "score": 0.2
+          },
+          {
+            "name": "dotted-capital-prefix",
+            "matches": true,
+            "score": 0.2
+          },
+          {
+            "name": "sharp-s-prefix",
+            "matches": true,
+            "score": 0.1
+          },
+          {
+            "name": "combining-prefix",
+            "matches": true,
+            "score": 0.2
+          },
+          {
+            "name": "accented-pair",
+            "matches": true,
+            "score": -4.7
+          },
+          {
+            "name": "no-break-space-boundary",
+            "matches": true,
+            "score": -9.8
+          },
+          {
+            "name": "final-sigma-terminal",
+            "matches": false,
+            "score": 0
+          },
+          {
+            "name": "final-sigma-initial",
+            "matches": true,
+            "score": -15
+          },
+          {
+            "name": "sigma-alone",
+            "matches": true,
+            "score": -115
+          },
+          {
+            "name": "non-ascii-uppercase",
+            "matches": true,
+            "score": 0.1
+          }
+        ],
+        "filter": [
+          {
+            "name": "utf16-rank-with-ties",
+            "output": [
+              "a",
+              "aa",
+              "éa",
+              "xxa",
+              "😀a"
+            ]
+          },
+          {
+            "name": "non-ascii-membership",
+            "output": [
+              "éa",
+              "xxa",
+              "😀a"
+            ]
+          },
+          {
+            "name": "final-sigma-filter",
+            "output": [
+              "ΣΑ"
+            ]
+          },
+          {
+            "name": "no-break-space-token",
+            "output": [
+              "a/b/c"
+            ]
+          },
+          {
+            "name": "no-break-space-trim",
+            "output": [
+              "alpha"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

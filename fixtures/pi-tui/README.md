@@ -20,6 +20,7 @@ The initial independently captured cases are:
 | `component.json` | Text wrapping, padding and full ANSI output before/after `setText` | `PiTuiDifferentialTest` drives public Text render/mutation |
 | `screen-state.json` | Two regular renderer frames; every cell's grapheme, continuation and style, visible rows, scrollback and cursor position/visibility | `ScreenStateGoldenTest` drives Component/Focusable/Tui over VirtualTerminal |
 | `capability-ledger.json` | Frozen `packages/tui/src/index.ts` export set (173) with ledger classifications and required cross-references | `TuiCapabilityLedgerTest` + docs ledger; offline verify requires the family |
+| `fuzzy.json` | `fuzzyMatch` scores/matches and `fuzzyFilter` rankings over non-ASCII, combining, supplementary, final-sigma and no-break-space queries and texts, each row recording both UTF-16 and UTF-8 lengths of the text | `PiTuiDifferentialTest` drives `fuzzy_match`/`fuzzy_filter`; `FuzzyTest` pins the retained original-UTF-8 offset helper that pi does not export |
 
 The screen case changes bold red `red` to underlined green `go` and retains a focused cursor
 at column 2, row 1. A text-only screenshot would miss a wrong style or displaced cursor;
