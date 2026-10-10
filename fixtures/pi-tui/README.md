@@ -4,7 +4,7 @@
 
 The inventory and gate report below describe historical evidence at `83114817c68f5413e4d7ba6d7003ddc511cd31d2`. [ADR 0067](../../docs/adr/0067-align-the-linux-tui-toolkit-and-native-tui-with-pi-v1-0-4.md) and [#946](https://github.com/lanshengzhi/cpp-coding-harness/issues/946) select the new Named Baseline `pi-v1.0.4`, exact revision `7c10bd4337495ee613f2224843ecdf349b80d1df`, for complete Linux TUI alignment. Historical Deferred classifications and behavioral exemptions do not exempt included capabilities from that target.
 
-[#947](https://github.com/lanshengzhi/cpp-coding-harness/issues/947) introduces the separate named capture/replay runner; [#948](https://github.com/lanshengzhi/cpp-coding-harness/issues/948) accounts for capabilities and actual consumers. Keep existing fixture provenance. A missing, wrong-revision or tampered requested bundle must fail rather than fall back to these fixtures. The named bundle below records only the initial runnable evidence slice; it does not accept the remaining toolkit or product capability target.
+[#947](https://github.com/lanshengzhi/cpp-coding-harness/issues/947) introduces the separate named capture/replay runner; [#948](https://github.com/lanshengzhi/cpp-coding-harness/issues/948) accounts for capabilities and actual consumers in [`docs/research/tui-v1.0.4-capability-ledger.md`](../../docs/research/tui-v1.0.4-capability-ledger.md) / [`.json`](../../docs/research/tui-v1.0.4-capability-ledger.json). Keep existing fixture provenance. A missing, wrong-revision or tampered requested bundle must fail rather than fall back to these fixtures. The named bundle below records only the initial runnable evidence slice; it does not accept the remaining toolkit or product capability target.
 
 ## Named pi-v1.0.4 evidence runner
 
@@ -19,6 +19,7 @@ The initial independently captured cases are:
 | `input.json` | `parseKey` press/repeat/release identities; actual Input editing values and submit callbacks (`a`, `b`, Left, `c`, Enter → `acb`) | `PiTuiDifferentialTest` drives the decoder and real focused Input through Tui/VirtualTerminal |
 | `component.json` | Text wrapping, padding and full ANSI output before/after `setText` | `PiTuiDifferentialTest` drives public Text render/mutation |
 | `screen-state.json` | Two regular renderer frames; every cell's grapheme, continuation and style, visible rows, scrollback and cursor position/visibility | `ScreenStateGoldenTest` drives Component/Focusable/Tui over VirtualTerminal |
+| `capability-ledger.json` | Frozen `packages/tui/src/index.ts` export set (173) with ledger classifications and required cross-references | `TuiCapabilityLedgerTest` + docs ledger; offline verify requires the family |
 
 The screen case changes bold red `red` to underlined green `go` and retains a focused cursor
 at column 2, row 1. A text-only screenshot would miss a wrong style or displaced cursor;
@@ -47,7 +48,7 @@ modules rather than reading Pike output. It records Node/glibc versions and hash
 capture generator. Extend that generator with each later ticket's independent scenarios
 and artifacts using the same envelope; update the manifest and its registry pin through
 capture, then implement the corresponding public C++ replay. Every bundle must retain
-input, component and screen-state families. Re-capture is explicit and changes timestamp
+input, component, screen-state and capability-ledger families. Re-capture is explicit and changes timestamp
 and provenance even if the observed values do not change.
 
 The offline `verify`/`read` CLI never captures, imports pi, or selects historical files.

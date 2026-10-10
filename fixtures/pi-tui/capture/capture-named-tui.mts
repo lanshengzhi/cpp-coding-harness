@@ -47,6 +47,7 @@ if (xtermVersion !== packageMetadata.devDependencies["@xterm/headless"]) {
 }
 Object.assign(environment, { dependencies: { "@xterm/headless": xtermVersion, tsx: requirePi("tsx/package.json").version } });
 const capturedAt = new Date().toISOString();
+const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 const src = (relative: string) => pathToFileURL(path.join(pi, "packages/tui", relative)).href;
 const { parseKey, isKeyRepeat, isKeyRelease, setKittyProtocolActive } = await import(src("src/keys.ts"));
 const { Input } = await import(src("src/components/input.ts"));
@@ -176,14 +177,59 @@ const screenArtifact = envelope([
 	"packages/tui/package.json:@xterm/headless",
 ], [{ name: "styled-frame-and-focused-cursor", dimensions: { columns: 16, rows: 6 }, inputs: screenInputs, expected: { initial, changed } }]);
 
+
+// Capability accounting observation: freeze the public index export set and ledger classifications.
+// The committed docs/research ledger is hashed as the C++/Pike accounting artifact; export names are
+// observed directly from the frozen index so a stale/partial ledger cannot pass silently.
+const indexSource = readFileSync(path.join(pi, "packages/tui/src/index.ts"), "utf8");
+const indexExports = [...indexSource.matchAll(/export\s+(?:type\s+)?\{([^}]+)\}\s+from\s+"([^"]+)"/gs)].flatMap((match) =>
+	match[1].split(",").map((raw) => {
+		let name = raw.trim().replace(/^type\s+/, "");
+		if (!name) return "";
+		if (name.includes(" as ")) name = name.split(" as ").at(-1)?.trim() ?? "";
+		return name;
+	}).filter(Boolean),
+);
+const ledgerPath = path.resolve(root, "../../docs/research/tui-v1.0.4-capability-ledger.json");
+const ledger = JSON.parse(readFileSync(ledgerPath, "utf8"));
+if (ledger.baseline !== baseline || ledger.revision !== revision) {
+	throw new Error("capability ledger revision/baseline mismatch");
+}
+const exportRows = ledger.rows.filter((row: any) => row.member == null && !["product-entry", "diagnostic-capability", "internal-helper"].includes(row.kind));
+const ledgerNames = exportRows.map((row: any) => row.export).sort();
+const observedNames = [...indexExports].sort();
+if (JSON.stringify(ledgerNames) !== JSON.stringify(observedNames)) {
+	throw new Error("capability ledger export set diverges from frozen index");
+}
+if (exportRows.some((row: any) => row.classification === "included" && /Deferred/.test(JSON.stringify(row)))) {
+	throw new Error("included capability rows must not be Deferred");
+}
+const capabilityArtifact = envelope([
+	"packages/tui/src/index.ts:export-surface",
+], [{
+	name: "index-export-accounting",
+	dimensions: { columns: 1, rows: 1 },
+	inputs: {
+		indexSha256: sha256(Buffer.from(indexSource)),
+		exportCount: observedNames.length,
+		ledgerPath: "docs/research/tui-v1.0.4-capability-ledger.json",
+		ledgerSha256: sha256(readFileSync(ledgerPath)),
+	},
+	expected: {
+		exports: observedNames,
+		classifications: Object.fromEntries(exportRows.map((row: any) => [row.export, row.classification])),
+		crossReferences: ["831", "811", "809", "749", "830"],
+	},
+}]);
+
 // No output is touched before source guards and all observations complete.
 const bundle = path.join(root, selected.bundle);
 mkdirSync(bundle, { recursive: true });
-const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 const artifacts = [
 	["input.json", "input", inputArtifact],
 	["component.json", "component", componentArtifact],
 	["screen-state.json", "screen-state", screenArtifact],
+	["capability-ledger.json", "capability-ledger", capabilityArtifact],
 ] as const;
 const records = artifacts.map(([file, family, artifact]) => {
 	const bytes = Buffer.from(JSON.stringify(artifact, null, 2) + "\n");
