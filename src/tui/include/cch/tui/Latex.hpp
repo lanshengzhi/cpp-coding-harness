@@ -20,10 +20,10 @@ struct LatexOptions {
 ///
 /// Inline grammar is supported: named symbols, grouping, `\frac`, `\sqrt`,
 /// accents, `\mathbb`, scripts, named and limit operators, spacing, wrappers
-/// and `\begin{equation}`-style inline environments. With `display = true`,
-/// fractions, scripts, and operator limits use multiline baseline layout.
-/// Display environments (`aligned`, `cases`, matrix families) belong to #975
-/// and report the same failure value.
+/// and `\begin{equation}`-style inline environments. Matrix and cases
+/// environments render multiple rows in layout; aligned equation environments
+/// render one output line per row. With `display = true`, fractions, scripts,
+/// and operator limits also use multiline baseline layout.
 [[nodiscard]] std::optional<std::string> render_latex(std::string_view source, const LatexOptions& options = {});
 
 } // namespace cch::tui

@@ -6,6 +6,7 @@
 #include <utf8proc.h>
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <cstddef>
 #include <optional>
@@ -937,6 +938,7 @@ enum class LayoutNodeKind {
     Fraction,
     Operator,
     Script,
+    Matrix,
 };
 
 struct LayoutNode {
@@ -946,6 +948,8 @@ struct LayoutNode {
     std::string operator_name;
     std::optional<std::string> lower;
     std::optional<std::string> upper;
+    std::vector<std::string> lines;
+    std::size_t baseline{0};
 };
 
 struct Layout {
@@ -956,6 +960,14 @@ struct Layout {
 
 constexpr std::string_view kLayoutMarkerStart{"\xf3\xb0\x80\x80"};
 constexpr std::string_view kLayoutMarkerEnd{"\xf3\xb0\x80\x81"};
+constexpr std::string_view kProtectedSpace{"\xc2\xa0"};
+
+[[nodiscard]] std::string protected_spaces(std::size_t count) {
+    std::string spaces;
+    for (std::size_t index = 0; index < count; ++index)
+        spaces += kProtectedSpace;
+    return spaces;
+}
 
 [[nodiscard]] std::string layout_marker(std::size_t index) {
     return std::string{kLayoutMarkerStart} + std::to_string(index) + std::string{kLayoutMarkerEnd};
@@ -1121,7 +1133,9 @@ private:
                     .denominator = {},
                     .operator_name = {},
                     .lower = sub ? std::optional{normalize_output(*sub)} : std::nullopt,
-                    .upper = sup ? std::optional{normalize_output(*sup)} : std::nullopt};
+                    .upper = sup ? std::optional{normalize_output(*sup)} : std::nullopt,
+                    .lines = {},
+                    .baseline = 0};
             const std::size_t index = layout_nodes_.size();
             layout_nodes_.push_back(std::move(node));
             return layout_marker(index);
@@ -1207,7 +1221,9 @@ private:
                         .denominator = normalize_output(denominator),
                         .operator_name = {},
                         .lower = std::nullopt,
-                        .upper = std::nullopt};
+                        .upper = std::nullopt,
+                        .lines = {},
+                        .baseline = 0};
                 const std::size_t index = layout_nodes_.size();
                 layout_nodes_.push_back(std::move(node));
                 return layout_marker(index);
@@ -1329,7 +1345,9 @@ private:
                     .denominator = {},
                     .operator_name = std::move(operator_name),
                     .lower = std::move(lower),
-                    .upper = std::move(upper)};
+                    .upper = std::move(upper),
+                    .lines = {},
+                    .baseline = 0};
             const std::size_t index = layout_nodes_.size();
             layout_nodes_.push_back(std::move(node));
             return layout_marker(index);
@@ -1434,6 +1452,58 @@ private:
         return std::nullopt;
     }
 
+    [[nodiscard]] std::vector<std::string> split_environment_rows(std::string_view body) const {
+        std::vector<std::string> rows;
+        std::size_t start = 0;
+        while (start <= body.size()) {
+            const std::size_t separator = body.find("\\\\", start);
+            const std::size_t row_end = separator == std::string_view::npos ? body.size() : separator;
+            rows.emplace_back(body.substr(start, row_end - start));
+            if (separator == std::string_view::npos) break;
+            start = separator + 2;
+            if (start < body.size() && body[start] == '[') {
+                const std::size_t closing = body.find(']', start + 1);
+                const std::size_t newline = body.find('\n', start + 1);
+                if (closing != std::string_view::npos && (newline == std::string_view::npos || closing < newline)) {
+                    start = closing + 1;
+                }
+            }
+        }
+        return rows;
+    }
+
+    [[nodiscard]] static std::vector<std::string> split_environment_cells(std::string_view row) {
+        std::vector<std::string> cells;
+        std::size_t start = 0;
+        while (start <= row.size()) {
+            const std::size_t separator = row.find('&', start);
+            const std::size_t cell_end = separator == std::string_view::npos ? row.size() : separator;
+            cells.emplace_back(row.substr(start, cell_end - start));
+            if (separator == std::string_view::npos) break;
+            start = separator + 1;
+        }
+        return cells;
+    }
+
+    [[nodiscard]] static std::string strip_leading_argument(std::string_view body) {
+        static const std::regex argument(R"(^\s*\{[^}]*\})");
+        return std::regex_replace(std::string{body}, argument, "", std::regex_constants::format_first_only);
+    }
+
+    [[nodiscard]] std::string add_layout_node(std::vector<std::string> lines, std::size_t baseline) {
+        LayoutNode node{.kind = LayoutNodeKind::Matrix,
+                .numerator = {},
+                .denominator = {},
+                .operator_name = {},
+                .lower = std::nullopt,
+                .upper = std::nullopt,
+                .lines = std::move(lines),
+                .baseline = baseline};
+        const std::size_t index = layout_nodes_.size();
+        layout_nodes_.push_back(std::move(node));
+        return layout_marker(index);
+    }
+
     [[nodiscard]] std::string parse_environment() {
         const auto environment = read_raw_group();
         if (!environment) return {};
@@ -1448,14 +1518,165 @@ private:
         if (*environment == "equation" || *environment == "equation*" || *environment == "displaymath") {
             return std::string{trim(render_nested(body))};
         }
-        // Every remaining pi environment (aligned families, cases and the matrix
-        // families) renders through the display layout stage owned by #975.
+
+        if (*environment == "cases" || *environment == "cases*") return render_cases(body);
+        if (*environment == "array" || *environment == "matrix" || *environment == "smallmatrix" ||
+                *environment == "pmatrix" || *environment == "bmatrix" || *environment == "Bmatrix" ||
+                *environment == "vmatrix" || *environment == "Vmatrix") {
+            const std::string matrix_body = *environment == "array" ? strip_leading_argument(body) : body;
+            return render_matrix(*environment, matrix_body);
+        }
+        if (*environment == "aligned" || *environment == "align" || *environment == "align*" ||
+                *environment == "alignedat" || *environment == "alignat" || *environment == "alignat*" ||
+                *environment == "gather" || *environment == "gathered" || *environment == "multline" ||
+                *environment == "multline*" || *environment == "split") {
+            const bool aligned_at =
+                    *environment == "alignedat" || *environment == "alignat" || *environment == "alignat*";
+            const std::string aligned_body = aligned_at ? strip_leading_argument(body) : body;
+            std::vector<std::string> rows;
+            for (const auto& row : split_environment_rows(aligned_body)) {
+                const auto cells = split_environment_cells(row);
+                std::string source;
+                if (aligned_at) {
+                    for (std::size_t cell = 0; cell < cells.size(); cell += 2) {
+                        if (cell > 0) source += ' ';
+                        for (std::size_t pair_cell = cell; pair_cell < std::min(cell + 2, cells.size()); ++pair_cell)
+                            source += cells[pair_cell];
+                    }
+                } else {
+                    for (const auto& cell : cells)
+                        source += cell;
+                }
+                std::string rendered = render_nested(source);
+                if (!trim(rendered).empty()) rows.emplace_back(trim(rendered));
+            }
+            std::string result;
+            for (const auto& row : rows) {
+                if (!result.empty()) result += '\n';
+                result += row;
+            }
+            return result;
+        }
+
         supported_ = false;
         return body;
     }
 
-    [[nodiscard]] std::string render_nested(std::string_view source) {
-        auto rendered = LatexParser(source, display_, layout_nodes_).render();
+    [[nodiscard]] std::string render_cases(std::string_view body) {
+        std::vector<std::vector<std::string>> rows;
+        for (const auto& source_row : split_environment_rows(body)) {
+            auto cells = split_environment_cells(source_row);
+            std::vector<std::string> row;
+            for (const auto& cell : cells)
+                row.push_back(std::string{trim(render_nested(cell, false))});
+            if (std::ranges::any_of(row, [](const std::string& cell) { return !cell.empty(); }))
+                rows.push_back(std::move(row));
+        }
+        const auto remove_trailing_comma = [](std::string value) {
+            std::size_t end = value.size();
+            while (end > 0 && is_ascii_space(value[end - 1]))
+                --end;
+            if (end > 0 && value[end - 1] == ',') {
+                --end;
+                while (end > 0 && is_ascii_space(value[end - 1]))
+                    --end;
+                value.resize(end);
+            }
+            return value;
+        };
+        std::size_t value_width = 0;
+        for (const auto& row : rows)
+            value_width = std::max(value_width, visible_width(remove_trailing_comma(row.empty() ? "" : row[0])));
+        std::vector<std::string> contents;
+        for (const auto& row : rows) {
+            const std::string value = remove_trailing_comma(row.empty() ? "" : row[0]);
+            const std::string condition = row.size() > 1 ? row[1] : "";
+            if (condition.empty()) {
+                contents.push_back(value);
+                continue;
+            }
+            static const std::regex condition_prefix(R"(^(if|when|for|otherwise)\b)", std::regex_constants::icase);
+            const std::string prefix = std::regex_search(condition, condition_prefix) ? " " : " if ";
+            contents.push_back(value + protected_spaces(value_width - visible_width(value)) + prefix + condition);
+        }
+        if (contents.size() <= 1) return contents.empty() ? "" : "⎧ " + contents.front();
+
+        const std::size_t middle = contents.size() / 2;
+        std::vector<std::optional<std::string>> visual_rows;
+        for (std::size_t row = 0; row < contents.size(); ++row) {
+            if (contents.size() % 2 == 0 && row == middle) visual_rows.emplace_back(std::nullopt);
+            visual_rows.emplace_back(contents[row]);
+        }
+        std::vector<std::string> lines;
+        for (std::size_t row = 0; row < visual_rows.size(); ++row) {
+            const std::string_view delimiter = row == 0 ? "⎧" : row + 1 == visual_rows.size() ? "⎩" : "⎨";
+            lines.push_back(
+                    visual_rows[row] ? std::string(delimiter) + " " + *visual_rows[row] : std::string(delimiter));
+        }
+        return add_layout_node(std::move(lines), middle);
+    }
+
+    [[nodiscard]] std::string render_matrix(std::string_view environment, std::string_view body) {
+        std::vector<std::vector<std::string>> matrix;
+        for (const auto& source_row : split_environment_rows(body)) {
+            std::vector<std::string> row;
+            for (const auto& cell : split_environment_cells(source_row))
+                row.emplace_back(trim(render_nested(cell, false)));
+            if (std::ranges::any_of(row, [](const std::string& cell) { return !cell.empty(); }))
+                matrix.push_back(std::move(row));
+        }
+        std::size_t column_count = 0;
+        for (const auto& row : matrix)
+            column_count = std::max(column_count, row.size());
+        std::vector<std::size_t> column_widths(column_count, 0);
+        for (std::size_t column = 0; column < column_count; ++column) {
+            for (const auto& row : matrix) {
+                if (column < row.size())
+                    column_widths[column] = std::max(column_widths[column], visible_width(row[column]));
+            }
+        }
+        std::vector<std::string> rows;
+        for (const auto& row : matrix) {
+            std::string rendered;
+            for (std::size_t column = 0; column < column_count; ++column) {
+                if (column > 0) rendered += " │ ";
+                const std::string_view cell = column < row.size() ? std::string_view{row[column]} : std::string_view{};
+                rendered += cell;
+                rendered += protected_spaces(column_widths[column] - visible_width(cell));
+            }
+            rows.push_back(std::move(rendered));
+        }
+
+        std::vector<std::string> lines;
+        if (environment == "array" || environment == "matrix" || environment == "smallmatrix") {
+            lines = std::move(rows);
+        } else {
+            using Delimiters = std::array<std::string_view, 6>;
+            static const std::unordered_map<std::string_view, Delimiters> delimiters{
+                    {"pmatrix", {"⎛", "⎞", "⎜", "⎟", "⎝", "⎠"}},
+                    {"bmatrix", {"⎡", "⎤", "⎢", "⎥", "⎣", "⎦"}},
+                    {"Bmatrix", {"⎧", "⎫", "⎨", "⎬", "⎩", "⎭"}},
+                    {"vmatrix", {"│", "│", "│", "│", "│", "│"}},
+                    {"Vmatrix", {"║", "║", "║", "║", "║", "║"}},
+            };
+            const auto delimiter = delimiters.find(environment);
+            if (delimiter == std::end(delimiters)) {
+                supported_ = false;
+                return std::string{body};
+            }
+            for (std::size_t row = 0; row < rows.size(); ++row) {
+                const auto& symbols = delimiter->second;
+                const std::string_view left = row == 0 ? symbols[0] : row + 1 == rows.size() ? symbols[4] : symbols[2];
+                const std::string_view right = row == 0 ? symbols[1] : row + 1 == rows.size() ? symbols[5] : symbols[3];
+                lines.push_back(std::string(left) + " " + rows[row] + " " + std::string(right));
+            }
+        }
+        if (lines.size() <= 1) return lines.empty() ? "" : lines.front();
+        return add_layout_node(std::move(lines), 0);
+    }
+
+    [[nodiscard]] std::string render_nested(std::string_view source, bool stack_fractions = true) {
+        auto rendered = LatexParser(source, display_, layout_nodes_, stack_fractions_ && stack_fractions).render();
         if (!rendered) {
             supported_ = false;
             return std::string{source};
@@ -1496,6 +1717,7 @@ private:
         std::vector<Layout> layouts;
         std::size_t position = 0;
         bool previous_node = false;
+        bool previous_matrix = false;
         while (position < source_line.size()) {
             const std::size_t marker_start = source_line.find(kLayoutMarkerStart, position);
             if (marker_start == std::string_view::npos) break;
@@ -1510,15 +1732,20 @@ private:
                 continue;
             }
             if (marker_start > position) {
-                std::string text{source_line.substr(position, marker_start - position)};
-                if (previous_node) {
-                    const std::size_t first = text.find_first_not_of(" \t\r\n\v\f");
-                    text = first == std::string::npos ? std::string{} : text.substr(first);
-                }
+                const std::string_view sliced = source_line.substr(position, marker_start - position);
+                const std::size_t first = previous_node ? sliced.find_first_not_of(" \t\r\n\v\f") : 0;
+                std::string text = first == std::string_view::npos ? std::string{} : std::string{sliced.substr(first)};
                 while (!text.empty() && is_ascii_space(text.back()))
                     text.pop_back();
-                if (!text.empty())
-                    layouts.push_back(Layout{.lines = {text}, .width = visible_width(text), .baseline = 0});
+                const bool preserve_leading_space =
+                        previous_matrix && !sliced.empty() && is_ascii_space(sliced.front());
+                const bool preserve_trailing_space = nodes[node_index].kind == LayoutNodeKind::Matrix &&
+                                                     !sliced.empty() && is_ascii_space(sliced.back());
+                if (!text.empty() || preserve_leading_space || preserve_trailing_space) {
+                    const std::string spaced =
+                            (preserve_leading_space ? " " : "") + text + (preserve_trailing_space ? " " : "");
+                    layouts.push_back(Layout{.lines = {spaced}, .width = visible_width(spaced), .baseline = 0});
+                }
             }
 
             const LayoutNode& node = nodes[node_index];
@@ -1549,6 +1776,14 @@ private:
                 if (node.lower) lines.push_back(pad_layout_line(*node.lower, content_width, true) + " ");
                 layouts.push_back(Layout{
                         .lines = std::move(lines), .width = content_width + 1, .baseline = node.upper ? 1U : 0U});
+            } else if (node.kind == LayoutNodeKind::Matrix) {
+                std::size_t width = 0;
+                for (const auto& line : node.lines)
+                    width = std::max(width, visible_width(line));
+                std::vector<std::string> lines;
+                for (const auto& line : node.lines)
+                    lines.push_back(pad_layout_line(line, width));
+                layouts.push_back(Layout{.lines = std::move(lines), .width = width, .baseline = node.baseline});
             } else {
                 const std::optional<Layout> upper =
                         node.upper ? std::optional{render_layout(*node.upper, nodes)} : std::nullopt;
@@ -1570,13 +1805,15 @@ private:
             }
             position = marker_end + kLayoutMarkerEnd.size();
             previous_node = true;
+            previous_matrix = node.kind == LayoutNodeKind::Matrix;
         }
         if (position < source_line.size()) {
-            std::string text{source_line.substr(position)};
-            if (previous_node) {
-                const auto first = text.find_first_not_of(" \t\r\n\v\f");
-                text = first == std::string::npos ? std::string{} : text.substr(first);
-            }
+            const std::string_view sliced = source_line.substr(position);
+            const std::size_t first = previous_node ? sliced.find_first_not_of(" \t\r\n\v\f") : 0;
+            const std::string trimmed =
+                    first == std::string_view::npos ? std::string{} : std::string{sliced.substr(first)};
+            const bool preserve_leading_space = previous_matrix && !sliced.empty() && is_ascii_space(sliced.front());
+            const std::string text = preserve_leading_space ? " " + trimmed : trimmed;
             if (!text.empty()) layouts.push_back(Layout{.lines = {text}, .width = visible_width(text), .baseline = 0});
         }
         const Layout line_layout = join_layouts(layouts);
@@ -1597,7 +1834,7 @@ std::optional<std::string> render_latex(std::string_view source, const LatexOpti
     std::vector<LayoutNode> layout_nodes;
     const auto rendered = LatexParser(source, options.display, layout_nodes).render();
     if (!rendered) return std::nullopt;
-    if (!options.display || layout_nodes.empty()) return rendered;
+    if (layout_nodes.empty()) return replace_all(*rendered, kProtectedSpace, " ");
 
     Layout layout = render_layout(*rendered, layout_nodes);
     std::size_t indentation = std::string::npos;
@@ -1616,7 +1853,7 @@ std::optional<std::string> render_latex(std::string_view source, const LatexOpti
             --end;
         result.append(dedented.substr(0, end));
     }
-    return result;
+    return replace_all(result, kProtectedSpace, " ");
 }
 
 } // namespace cch::tui

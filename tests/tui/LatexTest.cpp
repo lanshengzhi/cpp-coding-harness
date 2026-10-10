@@ -109,8 +109,6 @@ TEST_CASE("render_latex reports the frozen failure value for unsupported and mal
         // here; only the frozen failure value passes.
         CHECK_FALSE(tui::render_latex(observation.source).has_value());
     }
-    CHECK_FALSE(tui::render_latex("\\begin{matrix} a \\\\ b \\end{matrix}").has_value());
-    CHECK_FALSE(tui::render_latex("\\begin{aligned} a &= b \\end{aligned}").has_value());
 }
 
 TEST_CASE("render_latex does not invent a rendering for a failure by keeping the source",
@@ -120,6 +118,95 @@ TEST_CASE("render_latex does not invent a rendering for a failure by keeping the
     // A source-preserving fallback would echo the input; the failure value is
     // the absence of a value, not the input text.
     CHECK(tui::render_latex("x^").has_value() == false);
+}
+
+// Complete matrix and environment outputs below were checked against the frozen pi v1.0.4 latex.ts renderer.
+TEST_CASE("render_latex aligns matrix columns and renders frozen delimiters", "[tui][latex][issue975][spec]") {
+    const auto parenthesized = tui::render_latex(R"(\begin{pmatrix} a & long \\ xy & z \\ m & uvw \end{pmatrix})");
+    REQUIRE(parenthesized);
+    CHECK(*parenthesized == "⎛ a  │ long ⎞\n⎜ xy │ z    ⎟\n⎝ m  │ uvw  ⎠");
+    CHECK(tui::visible_width("⎛ a  │ long ⎞") == 13);
+
+    const auto bracketed = tui::render_latex(R"(\begin{bmatrix} 1 & 2 \\ 30 & 4 \\ 5 & 600 \end{bmatrix})");
+    REQUIRE(bracketed);
+    CHECK(*bracketed == "⎡ 1  │ 2   ⎤\n⎢ 30 │ 4   ⎥\n⎣ 5  │ 600 ⎦");
+
+    const auto vertical = tui::render_latex(R"(\begin{vmatrix} a & abc \\ de & f \\ ghi & j \end{vmatrix})");
+    REQUIRE(vertical);
+    CHECK(*vertical == "│ a   │ abc │\n│ de  │ f   │\n│ ghi │ j   │");
+
+    const auto braces = tui::render_latex(R"(\begin{Bmatrix} a & b \\ c & d \end{Bmatrix})");
+    REQUIRE(braces);
+    CHECK(*braces == "⎧ a │ b ⎫\n⎩ c │ d ⎭");
+
+    const auto double_vertical = tui::render_latex(R"(\begin{Vmatrix} a & b \\ c & d \end{Vmatrix})");
+    REQUIRE(double_vertical);
+    CHECK(*double_vertical == "║ a │ b ║\n║ c │ d ║");
+
+    const auto array = tui::render_latex(R"(\begin{array}{cc} a & long \\ xyz & b \end{array})");
+    REQUIRE(array);
+    CHECK(*array == "a   │ long\nxyz │ b   ");
+
+    CHECK(tui::render_latex(R"(\begin{matrix} a & b \\ c & d \end{matrix})") == "a │ b\nc │ d");
+    CHECK(tui::render_latex(R"(\begin{smallmatrix} a & b \\ c & d \end{smallmatrix})") == "a │ b\nc │ d");
+
+    const auto embedded = tui::render_latex(R"(A=\begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix} + B)");
+    REQUIRE(embedded);
+    CHECK(*embedded == "A = ⎛ 1 │ 2 ⎞ + B\n    ⎝ 3 │ 4 ⎠");
+
+    const auto fraction_cell =
+            tui::render_latex(R"(\begin{matrix} \frac{1}{2} & z \\ x & 3 \end{matrix})", {.display = true});
+    REQUIRE(fraction_cell);
+    CHECK(*fraction_cell == "1/2 │ z\nx   │ 3");
+}
+
+TEST_CASE("render_latex renders cases conditions and odd or even row layouts", "[tui][latex][issue975][spec]") {
+    const auto odd = tui::render_latex(R"(\begin{cases} x, & if x>0 \\ -x, & x<0 \\ 0, & otherwise \end{cases})");
+    REQUIRE(odd);
+    CHECK(*odd == "⎧ x  if x > 0\n⎨ -x if x < 0\n⎩ 0  otherwise");
+    CHECK(tui::visible_width("⎧ x  if x > 0") == 13);
+    CHECK(tui::visible_width("⎨ -x if x < 0") == 13);
+
+    const auto even =
+            tui::render_latex(R"(\begin{cases} a, & if a \\ b, & when b \\ c, & c \\ d, & for d \end{cases})");
+    REQUIRE(even);
+    CHECK(*even == "⎧ a if a\n⎨ b when b\n⎨\n⎨ c if c\n⎩ d for d");
+    CHECK(tui::visible_width("⎨ b when b") == 10);
+
+    CHECK(tui::render_latex(R"(\begin{cases} a, & if a \end{cases})") == "⎧ a if a");
+    CHECK(tui::render_latex(R"(\begin{cases*} a, & a \\ b, & b \end{cases*})") == "⎧ a if a\n⎨\n⎩ b if b");
+}
+
+TEST_CASE(
+        "render_latex renders aligned and alignedat rows without cross-row alignment", "[tui][latex][issue975][spec]") {
+    const auto aligned = tui::render_latex(R"(\begin{aligned} x &= y \\ a + b &= c \end{aligned})");
+    REQUIRE(aligned);
+    CHECK(*aligned == "x = y\na + b = c");
+
+    const auto align = tui::render_latex(R"(\begin{align*} a &= b \\ c &= d \end{align*})");
+    REQUIRE(align);
+    CHECK(*align == "a = b\nc = d");
+
+    const auto aligned_at =
+            tui::render_latex(R"(\begin{alignedat}{2} x &= y & u &= v \\ aa &= bb & cc &= dd \end{alignedat})");
+    REQUIRE(aligned_at);
+    CHECK(*aligned_at == "x = y u = v\naa = bb cc = dd");
+
+    for (const std::string_view environment :
+            {"align", "gather", "gathered", "multline", "multline*", "split", "alignat", "alignat*"}) {
+        const std::string arguments = environment == "alignat" || environment == "alignat*" ? "{1}" : "";
+        const std::string source = "\\begin{" + std::string{environment} + "}" + arguments +
+                                   " a &= b \\\\ c &= d \\end{" + std::string{environment} + "}";
+        CAPTURE(environment);
+        CHECK(tui::render_latex(source) == "a = b\nc = d");
+    }
+}
+
+TEST_CASE("render_latex rejects unsupported and malformed environments", "[tui][latex][issue975][spec]") {
+    CHECK_FALSE(tui::render_latex(R"(\begin{unknown} x \end{unknown})").has_value());
+    CHECK_FALSE(tui::render_latex(R"(\begin{pmatrix} a & b \\ c & d)").has_value());
+    CHECK_FALSE(tui::render_latex(R"(\begin{pmatrix} a & b \end{matrix})").has_value());
+    CHECK_FALSE(tui::render_latex(R"(\begin{pmatrix} \frac{a & b \\ c & d \end{pmatrix})").has_value());
 }
 
 TEST_CASE(
