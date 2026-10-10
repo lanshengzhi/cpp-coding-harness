@@ -94,14 +94,29 @@ struct ExtractedSequences {
     std::string remainder;
 };
 
+[[nodiscard]] std::size_t utf8_sequence_length(unsigned char lead) {
+    // Match frozen pi StdinBuffer string semantics: non-ESC units are UTF-16
+    // characters in JS; in C++ emit one complete UTF-8 code unit sequence.
+    if ((lead & 0x80) == 0) return 1;
+    if ((lead & 0xe0) == 0xc0) return 2;
+    if ((lead & 0xf0) == 0xe0) return 3;
+    if ((lead & 0xf8) == 0xf0) return 4;
+    return 1;
+}
+
 [[nodiscard]] ExtractedSequences extract_complete_sequences(std::string_view buffer) {
     ExtractedSequences extracted;
     std::size_t position = 0;
     while (position < buffer.size()) {
         const auto remaining = buffer.substr(position);
         if (!remaining.starts_with(kEsc)) {
-            extracted.sequences.emplace_back(1, remaining.front());
-            ++position;
+            const auto length = utf8_sequence_length(static_cast<unsigned char>(remaining.front()));
+            if (remaining.size() < length) {
+                extracted.remainder = std::string(remaining);
+                break;
+            }
+            extracted.sequences.emplace_back(remaining.substr(0, length));
+            position += length;
             continue;
         }
 
@@ -226,7 +241,7 @@ std::vector<std::string> StdinBuffer::flush() {
     std::vector<std::string> flushed{std::move(buffer_)};
     buffer_.clear();
     pending_kitty_printable_codepoint_.reset();
-    for (auto& sequence : flushed) emit_data_sequence(std::move(sequence));
+    for (const auto& sequence : flushed) emit_data_sequence(sequence);
     return flushed;
 }
 
