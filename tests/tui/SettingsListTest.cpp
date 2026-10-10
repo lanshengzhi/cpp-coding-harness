@@ -156,6 +156,22 @@ TEST_CASE("SettingsList search preserves baseline token and alphanumeric matchin
     CHECK(unicode_search.selected_item()->id == "accented");
 }
 
+TEST_CASE("SettingsList search ranks non-ASCII labels by the frozen UTF-16 scores",
+        "[tui][settings-list][issue958][spec]") {
+    // "Éa" scores 0.1 for the queried "a" and "xxa" scores 0.2, so the accented
+    // label wins even though it is listed second. Byte-indexed scoring ties
+    // them at 0.2 and leaves the input order to decide.
+    cch::tui::SettingsList list(
+            {
+                    {.id = "ascii", .label = "xxa", .current_value = "off"},
+                    {.id = "accented", .label = "\xc3\x89\x61", .current_value = "on"},
+            },
+            cch::tui::SettingsListOptions{.enable_search = true});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "a"}));
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->id == "accented");
+}
+
 TEST_CASE("SettingsList delegates nested selection and restores its parent selection",
         "[tui][settings-list][issue52][spec]") {
     std::vector<std::string> updates;

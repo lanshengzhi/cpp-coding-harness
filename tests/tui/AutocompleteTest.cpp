@@ -120,6 +120,24 @@ TEST_CASE("CombinedAutocompleteProvider completes slash commands with fuzzy rank
     CHECK_FALSE(request_suggestions(provider, {"/set"}, 0, 4, /*force=*/true).has_value());
 }
 
+TEST_CASE("CombinedAutocompleteProvider ranks non-ASCII command names by the frozen UTF-16 scores",
+        "[tui][autocomplete][issue958][spec]") {
+    cch::tests::TempWorkspace workspace;
+    std::vector<std::variant<SlashCommand, AutocompleteItem>> commands;
+    commands.emplace_back(SlashCommand{.name = "xxa", .description = {}, .argument_hint = {}});
+    commands.emplace_back(SlashCommand{.name = "\xc3\xa9\x61", .description = {}, .argument_hint = {}});
+    auto provider = make_provider(std::move(commands), workspace.path());
+
+    // Both commands match "a"; the one-unit accented prefix scores 0.1 against
+    // 0.2 for "xxa", so completion offers it first. Byte-indexed scoring ties
+    // them and would keep the declaration order.
+    const auto ranked = request_suggestions(provider, {"/a"}, 0, 2);
+    REQUIRE(ranked);
+    REQUIRE(ranked->items.size() == 2);
+    CHECK(ranked->items[0].value == "\xc3\xa9\x61");
+    CHECK(ranked->items[1].value == "xxa");
+}
+
 TEST_CASE(
         "CombinedAutocompleteProvider completes slash commands after leading whitespace", "[tui][autocomplete][spec]") {
     cch::tests::TempWorkspace workspace;

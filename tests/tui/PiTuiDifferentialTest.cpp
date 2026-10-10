@@ -684,3 +684,47 @@ TEST_CASE("Named pi-v1.0.4 component evidence replays styled text after mutation
     text.set_text(inputs.at("changedText").get_string());
     check_lines(text.render(width), scenario.at("expected").at("changed"));
 }
+
+TEST_CASE("Named pi-v1.0.4 fuzzy evidence replays UTF-16 scores and ranking",
+        "[tui][differential][issue958][compat-pi]") {
+    const auto fixture = tests::read_pi_tui_evidence("fuzzy.json");
+    REQUIRE(fixture);
+    const auto& scenario = fixture->at("scenarios").get_array().front();
+    const auto& inputs = scenario.at("inputs");
+    const auto& expected = scenario.at("expected");
+
+    // Scores and match/nonmatch outcomes come from pi's own fuzzyMatch over the
+    // frozen query/text corpus. Byte-indexed scoring reproduces neither the
+    // accented nor the supplementary prefix position.
+    const auto& match_rows = expected.at("match").get_array();
+    const auto& match_inputs = inputs.at("match").get_array();
+    REQUIRE(match_rows.size() == match_inputs.size());
+    for (std::size_t index = 0; index < match_rows.size(); ++index) {
+        const auto& row = match_rows[index];
+        const auto& input = match_inputs[index];
+        INFO(std::string{"fuzzy match "} + row.at("name").get_string());
+        const auto result = tui::fuzzy_match(input.at("query").get_string(), input.at("text").get_string());
+        CHECK(result.matches == row.at("matches").get_boolean());
+        CHECK(result.score == row.at("score").get_number());
+    }
+
+    // Ranking replays pi's fuzzyFilter order, not mere membership.
+    const auto& filter_rows = expected.at("filter").get_array();
+    const auto& filter_inputs = inputs.at("filter").get_array();
+    REQUIRE(filter_rows.size() == filter_inputs.size());
+    for (std::size_t index = 0; index < filter_rows.size(); ++index) {
+        const auto& row = filter_rows[index];
+        const auto& input = filter_inputs[index];
+        INFO(std::string{"fuzzy filter "} + row.at("name").get_string());
+        std::vector<std::string> items;
+        for (const auto& item : input.at("items").get_array())
+            items.push_back(item.get_string());
+        const auto ranked =
+                tui::fuzzy_filter(items, input.at("query").get_string(), [](const std::string& item) { return item; });
+        const auto& output = row.at("output").get_array();
+        REQUIRE(ranked.size() == output.size());
+        for (std::size_t position = 0; position < ranked.size(); ++position) {
+            CHECK(ranked[position] == output[position].get_string());
+        }
+    }
+}

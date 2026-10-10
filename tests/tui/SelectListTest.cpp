@@ -337,6 +337,22 @@ TEST_CASE("SelectList search mode ranks better fuzzy matches above the original 
     CHECK(list.selected_item()->value == "consecutive");
 }
 
+TEST_CASE("SelectList search mode ranks non-ASCII labels by the frozen UTF-16 scores",
+        "[tui][select-list][issue958][spec]") {
+    // Both items match "a"; "\xc3\xa9a" scores 0.1 from its one-unit prefix and
+    // "xxa" scores 0.2, so the accented item wins despite being listed second.
+    // Byte-indexed scoring would tie them and keep the original order.
+    cch::tui::SelectList list(
+            {
+                    {.value = "ascii", .label = "xxa"},
+                    {.value = "accented", .label = "\xc3\xa9\x61"},
+            },
+            cch::tui::SelectListOptions{.enable_search = true});
+    type_into(list, "a");
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->value == "accented");
+}
+
 TEST_CASE("SelectList search mode matches label description and hidden search text",
         "[tui][select-list][issue586][spec]") {
     // The default searchable text joins the label, description and value, so
