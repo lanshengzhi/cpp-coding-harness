@@ -191,12 +191,14 @@ TEST_CASE("removing a listener during dispatch stops its later callbacks", "[tui
     CHECK_FALSE(self_removing.active());
     CHECK_FALSE(later.active());
 
-    // No stale callback survives the removals, and the removed listeners' bytes
-    // are no longer typed.
+    // No stale callback survives the removals. The surviving listener keeps
+    // observing, and the typed stage still receives the bytes (pi tui.ts:
+    // removal never blocks typed dispatch — only consume() or an empty
+    // rewrite does), so the editor accumulates "ab".
     recorder.observed.clear();
     REQUIRE(host.type("b"));
-    CHECK(recorder.observed.empty());
-    CHECK(host.value() == "b");
+    CHECK(recorder.observed == std::vector<std::string>{"removing"});
+    CHECK(host.value() == "ab");
 }
 
 TEST_CASE("destroying a listener handle removes it, and a handle outliving its host is inert",
@@ -211,19 +213,25 @@ TEST_CASE("destroying a listener handle removes it, and a handle outliving its h
             CHECK(recorder.observed == std::vector<std::string>{"a"});
             CHECK(host.value() == "a");
         }
-        // The scoped handle is gone: no callback and no typed text for "b".
+        // The scoped handle is gone, so its callback never runs again. The
+        // typed stage still receives the bytes (pi tui.ts: removing an
+        // inputListener never blocks typed dispatch — only consume() or an
+        // empty rewrite does), so the editor holds "ab".
         REQUIRE(host.type("b"));
         CHECK(recorder.observed == std::vector<std::string>{"a"});
-        CHECK(host.value() == "a");
+        CHECK(host.value() == "ab");
 
         surviving = host.tui().add_raw_input_listener(recorder.pass());
         REQUIRE(surviving.active());
     }
     // The host was destroyed before its handle; disposing the orphaned handle
-    // touches nothing and leaves no stale callback.
+    // touches nothing and leaves no stale callback. The handle keeps its id
+    // (it still names the dead registration) but reports inactive, and
+    // reset() on the orphan is a no-op.
     CHECK_FALSE(surviving.active());
-    CHECK(surviving.id() == 0);
+    CHECK(surviving.id() != 0);
     surviving.reset();
+    CHECK(surviving.id() == 0);
 }
 
 TEST_CASE("stop and restart keep registered listeners live without duplicating them", "[tui][input][issue952][spec]") {
