@@ -37,6 +37,7 @@ include_guard(GLOBAL)
         tests/tui/SettingsListTest.cpp
         tests/tui/TerminalImageTest.cpp
         tests/tui/TerminalStreamDecoderTest.cpp
+        tests/tui/StdinBufferTest.cpp
         tests/tui/TextBufferTest.cpp
         tests/tui/TruncatedTextTest.cpp
         tests/tui/TuiTest.cpp
