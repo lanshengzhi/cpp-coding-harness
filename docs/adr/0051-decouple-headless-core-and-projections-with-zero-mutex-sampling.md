@@ -4,6 +4,15 @@ status: accepted
 
 # Decouple Headless Core and Projections with Zero-Mutex Sampling
 
+> Native TUI paint policy amended by [ADR 0067](0067-align-the-linux-tui-toolkit-and-native-tui-with-pi-v1-0-4.md)
+> and [spec #946](https://github.com/lanshengzhi/cpp-coding-harness/issues/946). Toolkit scheduling
+> replaces the product counted ticker/preview paint tiers and direct Editor local echo. Projection
+> consumption, successful-frame accounting, frozen transcript caches, headless/serialized Core and
+> ADR 0052's Base/Patch convergence and bounded mailboxes remain. #978 performs the actual policy
+> handoff and local-echo shutdown; #987 physically deletes the old bypass APIs. Accepted policy
+> does not claim this migration has landed; the original decision and preview rationale remain
+> below as history.
+
 The Pike runtime decouples the Authoritative Core and all presentation surfaces (Native TUI, Web, GUI, and remote inspectors) into an asynchronous, read-only projection architecture. The Core runtime operates completely headless on a single-threaded, lock-free serialized domain, publishing immutable, versioned state patches and snapshots. All UI components, terminal renderers, and input buffers eliminate operating system recursive mutexes. The Native TUI becomes a consumer projection pulling state on an independent 30/60 FPS frame ticker, adopting the Block Frozen Protocol (`Active` -> `Finalized` -> `Committed`) for streaming transcript blocks and client-side prediction for user prompt typing.
 
 This decision supersedes the synchronous UI binding and recursive-mutex synchronization introduced in ADR 0025, ADR 0035, and ADR 0040. Core session and agent invariants, the single authoritative session, and serialized execution domain semantics remain authoritative.

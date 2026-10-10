@@ -4,6 +4,14 @@ status: accepted
 
 # Pi capability scope decisions and open questions
 
+> Linux TUI membership amendment: [spec #946](https://github.com/lanshengzhi/cpp-coding-harness/issues/946)
+> and its user-authorized readiness revision are recorded in
+> [ADR 0067](0067-align-the-linux-tui-toolkit-and-native-tui-with-pi-v1-0-4.md). The complete frozen
+> pi-v1.0.4 Linux toolkit and necessary Native TUI/CLI consumers are included, replacing historical
+> toolkit subset exclusions and exemptions. This ruling is not evidence that those capabilities
+> have been implemented or verified. Unrelated membership decisions and open questions below
+> retain their own authority; historical inventories do not reopen the TUI scope.
+
 ## Context
 
 [ADR 0053](0053-replace-pi-parity-authority-with-the-product-architecture-contract.md) made pi

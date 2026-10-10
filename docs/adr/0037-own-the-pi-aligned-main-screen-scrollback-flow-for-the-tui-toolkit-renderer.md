@@ -4,6 +4,14 @@ status: accepted
 
 # Own the pi-aligned main-screen scrollback flow for the TUI Toolkit renderer
 
+> Amended by [ADR 0067](0067-align-the-linux-tui-toolkit-and-native-tui-with-pi-v1-0-4.md) and
+> [spec #946](https://github.com/lanshengzhi/cpp-coding-harness/issues/946). The regular scrollback
+> objective remains, but positioning, resize/shrink/image outcomes and renderer exemptions now
+> follow the frozen pi-v1.0.4 contract. The absolute strategy subsequently chosen in ADR 0041 is
+> replaced by relative line flow without startup DSR, and fullscreen is included. This records the
+> accepted target; implementation and evidence remain obligations of the spec's tickets. The
+> historical reasoning below is preserved.
+
 The TUI Toolkit's main-screen differential renderer previously clipped the composed buffer to the terminal viewport (`new_lines.resize(rows)`) and rewrote rows in place with absolute cursor addressing, so TUI content never entered the terminal's native scrollback: users could not scroll up to review earlier conversation, and the startup header/loaded-resources block stayed pinned at the top of the screen instead of scrolling away as content grew. ADR 0035 claimed the "TUI core with main-screen differential renderer" as a Supported Capability without recording this divergence from pi's `TuiMainScreen`, whose contract is to render into the terminal's main screen **and scrollback** (`packages/tui/src/tui-main-screen.ts`: writes the full buffer, tracks a viewport top over it, and only clears screen plus scrollback — `\x1b[2J\x1b[H\x1b[3J` — on a width/height change full-redraw). This decision aligns the renderer and terminal seam with pi's `TuiMainScreen` semantics while keeping the recorded Intentional Divergences (Decoded Input Event fork A, Terminal-Owned Image Placement fork B) and the ADR 0035 capability subset unchanged; it records the Termux height-change special-case as not applicable and sets the acceptance criteria for the `/to-spec` → `/to-tickets` → `/implement` series.
 
 ## Considered options

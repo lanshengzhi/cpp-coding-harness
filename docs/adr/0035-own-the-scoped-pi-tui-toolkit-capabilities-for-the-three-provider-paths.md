@@ -4,6 +4,14 @@ status: accepted
 
 # Own the scoped pi-tui toolkit capabilities for the three provider paths
 
+> Scope and baseline superseded by [ADR 0067](0067-align-the-linux-tui-toolkit-and-native-tui-with-pi-v1-0-4.md)
+> for [spec #946](https://github.com/lanshengzhi/cpp-coding-harness/issues/946). The complete Linux
+> toolkit and required product consumers replace this regular-only subset, its fullscreen/extension/
+> diagnostic omissions, the 1 MiB paste bound and its behavioral exemptions. Typed input, immutable
+> bindings, out-of-band cursor/image values and VirtualTerminal remain C++ representations whose
+> outcomes must satisfy the new frozen contract. This is an accepted target, not an implementation
+> or verification claim; the historical decision below is preserved.
+
 The pi-tui toolkit surface is exactly the reusable terminal/input/editor/component capabilities the three scoped provider paths exercise through pi's default interactive boot — the regular main-screen mode — as a pi capability subset by omission only: the entire opt-in alt-screen/viewport half, extension-only seams, platform-native helpers pi itself fails closed without, JS-runtime re-exports, and diagnostic surfaces are Deferred with no placeholder surface. This implements parity-map ticket [#333](https://github.com/lanshengzhi/cpp-coding-harness/issues/333), consuming the capability inventory and 58-row delta from [#332](https://github.com/lanshengzhi/cpp-coding-harness/issues/332) and bounded by the OAuth presentation contract frozen in [#328](https://github.com/lanshengzhi/cpp-coding-harness/issues/328) and the pi-agent-core terminal-event/error surface frozen in [#331](https://github.com/lanshengzhi/cpp-coding-harness/issues/331). The strict-alignment directive applies: names, namespaces, and layout may change to match pi; there is no backward-compatibility burden. The completion gate, fixture strategy, and downstream handoff that make this surface verifiable are recorded in the [#334](https://github.com/lanshengzhi/cpp-coding-harness/issues/334) resolution.
 
 > Terminology refined by [ADR 0039](0039-own-the-capability-owner-package-graph-and-parity-architecture-gate.md): every “public” toolkit, module, header, utility, or surface reference in this ADR means the repository-internal `cch_tui` Owner Interface. It does not mean an installed consumer surface, SDK, ABI, CMake package, or exported target. The Supported/Deferred capability classifications and observable TUI semantics remain authoritative.

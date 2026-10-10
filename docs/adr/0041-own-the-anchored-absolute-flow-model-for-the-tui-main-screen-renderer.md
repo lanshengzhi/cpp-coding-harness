@@ -4,6 +4,14 @@ status: accepted
 
 # Own the anchored absolute flow model for the TUI main-screen renderer
 
+> Positioning decision superseded by [ADR 0067](0067-align-the-linux-tui-toolkit-and-native-tui-with-pi-v1-0-4.md)
+> and [spec #946](https://github.com/lanshengzhi/cpp-coding-harness/issues/946). Regular rendering
+> uses relative line flow from the shell's existing cursor; startup DSR anchoring, destructive CPR
+> timeout fallback and the alternate absolute regular strategy are to be removed. Dirty-screen,
+> scrollback, cursor/image and failure-recovery outcomes require frozen evidence. This is an
+> accepted replacement target, not a claim that removal has landed. The earlier trade-off below
+> is retained as history.
+
 ADR 0037 aligned the main-screen renderer with pi's `TuiMainScreen` scrollback flow, but the port replaced pi's relative line-flow writes with absolute cursor addressing (`set_cursor` → CUP) while hard-coding the buffer-to-screen origin at row 0 (`viewport_top = 0`, internal cursor `{0,0}`, no startup cursor query). pi's first render (`fullRender(false)`) writes lines joined by `\r\n` from wherever the shell left the hardware cursor and never uses absolute CUP, so it leaves zero residue on any screen state; the C++ port instead overwrites from screen row 0 and leaves any pre-existing shell content below the composed buffer in place until the buffer grows to fill the screen (issue #476 — "dirty-screen startup residue"). The fix must restore pi's observable behavior on dirty screens, but pi's internal model — three mutually-coupled cursor states (`cursorRow` / `hardwareCursorRow` / `previousViewportTop`), relative-only movement with no absolute ground truth, and unrecoverable drift when external output disturbs the cursor — is historical baggage this port need not inherit: the terminal seam here is already absolute-addressing styled, and the input decoder already consumes asynchronous terminal responses (`CSI 16 t` cell-size reports), so a startup Device Status Report can give this renderer the absolute anchor pi never had.
 
 ## Considered options

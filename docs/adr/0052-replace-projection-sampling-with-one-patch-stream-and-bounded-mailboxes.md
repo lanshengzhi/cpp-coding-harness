@@ -4,6 +4,8 @@ status: accepted
 
 # Replace Projection Sampling with One Patch Stream and Bounded Subscriber Mailboxes
 
+[ADR 0067](0067-align-the-linux-tui-toolkit-and-native-tui-with-pi-v1-0-4.md) supersedes the Native TUI counted-ticker/preview paint authority retained below. The one Projection Stream, Base/Patch convergence, bounded subscriber mailboxes and Block Frozen Protocol remain. #978 migrates actual paint scheduling while keeping Projection consumption and successful-frame accounting asynchronous and product-owned; accepted scope does not imply completed implementation.
+
 ADR 0051 established the projection seam as three operations — `state_version()`, `snapshot()`, and a single replaceable dirty edge — consumed by the Native TUI's "sample version, then sample snapshot" ticker protocol. Spec #597 story 10 requires alternative presentation layers to attach to the Headless Core without modifying it, but the sampling seam cannot serve a second projection: the dirty edge is stolen on re-attach, there is no patch vocabulary, every consumer pays a full-snapshot materialization per version, and push-only facts (tool partials and failures) reach the TUI outside the snapshot value entirely (#615).
 
 We replace the three-method sampling contract with a single subscription seam: `attach(listener) -> Subscription`. The listener receives exactly two message kinds through a bounded, per-subscriber mailbox:

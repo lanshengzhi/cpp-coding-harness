@@ -1,5 +1,13 @@
 # pi-tui compatibility fixtures
 
+## Baseline routing
+
+The inventory and gate report below describe historical evidence at `83114817c68f5413e4d7ba6d7003ddc511cd31d2`. [ADR 0067](../../docs/adr/0067-align-the-linux-tui-toolkit-and-native-tui-with-pi-v1-0-4.md) and [#946](https://github.com/lanshengzhi/cpp-coding-harness/issues/946) select the new Named Baseline `pi-v1.0.4`, exact revision `7c10bd4337495ee613f2224843ecdf349b80d1df`, for complete Linux TUI alignment. Historical Deferred classifications and behavioral exemptions do not exempt included capabilities from that target.
+
+[#947](https://github.com/lanshengzhi/cpp-coding-harness/issues/947) introduces the separate named capture/replay runner; [#948](https://github.com/lanshengzhi/cpp-coding-harness/issues/948) accounts for capabilities and actual consumers. Keep existing fixture provenance. A missing, wrong-revision or tampered requested bundle must fail rather than fall back to these fixtures. This routing note supplies no new captured evidence or behavioral acceptance.
+
+## Historical scoped evidence
+
 The committed evidence bundle for the pi-tui completion gate ([#386]), closing the scoped toolkit
 phase of parity map [#2] (ADR 0035). Every snapshot below is compared byte-for-byte by tests in
 this repository against the C++ `cch_tui` surface, so the gate's evidence is one checklist away.
