@@ -190,12 +190,12 @@ TEST_CASE(
             // Uppercase letters: pi returns the raw text identifier ("A");
             // the C++ decoder canonicalizes to the shift+letter identifier
             // with the typed case preserved in inserted text
-            // (detail::printable_text).
+            // (tui::printable_text).
             const auto expected =
                 std::string{"shift+"} + static_cast<char>(pi_id.front() - 'A' + 'a');
             CHECK(tui::key_id(*key) == expected);
             CHECK(key->shift);
-            CHECK(tui::detail::printable_text(*key) == pi_id);
+            CHECK(tui::printable_text(*key) == std::optional<std::string>{pi_id});
         } else {
             // Unshifted uppercase codepoints: pi rejects them (null); the
             // C++ decoder still decodes the uppercase character key. No

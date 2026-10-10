@@ -3,7 +3,9 @@
 #include "tui/InputInternal.hpp"
 
 #include <cch/support/Error.hpp>
+#include <algorithm>
 #include <array>
+#include <optional>
 #include <string>
 
 namespace cch::tui {
@@ -39,6 +41,40 @@ bool is_baseline_key(std::string_view key) {
     const auto value = key.front();
     return (value >= 'a' && value <= 'z') || (value >= '0' && value <= '9') ||
         detail::is_baseline_symbol(value);
+}
+
+bool is_non_printable_key(std::string_view key) {
+    // The named keys a printable character never is. Events decoded from a
+    // terminal carry their own text and never reach this list; it guards the
+    // identity fallback for events built without terminal text.
+    constexpr std::array<std::string_view, 21> kNonPrintableKeys{
+            "enter",
+            "tab",
+            "escape",
+            "backspace",
+            "delete",
+            "insert",
+            "clear",
+            "home",
+            "end",
+            "pageUp",
+            "pageDown",
+            "up",
+            "down",
+            "left",
+            "right",
+            "menu",
+            "capsLock",
+            "numLock",
+            "scrollLock",
+            "pause",
+            "printScreen",
+    };
+    for (const auto candidate : kNonPrintableKeys) {
+        if (candidate == key) return true;
+    }
+    return key.size() > 1 && key.size() <= 3 && key.front() == 'f' &&
+           std::all_of(key.begin() + 1, key.end(), [](char value) { return value >= '0' && value <= '9'; });
 }
 
 } // namespace
@@ -97,6 +133,23 @@ bool matches_key(const KeyEvent& event, std::string_view identifier) {
     const auto parsed = parse_key_id(identifier);
     return parsed && parsed->key == event.key && parsed->ctrl == event.ctrl && parsed->shift == event.shift &&
            parsed->alt == event.alt && parsed->super == event.super;
+}
+
+std::optional<std::string> printable_text(const KeyEvent& event) {
+    if (!carries_press_behavior(&event)) return std::nullopt;
+    if (event.ctrl || event.alt || event.super || event.key.empty()) return std::nullopt;
+    if (!event.text.empty()) return event.text;
+    if (is_non_printable_key(event.key)) return std::nullopt;
+    if (event.key == "space") return " ";
+    // The identifier grammar lowercases shift-modified letters, so the typed
+    // case is restored here for events decoded without terminal text.
+    if (event.shift && event.key.size() == 1) {
+        const auto letter = static_cast<unsigned char>(event.key.front());
+        if (letter >= 'a' && letter <= 'z') {
+            return std::string(1, static_cast<char>(letter - 'a' + 'A'));
+        }
+    }
+    return event.key;
 }
 
 } // namespace cch::tui
