@@ -30,6 +30,7 @@ include_guard(GLOBAL)
         tests/tui/InputTest.cpp
         tests/tui/KeybindingsTest.cpp
         tests/tui/KeysTest.cpp
+        tests/tui/LatexTest.cpp
         tests/tui/LoaderTest.cpp
         tests/tui/MarkdownTest.cpp
         tests/tui/OverlayTest.cpp

@@ -1,0 +1,580 @@
+{
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-10T06:25:12.161Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/latex.ts:renderLatex,RenderLatexOptions"
+  ],
+  "recapture": {
+    "recapturedAt": "2026-10-10T07:57:46.663Z",
+    "sourceBuild": "@earendil-works/pi-tui@1.0.4",
+    "sourceBuildDist": "dist/latex.js",
+    "sourceBuildSha256": "9a2055efaee483b038b2f0f663588eb4128153bedaa3c8c314248da00807c5bf",
+    "note": "Observed by executing the pinned published build of the frozen baseline on the envelope's environment; expectations are never regenerated from Pike."
+  },
+  "scenarios": [
+    {
+      "name": "inline-grammar",
+      "dimensions": {
+        "columns": 40,
+        "rows": 8
+      },
+      "inputs": {
+        "inline": [
+          {
+            "name": "symbols-greek",
+            "source": "\\alpha\\beta\\gamma"
+          },
+          {
+            "name": "symbols-caps",
+            "source": "\\Gamma\\sum\\Omega"
+          },
+          {
+            "name": "symbols-relations",
+            "source": "a \\times b"
+          },
+          {
+            "name": "symbols-cdot",
+            "source": "a \\cdot b"
+          },
+          {
+            "name": "symbols-le",
+            "source": "a \\leq b"
+          },
+          {
+            "name": "symbols-infinity",
+            "source": "\\infty"
+          },
+          {
+            "name": "frac-half",
+            "source": "\\frac{1}{2}"
+          },
+          {
+            "name": "frac-letters",
+            "source": "\\frac{a}{b}"
+          },
+          {
+            "name": "frac-expression",
+            "source": "\\frac{a+b}{c-d}"
+          },
+          {
+            "name": "frac-scripts",
+            "source": "\\frac{x^{2}}{2}"
+          },
+          {
+            "name": "frac-nested",
+            "source": "\\frac{\\frac{1}{2}}{3}"
+          },
+          {
+            "name": "frac-bare-arguments",
+            "source": "\\frac1{2}"
+          },
+          {
+            "name": "group-nested",
+            "source": "{{x}^{2}}^{3}"
+          },
+          {
+            "name": "group-nested-command",
+            "source": "{\\alpha{\\beta\\gamma}}"
+          },
+          {
+            "name": "root-square",
+            "source": "\\sqrt{x+1}"
+          },
+          {
+            "name": "root-square-word",
+            "source": "\\sqrt{2}"
+          },
+          {
+            "name": "root-cube",
+            "source": "\\sqrt[3]{8}"
+          },
+          {
+            "name": "root-fourth",
+            "source": "\\sqrt[4]{16}"
+          },
+          {
+            "name": "root-degree",
+            "source": "\\sqrt[n]{x}"
+          },
+          {
+            "name": "root-nested",
+            "source": "\\sqrt{\\sqrt{2}}"
+          },
+          {
+            "name": "accent-hat",
+            "source": "\\hat{a}"
+          },
+          {
+            "name": "accent-bar",
+            "source": "\\bar{b}"
+          },
+          {
+            "name": "accent-vec",
+            "source": "\\vec{v}"
+          },
+          {
+            "name": "accent-overline",
+            "source": "\\overline{a}"
+          },
+          {
+            "name": "accent-multi",
+            "source": "\\widehat{ab}"
+          },
+          {
+            "name": "script-sup",
+            "source": "x^{2}"
+          },
+          {
+            "name": "script-sub",
+            "source": "x_{n+1}"
+          },
+          {
+            "name": "script-order-sup-first",
+            "source": "x^{2}_{i+1}"
+          },
+          {
+            "name": "script-order-sub-first",
+            "source": "x_{3}^{2}"
+          },
+          {
+            "name": "script-normalized",
+            "source": "x^{a = b}"
+          },
+          {
+            "name": "script-letter-run",
+            "source": "x^{ab}"
+          },
+          {
+            "name": "operator-limit",
+            "source": "\\lim_{n\\to\\infty}"
+          },
+          {
+            "name": "operator-sum",
+            "source": "\\sum_{i=1}^{n} i"
+          },
+          {
+            "name": "operator-named",
+            "source": "\\sin x"
+          },
+          {
+            "name": "operator-named-adjacent",
+            "source": "\\sin\\cos"
+          },
+          {
+            "name": "operator-limits-modifier",
+            "source": "\\lim\\limits_{n}x"
+          },
+          {
+            "name": "blackboard",
+            "source": "\\mathbb{R}"
+          },
+          {
+            "name": "negation",
+            "source": "\\not\\subset"
+          },
+          {
+            "name": "delimiters",
+            "source": "\\left( x \\right)"
+          },
+          {
+            "name": "plain-wrapper",
+            "source": "\\mathrm{d}x"
+          },
+          {
+            "name": "boxed",
+            "source": "\\boxed{x}"
+          },
+          {
+            "name": "equation",
+            "source": "\\begin{equation} a + b \\end{equation}"
+          }
+        ]
+      },
+      "expected": {
+        "inline": [
+          {
+            "name": "symbols-greek",
+            "source": "\\alpha\\beta\\gamma",
+            "output": "αβγ"
+          },
+          {
+            "name": "symbols-caps",
+            "source": "\\Gamma\\sum\\Omega",
+            "output": "Γ∑Ω"
+          },
+          {
+            "name": "symbols-relations",
+            "source": "a \\times b",
+            "output": "a × b"
+          },
+          {
+            "name": "symbols-cdot",
+            "source": "a \\cdot b",
+            "output": "a · b"
+          },
+          {
+            "name": "symbols-le",
+            "source": "a \\leq b",
+            "output": "a ≤ b"
+          },
+          {
+            "name": "symbols-infinity",
+            "source": "\\infty",
+            "output": "∞"
+          },
+          {
+            "name": "frac-half",
+            "source": "\\frac{1}{2}",
+            "output": "1/2"
+          },
+          {
+            "name": "frac-letters",
+            "source": "\\frac{a}{b}",
+            "output": "a/b"
+          },
+          {
+            "name": "frac-expression",
+            "source": "\\frac{a+b}{c-d}",
+            "output": "(a+b)/(c-d)"
+          },
+          {
+            "name": "frac-scripts",
+            "source": "\\frac{x^{2}}{2}",
+            "output": "x²/2"
+          },
+          {
+            "name": "frac-nested",
+            "source": "\\frac{\\frac{1}{2}}{3}",
+            "output": "(1/2)/3"
+          },
+          {
+            "name": "frac-bare-arguments",
+            "source": "\\frac1{2}",
+            "output": "1/2"
+          },
+          {
+            "name": "group-nested",
+            "source": "{{x}^{2}}^{3}",
+            "output": "x²³"
+          },
+          {
+            "name": "group-nested-command",
+            "source": "{\\alpha{\\beta\\gamma}}",
+            "output": "αβγ"
+          },
+          {
+            "name": "root-square",
+            "source": "\\sqrt{x+1}",
+            "output": "√(x+1)"
+          },
+          {
+            "name": "root-square-word",
+            "source": "\\sqrt{2}",
+            "output": "√2"
+          },
+          {
+            "name": "root-cube",
+            "source": "\\sqrt[3]{8}",
+            "output": "∛8"
+          },
+          {
+            "name": "root-fourth",
+            "source": "\\sqrt[4]{16}",
+            "output": "∜16"
+          },
+          {
+            "name": "root-degree",
+            "source": "\\sqrt[n]{x}",
+            "output": "ⁿ√x"
+          },
+          {
+            "name": "root-nested",
+            "source": "\\sqrt{\\sqrt{2}}",
+            "output": "√(√2)"
+          },
+          {
+            "name": "accent-hat",
+            "source": "\\hat{a}",
+            "output": "â"
+          },
+          {
+            "name": "accent-bar",
+            "source": "\\bar{b}",
+            "output": "b̅"
+          },
+          {
+            "name": "accent-vec",
+            "source": "\\vec{v}",
+            "output": "v⃗"
+          },
+          {
+            "name": "accent-overline",
+            "source": "\\overline{a}",
+            "output": "a̅"
+          },
+          {
+            "name": "accent-multi",
+            "source": "\\widehat{ab}",
+            "output": "widehat(ab)"
+          },
+          {
+            "name": "script-sup",
+            "source": "x^{2}",
+            "output": "x²"
+          },
+          {
+            "name": "script-sub",
+            "source": "x_{n+1}",
+            "output": "xₙ₊₁"
+          },
+          {
+            "name": "script-order-sup-first",
+            "source": "x^{2}_{i+1}",
+            "output": "x²ᵢ₊₁"
+          },
+          {
+            "name": "script-order-sub-first",
+            "source": "x_{3}^{2}",
+            "output": "x₃²"
+          },
+          {
+            "name": "script-normalized",
+            "source": "x^{a = b}",
+            "output": "xᵃ⁼ᵇ"
+          },
+          {
+            "name": "script-letter-run",
+            "source": "x^{ab}",
+            "output": "xᵃᵇ"
+          },
+          {
+            "name": "operator-limit",
+            "source": "\\lim_{n\\to\\infty}",
+            "output": "lim[n→∞]"
+          },
+          {
+            "name": "operator-sum",
+            "source": "\\sum_{i=1}^{n} i",
+            "output": "∑ᵢ₌₁ⁿ i"
+          },
+          {
+            "name": "operator-named",
+            "source": "\\sin x",
+            "output": "sin x"
+          },
+          {
+            "name": "operator-named-adjacent",
+            "source": "\\sin\\cos",
+            "output": "sin cos"
+          },
+          {
+            "name": "operator-limits-modifier",
+            "source": "\\lim\\limits_{n}x",
+            "output": "lim[n] x"
+          },
+          {
+            "name": "blackboard",
+            "source": "\\mathbb{R}",
+            "output": "ℝ"
+          },
+          {
+            "name": "negation",
+            "source": "\\not\\subset",
+            "output": "⊄"
+          },
+          {
+            "name": "delimiters",
+            "source": "\\left( x \\right)",
+            "output": "( x )"
+          },
+          {
+            "name": "plain-wrapper",
+            "source": "\\mathrm{d}x",
+            "output": "dx"
+          },
+          {
+            "name": "boxed",
+            "source": "\\boxed{x}",
+            "output": "[x]"
+          },
+          {
+            "name": "equation",
+            "source": "\\begin{equation} a + b \\end{equation}",
+            "output": "a + b"
+          }
+        ]
+      }
+    },
+    {
+      "name": "inline-failure-value",
+      "dimensions": {
+        "columns": 40,
+        "rows": 8
+      },
+      "inputs": {
+        "failing": [
+          {
+            "name": "unknown-command",
+            "source": "\\bogus"
+          },
+          {
+            "name": "dangling-superscript",
+            "source": "x^"
+          },
+          {
+            "name": "unclosed-group",
+            "source": "x^{"
+          },
+          {
+            "name": "frac-one-argument",
+            "source": "\\frac{1}"
+          },
+          {
+            "name": "unbalanced-close",
+            "source": "a}b"
+          },
+          {
+            "name": "bare-backslash",
+            "source": "\\"
+          },
+          {
+            "name": "dangling-negation",
+            "source": "\\not"
+          },
+          {
+            "name": "unclosed-optional-root",
+            "source": "\\sqrt["
+          },
+          {
+            "name": "text-without-argument",
+            "source": "\\text"
+          },
+          {
+            "name": "unknown-environment",
+            "source": "\\begin{foo} x \\end{foo}"
+          }
+        ]
+      },
+      "expected": {
+        "failing": [
+          {
+            "name": "unknown-command",
+            "source": "\\bogus",
+            "output": null
+          },
+          {
+            "name": "dangling-superscript",
+            "source": "x^",
+            "output": null
+          },
+          {
+            "name": "unclosed-group",
+            "source": "x^{",
+            "output": null
+          },
+          {
+            "name": "frac-one-argument",
+            "source": "\\frac{1}",
+            "output": null
+          },
+          {
+            "name": "unbalanced-close",
+            "source": "a}b",
+            "output": null
+          },
+          {
+            "name": "bare-backslash",
+            "source": "\\",
+            "output": null
+          },
+          {
+            "name": "dangling-negation",
+            "source": "\\not",
+            "output": null
+          },
+          {
+            "name": "unclosed-optional-root",
+            "source": "\\sqrt[",
+            "output": null
+          },
+          {
+            "name": "text-without-argument",
+            "source": "\\text",
+            "output": null
+          },
+          {
+            "name": "unknown-environment",
+            "source": "\\begin{foo} x \\end{foo}",
+            "output": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "display-option",
+      "dimensions": {
+        "columns": 40,
+        "rows": 8
+      },
+      "inputs": {
+        "display": [
+          {
+            "name": "frac-half",
+            "source": "\\frac{1}{2}"
+          },
+          {
+            "name": "sum-limits",
+            "source": "\\sum_{i=1}^{n}"
+          },
+          {
+            "name": "nested-frac",
+            "source": "\\frac{\\frac{1}{2}}{3}"
+          }
+        ]
+      },
+      "expected": {
+        "display": [
+          {
+            "name": "frac-half",
+            "source": "\\frac{1}{2}",
+            "output": "1\n─\n2"
+          },
+          {
+            "name": "sum-limits",
+            "source": "\\sum_{i=1}^{n}",
+            "output": " n\n ∑\ni=1"
+          },
+          {
+            "name": "nested-frac",
+            "source": "\\frac{\\frac{1}{2}}{3}",
+            "output": "1/2\n───\n 3"
+          }
+        ]
+      }
+    }
+  ]
+}

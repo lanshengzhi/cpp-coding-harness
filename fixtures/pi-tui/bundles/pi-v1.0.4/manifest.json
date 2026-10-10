@@ -81,6 +81,15 @@
         "packages/tui/src/components/text.ts:render",
         "packages/tui/src/components/input.ts:render,setValue"
       ]
+    },
+    {
+      "path": "latex.json",
+      "family": "latex",
+      "sha256": "036fb44f8818bf6936a91fc618f1dae810f3f546a99e022d160e27261ce72452",
+      "bytes": 14600,
+      "sourceEndpoints": [
+        "packages/tui/src/latex.ts:renderLatex,RenderLatexOptions"
+      ]
     }
   ]
 }
