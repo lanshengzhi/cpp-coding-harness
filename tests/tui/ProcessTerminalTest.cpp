@@ -1280,8 +1280,8 @@ TEST_CASE("Process Terminal stays conservative under unknown and tmux environmen
     }
 }
 
-TEST_CASE("Process Terminal consumes CSI 16 t cell-size responses and notifies re-render",
-        "[tui][terminal][image][issue385][spec]") {
+TEST_CASE("Process Terminal forwards CSI 16 t cell-size responses for the raw-input listener stage",
+        "[tui][terminal][image][issue385][issue952][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ImageEnvironmentGuard environment;
@@ -1295,7 +1295,9 @@ TEST_CASE("Process Terminal consumes CSI 16 t cell-size responses and notifies r
     REQUIRE(terminal.start(
             [&](std::string input) -> cch::support::ExpectedVoid {
                 std::lock_guard lock(events_mutex);
-                inputs.push_back(std::move(input));
+                // The empty fragment-window flush carries no bytes and is not
+                // part of what the listener stage observes.
+                if (!input.empty()) inputs.push_back(std::move(input));
                 return {};
             },
             [&](cch::tui::TerminalDimensions dimensions) -> cch::support::ExpectedVoid {
@@ -1308,6 +1310,23 @@ TEST_CASE("Process Terminal consumes CSI 16 t cell-size responses and notifies r
     constexpr std::string_view kResponse = "\x1b[6;20;10t";
     REQUIRE(::write(pty->master.get(), kResponse.data(), kResponse.size()) == static_cast<ssize_t>(kResponse.size()));
     REQUIRE(cch::tests::wait_until([&] {
+        std::lock_guard lock(events_mutex);
+        return inputs.size() == 1;
+    }));
+    {
+        std::lock_guard lock(events_mutex);
+        // The reply reaches the host verbatim (#952) so its raw-input listener
+        // stage observes it before the downstream cell-size consumer, which is
+        // Terminal::apply_cell_pixel_dimensions and not this worker.
+        CHECK(inputs.front() == kResponse);
+        CHECK(notifications.empty());
+    }
+    CHECK(terminal.capabilities().cell_pixels == cch::tui::CellPixelDimensions{.width = 9, .height = 18});
+
+    // The downstream consumer refines the reported cell size and notifies a
+    // re-render with unchanged dimensions.
+    REQUIRE(terminal.apply_cell_pixel_dimensions(cch::tui::CellPixelDimensions{.width = 10, .height = 20}));
+    REQUIRE(cch::tests::wait_until([&] {
         const auto capabilities = terminal.capabilities();
         return capabilities.cell_pixels &&
                *capabilities.cell_pixels == cch::tui::CellPixelDimensions{.width = 10, .height = 20};
@@ -1319,18 +1338,54 @@ TEST_CASE("Process Terminal consumes CSI 16 t cell-size responses and notifies r
     {
         std::lock_guard lock(events_mutex);
         CHECK(notifications.back() == terminal.dimensions());
-        CHECK(inputs.empty());
     }
 
     // User input after the response still forwards.
     REQUIRE(::write(pty->master.get(), "q", 1) == 1);
     REQUIRE(cch::tests::wait_until([&] {
         std::lock_guard lock(events_mutex);
+        return inputs.size() == 2;
+    }));
+    {
+        std::lock_guard lock(events_mutex);
+        CHECK(inputs.back() == "q");
+    }
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE("Process Terminal keeps color and keyboard-negotiation replies out of the listener stage",
+        "[tui][terminal][issue952][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    ImageEnvironmentGuard environment;
+    environment.set("TERM_PROGRAM", "ghostty");
+    std::mutex events_mutex;
+    std::vector<std::string> inputs;
+
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    REQUIRE(terminal.start(
+            [&](std::string input) -> cch::support::ExpectedVoid {
+                std::lock_guard lock(events_mutex);
+                if (!input.empty()) inputs.push_back(std::move(input));
+                return {};
+            },
+            [&](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // The color-scheme report and the Kitty negotiation answer are consumed at
+    // their own stages and never reach the host's raw-input listener stage,
+    // unlike the cell-size reply.
+    const std::string stream = "\x1b[?997;1n\x1b[?1u\x1b[6;20;10t";
+    REQUIRE(::write(pty->master.get(), stream.data(), stream.size()) == static_cast<ssize_t>(stream.size()));
+    REQUIRE(cch::tests::wait_until([&] {
+        std::lock_guard lock(events_mutex);
         return !inputs.empty();
     }));
     {
         std::lock_guard lock(events_mutex);
-        CHECK(inputs.front() == "q");
+        CHECK(inputs.front() == "\x1b[6;20;10t");
+        CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
     }
     REQUIRE(terminal.stop());
 }

@@ -132,7 +132,8 @@ TEST_CASE("stream decoder preserves Super modifiers across legacy and extended k
     CHECK(cch::tui::matches_key(*kitty_key, "ctrl+super+k"));
 }
 
-TEST_CASE("stream decoder demuxes a cell-size response without leaking bytes", "[tui][decoder][spec]") {
+TEST_CASE("stream decoder demuxes a cell-size response and keeps it visible to the listener stage",
+        "[tui][decoder][issue952][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
     const auto result = decoder.feed("\x1b[6;20;10t");
 
@@ -140,8 +141,11 @@ TEST_CASE("stream decoder demuxes a cell-size response without leaking bytes", "
     const auto* cell_size = std::get_if<tui::detail::CellSizeResponse>(&result.responses.front());
     REQUIRE(cell_size != nullptr);
     CHECK(*cell_size == tui::detail::CellSizeResponse{.height_px = 20, .width_px = 10});
+    // The reply decodes to no key event, but its bytes still reach the host so
+    // its raw-input listener stage observes it before the downstream
+    // cell-size consumer (issue #952).
     CHECK(result.events.empty());
-    CHECK(result.forwarded_input.empty());
+    CHECK(result.forwarded_input == "\x1b[6;20;10t");
 }
 
 TEST_CASE("stream decoder demuxes keyboard protocol negotiation responses", "[tui][decoder][spec]") {
@@ -219,7 +223,7 @@ TEST_CASE("stream decoder forwards malformed response-shaped sequences as in-ban
     CHECK(result.forwarded_input == "\x1b[0;0R");
 }
 
-TEST_CASE("stream decoder reassembles responses split across chunk boundaries", "[tui][decoder][spec]") {
+TEST_CASE("stream decoder reassembles responses split across chunk boundaries", "[tui][decoder][issue952][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
     std::vector<tui::detail::TerminalResponseVariant> responses;
@@ -237,7 +241,7 @@ TEST_CASE("stream decoder reassembles responses split across chunk boundaries", 
     const auto* cell_size = std::get_if<tui::detail::CellSizeResponse>(&responses.front());
     REQUIRE(cell_size != nullptr);
     CHECK(*cell_size == tui::detail::CellSizeResponse{.height_px = 20, .width_px = 10});
-    CHECK(forwarded.empty());
+    CHECK(forwarded == "\x1b[6;20;10t");
 }
 
 TEST_CASE("stream decoder reassembles key sequences split across chunk boundaries", "[tui][decoder][spec]") {

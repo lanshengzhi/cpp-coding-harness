@@ -360,8 +360,8 @@ TEST_CASE("cell-size input parser bounds buffered fragments", "[tui][image][term
     CHECK(result.responses.empty());
 }
 
-TEST_CASE(
-        "VirtualTerminal consumes cell-size responses protocol-aware", "[tui][image][terminal-image][issue385][spec]") {
+TEST_CASE("VirtualTerminal forwards cell-size responses for the raw-input listener stage",
+        "[tui][image][terminal-image][issue385][issue952][spec]") {
     cch::tui::VirtualTerminal terminal({
         .columns = 80,
         .rows = 24,
@@ -382,8 +382,8 @@ TEST_CASE(
             return {};
         }));
 
-    // Pi's 9x18 default applies until a CSI 16 t response arrives, and the
-    // startup query is recorded.
+    // Pi's 9x18 default applies until a host applies a CSI 16 t response, and
+    // the startup query is recorded.
     CHECK(terminal.capabilities().cell_pixels == cch::tui::CellPixelDimensions{});
     bool query_recorded = false;
     for (const auto& line : terminal.output()) {
@@ -391,43 +391,54 @@ TEST_CASE(
     }
     CHECK(query_recorded);
 
-    // Complete response: consumed, applied, and not forwarded.
+    // Complete response: forwarded verbatim so the host's raw-input listener
+    // stage observes it, and not applied by the terminal itself (#952).
     REQUIRE(terminal.inject_input("\x1b[6;20;10t"));
+    REQUIRE(inputs.size() == 1);
+    CHECK(inputs[0] == "\x1b[6;20;10t");
+    CHECK(terminal.capabilities().cell_pixels == cch::tui::CellPixelDimensions{});
+    CHECK(notifications.empty());
+
+    // The downstream consumer refines the reported cell size and notifies a
+    // re-render with unchanged dimensions.
+    REQUIRE(terminal.apply_cell_pixel_dimensions(cch::tui::CellPixelDimensions{.width = 10, .height = 20}));
     CHECK(terminal.capabilities().cell_pixels ==
         (cch::tui::CellPixelDimensions{.width = 10, .height = 20}));
     REQUIRE(notifications.size() == 1);
     CHECK(notifications[0] == (cch::tui::TerminalDimensions{.columns = 80, .rows = 24}));
-    CHECK(inputs.empty());
 
     // Later user input still forwards.
     REQUIRE(terminal.inject_input("q"));
-    REQUIRE(inputs.size() == 1);
-    CHECK(inputs[0] == "q");
+    REQUIRE(inputs.size() == 2);
+    CHECK(inputs[1] == "q");
 
     // A bare escape is forwarded immediately (pi's tui-cell-size-input pin).
     REQUIRE(terminal.inject_input("\x1b"));
-    REQUIRE(inputs.size() == 2);
-    CHECK(inputs[1] == "\x1b");
+    REQUIRE(inputs.size() == 3);
+    CHECK(inputs[2] == "\x1b");
 
-    // Split responses are buffered across injections.
+    // A response split across injections is forwarded fragment by fragment;
+    // reassembling it is the host decoder's fragment window.
     REQUIRE(terminal.inject_input("\x1b[6;30;"));
     REQUIRE(terminal.inject_input("40t"));
-    CHECK(terminal.capabilities().cell_pixels ==
-        (cch::tui::CellPixelDimensions{.width = 40, .height = 30}));
+    REQUIRE(inputs.size() == 5);
+    CHECK(inputs[3] == "\x1b[6;30;");
+    CHECK(inputs[4] == "40t");
+    CHECK(terminal.capabilities().cell_pixels == (cch::tui::CellPixelDimensions{.width = 10, .height = 20}));
 
     // Invalid sequences pass through untouched.
     REQUIRE(terminal.inject_input("\x1b[6;5a;5t"));
-    REQUIRE(inputs.size() == 3);
-    CHECK(inputs[2] == "\x1b[6;5a;5t");
+    REQUIRE(inputs.size() == 6);
+    CHECK(inputs[5] == "\x1b[6;5a;5t");
 
-    // Zero dimensions are consumed but not applied (pi consumeCellSizeResponse).
+    // Zero dimensions are ignored by the consumer (pi consumeCellSizeResponse).
     REQUIRE(terminal.inject_input("\x1b[6;0;0t"));
-    CHECK(terminal.capabilities().cell_pixels ==
-        (cch::tui::CellPixelDimensions{.width = 40, .height = 30}));
-    CHECK(inputs.size() == 3);
+    CHECK(inputs.size() == 7);
+    REQUIRE(terminal.apply_cell_pixel_dimensions(cch::tui::CellPixelDimensions{}));
+    CHECK(terminal.capabilities().cell_pixels == (cch::tui::CellPixelDimensions{.width = 10, .height = 20}));
 
     // Notifications fire only for applied changes.
-    REQUIRE(notifications.size() == 2);
+    REQUIRE(notifications.size() == 1);
     REQUIRE(terminal.stop());
 }
 
