@@ -84,6 +84,13 @@ struct EditorCompletionSession::Impl {
         std::size_t request_id{0};
         std::optional<std::size_t> started_generation{};
         std::optional<std::size_t> delivered_request_id{};
+        /// The stop source of the request whose result was already accepted.
+        /// Frozen pi clears `autocompleteAbort` when a current result arrives
+        /// (`runAutocompleteRequest`), so later lifecycle events — supersede,
+        /// escape-cancel, menu accept, empty-result close, provider
+        /// replacement — cannot abort work that already completed. The source
+        /// is retired here and dropped without requesting a stop.
+        std::optional<std::stop_source> completed_stop_source{};
         std::stop_source request_stop_source{};
         std::optional<PendingDue> due{};
         std::optional<PendingDelivery> pending{};
@@ -226,6 +233,7 @@ void EditorCompletionSession::close() noexcept {
             control->request_stop_source = std::stop_source{};
             control->started_generation.reset();
             control->delivered_request_id.reset();
+            control->completed_stop_source.reset();
             control->due.reset();
             retired_provider = std::move(control->provider);
             control->pending.reset();
@@ -249,6 +257,7 @@ void EditorCompletionSession::Impl::cancel_current_lifecycle(
         ++control->request_id;
         control->started_generation.reset();
         control->delivered_request_id.reset();
+        control->completed_stop_source.reset();
         control->due.reset();
         control->pending.reset();
         control->clear_menu_locked();
@@ -304,6 +313,7 @@ EditorCompletionSession::Impl::admit_request(const std::shared_ptr<Control>& con
         ++control->request_id;
         control->started_generation.reset();
         control->delivered_request_id.reset();
+        control->completed_stop_source.reset();
         control->pending.reset();
 
         admission = EditorCompletionSession::Impl::RequestAdmission{
@@ -444,6 +454,13 @@ support::Expected<EditorCompletionEffect> EditorCompletionSession::Impl::start_r
                         if (state->open && state->request_id == request_id &&
                                 (!state->delivered_request_id || *state->delivered_request_id != request_id)) {
                             state->delivered_request_id = request_id;
+                            // The result is accepted: the request's stop source retires the
+                            // way pi clears autocompleteAbort, so the completion cannot be
+                            // aborted by the lifecycle events that follow.
+                            if (state->request_stop_source.stop_possible()) {
+                                state->completed_stop_source = std::move(state->request_stop_source);
+                                state->request_stop_source = std::stop_source{};
+                            }
                             state->pending = EditorCompletionSession::Impl::PendingDelivery{
                                     .request_id = request_id,
                                     .intent = intent,

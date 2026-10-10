@@ -1394,6 +1394,248 @@ TEST_CASE("Editor drops autocomplete results that no longer match the buffer sna
     CHECK_FALSE(menu_rendered(editor));
 }
 
+TEST_CASE("Editor never aborts a completed completion request's stop token", "[tui][editor][autocomplete][issue965]") {
+    // Frozen pi clears autocompleteAbort when a current result arrives
+    // (runAutocompleteRequest): later lifecycle events cannot abort a request
+    // whose result was already accepted, unlike an in-flight request.
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->immediate = false;
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/"); // request A held
+    REQUIRE(provider_ptr->requests.size() == 1);
+    const auto completed_token = provider_ptr->requests[0].stop_token;
+    (void)provider_ptr->held_sinks[0](slash_suggestions());
+    REQUIRE(menu_rendered(editor)); // drains A; the menu opens
+
+    SECTION("supersede after acceptance aborts only the in-flight successor") {
+        type(editor, "h"); // request B supersedes the completed A
+        REQUIRE(provider_ptr->requests.size() == 2);
+        CHECK_FALSE(completed_token.stop_requested());
+        CHECK_FALSE(provider_ptr->requests[1].stop_token.stop_requested());
+        key(editor, "escape"); // the cancel reaches the in-flight B only
+        CHECK(provider_ptr->requests[1].stop_token.stop_requested());
+        CHECK_FALSE(completed_token.stop_requested());
+    }
+
+    SECTION("escape-cancel of the open menu spares the completed token") {
+        key(editor, "escape");
+        CHECK_FALSE(menu_rendered(editor));
+        CHECK_FALSE(completed_token.stop_requested());
+    }
+
+    SECTION("menu accept spares the completed token") {
+        key(editor, "tab");
+        CHECK(editor.text() == "/help ");
+        CHECK_FALSE(completed_token.stop_requested());
+    }
+
+    SECTION("provider replacement spares the completed token") {
+        editor.set_autocomplete_provider(std::make_unique<HeldAutocompleteProvider>());
+        CHECK_FALSE(menu_rendered(editor)); // pi setAutocompleteProvider cancels the open UI
+        CHECK_FALSE(completed_token.stop_requested());
+    }
+}
+
+TEST_CASE("Editor does not abort the completed request when an empty update closes the menu",
+        "[tui][editor][autocomplete][issue965]") {
+    // Frozen pi clears autocompleteAbort before the empty-items check, so the
+    // cancelAutocomplete on an empty result aborts no completed request.
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->immediate = false;
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/");
+    REQUIRE(provider_ptr->requests.size() == 1);
+    (void)provider_ptr->held_sinks[0](slash_suggestions());
+    REQUIRE(menu_rendered(editor)); // drains A; the menu opens
+
+    type(editor, "h"); // open menu re-queries: request B
+    REQUIRE(provider_ptr->requests.size() == 2);
+    (void)provider_ptr->held_sinks[1](cch::tui::AutocompleteSuggestions{.items = {}, .prefix = "/h"});
+    CHECK_FALSE(menu_rendered(editor)); // empty result closes the menu (pi cancelAutocomplete)
+    CHECK_FALSE(provider_ptr->requests[0].stop_token.stop_requested());
+    CHECK_FALSE(provider_ptr->requests[1].stop_token.stop_requested());
+}
+
+TEST_CASE("Editor keeps only the newer completion menu when the older slow request finishes last",
+        "[tui][editor][autocomplete][issue965]") {
+    std::size_t render_requests = 0;
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->immediate = false;
+    cch::tui::Editor editor(
+            cch::tui::EditorOptions{.render_request = [&render_requests]() -> cch::support::ExpectedVoid {
+                ++render_requests;
+                return {};
+            }});
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "/"); // request A held
+    type(editor, "h"); // request B supersedes the in-flight A (pi aborts it)
+    REQUIRE(provider_ptr->requests.size() == 2);
+    CHECK(provider_ptr->requests[0].stop_token.stop_requested());
+
+    // The newer request resolves first: its menu and prefix win.
+    (void)provider_ptr->held_sinks[1](cch::tui::AutocompleteSuggestions{
+            .items = {{.value = "history", .label = "history", .description = {}}},
+            .prefix = "/h",
+    });
+    CHECK(render_requests == 1);
+    REQUIRE(menu_rendered(editor));
+    CHECK(editor.render(80)->lines[1].starts_with("> /history"));
+    CHECK(editor.text() == "/h");
+
+    // The older slow request finishes last: the stale result is dropped
+    // without touching the menu, the text, or the render notifications (pi
+    // isAutocompleteRequestCurrent's silent return).
+    (void)provider_ptr->held_sinks[0](slash_suggestions());
+    CHECK(render_requests == 1);
+    CHECK(editor.text() == "/h");
+    REQUIRE(menu_rendered(editor));
+    CHECK(editor.render(80)->lines[1].starts_with("> /history"));
+}
+
+TEST_CASE("Editor keeps a newer applied completion when the older slow request finishes last",
+        "[tui][editor][autocomplete][issue965]") {
+    std::size_t render_requests = 0;
+    std::size_t changes = 0;
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->immediate = false;
+    cch::tui::Editor editor(
+            cch::tui::EditorOptions{.render_request = [&render_requests]() -> cch::support::ExpectedVoid {
+                ++render_requests;
+                return {};
+            }},
+            [&changes](std::string) -> cch::support::ExpectedVoid {
+                ++changes;
+                return {};
+            },
+            {});
+    editor.set_autocomplete_provider(std::move(provider));
+
+    type(editor, "@"); // request A held
+    REQUIRE(provider_ptr->requests.size() == 1);
+    CHECK(changes == 1); // the keystroke itself notifies once
+    key(editor, "tab");  // forced request B supersedes the in-flight A
+    REQUIRE(provider_ptr->requests.size() == 2);
+    CHECK(provider_ptr->requests[0].stop_token.stop_requested());
+    CHECK(provider_ptr->requests[1].force);
+
+    // B's unique forced match applies on delivery (pi's force+explicitTab
+    // single-item branch) and notifies exactly one more change.
+    (void)provider_ptr->held_sinks[1](cch::tui::AutocompleteSuggestions{
+            .items = {{.value = "@src/", .label = "src/", .description = {}}},
+            .prefix = "@",
+    });
+    REQUIRE(editor.render(80));
+    CHECK(editor.text() == "@src/");
+    CHECK(changes == 2);
+    CHECK(render_requests == 1);
+    CHECK_FALSE(provider_ptr->requests[1].stop_token.stop_requested());
+
+    // A's late result cannot rewrite the applied text or reopen the menu.
+    (void)provider_ptr->held_sinks[0](cch::tui::AutocompleteSuggestions{
+            .items = {{.value = "@README.md", .label = "README.md", .description = {}}},
+            .prefix = "@",
+    });
+    CHECK(editor.text() == "@src/");
+    CHECK(changes == 2);
+    CHECK(render_requests == 1);
+    CHECK_FALSE(menu_rendered(editor));
+}
+
+TEST_CASE("Editor accepts a completion that finishes after focus loss, matching frozen pi",
+        "[tui][editor][autocomplete][issue965]") {
+    // Frozen pi has no focus-based autocomplete cancellation: editor.ts's
+    // focused flag only gates the cursor marker, and no blur path calls
+    // cancelAutocomplete, so the in-flight request completes normally.
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->immediate = false;
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+
+    editor.set_focused(true);
+    type(editor, "/"); // request A held
+    REQUIRE(provider_ptr->requests.size() == 1);
+    const auto in_flight_token = provider_ptr->requests[0].stop_token;
+
+    editor.set_focused(false); // blur does not cancel or abort
+    CHECK_FALSE(in_flight_token.stop_requested());
+
+    (void)provider_ptr->held_sinks[0](slash_suggestions()); // completes while unfocused
+    REQUIRE(menu_rendered(editor));
+    CHECK(editor.render(80)->lines[1].starts_with("> /help"));
+
+    editor.set_focused(true); // refocus keeps the delivered menu usable
+    REQUIRE(menu_rendered(editor));
+    key(editor, "tab");
+    CHECK(editor.text() == "/help ");
+    CHECK_FALSE(in_flight_token.stop_requested());
+}
+
+TEST_CASE("Editor keeps the open completion menu across focus loss and refocus, matching frozen pi",
+        "[tui][editor][autocomplete][issue965]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = cch::tui::AutocompleteSuggestions{
+            .items = {{.value = "help", .label = "help", .description = {}},
+                    {.value = "history", .label = "history", .description = {}}},
+            .prefix = "/",
+    };
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+
+    editor.set_focused(true);
+    type(editor, "/");
+    REQUIRE(menu_rendered(editor));
+
+    editor.set_focused(false); // blur keeps the open menu (frozen pi)
+    REQUIRE(menu_rendered(editor));
+    editor.set_focused(true);
+
+    key(editor, "down"); // selection still moves after refocus
+    const auto screen = editor.render(80);
+    REQUIRE(screen);
+    CHECK(screen->lines[1].starts_with("  /help"));
+    CHECK(screen->lines[2].starts_with("> /history"));
+    key(editor, "tab");
+    CHECK(editor.text() == "/history ");
+}
+
+TEST_CASE("Editor keeps a pending debounce across focus loss, matching frozen pi",
+        "[tui][editor][autocomplete][issue965]") {
+    auto timer = std::make_unique<ManualDebounceTimer>();
+    auto* timer_ptr = timer.get();
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->response = cch::tui::AutocompleteSuggestions{
+            .items = {{.value = "@src/", .label = "src/", .description = {}}},
+            .prefix = "@",
+    };
+    cch::tui::Editor editor({.autocomplete_debounce_timer = std::move(timer)});
+    editor.set_autocomplete_provider(std::move(provider));
+
+    editor.set_focused(true);
+    type(editor, "@"); // debounced: no request until the timer fires
+    CHECK(provider_ptr->requests.empty());
+    REQUIRE(timer_ptr->start_count == 1);
+
+    editor.set_focused(false); // blur leaves the pending debounce alone
+    timer_ptr->fire();
+    REQUIRE(provider_ptr->requests.size() == 1);
+    REQUIRE(menu_rendered(editor));
+
+    editor.set_focused(true);
+    REQUIRE(menu_rendered(editor));
+}
+
 TEST_CASE("Editor applies a unique forced completion without opening the menu",
         "[tui][editor][autocomplete][issue383][spec]") {
     auto provider = std::make_unique<HeldAutocompleteProvider>();
