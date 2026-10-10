@@ -9,7 +9,10 @@
 #include <cctype>
 #include <cerrno>
 #include <cstdlib>
+#include <cwchar>
 #include <filesystem>
+#include <locale>
+#include <ranges>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -230,12 +233,14 @@ struct ScopedQuery {
 
 /// Walk the directory tree with an `fd` child process (pi's
 /// `walkDirectoryWithFd`). Runs on the caller's thread; the child is killed
-/// when `stop_token` is requested.
+/// when `stop_token` is requested. `max_depth` adds pi's optional
+/// `--max-depth` argument (used by the depth-1 base-directory walk).
 [[nodiscard]] std::vector<FdEntry> walk_directory_with_fd(const std::filesystem::path& base_dir,
         const std::filesystem::path& fd_path,
         std::string_view query,
         std::size_t max_results,
-        std::stop_token stop_token) {
+        std::stop_token stop_token,
+        std::optional<std::size_t> max_depth = std::nullopt) {
     if (stop_token.stop_requested()) return {};
 
     std::vector<std::string> args{
@@ -256,6 +261,10 @@ struct ScopedQuery {
             "--exclude",
             ".git/**",
     };
+    if (max_depth) {
+        args.push_back("--max-depth");
+        args.push_back(std::to_string(*max_depth));
+    }
     if (to_display_path(query).find('/') != std::string::npos) {
         args.push_back("--full-path");
     }
@@ -362,6 +371,54 @@ struct ScopedQuery {
     return score;
 }
 
+/// Number of non-empty path segments (pi's
+/// `toDisplayPath(path).split("/").filter(Boolean).length`), the first
+/// equal-score tie-break of the fd ranking.
+[[nodiscard]] std::size_t path_depth(std::string_view path) {
+    const auto display = to_display_path(path);
+    std::size_t depth = 0;
+    std::size_t begin = 0;
+    for (std::size_t index = 0; index <= display.size(); ++index) {
+        if (index != display.size() && display[index] != '/') continue;
+        if (index > begin) ++depth;
+        begin = index + 1;
+    }
+    return depth;
+}
+
+/// pi's `a.path.localeCompare(b.path)` tie-break: the process locale's
+/// collation, falling back to a deterministic codepoint order when the locale
+/// cannot collate the string. The process locale is set once, lazily, because
+/// the fd ranking runs on the worker thread and locale changes are global.
+[[nodiscard]] bool path_locale_less(std::string_view left, std::string_view right) {
+    static const std::locale process_locale = std::locale{""};
+    const auto& collate = std::use_facet<std::collate<wchar_t>>(process_locale);
+    std::wstring wide_left;
+    std::wstring wide_right;
+    std::mbstate_t state{};
+    const auto widen = [&state](std::string_view text, std::wstring* out) {
+        const char* cursor = text.data();
+        const char* const end = text.data() + text.size();
+        while (cursor < end) {
+            wchar_t character{};
+            const auto consumed = std::mbrtowc(&character, cursor, static_cast<std::size_t>(end - cursor), &state);
+            if (consumed == static_cast<std::size_t>(-1) || consumed == static_cast<std::size_t>(-2) || consumed == 0) {
+                return false;
+            }
+            out->push_back(character);
+            cursor += consumed;
+        }
+        return true;
+    };
+    if (widen(left, &wide_left) && widen(right, &wide_right)) {
+        return collate.compare(wide_left.data(),
+                       wide_left.data() + wide_left.size(),
+                       wide_right.data(),
+                       wide_right.data() + wide_right.size()) < 0;
+    }
+    return left < right;
+}
+
 [[nodiscard]] std::vector<AutocompleteItem> get_file_suggestions(
         const std::filesystem::path& base_path, std::string_view prefix) {
     const auto parsed = parse_path_prefix(prefix);
@@ -463,12 +520,15 @@ struct ScopedQuery {
         if (entry_error) return {};
     }
 
+    // pi classifies directories by the label's trailing slash (the value
+    // may be quoted, so its own trailing character is the closing quote) and
+    // orders the rest by the process locale's collation.
     std::stable_sort(
             suggestions.begin(), suggestions.end(), [](const AutocompleteItem& left, const AutocompleteItem& right) {
-                const bool left_dir = left.value.ends_with('/');
-                const bool right_dir = right.value.ends_with('/');
+                const bool left_dir = left.label.ends_with('/');
+                const bool right_dir = right.label.ends_with('/');
                 if (left_dir != right_dir) return left_dir;
-                return left.label < right.label;
+                return path_locale_less(left.label, right.label);
             });
     return suggestions;
 }
@@ -483,8 +543,24 @@ struct ScopedQuery {
     const auto scoped_query = resolve_scoped_fuzzy_query(base_path, query);
     const auto fd_base_dir = scoped_query ? scoped_query->base_dir : base_path;
     const auto fd_query = scoped_query ? scoped_query->query : std::string{query};
-    const auto entries = walk_directory_with_fd(fd_base_dir, fd_path, fd_query, kFdMaxResults, stop_token);
+    // pi's two walks: the depth-1 base-directory walk first, then the
+    // recursive walk, with duplicates already seen in the base walk dropped.
+    // The base walk keeps direct children visible when the recursive walk's
+    // result window is flooded by deep matches.
+    const auto base_dir_entries =
+            walk_directory_with_fd(fd_base_dir, fd_path, fd_query, kFdMaxResults, stop_token, /*max_depth=*/1);
+    const auto recursive_entries = walk_directory_with_fd(fd_base_dir, fd_path, fd_query, kFdMaxResults, stop_token);
     if (stop_token.stop_requested()) return {};
+    std::vector<FdEntry> entries = base_dir_entries;
+    std::vector<std::string> seen_paths;
+    seen_paths.reserve(base_dir_entries.size());
+    for (const auto& entry : base_dir_entries)
+        seen_paths.push_back(entry.path);
+    for (const auto& entry : recursive_entries) {
+        if (std::ranges::find(seen_paths, entry.path) != seen_paths.end()) continue;
+        seen_paths.push_back(entry.path);
+        entries.push_back(entry);
+    }
 
     struct ScoredEntry {
         std::string path;
@@ -493,13 +569,27 @@ struct ScopedQuery {
     };
     std::vector<ScoredEntry> scored;
     for (const auto& entry : entries) {
-        const auto score = fd_query.empty() ? 1.0 : score_entry(entry.path, fd_query, entry.is_directory);
+        // pi's `basename` strips a trailing separator before scoring, so a
+        // directory's filename is its last segment, not the empty string
+        // after the trailing slash.
+        const auto score_path = entry.is_directory && entry.path.ends_with('/')
+                                        ? std::string_view{entry.path}.substr(0, entry.path.size() - 1)
+                                        : std::string_view{entry.path};
+        const auto score = fd_query.empty() ? 1.0 : score_entry(score_path, fd_query, entry.is_directory);
         if (score <= 0) continue;
         scored.push_back({.path = entry.path, .is_directory = entry.is_directory, .score = score});
     }
 
+    // pi's ranking: score descending, then shallower paths, then shorter
+    // paths, then the process-locale collation of the path. The tie-breaks
+    // make the order independent of fd's return order.
     std::stable_sort(scored.begin(), scored.end(), [](const ScoredEntry& left, const ScoredEntry& right) {
-        return left.score > right.score;
+        if (left.score != right.score) return left.score > right.score;
+        const auto left_depth = path_depth(left.path);
+        const auto right_depth = path_depth(right.path);
+        if (left_depth != right_depth) return left_depth < right_depth;
+        if (left.path.size() != right.path.size()) return left.path.size() < right.path.size();
+        return path_locale_less(left.path, right.path);
     });
     if (scored.size() > kFdTopResults) scored.resize(kFdTopResults);
 
@@ -667,9 +757,34 @@ void CombinedAutocompleteProvider::get_suggestions(const AutocompleteRequest& re
                         command);
             }
 
-            const auto filtered = fuzzy_filter(std::move(command_items),
+            // pi's two-pass skill ranking: the first pass matches skill
+            // commands by their bare name (after the `skill:` prefix) and
+            // everything else by its full name; the second pass matches the
+            // remaining skill commands by their full name and appends them,
+            // so bare-name matches always rank ahead of full-name-only ones.
+            constexpr std::string_view kSkillPrefix = "skill:";
+            const auto bare_name_matches =
+                    fuzzy_filter(command_items, prefix, [kSkillPrefix](const CommandEntry& entry) -> std::string {
+                        if (entry.name.starts_with(kSkillPrefix)) {
+                            return entry.name.substr(kSkillPrefix.size());
+                        }
+                        return entry.name;
+                    });
+            std::vector<CommandEntry> full_name_candidates;
+            for (const auto& entry : command_items) {
+                if (!entry.name.starts_with(kSkillPrefix)) continue;
+                if (std::ranges::find(bare_name_matches, entry.name, &CommandEntry::name) != bare_name_matches.end()) {
+                    continue;
+                }
+                full_name_candidates.push_back(entry);
+            }
+            const auto full_name_only_matches = fuzzy_filter(std::move(full_name_candidates),
                     prefix,
                     [](const CommandEntry& entry) -> const std::string& { return entry.name; });
+            std::vector<CommandEntry> filtered;
+            filtered.reserve(bare_name_matches.size() + full_name_only_matches.size());
+            filtered.insert(filtered.end(), bare_name_matches.begin(), bare_name_matches.end());
+            filtered.insert(filtered.end(), full_name_only_matches.begin(), full_name_only_matches.end());
             if (filtered.empty()) {
                 (void)sink(std::nullopt);
                 return;

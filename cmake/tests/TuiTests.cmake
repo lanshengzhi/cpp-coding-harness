@@ -33,6 +33,7 @@ include_guard(GLOBAL)
         tests/Catch2Main.cpp
         tests/tui/AutocompleteTest.cpp
         tests/tui/AutocompleteContextTest.cpp
+        tests/tui/AutocompleteRankingTest.cpp
         tests/tui/ContainerTest.cpp
         tests/tui/EditorTest.cpp
         tests/tui/EditorLayoutTest.cpp
