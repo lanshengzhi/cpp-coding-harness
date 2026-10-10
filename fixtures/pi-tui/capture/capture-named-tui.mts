@@ -59,6 +59,7 @@ const { Text } = await import(src("src/components/text.ts"));
 const { TuiMainScreen } = await import(src("src/tui-main-screen.ts"));
 const { CURSOR_MARKER } = await import(src("src/tui.ts"));
 const { VirtualTerminal } = await import(src("test/virtual-terminal.ts"));
+const { renderLatex } = await import(src("src/latex.ts"));
 const { Terminal: XtermTerminal } = requirePi("@xterm/headless");
 
 function envelope(sourceEndpoints: string[], scenarios: unknown[]) {
@@ -432,6 +433,94 @@ const fuzzyArtifact = envelope(["packages/tui/src/fuzzy.ts:fuzzyMatch,fuzzyFilte
 	},
 }]);
 
+// Inline math grammar and the frozen failure value (#973).
+const latexInline = [
+  ["symbols-greek", "\\alpha\\beta\\gamma"],
+  ["symbols-caps", "\\Gamma\\sum\\Omega"],
+  ["symbols-relations", "a \\times b"],
+  ["symbols-cdot", "a \\cdot b"],
+  ["symbols-le", "a \\leq b"],
+  ["symbols-infinity", "\\infty"],
+  ["frac-half", "\\frac{1}{2}"],
+  ["frac-letters", "\\frac{a}{b}"],
+  ["frac-expression", "\\frac{a+b}{c-d}"],
+  ["frac-scripts", "\\frac{x^{2}}{2}"],
+  ["frac-nested", "\\frac{\\frac{1}{2}}{3}"],
+  ["frac-bare-arguments", "\\frac1{2}"],
+  ["group-nested", "{{x}^{2}}^{3}"],
+  ["group-nested-command", "{\\alpha{\\beta\\gamma}}"],
+  ["root-square", "\\sqrt{x+1}"],
+  ["root-square-word", "\\sqrt{2}"],
+  ["root-cube", "\\sqrt[3]{8}"],
+  ["root-fourth", "\\sqrt[4]{16}"],
+  ["root-degree", "\\sqrt[n]{x}"],
+  ["root-nested", "\\sqrt{\\sqrt{2}}"],
+  ["accent-hat", "\\hat{a}"],
+  ["accent-bar", "\\bar{b}"],
+  ["accent-vec", "\\vec{v}"],
+  ["accent-overline", "\\overline{a}"],
+  ["accent-multi", "\\widehat{ab}"],
+  ["script-sup", "x^{2}"],
+  ["script-sub", "x_{n+1}"],
+  ["script-order-sup-first", "x^{2}_{i+1}"],
+  ["script-order-sub-first", "x_{3}^{2}"],
+  ["script-normalized", "x^{a = b}"],
+  ["script-letter-run", "x^{ab}"],
+  ["operator-limit", "\\lim_{n\\to\\infty}"],
+  ["operator-sum", "\\sum_{i=1}^{n} i"],
+  ["operator-named", "\\sin x"],
+  ["operator-named-adjacent", "\\sin\\cos"],
+  ["operator-limits-modifier", "\\lim\\limits_{n}x"],
+  ["blackboard", "\\mathbb{R}"],
+  ["negation", "\\not\\subset"],
+  ["delimiters", "\\left( x \\right)"],
+  ["plain-wrapper", "\\mathrm{d}x"],
+  ["boxed", "\\boxed{x}"],
+  ["equation", "\\begin{equation} a + b \\end{equation}"],
+];
+const latexFailing = [
+  ["unknown-command", "\\bogus"],
+  ["dangling-superscript", "x^"],
+  ["unclosed-group", "x^{"],
+  ["frac-one-argument", "\\frac{1}"],
+  ["unbalanced-close", "a}b"],
+  ["bare-backslash", "\\"],
+  ["dangling-negation", "\\not"],
+  ["unclosed-optional-root", "\\sqrt["],
+  ["text-without-argument", "\\text"],
+  ["unknown-environment", "\\begin{foo} x \\end{foo}"],
+];
+const latexDisplay = [
+  ["frac-half", "\\frac{1}{2}"],
+  ["sum-limits", "\\sum_{i=1}^{n}"],
+  ["nested-frac", "\\frac{\\frac{1}{2}}{3}"],
+];
+// `undefined` is the frozen failure value; the artifact records it as JSON null.
+const observeLatex = (source: string, options?: { display?: boolean }) => {
+  const output = renderLatex(source, options);
+  return output === undefined ? null : output;
+};
+const latexRows = (rows: [string, string][]) => rows.map(([name, source]) => ({ name, source }));
+const latexArtifact = envelope(["packages/tui/src/latex.ts:renderLatex,RenderLatexOptions"], [
+  {
+    name: "inline-grammar", dimensions: { columns: 40, rows: 8 },
+    inputs: { inline: latexRows(latexInline) },
+    expected: { inline: latexRows(latexInline).map((row) => ({ ...row, output: observeLatex(row.source) })) },
+  },
+  {
+    name: "inline-failure-value", dimensions: { columns: 40, rows: 8 },
+    inputs: { failing: latexRows(latexFailing) },
+    expected: { failing: latexRows(latexFailing).map((row) => ({ ...row, output: observeLatex(row.source) })) },
+  },
+  {
+    // #974 owns the display layout; the observation is frozen here so that
+    // ticket replays it rather than capturing a new baseline.
+    name: "display-option", dimensions: { columns: 40, rows: 8 },
+    inputs: { display: latexRows(latexDisplay) },
+    expected: { display: latexRows(latexDisplay).map((row) => ({ ...row, output: observeLatex(row.source, { display: true }) })) },
+  },
+]);
+
 // No output is touched before source guards and all observations complete.
 const bundle = path.join(root, selected.bundle);
 mkdirSync(bundle, { recursive: true });
@@ -444,6 +533,8 @@ const artifacts = [
 ["keys-kitty-text.json", "keys-kitty-text", kittyArtifact],
 	["utils-ansi.json", "utils-ansi", utilsAnsiArtifact],
 	["fuzzy.json", "fuzzy", fuzzyArtifact],
+["keys-kitty-text.json", "keys-kitty-text", kittyArtifact],
+	["latex.json", "latex", latexArtifact],
 ] as const;
 const records = artifacts.map(([file, family, artifact]) => {
 	const bytes = Buffer.from(JSON.stringify(artifact, null, 2) + "\n");

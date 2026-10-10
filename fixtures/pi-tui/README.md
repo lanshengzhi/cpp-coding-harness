@@ -21,6 +21,9 @@ The initial independently captured cases are:
 | `screen-state.json` | Two regular renderer frames; every cell's grapheme, continuation and style, visible rows, scrollback and cursor position/visibility | `ScreenStateGoldenTest` drives Component/Focusable/Tui over VirtualTerminal |
 | `capability-ledger.json` | Frozen `packages/tui/src/index.ts` export set (173) with ledger classifications and required cross-references | `TuiCapabilityLedgerTest` + docs ledger; offline verify requires the family |
 | `fuzzy.json` | `fuzzyMatch` scores/matches and `fuzzyFilter` rankings over non-ASCII, combining, supplementary, final-sigma and no-break-space queries and texts, each row recording both UTF-16 and UTF-8 lengths of the text | `PiTuiDifferentialTest` drives `fuzzy_match`/`fuzzy_filter`; `FuzzyTest` pins the retained original-UTF-8 offset helper that pi does not export |
+| `latex.json` | Frozen `renderLatex` inline grammar (symbols, nested groups, fractions including `frac 1/2`, roots, accents, inline scripts, operators), its `undefined` failure value, and the `display` option | `LatexTest` replays every row through `cch_tui::render_latex` and compares complete values |
+
+`latex.json` was appended to the existing bundle rather than re-captured with all of it, so it keeps the envelope `capturedAt` and records its own wall clock plus the pinned published build digest under `recapture`. The other five families are unchanged.
 
 The screen case changes bold red `red` to underlined green `go` and retains a focused cursor
 at column 2, row 1. A text-only screenshot would miss a wrong style or displaced cursor;

@@ -2,7 +2,7 @@
   "schema": "pike/tui-evidence/1",
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-10T07:44:52.086Z",
+  "capturedAt": "2026-10-10T06:25:12.161Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -28,14 +28,14 @@
   },
   "generator": {
     "path": "capture/capture-named-tui.mts",
-    "sha256": "e8e0a406883848a671ec3980f79d8df0264bdf0a49254f03ef499cc9f9041c41"
+    "sha256": "9d44fdeff5d8338d7df6807c9776f85b377e84867f5c5fcd084b9f2ac1cb0e79"
   },
   "artifacts": [
     {
       "path": "input.json",
       "family": "input",
       "bytes": 1697,
-      "sha256": "08dd575875f99357810330fd642ebc8a69ae7234c84aa60b0aa33584a2e75228",
+      "sha256": "b9b200f284810124158270458019ad9aabc1e348b5a78a6c706f0e95649462c1",
       "sourceEndpoints": [
         "packages/tui/src/keys.ts:parseKey,isKeyRepeat,isKeyRelease",
         "packages/tui/src/components/input.ts:handleInput,getValue,onSubmit"
@@ -45,7 +45,7 @@
       "path": "component.json",
       "family": "component",
       "bytes": 1239,
-      "sha256": "0eb8a600274f1fc353bc4d43675041b86ea8cfd782d482ff0dfd172b9e541a19",
+      "sha256": "4cd76c22cf067b5bfd1db8637376cadcb63db161257de6a759ec556024165620",
       "sourceEndpoints": [
         "packages/tui/src/components/text.ts:render,setText"
       ]
@@ -54,7 +54,7 @@
       "path": "screen-state.json",
       "family": "screen-state",
       "bytes": 113420,
-      "sha256": "7deeea2694b2d420c999b5e29f1f114ae0bdf4f4eff34dc1dd8c8270c207e5f3",
+      "sha256": "36e63f9ed0437e59dd81acb0ee7baa4b0e0d758ef774efb67c62494ffbf2612c",
       "sourceEndpoints": [
         "packages/tui/src/tui-main-screen.ts:TuiMainScreen.renderNow",
         "packages/tui/src/tui.ts:setFocus,CURSOR_MARKER",
@@ -66,7 +66,7 @@
       "path": "capability-ledger.json",
       "family": "capability-ledger",
       "bytes": 13980,
-      "sha256": "4c6e76e59a0f095ae21067644816bdac4ca96c6efb6460621142ef91b5371241",
+      "sha256": "756ffeb740390c53ab111e607dc72efaf07d52dd84ef939cc67252bb080888f7",
       "sourceEndpoints": [
         "packages/tui/src/index.ts:export-surface"
       ]
@@ -75,7 +75,7 @@
       "path": "utils-width.json",
       "family": "utils-width",
       "bytes": 3110,
-      "sha256": "016972c6434823affb71d490ba2d7b9bc4a2564980ed10cb79d3a0912ffe04fd",
+      "sha256": "3966ff5278646b5f37e100d4aa58e8a864581d1831e34df1991f9cb902d31f67",
       "sourceEndpoints": [
         "packages/tui/src/utils.ts:visibleWidth",
         "packages/tui/src/components/text.ts:render",
@@ -83,12 +83,12 @@
       ]
     },
     {
-      "path": "fuzzy.json",
-      "family": "fuzzy",
-      "bytes": 8095,
-      "sha256": "f65fb0d825d8f914101a13d3b0adca11fb81430fa7c2e3485175ccf540b159ce",
+      "path": "latex.json",
+      "family": "latex",
+      "sha256": "036fb44f8818bf6936a91fc618f1dae810f3f546a99e022d160e27261ce72452",
+      "bytes": 14600,
       "sourceEndpoints": [
-        "packages/tui/src/fuzzy.ts:fuzzyMatch,fuzzyFilter"
+        "packages/tui/src/latex.ts:renderLatex,RenderLatexOptions"
       ]
     }
   ]

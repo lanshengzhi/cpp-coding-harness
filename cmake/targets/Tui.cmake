@@ -19,6 +19,7 @@ cch_parity_declare_target(
         src/tui/InputDecoder.cpp
         src/tui/Keybindings.cpp
         src/tui/Keys.cpp
+        src/tui/Latex.cpp
         src/tui/Loader.cpp
         src/tui/Markdown.cpp
         src/tui/Overlay.cpp
