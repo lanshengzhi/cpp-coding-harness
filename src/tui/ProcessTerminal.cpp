@@ -1,5 +1,6 @@
 #include <cch/tui/ProcessTerminal.hpp>
 
+#include <cch/tui/StdinBuffer.hpp>
 #include <cch/tui/TerminalImage.hpp>
 
 #include "tui/InputDecoder.hpp"
@@ -315,6 +316,7 @@ void poll_startup_probe(
 
 } // namespace
 struct InputState {
+    StdinBuffer stdin_buffer{StdinBufferOptions{}};
     detail::TerminalStreamDecoder decoder;
     bool color_scheme_reported{false};
     bool needs_input_flush{false};
@@ -469,6 +471,10 @@ template <typename T> void record_worker_error(T& impl, support::Error error) {
     if (!impl.worker_error) impl.worker_error = std::move(error);
 }
 
+template <typename T>
+void apply_terminal_responses(
+        T& impl, InputState& state, const std::vector<detail::TerminalResponseVariant>& responses);
+
 template <typename T> void invoke_input(T& impl, std::string input) {
     std::shared_ptr<TerminalInputSink> sink;
     {
@@ -482,6 +488,35 @@ template <typename T> void invoke_input(T& impl, std::string input) {
         std::lock_guard lock(impl.mutex);
         if (impl.input_sink == sink) impl.input_sink.reset();
     }
+}
+
+template <typename T> void process_framed_input(T& impl, std::string sequence) {
+    if (sequence.empty()) return;
+    auto decoded = impl.input_state.decoder.feed(sequence);
+    apply_terminal_responses(impl, impl.input_state, decoded.responses);
+    if (!decoded.forwarded_input.empty()) {
+        invoke_input(impl, std::move(decoded.forwarded_input));
+        impl.input_state.needs_input_flush = true;
+    }
+}
+
+template <typename T> void configure_stdin_buffer(T& impl) {
+    impl.input_state.stdin_buffer.clear();
+    impl.input_state.stdin_buffer = StdinBuffer({
+            .timeout = detail::kSequenceFragmentTimeout,
+            .escape_timeout = impl.input_state.escape_fragment_timeout,
+    });
+    const auto weak_self = impl.self;
+    impl.input_state.stdin_buffer.set_data_handler([weak_self](std::string sequence) {
+        const auto self = weak_self.lock();
+        if (!self) return;
+        process_framed_input(*self, std::move(sequence));
+    });
+    impl.input_state.stdin_buffer.set_paste_handler([weak_self](std::string content) {
+        const auto self = weak_self.lock();
+        if (!self) return;
+        invoke_input(*self, std::string("\x1b[200~") + std::move(content) + "\x1b[201~");
+    });
 }
 
 /// True while the terminal session is still live, i.e. teardown has not begun.
@@ -771,20 +806,22 @@ void apply_terminal_responses(
 /// stdin-buffer.ts), so a chunk that leaves nothing held resolves immediately
 /// and arms no deadline.
 template <typename T> void arm_fragment_deadline(T& impl) {
+    auto deadline = std::chrono::steady_clock::time_point::max();
     const auto& decoder = impl.input_state.decoder;
+    const auto& stdin_buffer = impl.input_state.stdin_buffer;
+    if (stdin_buffer.holds_fragment()) {
+        deadline = std::min(deadline, stdin_buffer.deadline());
+    }
     if (decoder.holds_lone_escape()) {
-        impl.input_state.negotiation_deadline =
-                std::chrono::steady_clock::now() + impl.input_state.escape_fragment_timeout;
-        return;
+        deadline = std::min(
+                deadline,
+                std::chrono::steady_clock::now() + impl.input_state.escape_fragment_timeout);
+    } else if (decoder.holds_fragment() || impl.input_state.needs_input_flush) {
+        deadline = std::min(
+                deadline,
+                std::chrono::steady_clock::now() + detail::kSequenceFragmentTimeout);
     }
-    // Forwarded input is followed by an empty-value flush for the Tui decoder,
-    // which can hold a fragment of its own, so that case keeps the sequence
-    // window alongside a genuinely incomplete fragment.
-    if (decoder.holds_fragment() || impl.input_state.needs_input_flush) {
-        impl.input_state.negotiation_deadline = std::chrono::steady_clock::now() + detail::kSequenceFragmentTimeout;
-        return;
-    }
-    impl.input_state.negotiation_deadline = std::chrono::steady_clock::time_point::max();
+    impl.input_state.negotiation_deadline = deadline;
 }
 
 template <typename T> void process_input_chunk(T& impl, std::string_view chunk) {
@@ -796,12 +833,7 @@ template <typename T> void process_input_chunk(T& impl, std::string_view chunk) 
             return;
         }
     }
-    auto decoded = impl.input_state.decoder.feed(chunk);
-    apply_terminal_responses(impl, impl.input_state, decoded.responses);
-    if (!decoded.forwarded_input.empty()) {
-        invoke_input(impl, std::move(decoded.forwarded_input));
-        impl.input_state.needs_input_flush = true;
-    }
+    impl.input_state.stdin_buffer.process(chunk);
     arm_fragment_deadline(impl);
 }
 
@@ -920,6 +952,10 @@ template <typename T> void arm_readiness_timer_locked(T& impl) {
             const auto now = std::chrono::steady_clock::now();
             if (impl.input_state.negotiation_deadline != std::chrono::steady_clock::time_point::max() &&
                     now >= impl.input_state.negotiation_deadline) {
+                if (impl.input_state.stdin_buffer.holds_fragment() &&
+                        now >= impl.input_state.stdin_buffer.deadline()) {
+                    (void)impl.input_state.stdin_buffer.flush();
+                }
                 auto decoded = impl.input_state.decoder.flush();
                 responses = std::move(decoded.responses);
                 forwarded_input = std::move(decoded.forwarded_input);
@@ -1311,13 +1347,9 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
     impl_->input_state.escape_fragment_timeout =
             detail::resolve_escape_fragment_timeout(environment("PI_TUI_ESC_TIMEOUT"),
                     !environment("SSH_CONNECTION").empty() || !environment("SSH_TTY").empty());
+    configure_stdin_buffer(*impl_);
     if (!startup_input.empty()) {
-        auto decoded = impl_->input_state.decoder.feed(startup_input);
-        apply_terminal_responses(*impl_, impl_->input_state, decoded.responses);
-        if (!decoded.forwarded_input.empty()) {
-            invoke_input(*impl_, std::move(decoded.forwarded_input));
-            impl_->input_state.needs_input_flush = true;
-        }
+        impl_->input_state.stdin_buffer.process(startup_input);
         arm_fragment_deadline(*impl_);
     }
         lock.lock();

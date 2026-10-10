@@ -408,6 +408,29 @@ std::optional<std::size_t> escape_sequence_length(std::string_view pending, bool
             const auto final = pending.find('~', 3);
             return final == std::string_view::npos ? std::nullopt : std::optional<std::size_t>{final + 1};
         }
+        if (pending.starts_with("\x1b[M")) {
+            return pending.size() >= 6 ? std::optional<std::size_t>{6} : std::nullopt;
+        }
+        if (pending.starts_with("\x1b[<")) {
+            if (pending.size() < 4) return std::nullopt;
+            const auto final = pending.back();
+            if (final != 'M' && final != 'm') return std::nullopt;
+            const auto body = pending.substr(3, pending.size() - 4);
+            std::size_t start = 0;
+            int parts = 0;
+            while (start <= body.size()) {
+                const auto separator = body.find(';', start);
+                const auto part = body.substr(start, separator - start);
+                if (part.empty()) return std::nullopt;
+                for (const auto ch : part) {
+                    if (ch < '0' || ch > '9') return std::nullopt;
+                }
+                ++parts;
+                if (separator == std::string_view::npos) break;
+                start = separator + 1;
+            }
+            return parts == 3 ? std::optional<std::size_t>{pending.size()} : std::nullopt;
+        }
         for (std::size_t index = 2; index < pending.size(); ++index) {
             const auto value = static_cast<unsigned char>(pending[index]);
             if (value >= 0x40 && value <= 0x7e) return index + 1;
@@ -694,6 +717,28 @@ struct ResponseScan {
         pending.starts_with(kOscBackgroundResponsePrefix);
 }
 
+[[nodiscard]] bool is_mouse_control_sequence(std::string_view sequence) {
+    if (sequence.starts_with("\x1b[M") && sequence.size() == 6) return true;
+    if (!sequence.starts_with("\x1b[<") || sequence.size() < 6) return false;
+    const auto final = sequence.back();
+    if (final != 'M' && final != 'm') return false;
+    const auto body = sequence.substr(3, sequence.size() - 4);
+    std::size_t start = 0;
+    int parts = 0;
+    while (start <= body.size()) {
+        const auto separator = body.find(';', start);
+        const auto part = body.substr(start, separator - start);
+        if (part.empty()) return false;
+        for (const auto ch : part) {
+            if (ch < '0' || ch > '9') return false;
+        }
+        ++parts;
+        if (separator == std::string_view::npos) break;
+        start = separator + 1;
+    }
+    return parts == 3;
+}
+
 } // namespace
 
 std::chrono::milliseconds resolve_escape_fragment_timeout(std::string_view configured, bool over_ssh) {
@@ -840,6 +885,7 @@ void TerminalStreamDecoder::drain(StreamDecodeResult& result, bool end_of_feed) 
                 if (scan.response) result.responses.push_back(std::move(*scan.response));
                 continue;
             }
+            if (is_mouse_control_sequence(sequence)) continue;
         }
         result.forwarded_input += sequence;
         if (sequence.size() == 1 && pending_kitty_printable_codepoint_.has_value()) {
