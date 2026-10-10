@@ -32,29 +32,6 @@ constexpr std::size_t kEntryContentDisplayBytes = 200;
 constexpr std::size_t kBashCommandDisplayBytes = 50;
 constexpr std::size_t kToolArgumentsDisplayBytes = 40;
 
-/// Printable keys: plain and shift-modified characters only (the private
-/// `tui::detail::is_printable` mirror; named keys and ctrl/alt-modified
-/// events are handled by the keybinding actions or rejected).
-[[nodiscard]] bool is_printable_key(const cch::tui::KeyEvent& event) {
-    if (event.ctrl || event.alt || event.key.empty()) return false;
-    return event.key != "enter" && event.key != "tab" && event.key != "escape" &&
-        event.key != "backspace" && event.key != "delete" && event.key != "insert" &&
-        event.key != "clear" && event.key != "home" && event.key != "end" &&
-        event.key != "pageUp" && event.key != "pageDown" && event.key != "up" &&
-        event.key != "down" && event.key != "left" && event.key != "right";
-}
-
-[[nodiscard]] std::string printable_key_text(const cch::tui::KeyEvent& event) {
-    if (event.key == "space") return " ";
-    if (event.shift && event.key.size() == 1) {
-        const auto letter = static_cast<unsigned char>(event.key.front());
-        if (letter >= 'a' && letter <= 'z') {
-            return std::string(1, static_cast<char>(letter - 'a' + 'A'));
-        }
-    }
-    return event.key;
-}
-
 /// The concatenated text across a message content block list (pi
 /// `extractFullContent`).
 [[nodiscard]] std::string extract_content_text(const ai::MessageVariant& message) {
@@ -1338,8 +1315,8 @@ cch::tui::InputAdmissionOutcome TreeSelectorComponent::handle_input(const cch::t
         }
     } else if (matches("app.tree.toggleLabelTimestamp")) {
         show_label_timestamps_ = !show_label_timestamps_;
-    } else if (is_printable_key(*key)) {
-        search_query_ += printable_key_text(*key);
+    } else if (const auto text = cch::tui::printable_text(*key)) {
+        search_query_ += *text;
         folded_nodes_.clear();
         apply_filter();
     }

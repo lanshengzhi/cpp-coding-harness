@@ -129,20 +129,39 @@ std::optional<std::string> key_for_codepoint(unsigned int codepoint, bool shift)
     return encoded;
 }
 
+std::optional<std::string> kitty_printable_text(unsigned int codepoint, const ParsedModifiers& modifiers) {
+    // Kitty functional and keypad keys occupy the Unicode private-use planes;
+    // their reported codepoint is a key number, never inserted text.
+    if (codepoint < 0x20 || codepoint == 0x7f) return std::nullopt;
+    if (codepoint > 0x10ffff || (codepoint >= 0xe000 && codepoint <= 0xf8ff)) return std::nullopt;
+    // A control combination (pi `decodeKittyPrintable` blocks super the same
+    // way) is a shortcut, not text.
+    if (modifiers.ctrl || modifiers.alt || modifiers.super) return std::nullopt;
+    auto encoded = encode_utf8(codepoint);
+    if (encoded.empty()) return std::nullopt;
+    return encoded;
+}
+
 std::optional<KeyEvent> make_key_event(unsigned int codepoint,
         ParsedModifiers modifiers,
         KeyEventType type,
         std::optional<unsigned int> base_layout_key = std::nullopt,
         std::optional<unsigned int> shifted_key = std::nullopt) {
-    auto key = modifiers.shift && shifted_key ? key_for_codepoint(*shifted_key, modifiers.shift)
-                                              : key_for_codepoint(codepoint, modifiers.shift);
+    // pi `decodeKittyPrintable`: a shift-modified press inserts the shifted
+    // key's character; without shift the reported codepoint is the character.
+    const auto effective_codepoint = modifiers.shift && shifted_key ? *shifted_key : codepoint;
+    auto key = key_for_codepoint(effective_codepoint, modifiers.shift);
     const bool authoritative = key && key->size() == 1 &&
         (((*key)[0] >= 'a' && (*key)[0] <= 'z') || ((*key)[0] >= '0' && (*key)[0] <= '9') ||
          is_baseline_symbol((*key)[0]));
+    // The base-layout fallback exists so a non-Latin layout still matches a
+    // base-layout shortcut. It replaces the shortcut identity only: the
+    // insertion text keeps the character the terminal actually reported.
     if (!authoritative && base_layout_key) key = key_for_codepoint(*base_layout_key, modifiers.shift);
     if (!key) return std::nullopt;
     return KeyEvent{
             .key = std::move(*key),
+            .text = kitty_printable_text(effective_codepoint, modifiers).value_or(std::string{}),
             .ctrl = modifiers.ctrl,
             .shift = modifiers.shift,
             .alt = modifiers.alt,
@@ -347,9 +366,11 @@ std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence, bool kitty
         if (value == 29) return *parse_key_id("ctrl+]");
         if (value == 31) return *parse_key_id("ctrl+-");
         if (value >= 'A' && value <= 'Z') {
-            return KeyEvent{.key = std::string(1, static_cast<char>(value - 'A' + 'a')), .shift = true};
+            return KeyEvent{.key = std::string(1, static_cast<char>(value - 'A' + 'a')),
+                    .text = std::string(1, static_cast<char>(value)),
+                    .shift = true};
         }
-        if (value >= 32 && value <= 126) return KeyEvent{.key = std::string(sequence)};
+        if (value >= 32 && value <= 126) return KeyEvent{.key = std::string(sequence), .text = std::string(sequence)};
         if (value >= 128) return KeyEvent{.key = std::string(sequence)};
     }
 
@@ -362,7 +383,7 @@ std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence, bool kitty
             for (std::size_t index = 1; index < sequence.size(); ++index) {
                 if ((static_cast<unsigned char>(sequence[index]) & 0xc0) != 0x80) valid = false;
             }
-            if (valid) return KeyEvent{.key = std::string(sequence)};
+            if (valid) return KeyEvent{.key = std::string(sequence), .text = std::string(sequence)};
         }
     }
 
@@ -960,3 +981,11 @@ void TerminalStreamDecoder::commit_paste_byte(char byte) {
 }
 
 } // namespace cch::tui::detail
+
+namespace cch::tui {
+
+std::optional<KeyEvent> parse_key(std::string_view data, bool kitty_protocol_active) {
+    return detail::parse_raw_sequence(data, kitty_protocol_active);
+}
+
+} // namespace cch::tui

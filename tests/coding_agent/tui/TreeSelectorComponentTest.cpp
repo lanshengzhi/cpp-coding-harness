@@ -13,6 +13,7 @@
 #include "coding_agent/tui/TreeSelector.hpp"
 
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/Keys.hpp>
 
 #include <chrono>
 #include <iterator>
@@ -476,6 +477,62 @@ TEST_CASE("tree selector renders the empty filtered state", "[coding_agent][tui]
     const auto text = render_text(component);
     CHECK(text.find("No entries found") != std::string::npos);
     CHECK(text.find("(0/0)") != std::string::npos);
+}
+
+TEST_CASE("tree selector filters with the Kitty character, not the shortcut identity",
+        "[coding_agent][tui][tree-selector][issue950][spec]") {
+    auto theme = test_theme();
+    auto keybindings = test_keybindings();
+    // Two independent rows: one matches the base-layout key 'a', the other the
+    // non-Latin character whose physical key is that same 'a'.
+    std::vector<Node> nodes;
+    nodes.push_back(user_node("u0", "alpha", 1000));
+    nodes.push_back(assistant_node("a1", "\xd1\x84orm", 2000));
+
+    coding_agent::tui::TreeSelectorComponent component(
+            theme,
+            keybindings,
+            std::move(nodes),
+            "a1",
+            /*terminal_height=*/20,
+            [](std::string) -> support::ExpectedVoid { return {}; },
+            [] {},
+            [](std::string, std::optional<std::string>) -> support::ExpectedVoid { return {}; },
+            [](std::optional<std::string>) -> support::ExpectedVoid { return {}; },
+            [] {});
+
+    // Both rows are visible before the search.
+    auto text = render_text(component);
+    REQUIRE(text.find("alpha") != std::string::npos);
+    REQUIRE(text.find("\xd1\x84orm") != std::string::npos);
+
+    // ESC[1092::97u: the terminal reports Cyrillic ef on the physical 'a' key.
+    const auto cyrillic_ef = tui::parse_key("\x1b[1092::97u", /*kitty_protocol_active=*/true);
+    REQUIRE(cyrillic_ef);
+    REQUIRE(tui::matches_key(*cyrillic_ef, "a"));
+
+    REQUIRE(component.handle_input(*cyrillic_ef) == tui::InputAdmissionOutcome::Consumed);
+    text = render_text(component);
+    CHECK(text.find("\xd1\x84orm") != std::string::npos);
+    // Filtering by the shortcut identity would keep the 'alpha' row instead.
+    CHECK(text.find("alpha") == std::string::npos);
+
+    // A repeat appends the same character, so nothing matches the doubled
+    // query any more. A repeat resolved to the shortcut identity would keep
+    // matching the 'alpha' row.
+    const auto repeat = tui::parse_key("\x1b[1092::97;2u", /*kitty_protocol_active=*/true);
+    REQUIRE(repeat);
+    REQUIRE(component.handle_input(*repeat) == tui::InputAdmissionOutcome::Consumed);
+    text = render_text(component);
+    CHECK(text.find("No entries found") != std::string::npos);
+
+    // The release never changes the query.
+    const auto release = tui::parse_key("\x1b[1092::97;3u", /*kitty_protocol_active=*/true);
+    REQUIRE(release);
+    CHECK(component.handle_input(*release) == tui::InputAdmissionOutcome::Unhandled);
+    text = render_text(component);
+    CHECK(text.find("No entries found") != std::string::npos);
+    CHECK(text.find("alpha") == std::string::npos);
 }
 
 TEST_CASE("tree selector renders branch-summary and compaction entries from pi-created sessions",

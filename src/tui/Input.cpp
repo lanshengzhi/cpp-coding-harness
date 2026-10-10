@@ -339,8 +339,8 @@ InputAdmissionOutcome Input::handle_input(const InputEventVariant& input) {
         impl_->buffer.move_word_forward();
         return InputAdmissionOutcome::Consumed;
     }
-    if (detail::is_printable(*event)) {
-        impl_->buffer.insert_character(detail::printable_text(*event));
+    if (const auto text = printable_text(*event)) {
+        impl_->buffer.insert_character(*text);
         return InputAdmissionOutcome::Consumed;
     }
     return InputAdmissionOutcome::Unhandled;

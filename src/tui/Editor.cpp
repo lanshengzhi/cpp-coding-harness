@@ -1079,8 +1079,8 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
             impl.jump_direction.reset();
             return InputAdmissionOutcome::Consumed;
         }
-        if (detail::is_printable(*event)) {
-            impl.jump_to(detail::printable_text(*event), *impl.jump_direction);
+        if (const auto text = printable_text(*event)) {
+            impl.jump_to(*text, *impl.jump_direction);
             impl.jump_direction.reset();
             impl.echo_cursor();
             return InputAdmissionOutcome::Consumed;
@@ -1246,8 +1246,8 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
         impl.submit();
         return InputAdmissionOutcome::Consumed;
     }
-    if (detail::is_printable(*event)) {
-        impl.insert_character(detail::printable_text(*event));
+    if (const auto text = printable_text(*event)) {
+        impl.insert_character(*text);
         return InputAdmissionOutcome::Consumed;
     }
     return InputAdmissionOutcome::Unhandled;
