@@ -4,6 +4,7 @@
 #include <utf8proc.h>
 
 #include <algorithm>
+#include <ranges>
 #include <charconv>
 #include <cstddef>
 #include <format>
@@ -16,9 +17,7 @@
 namespace cch::tui::detail {
 namespace {
 
-[[nodiscard]] bool is_regional_indicator(char32_t codepoint) {
-    return codepoint >= 0x1F1E6 && codepoint <= 0x1F1FF;
-}
+[[nodiscard]] bool is_regional_indicator(char32_t codepoint) { return codepoint >= 0x1F1E6 && codepoint <= 0x1F1FF; }
 
 [[nodiscard]] std::size_t utf8_sequence_length(unsigned char lead) {
     if (lead < 0x80) return 1;
@@ -56,21 +55,18 @@ namespace {
     for (std::size_t index = 0; index < values.size(); ++index) {
         const auto value = values[index];
         if (value == 0 || (value >= 1 && value <= 5) || value == 7 || value == 8 || value == 9 ||
-            (value >= 22 && value <= 25) || (value >= 27 && value <= 29) ||
-            (value >= 30 && value <= 37) || value == 39 ||
-            (value >= 40 && value <= 47) || value == 49 ||
-            (value >= 90 && value <= 97) || (value >= 100 && value <= 107)) {
+                (value >= 22 && value <= 25) || (value >= 27 && value <= 29) || (value >= 30 && value <= 37) ||
+                value == 39 || (value >= 40 && value <= 47) || value == 49 || (value >= 90 && value <= 97) ||
+                (value >= 100 && value <= 107)) {
             continue;
         }
         if (value != 38 && value != 48) return false;
-        if (index + 2 < values.size() && values[index + 1] == 5 &&
-            is_color_channel(values[index + 2])) {
+        if (index + 2 < values.size() && values[index + 1] == 5 && is_color_channel(values[index + 2])) {
             index += 2;
             continue;
         }
-        if (index + 4 < values.size() && values[index + 1] == 2 &&
-            is_color_channel(values[index + 2]) && is_color_channel(values[index + 3]) &&
-            is_color_channel(values[index + 4])) {
+        if (index + 4 < values.size() && values[index + 1] == 2 && is_color_channel(values[index + 2]) &&
+                is_color_channel(values[index + 3]) && is_color_channel(values[index + 4])) {
             index += 4;
             continue;
         }
@@ -79,9 +75,7 @@ namespace {
     return true;
 }
 
-[[nodiscard]] support::Expected<AnsiCode> parse_supported_ansi(
-    std::string_view text,
-    std::size_t position) {
+[[nodiscard]] support::Expected<AnsiCode> parse_supported_ansi(std::string_view text, std::size_t position) {
     if (position >= text.size() || text[position] != '\x1b') {
         return std::unexpected(invalid_terminal_text("Expected an ANSI escape sequence"));
     }
@@ -123,8 +117,8 @@ namespace {
             return std::unexpected(invalid_terminal_text("Malformed SGR parameters"));
         }
         return AnsiCode{
-            .code = std::string(text.substr(position, cursor + 1 - position)),
-            .length = cursor + 1 - position,
+                .code = std::string(text.substr(position, cursor + 1 - position)),
+                .length = cursor + 1 - position,
         };
     }
 
@@ -154,17 +148,14 @@ namespace {
         // zones (`133;A`/`133;B`/`133;C`, pi's coding-agent user/assistant
         // message wrappers) are accepted as zero-width control tokens so
         // message lines can carry them through the differential renderer.
-        const auto is_hyperlink =
-            body.starts_with("8;") && body.find(';', 2) != std::string_view::npos;
-        const auto is_osc133 =
-            (body == "133;A" || body == "133;B" || body == "133;C");
+        const auto is_hyperlink = body.starts_with("8;") && body.find(';', 2) != std::string_view::npos;
+        const auto is_osc133 = (body == "133;A" || body == "133;B" || body == "133;C");
         if (!is_hyperlink && !is_osc133) {
-            return std::unexpected(invalid_terminal_text(
-                "Only OSC 8 hyperlinks and OSC 133 zones are supported"));
+            return std::unexpected(invalid_terminal_text("Only OSC 8 hyperlinks and OSC 133 zones are supported"));
         }
         return AnsiCode{
-            .code = std::string(text.substr(position, cursor + terminator_length - position)),
-            .length = cursor + terminator_length - position,
+                .code = std::string(text.substr(position, cursor + terminator_length - position)),
+                .length = cursor + terminator_length - position,
         };
     }
 
@@ -181,8 +172,7 @@ namespace {
     while (end < text.size()) {
         if (text[end] == '\x1b' || text[end] == '\r' || text[end] == '\n' || text[end] == '\t') break;
         const auto [current, current_bytes] = decode_utf8(text, end);
-        if (current_bytes == 0 || current < 0x20 || current == 0x7F ||
-            (current >= 0x80 && current <= 0x9F)) {
+        if (current_bytes == 0 || current < 0x20 || current == 0x7F || (current >= 0x80 && current <= 0x9F)) {
             break;
         }
         const auto current_utf8proc = static_cast<utf8proc_int32_t>(current);
@@ -209,24 +199,61 @@ std::pair<char32_t, std::size_t> decode_utf8(std::string_view text, std::size_t 
         if ((continuation & 0xC0) != 0x80) return {0xFFFD, 1};
     }
     if (length == 2) {
-        codepoint = ((lead & 0x1F) << 6) |
-                    (static_cast<unsigned char>(text[position + 1]) & 0x3F);
+        codepoint = ((lead & 0x1F) << 6) | (static_cast<unsigned char>(text[position + 1]) & 0x3F);
         if (codepoint < 0x80) return {0xFFFD, 1};
     } else if (length == 3) {
-        codepoint = ((lead & 0x0F) << 12) |
-                    ((static_cast<unsigned char>(text[position + 1]) & 0x3F) << 6) |
+        codepoint = ((lead & 0x0F) << 12) | ((static_cast<unsigned char>(text[position + 1]) & 0x3F) << 6) |
                     (static_cast<unsigned char>(text[position + 2]) & 0x3F);
         if (codepoint < 0x800 || (codepoint >= 0xD800 && codepoint <= 0xDFFF)) {
             return {0xFFFD, 1};
         }
     } else {
-        codepoint = ((lead & 0x07) << 18) |
-                    ((static_cast<unsigned char>(text[position + 1]) & 0x3F) << 12) |
+        codepoint = ((lead & 0x07) << 18) | ((static_cast<unsigned char>(text[position + 1]) & 0x3F) << 12) |
                     ((static_cast<unsigned char>(text[position + 2]) & 0x3F) << 6) |
                     (static_cast<unsigned char>(text[position + 3]) & 0x3F);
         if (codepoint < 0x10000 || codepoint > 0x10FFFF) return {0xFFFD, 1};
     }
     return {codepoint, length};
+}
+
+[[nodiscard]] bool is_mark_category(utf8proc_category_t category) {
+    return category == UTF8PROC_CATEGORY_MN || category == UTF8PROC_CATEGORY_MC || category == UTF8PROC_CATEGORY_ME;
+}
+
+[[nodiscard]] bool is_non_printing_category(utf8proc_category_t category) {
+    return category == UTF8PROC_CATEGORY_CN || category == UTF8PROC_CATEGORY_CC || category == UTF8PROC_CATEGORY_CF ||
+           is_mark_category(category) || category == UTF8PROC_CATEGORY_CS;
+}
+
+/// Terminal-spacing marks: Unicode Spacing_Mark minus Hanunoo/Hangul tone marks,
+/// plus the legacy wcwidth exceptions pi lists in utils.ts.
+[[nodiscard]] bool is_terminal_spacing_mark(char32_t codepoint) {
+    if (codepoint == 0x1734 || codepoint == 0x302E || codepoint == 0x302F) return false;
+    if (utf8proc_category(static_cast<utf8proc_int32_t>(codepoint)) == UTF8PROC_CATEGORY_MC) {
+        return true;
+    }
+    return codepoint == 0x065F || codepoint == 0x0F7F || codepoint == 0x102B || codepoint == 0x102C ||
+           codepoint == 0x1031 || (codepoint >= 0x1033 && codepoint <= 0x1035) || codepoint == 0x1038 ||
+           (codepoint >= 0x103A && codepoint <= 0x103E);
+}
+
+[[nodiscard]] bool is_zero_width_cluster_codepoint(char32_t codepoint) {
+    const auto category = utf8proc_category(static_cast<utf8proc_int32_t>(codepoint));
+    if (is_mark_category(category) || category == UTF8PROC_CATEGORY_CC || category == UTF8PROC_CATEGORY_CS) {
+        return true;
+    }
+    const auto* property = utf8proc_get_property(static_cast<utf8proc_int32_t>(codepoint));
+    return property->ignorable != 0;
+}
+
+[[nodiscard]] bool is_leading_non_printing(char32_t codepoint) {
+    const auto category = utf8proc_category(static_cast<utf8proc_int32_t>(codepoint));
+    if (is_mark_category(category) || category == UTF8PROC_CATEGORY_CC || category == UTF8PROC_CATEGORY_CF ||
+            category == UTF8PROC_CATEGORY_CS) {
+        return true;
+    }
+    const auto* property = utf8proc_get_property(static_cast<utf8proc_int32_t>(codepoint));
+    return property->ignorable != 0;
 }
 
 std::size_t codepoint_width(char32_t codepoint) {
@@ -236,9 +263,31 @@ std::size_t codepoint_width(char32_t codepoint) {
 }
 
 std::size_t grapheme_width(std::string_view cluster) {
-    std::size_t width = 0;
-    std::size_t trailing_width = 0;
+    if (cluster.empty()) return 0;
+    if (cluster.size() == 1) {
+        const auto code = static_cast<unsigned char>(cluster[0]);
+        if (code >= 0x20 && code <= 0x7E) return 1;
+        if (code == '	') return 3;
+    }
+
+    std::vector<char32_t> codepoints;
+    codepoints.reserve(cluster.size());
     std::size_t position = 0;
+    while (position < cluster.size()) {
+        const auto [codepoint, bytes] = decode_utf8(cluster, position);
+        if (bytes == 0) break;
+        codepoints.push_back(codepoint);
+        position += bytes;
+    }
+    if (codepoints.empty()) return 0;
+
+    if (std::ranges::all_of(codepoints, [](char32_t cp) { return is_terminal_spacing_mark(cp); })) {
+        return codepoints.size();
+    }
+    if (std::ranges::all_of(codepoints, [](char32_t cp) { return is_zero_width_cluster_codepoint(cp); })) {
+        return 0;
+    }
+
     std::size_t regional_indicators = 0;
     char32_t base_codepoint{0};
     bool has_base = false;
@@ -246,27 +295,13 @@ std::size_t grapheme_width(std::string_view cluster) {
     bool has_vs16 = false;
     bool has_keycap = false;
     bool has_joiner = false;
-
-    while (position < cluster.size()) {
-        const auto [codepoint, bytes] = decode_utf8(cluster, position);
-        if (bytes == 0) break;
+    for (const auto codepoint : codepoints) {
         const auto* property = utf8proc_get_property(static_cast<utf8proc_int32_t>(codepoint));
-        const auto is_emoji_base =
-            property->boundclass == UTF8PROC_BOUNDCLASS_EXTENDED_PICTOGRAPHIC ||
-            property->boundclass == UTF8PROC_BOUNDCLASS_E_BASE ||
-            property->boundclass == UTF8PROC_BOUNDCLASS_E_BASE_GAZ;
-        const auto codepoint_columns = codepoint_width(codepoint);
-        const auto adds_trailing_width =
-            has_base && ((codepoint >= 0xFF00 && codepoint <= 0xFFEF) ||
-                         codepoint == 0x0E33 || codepoint == 0x0EB3);
-        if (adds_trailing_width) {
-            trailing_width += codepoint == 0x0E33 || codepoint == 0x0EB3
-                                  ? 1
-                                  : codepoint_columns;
-        } else {
-            width = std::max(width, codepoint_columns);
-        }
-        if (!has_base && codepoint_columns > 0) {
+        const auto is_emoji_base = property->boundclass == UTF8PROC_BOUNDCLASS_EXTENDED_PICTOGRAPHIC ||
+                                   property->boundclass == UTF8PROC_BOUNDCLASS_E_BASE ||
+                                   property->boundclass == UTF8PROC_BOUNDCLASS_E_BASE_GAZ;
+        const auto columns = codepoint_width(codepoint);
+        if (!has_base && columns > 0) {
             base_codepoint = codepoint;
             has_base = true;
         }
@@ -275,19 +310,48 @@ std::size_t grapheme_width(std::string_view cluster) {
         has_vs16 = has_vs16 || codepoint == 0xFE0F;
         has_keycap = has_keycap || codepoint == 0x20E3;
         has_joiner = has_joiner || codepoint == 0x200D;
-        position += bytes;
     }
 
-    const auto is_keycap_base = has_base &&
-                                (base_codepoint == '#' || base_codepoint == '*' ||
-                                 (base_codepoint >= '0' && base_codepoint <= '9'));
-    if (regional_indicators > 0 || (has_vs16 && has_emoji_base) ||
-        (has_keycap && is_keycap_base) || (has_joiner && has_emoji_base)) {
+    const auto is_keycap_base = has_base && (base_codepoint == '#' || base_codepoint == '*' ||
+                                                    (base_codepoint >= '0' && base_codepoint <= '9'));
+    if (regional_indicators > 0 || (has_vs16 && has_emoji_base) || (has_keycap && is_keycap_base) ||
+            (has_joiner && has_emoji_base)) {
         return 2;
     }
-    return width + trailing_width;
-}
 
+    std::size_t base_index = 0;
+    while (base_index < codepoints.size() && is_leading_non_printing(codepoints[base_index])) {
+        ++base_index;
+    }
+    if (base_index >= codepoints.size()) return 0;
+
+    // Match frozen pi graphemeWidth: east-asian width of the base, then count
+    // Spacing_Mark cells and consonants that follow non-spacing marks.
+    std::size_t width = codepoint_width(codepoints[base_index]);
+    bool follows_mark = false;
+    for (std::size_t index = base_index + 1; index < codepoints.size(); ++index) {
+        const auto codepoint = codepoints[index];
+        const auto category = utf8proc_category(static_cast<utf8proc_int32_t>(codepoint));
+        if (is_terminal_spacing_mark(codepoint)) {
+            width += 1;
+            follows_mark = false;
+            continue;
+        }
+        if (is_mark_category(category)) {
+            follows_mark = true;
+            continue;
+        }
+        if (is_leading_non_printing(codepoint)) continue;
+
+        if (follows_mark || (codepoint >= 0xFF00 && codepoint <= 0xFFEF)) {
+            width += codepoint_width(codepoint);
+        } else if (codepoint == 0x0E33 || codepoint == 0x0EB3) {
+            width += 1;
+        }
+        follows_mark = false;
+    }
+    return width;
+}
 std::optional<AnsiCode> extract_ansi_code(std::string_view text, std::size_t position) {
     if (position >= text.size() || text[position] != '\x1b') return std::nullopt;
     auto parsed = parse_supported_ansi(text, position);
@@ -369,11 +433,9 @@ support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::stri
             position += bytes;
             continue;
         }
-        if ((codepoint < 0x20) || codepoint == 0x7F ||
-            (codepoint >= 0x80 && codepoint <= 0x9F)) {
-            return std::unexpected(invalid_terminal_text(
-                "Unsupported control character in terminal text",
-                std::format("U+{:04X}", static_cast<unsigned>(codepoint))));
+        if ((codepoint < 0x20) || codepoint == 0x7F || (codepoint >= 0x80 && codepoint <= 0x9F)) {
+            return std::unexpected(invalid_terminal_text("Unsupported control character in terminal text",
+                    std::format("U+{:04X}", static_cast<unsigned>(codepoint))));
         }
 
         const auto end = next_grapheme_end(text, position);
@@ -432,13 +494,11 @@ std::string AnsiStyleState::get_active_codes() const {
 }
 
 bool AnsiStyleState::has_sgr_codes() const {
-    return bold || dim || italic || underline || blink || inverse || hidden ||
-           strikethrough || !fg_color.empty() || !bg_color.empty();
+    return bold || dim || italic || underline || blink || inverse || hidden || strikethrough || !fg_color.empty() ||
+           !bg_color.empty();
 }
 
-bool AnsiStyleState::has_active_codes() const {
-    return has_sgr_codes() || !hyperlink.empty();
-}
+bool AnsiStyleState::has_active_codes() const { return has_sgr_codes() || !hyperlink.empty(); }
 
 std::string AnsiStyleState::get_line_end_reset() const {
     // pi `AnsiCodeTracker.getLineEndReset`: underline must be closed so it
@@ -483,42 +543,73 @@ void AnsiStyleState::process_ansi(std::string_view code) {
     for (std::size_t index = 0; index < parameters.size(); ++index) {
         const auto value = parameters[index];
         switch (value) {
-        case 0: reset(); break;
-        case 1: bold = true; break;
-        case 2: dim = true; break;
-        case 3: italic = true; break;
-        case 4: underline = true; break;
-        case 5: blink = true; break;
-        case 7: inverse = true; break;
-        case 8: hidden = true; break;
-        case 9: strikethrough = true; break;
-        case 22: bold = false; dim = false; break;
-        case 23: italic = false; break;
-        case 24: underline = false; break;
-        case 25: blink = false; break;
-        case 27: inverse = false; break;
-        case 28: hidden = false; break;
-        case 29: strikethrough = false; break;
-        case 39: fg_color.clear(); break;
-        case 49: bg_color.clear(); break;
+        case 0:
+            reset();
+            break;
+        case 1:
+            bold = true;
+            break;
+        case 2:
+            dim = true;
+            break;
+        case 3:
+            italic = true;
+            break;
+        case 4:
+            underline = true;
+            break;
+        case 5:
+            blink = true;
+            break;
+        case 7:
+            inverse = true;
+            break;
+        case 8:
+            hidden = true;
+            break;
+        case 9:
+            strikethrough = true;
+            break;
+        case 22:
+            bold = false;
+            dim = false;
+            break;
+        case 23:
+            italic = false;
+            break;
+        case 24:
+            underline = false;
+            break;
+        case 25:
+            blink = false;
+            break;
+        case 27:
+            inverse = false;
+            break;
+        case 28:
+            hidden = false;
+            break;
+        case 29:
+            strikethrough = false;
+            break;
+        case 39:
+            fg_color.clear();
+            break;
+        case 49:
+            bg_color.clear();
+            break;
         default:
             if ((value >= 30 && value <= 37) || (value >= 90 && value <= 97)) {
                 fg_color = std::to_string(value);
             } else if ((value >= 40 && value <= 47) || (value >= 100 && value <= 107)) {
                 bg_color = std::to_string(value);
-            } else if ((value == 38 || value == 48) && index + 2 < parameters.size() &&
-                       parameters[index + 1] == 5) {
+            } else if ((value == 38 || value == 48) && index + 2 < parameters.size() && parameters[index + 1] == 5) {
                 const auto color = std::format("{};5;{}", value, parameters[index + 2]);
                 (value == 38 ? fg_color : bg_color) = color;
                 index += 2;
-            } else if ((value == 38 || value == 48) && index + 4 < parameters.size() &&
-                       parameters[index + 1] == 2) {
+            } else if ((value == 38 || value == 48) && index + 4 < parameters.size() && parameters[index + 1] == 2) {
                 const auto color = std::format(
-                    "{};2;{};{};{}",
-                    value,
-                    parameters[index + 2],
-                    parameters[index + 3],
-                    parameters[index + 4]);
+                        "{};2;{};{};{}", value, parameters[index + 2], parameters[index + 3], parameters[index + 4]);
                 (value == 38 ? fg_color : bg_color) = color;
                 index += 4;
             }
@@ -552,9 +643,8 @@ support::Expected<PreparedRenderedLine> prepare_rendered_line(std::string_view l
     auto line_width = token_width(*tokens);
     if (!line_width) return std::unexpected(line_width.error());
     if (*line_width > width) {
-        return std::unexpected(invalid_terminal_text(
-            "TUI component rendered a line wider than its width bound",
-            std::format("line width {} exceeds visible width {}", *line_width, width)));
+        return std::unexpected(invalid_terminal_text("TUI component rendered a line wider than its width bound",
+                std::format("line width {} exceeds visible width {}", *line_width, width)));
     }
     // The component boundary carries no reset: the single per-row full reset
     // belongs to the composed-line boundary in `Tui::render` (pi's component

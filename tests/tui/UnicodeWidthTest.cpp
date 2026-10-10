@@ -1,3 +1,4 @@
+#include <cch/tui/Input.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 #include <cch/tui/Utils.hpp>
@@ -13,10 +14,10 @@
 
 using namespace cch::tui::detail;
 TEST_CASE("grapheme_width honors regional indicators and presentation selectors", "[tui][issue46][unicode][spec]") {
-    CHECK(cch::tui::visible_width("\xf0\x9f\x87\xa8") == 2); // isolated regional indicator C
-    CHECK(cch::tui::visible_width("\xef\xb8\x8f") == 0); // standalone VS16
-    CHECK(cch::tui::visible_width("A\xef\xb8\x8f") == 1); // VS16 does not promote a non-emoji base
-    CHECK(cch::tui::visible_width("\xe2\x9d\xa4") == 1); // U+2764 text by default
+    CHECK(cch::tui::visible_width("\xf0\x9f\x87\xa8") == 2);         // isolated regional indicator C
+    CHECK(cch::tui::visible_width("\xef\xb8\x8f") == 0);             // standalone VS16
+    CHECK(cch::tui::visible_width("A\xef\xb8\x8f") == 1);            // VS16 does not promote a non-emoji base
+    CHECK(cch::tui::visible_width("\xe2\x9d\xa4") == 1);             // U+2764 text by default
     CHECK(cch::tui::visible_width("\xe2\x9d\xa4\xef\xb8\x8f") == 2); // VS16 emoji presentation
     CHECK(cch::tui::visible_width("\xe2\x9d\xa4\xef\xb8\x8e") == 1); // VS15 text presentation
 }
@@ -51,15 +52,13 @@ TEST_CASE("grapheme width counts trailing Thai and Lao AM vowels", "[tui][issue4
     CHECK(cch::tui::visible_width(rendered->lines[0]) == 2);
 
     cch::tui::VirtualTerminal narrow_terminal({.columns = 1, .rows = 1});
-    REQUIRE(narrow_terminal.start(
-        [](std::string) -> cch::support::ExpectedVoid { return {}; },
-        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(narrow_terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE_FALSE(narrow_terminal.write(thai));
 
     cch::tui::VirtualTerminal terminal({.columns = 2, .rows = 1});
-    REQUIRE(terminal.start(
-        [](std::string) -> cch::support::ExpectedVoid { return {}; },
-        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(terminal.write(thai));
     REQUIRE(terminal.cells().size() == 1);
     REQUIRE(terminal.cells()[0].size() == 2);
@@ -133,14 +132,16 @@ TEST_CASE("normalize_terminal_output preserves ANSI codes", "[tui][issue46][unic
 
 TEST_CASE("normalize_terminal_output replaces malformed UTF-8", "[tui][issue46][unicode][spec]") {
     // 0xFF is an invalid lead byte
-    auto r = normalize_terminal_output("a\xff""b");
+    auto r = normalize_terminal_output("a\xff"
+                                       "b");
     REQUIRE(r);
     // Should contain U+FFD (EF BF BD)
     CHECK(r->find("\xef\xbf\xbd") != std::string::npos);
 }
 
 TEST_CASE("normalize_terminal_output rejects unsupported control chars", "[tui][issue46][unicode][spec]") {
-    auto r = normalize_terminal_output("a\x01""b");
+    auto r = normalize_terminal_output("a\x01"
+                                       "b");
     REQUIRE_FALSE(r);
     CHECK(r.error().code == cch::support::ErrorCode::Validation);
 }
@@ -169,9 +170,8 @@ TEST_CASE("split_graphemes handles CJK characters", "[tui][issue46][unicode][spe
 TEST_CASE("split_graphemes keeps promised emoji sequences atomic", "[tui][issue46][unicode][spec]") {
     const std::string toned_thumb = "\xf0\x9f\x91\x8d\xf0\x9f\x8f\xbd";
     const std::string keycap = "1\xef\xb8\x8f\xe2\x83\xa3";
-    const std::string family =
-        "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9\xe2\x80\x8d"
-        "\xf0\x9f\x91\xa7\xe2\x80\x8d\xf0\x9f\x91\xa6";
+    const std::string family = "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9\xe2\x80\x8d"
+                               "\xf0\x9f\x91\xa7\xe2\x80\x8d\xf0\x9f\x91\xa6";
 
     const auto thumb_clusters = split_graphemes(toned_thumb);
     const auto keycap_clusters = split_graphemes(keycap);
@@ -209,12 +209,15 @@ TEST_CASE("normalize_terminal_output normalizes CRLF and lone CR", "[tui][issue4
 
 TEST_CASE("normalize_terminal_output rejects unsafe terminal controls", "[tui][issue46][unicode][spec]") {
     CHECK_FALSE(normalize_terminal_output("\x1b[10Gx"));
-    CHECK_FALSE(normalize_terminal_output("\x1b" "7x"));
+    CHECK_FALSE(normalize_terminal_output("\x1b"
+                                          "7x"));
     CHECK_FALSE(normalize_terminal_output("\x1b_X\x1b\\"));
     CHECK_FALSE(normalize_terminal_output("\x1b]0;title\x07"));
     CHECK_FALSE(normalize_terminal_output("\x1b[999999999999999999999m"));
-    CHECK_FALSE(normalize_terminal_output("a\x7f" "b"));
-    CHECK_FALSE(normalize_terminal_output("a\xc2\x85" "b"));
+    CHECK_FALSE(normalize_terminal_output("a\x7f"
+                                          "b"));
+    CHECK_FALSE(normalize_terminal_output("a\xc2\x85"
+                                          "b"));
 }
 
 TEST_CASE("normalize_terminal_output accepts only fully tracked SGR forms", "[tui][issue46][unicode][spec]") {
@@ -295,4 +298,57 @@ TEST_CASE("AnsiStyleState handles OSC 8 hyperlinks", "[tui][issue46][unicode][sp
     // Close hyperlink
     state.process_ansi("\x1b]8;;\x07");
     CHECK(state.hyperlink.empty());
+}
+
+TEST_CASE("visible_width matches frozen pi for Indic spacing marks and grapheme clusters",
+        "[tui][issue956][unicode][spec]") {
+    // Frozen pi-v1.0.4 visibleWidth: का and क्ष are width 2 via Spacing_Mark /
+    // consonant-after-mark counting; emoji/combining stay on the same contract.
+    CHECK(cch::tui::visible_width("का") == 2);
+    CHECK(cch::tui::visible_width("क्ष") == 2);
+    CHECK(cch::tui::visible_width("क्षि") == 3);
+    CHECK(cch::tui::visible_width("नमस्ते") == 4);
+    CHECK(grapheme_width("का") == 2);
+    CHECK(grapheme_width("क्ष") == 2);
+    CHECK(cch::tui::visible_width("e\xcc\x81") == 1);
+    CHECK(cch::tui::visible_width(std::string("a") + "\xf0\x9f\x98\x80" + "b") == 4);
+    CHECK(cch::tui::visible_width("\xf0\x9f\x87\xa9\xf0\x9f\x87\xaa") == 2);
+    CHECK(cch::tui::visible_width("กำ") == 2);
+}
+
+TEST_CASE("visible_width sums graphemes across newlines like frozen pi", "[tui][issue956][unicode][spec]") {
+    // Widest-line semantics would report 2 for का\\nक्ष and 5 for hello\\nworld;
+    // pi sums every grapheme and ignores the newline itself.
+    CHECK(cch::tui::visible_width("का\nक्ष") == 4);
+    CHECK(cch::tui::visible_width("a\nb") == 2);
+    CHECK(cch::tui::visible_width("hello\nworld") == 10);
+    CHECK(cch::tui::visible_width("\x1b[31mred\x1b[0m\n\x1b[32mtail\x1b[0m") == 7);
+}
+
+TEST_CASE("narrow Text wrap and Input cursor follow corrected Indic widths", "[tui][issue956][unicode][spec]") {
+    // Under the old width-1 reading, काक्ष fits a width-2 Text line; frozen pi
+    // wraps one cluster per line and leaves the Input fake cursor on का.
+    cch::tui::Text text("काक्ष", 0, 0);
+    const auto wrapped = text.render(2);
+    REQUIRE(wrapped);
+    REQUIRE(wrapped->lines.size() == 2);
+    CHECK(wrapped->lines[0] == "का");
+    CHECK(wrapped->lines[1] == "क्ष");
+    CHECK(cch::tui::visible_width(wrapped->lines[0]) == 2);
+    CHECK(cch::tui::visible_width(wrapped->lines[1]) == 2);
+
+    const auto fits = text.render(4);
+    REQUIRE(fits);
+    REQUIRE(fits->lines.size() == 1);
+    CHECK(fits->lines[0] == "काक्ष");
+
+    cch::tui::Input input;
+    input.set_focused(true);
+    input.set_value("काक्ष");
+    const auto rendered = input.render(6);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 1);
+    CHECK(rendered->lines[0] == "> \x1b[7mका\x1b[27mक्ष");
+    REQUIRE(input.cursor_location().has_value());
+    CHECK((*input.cursor_location() == cch::tui::CursorPosition{.column = 2, .row = 0}));
 }

@@ -88,19 +88,16 @@ VisibleWidthMeasurement measure_visible_width(std::string_view text) {
     const auto is_printable_ascii = [](unsigned char byte) { return byte >= 0x20 && byte <= 0x7E; };
     if (std::ranges::all_of(text, is_printable_ascii)) return {.width = text.size(), .used_tokenizer = false};
 
+    // Match frozen pi visibleWidth: sum every grapheme/tab width. Newlines are
+    // neither printable ASCII nor tokenizer width contributors; they do not
+    // reset the accumulator to a widest-line reading.
     auto tokens = tokenize_terminal_output(text, TokenizeMode::WidthOnly);
     if (!tokens) return {.width = 0, .used_tokenizer = true};
-    std::size_t maximum = 0;
-    std::size_t current = 0;
+    std::size_t width = 0;
     for (const auto& token : *tokens) {
-        if (token.kind == TerminalTokenKind::Newline) {
-            maximum = std::max(maximum, current);
-            current = 0;
-        } else {
-            current += token.width;
-        }
+        if (token.kind != TerminalTokenKind::Newline) width += token.width;
     }
-    return {.width = std::max(maximum, current), .used_tokenizer = true};
+    return {.width = width, .used_tokenizer = true};
 }
 
 } // namespace detail
@@ -200,8 +197,10 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
     while (index < tokens->size()) {
         const auto& token = (*tokens)[index];
         if (token.kind == detail::TerminalTokenKind::Newline) {
-            if (line_width + pending_width <= width) replay_pending(true);
-            else replay_pending(false);
+            if (line_width + pending_width <= width)
+                replay_pending(true);
+            else
+                replay_pending(false);
             // pi splits the input on `\r\n|\r|\n` and prefixes each line with
             // the previous line's active codes: a logical line boundary is not a
             // wrap break, so it carries no line-end reset.
@@ -245,8 +244,10 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
             continue;
         }
         if (token.kind != detail::TerminalTokenKind::Grapheme) {
-            if (pending_separator.empty()) append_token(token);
-            else pending_separator.push_back(token);
+            if (pending_separator.empty())
+                append_token(token);
+            else
+                pending_separator.push_back(token);
             ++index;
             continue;
         }
@@ -291,7 +292,8 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
             } else {
                 replay_pending(true);
             }
-            while (index < word_end) append_token((*tokens)[index++]);
+            while (index < word_end)
+                append_token((*tokens)[index++]);
             continue;
         }
 
@@ -324,20 +326,19 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
                 continue;
             }
             if (word_token.width > width) {
-                return std::unexpected(detail::invalid_terminal_text(
-                    "Unicode grapheme is wider than the available terminal width",
-                    std::format(
-                        "grapheme width {} exceeds visible width {}",
-                        word_token.width,
-                        width)));
+                return std::unexpected(
+                        detail::invalid_terminal_text("Unicode grapheme is wider than the available terminal width",
+                                std::format("grapheme width {} exceeds visible width {}", word_token.width, width)));
             }
             if (line_width != 0 && line_width + word_token.width > width) push_wrapped_line();
             append_token(word_token);
         }
     }
 
-    if (line_width + pending_width <= width) replay_pending(true);
-    else replay_pending(false);
+    if (line_width + pending_width <= width)
+        replay_pending(true);
+    else
+        replay_pending(false);
     // pi `wrapSingleLine` appends the line-end reset only where it breaks a
     // line: "No reset at end of final line - let caller handle it". The full
     // reset for the row belongs to the composed-line boundary.
@@ -347,10 +348,7 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
 }
 
 support::Expected<std::string> truncate_text(
-    std::string_view text,
-    std::size_t max_width,
-    std::string_view ellipsis,
-    bool pad) {
+        std::string_view text, std::size_t max_width, std::string_view ellipsis, bool pad) {
     if (max_width == 0) return std::string{};
 
     auto tokens = detail::tokenize_terminal_output(text);
@@ -378,8 +376,7 @@ support::Expected<std::string> truncate_text(
     if (!ellipsis_tokens) return std::unexpected(ellipsis_tokens.error());
     for (const auto& token : *ellipsis_tokens) {
         if (token.kind != detail::TerminalTokenKind::Grapheme) {
-            return std::unexpected(
-                detail::invalid_terminal_text("Truncation ellipsis must contain only visible text"));
+            return std::unexpected(detail::invalid_terminal_text("Truncation ellipsis must contain only visible text"));
         }
     }
     const auto ellipsis_width = visible_width(ellipsis);
@@ -420,10 +417,7 @@ support::Expected<std::string> truncate_text(
 }
 
 support::Expected<std::string> slice_by_column(
-    std::string_view line,
-    std::size_t start_col,
-    std::size_t length,
-    bool strict) {
+        std::string_view line, std::size_t start_col, std::size_t length, bool strict) {
     if (length == 0) return std::string{};
     const auto end_col = start_col + length;
     auto tokens = detail::tokenize_terminal_output(line);
@@ -475,8 +469,8 @@ std::string strip_terminal_sequences(std::string_view text) {
             const auto kind = text[position + 1];
             if (kind == '[') {
                 std::size_t cursor = position + 2;
-                while (cursor < text.size() && text[cursor] != 'm' && text[cursor] != 'G' &&
-                       text[cursor] != 'K' && text[cursor] != 'H' && text[cursor] != 'J') {
+                while (cursor < text.size() && text[cursor] != 'm' && text[cursor] != 'G' && text[cursor] != 'K' &&
+                        text[cursor] != 'H' && text[cursor] != 'J') {
                     ++cursor;
                 }
                 if (cursor < text.size()) end = cursor + 1;
