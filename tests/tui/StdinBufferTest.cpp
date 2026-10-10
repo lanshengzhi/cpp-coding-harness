@@ -87,8 +87,8 @@ TEST_CASE("StdinBuffer emits one complete ESC[M !! frame across every byte bound
 
 TEST_CASE("StdinBuffer preserves interleaved CSI/OSC/DCS/UTF-8 order and ESC deadline selection",
         "[tui][stdin-buffer][issue949][spec]") {
-    tui::StdinBuffer buffer({.timeout = std::chrono::milliseconds{50},
-            .escape_timeout = std::chrono::milliseconds{10}});
+    tui::StdinBuffer buffer(
+            {.timeout = std::chrono::milliseconds{50}, .escape_timeout = std::chrono::milliseconds{10}});
     std::vector<std::string> sequences;
     buffer.set_data_handler([&](std::string sequence) { sequences.push_back(std::move(sequence)); });
 
@@ -116,8 +116,7 @@ TEST_CASE("StdinBuffer preserves interleaved CSI/OSC/DCS/UTF-8 order and ESC dea
 
     tui::StdinBuffer incomplete({.timeout = std::chrono::milliseconds{10}});
     std::vector<std::string> incomplete_sequences;
-    incomplete.set_data_handler(
-            [&](std::string sequence) { incomplete_sequences.push_back(std::move(sequence)); });
+    incomplete.set_data_handler([&](std::string sequence) { incomplete_sequences.push_back(std::move(sequence)); });
     incomplete.process("\x1b[<35");
     CHECK(incomplete.get_buffer() == "\x1b[<35");
     CHECK(incomplete.selected_timeout() == std::chrono::milliseconds{10});
@@ -136,9 +135,8 @@ TEST_CASE("ProcessTerminal PTY path keeps split ESC[M !! out of Input and Editor
     REQUIRE(pty);
     cch::tests::ImageEnvironmentGuard environment;
 
-    cch::tui::ProcessTerminal terminal({.input_fd = pty->slave.get(),
-            .output_fd = pty->slave.get(),
-            .executor = issue949_io().io.get_executor()});
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = issue949_io().io.get_executor()});
     cch::tui::Tui tui(terminal);
 
     auto input = std::make_unique<tui::Input>();

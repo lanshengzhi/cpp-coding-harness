@@ -813,13 +813,9 @@ template <typename T> void arm_fragment_deadline(T& impl) {
         deadline = std::min(deadline, stdin_buffer.deadline());
     }
     if (decoder.holds_lone_escape()) {
-        deadline = std::min(
-                deadline,
-                std::chrono::steady_clock::now() + impl.input_state.escape_fragment_timeout);
+        deadline = std::min(deadline, std::chrono::steady_clock::now() + impl.input_state.escape_fragment_timeout);
     } else if (decoder.holds_fragment() || impl.input_state.needs_input_flush) {
-        deadline = std::min(
-                deadline,
-                std::chrono::steady_clock::now() + detail::kSequenceFragmentTimeout);
+        deadline = std::min(deadline, std::chrono::steady_clock::now() + detail::kSequenceFragmentTimeout);
     }
     impl.input_state.negotiation_deadline = deadline;
 }
@@ -952,8 +948,7 @@ template <typename T> void arm_readiness_timer_locked(T& impl) {
             const auto now = std::chrono::steady_clock::now();
             if (impl.input_state.negotiation_deadline != std::chrono::steady_clock::time_point::max() &&
                     now >= impl.input_state.negotiation_deadline) {
-                if (impl.input_state.stdin_buffer.holds_fragment() &&
-                        now >= impl.input_state.stdin_buffer.deadline()) {
+                if (impl.input_state.stdin_buffer.holds_fragment() && now >= impl.input_state.stdin_buffer.deadline()) {
                     (void)impl.input_state.stdin_buffer.flush();
                 }
                 auto decoded = impl.input_state.decoder.flush();

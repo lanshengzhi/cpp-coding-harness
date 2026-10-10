@@ -23,7 +23,8 @@ enum class SequenceStatus { Complete, Incomplete, NotEscape };
         return std::nullopt;
     }
     unsigned int codepoint = 0;
-    for (const auto ch : key_part) codepoint = codepoint * 10 + static_cast<unsigned int>(ch - '0');
+    for (const auto ch : key_part)
+        codepoint = codepoint * 10 + static_cast<unsigned int>(ch - '0');
     return codepoint >= 32 ? std::optional<unsigned int>{codepoint} : std::nullopt;
 }
 
@@ -84,7 +85,8 @@ enum class SequenceStatus { Complete, Incomplete, NotEscape };
     if (after_esc.starts_with("P") || after_esc.starts_with("_")) {
         return is_complete_string_terminated_sequence(data);
     }
-    if (after_esc.starts_with("O")) return after_esc.size() >= 2 ? SequenceStatus::Complete : SequenceStatus::Incomplete;
+    if (after_esc.starts_with("O"))
+        return after_esc.size() >= 2 ? SequenceStatus::Complete : SequenceStatus::Incomplete;
     if (after_esc.size() == 1) return SequenceStatus::Complete;
     return SequenceStatus::Complete;
 }
@@ -208,7 +210,8 @@ void StdinBuffer::process(std::string_view input) {
     if (start_index != std::string::npos) {
         if (start_index > 0) {
             const auto before_paste = extract_complete_sequences(buffer_.substr(0, start_index));
-            for (const auto& sequence : before_paste.sequences) emit_data_sequence(sequence);
+            for (const auto& sequence : before_paste.sequences)
+                emit_data_sequence(sequence);
         }
         pending_kitty_printable_codepoint_.reset();
         buffer_ = buffer_.substr(start_index + kPasteStart.size());
@@ -231,7 +234,8 @@ void StdinBuffer::process(std::string_view input) {
 
     const auto extracted = extract_complete_sequences(buffer_);
     buffer_ = extracted.remainder;
-    for (const auto& sequence : extracted.sequences) emit_data_sequence(sequence);
+    for (const auto& sequence : extracted.sequences)
+        emit_data_sequence(sequence);
     schedule_timeout();
 }
 
@@ -241,7 +245,8 @@ std::vector<std::string> StdinBuffer::flush() {
     std::vector<std::string> flushed{std::move(buffer_)};
     buffer_.clear();
     pending_kitty_printable_codepoint_.reset();
-    for (const auto& sequence : flushed) emit_data_sequence(sequence);
+    for (const auto& sequence : flushed)
+        emit_data_sequence(sequence);
     return flushed;
 }
 
