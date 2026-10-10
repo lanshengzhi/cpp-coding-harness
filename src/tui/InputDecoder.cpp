@@ -138,9 +138,12 @@ std::optional<std::string> key_for_codepoint(unsigned int codepoint, bool shift)
     return encoded;
 }
 
-std::optional<std::string> kitty_printable_text(unsigned int codepoint,
-        const ParsedModifiers& modifiers,
-        std::optional<unsigned int> shifted_key = std::nullopt) {
+std::optional<std::string> kitty_printable_text(unsigned int codepoint, const ParsedModifiers& modifiers) {
+    // pi `decodeKittyPrintable` (verified against frozen pi 7c10bd43): the
+    // text path NEVER substitutes the shifted keycode — it encodes the
+    // terminal's own reported codepoint. (The shifted key feeds only the
+    // shortcut identity in pi `formatParsedKey`.) Every guard below applies
+    // to that reported codepoint.
     // Kitty functional and keypad keys occupy the Unicode private-use planes;
     // their reported codepoint is a key number, never inserted text.
     if (codepoint < 0x20 || codepoint == 0x7f) return std::nullopt;
@@ -148,10 +151,7 @@ std::optional<std::string> kitty_printable_text(unsigned int codepoint,
     // A control combination (pi `decodeKittyPrintable` blocks super the same
     // way) is a shortcut, not text.
     if (modifiers.ctrl || modifiers.alt || modifiers.super) return std::nullopt;
-    // pi `decodeKittyPrintable`: prefer the shifted keycode when Shift is
-    // held. Without a shifted key the terminal's own codepoint is the text.
-    const auto effective = modifiers.shift && shifted_key ? *shifted_key : codepoint;
-    auto encoded = encode_utf8(effective);
+    auto encoded = encode_utf8(codepoint);
     if (encoded.empty()) return std::nullopt;
     return encoded;
 }
@@ -179,7 +179,7 @@ std::optional<KeyEvent> make_key_event(unsigned int codepoint,
     if (!key) return std::nullopt;
     return KeyEvent{
             .key = std::move(*key),
-            .text = kitty_printable_text(codepoint, modifiers, shifted_key).value_or(std::string{}),
+            .text = kitty_printable_text(codepoint, modifiers).value_or(std::string{}),
             .ctrl = modifiers.ctrl,
             .shift = modifiers.shift,
             .alt = modifiers.alt,

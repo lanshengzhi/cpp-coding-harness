@@ -520,14 +520,14 @@ TEST_CASE("tree selector filters with the Kitty character, not the shortcut iden
     // A repeat appends the same character, so nothing matches the doubled
     // query any more. A repeat resolved to the shortcut identity would keep
     // matching the 'alpha' row.
-    const auto repeat = tui::parse_key("\x1b[1092::97;2u", /*kitty_protocol_active=*/true);
+    const auto repeat = tui::parse_key("\x1b[1092::97;1:2u", /*kitty_protocol_active=*/true);
     REQUIRE(repeat);
     REQUIRE(component.handle_input(*repeat) == tui::InputAdmissionOutcome::Consumed);
     text = render_text(component);
     CHECK(text.find("No entries found") != std::string::npos);
 
     // The release never changes the query.
-    const auto release = tui::parse_key("\x1b[1092::97;3u", /*kitty_protocol_active=*/true);
+    const auto release = tui::parse_key("\x1b[1092::97;1:3u", /*kitty_protocol_active=*/true);
     REQUIRE(release);
     CHECK(component.handle_input(*release) == tui::InputAdmissionOutcome::Unhandled);
     text = render_text(component);

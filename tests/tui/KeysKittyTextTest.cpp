@@ -45,13 +45,16 @@ TEST_CASE("a Kitty non-Latin key inserts its own character and keeps the base-la
 }
 
 TEST_CASE("shifted, supplementary and legacy printables keep their own characters", "[tui][input][issue950][spec]") {
-    // CSI 49:33;2u: shift-modified '1' takes the shifted key's symbol.
+    // CSI 49:33;2u: shift-modified '1'. The identity takes the shifted key's
+    // symbol ('!'), but the inserted text is the terminal's own reported
+    // character ('1') — verified against frozen pi 7c10bd43
+    // `decodeKittyPrintable`, which never substitutes the shifted keycode.
     const auto shifted = kitty("\x1b[49:33;2u");
     REQUIRE(shifted);
     CHECK(shifted->key == "!");
     CHECK(shifted->shift);
-    CHECK(shifted->text == "!");
-    CHECK(tui::printable_text(*shifted) == std::optional<std::string>{"!"});
+    CHECK(shifted->text == "1");
+    CHECK(tui::printable_text(*shifted) == std::optional<std::string>{"1"});
 
     // A supplementary codepoint is text, not a truncated code unit.
     const auto supplementary = kitty("\x1b[128512u");
@@ -59,14 +62,19 @@ TEST_CASE("shifted, supplementary and legacy printables keep their own character
     CHECK(supplementary->text == "\xf0\x9f\x98\x80");
     CHECK(tui::printable_text(*supplementary) == std::optional<std::string>{"\xf0\x9f\x98\x80"});
 
-    // A shift-modified non-Latin layout keeps the shifted layout character as
-    // its text while the identity stays the base-layout key.
+    // A shift-modified non-Latin layout keeps its reported character as text
+    // while the identity stays the base-layout key. NOTE (verified against
+    // frozen pi 7c10bd43 `decodeKittyPrintable`): pi does NOT substitute the
+    // shifted keycode into the text path — `ESC[1060:1040:97;2u` inserts
+    // U+0410 (А, the reported codepoint), even though group 2 carries 1040.
+    // pi's `formatParsedKey` uses the shifted key only for the shortcut
+    // identity, not for insertion text.
     const auto shifted_cyrillic = kitty("\x1b[1060:1040:97;2u");
     REQUIRE(shifted_cyrillic);
     CHECK(shifted_cyrillic->key == "a");
     CHECK(shifted_cyrillic->shift);
-    CHECK(shifted_cyrillic->text == "\xd0\xa1");
-    CHECK(tui::printable_text(*shifted_cyrillic) == std::optional<std::string>{"\xd0\xa1"});
+    CHECK(shifted_cyrillic->text == "\xd0\x90");
+    CHECK(tui::printable_text(*shifted_cyrillic) == std::optional<std::string>{"\xd0\x90"});
 
     // The legacy paths still type what the terminal sent: the identifier is
     // canonical, the inserted text keeps the typed case and non-ASCII bytes.
@@ -88,13 +96,16 @@ TEST_CASE("repeat inserts, release does not, and non-printing modifiers never ca
     CHECK(tui::carries_press_behavior(&*press));
     CHECK(tui::printable_text(*press) == std::optional<std::string>{"\xd1\x84"});
 
-    const auto repeat = kitty("\x1b[1092::97;2u");
+    // pi's CSI-u grammar puts the event type AFTER the modifier colon
+    // (`;<mod>:<event>u`, keys.ts parseKittySequence): `;1:2u` is a repeat,
+    // while bare `;2u` is shift and bare `;3u` is alt.
+    const auto repeat = kitty("\x1b[1092::97;1:2u");
     REQUIRE(repeat);
     CHECK(repeat->type == tui::KeyEventType::Repeat);
     CHECK(tui::printable_text(*repeat) == std::optional<std::string>{"\xd1\x84"});
 
     // The release still identifies the shortcut but inserts nothing.
-    const auto release = kitty("\x1b[1092::97;3u");
+    const auto release = kitty("\x1b[1092::97;1:3u");
     REQUIRE(release);
     CHECK(release->type == tui::KeyEventType::Release);
     CHECK(tui::matches_key(*release, "a"));
@@ -140,12 +151,12 @@ TEST_CASE("Input inserts the Kitty character and ignores its release", "[tui][in
 
     REQUIRE(input.handle_input(tui::InputEventVariant{*kitty("\x1b[1092::97u")}) ==
             tui::InputAdmissionOutcome::Consumed);
-    REQUIRE(input.handle_input(tui::InputEventVariant{*kitty("\x1b[1092::97;2u")}) ==
+    REQUIRE(input.handle_input(tui::InputEventVariant{*kitty("\x1b[1092::97;1:2u")}) ==
             tui::InputAdmissionOutcome::Consumed);
     CHECK(input.value() == "\xd1\x84\xd1\x84");
 
     // The release identifies the 'a' shortcut but inserts nothing.
-    CHECK(input.handle_input(tui::InputEventVariant{*kitty("\x1b[1092::97;3u")}) ==
+    CHECK(input.handle_input(tui::InputEventVariant{*kitty("\x1b[1092::97;1:3u")}) ==
             tui::InputAdmissionOutcome::Unhandled);
     CHECK(input.value() == "\xd1\x84\xd1\x84");
 }
@@ -162,8 +173,8 @@ TEST_CASE("Editor inserts and jumps by the Kitty character, not by the shortcut 
 
     // Press and repeat insert the layout's character; the release does not.
     REQUIRE(terminal.inject_input("\x1b[1092::97u"));
-    REQUIRE(terminal.inject_input("\x1b[1092::97;2u"));
-    REQUIRE(terminal.inject_input("\x1b[1092::97;3u"));
+    REQUIRE(terminal.inject_input("\x1b[1092::97;1:2u"));
+    REQUIRE(terminal.inject_input("\x1b[1092::97;1:3u"));
     CHECK(editor_pointer->text() == "\xd1\x84\xd1\x84");
 
     // A shortcut still matches the base-layout key from the same event.
