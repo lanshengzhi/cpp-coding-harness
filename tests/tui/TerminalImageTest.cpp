@@ -431,10 +431,11 @@ TEST_CASE("VirtualTerminal forwards cell-size responses for the raw-input listen
     REQUIRE(inputs.size() == 6);
     CHECK(inputs[5] == "\x1b[6;5a;5t");
 
-    // Zero dimensions are ignored by the consumer (pi consumeCellSizeResponse).
+    // Zero dimensions are ignored by the consumer (pi tui.ts
+    // `consumeCellSizeResponse`: `heightPx <= 0 || widthPx <= 0` applies
+    // nothing). The `{}` sentinel is not a size a caller passes.
     REQUIRE(terminal.inject_input("\x1b[6;0;0t"));
     CHECK(inputs.size() == 7);
-    REQUIRE(terminal.apply_cell_pixel_dimensions(cch::tui::CellPixelDimensions{}));
     CHECK(terminal.capabilities().cell_pixels == (cch::tui::CellPixelDimensions{.width = 10, .height = 20}));
 
     // Notifications fire only for applied changes.

@@ -750,6 +750,11 @@ support::ExpectedVoid VirtualTerminal::inject_input(std::string input) {
 }
 
 support::ExpectedVoid VirtualTerminal::apply_cell_pixel_dimensions(CellPixelDimensions pixels) {
+    // pi `consumeCellSizeResponse` (tui.ts): the reply is consumed (never
+    // typed) whether or not the size applies. A zero height or width applies
+    // nothing and invalidates nothing — but it is still consumed. So `{}`
+    // changes no state and wakes no re-render, exactly like pi's
+    // `heightPx <= 0 || widthPx <= 0` early-true return.
     if (pixels.width == 0 || pixels.height == 0) return {};
     if (impl_->capabilities.cell_pixels && *impl_->capabilities.cell_pixels == pixels) return {};
     impl_->capabilities.cell_pixels = pixels;

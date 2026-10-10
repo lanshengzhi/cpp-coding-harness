@@ -77,13 +77,19 @@ void RawInputListenerChain::clear() {
 
 RawInputDispatch RawInputListenerChain::dispatch(std::string_view input) {
     RawInputDispatch outcome{.consumed = false, .input = std::string(input)};
-    // The chain is snapshotted before the first listener runs: a listener
-    // added during this dispatch belongs to the next input, and a listener
-    // removed during it (itself or another) is skipped from its removal on.
+    // The chain is snapshotted before the first listener runs: entries are
+    // (id, listener) COPIES, so mid-dispatch removal, compaction, erasure
+    // and even re-registration cannot shift, skip or resurrect what this
+    // dispatch observes. A listener added during this dispatch belongs to
+    // the next input; a listener removed during it (itself or another) is
+    // skipped from its removal on via the is_active re-check below.
+    // (An earlier live-index revision broke exactly this: remove() compacts
+    // immediately, so erasing entry 0 shifted entry 1 into index 0 and the
+    // loop re-ran it — a same-dispatch resurrection no snapshot can have.)
     std::vector<std::pair<RawInputListenerId, RawInputListener>> snapshot;
     snapshot.reserve(state_->entries.size());
     for (const auto& entry : state_->entries) {
-        if (!entry.active) continue;
+        if (!entry.active || !entry.listener) continue;
         snapshot.emplace_back(entry.id, entry.listener);
     }
 
@@ -111,6 +117,10 @@ RawInputListenerHandle::RawInputListenerHandle(
         std::weak_ptr<RawInputListenerChain::State> state, RawInputListenerId id) noexcept
     : state_(std::move(state)), id_(id) {}
 
+// Moving transfers ownership of the registration: the destination takes
+// over disposal duty and the source is left owning nothing. (Disposing the
+// destination's previous registration first preserves the RAII invariant
+// that a live handle always owns exactly one registration.)
 RawInputListenerHandle::RawInputListenerHandle(RawInputListenerHandle&& other) noexcept
     : state_(std::move(other.state_)), id_(other.id_) {
     other.state_.reset();
