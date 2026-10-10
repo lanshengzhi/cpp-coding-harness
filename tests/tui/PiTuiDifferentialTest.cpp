@@ -560,13 +560,7 @@ TEST_CASE("markdown rendered output matches the frozen pi component",
     style.code_block = wrap_style("codeBlock");
     style.code_block_border = wrap_style("codeBlockBorder");
     style.list_marker = wrap_style("listBullet");
-    // pi's blockquote rendering applies the quote style twice (the quote
-    // block's style context wraps the paragraph's own); the C++ renderer
-    // applies the role once, so the composition moves into the hook.
-    const auto italic = wrap_style("italic");
-    style.quote = [italic](std::string text) {
-        return italic(italic(std::move(text)));
-    };
+    style.quote = wrap_style("quote");
     style.quote_border = wrap_style("quoteBorder");
     style.horizontal_rule = wrap_style("hr");
     const auto underline = wrap_style("underline");

@@ -475,10 +475,8 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
 [[nodiscard]] std::vector<StyleRole> block_roles(bool heading, std::size_t quote_depth) {
     std::vector<StyleRole> roles;
     for (std::size_t depth = 0; depth < quote_depth; ++depth) {
-        for (int application = 0; application < 2; ++application) {
-            roles.push_back(StyleRole::Quote);
-            roles.push_back(StyleRole::Emphasis);
-        }
+        roles.push_back(StyleRole::Quote);
+        roles.push_back(StyleRole::Emphasis);
     }
     if (heading) roles.push_back(StyleRole::Heading);
     return roles;
