@@ -4,6 +4,8 @@ status: accepted
 
 # Own a modular native TUI
 
+> Target scope updated by [ADR 0067](0067-align-the-linux-tui-toolkit-with-pi-v1-0-4.md): complete Linux toolkit capability coverage and necessary product integration against pi v1.0.4, including fullscreen as the final default. The reusable toolkit/product split, Linux-only Supported Platform, RAII, and deterministic terminal seam remain. This is an accepted target, not a delivery claim.
+
 A Native TUI belongs in this product's boundary rather than being left to JSON/RPC or SDK clients. It follows pi's modular shape: a public, reusable source-level C++ TUI module that does not depend on coding-agent types, plus a separate interactive-mode module that assembles TUI and Agent Session capabilities; print, JSON/RPC, and SDK paths remain independent of the TUI. The earlier requirement to preserve an explicit line-oriented frontend was superseded by the Native TUI promotion decision in #34 and #64.
 
 > Refined by [ADR 0035](0035-own-the-scoped-pi-tui-toolkit-capabilities-for-the-three-provider-paths.md): the toolkit's Supported renderer is pi's default regular main-screen mode at parity baseline `83114817`; the opt-in fullscreen alt-screen/viewport half (layout engine, scroll/mouse/selection, OSC 133 navigation) is Deferred with no placeholder surface. The toolkit keeps the decoded input-event model and terminal-owned image placement as recorded Intentional Divergences under the Semantic Parity definition below, and the reusable module surface is re-pinned from `864b35c` to `83114817` (app-layer pins advance with the pi-coding-agent phase audit).

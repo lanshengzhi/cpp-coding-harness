@@ -4,6 +4,8 @@ status: accepted
 
 # Decouple Headless Core and Projections with Zero-Mutex Sampling
 
+> Presentation-path refinement in [ADR 0067](0067-align-the-linux-tui-toolkit-with-pi-v1-0-4.md): the accepted TUI target removes direct terminal local echo and the old dock protocol, with fixed regions supplied by fullscreen layout. Toolkit owns paint scheduling over the host Runtime; product Session Projection consumption and accounting remain. Headless isolation, convergence, and frozen-block requirements are retained. Conflicting counted/preview assumptions must be reconciled in the replacement slice, not silently copied into a second scheduler. Implementation remains pending.
+
 The Pike runtime decouples the Authoritative Core and all presentation surfaces (Native TUI, Web, GUI, and remote inspectors) into an asynchronous, read-only projection architecture. The Core runtime operates completely headless on a single-threaded, lock-free serialized domain, publishing immutable, versioned state patches and snapshots. All UI components, terminal renderers, and input buffers eliminate operating system recursive mutexes. The Native TUI becomes a consumer projection pulling state on an independent 30/60 FPS frame ticker, adopting the Block Frozen Protocol (`Active` -> `Finalized` -> `Committed`) for streaming transcript blocks and client-side prediction for user prompt typing.
 
 This decision supersedes the synchronous UI binding and recursive-mutex synchronization introduced in ADR 0025, ADR 0035, and ADR 0040. Core session and agent invariants, the single authoritative session, and serialized execution domain semantics remain authoritative.
