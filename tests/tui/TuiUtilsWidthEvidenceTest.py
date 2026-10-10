@@ -30,7 +30,7 @@ class TuiUtilsWidthEvidenceTest(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("verified 5 TUI artifacts", result.stdout)
+        self.assertIn("verified 6 TUI artifacts", result.stdout)
 
     def test_visible_width_cases_match_frozen_pi(self) -> None:
         scenario = load_scenario()
