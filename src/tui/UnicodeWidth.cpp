@@ -488,7 +488,7 @@ std::string AnsiStyleState::get_active_codes() const {
         result += 'm';
     }
     if (!hyperlink.empty()) {
-        result += "\x1b]8;" + hyperlink_params + ";" + hyperlink + "\x07";
+        result += "\x1b]8;" + hyperlink_params + ";" + hyperlink + (hyperlink_st_terminated ? "\x1b\\" : "\x07");
     }
     return result;
 }
@@ -508,8 +508,13 @@ std::string AnsiStyleState::get_line_end_reset() const {
     // one per-row reset appended at the composed-line boundary.
     std::string result;
     if (underline) result += "\x1b[24m";
-    if (!hyperlink.empty()) result += kOsc8LinkClose;
+    if (!hyperlink.empty()) result += get_active_link_close();
     return result;
+}
+
+std::string AnsiStyleState::get_active_link_close() const {
+    if (hyperlink.empty()) return {};
+    return std::string{"\x1b]8;;"} + (hyperlink_st_terminated ? "\x1b\\" : "\x07");
 }
 
 void AnsiStyleState::process_ansi(std::string_view code) {
@@ -522,6 +527,7 @@ void AnsiStyleState::process_ansi(std::string_view code) {
         hyperlink_params = std::string(body.substr(0, separator));
         hyperlink = std::string(body.substr(separator + 1));
         if (hyperlink.empty()) hyperlink_params.clear();
+        hyperlink_st_terminated = terminator_size == 2U;
         return;
     }
     if (!code.starts_with("\x1b[") || !code.ends_with('m')) return;

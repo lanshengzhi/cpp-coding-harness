@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <format>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -78,6 +79,57 @@ void trim_end_whitespace(std::string& text) {
         position += bytes;
     }
     return false;
+}
+
+/// pi's `truncateFragmentToWidth` over an ellipsis already validated as visible
+/// text: the leading graphemes that fit `max_width`.
+[[nodiscard]] std::string clipped_visible_text(
+        const std::vector<detail::TerminalToken>& tokens, std::size_t max_width) {
+    std::string clipped;
+    std::size_t width = 0;
+    for (const auto& token : tokens) {
+        if (width + token.width > max_width) break;
+        clipped += token.text;
+        width += token.width;
+    }
+    return clipped;
+}
+
+/// pi's `getActiveOsc8Close(prefix)`: the OSC 8 close matching the terminator of
+/// the link the kept prefix leaves open, or nothing.
+[[nodiscard]] std::string active_link_close(std::string_view prefix) {
+    const auto tokens = detail::tokenize_terminal_output(prefix);
+    if (!tokens) return {};
+    detail::AnsiStyleState style;
+    for (const auto& token : *tokens) {
+        if (token.kind != detail::TerminalTokenKind::Grapheme) style.process_ansi(token.text);
+    }
+    return style.get_active_link_close();
+}
+
+/// pi's `finalizeTruncatedResult` (utils.ts at the frozen baseline): exactly
+/// `prefix + osc8Close + "\x1b[0m" + ellipsis + "\x1b[0m"`, with the trailing
+/// ellipsis reset present only when the ellipsis is non-empty and padding
+/// appended afterwards. The always-on SGR reset closes what the kept prefix left
+/// open, so no attribute is closed separately.
+[[nodiscard]] std::string finalize_truncation(std::string prefix,
+        std::size_t prefix_width,
+        std::string_view ellipsis,
+        std::size_t ellipsis_width,
+        std::size_t max_width,
+        bool pad) {
+    const auto link_close = active_link_close(prefix);
+    prefix += link_close;
+    prefix += detail::kSgrReset;
+    if (!ellipsis.empty()) {
+        prefix += ellipsis;
+        prefix += detail::kSgrReset;
+    }
+    if (pad) {
+        const auto visible = prefix_width + ellipsis_width;
+        if (max_width > visible) prefix.append(max_width - visible, ' ');
+    }
+    return prefix;
 }
 
 } // namespace
@@ -193,6 +245,22 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
         input_line_wrapped = false;
     };
 
+    // True when the control at `index` is staged for the next visible grapheme
+    // instead of closing the line being filled: pi attaches it to that grapheme
+    // as its token prefix, so a wrap break between them leaves the pushed row
+    // without it. A code followed by whitespace, a newline, or nothing keeps
+    // its place on the current line.
+    const auto pending_control_belongs_to_next_token = [&](std::size_t index) {
+        if (line_width == 0) return false;
+        for (std::size_t position = index + 1; position < tokens->size(); ++position) {
+            const auto& next = (*tokens)[position];
+            if (next.kind == detail::TerminalTokenKind::Newline) return false;
+            if (next.kind != detail::TerminalTokenKind::Grapheme) continue;
+            return !is_whitespace(next);
+        }
+        return false;
+    };
+
     std::size_t index = 0;
     while (index < tokens->size()) {
         const auto& token = (*tokens)[index];
@@ -244,10 +312,20 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
             continue;
         }
         if (token.kind != detail::TerminalTokenKind::Grapheme) {
-            if (pending_separator.empty())
-                append_token(token);
-            else
+            // pi's tokenizer holds an escape sequence in `pendingAnsi` until the
+            // next visible grapheme attaches it, so the code belongs to the
+            // upcoming token rather than to the line being filled. Deferring it
+            // here keeps a long token's leading codes off the pushed row: pi
+            // pushes the current line before `breakLongWord` sees them
+            // (`wrapTextWithAnsi("\u4e2d\u6587\x1b[31mABCDEFGHIJ", 4)` is
+            // ["\u4e2d\u6587", "\x1b[31mABCD", "\x1b[31mEFGH", "\x1b[31mIJ"]). A
+            // code that no visible grapheme follows stays on the line, because
+            // pi attaches a trailing code to the line's last token.
+            if (!pending_separator.empty() || pending_control_belongs_to_next_token(index)) {
                 pending_separator.push_back(token);
+            } else {
+                append_token(token);
+            }
             ++index;
             continue;
         }
@@ -357,17 +435,11 @@ support::Expected<std::string> truncate_text(
     if (!width_result) return std::unexpected(width_result.error());
 
     if (*width_result <= max_width) {
-        detail::AnsiStyleState style;
+        // pi returns the fitting input unchanged and pads inside whatever span
+        // it left open (`truncateToWidth`, utils.ts at the frozen baseline):
+        // closing underline or the hyperlink before the padding would change the
+        // bytes and let the padding fall outside the intended styling.
         auto result = detail::normalized_text(*tokens);
-        for (const auto& token : *tokens) {
-            if (token.kind != detail::TerminalTokenKind::Grapheme) style.process_ansi(token.text);
-        }
-        // debt: this fits path closes underline/hyperlink before padding, where
-        // pi pads inside the still-open span (`truncateToWidth("\x1b[4mabc", 8,
-        // "", true)` is "\x1b[4mabc     " in pi and
-        // "\x1b[4mabc\x1b[24m     " here); upgrade when a composed surface
-        // pads a line carrying an open underline/hyperlink.
-        result += style.get_line_end_reset();
         if (pad) result.append(max_width - *width_result, ' ');
         return result;
     }
@@ -380,40 +452,36 @@ support::Expected<std::string> truncate_text(
         }
     }
     const auto ellipsis_width = visible_width(ellipsis);
-    if (ellipsis_width > max_width) return truncate_text(ellipsis, max_width, "", pad);
+    if (ellipsis_width >= max_width) {
+        // pi clips the ellipsis itself when it does not leave room beside the
+        // text: nothing visible survives, so the result is empty (or all
+        // padding) rather than a reset around a missing ellipsis.
+        auto clipped = clipped_visible_text(*ellipsis_tokens, max_width);
+        const auto clipped_width = visible_width(clipped);
+        if (clipped_width == 0) return pad ? std::string(max_width, ' ') : std::string{};
+        return finalize_truncation({}, 0, clipped, clipped_width, max_width, pad);
+    }
     const auto target_width = max_width - ellipsis_width;
 
     std::string result;
+    std::string pending_ansi;
     std::size_t collected_width = 0;
-    detail::AnsiStyleState style;
-    // debt: a zero-width control immediately preceding the first non-fitting
-    // grapheme is kept before the always-on reset, where pi holds it pending
-    // and drops it (`truncate_text("\x1b[4ma\x1b[31mbcdef", 4, "...")` here is
-    // "\x1b[4ma\x1b[31m\x1b[0m...\x1b[0m" versus pi's
-    // "\x1b[4ma\x1b[0m...\x1b[0m"); the rows render identically. Upgrade when
-    // a composed surface observes a control's position within a truncated
-    // line.
     for (const auto& token : *tokens) {
         if (token.kind != detail::TerminalTokenKind::Grapheme) {
-            result += token.text;
-            style.process_ansi(token.text);
+            // pi holds a control in `pendingAnsi` until a kept grapheme adopts
+            // it, so a code that only styles dropped text never reaches the
+            // result (`truncateToWidth("\x1b[4ma\x1b[31mbcdef", 4, "...")` is
+            // "\x1b[4ma\x1b[0m...\x1b[0m").
+            pending_ansi += token.text;
             continue;
         }
         if (collected_width + token.width > target_width) break;
+        result += pending_ansi;
+        pending_ansi.clear();
         result += token.text;
         collected_width += token.width;
     }
-    // Close an OSC 8 hyperlink before the SGR reset so it cannot cover the
-    // ellipsis or subsequent terminal output.
-    if (!style.hyperlink.empty()) result += detail::kOsc8LinkClose;
-    // pi's `finalizeTruncatedResult` is exactly
-    // `prefix + "\x1b[0m" + ellipsis + "\x1b[0m"` (utils.ts at the frozen
-    // baseline); the always-on resets close whatever the kept prefix left open.
-    result += detail::kSgrReset;
-    result += ellipsis;
-    if (!ellipsis.empty()) result += detail::kSgrReset;
-    if (pad) result.append(max_width - collected_width - ellipsis_width, ' ');
-    return result;
+    return finalize_truncation(std::move(result), collected_width, ellipsis, ellipsis_width, max_width, pad);
 }
 
 support::Expected<std::string> slice_by_column(
@@ -456,6 +524,35 @@ support::Expected<std::string> slice_by_column(
         if (current_col >= end_col) break;
     }
     return result;
+}
+
+std::optional<std::string> osc8_link_at_column(std::string_view line, std::size_t column) {
+    auto tokens = detail::tokenize_terminal_output(line);
+    if (!tokens) return std::nullopt;
+
+    std::optional<std::string> active_link;
+    std::size_t current_col = 0;
+    for (const auto& token : *tokens) {
+        if (token.kind == detail::TerminalTokenKind::Newline) continue;
+        if (token.kind != detail::TerminalTokenKind::Grapheme) {
+            // pi keeps only the URL of an OSC 8 open/close; an empty URL closes
+            // the active link (`\x1b]8;;\x07`).
+            std::string_view body(token.text);
+            const auto terminator_size = body.ends_with('\x07') ? 1U : 2U;
+            if (body.size() > 4 + terminator_size && body.starts_with("\x1b]8;")) {
+                body = body.substr(4, body.size() - 4 - terminator_size);
+                const auto separator = body.find(';');
+                if (separator != std::string_view::npos) {
+                    const auto url = body.substr(separator + 1);
+                    active_link = url.empty() ? std::nullopt : std::optional<std::string>{std::string(url)};
+                }
+            }
+            continue;
+        }
+        if (column >= current_col && column < current_col + token.width) return active_link;
+        current_col += token.width;
+    }
+    return std::nullopt;
 }
 
 std::string strip_terminal_sequences(std::string_view text) {

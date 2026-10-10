@@ -18,6 +18,11 @@ include_guard(GLOBAL)
     set_tests_properties(cch_tui_utils_width_evidence PROPERTIES
         LABELS "tui;differential;issue956;compat-pi")
 
+    add_test(NAME cch_tui_utils_ansi_evidence
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/tui/TuiUtilsAnsiEvidenceTest.py)
+    set_tests_properties(cch_tui_utils_ansi_evidence PROPERTIES
+        LABELS "tui;differential;issue957;compat-pi")
+
     # TUI
     add_executable(cch_tests_tui
         tests/Catch2Main.cpp
@@ -47,6 +52,7 @@ include_guard(GLOBAL)
         tests/tui/TruncatedTextTest.cpp
         tests/tui/TuiTest.cpp
         tests/tui/UnicodeWidthTest.cpp
+        tests/tui/UtilsAnsiTest.cpp
         tests/tui/UtilsTest.cpp
         tests/tui/VirtualTerminalTest.cpp
 )

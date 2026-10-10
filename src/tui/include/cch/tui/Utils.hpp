@@ -3,6 +3,7 @@
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -30,6 +31,12 @@ namespace cch::tui {
 /// grapheme extending past the range end is excluded (pi `sliceByColumn`).
 [[nodiscard]] support::Expected<std::string> slice_by_column(
         std::string_view line, std::size_t start_col, std::size_t length, bool strict = false);
+
+/// The OSC 8 hyperlink covering visible column `column` of `line`, or nothing
+/// when no link is open there (pi `getOsc8LinkAtColumn`). A wide grapheme
+/// covers every column it occupies, so a CJK character reports the same link at
+/// each of its cells.
+[[nodiscard]] std::optional<std::string> osc8_link_at_column(std::string_view line, std::size_t column);
 
 /// Remove ANSI, OSC, and APC control sequences from `text`, preserving the
 /// visible text (pi `stripTerminalSequences`).

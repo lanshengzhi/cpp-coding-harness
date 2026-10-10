@@ -64,10 +64,10 @@ struct ComposedRow {
 };
 
 /// Append `source`'s first `limit` visible columns, padded out to `limit`:
-/// the base row's contribution left of a spliced region. This is
-/// `truncate_text(source, limit, "", pad = true)` evaluated over the tokens
-/// the caller already holds, so the same tokenization serves every piece of
-/// the splice.
+/// the base row's contribution left of a spliced region. This is pi's
+/// `extractSegments` "before" region (`compositeTuiLine`, tui.ts at the frozen
+/// baseline) evaluated over the tokens the caller already holds, so the same
+/// tokenization serves every piece of the splice.
 void append_leading_columns(ComposedRow& row, const std::vector<TerminalToken>& source, std::size_t limit) {
     if (limit == 0) return;
     std::size_t source_width = 0;

@@ -28,6 +28,12 @@ struct AnsiCode {
 /// processing that maintains them. Deriving keeps the attribute set defined
 /// once, so the tracker and the virtual terminal's cell style cannot drift.
 struct AnsiStyleState : TerminalStyle {
+    /// pi `AnsiCodeTracker` keeps the OSC 8 terminator of the active hyperlink
+    /// and re-emits it on every close/reopen: some terminals only make
+    /// BEL-terminated links clickable, so an ST-terminated link must not be
+    /// rewritten to BEL at a wrap, slice, or truncation boundary.
+    bool hyperlink_st_terminated{false};
+
     [[nodiscard]] std::string get_active_codes() const;
     [[nodiscard]] bool has_active_codes() const;
     [[nodiscard]] bool has_sgr_codes() const;
@@ -36,6 +42,10 @@ struct AnsiStyleState : TerminalStyle {
     /// full reset, so it cannot cancel an enclosing background span (pi
     /// `AnsiCodeTracker.getLineEndReset`).
     [[nodiscard]] std::string get_line_end_reset() const;
+    /// pi `formatOsc8Close(activeHyperlink.terminator)`: the OSC 8 close of the
+    /// active link, or nothing when no link is open. It never closes underline
+    /// or any SGR attribute, unlike `get_line_end_reset`.
+    [[nodiscard]] std::string get_active_link_close() const;
     void process_ansi(std::string_view code);
     void reset();
 };

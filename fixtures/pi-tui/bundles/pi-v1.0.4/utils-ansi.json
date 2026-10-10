@@ -1,0 +1,346 @@
+{
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-10T06:25:12.161Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/utils.ts:wrapTextWithAnsi",
+    "packages/tui/src/utils.ts:sliceByColumn",
+    "packages/tui/src/utils.ts:truncateToWidth",
+    "packages/tui/src/utils.ts:getOsc8LinkAtColumn"
+  ],
+  "scenarios": [
+    {
+      "name": "ansi-boundary-order-and-hyperlinks",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "wrap": [
+          {
+            "name": "staged-control-after-content",
+            "input": "中文\u001b[31mABCDEFGHIJ",
+            "width": 4
+          },
+          {
+            "name": "staged-underline-after-content",
+            "input": "中文\u001b[4mABCDEFGH",
+            "width": 4
+          },
+          {
+            "name": "staged-hyperlink-after-content",
+            "input": "中文\u001b]8;;u\u0007ABCDEFGH",
+            "width": 4
+          },
+          {
+            "name": "st-terminated-link-across-break",
+            "input": "\u001b]8;;u\u001b\\hello world\u001b]8;;\u001b\\",
+            "width": 7
+          },
+          {
+            "name": "link-cjk-styled-span",
+            "input": "ab \u001b]8;;u\u0007\u001b[31m中文\u001b[0m\u001b]8;;\u0007 cd",
+            "width": 4
+          },
+          {
+            "name": "control-before-logical-newline",
+            "input": "abc\u001b[31m\ndef",
+            "width": 20
+          }
+        ],
+        "truncate": [
+          {
+            "name": "fits-open-underline-pads-inside",
+            "input": "\u001b[4mabc",
+            "width": 8,
+            "ellipsis": "",
+            "pad": true
+          },
+          {
+            "name": "pending-control-styles-dropped-text",
+            "input": "\u001b[4ma\u001b[31mbcdef",
+            "width": 4,
+            "ellipsis": "...",
+            "pad": false
+          },
+          {
+            "name": "pending-link-styles-dropped-text",
+            "input": "\u001b[4ma\u001b]8;;u\u0007bcdef",
+            "width": 4,
+            "ellipsis": "...",
+            "pad": false
+          },
+          {
+            "name": "st-terminated-link-closes-before-reset",
+            "input": "\u001b]8;;u\u001b\\abcdefgh",
+            "width": 4,
+            "ellipsis": "...",
+            "pad": false
+          },
+          {
+            "name": "ellipsis-does-not-fit",
+            "input": "abcdef",
+            "width": 2,
+            "ellipsis": "中",
+            "pad": false
+          },
+          {
+            "name": "ellipsis-clipped-to-fit",
+            "input": "abcdef",
+            "width": 2,
+            "ellipsis": "abc",
+            "pad": false
+          },
+          {
+            "name": "ellipsis-clipped-away",
+            "input": "abcdef",
+            "width": 1,
+            "ellipsis": "中中",
+            "pad": false
+          }
+        ],
+        "slice": [
+          {
+            "name": "slice-start-code-order",
+            "input": "\u001b[32mfoo\u001b[39m bar",
+            "start": 3,
+            "length": 4,
+            "strict": true
+          },
+          {
+            "name": "slice-inside-open-link",
+            "input": "\u001b]8;;u\u0007abcdefgh\u001b]8;;\u0007",
+            "start": 2,
+            "length": 3,
+            "strict": false
+          },
+          {
+            "name": "slice-spanning-cjk-link",
+            "input": "\u001b]8;;u\u0007a你bcd\u001b]8;;\u0007",
+            "start": 1,
+            "length": 3,
+            "strict": false
+          }
+        ],
+        "linkColumns": [
+          {
+            "name": "cjk-link-first-cell",
+            "input": "a \u001b]8;;https://x\u0007你b\u001b]8;;\u0007 c",
+            "column": 2
+          },
+          {
+            "name": "cjk-link-second-cell",
+            "input": "a \u001b]8;;https://x\u0007你b\u001b]8;;\u0007 c",
+            "column": 3
+          },
+          {
+            "name": "styled-link-cell",
+            "input": "\u001b[31m\u001b]8;;https://x\u0007ab\u001b]8;;\u0007\u001b[0m",
+            "column": 0
+          },
+          {
+            "name": "cell-after-link-close",
+            "input": "\u001b]8;;https://x\u0007ab\u001b]8;;\u0007",
+            "column": 3
+          }
+        ]
+      },
+      "expected": {
+        "wrap": [
+          {
+            "name": "staged-control-after-content",
+            "input": "中文\u001b[31mABCDEFGHIJ",
+            "width": 4,
+            "output": [
+              "中文",
+              "\u001b[31mABCD",
+              "\u001b[31mEFGH",
+              "\u001b[31mIJ"
+            ]
+          },
+          {
+            "name": "staged-underline-after-content",
+            "input": "中文\u001b[4mABCDEFGH",
+            "width": 4,
+            "output": [
+              "中文",
+              "\u001b[4mABCD\u001b[24m",
+              "\u001b[4mEFGH"
+            ]
+          },
+          {
+            "name": "staged-hyperlink-after-content",
+            "input": "中文\u001b]8;;u\u0007ABCDEFGH",
+            "width": 4,
+            "output": [
+              "中文",
+              "\u001b]8;;u\u0007ABCD\u001b]8;;\u0007",
+              "\u001b]8;;u\u0007EFGH"
+            ]
+          },
+          {
+            "name": "st-terminated-link-across-break",
+            "input": "\u001b]8;;u\u001b\\hello world\u001b]8;;\u001b\\",
+            "width": 7,
+            "output": [
+              "\u001b]8;;u\u001b\\hello\u001b]8;;\u001b\\",
+              "\u001b]8;;u\u001b\\world\u001b]8;;\u001b\\"
+            ]
+          },
+          {
+            "name": "link-cjk-styled-span",
+            "input": "ab \u001b]8;;u\u0007\u001b[31m中文\u001b[0m\u001b]8;;\u0007 cd",
+            "width": 4,
+            "output": [
+              "ab",
+              "\u001b]8;;u\u0007\u001b[31m中文\u001b]8;;\u0007",
+              "\u001b[31m\u001b]8;;u\u0007\u001b[0m\u001b]8;;\u0007 cd"
+            ]
+          },
+          {
+            "name": "control-before-logical-newline",
+            "input": "abc\u001b[31m\ndef",
+            "width": 20,
+            "output": [
+              "abc\u001b[31m",
+              "\u001b[31mdef"
+            ]
+          }
+        ],
+        "truncate": [
+          {
+            "name": "fits-open-underline-pads-inside",
+            "input": "\u001b[4mabc",
+            "width": 8,
+            "ellipsis": "",
+            "pad": true,
+            "output": "\u001b[4mabc     "
+          },
+          {
+            "name": "pending-control-styles-dropped-text",
+            "input": "\u001b[4ma\u001b[31mbcdef",
+            "width": 4,
+            "ellipsis": "...",
+            "pad": false,
+            "output": "\u001b[4ma\u001b[0m...\u001b[0m"
+          },
+          {
+            "name": "pending-link-styles-dropped-text",
+            "input": "\u001b[4ma\u001b]8;;u\u0007bcdef",
+            "width": 4,
+            "ellipsis": "...",
+            "pad": false,
+            "output": "\u001b[4ma\u001b[0m...\u001b[0m"
+          },
+          {
+            "name": "st-terminated-link-closes-before-reset",
+            "input": "\u001b]8;;u\u001b\\abcdefgh",
+            "width": 4,
+            "ellipsis": "...",
+            "pad": false,
+            "output": "\u001b]8;;u\u001b\\a\u001b]8;;\u001b\\\u001b[0m...\u001b[0m"
+          },
+          {
+            "name": "ellipsis-does-not-fit",
+            "input": "abcdef",
+            "width": 2,
+            "ellipsis": "中",
+            "pad": false,
+            "output": "\u001b[0m中\u001b[0m"
+          },
+          {
+            "name": "ellipsis-clipped-to-fit",
+            "input": "abcdef",
+            "width": 2,
+            "ellipsis": "abc",
+            "pad": false,
+            "output": "\u001b[0mab\u001b[0m"
+          },
+          {
+            "name": "ellipsis-clipped-away",
+            "input": "abcdef",
+            "width": 1,
+            "ellipsis": "中中",
+            "pad": false,
+            "output": ""
+          }
+        ],
+        "slice": [
+          {
+            "name": "slice-start-code-order",
+            "input": "\u001b[32mfoo\u001b[39m bar",
+            "start": 3,
+            "length": 4,
+            "strict": true,
+            "output": "\u001b[32m\u001b[39m bar"
+          },
+          {
+            "name": "slice-inside-open-link",
+            "input": "\u001b]8;;u\u0007abcdefgh\u001b]8;;\u0007",
+            "start": 2,
+            "length": 3,
+            "strict": false,
+            "output": "\u001b]8;;u\u0007cde"
+          },
+          {
+            "name": "slice-spanning-cjk-link",
+            "input": "\u001b]8;;u\u0007a你bcd\u001b]8;;\u0007",
+            "start": 1,
+            "length": 3,
+            "strict": false,
+            "output": "\u001b]8;;u\u0007你b"
+          }
+        ],
+        "linkColumns": [
+          {
+            "name": "cjk-link-first-cell",
+            "input": "a \u001b]8;;https://x\u0007你b\u001b]8;;\u0007 c",
+            "column": 2,
+            "link": "https://x"
+          },
+          {
+            "name": "cjk-link-second-cell",
+            "input": "a \u001b]8;;https://x\u0007你b\u001b]8;;\u0007 c",
+            "column": 3,
+            "link": "https://x"
+          },
+          {
+            "name": "styled-link-cell",
+            "input": "\u001b[31m\u001b]8;;https://x\u0007ab\u001b]8;;\u0007\u001b[0m",
+            "column": 0,
+            "link": "https://x"
+          },
+          {
+            "name": "cell-after-link-close",
+            "input": "\u001b]8;;https://x\u0007ab\u001b]8;;\u0007",
+            "column": 3,
+            "link": null
+          }
+        ]
+      }
+    }
+  ]
+}
