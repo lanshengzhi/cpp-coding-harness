@@ -499,4 +499,244 @@ std::string strip_terminal_sequences(std::string_view text) {
     return result;
 }
 
+namespace {
+
+/// pi expands a pasted TAB to this many columns in both the multiline editor
+/// and the single-line input.
+constexpr std::size_t kPasteTabColumns = 4;
+
+/// Modifier bits of a `CSI u` reply, matching the decoder in `tui/InputDecoder.cpp`.
+constexpr unsigned int kPasteShiftModifier = 1;
+constexpr unsigned int kPasteAltModifier = 2;
+constexpr unsigned int kPasteCtrlModifier = 4;
+constexpr unsigned int kPasteSuperModifier = 8;
+constexpr unsigned int kPasteLockModifiers = 64 + 128;
+constexpr unsigned int kPasteKnownModifiers =
+        kPasteShiftModifier | kPasteAltModifier | kPasteCtrlModifier | kPasteSuperModifier;
+
+struct ParsedDecimal {
+    unsigned int value{0};
+    bool valid{false};
+};
+
+[[nodiscard]] ParsedDecimal parse_decimal(std::string_view text) {
+    if (text.empty()) return {};
+    unsigned int value = 0;
+    for (const char character : text) {
+        if (character < '0' || character > '9') return {};
+        value = value * 10 + static_cast<unsigned int>(character - '0');
+        if (value > 0x10ffff) return {};
+    }
+    return {.value = value, .valid = true};
+}
+
+[[nodiscard]] bool is_decimal_digit(char character) { return character >= '0' && character <= '9'; }
+
+[[nodiscard]] std::vector<std::string_view> split_on(std::string_view text, char separator) {
+    std::vector<std::string_view> parts;
+    std::size_t start = 0;
+    while (true) {
+        const auto position = text.find(separator, start);
+        parts.push_back(
+                text.substr(start, position == std::string_view::npos ? text.size() - start : position - start));
+        if (position == std::string_view::npos) return parts;
+        start = position + 1;
+    }
+}
+
+[[nodiscard]] std::string encode_utf8(char32_t codepoint) {
+    std::string encoded;
+    if (codepoint <= 0x7f) {
+        encoded.push_back(static_cast<char>(codepoint));
+    } else if (codepoint <= 0x7ff) {
+        encoded.push_back(static_cast<char>(0xc0 | (codepoint >> 6)));
+        encoded.push_back(static_cast<char>(0x80 | (codepoint & 0x3f)));
+    } else if (codepoint <= 0xffff) {
+        encoded.push_back(static_cast<char>(0xe0 | (codepoint >> 12)));
+        encoded.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3f)));
+        encoded.push_back(static_cast<char>(0x80 | (codepoint & 0x3f)));
+    } else if (codepoint <= 0x10ffff) {
+        encoded.push_back(static_cast<char>(0xf0 | (codepoint >> 18)));
+        encoded.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3f)));
+        encoded.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3f)));
+        encoded.push_back(static_cast<char>(0x80 | (codepoint & 0x3f)));
+    }
+    return encoded;
+}
+
+/// The character a control reply encodes, with the kitty modifier mapping
+/// applied. Ctrl+J (codepoint 106) therefore resolves to LF, Ctrl+I to TAB and
+/// Ctrl+H to a backspace byte that the control filter removes.
+[[nodiscard]] char32_t resolve_reply_character(unsigned int codepoint, bool shift, bool ctrl) {
+    auto resolved = static_cast<char32_t>(codepoint);
+    if (shift && resolved >= 'a' && resolved <= 'z') resolved -= 'a' - 'A';
+    if (!ctrl) return resolved;
+    if (resolved >= 'a' && resolved <= 'z') return resolved - 96;
+    if (resolved >= 'A' && resolved <= 'Z') return resolved - 64;
+    if (resolved == ' ') return 0x00;
+    if (resolved >= '[' && resolved <= '_') return resolved - '@';
+    if (resolved == '?') return 0x7f;
+    return resolved;
+}
+
+struct PasteControlReply {
+    std::size_t consumed{0};
+    /// True when the bytes are a complete `CSI u` reply, including the repeat
+    /// and release forms that carry no insertable character.
+    bool recognized{false};
+    bool press{true};
+    char32_t character{0};
+};
+
+/// Parse a complete `ESC [ <parameters> u` reply at `position`. Anything else
+/// (other CSI forms, truncated bytes) stays unconsumed and is filtered as
+/// ordinary control bytes.
+[[nodiscard]] PasteControlReply parse_paste_control_reply(std::string_view text, std::size_t position) {
+    if (position + 1 >= text.size() || text[position] != '\x1b' || text[position + 1] != '[') return {};
+    const std::size_t body_start = position + 2;
+    std::size_t cursor = body_start;
+    while (cursor < text.size() && (is_decimal_digit(text[cursor]) || text[cursor] == ';' || text[cursor] == ':')) {
+        ++cursor;
+    }
+    if (cursor >= text.size() || text[cursor] != 'u') return {};
+
+    const auto body = text.substr(body_start, cursor - body_start);
+    const auto sections = split_on(body, ';');
+    if (sections.empty() || sections.size() > 2) return {};
+    const auto key_parts = split_on(sections[0], ':');
+    if (key_parts.empty() || key_parts.size() > 3) return {};
+    const auto codepoint = parse_decimal(key_parts[0]);
+    if (!codepoint.valid) return {};
+
+    unsigned int modifier_value = 1;
+    unsigned int event_type = 1;
+    if (sections.size() == 2) {
+        const auto modifier_parts = split_on(sections[1], ':');
+        if (modifier_parts.empty() || modifier_parts.size() > 2) return {};
+        const auto parsed_modifier = parse_decimal(modifier_parts[0]);
+        if (!parsed_modifier.valid || parsed_modifier.value == 0) return {};
+        modifier_value = parsed_modifier.value;
+        if (modifier_parts.size() == 2) {
+            const auto parsed_event = parse_decimal(modifier_parts[1]);
+            if (!parsed_event.valid) return {};
+            event_type = parsed_event.value;
+        }
+    }
+    const auto modifier = (modifier_value - 1) & ~kPasteLockModifiers;
+    if ((modifier & ~kPasteKnownModifiers) != 0) return {};
+
+    return PasteControlReply{
+            .consumed = cursor + 1 - position,
+            .recognized = true,
+            .press = event_type != 2 && event_type != 3,
+            .character = resolve_reply_character(
+                    codepoint.value, (modifier & kPasteShiftModifier) != 0, (modifier & kPasteCtrlModifier) != 0),
+    };
+}
+
+[[nodiscard]] bool is_filtered_control(char32_t codepoint) {
+    return codepoint < 0x20 || codepoint == 0x7f || (codepoint >= 0x80 && codepoint <= 0x9f);
+}
+
+/// Whitespace and filtered controls both end the current token, which is what
+/// lets a following path start a new token.
+[[nodiscard]] bool ends_token(char32_t codepoint) {
+    return codepoint == ' ' || codepoint == '\t' || codepoint == '\n' || codepoint == '\r' ||
+           is_filtered_control(codepoint);
+}
+
+/// ASCII word characters only: pasted spacing must never be inserted inside
+/// CJK or other scriptio continua, which carry no inter-word spaces.
+[[nodiscard]] bool is_word_character(char character) {
+    const auto byte = static_cast<unsigned char>(character);
+    return (byte >= '0' && byte <= '9') || (byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z') ||
+           byte == '_' || byte == '-';
+}
+
+[[nodiscard]] bool is_path_trailing_character(char character) {
+    const auto byte = static_cast<unsigned char>(character);
+    return is_word_character(character) || byte == '.' || byte == '/' || byte == '~';
+}
+
+[[nodiscard]] bool starts_path_token(std::string_view text, std::size_t position) {
+    return text[position] == '/' || text.substr(position, 2) == "./" || text.substr(position, 2) == "~/" ||
+           text.substr(position, 3) == "../";
+}
+
+} // namespace
+
+std::string normalize_pasted_text(std::string_view text, PasteNormalization normalization) {
+    const bool multiline = normalization.multiline;
+    const std::string_view before = normalization.boundaries.text_before;
+    const std::string_view after = normalization.boundaries.text_after;
+
+    std::string result;
+    result.reserve(text.size());
+
+    // The nearest existing character participates in the path-spacing rule, so
+    // the pasted text and the surrounding text are spaced identically.
+    char previous_character = before.empty() ? '\0' : before.back();
+    bool at_token_start = before.empty() || ends_token(static_cast<unsigned char>(before.back()));
+    // A path token stays one token until whitespace ends it, so the separators
+    // inside "/tmp/x" are never mistaken for a path glued to a word.
+    bool in_path_token = false;
+    // CRLF must collapse to one LF, so the LF of a CR LF pair is consumed.
+    bool after_carriage_return = false;
+
+    const auto emit = [&](char32_t codepoint) {
+        if (codepoint == '\r' || codepoint == '\n') {
+            if (multiline) {
+                result.push_back('\n');
+                previous_character = '\n';
+            }
+            return;
+        }
+        if (codepoint == '\t') {
+            result.append(kPasteTabColumns, ' ');
+            previous_character = ' ';
+            return;
+        }
+        if (is_filtered_control(codepoint)) return;
+        result += encode_utf8(codepoint);
+        previous_character = result.back();
+    };
+
+    for (std::size_t index = 0; index < text.size();) {
+        if (const auto reply = parse_paste_control_reply(text, index); reply.recognized) {
+            if (reply.press) {
+                emit(reply.character);
+                after_carriage_return = reply.character == '\r';
+            }
+            at_token_start = ends_token(reply.character);
+            in_path_token = false;
+            index += reply.consumed;
+            continue;
+        }
+        const auto [codepoint, bytes] = detail::decode_utf8(text, index);
+        if (after_carriage_return && codepoint == '\n') {
+            after_carriage_return = false;
+            at_token_start = true;
+            index += bytes;
+            continue;
+        }
+        const bool starts_path = !in_path_token && starts_path_token(text, index);
+        if (starts_path && is_word_character(previous_character)) {
+            result.push_back(' ');
+            previous_character = ' ';
+        }
+        emit(codepoint);
+        after_carriage_return = codepoint == '\r';
+        at_token_start = ends_token(codepoint);
+        in_path_token = !at_token_start && (in_path_token || starts_path);
+        index += bytes;
+    }
+
+    // The pasted path's own end is spaced against text that follows it.
+    if (in_path_token && !result.empty() && is_path_trailing_character(result.back()) && !after.empty() &&
+            is_word_character(after.front())) {
+        result.push_back(' ');
+    }
+    return result;
+}
+
 } // namespace cch::tui
