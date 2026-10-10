@@ -14,6 +14,7 @@
 #include <string_view>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace cch::tui::detail {
 namespace {
@@ -21,10 +22,17 @@ namespace {
 constexpr std::string_view kPasteStart = "\x1b[200~";
 constexpr std::string_view kPasteEnd = "\x1b[201~";
 constexpr std::size_t kMaxPendingBytes = 256;
+// Kitty/modifyOtherKeys modifier bits after the 1-based protocol value is
+// normalized (pi keys.ts MODIFIERS: shift 1, alt 2, ctrl 4, super 8).
+// WARNING: these bit positions are load-bearing — modifier 2 MUST be shift
+// (repeat `;2u` is shift, never an event type) and modifier 3 MUST be alt.
+// Do not reorder: a past swap here silently broke CSI-u decode.
 constexpr unsigned int kShiftModifier = 1;
 constexpr unsigned int kAltModifier = 2;
 constexpr unsigned int kCtrlModifier = 4;
 constexpr unsigned int kSuperModifier = 8;
+static_assert(kShiftModifier == 1 && kAltModifier == 2 && kCtrlModifier == 4 && kSuperModifier == 8,
+        "CSI-u modifier bits must match pi keys.ts MODIFIERS");
 constexpr unsigned int kLockModifiers = 64 + 128;
 
 struct ParsedModifiers {
@@ -130,7 +138,9 @@ std::optional<std::string> key_for_codepoint(unsigned int codepoint, bool shift)
     return encoded;
 }
 
-std::optional<std::string> kitty_printable_text(unsigned int codepoint, const ParsedModifiers& modifiers) {
+std::optional<std::string> kitty_printable_text(unsigned int codepoint,
+        const ParsedModifiers& modifiers,
+        std::optional<unsigned int> shifted_key = std::nullopt) {
     // Kitty functional and keypad keys occupy the Unicode private-use planes;
     // their reported codepoint is a key number, never inserted text.
     if (codepoint < 0x20 || codepoint == 0x7f) return std::nullopt;
@@ -138,7 +148,10 @@ std::optional<std::string> kitty_printable_text(unsigned int codepoint, const Pa
     // A control combination (pi `decodeKittyPrintable` blocks super the same
     // way) is a shortcut, not text.
     if (modifiers.ctrl || modifiers.alt || modifiers.super) return std::nullopt;
-    auto encoded = encode_utf8(codepoint);
+    // pi `decodeKittyPrintable`: prefer the shifted keycode when Shift is
+    // held. Without a shifted key the terminal's own codepoint is the text.
+    const auto effective = modifiers.shift && shifted_key ? *shifted_key : codepoint;
+    auto encoded = encode_utf8(effective);
     if (encoded.empty()) return std::nullopt;
     return encoded;
 }
@@ -148,21 +161,25 @@ std::optional<KeyEvent> make_key_event(unsigned int codepoint,
         KeyEventType type,
         std::optional<unsigned int> base_layout_key = std::nullopt,
         std::optional<unsigned int> shifted_key = std::nullopt) {
-    // pi `decodeKittyPrintable`: a shift-modified press inserts the shifted
-    // key's character; without shift the reported codepoint is the character.
+    // pi `formatParsedKey`: the shortcut identity uses the shifted key's
+    // character when Shift is held; without shift the reported codepoint is
+    // the identity. (Insertion text is a separate decision — pi
+    // `decodeKittyPrintable` — made in `kitty_printable_text` below.)
     const auto effective_codepoint = modifiers.shift && shifted_key ? *shifted_key : codepoint;
     auto key = key_for_codepoint(effective_codepoint, modifiers.shift);
     const bool authoritative = key && key->size() == 1 &&
         (((*key)[0] >= 'a' && (*key)[0] <= 'z') || ((*key)[0] >= '0' && (*key)[0] <= '9') ||
          is_baseline_symbol((*key)[0]));
     // The base-layout fallback exists so a non-Latin layout still matches a
-    // base-layout shortcut. It replaces the shortcut identity only: the
-    // insertion text keeps the character the terminal actually reported.
+    // base-layout shortcut (pi `formatParsedKey`: base key only when the
+    // codepoint is not a recognized Latin letter, digit or symbol). It
+    // replaces the shortcut identity only: the insertion text keeps the
+    // character the terminal actually reported.
     if (!authoritative && base_layout_key) key = key_for_codepoint(*base_layout_key, modifiers.shift);
     if (!key) return std::nullopt;
     return KeyEvent{
             .key = std::move(*key),
-            .text = kitty_printable_text(effective_codepoint, modifiers).value_or(std::string{}),
+            .text = kitty_printable_text(codepoint, modifiers, shifted_key).value_or(std::string{}),
             .ctrl = modifiers.ctrl,
             .shift = modifiers.shift,
             .alt = modifiers.alt,
@@ -183,19 +200,26 @@ std::optional<KeyEvent> parse_kitty_csi_u(std::string_view sequence) {
         return std::nullopt;
     }
 
+    // pi's CSI-u grammar (keys.ts `parseKittySequence`):
+    // `<codepoint>[:<shifted>[:<base>]];<mod>[:<event>]u`. An explicitly
+    // empty slot means "absent", so `<codepoint>::<base>` has no shifted
+    // key; a single trailing `:` carries no field at all.
     const auto key_parts = split(key_part, ':');
     if (key_parts.empty() || key_parts.size() > 3) return std::nullopt;
     const auto codepoint = parse_number(key_parts[0]);
     if (!codepoint.valid) return std::nullopt;
 
     std::optional<unsigned int> shifted_key;
+    std::optional<unsigned int> base_layout_key;
+    // Slot positions are fixed by pi's grammar: slot 2 is always the shifted
+    // key, slot 3 always the base key (group 3 of the CSI-u regex). An empty
+    // slot is simply absent — `<codepoint>::<base>` (as in `1092::97`) leaves
+    // the shifted key empty, exactly like the pre-#950 parse did.
     if (key_parts.size() >= 2 && !key_parts[1].empty()) {
         const auto parsed_shifted = parse_number(key_parts[1]);
         if (!parsed_shifted.valid) return std::nullopt;
         shifted_key = parsed_shifted.value;
     }
-
-    std::optional<unsigned int> base_layout_key;
     if (key_parts.size() == 3 && !key_parts[2].empty()) {
         const auto parsed_base = parse_number(key_parts[2]);
         if (!parsed_base.valid) return std::nullopt;

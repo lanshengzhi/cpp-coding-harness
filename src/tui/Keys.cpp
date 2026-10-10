@@ -136,7 +136,10 @@ bool matches_key(const KeyEvent& event, std::string_view identifier) {
 }
 
 std::optional<std::string> printable_text(const KeyEvent& event) {
-    if (!carries_press_behavior(&event)) return std::nullopt;
+    // pi `decodePrintableKey`: a repeat inserts the same text as a press;
+    // only a release never carries text. Gate on the release directly — not
+    // on `carries_press_behavior`, which only press events set currently.
+    if (event.type == KeyEventType::Release) return std::nullopt;
     if (event.ctrl || event.alt || event.super || event.key.empty()) return std::nullopt;
     if (!event.text.empty()) return event.text;
     if (is_non_printable_key(event.key)) return std::nullopt;

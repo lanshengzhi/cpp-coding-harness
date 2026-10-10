@@ -1174,11 +1174,17 @@ void TreeSelectorComponent::hide_label_input() {
 }
 
 cch::tui::InputAdmissionOutcome TreeSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
-    if (label_state_.active) {
-        const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
-        if (key != nullptr && key->type == cch::tui::KeyEventType::Release) {
+    // Claiming a key is not proof of visible work: a release never carries
+    // insertion text and must not count as consumed prompt input (pi
+    // `decodePrintableKey`, ADR 0050). Press/repeat events keep flowing into
+    // the action dispatch below, which decides what they claim.
+    if (const auto* key = std::get_if<cch::tui::KeyEvent>(&input); key != nullptr) {
+        if (key->type == cch::tui::KeyEventType::Release) {
             return cch::tui::InputAdmissionOutcome::Unhandled;
         }
+    }
+    if (label_state_.active) {
+        const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
         if (key != nullptr) {
             if (keybindings_->matches(*key, "tui.select.confirm")) {
                 auto value = label_input_.value();
