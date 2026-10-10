@@ -228,6 +228,47 @@ const capabilityArtifact = envelope([
 const narrowText = new Text("काक्ष", 0, 0);
 const narrowInput = new Input();
 narrowInput.setValue("काक्ष");
+// Public Kitty insertion text and shortcut identity (#950). The keyboard
+// protocol keeps the terminal's own character while the base-layout key still
+// answers shortcut matching; both are observed for the same event and through
+// the real Input insertion path. Never regenerate these expectations from Pike.
+const kittySequences = [
+	"\x1b[1092::97u",        // Cyrillic ef on the physical 'a' key
+	"\x1b[1060:1040:97;2u",  // shifted Cyrillic es, base-layout 'a'
+	"\x1b[49:33;2u",         // shift-modified '1' inserts '!'
+	"\x1b[128512u",          // supplementary plane character
+	"\x1b[1092::97;2u",      // repeat
+	"\x1b[1092::97;3u",      // release
+	"\x1b[1092::97;5u",      // ctrl combination
+	"\x1b[1092::97;9u",      // super combination
+];
+setKittyProtocolActive(true);
+const kittyInput = new Input();
+const kittyInputValues = kittySequences.map((data) => { kittyInput.handleInput(data); return kittyInput.getValue(); });
+const kittyArtifact = envelope([
+	"packages/tui/src/keys.ts:parseKey,decodeKittyPrintable",
+	"packages/tui/src/components/input.ts:handleInput,getValue",
+], [{
+	name: "kitty-insertion-text-and-shortcut-identity",
+	dimensions: { columns: 24, rows: 6 },
+	inputs: { kittyActive: true, sequences: kittySequences },
+	expected: {
+		// The parsed key's own field names are recorded too, so a Pike capture
+		// cannot silently read a differently named printable-text field.
+		keyShape: Object.keys(parseKey("\x1b[1092::97u") ?? {}).sort(),
+		keys: kittySequences.map((data) => {
+			const key = parseKey(data);
+			return {
+				id: key?.id ?? null,
+				text: key?.text ?? null,
+				eventType: isKeyRelease(data) ? "release" : isKeyRepeat(data) ? "repeat" : "press",
+			};
+		}),
+		inputValues: kittyInputValues,
+	},
+}]);
+setKittyProtocolActive(false);
+
 const utilsWidthArtifact = envelope([
 	"packages/tui/src/utils.ts:visibleWidth",
 	"packages/tui/src/components/text.ts:render",
@@ -366,6 +407,7 @@ const artifacts = [
 	["screen-state.json", "screen-state", screenArtifact],
 	["capability-ledger.json", "capability-ledger", capabilityArtifact],
 	["utils-width.json", "utils-width", utilsWidthArtifact],
+["keys-kitty-text.json", "keys-kitty-text", kittyArtifact],
 	["latex.json", "latex", latexArtifact],
 ] as const;
 const records = artifacts.map(([file, family, artifact]) => {

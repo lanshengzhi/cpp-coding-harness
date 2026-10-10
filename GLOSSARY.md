@@ -372,6 +372,14 @@ _Avoid_: Escape sequences in render lines, component-owned protocol bytes
 The Native TUI presentation model in which growing content becomes terminal scrollback rather than a separate application-managed history view.
 _Avoid_: Viewport-clip redraw, in-place line rewrite, alt-screen scrolling
 
+**Raw-Input Listener**:
+An ordered TUI Toolkit callback that observes one raw terminal input fragment before typed dispatch and may consume it or replace the text the rest of the chain and the focused component receive.
+_Avoid_: Keybinding handler, global input hook, component input event
+
+**Cell-Size Reply Consumer**:
+The stage, downstream of the Raw-Input Listener chain, that applies a terminal's reported cell pixel size after listeners have had their say.
+_Avoid_: Input-stage reply consumption, image-only cell size cache
+
 ### Core projections
 
 **Headless Core**:

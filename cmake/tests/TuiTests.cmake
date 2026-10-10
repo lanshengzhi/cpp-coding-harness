@@ -30,13 +30,16 @@ include_guard(GLOBAL)
         tests/tui/InputTest.cpp
         tests/tui/KeybindingsTest.cpp
         tests/tui/KeysTest.cpp
+tests/tui/KeysKittyTextTest.cpp
         tests/tui/LatexTest.cpp
         tests/tui/LoaderTest.cpp
         tests/tui/MarkdownTest.cpp
         tests/tui/OverlayTest.cpp
         tests/tui/OverlayCompositorTest.cpp
+        tests/tui/PasteNormalizationTest.cpp
         tests/tui/PiTuiDifferentialTest.cpp
         tests/tui/ProcessTerminalTest.cpp
+        tests/tui/RawInputListenerTest.cpp
         tests/tui/RenderDifferentialTest.cpp
         tests/tui/ScreenStateGoldenTest.cpp
         tests/tui/SelectListTest.cpp

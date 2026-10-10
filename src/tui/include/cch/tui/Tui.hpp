@@ -2,6 +2,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Overlay.hpp>
+#include <cch/tui/RawInputListener.hpp>
 #include <cch/tui/Terminal.hpp>
 
 #include <cch/support/Error.hpp>
@@ -59,6 +60,15 @@ public:
     void set_render_request_sink(TuiRenderRequestSink sink);
     void invalidate();
 
+    /// Register an ordered raw-input listener that observes every raw input
+    /// fragment before typed dispatch (pi `addInputListener`). The returned
+    /// handle removes its registration when destroyed, moved from, or reset;
+    /// the caller may also remove it explicitly by id.
+    [[nodiscard]] RawInputListenerHandle add_raw_input_listener(RawInputListener listener);
+    /// Remove a raw-input listener registration. Removing during a dispatch
+    /// takes effect for the rest of that dispatch and every later input.
+    [[nodiscard]] support::ExpectedVoid remove_raw_input_listener(RawInputListenerId id);
+
     /// Add an overlay. Overlays are rendered on top of base children
     /// and support position strategies, stacking, and focus isolation.
     [[nodiscard]] support::Expected<std::reference_wrapper<Overlay>> add_overlay(
@@ -93,6 +103,7 @@ private:
     std::unique_ptr<detail::OverlayCompositor> compositor_;
     std::unique_ptr<detail::RenderPipeline> render_pipeline_;
     TuiRenderRequestSink render_request_sink_;
+    std::shared_ptr<RawInputListenerChain> raw_listeners_;
     std::vector<std::unique_ptr<Component>> children_;
     Component* focused_{nullptr}; // Null or aliases an element owned by children_ or the compositor's overlays.
     bool started_{false};

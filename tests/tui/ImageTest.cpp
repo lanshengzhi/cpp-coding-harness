@@ -222,7 +222,8 @@ TEST_CASE("Terminal without image capability shows semantic fallback", "[tui][im
     CHECK(terminal.screen()[0].find("16x9") != std::string::npos);
 }
 
-TEST_CASE("Cell-size math defaults to pi's 9x18 cells and consumes CSI 16 t updates", "[tui][image][issue385][spec]") {
+TEST_CASE("Cell-size math defaults to pi's 9x18 cells and applies CSI 16 t updates downstream of the listener stage",
+        "[tui][image][issue385][issue952][spec]") {
     cch::tui::VirtualTerminal terminal({
         .columns = 20,
         .rows = 3,

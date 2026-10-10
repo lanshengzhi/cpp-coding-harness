@@ -3,6 +3,7 @@
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -16,7 +17,13 @@ enum class KeyEventType {
 };
 
 struct KeyEvent {
+    /// Shortcut identity: the key name a binding matches (pi `Key.id`).
     std::string key;
+    /// The original printable text the terminal produced, kept apart from the
+    /// shortcut identity (pi `Key.text`). A non-Latin Kitty layout keeps its
+    /// own character here while `key` stays the base-layout key a shortcut
+    /// matches; empty when the event carries no printable character.
+    std::string text;
     bool ctrl{false};
     bool shift{false};
     bool alt{false};
@@ -43,6 +50,19 @@ using InputEventVariant = std::variant<KeyEvent, PasteEvent>;
 [[nodiscard]] support::Expected<KeyEvent> parse_key_id(std::string_view identifier);
 [[nodiscard]] std::string key_id(const KeyEvent& event);
 [[nodiscard]] bool matches_key(const KeyEvent& event, std::string_view identifier);
+
+/// Decode one complete key payload (pi `parseKey`). The keyboard protocol
+/// state is a caller-held argument, never process-global state: each terminal
+/// decodes with its own negotiated state and two callers never interfere.
+/// Escape sequences must already be whole; the fragment framing that
+/// reassembles split reads belongs to the input edge.
+[[nodiscard]] std::optional<KeyEvent> parse_key(std::string_view data, bool kitty_protocol_active);
+
+/// The text a key event inserts (pi `decodePrintableKey`). Nothing when the
+/// event carries no printable character: named keys, ctrl/alt/super
+/// combinations and key releases never insert. The terminal text wins;
+/// the shortcut identity is used only for events decoded without one.
+[[nodiscard]] std::optional<std::string> printable_text(const KeyEvent& event);
 
 /// Whether the event carries key press behavior (press or repeat). Paste
 /// events (no key payload) and key releases do not; a handler that does not

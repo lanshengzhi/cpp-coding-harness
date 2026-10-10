@@ -743,8 +743,14 @@ template <typename T> void drain_output(T& impl, bool writable) {
     drain_output_locked(impl, writable);
 }
 
-template <typename T> void apply_cell_size_response(T& impl, const detail::CellSizeResponse& response) {
-    if (response.height_px == 0 || response.width_px == 0) return;
+/// The downstream cell-size consumer, reached only when the host runs a
+/// cell-size reply through its raw-input listener stage (#952; pi
+/// terminal-image.ts consumeCellSizeResponse at the frozen listener stage, pi
+/// tui.ts onLateReply). Refining the reported pixels is a
+/// presentation-affecting capability update, so the resize sink runs with
+/// unchanged dimensions.
+template <typename T> void apply_cell_size_response(T& impl, const CellPixelDimensions& pixels) {
+    if (pixels.width == 0 || pixels.height == 0) return;
     std::shared_ptr<TerminalResizeSink> sink;
     TerminalDimensions dimensions;
     {
@@ -752,14 +758,10 @@ template <typename T> void apply_cell_size_response(T& impl, const detail::CellS
         // Same lifetime guard as deliver_resize_if_changed (issue #628): never
         // dispatch a resize once teardown has begun.
         if (!session_active(impl)) return;
-        const CellPixelDimensions updated{
-                .width = response.width_px,
-                .height = response.height_px,
-        };
-        if (impl.capabilities.cell_pixels && *impl.capabilities.cell_pixels == updated) {
+        if (impl.capabilities.cell_pixels && *impl.capabilities.cell_pixels == pixels) {
             return;
         }
-        impl.capabilities.cell_pixels = updated;
+        impl.capabilities.cell_pixels = pixels;
         sink = impl.resize_sink;
         dimensions = impl.dimensions;
     }
@@ -775,10 +777,11 @@ template <typename T>
 void apply_terminal_responses(
         T& impl, InputState& state, const std::vector<detail::TerminalResponseVariant>& responses) {
     for (const auto& response : responses) {
-        if (const auto* cell_size = std::get_if<detail::CellSizeResponse>(&response)) {
-            apply_cell_size_response(impl, *cell_size);
-            continue;
-        }
+        // A cell-size reply is deliberately not applied here (#952): the reply
+        // is forwarded verbatim so the host's raw-input listener stage observes
+        // it first, and Terminal::apply_cell_pixel_dimensions is the downstream
+        // consumer. Color and keyboard-negotiation answers keep this stage,
+        // where frozen pi consumes them.
         if (const auto* keyboard = std::get_if<detail::KeyboardProtocolResponse>(&response)) {
             apply_keyboard_response(impl, *keyboard);
             continue;
@@ -1739,6 +1742,15 @@ support::ExpectedVoid ProcessTerminal::end_synchronized_update() {
     }
     impl_->synchronized_output_state.reset();
     return ended;
+}
+
+support::ExpectedVoid ProcessTerminal::apply_cell_pixel_dimensions(CellPixelDimensions pixels) {
+    // Reached on the host's own input path (the TUI calls it after its raw-input
+    // listener stage), never from this worker while the input sink runs, so the
+    // mutex below is free; apply_cell_size_response copies the sink out and
+    // invokes it unlocked.
+    apply_cell_size_response(*impl_, pixels);
+    return {};
 }
 
 support::ExpectedVoid ProcessTerminal::set_title(std::string_view title) {

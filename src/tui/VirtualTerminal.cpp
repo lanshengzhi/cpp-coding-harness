@@ -45,7 +45,7 @@ struct VirtualTerminal::Impl {
     std::size_t scroll_origin{0};
     std::size_t sync_depth{0};
     std::uint64_t next_image_handle{1};
-    std::string cell_size_pending;
+
     bool progress_active{false};
     bool clear_screen_called{false};
     bool clear_scrollback_called{false};
@@ -738,30 +738,25 @@ support::ExpectedVoid VirtualTerminal::seed_shell_content(
 
 support::ExpectedVoid VirtualTerminal::inject_input(std::string input) {
     if (!impl_->modes.started || !impl_->input_sink) return {};
-    auto consumed = detail::consume_cell_size_input(
-        std::move(impl_->cell_size_pending),
-        input);
-    impl_->cell_size_pending = std::move(consumed.pending);
-    if (!consumed.responses.empty()) {
-        const auto& response = consumed.responses.back();
-        if (response.height_px > 0 && response.width_px > 0) {
-            impl_->capabilities.cell_pixels = CellPixelDimensions{
-                .width = response.width_px,
-                .height = response.height_px,
-            };
-            if (impl_->resize_sink) {
-                if (auto delivered = impl_->resize_sink(impl_->dimensions); !delivered) {
-                    impl_->resize_sink = {};
-                    return std::unexpected(std::move(delivered.error()));
-                }
-            }
-        }
+    // Delivered verbatim, including a `CSI 6 ; h ; w t` cell-size reply (#952):
+    // the host's raw-input listener stage observes the reply before the
+    // downstream consumer (apply_cell_pixel_dimensions) refines the cell size.
+    // Split fragments reassemble in the host's own decoder.
+    if (auto delivered = impl_->input_sink(std::move(input)); !delivered) {
+        impl_->input_sink = {};
+        return std::unexpected(std::move(delivered.error()));
     }
-    if (input.empty() || !consumed.forwarded_input.empty()) {
-        if (auto delivered = impl_->input_sink(std::move(consumed.forwarded_input)); !delivered) {
-            impl_->input_sink = {};
-            return std::unexpected(std::move(delivered.error()));
-        }
+    return {};
+}
+
+support::ExpectedVoid VirtualTerminal::apply_cell_pixel_dimensions(CellPixelDimensions pixels) {
+    if (pixels.width == 0 || pixels.height == 0) return {};
+    if (impl_->capabilities.cell_pixels && *impl_->capabilities.cell_pixels == pixels) return {};
+    impl_->capabilities.cell_pixels = pixels;
+    if (!impl_->modes.started || !impl_->resize_sink) return {};
+    if (auto delivered = impl_->resize_sink(impl_->dimensions); !delivered) {
+        impl_->resize_sink = {};
+        return std::unexpected(std::move(delivered.error()));
     }
     return {};
 }

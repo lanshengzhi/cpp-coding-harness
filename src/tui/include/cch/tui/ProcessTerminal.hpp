@@ -53,6 +53,10 @@ public:
     [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override;
     [[nodiscard]] support::ExpectedVoid end_synchronized_update() override;
     [[nodiscard]] support::ExpectedVoid set_title(std::string_view title) override;
+    /// The downstream cell-size consumer: the `CSI 16 t` reply is forwarded to
+    /// the input sink verbatim so the host's raw-input listener stage observes
+    /// it first (#952), and this call refines the reported cell pixels.
+    [[nodiscard]] support::ExpectedVoid apply_cell_pixel_dimensions(CellPixelDimensions pixels) override;
     [[nodiscard]] support::ExpectedVoid set_progress(bool active) override;
     [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds max_ms = kDrainInputMaxMs,
             std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;

@@ -15,40 +15,6 @@
 
 namespace cch::tui::detail {
 
-/// Printable keys: plain and shift-modified characters only. Named keys and
-/// ctrl/alt-modified events are handled by the keybinding actions or
-/// rejected, mirroring pi's control-character check.
-[[nodiscard]] inline bool is_printable(const KeyEvent& event) {
-    if (event.ctrl || event.alt || event.super || event.key.empty()) return false;
-    if (event.key == "space") return true;
-    if (event.key.size() > 1 && event.key.front() == 'f' && event.key.size() <= 3 &&
-            std::all_of(event.key.begin() + 1, event.key.end(), [](char c) { return c >= '0' && c <= '9'; })) {
-        return false;
-    }
-    return event.key != "enter" && event.key != "tab" && event.key != "escape" && event.key != "backspace" &&
-           event.key != "delete" && event.key != "insert" && event.key != "clear" && event.key != "home" &&
-           event.key != "end" && event.key != "pageUp" && event.key != "pageDown" && event.key != "up" &&
-           event.key != "down" && event.key != "left" && event.key != "right" && event.key != "menu" &&
-           event.key != "capsLock" && event.key != "numLock" && event.key != "scrollLock" && event.key != "pause" &&
-           event.key != "printScreen";
-}
-
-/// The visible text a printable key event inserts ("space" renders as a
-/// space). A shift-modified single ASCII letter renders uppercase, matching
-/// pi's "shift+letter produces uppercase" legacy contract (the decoder
-/// canonicalizes letters to lowercase for the identifier grammar; the
-/// inserted text must preserve the typed case).
-[[nodiscard]] inline std::string printable_text(const KeyEvent& event) {
-    if (event.key == "space") return " ";
-    if (event.shift && event.key.size() == 1) {
-        const auto letter = static_cast<unsigned char>(event.key.front());
-        if (letter >= 'a' && letter <= 'z') {
-            return std::string(1, static_cast<char>(letter - 'a' + 'A'));
-        }
-    }
-    return event.key;
-}
-
 struct VisibleRange {
     std::size_t begin{0};
     std::size_t end{0};

@@ -1,5 +1,7 @@
 #include "TextBuffer.hpp"
 
+#include <cch/tui/Utils.hpp>
+
 #include "tui/UnicodeWidth.hpp"
 #include "tui/WordNavigation.hpp"
 
@@ -364,7 +366,18 @@ void TextBuffer::insert_text(std::string text, bool record_undo) {
 }
 
 void TextBuffer::insert_paste(std::string text) {
-    text = sanitize_input(std::move(text), options_.multiline);
+    // Pasted content is normalized exactly once, at the insertion path shared by
+    // the multiline Editor and the single-line Input (pi `handlePaste`).
+    clamp_cursor();
+    const auto line = line_text(document_[cursor_.line]);
+    const auto prefix = line_prefix_before_cursor();
+    std::string_view suffix = line;
+    if (prefix.size() <= line.size()) suffix.remove_prefix(prefix.size());
+    text = normalize_pasted_text(text,
+            PasteNormalization{
+                    .multiline = options_.multiline,
+                    .boundaries = {.text_before = prefix, .text_after = suffix},
+            });
     if (text.empty()) return;
     push_undo();
     last_action_ = LastAction::None;

@@ -8,6 +8,8 @@
 
 namespace cch::tui {
 
+support::ExpectedVoid Terminal::apply_cell_pixel_dimensions(CellPixelDimensions) { return {}; }
+
 support::ExpectedVoid Terminal::move_cursor_down(std::size_t rows) {
     if (rows == 0) return {};
 

@@ -103,6 +103,12 @@ struct CellSizeInputResult {
 /// and appearance response parsers do. Fragments shorter than the full
 /// `ESC [ 6 ;` prefix are never buffered, so a bare ESC is forwarded
 /// immediately (pi's tui-cell-size-input expectation).
+///
+/// The reusable framing helper for a host that reads cell-size replies out of
+/// its own byte stream (pi `consumeCellSizeResponse`). The TUI does not use it:
+/// a cell-size reply is delivered verbatim to the host so its raw-input
+/// listener stage observes it first, and the host applies the reply downstream
+/// through Terminal::apply_cell_pixel_dimensions (#952).
 [[nodiscard]] CellSizeInputResult consume_cell_size_input(
     std::string pending,
     std::string_view input);

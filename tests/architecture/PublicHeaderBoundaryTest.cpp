@@ -36,6 +36,7 @@
 #include <cch/tui/Loader.hpp>
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/ProcessTerminal.hpp>
+#include <cch/tui/RawInputListener.hpp>
 #include <cch/tui/SelectList.hpp>
 #include <cch/tui/SettingsList.hpp>
 #include <cch/tui/Style.hpp>
