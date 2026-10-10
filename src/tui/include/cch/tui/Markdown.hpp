@@ -28,6 +28,7 @@ struct MarkdownStyleConfig {
     MarkdownStyleHook heading{};
     MarkdownStyleHook emphasis{};
     MarkdownStyleHook strong{};
+    MarkdownStyleHook underline{};
     MarkdownStyleHook strikethrough{};
     MarkdownStyleHook inline_code{};
     MarkdownStyleHook code_block{};

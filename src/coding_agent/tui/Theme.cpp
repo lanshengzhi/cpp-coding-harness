@@ -591,6 +591,7 @@ cch::tui::MarkdownStyleConfig LiveTheme::markdown_style() const {
     style.heading = foreground_hook(ThemeToken::MdHeading);
     style.emphasis = [](std::string text) { return attribute_style(3, 23, std::move(text)); };
     style.strong = [](std::string text) { return attribute_style(1, 22, std::move(text)); };
+    style.underline = [](std::string text) { return attribute_style(4, 24, std::move(text)); };
     style.strikethrough = [](std::string text) { return attribute_style(9, 29, std::move(text)); };
     style.inline_code = foreground_hook(ThemeToken::MdCode);
     style.code_block = foreground_hook(ThemeToken::MdCodeBlock);
@@ -601,10 +602,7 @@ cch::tui::MarkdownStyleConfig LiveTheme::markdown_style() const {
     style.horizontal_rule = foreground_hook(ThemeToken::MdHr);
     const auto state = impl_;
     style.link_text = [state](std::string text) {
-        return attribute_style(
-            4,
-            24,
-            apply_style(state, ThemeToken::MdLink, std::move(text), false));
+        return apply_style(state, ThemeToken::MdLink, std::move(text), false);
     };
     style.link_url = foreground_hook(ThemeToken::MdLinkUrl);
     return style;

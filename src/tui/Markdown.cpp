@@ -1,5 +1,6 @@
 #include <cch/tui/Markdown.hpp>
 
+#include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/Utils.hpp>
 
 #include "tui/RenderUtils.hpp"
@@ -51,6 +52,7 @@ enum class StyleRole {
     Quote,
     Emphasis,
     Strong,
+    Underline,
     Strikethrough,
     InlineCode,
     Link,
@@ -352,6 +354,8 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
             return &style.emphasis;
         case StyleRole::Strong:
             return &style.strong;
+        case StyleRole::Underline:
+            return &style.underline;
         case StyleRole::Strikethrough:
             return &style.strikethrough;
         case StyleRole::InlineCode:
@@ -374,11 +378,21 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
     std::string text,
     const std::vector<StyleRole>& roles,
     MarkdownStyleConfig& style) {
+    const auto has_contextual_style = std::any_of(roles.begin(), roles.end(), [](StyleRole role) {
+        return role == StyleRole::Quote || role == StyleRole::Heading;
+    });
     for (auto iterator = roles.rbegin(); iterator != roles.rend(); ++iterator) {
         auto* hook = role_hook(*iterator, style);
         if (hook != nullptr) text = apply_style_hook(*hook, std::move(text));
     }
-    return apply_style_hook(style.text, std::move(text));
+    return has_contextual_style ? text : apply_style_hook(style.text, std::move(text));
+}
+
+[[nodiscard]] std::string role_style_prefix(const std::vector<StyleRole>& roles, MarkdownStyleConfig& style) {
+    constexpr std::string_view kSentinel{"\0", 1};
+    auto styled = apply_roles(std::string{kSentinel}, roles, style);
+    const auto sentinel = styled.find(kSentinel);
+    return sentinel == std::string::npos ? std::string{} : styled.substr(0, sentinel);
 }
 
 [[nodiscard]] std::string plain_inline_text(const InlineNode& node) {
@@ -407,15 +421,17 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
     std::vector<StyleRole> roles,
     MarkdownStyleConfig& style) {
     roles.push_back(StyleRole::Link);
+    roles.push_back(StyleRole::Underline);
     auto label = render_inline_children(node.children, roles, style);
     const auto plain_label = plain_inline_text(node);
     if (style.link) return style.link(std::move(label), node.destination);
+    if (get_image_capabilities().hyperlinks) return hyperlink(label, node.destination);
     auto comparable_destination = node.destination;
     if (comparable_destination.starts_with("mailto:")) comparable_destination.erase(0, 7);
     if (node.autolink || plain_label == node.destination || plain_label == comparable_destination) return label;
     auto destination = std::format(" ({})", node.destination);
     destination = apply_style_hook(style.link_url, std::move(destination));
-    destination = apply_style_hook(style.text, std::move(destination));
+    destination += role_style_prefix(roles, style);
     return label + destination;
 }
 
@@ -432,9 +448,11 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
         case InlineKind::Strong:
             roles.push_back(StyleRole::Strong);
             return render_inline_children(node.children, roles, style);
-        case InlineKind::Code:
-            roles.push_back(StyleRole::InlineCode);
-            return render_inline_children(node.children, roles, style);
+        case InlineKind::Code: {
+            const auto code = plain_inline_text(node);
+            const auto styled_code = apply_style_hook(style.inline_code, code);
+            return styled_code + role_style_prefix(roles, style);
+        }
         case InlineKind::Strikethrough: {
             if (!node.strict_strikethrough) {
                 return apply_roles("~~", roles, style) +
@@ -454,17 +472,22 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
     return {};
 }
 
-[[nodiscard]] std::vector<StyleRole> block_roles(bool heading, bool quote) {
+[[nodiscard]] std::vector<StyleRole> block_roles(bool heading, std::size_t quote_depth) {
     std::vector<StyleRole> roles;
+    for (std::size_t depth = 0; depth < quote_depth; ++depth) {
+        for (int application = 0; application < 2; ++application) {
+            roles.push_back(StyleRole::Quote);
+            roles.push_back(StyleRole::Emphasis);
+        }
+    }
     if (heading) roles.push_back(StyleRole::Heading);
-    if (quote) roles.push_back(StyleRole::Quote);
     return roles;
 }
 
 struct RenderContext {
     MarkdownStyleConfig& style; // must outlive the synchronous render operation
     SyntaxHighlightHook& syntax_highlighter; // must outlive the synchronous render operation
-    bool quoted{false};
+    std::size_t quote_depth{0};
 };
 
 using RenderedLines = support::Expected<std::vector<std::string>>;
@@ -548,12 +571,12 @@ using RenderedLines = support::Expected<std::vector<std::string>>;
     const auto code = block.text.ends_with('\n')
                           ? block.text.substr(0, block.text.size() - 1)
                           : block.text;
-    const auto border_roles = block_roles(false, context.quoted);
+    const auto border_roles = block_roles(false, context.quote_depth);
     auto opening = apply_style_hook(
         context.style.code_block_border,
         std::format("```{}", block.language));
     auto closing = apply_style_hook(context.style.code_block_border, "```");
-    if (context.quoted) {
+    if (!border_roles.empty()) {
         opening = apply_roles(std::move(opening), border_roles, context.style);
         closing = apply_roles(std::move(closing), border_roles, context.style);
     }
@@ -591,7 +614,12 @@ using RenderedLines = support::Expected<std::vector<std::string>>;
     }
     for (const auto& code_line : code_lines) {
         if (auto wrapped = wrap_text(code_line, code_width); wrapped) {
-            for (const auto& line : *wrapped) result.push_back(indent + line);
+            for (const auto& line : *wrapped) {
+                auto rendered_line = indent + line;
+                if (!border_roles.empty())
+                    rendered_line = apply_roles(std::move(rendered_line), border_roles, context.style);
+                result.push_back(std::move(rendered_line));
+            }
         } else {
             return std::unexpected(wrapped.error());
         }
@@ -618,6 +646,8 @@ using RenderedLines = support::Expected<std::vector<std::string>>;
         }
         if (item->task_item) marker += item->task_checked ? "[x] " : "[ ] ";
         auto styled_marker = apply_style_hook(context.style.list_marker, marker);
+        const auto marker_roles = block_roles(false, context.quote_depth);
+        if (!marker_roles.empty()) styled_marker = apply_roles(std::move(styled_marker), marker_roles, context.style);
         auto marker_width = visible_width(styled_marker);
         if (marker_width >= width) {
             styled_marker.clear();
@@ -626,10 +656,8 @@ using RenderedLines = support::Expected<std::vector<std::string>>;
 
         bool wrote_content = false;
         if (!item->inlines.empty()) {
-            const auto item_text = render_inline_children(
-                item->inlines,
-                block_roles(false, context.quoted),
-                context.style);
+            const auto item_text =
+                    render_inline_children(item->inlines, block_roles(false, context.quote_depth), context.style);
             if (auto item_lines = wrap_text(item_text, width - marker_width); item_lines) {
                 if (auto prefixed = add_prefix(
                         *item_lines,
@@ -697,14 +725,14 @@ using RenderedLines = support::Expected<std::vector<std::string>>;
         case BlockKind::Document:
             return render_sequence(block.children, width, context, true);
         case BlockKind::Paragraph: {
-            const auto text = render_inline_children(
-                block.inlines,
-                block_roles(false, context.quoted),
-                context.style);
+            const auto text =
+                    render_inline_children(block.inlines, block_roles(false, context.quote_depth), context.style);
             return wrap_text(text, width);
         }
         case BlockKind::Heading: {
-            auto roles = block_roles(true, context.quoted);
+            auto roles = block_roles(true, context.quote_depth);
+            roles.push_back(StyleRole::Strong);
+            if (block.heading_level == 1) roles.push_back(StyleRole::Underline);
             auto text = render_inline_children(block.inlines, roles, context.style);
             if (block.heading_level >= 3) {
                 text = apply_roles(
@@ -724,18 +752,13 @@ using RenderedLines = support::Expected<std::vector<std::string>>;
         case BlockKind::Code:
             return render_code(block, width, context);
         case BlockKind::Html:
-            return wrap_text(
-                apply_roles(
-                    block.text,
-                    block_roles(false, context.quoted),
-                    context.style),
-                width);
+            return wrap_text(apply_roles(block.text, block_roles(false, context.quote_depth), context.style), width);
         case BlockKind::Quote: {
             constexpr std::string_view kQuotePrefix = "│ ";
             constexpr std::size_t kQuoteWidth = 2;
             const auto prefix_width = kQuoteWidth < width ? kQuoteWidth : 0;
             auto quote_context = context;
-            quote_context.quoted = true;
+            ++quote_context.quote_depth;
             std::vector<std::string> quote_lines;
             if (auto content = render_sequence(
                     block.children,
@@ -747,11 +770,13 @@ using RenderedLines = support::Expected<std::vector<std::string>>;
             } else {
                 return std::unexpected(content.error());
             }
-            const auto styled_prefix = prefix_width == 0
-                                           ? std::string{}
-                                           : apply_style_hook(
-                                                 context.style.quote_border,
-                                                 std::string(kQuotePrefix));
+            auto styled_prefix = prefix_width == 0
+                                         ? std::string{}
+                                         : apply_style_hook(context.style.quote_border, std::string(kQuotePrefix));
+            const auto parent_quote_roles = block_roles(false, context.quote_depth);
+            if (!parent_quote_roles.empty()) {
+                styled_prefix = apply_roles(std::move(styled_prefix), parent_quote_roles, context.style);
+            }
             std::vector<std::string> result;
             for (const auto& line : quote_lines) result.push_back(styled_prefix + line);
             if (result.empty()) result.push_back(std::move(styled_prefix));

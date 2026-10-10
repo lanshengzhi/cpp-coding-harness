@@ -6,6 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "support/RenderedScreen.hpp"
+#include "support/ImageCapabilitiesGuard.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -374,6 +375,152 @@ TEST_CASE("Markdown invalidates content style and highlighter caches", "[tui][ma
     CHECK(rendered_text(*second_highlight, 12).find("cache") != std::string::npos);
     CHECK(second_highlight->lines.at(1).find("\x1b[35m") != std::string::npos);
     CHECK(second_highlight->lines.at(1).find("\x1b[36m") == std::string::npos);
+}
+
+TEST_CASE("Markdown heading roles match frozen pi styling", "[tui][markdown][issue971][compat-pi]") {
+    tui::MarkdownStyleConfig style;
+    style.heading = [](std::string text) { return "\x1b[36m" + text + "\x1b[39m"; };
+    style.strong = [](std::string text) { return "\x1b[1m" + text + "\x1b[22m"; };
+    style.underline = [](std::string text) { return "\x1b[4m" + text + "\x1b[24m"; };
+    style.inline_code = [](std::string text) { return "\x1b[33m" + text + "\x1b[39m"; };
+    tui::Markdown markdown("# H1\n## H2\n# `code` tail", 0, 0, std::move(style));
+
+    const auto lines = markdown.render(24);
+
+    REQUIRE(lines);
+    tui::VirtualTerminal terminal({.columns = 24, .rows = lines->lines.size()});
+    REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
+            [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
+    write_lines(terminal, *lines);
+    const auto* h1 = find_cell(terminal, "H");
+    REQUIRE(h1 != nullptr);
+    CHECK(h1->style.bold);
+    CHECK(h1->style.underline);
+    CHECK(h1->style.fg_color == "36");
+    const auto h2_row = std::find_if(terminal.cells().begin(), terminal.cells().end(), [](const auto& row) {
+        return std::any_of(row.begin(), row.end(), [](const auto& cell) { return cell.grapheme == "2"; });
+    });
+    REQUIRE(h2_row != terminal.cells().end());
+    const auto h2 = std::find_if(h2_row->begin(), h2_row->end(), [](const auto& cell) { return cell.grapheme == "H"; });
+    REQUIRE(h2 != h2_row->end());
+    CHECK(h2->style.bold);
+    CHECK_FALSE(h2->style.underline);
+    CHECK(h2->style.fg_color == "36");
+    const auto* code = find_cell(terminal, "c");
+    REQUIRE(code != nullptr);
+    CHECK(code->style.fg_color == "33");
+    CHECK_FALSE(code->style.bold);
+    CHECK_FALSE(code->style.underline);
+    const auto* tail = find_cell(terminal, "t");
+    REQUIRE(tail != nullptr);
+    CHECK(tail->style.bold);
+    CHECK(tail->style.underline);
+    CHECK(tail->style.fg_color == "36");
+    CHECK(terminal.final_style() == tui::TerminalStyle{});
+}
+
+TEST_CASE("Markdown nested quote styles and OSC links preserve frozen cell attributes",
+        "[tui][markdown][issue971][compat-pi]") {
+    tui::MarkdownStyleConfig style;
+    style.quote = [](std::string text) { return "\x1b[3m" + text + "\x1b[23m"; };
+    style.quote_border = [](std::string text) { return "\x1b[34m" + text + "\x1b[39m"; };
+    style.link_text = [](std::string text) { return "\x1b[34m\x1b[4m" + text + "\x1b[24m\x1b[39m"; };
+    tui::Markdown markdown("> > nested [linked](https://example.com)", 0, 0, std::move(style));
+    const tests::ImageCapabilitiesGuard capabilities({.images = tui::InlineImageProtocol::None, .hyperlinks = true});
+
+    const auto lines = markdown.render(40);
+
+    REQUIRE(lines);
+    tui::VirtualTerminal terminal({.columns = 40, .rows = lines->lines.size()});
+    REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
+            [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
+    write_lines(terminal, *lines);
+    const auto borders = std::count_if(terminal.cells().front().begin(),
+            terminal.cells().front().end(),
+            [](const auto& cell) { return cell.grapheme == "│"; });
+    CHECK(borders == 2);
+    const auto* linked = find_cell(terminal, "l");
+    REQUIRE(linked != nullptr);
+    CHECK(linked->style.hyperlink == "https://example.com");
+    CHECK(linked->style.underline);
+    CHECK(linked->style.italic);
+    CHECK(linked->style.fg_color == "34");
+    CHECK(terminal.final_style() == tui::TerminalStyle{});
+}
+
+TEST_CASE("Markdown streamed code fences match frozen pi at each chunk", "[tui][markdown][issue971][compat-pi]") {
+    constexpr std::size_t kWidth = 40;
+    const std::vector<std::pair<std::string, std::vector<std::string>>> snapshots{
+            {"```cpp\n",
+                    {"\x1b[2m```cpp\x1b[22m                                  ",
+                            "  \x1b[32m\x1b[39m                                      ",
+                            "\x1b[2m```\x1b[22m                                     "}},
+            {"```cpp\nint value = 42;",
+                    {"\x1b[2m```cpp\x1b[22m                                  ",
+                            "  \x1b[32mint value = 42;\x1b[39m                       ",
+                            "\x1b[2m```\x1b[22m                                     "}},
+            {"```cpp\nint value = 42;\n``",
+                    {"\x1b[2m```cpp\x1b[22m                                  ",
+                            "  \x1b[32mint value = 42;\x1b[39m                       ",
+                            "\x1b[2m```\x1b[22m                                     "}},
+            {"```cpp\nint value = 42;\n```",
+                    {"\x1b[2m```cpp\x1b[22m                                  ",
+                            "  \x1b[32mint value = 42;\x1b[39m                       ",
+                            "\x1b[2m```\x1b[22m                                     "}},
+    };
+    tui::Markdown markdown({}, 0, 0, ansi_style());
+    for (const auto& [chunk, expected] : snapshots) {
+        markdown.set_text(chunk);
+
+        const auto lines = markdown.render(kWidth);
+
+        REQUIRE(lines);
+        CHECK(lines->lines == expected);
+        tui::VirtualTerminal terminal({.columns = kWidth, .rows = lines->lines.size()});
+        REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
+                [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
+        write_lines(terminal, *lines);
+        CHECK(terminal.final_style() == tui::TerminalStyle{});
+    }
+}
+
+TEST_CASE("Markdown default text hooks respect empty narrow and padded rendering",
+        "[tui][markdown][issue971][compat-pi]") {
+    tui::Markdown empty(" \n\t", 0, 0, {});
+    const auto empty_lines = empty.render(4);
+    REQUIRE(empty_lines);
+    CHECK(empty_lines->lines.empty());
+
+    tui::MarkdownStyleConfig style;
+    style.text = [](std::string text) { return "\x1b[31m" + text + "\x1b[39m"; };
+    style.heading = [](std::string text) { return "\x1b[36m" + text + "\x1b[39m"; };
+    style.strong = [](std::string text) { return "\x1b[1m" + text + "\x1b[22m"; };
+    style.underline = [](std::string text) { return "\x1b[4m" + text + "\x1b[24m"; };
+    tui::Markdown markdown("plain\n# heading", 1, 1, std::move(style));
+    const auto lines = markdown.render(10);
+    REQUIRE(lines);
+    REQUIRE(lines->lines.size() == 5);
+    tui::VirtualTerminal terminal({.columns = 10, .rows = lines->lines.size()});
+    REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
+            [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
+    write_lines(terminal, *lines);
+    const auto* plain = find_cell(terminal, "p");
+    REQUIRE(plain != nullptr);
+    CHECK(plain->style.fg_color == "31");
+    const auto heading_row = std::find_if(terminal.cells().begin(), terminal.cells().end(), [](const auto& row) {
+        return std::any_of(row.begin(), row.end(), [](const auto& cell) { return cell.grapheme == "h"; });
+    });
+    REQUIRE(heading_row != terminal.cells().end());
+    const auto heading = std::find_if(
+            heading_row->begin(), heading_row->end(), [](const auto& cell) { return cell.grapheme == "h"; });
+    REQUIRE(heading != heading_row->end());
+    CHECK(heading->style.fg_color == "36");
+    CHECK(terminal.final_style() == tui::TerminalStyle{});
+
+    tui::Markdown narrow("word", 0, 0);
+    const auto narrow_lines = narrow.render(1);
+    REQUIRE(narrow_lines);
+    CHECK(narrow_lines->lines == std::vector<std::string>{"w", "o", "r", "d"});
 }
 
 TEST_CASE("Markdown applies configured padding and background to every cell", "[tui][markdown][issue51][spec]") {
