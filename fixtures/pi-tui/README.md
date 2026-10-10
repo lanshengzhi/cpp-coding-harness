@@ -4,7 +4,71 @@
 
 The inventory and gate report below describe historical evidence at `83114817c68f5413e4d7ba6d7003ddc511cd31d2`. [ADR 0067](../../docs/adr/0067-align-the-linux-tui-toolkit-and-native-tui-with-pi-v1-0-4.md) and [#946](https://github.com/lanshengzhi/cpp-coding-harness/issues/946) select the new Named Baseline `pi-v1.0.4`, exact revision `7c10bd4337495ee613f2224843ecdf349b80d1df`, for complete Linux TUI alignment. Historical Deferred classifications and behavioral exemptions do not exempt included capabilities from that target.
 
-[#947](https://github.com/lanshengzhi/cpp-coding-harness/issues/947) introduces the separate named capture/replay runner; [#948](https://github.com/lanshengzhi/cpp-coding-harness/issues/948) accounts for capabilities and actual consumers. Keep existing fixture provenance. A missing, wrong-revision or tampered requested bundle must fail rather than fall back to these fixtures. This routing note supplies no new captured evidence or behavioral acceptance.
+[#947](https://github.com/lanshengzhi/cpp-coding-harness/issues/947) introduces the separate named capture/replay runner; [#948](https://github.com/lanshengzhi/cpp-coding-harness/issues/948) accounts for capabilities and actual consumers. Keep existing fixture provenance. A missing, wrong-revision or tampered requested bundle must fail rather than fall back to these fixtures. The named bundle below records only the initial runnable evidence slice; it does not accept the remaining toolkit or product capability target.
+
+## Named pi-v1.0.4 evidence runner
+
+[`baselines.json`](baselines.json) selects the exact frozen revision and pins the digest of
+[`bundles/pi-v1.0.4/manifest.json`](bundles/pi-v1.0.4/manifest.json). The manifest binds every
+artifact to its SHA-256 and byte count. Each artifact also carries its baseline, revision,
+source endpoints, timestamp, environment, scenario dimensions, inputs and observed outputs.
+The initial independently captured cases are:
+
+| Family | Frozen observation | Real C++ consumer |
+| --- | --- | --- |
+| `input.json` | `parseKey` press/repeat/release identities; actual Input editing values and submit callbacks (`a`, `b`, Left, `c`, Enter → `acb`) | `PiTuiDifferentialTest` drives the decoder and real focused Input through Tui/VirtualTerminal |
+| `component.json` | Text wrapping, padding and full ANSI output before/after `setText` | `PiTuiDifferentialTest` drives public Text render/mutation |
+| `screen-state.json` | Two regular renderer frames; every cell's grapheme, continuation and style, visible rows, scrollback and cursor position/visibility | `ScreenStateGoldenTest` drives Component/Focusable/Tui over VirtualTerminal |
+
+The screen case changes bold red `red` to underlined green `go` and retains a focused cursor
+at column 2, row 1. A text-only screenshot would miss a wrong style or displaced cursor;
+the replay compares all of them, including erased and empty cells. The frozen test-local
+cursor marker becomes equivalent out-of-band C++ cursor metadata. Palette colors use
+canonical SGR representations. The cell comparison maps xterm's vacant-cell empty string
+and C++'s explicitly padded U+0020 to the same visible blank, retaining every continuation
+bit and style. Viewport strings use xterm's trim-right representation, while complete cell
+comparisons retain all trailing cells and their attributes. Original captured bytes remain
+unchanged; no text, nonblank glyph, style, cursor or geometry is projected away. This initial capture uses no images, OSC 8 links, scrolling,
+real emulator or IME; those require their own later-ticket evidence.
+
+Capture explicitly, from a clean frozen pi checkout with its existing dependencies:
+
+```bash
+PI_CHECKOUT=/absolute/path/to/pi PI_BASELINE=pi-v1.0.4 \
+  /absolute/path/to/pi/node_modules/.bin/tsx fixtures/pi-tui/capture/capture-named-tui.mts
+python3 scripts/tui/evidence.py verify --baseline pi-v1.0.4
+python3 scripts/tui/evidence.py read --baseline pi-v1.0.4 --artifact input.json
+```
+
+A linked worktree must supply `PI_CHECKOUT`; the convenience default is the primary clone's
+sibling `../pi`. Capture requires Linux x86-64/glibc, checks the exact revision and clean
+source tree before importing pi, fixes terminal capability inputs, and executes upstream
+modules rather than reading Pike output. It records Node/glibc versions and hashes the
+capture generator. Extend that generator with each later ticket's independent scenarios
+and artifacts using the same envelope; update the manifest and its registry pin through
+capture, then implement the corresponding public C++ replay. Every bundle must retain
+input, component and screen-state families. Re-capture is explicit and changes timestamp
+and provenance even if the observed values do not change.
+
+The offline `verify`/`read` CLI never captures, imports pi, or selects historical files.
+`read` emits the exact bytes already verified in memory, preventing a verify-then-reopen
+race. Missing bundles, unknown names, wrong revisions, absent metadata, omitted families,
+unrecorded artifacts and digest/size mismatches fail with no artifact bytes on stdout.
+The actual named C++ consumers call this reader; verification is part of replay, not an
+optional preparatory command.
+
+```bash
+python3 tests/tui/PiTuiEvidenceTest.py
+cmake --build --preset vcpkg --target cch_tests_tui -j2
+ctest --preset vcpkg -N -L issue947
+ctest --preset vcpkg -L issue947
+```
+
+The older capture script and root JSON files below retain their original provenance and
+remain explicit historical regression inputs. They cannot satisfy a named pi-v1.0.4 read.
+The old reported exclusions/defaults are historical authority only; ADR 0067 governs the
+new effort. The ADR is an accepted scope record, and the three initial observations are
+runner acceptance, not complete behavioral parity.
 
 ## Historical scoped evidence
 

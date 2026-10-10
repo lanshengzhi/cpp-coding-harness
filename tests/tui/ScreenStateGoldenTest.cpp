@@ -1,3 +1,5 @@
+// Historical root fixtures are explicit regression inputs; named pi-v1.0.4
+// acceptance below uses verified bundle reads and never falls back to them.
 // VirtualTerminal screen-state goldens for the pi-tui completion gate
 // (issue #386, fork-B/renderer evidence): every scenario in
 // `fixtures/pi-tui/screen-state.json` is replayed through the VirtualTerminal
@@ -21,6 +23,7 @@
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "support/Json.hpp"
+#include "support/PiTuiEvidence.hpp"
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_message.hpp>
@@ -31,6 +34,7 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -39,7 +43,7 @@ using namespace cch;
 
 namespace {
 
-[[nodiscard]] support::Expected<support::JsonValue> read_screen_state() {
+[[nodiscard]] support::Expected<support::JsonValue> read_historical_screen_state() {
     const auto path = std::filesystem::path{CCH_SOURCE_DIR} / "fixtures/pi-tui/screen-state.json";
     std::ifstream input{path, std::ios::binary};
     if (!input) {
@@ -488,8 +492,8 @@ public:
 } // namespace
 
 TEST_CASE("VirtualTerminal screen-state goldens match the committed snapshots",
-        "[tui][differential][issue386][compat-pi]") {
-    const auto fixture = read_screen_state();
+        "[tui][differential][issue386][compat-pi][historical-pi]") {
+    const auto fixture = read_historical_screen_state();
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
     const auto& scenarios = root.at("scenarios").get<support::JsonValue::array_t>();
@@ -510,4 +514,131 @@ TEST_CASE("VirtualTerminal screen-state goldens match the committed snapshots",
             CHECK(actual[index] == expected[index].get_string());
         }
     }
+}
+
+namespace {
+
+// The frozen probe uses a test-local Component plus CURSOR_MARKER. This
+// equivalent caller keeps the same geometry as out-of-band cursor metadata.
+class EvidenceLines final : public tui::Component, public tui::Focusable {
+public:
+    EvidenceLines(std::vector<std::string> lines, tui::CursorPosition cursor)
+        : lines_(std::move(lines)), cursor_(cursor) {}
+
+    void set_lines(std::vector<std::string> lines) { lines_ = std::move(lines); }
+    [[nodiscard]] support::Expected<tui::RenderResult> render(std::size_t) override {
+        return tui::RenderResult{.lines = lines_};
+    }
+    void invalidate() override {}
+    void set_focused(bool focused) override { focused_ = focused; }
+    [[nodiscard]] bool focused() const override { return focused_; }
+    [[nodiscard]] std::optional<tui::CursorPosition> cursor_location() const override {
+        return focused_ ? std::optional{cursor_} : std::nullopt;
+    }
+
+private:
+    std::vector<std::string> lines_;
+    tui::CursorPosition cursor_;
+    bool focused_{false};
+};
+
+[[nodiscard]] std::vector<std::string> evidence_strings(const support::JsonValue& value) {
+    std::vector<std::string> strings;
+    for (const auto& entry : value.get_array())
+        strings.push_back(entry.get_string());
+    return strings;
+}
+
+// xterm getChars() represents vacant cells as an empty string; C++ can
+// explicitly pad those same cells with U+0020. Both display one blank cell.
+// Keep every style and continuation bit so this cannot hide colored blanks,
+// clipped wide glyphs, or changed geometry.
+[[nodiscard]] tui::VirtualTerminalCell visual_evidence_cell(tui::VirtualTerminalCell cell) {
+    if (cell.grapheme.empty() && !cell.continuation) cell.grapheme = " ";
+    return cell;
+}
+
+[[nodiscard]] std::vector<std::string> visible_evidence_rows(std::vector<std::string> lines) {
+    // Match xterm's public translateToString(true) row representation. The
+    // complete cell comparison below still checks every trailing cell/style.
+    for (auto& line : lines) {
+        while (!line.empty() && line.back() == ' ')
+            line.pop_back();
+    }
+    return lines;
+}
+
+void check_evidence_frame(const tui::VirtualTerminal& terminal, const support::JsonValue& expected) {
+    CHECK(visible_evidence_rows(terminal.screen()) == visible_evidence_rows(evidence_strings(expected.at("screen"))));
+    CHECK(terminal.scrollback() == evidence_strings(expected.at("scrollback")));
+    const tui::CursorPosition cursor{
+            .column = static_cast<std::size_t>(expected.at("cursor").at("column").get_number()),
+            .row = static_cast<std::size_t>(expected.at("cursor").at("row").get_number()),
+    };
+    CHECK(terminal.cursor() == cursor);
+    CHECK(terminal.modes().cursor_visible == expected.at("cursorVisible").get_boolean());
+    const auto& rows = expected.at("cells").get_array();
+    REQUIRE(terminal.cells().size() == rows.size());
+    for (std::size_t row = 0; row < rows.size(); ++row) {
+        const auto& cells = rows[row].get_array();
+        REQUIRE(terminal.cells()[row].size() == cells.size());
+        for (std::size_t column = 0; column < cells.size(); ++column) {
+            INFO(std::format("cell row={}, column={}", row, column));
+            const auto& cell = cells[column];
+            const auto& style = cell.at("style");
+            const tui::VirtualTerminalCell expected_cell{
+                    .grapheme = cell.at("grapheme").get_string(),
+                    .continuation = cell.at("continuation").get_boolean(),
+                    .style =
+                            {
+                                    .bold = style.at("bold").get_boolean(),
+                                    .dim = style.at("dim").get_boolean(),
+                                    .italic = style.at("italic").get_boolean(),
+                                    .underline = style.at("underline").get_boolean(),
+                                    .blink = style.at("blink").get_boolean(),
+                                    .inverse = style.at("inverse").get_boolean(),
+                                    .hidden = style.at("hidden").get_boolean(),
+                                    .strikethrough = style.at("strikethrough").get_boolean(),
+                                    .fg_color = style.at("fg_color").get_string(),
+                                    .bg_color = style.at("bg_color").get_string(),
+                                    .hyperlink = style.at("hyperlink").get_string(),
+                                    .hyperlink_params = style.at("hyperlink_params").get_string(),
+                            },
+            };
+            CHECK(visual_evidence_cell(terminal.cells()[row][column]) == visual_evidence_cell(expected_cell));
+        }
+    }
+}
+
+} // namespace
+
+TEST_CASE("Named pi-v1.0.4 screen evidence replays all styled cells and focused cursor",
+        "[tui][differential][issue947][compat-pi]") {
+    const auto fixture = tests::read_pi_tui_evidence("screen-state.json");
+    REQUIRE(fixture);
+    const auto& scenario = fixture->at("scenarios").get_array().front();
+    const auto& dimensions = scenario.at("dimensions");
+    tui::VirtualTerminal terminal({
+            .columns = static_cast<std::size_t>(dimensions.at("columns").get_number()),
+            .rows = static_cast<std::size_t>(dimensions.at("rows").get_number()),
+    });
+    tui::Tui host(terminal);
+    const auto& inputs = scenario.at("inputs");
+    const auto& frames = inputs.at("frames").get_array();
+    REQUIRE(frames.size() == 2);
+    auto child = std::make_unique<EvidenceLines>(evidence_strings(frames[0]),
+            tui::CursorPosition{
+                    .column = static_cast<std::size_t>(inputs.at("cursor").at("column").get_number()),
+                    .row = static_cast<std::size_t>(inputs.at("cursor").at("row").get_number()),
+            });
+    auto* pointer = child.get();
+    REQUIRE(host.add_child(std::move(child)));
+    REQUIRE(host.start());
+    REQUIRE(host.set_focus(pointer));
+    REQUIRE(host.render());
+    check_evidence_frame(terminal, scenario.at("expected").at("initial"));
+    pointer->set_lines(evidence_strings(frames[1]));
+    REQUIRE(host.render());
+    check_evidence_frame(terminal, scenario.at("expected").at("changed"));
+    REQUIRE(host.stop());
 }
