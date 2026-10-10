@@ -50,6 +50,7 @@ const capturedAt = new Date().toISOString();
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 const src = (relative: string) => pathToFileURL(path.join(pi, "packages/tui", relative)).href;
 const { parseKey, isKeyRepeat, isKeyRelease, setKittyProtocolActive } = await import(src("src/keys.ts"));
+const { visibleWidth } = await import(src("src/utils.ts"));
 const { Input } = await import(src("src/components/input.ts"));
 const { Text } = await import(src("src/components/text.ts"));
 const { TuiMainScreen } = await import(src("src/tui-main-screen.ts"));
@@ -222,6 +223,51 @@ const capabilityArtifact = envelope([
 	},
 }]);
 
+// Public visible-width and dependent Text/Input placement (#956).
+const narrowText = new Text("काक्ष", 0, 0);
+const narrowInput = new Input();
+narrowInput.setValue("काक्ष");
+const utilsWidthArtifact = envelope([
+	"packages/tui/src/utils.ts:visibleWidth",
+	"packages/tui/src/components/text.ts:render",
+	"packages/tui/src/components/input.ts:render,setValue",
+], [{
+	name: "visible-width-and-narrow-placement",
+	dimensions: { columns: 6, rows: 4 },
+	inputs: {
+		visibleWidth: [
+			{ name: "ka", input: "का", output: visibleWidth("का") },
+			{ name: "ksha", input: "क्ष", output: visibleWidth("क्ष") },
+			{ name: "ka-newline-ksha", input: "का\nक्ष", output: visibleWidth("का\nक्ष") },
+			{ name: "hello-newline-world", input: "hello\nworld", output: visibleWidth("hello\nworld") },
+			{
+				name: "ansi-newline-ansi",
+				input: "\x1b[31mred\x1b[0m\n\x1b[32mtail\x1b[0m",
+				output: visibleWidth("\x1b[31mred\x1b[0m\n\x1b[32mtail\x1b[0m"),
+			},
+			{ name: "emoji-combining-flag", input: "a😀b", output: visibleWidth("a😀b") },
+		],
+		narrowText: { text: "काक्ष", width: 2 },
+		narrowInput: { value: "काक्ष", width: 6 },
+	},
+	expected: {
+		visibleWidth: [
+			{ name: "ka", input: "का", output: visibleWidth("का") },
+			{ name: "ksha", input: "क्ष", output: visibleWidth("क्ष") },
+			{ name: "ka-newline-ksha", input: "का\nक्ष", output: visibleWidth("का\nक्ष") },
+			{ name: "hello-newline-world", input: "hello\nworld", output: visibleWidth("hello\nworld") },
+			{
+				name: "ansi-newline-ansi",
+				input: "\x1b[31mred\x1b[0m\n\x1b[32mtail\x1b[0m",
+				output: visibleWidth("\x1b[31mred\x1b[0m\n\x1b[32mtail\x1b[0m"),
+			},
+			{ name: "emoji-combining-flag", input: "a😀b", output: visibleWidth("a😀b") },
+		],
+		narrowText: { width2: [...narrowText.render(2)], width4: [...narrowText.render(4)] },
+		narrowInput: { width6: [...narrowInput.render(6)] },
+	},
+}]);
+
 // No output is touched before source guards and all observations complete.
 const bundle = path.join(root, selected.bundle);
 mkdirSync(bundle, { recursive: true });
@@ -230,6 +276,7 @@ const artifacts = [
 	["component.json", "component", componentArtifact],
 	["screen-state.json", "screen-state", screenArtifact],
 	["capability-ledger.json", "capability-ledger", capabilityArtifact],
+	["utils-width.json", "utils-width", utilsWidthArtifact],
 ] as const;
 const records = artifacts.map(([file, family, artifact]) => {
 	const bytes = Buffer.from(JSON.stringify(artifact, null, 2) + "\n");

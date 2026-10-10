@@ -2,7 +2,7 @@
   "schema": "pike/tui-evidence/1",
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-10T05:24:14.791Z",
+  "capturedAt": "2026-10-10T06:25:12.161Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -28,14 +28,14 @@
   },
   "generator": {
     "path": "capture/capture-named-tui.mts",
-    "sha256": "0a1aa10d487dc60de657d0f019a8745123dec1aa472ba255b9f7b73d7c56b570"
+    "sha256": "9d44fdeff5d8338d7df6807c9776f85b377e84867f5c5fcd084b9f2ac1cb0e79"
   },
   "artifacts": [
     {
       "path": "input.json",
       "family": "input",
       "bytes": 1697,
-      "sha256": "2f47fc2a8508bb567324ca08c2213fe943560a005440a671cb2018289b833374",
+      "sha256": "b9b200f284810124158270458019ad9aabc1e348b5a78a6c706f0e95649462c1",
       "sourceEndpoints": [
         "packages/tui/src/keys.ts:parseKey,isKeyRepeat,isKeyRelease",
         "packages/tui/src/components/input.ts:handleInput,getValue,onSubmit"
@@ -45,7 +45,7 @@
       "path": "component.json",
       "family": "component",
       "bytes": 1239,
-      "sha256": "69c792ffc5d865123c39ca07b2dbd0e26589fe91ed6e2da2d445282402a912f2",
+      "sha256": "4cd76c22cf067b5bfd1db8637376cadcb63db161257de6a759ec556024165620",
       "sourceEndpoints": [
         "packages/tui/src/components/text.ts:render,setText"
       ]
@@ -54,7 +54,7 @@
       "path": "screen-state.json",
       "family": "screen-state",
       "bytes": 113420,
-      "sha256": "930827724228762e74b12fa72bcd4eb1bf8fad37172e9f55587a992dd1ba8570",
+      "sha256": "36e63f9ed0437e59dd81acb0ee7baa4b0e0d758ef774efb67c62494ffbf2612c",
       "sourceEndpoints": [
         "packages/tui/src/tui-main-screen.ts:TuiMainScreen.renderNow",
         "packages/tui/src/tui.ts:setFocus,CURSOR_MARKER",
@@ -66,9 +66,20 @@
       "path": "capability-ledger.json",
       "family": "capability-ledger",
       "bytes": 13980,
-      "sha256": "28a432ae0517e7d057643125effa6917b2ecfee6ecc621f9659c8d95f4f1a8a4",
+      "sha256": "756ffeb740390c53ab111e607dc72efaf07d52dd84ef939cc67252bb080888f7",
       "sourceEndpoints": [
         "packages/tui/src/index.ts:export-surface"
+      ]
+    },
+    {
+      "path": "utils-width.json",
+      "family": "utils-width",
+      "bytes": 3110,
+      "sha256": "3966ff5278646b5f37e100d4aa58e8a864581d1831e34df1991f9cb902d31f67",
+      "sourceEndpoints": [
+        "packages/tui/src/utils.ts:visibleWidth",
+        "packages/tui/src/components/text.ts:render",
+        "packages/tui/src/components/input.ts:render,setValue"
       ]
     }
   ]

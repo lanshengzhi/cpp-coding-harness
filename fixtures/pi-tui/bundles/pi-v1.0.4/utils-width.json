@@ -1,0 +1,132 @@
+{
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-10T06:25:12.161Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/utils.ts:visibleWidth",
+    "packages/tui/src/components/text.ts:render",
+    "packages/tui/src/components/input.ts:render,setValue"
+  ],
+  "scenarios": [
+    {
+      "name": "visible-width-and-narrow-placement",
+      "dimensions": {
+        "columns": 6,
+        "rows": 4
+      },
+      "inputs": {
+        "visibleWidth": [
+          {
+            "name": "ka",
+            "input": "का",
+            "output": 2
+          },
+          {
+            "name": "ksha",
+            "input": "क्ष",
+            "output": 2
+          },
+          {
+            "name": "ka-newline-ksha",
+            "input": "का\nक्ष",
+            "output": 4
+          },
+          {
+            "name": "hello-newline-world",
+            "input": "hello\nworld",
+            "output": 10
+          },
+          {
+            "name": "ansi-newline-ansi",
+            "input": "\u001b[31mred\u001b[0m\n\u001b[32mtail\u001b[0m",
+            "output": 7
+          },
+          {
+            "name": "emoji-combining-flag",
+            "input": "a😀b",
+            "output": 4
+          }
+        ],
+        "narrowText": {
+          "text": "काक्ष",
+          "width": 2
+        },
+        "narrowInput": {
+          "value": "काक्ष",
+          "width": 6
+        }
+      },
+      "expected": {
+        "visibleWidth": [
+          {
+            "name": "ka",
+            "input": "का",
+            "output": 2
+          },
+          {
+            "name": "ksha",
+            "input": "क्ष",
+            "output": 2
+          },
+          {
+            "name": "ka-newline-ksha",
+            "input": "का\nक्ष",
+            "output": 4
+          },
+          {
+            "name": "hello-newline-world",
+            "input": "hello\nworld",
+            "output": 10
+          },
+          {
+            "name": "ansi-newline-ansi",
+            "input": "\u001b[31mred\u001b[0m\n\u001b[32mtail\u001b[0m",
+            "output": 7
+          },
+          {
+            "name": "emoji-combining-flag",
+            "input": "a😀b",
+            "output": 4
+          }
+        ],
+        "narrowText": {
+          "width2": [
+            "का",
+            "क्ष"
+          ],
+          "width4": [
+            "काक्ष"
+          ]
+        },
+        "narrowInput": {
+          "width6": [
+            "> \u001b[7mका\u001b[27mक्ष"
+          ]
+        }
+      }
+    }
+  ]
+}

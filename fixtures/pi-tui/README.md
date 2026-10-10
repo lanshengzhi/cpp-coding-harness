@@ -395,7 +395,7 @@ decode layer dropped `$`-final legacy shift sequences (`\x1b[2$` … `\x1b[8$`) 
 (`detail::printable_text`); all three now carry regression rows in `TuiTest`/`EditorTest` and are
 pinned by the input-decode corpus. The `truncate_text` ellipsis now always carries pi's `\x1b[0m`
 resets. Recorded renderer-side divergences (documented in the README rows above): pi's multi-line
-`visibleWidth` sums graphemes where the C++ widest-line reading is the deliberate C++ idiom; the
+`visibleWidth` sums graphemes across newlines; C++ `visible_width` matches that sum (issue #956); the
 `truncate_text` fits path closes underline/hyperlink before padding where pi pads inside the
 still-open span (`truncateToWidth("\x1b[4mabc", 8, "", true)` is `"\x1b[4mabc     "` in pi and
 `"\x1b[4mabc\x1b[24m     "` here); a zero-width control staged immediately after visible content
