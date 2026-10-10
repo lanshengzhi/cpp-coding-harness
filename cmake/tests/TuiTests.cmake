@@ -34,6 +34,7 @@ include_guard(GLOBAL)
         tests/tui/MarkdownTest.cpp
         tests/tui/OverlayTest.cpp
         tests/tui/OverlayCompositorTest.cpp
+        tests/tui/PasteNormalizationTest.cpp
         tests/tui/PiTuiDifferentialTest.cpp
         tests/tui/ProcessTerminalTest.cpp
         tests/tui/RenderDifferentialTest.cpp

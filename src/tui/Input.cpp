@@ -23,7 +23,7 @@ namespace {
 
 // Behavioral baseline: pi 83114817 packages/tui/src/components/input.ts
 // (horizontal-scroll windowing with the cursor-at-end column reservation,
-// bracketed-paste cleaning, kill ring with accumulate/prepend ordering,
+// bracketed-paste normalization, kill ring with accumulate/prepend ordering,
 // undo with typing coalescing, word navigation, and the submit/escape sink
 // routing). Pasted control characters are dropped per this repository's
 // decoded-event hygiene, matching Editor::paste; word navigation uses the
@@ -99,39 +99,12 @@ struct Input::Impl {
     }
 
     void handle_paste(std::string_view text) {
-        // Single-line cleaning (pi's handlePaste): CRLF/lone CR/lone LF are
-        // removed, tabs expand to four spaces. Remaining C0/C1/DEL control
-        // characters are dropped per this repository's decoded-event hygiene
-        // (matching Editor::paste).
-        std::string cleaned;
-        for (std::size_t index = 0; index < text.size();) {
-            const auto [codepoint, bytes] = detail::decode_utf8(text, index);
-            if (bytes == 0) {
-                ++index;
-                continue;
-            }
-            if (codepoint == '\r') {
-                index += bytes;
-                if (index < text.size() && text[index] == '\n') ++index;
-                continue;
-            }
-            if (codepoint == '\n') {
-                index += bytes;
-                continue;
-            }
-            if (codepoint == '\t') {
-                cleaned += "    ";
-                index += bytes;
-                continue;
-            }
-            if (codepoint < 0x20 || codepoint == 0x7f || (codepoint >= 0x80 && codepoint <= 0x9f)) {
-                index += bytes;
-                continue;
-            }
-            cleaned.append(text.substr(index, bytes));
-            index += bytes;
-        }
-        buffer.insert_text(cleaned);
+        // The single-line target applies pi's `handlePaste` normalization
+        // through the shared insertion path: CR/CRLF/LF are dropped, tabs
+        // expand to four spaces, control bytes (including `CSI u` control
+        // replies) resolve or drop, and a pasted path gains its separating
+        // space. It stays a single undo step.
+        buffer.insert_paste(std::string(text));
     }
 
     struct VisibleWindow {
