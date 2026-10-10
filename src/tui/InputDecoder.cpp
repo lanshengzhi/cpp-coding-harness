@@ -35,6 +35,16 @@ static_assert(kShiftModifier == 1 && kAltModifier == 2 && kCtrlModifier == 4 && 
         "CSI-u modifier bits must match pi keys.ts MODIFIERS");
 constexpr unsigned int kLockModifiers = 64 + 128;
 
+// Adjacent-literal spelling: `\x1bb` would swallow `b` into the hex escape.
+constexpr std::string_view kEscLowerB = "\x1b"
+                                        "b";
+constexpr std::string_view kEscLowerF = "\x1b"
+                                        "f";
+constexpr std::string_view kEscUpperB = "\x1b"
+                                        "B";
+constexpr std::string_view kEscUpperF = "\x1b"
+                                        "F";
+
 struct ParsedModifiers {
     bool ctrl{false};
     bool shift{false};
@@ -346,8 +356,8 @@ std::optional<KeyEvent> parse_legacy_sequence(std::string_view sequence) {
     if (sequence == "\x1b[8^") return *parse_key_id("ctrl+end");
     if (sequence == "\x1b[e") return *parse_key_id("shift+clear");
     if (sequence == "\x1bOe") return *parse_key_id("ctrl+clear");
-    if (sequence == "\x1b" "B" || sequence == "\x1b" "b") return *parse_key_id("alt+left");
-    if (sequence == "\x1b" "F" || sequence == "\x1b" "f") return *parse_key_id("alt+right");
+    if (sequence == kEscLowerB) return *parse_key_id("alt+left");
+    if (sequence == kEscLowerF) return *parse_key_id("alt+right");
     if (sequence == "\x1bp") return *parse_key_id("alt+up");
     if (sequence == "\x1bn") return *parse_key_id("alt+down");
     if (sequence == "\x1bOM") return *parse_key_id("enter");
@@ -412,7 +422,9 @@ std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence, bool kitty
         }
     }
 
-    if (sequence.size() >= 2 && sequence.front() == '\x1b') {
+    if (!kitty_protocol_active && sequence == kEscUpperB) return *parse_key_id("alt+left");
+    if (!kitty_protocol_active && sequence == kEscUpperF) return *parse_key_id("alt+right");
+    if (!kitty_protocol_active && sequence.size() >= 2 && sequence.front() == '\x1b') {
         const auto key = parse_raw_sequence(sequence.substr(1), kitty_protocol_active);
         if (!key) return std::nullopt;
         auto modified = *key;
@@ -869,7 +881,6 @@ StreamDecodeResult TerminalStreamDecoder::flush() {
 
 void TerminalStreamDecoder::reset() {
     pending_.clear();
-    pending_kitty_printable_codepoint_.reset();
     discard_mode_ = EscapeDiscardMode::None;
     discard_saw_escape_ = false;
     paste_mode_ = false;
@@ -943,31 +954,7 @@ void TerminalStreamDecoder::drain(StreamDecodeResult& result, bool end_of_feed) 
             if (is_mouse_control_sequence(sequence)) continue;
         }
         result.forwarded_input += sequence;
-        if (sequence.size() == 1 && pending_kitty_printable_codepoint_.has_value()) {
-            const auto raw_codepoint = static_cast<unsigned char>(sequence.front());
-            if (raw_codepoint == *pending_kitty_printable_codepoint_) {
-                pending_kitty_printable_codepoint_.reset();
-                continue;
-            }
-        }
-        pending_kitty_printable_codepoint_.reset();
         if (auto key = parse_raw_sequence(sequence, kitty_protocol_active_)) {
-            if (sequence.starts_with("\x1b[") && sequence.ends_with('u')) {
-                // If it's a Kitty CSI-u printable sequence without complex modifiers, record for suppression
-                const auto body = sequence.substr(2, sequence.size() - 3);
-                const auto semicolon = body.find(';');
-                if (semicolon == std::string_view::npos || body.substr(semicolon + 1) == "1" ||
-                        body.substr(semicolon + 1).empty()) {
-                    const auto key_part = body.substr(0, semicolon);
-                    const auto key_parts = split(key_part, ':');
-                    if (!key_parts.empty()) {
-                        const auto cp = parse_number(key_parts[0]);
-                        if (cp.valid && cp.value >= 32) {
-                            pending_kitty_printable_codepoint_ = cp.value;
-                        }
-                    }
-                }
-            }
             result.events.emplace_back(std::move(*key));
         }
     }

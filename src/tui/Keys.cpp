@@ -5,6 +5,7 @@
 #include <cch/support/Error.hpp>
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <optional>
 #include <string>
 
@@ -33,6 +34,68 @@ std::string normalize_key(std::string_view key) {
     if (normalized == "pageup") return "pageUp";
     if (normalized == "pagedown") return "pageDown";
     return normalized;
+}
+
+struct ParsedCodepoint {
+    unsigned int value{0};
+    bool valid{false};
+};
+
+ParsedCodepoint parse_codepoint(std::string_view text) {
+    if (text.empty()) return {};
+    unsigned int value = 0;
+    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+    return ParsedCodepoint{
+            .value = value,
+            .valid = error == std::errc{} && end == text.data() + text.size(),
+    };
+}
+
+std::optional<std::string> encoded_codepoint(unsigned int codepoint) {
+    std::string encoded;
+    if (codepoint <= 0x7f) {
+        encoded.push_back(static_cast<char>(codepoint));
+    } else if (codepoint <= 0x7ff) {
+        encoded.push_back(static_cast<char>(0xc0 | (codepoint >> 6)));
+        encoded.push_back(static_cast<char>(0x80 | (codepoint & 0x3f)));
+    } else if (codepoint <= 0xffff && (codepoint < 0xd800 || codepoint > 0xdfff)) {
+        encoded.push_back(static_cast<char>(0xe0 | (codepoint >> 12)));
+        encoded.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3f)));
+        encoded.push_back(static_cast<char>(0x80 | (codepoint & 0x3f)));
+    } else if (codepoint <= 0x10ffff) {
+        encoded.push_back(static_cast<char>(0xf0 | (codepoint >> 18)));
+        encoded.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3f)));
+        encoded.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3f)));
+        encoded.push_back(static_cast<char>(0x80 | (codepoint & 0x3f)));
+    } else {
+        return std::nullopt;
+    }
+    return encoded;
+}
+
+std::optional<std::string> parse_bare_kitty_printable(std::string_view sequence) {
+    if (!sequence.starts_with("\x1b[") || !sequence.ends_with('u')) return std::nullopt;
+    const auto body = sequence.substr(2, sequence.size() - 3);
+    if (body.find(';') != std::string_view::npos) return std::nullopt;
+    const auto first_separator = body.find(':');
+    const auto codepoint_text = body.substr(0, first_separator);
+    const auto codepoint = parse_codepoint(codepoint_text);
+    if (!codepoint.valid || codepoint.value < 32) return std::nullopt;
+    if (first_separator != std::string_view::npos) {
+        auto alternatives = body.substr(first_separator + 1);
+        const auto second_separator = alternatives.find(':');
+        const auto shifted = alternatives.substr(0, second_separator);
+        if (!shifted.empty() && !parse_codepoint(shifted).valid) return std::nullopt;
+        if (second_separator != std::string_view::npos) {
+            const auto base = alternatives.substr(second_separator + 1);
+            if (base.empty() || !parse_codepoint(base).valid) return std::nullopt;
+        }
+    }
+    return encoded_codepoint(codepoint.value);
+}
+
+std::optional<std::string> kitty_duplicate_text(std::string_view sequence) {
+    return parse_bare_kitty_printable(sequence);
 }
 
 bool is_baseline_key(std::string_view key) {
@@ -134,6 +197,8 @@ bool matches_key(const KeyEvent& event, std::string_view identifier) {
     return parsed && parsed->key == event.key && parsed->ctrl == event.ctrl && parsed->shift == event.shift &&
            parsed->alt == event.alt && parsed->super == event.super;
 }
+
+std::optional<std::string> duplicate_printable_text(std::string_view data) { return kitty_duplicate_text(data); }
 
 std::optional<std::string> printable_text(const KeyEvent& event) {
     // pi `decodePrintableKey`: a repeat inserts the same text as a press;

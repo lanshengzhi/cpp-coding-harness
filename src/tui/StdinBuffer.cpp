@@ -1,4 +1,5 @@
 #include <cch/tui/StdinBuffer.hpp>
+#include <cch/tui/Keys.hpp>
 
 #include <algorithm>
 #include <cctype>
@@ -13,20 +14,6 @@ constexpr std::string_view kPasteStart = "\x1b[200~";
 constexpr std::string_view kPasteEnd = "\x1b[201~";
 
 enum class SequenceStatus { Complete, Incomplete, NotEscape };
-
-[[nodiscard]] std::optional<unsigned int> parse_unmodified_kitty_printable_codepoint(std::string_view sequence) {
-    if (!sequence.starts_with("\x1b[") || !sequence.ends_with('u')) return std::nullopt;
-    const auto body = sequence.substr(2, sequence.size() - 3);
-    const auto semicolon = body.find(';');
-    const auto key_part = semicolon == std::string_view::npos ? body : body.substr(0, semicolon);
-    if (key_part.empty() || !std::ranges::all_of(key_part, [](unsigned char ch) { return std::isdigit(ch); })) {
-        return std::nullopt;
-    }
-    unsigned int codepoint = 0;
-    for (const auto ch : key_part)
-        codepoint = codepoint * 10 + static_cast<unsigned int>(ch - '0');
-    return codepoint >= 32 ? std::optional<unsigned int>{codepoint} : std::nullopt;
-}
 
 [[nodiscard]] SequenceStatus is_complete_csi_sequence(std::string_view data) {
     if (!data.starts_with("\x1b[")) return SequenceStatus::Complete;
@@ -160,14 +147,11 @@ struct ExtractedSequences {
 StdinBuffer::StdinBuffer(StdinBufferOptions options) : options_(options) {}
 
 void StdinBuffer::emit_data_sequence(std::string sequence) {
-    if (sequence.size() == 1) {
-        const auto raw_codepoint = static_cast<unsigned char>(sequence.front());
-        if (pending_kitty_printable_codepoint_.has_value() && raw_codepoint == *pending_kitty_printable_codepoint_) {
-            pending_kitty_printable_codepoint_.reset();
-            return;
-        }
+    if (pending_kitty_printable_text_ && sequence == *pending_kitty_printable_text_) {
+        pending_kitty_printable_text_.reset();
+        return;
     }
-    pending_kitty_printable_codepoint_ = parse_unmodified_kitty_printable_codepoint(sequence);
+    pending_kitty_printable_text_ = duplicate_printable_text(sequence);
     if (data_handler_) data_handler_(std::move(sequence));
 }
 
@@ -200,7 +184,7 @@ void StdinBuffer::process(std::string_view input) {
         const auto remaining = paste_buffer_.substr(end_index + kPasteEnd.size());
         paste_mode_ = false;
         paste_buffer_.clear();
-        pending_kitty_printable_codepoint_.reset();
+        pending_kitty_printable_text_.reset();
         if (paste_handler_) paste_handler_(pasted_content);
         if (!remaining.empty()) process(remaining);
         return;
@@ -213,7 +197,7 @@ void StdinBuffer::process(std::string_view input) {
             for (const auto& sequence : before_paste.sequences)
                 emit_data_sequence(sequence);
         }
-        pending_kitty_printable_codepoint_.reset();
+        pending_kitty_printable_text_.reset();
         buffer_ = buffer_.substr(start_index + kPasteStart.size());
         paste_mode_ = true;
         paste_buffer_ = std::move(buffer_);
@@ -226,7 +210,7 @@ void StdinBuffer::process(std::string_view input) {
         const auto remaining = paste_buffer_.substr(end_index + kPasteEnd.size());
         paste_mode_ = false;
         paste_buffer_.clear();
-        pending_kitty_printable_codepoint_.reset();
+        pending_kitty_printable_text_.reset();
         if (paste_handler_) paste_handler_(pasted_content);
         if (!remaining.empty()) process(remaining);
         return;
@@ -244,7 +228,7 @@ std::vector<std::string> StdinBuffer::flush() {
     if (buffer_.empty()) return {};
     std::vector<std::string> flushed{std::move(buffer_)};
     buffer_.clear();
-    pending_kitty_printable_codepoint_.reset();
+    pending_kitty_printable_text_.reset();
     for (const auto& sequence : flushed)
         emit_data_sequence(sequence);
     return flushed;
@@ -255,7 +239,7 @@ void StdinBuffer::clear() {
     buffer_.clear();
     paste_mode_ = false;
     paste_buffer_.clear();
-    pending_kitty_printable_codepoint_.reset();
+    pending_kitty_printable_text_.reset();
 }
 
 } // namespace cch::tui

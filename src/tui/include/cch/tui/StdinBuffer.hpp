@@ -52,7 +52,7 @@ private:
     std::string buffer_;
     bool paste_mode_{false};
     std::string paste_buffer_;
-    std::optional<unsigned int> pending_kitty_printable_codepoint_;
+    std::optional<std::string> pending_kitty_printable_text_;
     std::chrono::steady_clock::time_point deadline_{std::chrono::steady_clock::time_point::max()};
 };
 

@@ -41,6 +41,7 @@ include_guard(GLOBAL)
         tests/tui/InputTest.cpp
         tests/tui/KeybindingsTest.cpp
         tests/tui/KeysTest.cpp
+        tests/tui/KeysLegacyTest.cpp
 tests/tui/KeysKittyTextTest.cpp
         tests/tui/LatexTest.cpp
         tests/tui/LoaderTest.cpp

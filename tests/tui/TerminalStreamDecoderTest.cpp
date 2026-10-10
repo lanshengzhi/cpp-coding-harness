@@ -5,6 +5,8 @@
 // packages/tui/src (terminal.ts negotiation, terminal-image.ts cell size,
 // terminal-colors.ts appearance, keys.ts parseKey).
 
+#include <cch/tui/StdinBuffer.hpp>
+
 #include "tui/InputDecoder.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -62,15 +64,23 @@ TEST_CASE("stream decoder differentiates newline from submit when Kitty protocol
     }
 }
 
-TEST_CASE("stream decoder suppresses redundant raw printable character following Kitty CSI-u",
-        "[tui][decoder][issue891][spec]") {
+TEST_CASE(
+        "stream decoder parses Kitty events while StdinBuffer owns duplicate suppression", "[tui][decoder][issue951]") {
     tui::detail::TerminalStreamDecoder decoder;
-    // \x1b[97u (Kitty 'a') followed by raw 'a'
     const auto result = decoder.feed("\x1b[97ua");
-    REQUIRE(result.events.size() == 1);
-    const auto* key = std::get_if<tui::KeyEvent>(&result.events.front());
-    REQUIRE(key != nullptr);
-    CHECK(key->key == "a");
+    REQUIRE(result.events.size() == 2);
+    const auto* kitty = std::get_if<tui::KeyEvent>(&result.events.front());
+    const auto* raw = std::get_if<tui::KeyEvent>(&result.events.back());
+    REQUIRE(kitty != nullptr);
+    REQUIRE(raw != nullptr);
+    CHECK(kitty->key == "a");
+    CHECK(raw->key == "a");
+
+    cch::tui::StdinBuffer buffer;
+    std::vector<std::string> sequences;
+    buffer.set_data_handler([&](std::string sequence) { sequences.push_back(std::move(sequence)); });
+    buffer.process("\x1b[97ua");
+    CHECK(sequences == std::vector<std::string>{"\x1b[97u"});
 }
 
 TEST_CASE("stream decoder prefers shifted key in Kitty CSI-u", "[tui][decoder][issue890][spec]") {

@@ -56,6 +56,11 @@ using InputEventVariant = std::variant<KeyEvent, PasteEvent>;
 /// reassembles split reads belongs to the input edge.
 [[nodiscard]] std::optional<KeyEvent> parse_key(std::string_view data, bool kitty_protocol_active);
 
+/// Return the text a Kitty or modifyOtherKeys payload may duplicate through
+/// the legacy input path. This mirrors pi's StdinBuffer filter: only bare
+/// Kitty CSI-u payloads qualify, including alternate-key forms.
+[[nodiscard]] std::optional<std::string> duplicate_printable_text(std::string_view data);
+
 /// The text a key event inserts (pi `decodePrintableKey`). Nothing when the
 /// event carries no printable character: named keys, ctrl/alt/super
 /// combinations and key releases never insert. The terminal text wins;

@@ -125,7 +125,6 @@ private:
     std::string paste_end_candidate_;
     std::size_t paste_original_bytes_{0};
     std::size_t paste_lines_{1};
-    std::optional<unsigned int> pending_kitty_printable_codepoint_;
     bool kitty_protocol_active_{false};
 };
 

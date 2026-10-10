@@ -343,6 +343,7 @@ bool Tui::owns(const Component* component) const {
 
 void Tui::handle_input(std::string input) {
     if (!started_) return;
+    stream_decoder_->set_kitty_protocol_active(terminal_.capabilities().keyboard_protocol == KeyboardProtocol::Kitty);
     if (input.empty()) {
         // ProcessTerminal applies out-of-band responses before delivering the
         // same bytes here; late response fragments are dropped by its flush.
