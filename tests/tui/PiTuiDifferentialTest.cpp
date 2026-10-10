@@ -1,3 +1,5 @@
+// Historical root fixtures are explicit regression inputs; named pi-v1.0.4
+// acceptance below uses verified bundle reads and never falls back to them.
 // Differential tests for the pi-tui completion gate (issue #386): byte-wise
 // comparison of the C++ toolkit surfaces against the committed snapshots
 // under `fixtures/pi-tui/` (input decode, keybinding table, terminal-image
@@ -15,6 +17,10 @@
 // codepoints) are pinned to their C++ outcomes.
 
 #include <cch/tui/Fuzzy.hpp>
+#include <cch/tui/Input.hpp>
+#include <cch/tui/Text.hpp>
+#include <cch/tui/Tui.hpp>
+#include <cch/tui/VirtualTerminal.hpp>
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/TerminalImage.hpp>
@@ -25,6 +31,7 @@
 #include "support/ImageCapabilitiesGuard.hpp"
 #include "tui/InteractionUtils.hpp"
 #include "support/Json.hpp"
+#include "support/PiTuiEvidence.hpp"
 #include "support/RenderedScreen.hpp"
 
 #include <cch/support/Error.hpp>
@@ -45,16 +52,15 @@ using namespace cch;
 
 namespace {
 
-[[nodiscard]] std::filesystem::path fixture_path(std::string_view name) {
+[[nodiscard]] std::filesystem::path historical_fixture_path(std::string_view name) {
     return std::filesystem::path{CCH_SOURCE_DIR} / "fixtures/pi-tui" / name;
 }
 
-[[nodiscard]] support::Expected<support::JsonValue> read_fixture(std::string_view name) {
-    std::ifstream input{fixture_path(name), std::ios::binary};
+[[nodiscard]] support::Expected<support::JsonValue> read_historical_fixture(std::string_view name) {
+    std::ifstream input{historical_fixture_path(name), std::ios::binary};
     if (!input) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "Failed to open pi-tui fixture: " + fixture_path(name).string()));
+        return std::unexpected(support::make_error(support::ErrorCode::Unknown,
+                "Failed to open pi-tui fixture: " + historical_fixture_path(name).string()));
     }
     const std::string json{
         std::istreambuf_iterator<char>{input},
@@ -116,8 +122,9 @@ struct ExpectedKey {
 
 } // namespace
 
-TEST_CASE("input-decode corpus matches the frozen pi parseKey table", "[tui][differential][issue386][compat-pi]") {
-    const auto fixture = read_fixture("input-decode.json");
+TEST_CASE("input-decode corpus matches the frozen pi parseKey table",
+        "[tui][differential][issue386][compat-pi][historical-pi]") {
+    const auto fixture = read_historical_fixture("input-decode.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
     const auto& corpus = root.at("corpus").get<support::JsonValue::array_t>();
@@ -136,8 +143,9 @@ TEST_CASE("input-decode corpus matches the frozen pi parseKey table", "[tui][dif
     }
 }
 
-TEST_CASE("mode-dependent legacy sequences decode to pi's legacy column", "[tui][differential][issue386][compat-pi]") {
-    const auto fixture = read_fixture("input-decode.json");
+TEST_CASE("mode-dependent legacy sequences decode to pi's legacy column",
+        "[tui][differential][issue386][compat-pi][historical-pi]") {
+    const auto fixture = read_historical_fixture("input-decode.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
     const auto& mode_dependent = root.at("modeDependent").get<support::JsonValue::array_t>();
@@ -159,8 +167,9 @@ TEST_CASE("mode-dependent legacy sequences decode to pi's legacy column", "[tui]
     }
 }
 
-TEST_CASE("recorded decode divergences pin the C++ outcomes", "[tui][differential][issue386][compat-pi]") {
-    const auto fixture = read_fixture("input-decode.json");
+TEST_CASE(
+        "recorded decode divergences pin the C++ outcomes", "[tui][differential][issue386][compat-pi][historical-pi]") {
+    const auto fixture = read_historical_fixture("input-decode.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
     const auto& divergences = root.at("divergences").get<support::JsonValue::array_t>();
@@ -197,8 +206,9 @@ TEST_CASE("recorded decode divergences pin the C++ outcomes", "[tui][differentia
     }
 }
 
-TEST_CASE("discarded control sequences produce no key events", "[tui][differential][issue386][compat-pi]") {
-    const auto fixture = read_fixture("input-decode.json");
+TEST_CASE("discarded control sequences produce no key events",
+        "[tui][differential][issue386][compat-pi][historical-pi]") {
+    const auto fixture = read_historical_fixture("input-decode.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
     const auto& discarded = root.at("discarded").get<support::JsonValue::array_t>();
@@ -212,8 +222,9 @@ TEST_CASE("discarded control sequences produce no key events", "[tui][differenti
     }
 }
 
-TEST_CASE("bracketed-paste framing decodes to pi's paste framing", "[tui][differential][issue386][compat-pi]") {
-    const auto fixture = read_fixture("input-decode.json");
+TEST_CASE("bracketed-paste framing decodes to pi's paste framing",
+        "[tui][differential][issue386][compat-pi][historical-pi]") {
+    const auto fixture = read_historical_fixture("input-decode.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
     const auto& paste = root.at("paste").get<support::JsonValue::array_t>();
@@ -239,8 +250,9 @@ TEST_CASE("bracketed-paste framing decodes to pi's paste framing", "[tui][differ
     }
 }
 
-TEST_CASE("chunk-split boundaries reassemble to the full-buffer decode", "[tui][differential][issue386][compat-pi]") {
-    const auto fixture = read_fixture("input-decode.json");
+TEST_CASE("chunk-split boundaries reassemble to the full-buffer decode",
+        "[tui][differential][issue386][compat-pi][historical-pi]") {
+    const auto fixture = read_historical_fixture("input-decode.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
     const auto& chunk_splits = root.at("chunkSplits").get<support::JsonValue::array_t>();
@@ -277,8 +289,9 @@ TEST_CASE("chunk-split boundaries reassemble to the full-buffer decode", "[tui][
     }
 }
 
-TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS", "[tui][differential][issue386][compat-pi]") {
-    const auto fixture = read_fixture("keybindings.json");
+TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS",
+        "[tui][differential][issue386][compat-pi][historical-pi]") {
+    const auto fixture = read_historical_fixture("keybindings.json");
     REQUIRE(fixture);
     const auto& entries = fixture->get<support::JsonValue::array_t>();
 
@@ -310,8 +323,9 @@ TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS", "[tui][diff
     CHECK(assembled == 32);
 }
 
-TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][differential][issue386][compat-pi]") {
-    const auto fixture = read_fixture("image-encoder.json");
+TEST_CASE("terminal-image encoder bytes match the frozen pi encoders",
+        "[tui][differential][issue386][compat-pi][historical-pi]") {
+    const auto fixture = read_historical_fixture("image-encoder.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
 
@@ -412,8 +426,9 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders", "[tui][di
     }
 }
 
-TEST_CASE("width truncate wrap slice strip match the frozen pi utils", "[tui][differential][issue386][compat-pi]") {
-    const auto fixture = read_fixture("utils.json");
+TEST_CASE("width truncate wrap slice strip match the frozen pi utils",
+        "[tui][differential][issue386][compat-pi][historical-pi]") {
+    const auto fixture = read_historical_fixture("utils.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
 
@@ -481,8 +496,9 @@ TEST_CASE("width truncate wrap slice strip match the frozen pi utils", "[tui][di
     }
 }
 
-TEST_CASE("fuzzy match and filter match the frozen pi fuzzy outputs", "[tui][differential][issue386][compat-pi]") {
-    const auto fixture = read_fixture("fuzzy.json");
+TEST_CASE("fuzzy match and filter match the frozen pi fuzzy outputs",
+        "[tui][differential][issue386][compat-pi][historical-pi]") {
+    const auto fixture = read_historical_fixture("fuzzy.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
 
@@ -519,8 +535,9 @@ TEST_CASE("fuzzy match and filter match the frozen pi fuzzy outputs", "[tui][dif
     }
 }
 
-TEST_CASE("markdown rendered output matches the frozen pi component", "[tui][differential][issue386][compat-pi]") {
-    const auto fixture = read_fixture("markdown.json");
+TEST_CASE("markdown rendered output matches the frozen pi component",
+        "[tui][differential][issue386][compat-pi][historical-pi]") {
+    const auto fixture = read_historical_fixture("markdown.json");
     REQUIRE(fixture);
     const auto& root = fixture->get<support::JsonValue::object_t>();
 
@@ -596,4 +613,74 @@ TEST_CASE("markdown rendered output matches the frozen pi component", "[tui][dif
             CHECK(rendered->lines[index] == expected[index].get_string());
         }
     }
+}
+
+TEST_CASE("Named pi-v1.0.4 input evidence replays keys and real input values",
+        "[tui][differential][issue947][compat-pi]") {
+    const auto fixture = tests::read_pi_tui_evidence("input.json");
+    REQUIRE(fixture);
+    const auto& scenario = fixture->at("scenarios").get_array().front();
+    const auto& inputs = scenario.at("inputs");
+    const auto& expected = scenario.at("expected");
+    const auto& sequences = inputs.at("sequences").get_array();
+    const auto& keys = expected.at("keys").get_array();
+    REQUIRE(sequences.size() == keys.size());
+    for (std::size_t index = 0; index < sequences.size(); ++index) {
+        const auto key = decode_key(sequences[index].get_string());
+        REQUIRE(key);
+        CHECK(tui::key_id(*key) == keys[index].at("id").get_string());
+        CHECK(event_type_name(key->type) == keys[index].at("eventType").get_string());
+    }
+    const auto& dimensions = scenario.at("dimensions");
+    tui::VirtualTerminal terminal({
+            .columns = static_cast<std::size_t>(dimensions.at("columns").get_number()),
+            .rows = static_cast<std::size_t>(dimensions.at("rows").get_number()),
+    });
+    tui::Tui host(terminal);
+    std::vector<std::string> submitted;
+    auto input =
+            std::make_unique<tui::Input>(tui::InputOptions{}, [&submitted](std::string value) -> support::ExpectedVoid {
+                submitted.push_back(std::move(value));
+                return {};
+            });
+    auto* pointer = input.get();
+    REQUIRE(host.add_child(std::move(input)));
+    REQUIRE(host.start());
+    REQUIRE(host.set_focus(pointer));
+    const auto& edits = inputs.at("edits").get_array();
+    const auto& values = expected.at("values").get_array();
+    REQUIRE(edits.size() == values.size());
+    for (std::size_t index = 0; index < edits.size(); ++index) {
+        REQUIRE(terminal.inject_input(edits[index].get_string()));
+        CHECK(pointer->value() == values[index].get_string());
+    }
+    const auto& callbacks = expected.at("submitted").get_array();
+    REQUIRE(submitted.size() == callbacks.size());
+    for (std::size_t index = 0; index < callbacks.size(); ++index) {
+        CHECK(submitted[index] == callbacks[index].get_string());
+    }
+    REQUIRE(host.stop());
+}
+
+TEST_CASE("Named pi-v1.0.4 component evidence replays styled text after mutation",
+        "[tui][differential][issue947][compat-pi]") {
+    const auto fixture = tests::read_pi_tui_evidence("component.json");
+    REQUIRE(fixture);
+    const auto& scenario = fixture->at("scenarios").get_array().front();
+    const auto& inputs = scenario.at("inputs");
+    const auto width = static_cast<std::size_t>(scenario.at("dimensions").at("columns").get_number());
+    tui::Text text(inputs.at("text").get_string(),
+            static_cast<std::size_t>(inputs.at("paddingX").get_number()),
+            static_cast<std::size_t>(inputs.at("paddingY").get_number()));
+    const auto check_lines = [](const support::Expected<tui::RenderResult>& actual,
+                                     const support::JsonValue& expected) {
+        REQUIRE(actual);
+        REQUIRE(actual->lines.size() == expected.get_array().size());
+        for (std::size_t index = 0; index < actual->lines.size(); ++index) {
+            CHECK(actual->lines[index] == expected.get_array()[index].get_string());
+        }
+    };
+    check_lines(text.render(width), scenario.at("expected").at("first"));
+    text.set_text(inputs.at("changedText").get_string());
+    check_lines(text.render(width), scenario.at("expected").at("changed"));
 }

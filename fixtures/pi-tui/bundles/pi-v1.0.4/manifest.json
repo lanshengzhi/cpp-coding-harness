@@ -1,0 +1,66 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-10T04:55:26.042Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "generator": {
+    "path": "capture/capture-named-tui.mts",
+    "sha256": "c5da1ce1be033c7fdaca2aa236cc32234d810bf53038b505f640e4d968ef61d0"
+  },
+  "artifacts": [
+    {
+      "path": "input.json",
+      "family": "input",
+      "bytes": 1697,
+      "sha256": "5645f1d1278610ab52c2461cc8ecdaaf3bbc897af5ceae59616bde848d8197bc",
+      "sourceEndpoints": [
+        "packages/tui/src/keys.ts:parseKey,isKeyRepeat,isKeyRelease",
+        "packages/tui/src/components/input.ts:handleInput,getValue,onSubmit"
+      ]
+    },
+    {
+      "path": "component.json",
+      "family": "component",
+      "bytes": 1239,
+      "sha256": "1c3128f3bf4851dded4b5cf6818cc6a775d227956fa7672bdf832a6494efe8cc",
+      "sourceEndpoints": [
+        "packages/tui/src/components/text.ts:render,setText"
+      ]
+    },
+    {
+      "path": "screen-state.json",
+      "family": "screen-state",
+      "bytes": 113420,
+      "sha256": "80efb475b2cfc2fb4b7aa021cb89b0635b506506901aa352ef5000fc4a9321ff",
+      "sourceEndpoints": [
+        "packages/tui/src/tui-main-screen.ts:TuiMainScreen.renderNow",
+        "packages/tui/src/tui.ts:setFocus,CURSOR_MARKER",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal",
+        "packages/tui/package.json:@xterm/headless"
+      ]
+    }
+  ]
+}

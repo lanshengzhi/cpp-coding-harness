@@ -2,6 +2,12 @@ include_guard(GLOBAL)
 
 # Orchestration include: top-level CMakeLists.txt only (relies on CMAKE_CURRENT_SOURCE_DIR = repo root).
 
+    find_package(Python3 3.12 COMPONENTS Interpreter REQUIRED)
+    add_test(NAME cch_tui_named_evidence_boundary
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/tui/PiTuiEvidenceTest.py)
+    set_tests_properties(cch_tui_named_evidence_boundary PROPERTIES
+        LABELS "tui;differential;issue947;compat-pi")
+
     # TUI
     add_executable(cch_tests_tui
         tests/Catch2Main.cpp
@@ -41,6 +47,7 @@ include_guard(GLOBAL)
 )
     target_compile_definitions(cch_tests_tui PRIVATE
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        CCH_PYTHON3="${Python3_EXECUTABLE}"
 )
     target_compile_options(cch_tests_tui PRIVATE ${CCH_WARNING_OPTIONS})
     catch_discover_tests(cch_tests_tui ADD_TAGS_AS_LABELS)
