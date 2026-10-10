@@ -140,6 +140,87 @@ TEST_CASE("Editor makes a large bracketed paste editable without submitting", "[
     CHECK(editor.expanded_text().empty());
 }
 
+TEST_CASE("Editor uses UTF-16 paste thresholds and counts", "[tui][editor][issue955]") {
+    const auto paste = [](cch::tui::Editor& editor, const std::string& text) {
+        static_cast<void>(editor.handle_input(cch::tui::PasteEvent{
+                .text = text,
+                .original_bytes = text.size(),
+                .lines = 1,
+        }));
+    };
+    const auto bmp_character = std::string{"\xe4\xb8\xad"};
+    std::string four_hundred_bmp;
+    for (std::size_t index = 0; index < 400; ++index)
+        four_hundred_bmp += bmp_character;
+    cch::tui::Editor small_bmp_editor;
+    paste(small_bmp_editor, four_hundred_bmp);
+    CHECK(small_bmp_editor.text() == four_hundred_bmp);
+    CHECK(small_bmp_editor.expanded_text() == four_hundred_bmp);
+
+    const auto astral_character = std::string{"\xf0\x9f\x98\x80"};
+    std::string one_thousand_utf16_units;
+    for (std::size_t index = 0; index < 500; ++index)
+        one_thousand_utf16_units += astral_character;
+    cch::tui::Editor astral_at_threshold_editor;
+    paste(astral_at_threshold_editor, one_thousand_utf16_units);
+    CHECK(astral_at_threshold_editor.text() == one_thousand_utf16_units);
+
+    const auto one_thousand_two_utf16_units = one_thousand_utf16_units + astral_character;
+    cch::tui::Editor astral_above_threshold_editor;
+    paste(astral_above_threshold_editor, one_thousand_two_utf16_units);
+    CHECK(astral_above_threshold_editor.text() == "[paste #1 1002 chars]");
+    CHECK(astral_above_threshold_editor.expanded_text() == one_thousand_two_utf16_units);
+}
+
+TEST_CASE("Editor keeps paste markers numbered through edits and undo", "[tui][editor][issue955]") {
+    const auto first_paste = std::string(1001, 'a');
+    const auto second_paste = std::string(1001, 'b');
+    const auto third_paste = std::string(1001, 'c');
+    std::vector<std::string> submitted;
+    cch::tui::Editor editor({}, {}, [&submitted](std::string text) -> cch::support::ExpectedVoid {
+        submitted.push_back(std::move(text));
+        return {};
+    });
+    const auto paste = [&editor](const std::string& text) {
+        static_cast<void>(editor.handle_input(cch::tui::PasteEvent{
+                .text = text,
+                .original_bytes = text.size(),
+                .lines = 1,
+        }));
+    };
+
+    paste(first_paste);
+    type(editor, "x");
+    paste(second_paste);
+    paste(third_paste);
+    CHECK(editor.text() == "[paste #1 1001 chars]x[paste #2 1001 chars][paste #3 1001 chars]");
+    CHECK(editor.expanded_text() == first_paste + "x" + second_paste + third_paste);
+
+    key(editor, "home");
+    key(editor, "delete");
+    CHECK(editor.text() == "x[paste #1 1001 chars][paste #2 1001 chars]");
+    CHECK(editor.expanded_text() == "x" + second_paste + third_paste);
+
+    key(editor, "delete");
+    CHECK(editor.text() == "[paste #1 1001 chars][paste #2 1001 chars]");
+    CHECK(editor.expanded_text() == second_paste + third_paste);
+
+    key(editor, "-", true);
+    CHECK(editor.text() == "x[paste #1 1001 chars][paste #2 1001 chars]");
+    CHECK(editor.expanded_text() == "x" + second_paste + third_paste);
+    key(editor, "-", true);
+    CHECK(editor.text() == "[paste #1 1001 chars]x[paste #2 1001 chars][paste #3 1001 chars]");
+    CHECK(editor.expanded_text() == first_paste + "x" + second_paste + third_paste);
+
+    key(editor, "end");
+    type(editor, "!");
+    key(editor, "enter");
+    REQUIRE(submitted.size() == 1);
+    CHECK(submitted.front() == first_paste + "x" + second_paste + third_paste + "!");
+    CHECK(editor.text().empty());
+    CHECK(editor.expanded_text().empty());
+}
+
 TEST_CASE("Editor accepts caller supplied command and filesystem suggestions through the async provider",
         "[tui][editor][issue48][issue60][issue383][spec]") {
     class ScriptedProvider final : public cch::tui::AutocompleteProvider {

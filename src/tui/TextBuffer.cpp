@@ -88,12 +88,23 @@ namespace {
     return filtered;
 }
 
+[[nodiscard]] std::size_t utf16_code_unit_count(std::string_view text) {
+    std::size_t count = 0;
+    for (std::size_t index = 0; index < text.size();) {
+        const auto [codepoint, bytes] = decode_utf8(text, index);
+        if (bytes == 0) break;
+        count += codepoint > 0xFFFF ? 2 : 1;
+        index += bytes;
+    }
+    return count;
+}
+
 [[nodiscard]] std::string marker_for(std::size_t id, std::string_view text) {
     const auto lines = static_cast<std::size_t>(std::count(text.begin(), text.end(), '\n')) + 1;
     if (lines > 10) {
         return std::format("[paste #{} +{} lines]", id, lines);
     }
-    return std::format("[paste #{} {} chars]", id, text.size());
+    return std::format("[paste #{} {} chars]", id, utf16_code_unit_count(text));
 }
 
 [[nodiscard]] std::string line_text(const BufferLine& line) {
@@ -383,7 +394,8 @@ void TextBuffer::insert_paste(std::string text) {
     last_action_ = LastAction::None;
 
     const auto line_count = static_cast<std::size_t>(std::count(text.begin(), text.end(), '\n')) + 1;
-    if (options_.multiline && options_.enable_paste_markers && (line_count > 10 || text.size() > 1000)) {
+    if (options_.multiline && options_.enable_paste_markers &&
+            (line_count > 10 || utf16_code_unit_count(text) > 1000)) {
         const auto id = ++paste_counter_;
         pastes_.emplace(id, text);
         const auto marker = marker_for(id, text);

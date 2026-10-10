@@ -174,3 +174,63 @@ TEST_CASE("TextBuffer Paste markers in multiline mode", "[tui][text_buffer][spec
     CHECK(buffer.expanded_text().empty());
     CHECK(buffer.pastes().empty());
 }
+
+TEST_CASE("TextBuffer counts collapsed paste text in UTF-16 units", "[tui][text_buffer][issue955]") {
+    const std::string bmp_character = "\xe4\xb8\xad";
+    std::string four_hundred_bmp;
+    for (std::size_t index = 0; index < 400; ++index)
+        four_hundred_bmp += bmp_character;
+    TextBuffer buffer;
+    buffer.insert_paste(four_hundred_bmp);
+    CHECK(buffer.text() == four_hundred_bmp);
+    CHECK(buffer.expanded_text() == four_hundred_bmp);
+
+    std::string one_thousand_bmp;
+    for (std::size_t index = 0; index < 1000; ++index)
+        one_thousand_bmp += bmp_character;
+    TextBuffer at_character_threshold;
+    at_character_threshold.insert_paste(one_thousand_bmp);
+    CHECK(at_character_threshold.text() == one_thousand_bmp);
+    CHECK(at_character_threshold.expanded_text() == one_thousand_bmp);
+
+    std::string one_thousand_one_bmp = one_thousand_bmp + bmp_character;
+    TextBuffer above_character_threshold;
+    above_character_threshold.insert_paste(one_thousand_one_bmp);
+    CHECK(above_character_threshold.text() == "[paste #1 1001 chars]");
+    CHECK(above_character_threshold.expanded_text() == one_thousand_one_bmp);
+
+    const std::string astral_character = "\xf0\x9f\x98\x80";
+    std::string one_thousand_utf16_units;
+    for (std::size_t index = 0; index < 500; ++index)
+        one_thousand_utf16_units += astral_character;
+    TextBuffer astral_at_character_threshold;
+    astral_at_character_threshold.insert_paste(one_thousand_utf16_units);
+    CHECK(astral_at_character_threshold.text() == one_thousand_utf16_units);
+    CHECK(astral_at_character_threshold.expanded_text() == one_thousand_utf16_units);
+
+    const auto one_thousand_two_utf16_units = one_thousand_utf16_units + astral_character;
+    TextBuffer astral_above_character_threshold;
+    astral_above_character_threshold.insert_paste(one_thousand_two_utf16_units);
+    CHECK(astral_above_character_threshold.text() == "[paste #1 1002 chars]");
+    CHECK(astral_above_character_threshold.expanded_text() == one_thousand_two_utf16_units);
+
+    const auto make_lines = [](std::size_t count) {
+        std::string result;
+        for (std::size_t index = 0; index < count; ++index) {
+            if (index > 0) result += '\n';
+            result += 'x';
+        }
+        return result;
+    };
+    const auto ten_lines = make_lines(10);
+    TextBuffer at_line_threshold;
+    at_line_threshold.insert_paste(ten_lines);
+    CHECK(at_line_threshold.text() == ten_lines);
+    CHECK(at_line_threshold.expanded_text() == ten_lines);
+
+    const auto eleven_lines = make_lines(11);
+    TextBuffer above_line_threshold;
+    above_line_threshold.insert_paste(eleven_lines);
+    CHECK(above_line_threshold.text() == "[paste #1 +11 lines]");
+    CHECK(above_line_threshold.expanded_text() == eleven_lines);
+}
