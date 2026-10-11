@@ -17,8 +17,11 @@
 
 namespace cch::coding_agent::tui {
 
-using SelectListSearchFilter =
-        std::function<std::vector<std::size_t>(std::string_view query, const std::vector<cch::tui::SelectItem>& items)>;
+/// Optional filter callback returns source indexes in display order. The
+/// callback may be move-only and is independent of SelectList's value-prefix
+/// filter.
+using SelectListSearchFilter = std::move_only_function<std::vector<std::size_t>(
+        std::string_view query, const std::vector<cch::tui::SelectItem>& items)>;
 
 /// Selector composition that owns a search Input and passes the ranked rows
 /// into the list-only toolkit SelectList.
@@ -107,6 +110,18 @@ private:
         return no_match_style_(std::move(text));
     }
 
+    [[nodiscard]] std::vector<cch::tui::SelectItem> items_from_indices(const std::vector<std::size_t>& indices) const {
+        std::vector<cch::tui::SelectItem> result;
+        result.reserve(indices.size());
+        std::vector<bool> seen(items_.size(), false);
+        for (const auto index : indices) {
+            if (index >= items_.size() || seen[index]) continue;
+            seen[index] = true;
+            result.push_back(items_[index]);
+        }
+        return result;
+    }
+
     void recompute(bool reset_selection) {
         std::vector<std::size_t> indices;
         if (filter_) {
@@ -124,14 +139,7 @@ private:
             });
         }
 
-        filtered_items_.clear();
-        filtered_items_.reserve(indices.size());
-        std::vector<bool> seen(items_.size(), false);
-        for (const auto index : indices) {
-            if (index >= items_.size() || seen[index]) continue;
-            seen[index] = true;
-            filtered_items_.push_back(items_[index]);
-        }
+        filtered_items_ = items_from_indices(indices);
         list_.set_items(filtered_items_);
         if (reset_selection) list_.set_selected_index(0);
     }

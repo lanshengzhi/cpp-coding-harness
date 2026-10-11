@@ -2,6 +2,8 @@
 
 #include <cch/tui/Utils.hpp>
 
+#include "tui/CompletionContext.hpp"
+#include "tui/FuzzyInternal.hpp"
 #include "tui/InteractionUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
@@ -11,6 +13,7 @@
 #include <cstddef>
 #include <format>
 #include <memory>
+#include <ranges>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -20,7 +23,8 @@
 namespace cch::tui {
 namespace {
 
-// Behavioral baseline: pi 83114817 packages/tui/src/components/select-list.ts.
+// Behavioral baseline: pi v1.0.4 at 7c10bd4337495ee613f2224843ecdf349b80d1df,
+// packages/tui/src/components/select-list.ts.
 constexpr std::size_t kDefaultPrimaryColumnWidth = 32;
 constexpr std::size_t kPrimaryColumnGap = 2;
 constexpr std::size_t kMinDescriptionWidth = 10;
@@ -35,20 +39,19 @@ constexpr std::array<std::string_view, 4> kSelectListActions = {
 [[nodiscard]] std::string single_line(std::string text) {
     std::string result;
     result.reserve(text.size());
-    bool replacing_newline = false;
-    for (const auto& value : text) {
-        if (value == '\r' || value == '\n') {
-            if (!replacing_newline) result.push_back(' ');
-            replacing_newline = true;
-        } else {
-            result.push_back(value);
-            replacing_newline = false;
+    for (std::size_t index = 0; index < text.size();) {
+        if (text[index] == '\r' || text[index] == '\n') {
+            result.push_back(' ');
+            do {
+                ++index;
+            } while (index < text.size() && (text[index] == '\r' || text[index] == '\n'));
+            continue;
         }
+        const auto length = detail::decode_utf8(text, index).second;
+        result.append(text, index, length);
+        index += length;
     }
-    const auto first = result.find_first_not_of(" \t");
-    if (first == std::string::npos) return {};
-    const auto last = result.find_last_not_of(" \t");
-    return result.substr(first, last - first + 1);
+    return std::string(detail::trim_completion_whitespace(result));
 }
 
 [[nodiscard]] std::string_view display_value(const SelectItem& item) {
@@ -72,7 +75,9 @@ std::string select_item_search_text(const SelectItem& item) {
 }
 
 struct SelectList::Impl {
+    std::vector<SelectItem> source_items;
     std::vector<SelectItem> items;
+    std::string filter;
     std::size_t selected_index{0};
     std::size_t max_visible{5};
     SelectListTheme theme;
@@ -94,7 +99,8 @@ struct SelectList::Impl {
         const auto* item = selected();
         auto sink = on_selection_change;
         if (item == nullptr || !sink || !*sink) return;
-        if (auto observed = (*sink)(*item); !observed) {
+        const auto item_snapshot = *item;
+        if (auto observed = (*sink)(item_snapshot); !observed) {
             callback_error = std::move(observed.error());
         }
     }
@@ -181,6 +187,7 @@ struct SelectList::Impl {
 
 SelectList::SelectList(std::vector<SelectItem> items, SelectListOptions options)
     : impl_(std::make_shared<Impl>()) {
+    impl_->source_items = items;
     impl_->items = std::move(items);
     impl_->max_visible = std::max<std::size_t>(1, options.max_visible);
     impl_->theme = std::move(options.theme);
@@ -200,24 +207,43 @@ SelectList::~SelectList() = default;
 
 void SelectList::set_items(std::vector<SelectItem> items) {
     auto impl = impl_;
+    const auto prior_index = impl->selected_index;
     const auto prior_value =
             impl->selected() == nullptr ? std::nullopt : std::optional<std::string>{impl->selected()->value};
-    const auto prior_index = impl->selected_index;
-    impl->items = std::move(items);
-    if (impl->items.empty()) {
-        impl->selected_index = 0;
-        return;
+    impl->source_items = std::move(items);
+    auto replacement = impl->source_items;
+    const auto prefix = detail::lowercase_text(impl->filter);
+    if (!prefix.empty()) {
+        std::erase_if(replacement,
+                [&prefix](const SelectItem& item) { return !detail::lowercase_text(item.value).starts_with(prefix); });
     }
+    impl->items = std::move(replacement);
+    impl->selected_index = 0;
+    if (impl->items.empty()) return;
     if (prior_value) {
-        for (std::size_t index = 0; index < impl->items.size(); ++index) {
-            if (impl->items[index].value == *prior_value) {
-                impl->selected_index = index;
-                return;
-            }
+        const auto found = std::ranges::find(impl->items, *prior_value, &SelectItem::value);
+        if (found != impl->items.end()) {
+            impl->selected_index = static_cast<std::size_t>(found - impl->items.begin());
+            return;
         }
     }
     impl->selected_index = std::min(prior_index, impl->items.size() - 1);
 }
+
+void SelectList::set_filter(std::string filter) {
+    auto impl = impl_;
+    const auto prefix = detail::lowercase_text(filter);
+    auto replacement = impl->source_items;
+    if (!prefix.empty()) {
+        std::erase_if(replacement,
+                [&prefix](const SelectItem& item) { return !detail::lowercase_text(item.value).starts_with(prefix); });
+    }
+    impl->filter = std::move(filter);
+    impl->items = std::move(replacement);
+    impl->selected_index = 0;
+}
+
+std::vector<SelectItem> SelectList::filtered_items() const { return impl_->items; }
 
 void SelectList::set_selected_index(std::size_t index) {
     auto impl = impl_;
@@ -295,7 +321,8 @@ InputAdmissionOutcome SelectList::handle_input(const InputEventVariant& input) {
         const auto* item = impl->selected();
         auto sink = impl->on_select;
         if (item == nullptr || !sink || !*sink) return InputAdmissionOutcome::Consumed;
-        if (auto selected = (*sink)(*item); !selected) {
+        const auto item_snapshot = *item;
+        if (auto selected = (*sink)(item_snapshot); !selected) {
             impl->callback_error = std::move(selected.error());
         }
         return InputAdmissionOutcome::Consumed;

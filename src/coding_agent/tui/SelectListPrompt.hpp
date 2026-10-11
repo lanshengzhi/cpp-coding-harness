@@ -20,9 +20,7 @@ public:
             std::string hint,
             cch::tui::TextStyleHook border_style,
             std::unique_ptr<cch::tui::Component> list)
-        : title_(std::move(title), 0, 0), hint_(std::move(hint), 0, 0), content_(std::move(list)),
-          input_handler_(dynamic_cast<cch::tui::InputHandler*>(content_.get())),
-          focusable_(dynamic_cast<cch::tui::Focusable*>(content_.get())) {
+        : title_(std::move(title), 0, 0), hint_(std::move(hint), 0, 0), content_(std::move(list)) {
         auto shared_style = std::make_shared<cch::tui::TextStyleHook>(std::move(border_style));
         const auto make_border_style = [shared_style](std::string line) {
             return *shared_style ? (*shared_style)(std::move(line)) : std::move(line);
@@ -62,17 +60,26 @@ public:
     }
 
     [[nodiscard]] cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override {
-        return input_handler_ != nullptr ? input_handler_->handle_input(input)
-                                         : cch::tui::InputAdmissionOutcome::Unhandled;
+        if (auto* input_handler = dynamic_cast<cch::tui::InputHandler*>(content_.get()); input_handler != nullptr) {
+            return input_handler->handle_input(input);
+        }
+        return cch::tui::InputAdmissionOutcome::Unhandled;
     }
 
     void set_focused(bool focused) override {
-        if (focusable_ != nullptr) focusable_->set_focused(focused);
+        if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(content_.get()); focusable != nullptr) {
+            focusable->set_focused(focused);
+        }
     }
-    [[nodiscard]] bool focused() const override { return focusable_ != nullptr && focusable_->focused(); }
+
+    [[nodiscard]] bool focused() const override {
+        const auto* focusable = dynamic_cast<const cch::tui::Focusable*>(content_.get());
+        return focusable != nullptr && focusable->focused();
+    }
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
-        if (focusable_ == nullptr) return std::nullopt;
-        const auto cursor = focusable_->cursor_location();
+        const auto* focusable = dynamic_cast<const cch::tui::Focusable*>(content_.get());
+        if (focusable == nullptr) return std::nullopt;
+        const auto cursor = focusable->cursor_location();
         if (!cursor) return std::nullopt;
         return cch::tui::CursorPosition{
                 .column = cursor->column,
@@ -86,8 +93,6 @@ private:
     std::unique_ptr<cch::tui::Component> content_;
     std::unique_ptr<DynamicBorder> top_border_;
     std::unique_ptr<DynamicBorder> bottom_border_;
-    cch::tui::InputHandler* input_handler_;
-    cch::tui::Focusable* focusable_;
     std::size_t list_row_offset_{0};
 };
 

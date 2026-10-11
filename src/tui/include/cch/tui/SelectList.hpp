@@ -75,9 +75,14 @@ public:
     SelectList(const SelectList&) = delete;
     SelectList& operator=(const SelectList&) = delete;
 
-    /// Replace the items, preserving the selected value when it remains
-    /// present, or clamping the prior selection position into the new list.
+    /// Replace the full source set while preserving the selected value when it
+    /// remains visible under the current prefix filter.
     void set_items(std::vector<SelectItem> items);
+    /// Filter source items by a value prefix using pi's Unicode lowercase
+    /// mapping. Each call resets selection to the first match.
+    void set_filter(std::string filter);
+    /// The visible items after filtering. The returned vector owns its values.
+    [[nodiscard]] std::vector<SelectItem> filtered_items() const;
     void set_selected_index(std::size_t index);
     [[nodiscard]] std::optional<SelectItem> selected_item() const;
 

@@ -1,5 +1,7 @@
 #include <cch/tui/Fuzzy.hpp>
 
+#include "tui/FuzzyInternal.hpp"
+
 #include <utf8proc.h>
 
 #include <cstddef>
@@ -322,6 +324,10 @@ std::vector<std::string> fuzzy_query_tokens(std::string_view query) {
 }
 
 } // namespace detail
+
+[[nodiscard]] std::string detail::lowercase_text(std::string_view text) {
+    return encode_codepoints(lowercase_characters(text).codepoints);
+}
 
 FuzzyMatch fuzzy_match(std::string_view query, std::string_view text) {
     const auto score = fuzzy_score(query, text);
