@@ -1,5 +1,6 @@
 #include <cch/tui/Markdown.hpp>
 
+#include <cch/tui/Latex.hpp>
 #include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/Utils.hpp>
 
@@ -11,6 +12,7 @@
 #include <utf8proc.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <exception>
 #include <format>
@@ -28,6 +30,7 @@ namespace {
 
 enum class BlockKind {
     Document,
+    Latex,
     Quote,
     UnorderedList,
     OrderedList,
@@ -53,6 +56,7 @@ enum class InlineKind {
     Image,
     Code,
     Strikethrough,
+    Latex,
 };
 
 enum class StyleRole {
@@ -69,11 +73,19 @@ enum class StyleRole {
 struct InlineNode {
     InlineKind kind{InlineKind::Text};
     std::string text;
+    std::string source;
     std::string destination;
+    bool latex_display{false};
+    bool latex_block{false};
+    bool latex_enabled{true};
+    bool latex_pending{false};
     bool autolink{false};
     bool strict_strikethrough{true};
     std::vector<std::unique_ptr<InlineNode>> children;
 };
+
+// Forward declaration used by the math-block promotion below.
+[[nodiscard]] std::string plain_inline_text(const InlineNode& node);
 
 struct BlockNode {
     BlockKind kind{BlockKind::Document};
@@ -85,6 +97,8 @@ struct BlockNode {
     bool tight_list{true};
     bool task_item{false};
     bool task_checked{false};
+    bool latex_pending{false};
+    bool latex_display{false};
     std::string language;
     std::string raw;
     std::string text;
@@ -92,8 +106,26 @@ struct BlockNode {
     std::vector<std::unique_ptr<BlockNode>> children;
 };
 
+struct MathToken {
+    std::string marker;
+    std::string source;
+    std::string text;
+    bool display{false};
+    bool block{false};
+    bool pending{false};
+};
+
+struct ProtectedMarkdown {
+    std::string text;
+    std::vector<MathToken> math_tokens;
+};
+
+void append_math_token(ProtectedMarkdown& protected_markdown, MathToken token);
+void scan_pending_display_math(std::string_view source_tail, ProtectedMarkdown& protected_markdown);
+
 struct ParseState {
     BlockNode root;
+    std::vector<MathToken> math_tokens;
     std::vector<BlockNode*> blocks; // point into root and must not outlive the synchronous parse
     std::vector<InlineNode*> inlines; // point into root and must not outlive the synchronous parse
     std::vector<bool> strict_strikethrough;
@@ -207,9 +239,10 @@ struct ParseState {
         case MD_SPAN_IMG:
             return InlineKind::Image;
         case MD_SPAN_CODE:
+            return InlineKind::Code;
         case MD_SPAN_LATEXMATH:
         case MD_SPAN_LATEXMATH_DISPLAY:
-            return InlineKind::Code;
+            return InlineKind::Latex;
         case MD_SPAN_DEL:
             return InlineKind::Strikethrough;
         case MD_SPAN_WIKILINK:
@@ -291,6 +324,9 @@ int enter_span(MD_SPANTYPE type, void* detail, void* userdata) noexcept {
         node->destination = attribute_text(static_cast<MD_SPAN_IMG_DETAIL*>(detail)->src);
     } else if (type == MD_SPAN_DEL && state.strikethrough_index < state.strict_strikethrough.size()) {
         node->strict_strikethrough = state.strict_strikethrough[state.strikethrough_index++];
+    } else if (type == MD_SPAN_LATEXMATH || type == MD_SPAN_LATEXMATH_DISPLAY) {
+        node->latex_display = type == MD_SPAN_LATEXMATH_DISPLAY;
+        node->latex_block = node->latex_display;
     }
         auto* node_pointer = node.get();
         if (state.inlines.empty()) {
@@ -313,6 +349,14 @@ int append_text(MD_TEXTTYPE type, const MD_CHAR* text, MD_SIZE size, void* userd
     auto& state = *static_cast<ParseState*>(userdata);
     if (state.blocks.empty()) return 1;
     auto& block = *state.blocks.back();
+    if (!state.inlines.empty() && state.inlines.back()->kind == InlineKind::Latex) {
+        if (type == MD_TEXT_NULLCHAR) {
+            state.inlines.back()->text += "\xef\xbf\xbd";
+        } else {
+            state.inlines.back()->text.append(text, size);
+        }
+        return 0;
+    }
     if (block.kind == BlockKind::Code || block.kind == BlockKind::Html) {
         if (type == MD_TEXT_NULLCHAR) {
             block.text += "\xef\xbf\xbd";
@@ -367,6 +411,341 @@ struct MarkdownFence {
     return true;
 }
 
+[[nodiscard]] bool looks_like_pending_dollar_math(std::string_view source) {
+    constexpr std::string_view kMathCharacters{"_^=+*/<>()[|+-"};
+    constexpr std::array<std::string_view, 12> kUnicodeMathCharacters{
+            "±", "≤", "≥", "≠", "≈", "∈", "→", "⇒", "∞", "∫", "∑", "√"};
+    if (source.find('\\') != std::string_view::npos ||
+            source.find_first_of(kMathCharacters) != std::string_view::npos) {
+        return true;
+    }
+    return std::any_of(kUnicodeMathCharacters.begin(),
+            kUnicodeMathCharacters.end(),
+            [source](std::string_view character) { return source.find(character) != std::string_view::npos; });
+}
+
+[[nodiscard]] bool escaped_math_delimiter(std::string_view source, std::size_t position) {
+    return escaped_at(source, position);
+}
+
+[[nodiscard]] std::size_t find_math_closing(std::string_view source, std::string_view delimiter, std::size_t start) {
+    auto position = source.find(delimiter, start);
+    while (position != std::string_view::npos && escaped_math_delimiter(source, position)) {
+        position = source.find(delimiter, position + delimiter.size());
+    }
+    return position;
+}
+
+void append_math_token(ProtectedMarkdown& protected_markdown, MathToken token) {
+    token.marker = std::format("CCHMATHPLACEHOLDER{}END", protected_markdown.math_tokens.size());
+    protected_markdown.text += token.marker;
+    protected_markdown.math_tokens.push_back(std::move(token));
+}
+
+[[nodiscard]] bool valid_inline_dollar_math(
+        std::string_view source, std::size_t opening_length, std::size_t closing_position) {
+    const auto contents = source.substr(opening_length, closing_position - opening_length);
+    if (contents.empty() || std::isspace(static_cast<unsigned char>(contents.back())) != 0 ||
+            contents.find('`') != std::string_view::npos) {
+        return false;
+    }
+    auto following = closing_position + opening_length;
+    if (following < source.size() && std::isdigit(static_cast<unsigned char>(source[following])) != 0) return false;
+    if (!contents.empty() && std::isupper(static_cast<unsigned char>(contents.front())) != 0 &&
+            std::all_of(contents.begin(),
+                    contents.end(),
+                    [](char character) {
+                        return std::isupper(static_cast<unsigned char>(character)) != 0 || character == '_' ||
+                               std::isdigit(static_cast<unsigned char>(character)) != 0;
+                    }) &&
+            following < source.size() && std::isalpha(static_cast<unsigned char>(source[following])) != 0) {
+        return false;
+    }
+    return true;
+}
+
+void protect_inline_math_line(
+        std::string_view line, ProtectedMarkdown& protected_markdown, std::size_t& code_tick_length) {
+    for (std::size_t index = 0; index < line.size();) {
+        if (line[index] == '`') {
+            std::size_t run = 1;
+            while (index + run < line.size() && line[index + run] == '`')
+                ++run;
+            protected_markdown.text.append(line.substr(index, run));
+            if (code_tick_length == 0) {
+                code_tick_length = run;
+            } else if (code_tick_length == run) {
+                code_tick_length = 0;
+            }
+            index += run;
+            continue;
+        }
+        if (code_tick_length != 0) {
+            protected_markdown.text += line[index++];
+            continue;
+        }
+
+        std::string_view opening;
+        std::string_view closing;
+        if (line[index] == '$' && !escaped_at(line, index)) {
+            const auto opening_length = line.substr(index).starts_with("$$") ? 2U : 1U;
+            if (opening_length == 1 && index + 1 < line.size() &&
+                    std::isspace(static_cast<unsigned char>(line[index + 1])) != 0) {
+                protected_markdown.text += line[index++];
+                continue;
+            }
+            opening = opening_length == 2 ? "$$" : "$";
+            closing = opening;
+        } else if (line[index] == '\\' && index + 1 < line.size() &&
+                   (line[index + 1] == '(' || line[index + 1] == '[') && !escaped_math_delimiter(line, index)) {
+            opening = line[index + 1] == '(' ? "\\(" : "\\[";
+            closing = line[index + 1] == '(' ? "\\)" : "\\]";
+        }
+
+        if (opening.empty()) {
+            if (line[index] == '\\' && index + 1 < line.size() && line[index + 1] == '$') {
+                protected_markdown.text += line[index++];
+                protected_markdown.text += line[index++];
+            } else if (line[index] == '\\' && index + 1 < line.size() && line[index + 1] == '\\' &&
+                       index + 2 < line.size() && (line[index + 2] == '(' || line[index + 2] == '[')) {
+                protected_markdown.text += line[index++];
+                protected_markdown.text += line[index++];
+                protected_markdown.text += line[index++];
+            } else {
+                protected_markdown.text += line[index++];
+            }
+            continue;
+        }
+
+        const auto opening_length = opening.size();
+        const auto closing_position = find_math_closing(line, closing, index + opening_length);
+        if (closing_position != std::string_view::npos && opening == "$" &&
+                !valid_inline_dollar_math(line.substr(index), opening_length, closing_position - index)) {
+            protected_markdown.text += line[index++];
+            continue;
+        }
+        if (closing_position != std::string_view::npos) {
+            const auto text = line.substr(index + opening_length, closing_position - index - opening_length);
+            if (text.empty()) {
+                protected_markdown.text += line[index++];
+                continue;
+            }
+            const auto end = closing_position + closing.size();
+            if (opening == "\\(" || opening == "\\[") {
+                append_math_token(protected_markdown,
+                        MathToken{
+                                {},
+                                std::string{line.substr(index, end - index)},
+                                std::string{text},
+                                opening == "\\[",
+                                opening == "\\[",
+                                false,
+                        });
+            } else {
+                protected_markdown.text.append(line.substr(index, end - index));
+            }
+            index = end;
+            continue;
+        }
+
+        if (opening == "\\(" || opening == "\\[") {
+            const auto pending_text = line.substr(index + opening_length);
+            append_math_token(protected_markdown,
+                    MathToken{
+                            {},
+                            std::string{line.substr(index)},
+                            std::string{pending_text},
+                            opening == "\\[",
+                            opening == "\\[",
+                            true,
+                    });
+            break;
+        }
+        protected_markdown.text += line[index++];
+    }
+}
+
+[[nodiscard]] ProtectedMarkdown protect_markdown_math(std::string_view input) {
+    ProtectedMarkdown result;
+    MarkdownFence fence;
+    std::size_t code_tick_length = 0;
+    std::size_t line_start = 0;
+    while (line_start < input.size()) {
+        const auto newline = input.find('\n', line_start);
+        const auto line_end = newline == std::string_view::npos ? input.size() : newline;
+        const auto line = input.substr(line_start, line_end - line_start);
+        const bool was_fenced = fence.marker != '\0';
+        const bool fence_line = update_markdown_fence(line, fence);
+        if (was_fenced || fence_line) {
+            result.text.append(line);
+        } else {
+            const auto indent = line.find_first_not_of(' ');
+            const auto content_start = indent == std::string_view::npos ? line.size() : indent;
+            const auto content = line.substr(content_start);
+            const bool display_dollar = content.starts_with("$$") && indent <= 3 && !escaped_at(line, content_start);
+            const bool display_bracket =
+                    content.starts_with("\\[") && indent <= 3 && !escaped_math_delimiter(line, content_start);
+            if ((display_dollar || display_bracket) && code_tick_length == 0) {
+                const std::string_view delimiter = display_dollar ? "$$" : "\\[";
+                const std::string_view closing = display_dollar ? "$$" : "\\]";
+                std::size_t closing_line_end = std::string_view::npos;
+                std::size_t closing_position = std::string_view::npos;
+                std::size_t scan_line_start = line_start;
+                while (scan_line_start <= input.size()) {
+                    const auto scan_newline = input.find('\n', scan_line_start);
+                    const auto scan_line_end = scan_newline == std::string_view::npos ? input.size() : scan_newline;
+                    const auto scan_line = input.substr(scan_line_start, scan_line_end - scan_line_start);
+                    auto candidate = scan_line.find(closing);
+                    while (candidate != std::string_view::npos &&
+                            (escaped_math_delimiter(scan_line, candidate) ||
+                                    (scan_line_start == line_start && candidate < content_start + delimiter.size()))) {
+                        candidate = scan_line.find(closing, candidate + closing.size());
+                    }
+                    if (candidate != std::string_view::npos &&
+                            scan_line.substr(candidate + closing.size()).find_first_not_of(" \t\r") ==
+                                    std::string_view::npos) {
+                        closing_line_end = scan_line_end;
+                        closing_position = scan_line_start + candidate;
+                        break;
+                    }
+                    if (scan_newline == std::string_view::npos) break;
+                    scan_line_start = scan_newline + 1;
+                }
+                if (closing_position != std::string_view::npos &&
+                        closing_position >= line_start + content_start + delimiter.size()) {
+                    const auto source_end = closing_line_end < input.size() ? closing_line_end + 1 : closing_line_end;
+                    const auto source = input.substr(line_start, source_end - line_start);
+                    const auto content_start_offset = line_start + content_start + delimiter.size();
+                    const auto content_end = closing_position;
+                    auto text = input.substr(content_start_offset, content_end - content_start_offset);
+                    while (!text.empty() && (text.front() == '\n' || text.front() == '\r'))
+                        text.remove_prefix(1);
+                    auto trimmed_text = text;
+                    while (!trimmed_text.empty() &&
+                            (trimmed_text.back() == '\n' || trimmed_text.back() == '\r' || trimmed_text.back() == ' ' ||
+                                    trimmed_text.back() == '\t')) {
+                        trimmed_text.remove_suffix(1);
+                    }
+                    if (!trimmed_text.empty()) {
+                        if (!result.text.empty() && !result.text.ends_with("\n\n")) {
+                            result.text += result.text.ends_with('\n') ? "\n" : "\n\n";
+                        }
+                        append_math_token(result,
+                                MathToken{
+                                        {},
+                                        std::string{source},
+                                        std::string{trimmed_text},
+                                        true,
+                                        true,
+                                        false,
+                                });
+                        result.text += "\n\n";
+                        line_start = source_end;
+                        code_tick_length = 0;
+                        continue;
+                    }
+                } else {
+                    const auto pending_source = input.substr(line_start);
+                    const auto pending_math = pending_source.substr(content_start + delimiter.size());
+                    if (display_bracket || (!pending_math.empty() && looks_like_pending_dollar_math(pending_math))) {
+                        if (!result.text.empty() && !result.text.ends_with("\n\n")) {
+                            result.text += result.text.ends_with('\n') ? "\n" : "\n\n";
+                        }
+                        append_math_token(result,
+                                MathToken{
+                                        {},
+                                        std::string{pending_source},
+                                        std::string{pending_math},
+                                        true,
+                                        true,
+                                        true,
+                                });
+                        line_start = input.size();
+                        break;
+                    }
+                }
+            }
+            protect_inline_math_line(line, result, code_tick_length);
+        }
+        if (newline != std::string_view::npos) result.text += '\n';
+        if (newline == std::string_view::npos) {
+            scan_pending_display_math(result.text, result);
+            break;
+        }
+        line_start = newline + 1;
+    }
+    return result;
+}
+
+void restore_math_tokens(BlockNode& block, const std::vector<MathToken>& math_tokens) {
+    for (auto& child : block.children)
+        restore_math_tokens(*child, math_tokens);
+    std::vector<std::unique_ptr<InlineNode>> restored;
+    for (auto& node : block.inlines) {
+        if (node->kind != InlineKind::Text) {
+            restored.push_back(std::move(node));
+            continue;
+        }
+        std::size_t position = 0;
+        while (position < node->text.size()) {
+            std::size_t token_position = std::string::npos;
+            const MathToken* matched_token = nullptr;
+            for (const auto& token : math_tokens) {
+                const auto found = node->text.find(token.marker, position);
+                if (found != std::string::npos && found < token_position) {
+                    token_position = found;
+                    matched_token = &token;
+                }
+            }
+            if (matched_token == nullptr) {
+                auto text = std::make_unique<InlineNode>();
+                text->text = node->text.substr(position);
+                restored.push_back(std::move(text));
+                break;
+            }
+            if (token_position > position) {
+                auto text = std::make_unique<InlineNode>();
+                text->text = node->text.substr(position, token_position - position);
+                restored.push_back(std::move(text));
+            }
+            auto math = std::make_unique<InlineNode>();
+            math->kind = InlineKind::Latex;
+            math->text = matched_token->text;
+            math->source = matched_token->source;
+            math->latex_display = matched_token->display;
+            math->latex_block = matched_token->block;
+            math->latex_pending = matched_token->pending;
+            restored.push_back(std::move(math));
+            position = token_position + matched_token->marker.size();
+        }
+        if (node->text.empty()) restored.push_back(std::move(node));
+    }
+    block.inlines = std::move(restored);
+    for (auto& node : block.inlines) {
+        if (node->kind == InlineKind::Latex && node->source.empty()) {
+            const std::string delimiter = node->latex_display ? "$$" : "$";
+            node->source = delimiter + node->text + delimiter;
+        }
+    }
+    for (auto& node : block.inlines) {
+        if (node->kind != InlineKind::Latex) continue;
+        for (auto& child : node->children) {
+            if (child->kind == InlineKind::Text) child->kind = InlineKind::Code;
+        }
+    }
+    if (block.kind != BlockKind::Paragraph || block.inlines.size() != 1 ||
+            block.inlines.front()->kind != InlineKind::Latex || !block.inlines.front()->latex_block) {
+        return;
+    }
+    const auto& math = *block.inlines.front();
+    block.kind = BlockKind::Latex;
+    block.text = math.text;
+    block.raw = math.source;
+    block.latex_display = math.latex_display;
+    block.latex_pending = math.latex_pending;
+    block.inlines.clear();
+}
+
 [[nodiscard]] bool is_table_delimiter(std::string_view line) {
     bool has_pipe = false;
     bool has_dash = false;
@@ -417,14 +796,17 @@ struct MarkdownFence {
     return tables;
 }
 
-[[nodiscard]] support::Expected<BlockNode> parse_markdown(std::string_view text) {
+[[nodiscard]] support::Expected<BlockNode> parse_markdown(
+        std::string_view text, const std::vector<MathToken>& math_tokens, bool render_latex) {
     ParseState state;
+    state.math_tokens = math_tokens;
     state.root.kind = BlockKind::Document;
     state.strict_strikethrough = scan_strikethrough_delimiters(text);
     state.table_raw = raw_tables(text);
     const MD_PARSER parser{
             .abi_version = 0,
-            .flags = MD_FLAG_PERMISSIVEAUTOLINKS | MD_FLAG_STRIKETHROUGH | MD_FLAG_TASKLISTS | MD_FLAG_TABLES,
+            .flags = MD_FLAG_PERMISSIVEAUTOLINKS | MD_FLAG_STRIKETHROUGH | MD_FLAG_TASKLISTS | MD_FLAG_TABLES |
+                     MD_FLAG_LATEXMATHSPANS,
             .enter_block = enter_block,
             .leave_block = leave_block,
             .enter_span = enter_span,
@@ -438,7 +820,23 @@ struct MarkdownFence {
         static_cast<MD_SIZE>(text.size()),
         &parser,
         &state);
-    if (parse_result == 0 && !state.failed) return std::move(state.root);
+    if (parse_result == 0 && !state.failed) {
+        restore_math_tokens(state.root, state.math_tokens);
+        const auto set_latex_enabled = [&](auto&& self, BlockNode& block) -> void {
+            for (auto& node : block.inlines) {
+                const auto set_inline = [&](auto&& inline_self, InlineNode& inline_node) -> void {
+                    if (inline_node.kind == InlineKind::Latex) inline_node.latex_enabled = render_latex;
+                    for (auto& child : inline_node.children)
+                        inline_self(inline_self, *child);
+                };
+                set_inline(set_inline, *node);
+            }
+            for (auto& child : block.children)
+                self(self, *child);
+        };
+        set_latex_enabled(set_latex_enabled, state.root);
+        return std::move(state.root);
+    }
     return std::unexpected(support::make_error(
         support::ErrorCode::Unknown,
         "TUI Markdown parsing failed",
@@ -499,7 +897,7 @@ struct MarkdownFence {
 }
 
 [[nodiscard]] std::string plain_inline_text(const InlineNode& node) {
-    if (node.kind == InlineKind::Text) return node.text;
+    if (node.kind == InlineKind::Text || node.kind == InlineKind::Latex) return node.text;
     std::string result;
     for (const auto& child : node.children) result += plain_inline_text(*child);
     return result;
@@ -556,6 +954,25 @@ struct MarkdownFence {
             const auto styled_code = apply_style_hook(style.inline_code, code);
             return styled_code + role_style_prefix(roles, style);
         }
+        case InlineKind::Latex: {
+            const auto rendered = node.latex_enabled && !node.latex_pending
+                                          ? cch::tui::render_latex(node.text, {.display = node.latex_display})
+                                          : std::nullopt;
+            const auto text = rendered.value_or(node.source);
+            std::string result;
+            std::size_t start = 0;
+            while (start <= text.size()) {
+                const auto newline = text.find('\n', start);
+                result += apply_roles(std::string{text.substr(start,
+                                              newline == std::string::npos ? text.size() - start : newline - start)},
+                        roles,
+                        style);
+                if (newline == std::string::npos) break;
+                result += '\n';
+                start = newline + 1;
+            }
+            return result;
+        }
         case InlineKind::Strikethrough: {
             if (!node.strict_strikethrough) {
                 return apply_roles("~~", roles, style) +
@@ -588,6 +1005,7 @@ struct MarkdownFence {
 struct RenderContext {
     MarkdownStyleConfig& style; // must outlive the synchronous render operation
     SyntaxHighlightHook& syntax_highlighter; // must outlive the synchronous render operation
+    bool render_latex{true};
     std::size_t quote_depth{0};
 };
 
@@ -1078,6 +1496,29 @@ using RenderedLines = support::Expected<std::vector<std::string>>;
     switch (block.kind) {
         case BlockKind::Document:
             return render_sequence(block.children, width, context, true);
+        case BlockKind::Latex: {
+            const auto rendered = context.render_latex && !block.latex_pending
+                                          ? cch::tui::render_latex(block.text, {.display = block.latex_display})
+                                          : std::nullopt;
+            const auto text = rendered.value_or(block.raw);
+            std::vector<std::string> lines;
+            std::size_t start = 0;
+            while (start <= text.size()) {
+                const auto newline = text.find('\n', start);
+                const auto line = std::string{
+                        text.substr(start, newline == std::string::npos ? text.size() - start : newline - start)};
+                if (auto wrapped = wrap_text(
+                            apply_roles(line, block_roles(false, context.quote_depth), context.style), width);
+                        wrapped) {
+                    lines.insert(lines.end(), wrapped->begin(), wrapped->end());
+                } else {
+                    return std::unexpected(wrapped.error());
+                }
+                if (newline == std::string::npos) break;
+                start = newline + 1;
+            }
+            return lines;
+        }
         case BlockKind::Paragraph: {
             const auto text =
                     render_inline_children(block.inlines, block_roles(false, context.quote_depth), context.style);
@@ -1161,6 +1602,28 @@ struct FenceRun {
     char marker{'\0'};
     std::size_t length{0};
 };
+
+void scan_pending_display_math(const std::string_view source_tail, ProtectedMarkdown& protected_markdown) {
+    constexpr std::size_t kMaxOpenerLength = 2;
+    for (std::size_t length = kMaxOpenerLength; length >= 1; --length) {
+        if (source_tail.size() < length) continue;
+        const auto suffix = source_tail.substr(source_tail.size() - length);
+        if (suffix == "$$" || suffix == "\\[") {
+            const auto position = source_tail.size() - length;
+            if (position > 0 && source_tail[position - 1] == '\\') continue;
+            append_math_token(protected_markdown,
+                    MathToken{
+                            {},
+                            std::string{suffix},
+                            {},
+                            true,
+                            true,
+                            true,
+                    });
+            break;
+        }
+    }
+}
 
 [[nodiscard]] std::string_view strip_container_prefixes(std::string_view line) {
     while (!line.empty()) {
@@ -1292,6 +1755,7 @@ struct Markdown::Impl {
     std::size_t padding_y{0};
     MarkdownStyleConfig style;
     SyntaxHighlightHook syntax_highlighter;
+    MarkdownOptions options;
     BackgroundHook background_hook;
     std::string cached_text;
     std::size_t cached_width{0};
@@ -1299,13 +1763,13 @@ struct Markdown::Impl {
     bool cache_valid{false};
 };
 
-Markdown::Markdown(
-    std::string text,
-    std::size_t padding_x,
-    std::size_t padding_y,
-    MarkdownStyleConfig style,
-    SyntaxHighlightHook syntax_highlighter,
-    BackgroundHook background_hook)
+Markdown::Markdown(std::string text,
+        std::size_t padding_x,
+        std::size_t padding_y,
+        MarkdownStyleConfig style,
+        SyntaxHighlightHook syntax_highlighter,
+        BackgroundHook background_hook,
+        MarkdownOptions options)
     : impl_(std::make_unique<Impl>()) {
     impl_->text = std::move(text);
     impl_->padding_x = padding_x;
@@ -1313,6 +1777,7 @@ Markdown::Markdown(
     impl_->style = std::move(style);
     impl_->syntax_highlighter = std::move(syntax_highlighter);
     impl_->background_hook = std::move(background_hook);
+    impl_->options = options;
 }
 
 Markdown::Markdown(Markdown&&) noexcept = default;
@@ -1378,8 +1843,11 @@ support::Expected<RenderResult> Markdown::render(std::size_t width) {
 
     const auto content_width = width - impl_->padding_x - impl_->padding_x;
     const auto normalized = normalize_markdown_input(impl_->text);
+    auto protected_markdown = protect_markdown_math(normalized);
     BlockNode document;
-    if (auto parsed = parse_markdown(normalized); parsed) {
+    if (auto parsed = parse_markdown(
+                protected_markdown.text, protected_markdown.math_tokens, impl_->options.render_latex);
+            parsed) {
         document = std::move(*parsed);
     } else {
         return std::unexpected(parsed.error());
@@ -1390,6 +1858,7 @@ support::Expected<RenderResult> Markdown::render(std::size_t width) {
                 RenderContext{
                         .style = impl_->style,
                         .syntax_highlighter = impl_->syntax_highlighter,
+                        .render_latex = impl_->options.render_latex,
                 });
     };
     std::vector<std::string> content;

@@ -98,6 +98,39 @@ TEST_CASE("AssistantMessageComponent preserves content order when interleaved bl
     CHECK(text < thought);
 }
 
+TEST_CASE("AssistantMessageComponent streams display math across internal blank lines",
+        "[coding_agent][tui][latex][issue976][spec]") {
+    auto theme = test_theme();
+    constexpr std::string_view kFormula = "$$\n\\frac{1}\n\n{2}\n$$";
+    coding_agent::tui::AssistantMessageComponent component(theme);
+    ai::AssistantMessage message;
+    message.stop_reason = ai::AssistantStopReason::Pending;
+    message.content.push_back(ai::TextContent{});
+
+    for (const char character : kFormula) {
+        std::get<ai::TextContent>(message.content[0]).text += character;
+        component.update_content(message);
+    }
+    CHECK(component.frozen_block_count() == 0);
+    CHECK(component.open_tail_text() == kFormula);
+
+    message.stop_reason = ai::AssistantStopReason::Stop;
+    component.update_content(message);
+    CHECK(component.frozen_block_count() == 1);
+    CHECK_FALSE(component.has_open_tail());
+    const auto screen = tests::rendered_screen(component);
+    CHECK(screen.find("1") != std::string::npos);
+    CHECK(screen.find("─") != std::string::npos);
+    CHECK(screen.find("$$") == std::string::npos);
+
+    coding_agent::tui::AssistantMessageComponent one_shot(theme);
+    ai::AssistantMessage one_shot_message;
+    one_shot_message.content.push_back(ai::TextContent{.text = std::string{kFormula}});
+    one_shot_message.stop_reason = ai::AssistantStopReason::Stop;
+    one_shot.update_content(one_shot_message);
+    CHECK(screen == tests::rendered_screen(one_shot));
+}
+
 TEST_CASE("AssistantMessageComponent freezes closed fences and preserves following text order",
         "[coding_agent][tui][issue603][spec]") {
     auto theme = test_theme();

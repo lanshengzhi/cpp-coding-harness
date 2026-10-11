@@ -125,6 +125,8 @@ private:
     bool tail_in_fence_{false};
     char tail_fence_char_{'\0'};
     std::size_t tail_fence_len_{0};
+    bool tail_in_display_math_{false};
+    char tail_math_delimiter_{'\0'};
     std::size_t settled_block_count_{0};
     std::unique_ptr<cch::tui::Component> active_tail_markdown_;
     TailKind tail_markdown_kind_{TailKind::None};

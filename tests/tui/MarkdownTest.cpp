@@ -88,6 +88,82 @@ void require_virtual_terminal_accepts(const tui::RenderResult& lines, std::size_
 
 } // namespace
 
+TEST_CASE("Markdown renders and preserves inline and display LaTeX math", "[tui][markdown][latex][issue976][spec]") {
+    tui::Markdown inline_math(R"(inline $\frac{1}{2}$ and \(x^2\))");
+    const auto inline_lines = inline_math.render(60);
+    REQUIRE(inline_lines);
+    const auto inline_text = rendered_text(*inline_lines, 60);
+    CHECK(inline_text.find("1/2") != std::string::npos);
+    CHECK(inline_text.find("x²") != std::string::npos);
+    CHECK(inline_text.find(R"($\frac)") == std::string::npos);
+
+    tui::Markdown display_math(R"md($$
+\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix}
+$$
+
+$$\frac{1}{2}$$)md");
+    const auto display_lines = display_math.render(60);
+    REQUIRE(display_lines);
+    const auto display_text = rendered_text(*display_lines, 60);
+    CHECK(display_text.find("⎡ 1 │ 2 ⎤") != std::string::npos);
+    CHECK(display_text.find("⎣ 3 │ 4 ⎦") != std::string::npos);
+    CHECK(display_text.find("1") != std::string::npos);
+    CHECK(display_text.find("─") != std::string::npos);
+}
+
+TEST_CASE("Markdown preserves pending and unsupported LaTeX source until it can render",
+        "[tui][markdown][latex][issue976][spec]") {
+    tui::Markdown markdown("before $");
+    auto pending = markdown.render(50);
+    REQUIRE(pending);
+    CHECK(rendered_text(*pending, 50).find("before $") != std::string::npos);
+
+    markdown.set_text(R"(before $\frac)");
+    pending = markdown.render(50);
+    REQUIRE(pending);
+    CHECK(rendered_text(*pending, 50).find(R"($\frac)") != std::string::npos);
+
+    markdown.set_text(R"(before $\frac{1})");
+    pending = markdown.render(50);
+    REQUIRE(pending);
+    CHECK(rendered_text(*pending, 50).find(R"($\frac{1})") != std::string::npos);
+
+    markdown.set_text(R"(before $\frac{1}{2}$)");
+    const auto completed = markdown.render(50);
+    REQUIRE(completed);
+    CHECK(rendered_text(*completed, 50).find("1/2") != std::string::npos);
+
+    markdown.set_text(R"(bad $\frac{1}$)");
+    const auto unsupported = markdown.render(50);
+    REQUIRE(unsupported);
+    CHECK(rendered_text(*unsupported, 50).find(R"($\frac{1}$)") != std::string::npos);
+}
+
+TEST_CASE(
+        "Markdown gives code and escaped delimiters precedence over LaTeX", "[tui][markdown][latex][issue976][spec]") {
+    tui::Markdown markdown(R"md(`$x^2$` and \$x^2\$ and \\(x^2\\))md");
+    const auto lines = markdown.render(60);
+    REQUIRE(lines);
+    const auto text = rendered_text(*lines, 60);
+    CHECK(text.find("$x^2$") != std::string::npos);
+    CHECK(text.find(R"(\(x^2\))") != std::string::npos);
+    CHECK(text.find("x²") == std::string::npos);
+
+    markdown.set_text(R"md(```text
+$x^2$
+```)md");
+    const auto fenced = markdown.render(60);
+    REQUIRE(fenced);
+    CHECK(rendered_text(*fenced, 60).find("$x^2$") != std::string::npos);
+}
+
+TEST_CASE("Markdown can disable LaTeX rendering while preserving source", "[tui][markdown][latex][issue976][spec]") {
+    tui::Markdown markdown(R"($\frac{1}{2}$)", 0, 0, {}, {}, {}, tui::MarkdownOptions{.render_latex = false});
+    const auto lines = markdown.render(40);
+    REQUIRE(lines);
+    CHECK(rendered_text(*lines, 40).find(R"($\frac{1}{2}$)") != std::string::npos);
+}
+
 TEST_CASE("Markdown wraps plain text within terminal width", "[tui][markdown][issue51][spec]") {
     tui::Markdown markdown("alpha beta gamma", 0, 0);
 

@@ -22,6 +22,11 @@ using MarkdownLinkHook = std::move_only_function<std::string(std::string, std::s
 using SyntaxHighlightHook = std::move_only_function<
     std::optional<std::vector<std::string>>(std::string_view, std::string_view)>;
 
+/// Markdown rendering options.
+struct MarkdownOptions {
+    bool render_latex{true};
+};
+
 /// Generic terminal styling for Markdown semantic roles.
 struct MarkdownStyleConfig {
     MarkdownStyleHook text{};
@@ -46,13 +51,13 @@ struct MarkdownStyleConfig {
 /// A tolerant, Unicode-aware Markdown component with injected styling.
 class Markdown final : public Component {
 public:
-    explicit Markdown(
-        std::string text = {},
-        std::size_t padding_x = 0,
-        std::size_t padding_y = 0,
-        MarkdownStyleConfig style = {},
-        SyntaxHighlightHook syntax_highlighter = {},
-        BackgroundHook background_hook = {});
+    explicit Markdown(std::string text = {},
+            std::size_t padding_x = 0,
+            std::size_t padding_y = 0,
+            MarkdownStyleConfig style = {},
+            SyntaxHighlightHook syntax_highlighter = {},
+            BackgroundHook background_hook = {},
+            MarkdownOptions options = {});
     Markdown(Markdown&&) noexcept;
     Markdown& operator=(Markdown&&) noexcept;
     ~Markdown() override;

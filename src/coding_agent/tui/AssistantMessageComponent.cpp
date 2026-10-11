@@ -113,6 +113,42 @@ struct FenceOpener {
     return FenceOpener{.fence_char = c, .fence_len = len};
 }
 
+[[nodiscard]] bool is_display_math_opener(std::string_view line) {
+    const auto first = line.find_first_not_of(' ');
+    if (first == std::string_view::npos || first > 3) return false;
+    const auto content = line.substr(first);
+    return content.starts_with("$$") || content.starts_with("\\[");
+}
+
+[[nodiscard]] char display_math_delimiter(std::string_view line) {
+    const auto first = line.find_first_not_of(' ');
+    if (first == std::string_view::npos) return '\0';
+    const auto content = line.substr(first);
+    if (content.starts_with("$$")) return '$';
+    if (content.starts_with("\\[")) return '[';
+    return '\0';
+}
+
+[[nodiscard]] bool is_display_math_closer(std::string_view line, char delimiter, std::size_t start = 0) {
+    const std::string_view closing = delimiter == '$' ? "$$" : "\\]";
+    auto position = line.find(closing, start);
+    while (position != std::string_view::npos) {
+        std::size_t backslashes = 0;
+        while (position > backslashes && line[position - backslashes - 1] == '\\')
+            ++backslashes;
+        if (backslashes % 2 == 0) break;
+        position = line.find(closing, position + closing.size());
+    }
+    return position != std::string_view::npos &&
+           line.substr(position + closing.size()).find_first_not_of(" \t\r") == std::string_view::npos;
+}
+
+[[nodiscard]] bool display_math_closed_on_line(std::string_view line, char delimiter) {
+    const auto first = line.find_first_not_of(' ');
+    if (first == std::string_view::npos) return false;
+    return is_display_math_closer(line, delimiter, first + (delimiter == '$' ? 2 : 2));
+}
+
 [[nodiscard]] bool is_closing_fence(std::string_view line, char fence_char, std::size_t fence_len) {
     std::size_t indent = 0;
     while (indent < line.size() && line[indent] == ' ')
@@ -234,6 +270,8 @@ void AssistantMessageComponent::reset_stream_state() {
     tail_in_fence_ = false;
     tail_fence_char_ = '\0';
     tail_fence_len_ = 0;
+    tail_in_display_math_ = false;
+    tail_math_delimiter_ = '\0';
     settled_block_count_ = 0;
     active_tail_markdown_.reset();
     tail_markdown_kind_ = TailKind::None;
@@ -383,12 +421,29 @@ void AssistantMessageComponent::scan_open_tail(bool final_line) {
             continue;
         }
 
+        if (tail_in_display_math_) {
+            if (is_display_math_closer(line, tail_math_delimiter_)) {
+                tail_in_display_math_ = false;
+                tail_math_delimiter_ = '\0';
+            }
+            tail_line_pos_ = line_end;
+            continue;
+        }
+
         if (is_blank_line(line)) {
             const auto prefix_end = tail_line_pos_;
             freeze_tail_prefix(prefix_end, false);
             tight_list_run_open_ = false;
             tail_line_pos_ = line_end;
             tail_probe_pos_ = line_end;
+            continue;
+        }
+
+        if (is_display_math_opener(line)) {
+            tail_math_delimiter_ = display_math_delimiter(line);
+            tail_in_display_math_ = !display_math_closed_on_line(line, tail_math_delimiter_);
+            if (!tail_in_display_math_) tail_math_delimiter_ = '\0';
+            tail_line_pos_ = line_end;
             continue;
         }
 
@@ -444,6 +499,8 @@ void AssistantMessageComponent::settle_tail() {
     tail_line_pos_ = 0;
     tail_probe_pos_ = 0;
     tail_in_fence_ = false;
+    tail_in_display_math_ = false;
+    tail_math_delimiter_ = '\0';
     active_tail_markdown_.reset();
     tail_markdown_kind_ = TailKind::None;
 }
