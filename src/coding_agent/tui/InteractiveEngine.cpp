@@ -658,29 +658,18 @@ void InteractiveEngine::append_command_error(const support::Error& error) {
 
 support::ExpectedVoid InteractiveEngine::attach_overlay(std::unique_ptr<cch::tui::Overlay> overlay) {
     auto* overlay_pointer = overlay.get();
-    if (auto attached = tui_.add_overlay(std::move(overlay)); !attached) {
-        return std::unexpected(attached.error());
-    }
+    auto attached = tui_.show_overlay(std::move(overlay));
+    if (!attached) return std::unexpected(attached.error());
     active_overlay_ = overlay_pointer;
-    if (auto focused = tui_.set_focus(active_overlay_); !focused) {
-        const auto focus_error = focused.error();
-        if (auto removed = tui_.remove_overlay(active_overlay_); !removed) {
-            return std::unexpected(aggregate_presentation_errors(
-                    focus_error, removed.error(), "Native TUI overlay focus and cleanup failed"));
-        }
-        active_overlay_ = nullptr;
-        return std::unexpected(focus_error);
-    }
+    active_overlay_handle_ = std::move(*attached);
     invalidate_frame();
     return {};
 }
 
 void InteractiveEngine::close_overlay() {
     if (!running_ || active_overlay_ == nullptr) return;
-    if (auto removed = tui_.remove_overlay(active_overlay_); !removed) {
-        append_command_error(removed.error());
-        return;
-    }
+    active_overlay_handle_.hide();
+    active_overlay_handle_ = {};
     active_overlay_ = nullptr;
     invalidate_frame();
 }

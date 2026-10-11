@@ -33,6 +33,7 @@
 
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Settings.hpp>
+#include <cch/tui/OverlayHandle.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/support/Error.hpp>
 
@@ -553,6 +554,7 @@ private:
     std::shared_ptr<SuspendController> suspend_controller_;
     InteractiveView* view_{nullptr};             // aliases the child owned by tui_.
     cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_.
+    cch::tui::OverlayHandle active_overlay_handle_;
     SlashCommandRouter slash_command_router_;
     std::atomic<bool> running_{false};
     std::stop_source stop_source_;

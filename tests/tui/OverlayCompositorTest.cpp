@@ -396,6 +396,7 @@ TEST_CASE("OverlayCompositor substitutes fallback text for clipped overlay image
 }
 
 TEST_CASE("OverlayCompositor routes input to the topmost capturing overlay", "[tui][overlay][spec]") {
+    // This unit test exercises the compositor's standalone routing probe.
     tui::detail::OverlayCompositor compositor;
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};
 

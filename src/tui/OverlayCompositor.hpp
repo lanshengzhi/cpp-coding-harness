@@ -2,6 +2,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Overlay.hpp>
+#include <cch/tui/OverlayHandle.hpp>
 #include <cch/tui/Terminal.hpp>
 
 #include <cch/support/Error.hpp>
@@ -17,7 +18,8 @@ namespace cch::tui::detail {
 /// Deep overlay compositing engine for the TUI root. Owns the overlay stack:
 /// overlay storage and lifetime, z-ordered responsive visibility, 2D viewport
 /// layout and clipping, ANSI-preserving line splicing, in-memory image
-/// intersection clipping, and the overlay focus history stack.
+/// intersection clipping and retained overlay metadata. Focus transitions
+/// remain owned by MainScreen.
 ///
 /// The compositor is pure presentation state and performs no terminal I/O.
 /// Focus application (mutating Focusable state) stays with Tui, which supplies
@@ -35,15 +37,23 @@ public:
     // --- Overlay lifetime ---
 
     /// Take ownership of an overlay. A null overlay is a validation error.
-    [[nodiscard]] support::Expected<std::reference_wrapper<Overlay>> add_overlay(
-        std::unique_ptr<Overlay> overlay);
+    [[nodiscard]] support::Expected<std::reference_wrapper<Overlay>> add_overlay(std::unique_ptr<Overlay> overlay,
+            Component* pre_focus = nullptr,
+            std::size_t focus_order = 0,
+            std::shared_ptr<OverlayHandleState> handle_state = {});
 
     /// Dispose of an owned overlay. A null pointer is a no-op; an overlay not
-    /// owned by this compositor is a validation error. Callers resolve focus
-    /// through the focus history operations around removal.
+    /// owned by this compositor is a validation error.
     [[nodiscard]] support::ExpectedVoid remove(Overlay* overlay);
 
     [[nodiscard]] bool owns(const Overlay* overlay) const;
+    [[nodiscard]] bool is_hidden(const Overlay* overlay) const;
+    [[nodiscard]] bool set_hidden(Overlay* overlay, bool hidden);
+    [[nodiscard]] bool visible(const Overlay* overlay, TerminalDimensions viewport) const;
+    [[nodiscard]] Component* pre_focus(const Overlay* overlay) const;
+    [[nodiscard]] std::optional<OverlayBounds> bounds(const Overlay* overlay) const;
+    void set_focus_order(Overlay* overlay, std::size_t order);
+    void retarget_pre_focus(Overlay* removed, Component* replacement);
 
     void invalidate_all();
 
@@ -70,12 +80,11 @@ public:
 
     // --- Input ---
 
-    /// Dispatch to visible capturing InputHandler overlays (reverse z-order).
-    /// Returns Consumed when an overlay consumed the event, Unhandled otherwise.
+    /// Legacy compositor probe retained for standalone routing tests.
     [[nodiscard]] InputAdmissionOutcome dispatch_input(
             const InputEventVariant& event, TerminalDimensions viewport) const;
 
-    // --- Focus history ---
+    // --- Focus ---
 
     /// Topmost visible, capturing overlay eligible for fallback focus.
     [[nodiscard]] Overlay* topmost_focusable(TerminalDimensions viewport) const;
@@ -83,30 +92,39 @@ public:
     /// Whether `component` names an owned, visible, capturing overlay.
     [[nodiscard]] bool focus_target_available(Component* component, TerminalDimensions viewport) const;
 
-    /// Record that `overlay` took focus from `previous` (null allowed).
+    /// Record and query legacy focus targets while existing component-only
+    /// callers migrate to OverlayHandle.
     void remember_focus(Overlay* overlay, Component* previous);
-
-    /// The focus target recorded when `overlay` last took focus, or null.
     [[nodiscard]] Component* return_focus(const Overlay* overlay) const;
-
-    /// Drop `overlay`'s history entry and re-point entries that returned
-    /// focus to it at `replacement`.
     void forget_focus(Overlay* overlay, Component* replacement);
-    void forget_component(Component* component);
-
     void clear_focus_history();
+
+    /// Retarget stored pre-focus references when their component is removed.
+    void forget_component(Component* component);
 
 private:
     struct OverlayFocusEntry {
-        Overlay* overlay; // aliases an element owned by overlays_.
-        Component* previous; // null or aliases a Tui child or an element owned by overlays_.
+        Overlay* overlay;
+        Component* previous;
+    };
+
+    struct OverlayEntry {
+        std::unique_ptr<Overlay> overlay;
+        Component* pre_focus{nullptr};
+        std::size_t focus_order{0};
+        bool hidden{false};
+        mutable std::optional<OverlayBounds> bounds;
+        std::shared_ptr<OverlayHandleState> handle_state;
     };
 
     /// Visible overlays sorted by z_index ascending (draw order).
-    [[nodiscard]] std::vector<Overlay*> sorted_visible(TerminalDimensions viewport) const;
+    [[nodiscard]] std::vector<const OverlayEntry*> sorted_visible(TerminalDimensions viewport) const;
+    [[nodiscard]] OverlayEntry* find_entry(const Overlay* overlay);
+    [[nodiscard]] const OverlayEntry* find_entry(const Overlay* overlay) const;
 
-    std::vector<std::unique_ptr<Overlay>> overlays_;
+    std::vector<OverlayEntry> overlays_;
     std::vector<OverlayFocusEntry> focus_history_;
+    std::size_t focus_order_counter_{0};
 };
 
 } // namespace cch::tui::detail

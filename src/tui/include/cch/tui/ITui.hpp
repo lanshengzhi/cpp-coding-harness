@@ -2,6 +2,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Overlay.hpp>
+#include <cch/tui/OverlayHandle.hpp>
 #include <cch/tui/RawInputListener.hpp>
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/TuiScheduler.hpp>
@@ -47,6 +48,7 @@ public:
     [[nodiscard]] virtual RawInputListenerHandle add_raw_input_listener(RawInputListener listener) = 0;
     [[nodiscard]] virtual support::ExpectedVoid remove_raw_input_listener(RawInputListenerId id) = 0;
 
+    [[nodiscard]] virtual support::Expected<OverlayHandle> show_overlay(std::unique_ptr<Overlay> overlay) = 0;
     [[nodiscard]] virtual support::Expected<std::reference_wrapper<Overlay>> add_overlay(
             std::unique_ptr<Overlay> overlay) = 0;
     [[nodiscard]] virtual support::ExpectedVoid remove_overlay(Overlay* overlay) = 0;

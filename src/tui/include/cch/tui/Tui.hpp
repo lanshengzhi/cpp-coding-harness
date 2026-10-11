@@ -73,6 +73,7 @@ public:
 
     /// Add an overlay. Overlays are rendered on top of base children
     /// and support position strategies, stacking, and focus isolation.
+    [[nodiscard]] support::Expected<OverlayHandle> show_overlay(std::unique_ptr<Overlay> overlay) override;
     [[nodiscard]] support::Expected<std::reference_wrapper<Overlay>> add_overlay(
             std::unique_ptr<Overlay> overlay) override;
 
@@ -87,6 +88,7 @@ public:
     [[nodiscard]] support::ExpectedVoid restore_overlay(Overlay* overlay) override;
 
 private:
+    friend class OverlayHandle;
     friend std::size_t detail::testing::frame_prepare_call_count(const MainScreen& tui) noexcept;
 
     class ChildOperation final {
@@ -102,6 +104,14 @@ private:
     };
 
     struct RenderScheduleState;
+    enum class OverlayFocusRestoreStatus { Inactive, Eligible, Blocked };
+    struct OverlayFocusRestoreState {
+        OverlayFocusRestoreStatus status{OverlayFocusRestoreStatus::Inactive};
+        Overlay* overlay{nullptr};
+        Component* blocked_by{nullptr};
+        bool resume_to_overlay{true};
+        Component* resume_target{nullptr};
+    };
 
     void finish_child_operation() noexcept;
     [[nodiscard]] support::ExpectedVoid render_now();
@@ -115,6 +125,14 @@ private:
     void cancel_scheduled_render() noexcept;
     void execute_scheduled_render(std::size_t generation);
     void apply_focus(Component* component);
+    void set_focus_internal(Component* component, bool preserve_restore);
+    void remove_overlay_internal(Overlay* overlay);
+    void hide_overlay_internal(Overlay* overlay, bool hidden);
+    void focus_overlay_internal(Overlay* overlay);
+    void unfocus_overlay_internal(Overlay* overlay, std::optional<Component*> target);
+    void reconcile_overlay_focus(TerminalDimensions dimensions);
+    void clear_overlay_restore_for(Overlay* overlay);
+    [[nodiscard]] Component* resolve_overlay_restore();
     [[nodiscard]] bool focus_target_available(Component* component) const;
     void fallback_focus();
     [[nodiscard]] Focusable* find_focusable_target();
@@ -122,6 +140,7 @@ private:
 
     Terminal& terminal_; // must outlive this MainScreen.
     std::shared_ptr<RenderScheduleState> render_schedule_state_;
+    std::shared_ptr<detail::OverlayHandleContext> overlay_handle_context_;
     TuiScheduler* scheduler_{nullptr}; // must outlive every scheduled render.
     TuiRenderPrepareSink render_prepare_sink_;
     TuiRenderCompleteSink render_complete_sink_;
@@ -141,6 +160,8 @@ private:
     bool started_{false};
     bool stopping_{false};
     bool pending_render_{false};
+    std::size_t focus_order_counter_{0};
+    OverlayFocusRestoreState overlay_focus_restore_;
 };
 
 using Tui = MainScreen;

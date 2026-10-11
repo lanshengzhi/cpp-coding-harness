@@ -527,6 +527,203 @@ TEST_CASE("Default cursor_location returns nullopt for non-focusable", "[tui][ov
     CHECK(text.cursor_location() == std::nullopt);
 }
 
+TEST_CASE("Overlay explicit unfocus routes inserted text only to its target", "[tui][overlay][issue982]") {
+    cch::tui::VirtualTerminal terminal({.columns = 12, .rows = 4});
+    cch::tui::Tui tui(terminal);
+
+    auto base = std::make_unique<cch::tui::Editor>();
+    auto* base_ptr = base.get();
+    REQUIRE(tui.add_child(std::move(base)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(base_ptr));
+
+    auto overlay = std::make_unique<cch::tui::Overlay>();
+    auto editor = std::make_unique<cch::tui::Editor>();
+    auto* editor_ptr = editor.get();
+    REQUIRE(overlay->add_child(std::move(editor)));
+    REQUIRE(overlay->focus_first());
+    auto shown = tui.show_overlay(std::move(overlay));
+    REQUIRE(shown);
+    auto handle = std::move(*shown);
+    CHECK(handle.is_focused());
+
+    handle.unfocus(base_ptr);
+    CHECK_FALSE(handle.is_focused());
+    REQUIRE(terminal.inject_input("base"));
+    CHECK(base_ptr->text() == "base");
+    CHECK(editor_ptr->text().empty());
+
+    handle.focus();
+    REQUIRE(terminal.inject_input("overlay"));
+    CHECK(base_ptr->text() == "base");
+    CHECK(editor_ptr->text() == "overlay");
+
+    handle.unfocus(std::optional<cch::tui::Component*>{nullptr});
+    REQUIRE(tui.set_focus(nullptr));
+    CHECK(tui.focus() == nullptr);
+    REQUIRE(terminal.inject_input("ignored"));
+    CHECK(base_ptr->text() == "base");
+    CHECK(editor_ptr->text() == "overlay");
+}
+
+TEST_CASE("Overlay handles preserve focus eligibility through hide and focus order", "[tui][overlay][issue982]") {
+    cch::tui::VirtualTerminal terminal({.columns = 12, .rows = 4});
+    cch::tui::Tui tui(terminal);
+    auto base = std::make_unique<FocusableInputComponent>("base");
+    auto* base_ptr = base.get();
+    REQUIRE(tui.add_child(std::move(base)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(base_ptr));
+
+    cch::tui::OverlayOptions options;
+    options.z_index = 5;
+    auto first_overlay = std::make_unique<cch::tui::Overlay>(options);
+    auto first_child = std::make_unique<FocusableInputComponent>("first");
+    auto* first_child_ptr = first_child.get();
+    REQUIRE(first_overlay->add_child(std::move(first_child)));
+    REQUIRE(first_overlay->focus_first());
+    auto first_result = tui.show_overlay(std::move(first_overlay));
+    REQUIRE(first_result);
+    auto first = std::move(*first_result);
+
+    auto second_overlay = std::make_unique<cch::tui::Overlay>(options);
+    auto second_child = std::make_unique<FocusableInputComponent>("second");
+    auto* second_child_ptr = second_child.get();
+    REQUIRE(second_overlay->add_child(std::move(second_child)));
+    REQUIRE(second_overlay->focus_first());
+    auto second_result = tui.show_overlay(std::move(second_overlay));
+    REQUIRE(second_result);
+    auto second = std::move(*second_result);
+    CHECK(second.is_focused());
+    second.set_hidden(true);
+    CHECK(second.is_hidden());
+    CHECK(first.is_focused());
+    second.set_hidden(false);
+    CHECK_FALSE(second.is_hidden());
+    CHECK(second.is_focused());
+    first.focus();
+    CHECK(first.is_focused());
+    REQUIRE(tui.render());
+    REQUIRE(first.get_bounds().has_value());
+    const auto first_bounds = *first.get_bounds();
+    CHECK(terminal.screen()[first_bounds.row].find("first") != std::string::npos);
+    CHECK(terminal.screen()[first_bounds.row].find("second") == std::string::npos);
+    CHECK(second_child_ptr->received_input.empty());
+    CHECK(first_child_ptr->received_input.empty());
+    second.hide();
+    CHECK_FALSE(second.is_hidden());
+    CHECK_FALSE(second.is_focused());
+    CHECK_FALSE(second.get_bounds().has_value());
+    CHECK_FALSE(second.is_focused());
+}
+
+TEST_CASE("Overlay blocked focus restores on base unfocus and blocker removal", "[tui][overlay][issue982]") {
+    cch::tui::VirtualTerminal terminal({.columns = 12, .rows = 4});
+    cch::tui::Tui tui(terminal);
+    auto base = std::make_unique<FocusableInputComponent>("base");
+    auto* base_ptr = base.get();
+    REQUIRE(tui.add_child(std::move(base)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(base_ptr));
+
+    auto overlay = std::make_unique<cch::tui::Overlay>();
+    REQUIRE(overlay->add_child(std::make_unique<FocusableInputComponent>("modal")));
+    REQUIRE(overlay->focus_first());
+    auto shown = tui.show_overlay(std::move(overlay));
+    REQUIRE(shown);
+    auto handle = std::move(*shown);
+    CHECK(handle.is_focused());
+    REQUIRE(tui.set_focus(base_ptr));
+    CHECK_FALSE(handle.is_focused());
+    REQUIRE(tui.set_focus(nullptr));
+    CHECK(handle.is_focused());
+
+    REQUIRE(tui.set_focus(base_ptr));
+    handle.unfocus(base_ptr);
+    REQUIRE(tui.remove_child(base_ptr));
+    CHECK_FALSE(handle.is_focused());
+    CHECK(tui.focus() == nullptr);
+    REQUIRE(terminal.inject_input("ignored"));
+    CHECK(base_ptr->received_input.empty());
+    handle.hide();
+}
+
+TEST_CASE("Overlay focus order breaks equal z-index ties and resize restores visibility", "[tui][overlay][issue982]") {
+    cch::tui::VirtualTerminal terminal({.columns = 12, .rows = 4});
+    cch::tui::Tui tui(terminal);
+    auto base = std::make_unique<FocusableInputComponent>("base");
+    auto* base_ptr = base.get();
+    REQUIRE(tui.add_child(std::move(base)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(base_ptr));
+
+    cch::tui::OverlayOptions responsive;
+    responsive.z_index = 10;
+    responsive.visible_at = [](cch::tui::TerminalDimensions dimensions) { return dimensions.columns >= 10; };
+    auto first_overlay = std::make_unique<cch::tui::Overlay>(responsive);
+    REQUIRE(first_overlay->add_child(std::make_unique<FocusableInputComponent>("one")));
+    REQUIRE(first_overlay->focus_first());
+    auto first_result = tui.show_overlay(std::move(first_overlay));
+    REQUIRE(first_result);
+    auto first = std::move(*first_result);
+    auto second_overlay = std::make_unique<cch::tui::Overlay>(responsive);
+    REQUIRE(second_overlay->add_child(std::make_unique<FocusableInputComponent>("two")));
+    REQUIRE(second_overlay->focus_first());
+    auto second_result = tui.show_overlay(std::move(second_overlay));
+    REQUIRE(second_result);
+    auto second = std::move(*second_result);
+    CHECK(second.is_focused());
+
+    REQUIRE(terminal.inject_resize({.columns = 8, .rows = 4}));
+    CHECK(tui.focus() == base_ptr);
+    REQUIRE(terminal.inject_resize({.columns = 12, .rows = 4}));
+    CHECK(second.is_focused());
+    second.focus();
+    REQUIRE(tui.render());
+    CHECK(second.get_bounds().has_value());
+    CHECK(first.get_bounds().has_value());
+}
+
+TEST_CASE("Overlay handle removal retargets nested pre-focus and stop is safe", "[tui][overlay][issue982]") {
+    cch::tui::VirtualTerminal terminal({.columns = 12, .rows = 4});
+    cch::tui::Tui tui(terminal);
+    auto base = std::make_unique<FocusableInputComponent>("base");
+    auto* base_ptr = base.get();
+    REQUIRE(tui.add_child(std::move(base)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(base_ptr));
+
+    auto first_overlay = std::make_unique<cch::tui::Overlay>();
+    REQUIRE(first_overlay->add_child(std::make_unique<FocusableInputComponent>("first")));
+    REQUIRE(first_overlay->focus_first());
+    auto first_result = tui.show_overlay(std::move(first_overlay));
+    REQUIRE(first_result);
+    auto first = std::move(*first_result);
+    auto second_overlay = std::make_unique<cch::tui::Overlay>();
+    REQUIRE(second_overlay->add_child(std::make_unique<FocusableInputComponent>("second")));
+    REQUIRE(second_overlay->focus_first());
+    auto second_result = tui.show_overlay(std::move(second_overlay));
+    REQUIRE(second_result);
+    auto second = std::move(*second_result);
+
+    first.hide();
+    CHECK(second.is_focused());
+    second.hide();
+    CHECK(tui.focus() == base_ptr);
+
+    auto final_overlay = std::make_unique<cch::tui::Overlay>();
+    REQUIRE(final_overlay->add_child(std::make_unique<FocusableInputComponent>("final")));
+    REQUIRE(final_overlay->focus_first());
+    auto final_result = tui.show_overlay(std::move(final_overlay));
+    REQUIRE(final_result);
+    auto final_handle = std::move(*final_result);
+    REQUIRE(tui.stop());
+    CHECK_FALSE(final_handle.is_focused());
+    final_handle.hide();
+    CHECK_FALSE(final_handle.is_hidden());
+    CHECK_FALSE(final_handle.is_focused());
+}
+
 TEST_CASE("Overlay rejects a disposed component after removal", "[tui][overlay][issue50][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);

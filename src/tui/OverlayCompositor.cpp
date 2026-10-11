@@ -182,15 +182,27 @@ void append_trailing_columns(ComposedRow& row, const std::vector<TerminalToken>&
 
 } // namespace
 
-support::Expected<std::reference_wrapper<Overlay>> OverlayCompositor::add_overlay(
-    std::unique_ptr<Overlay> overlay) {
+support::Expected<std::reference_wrapper<Overlay>> OverlayCompositor::add_overlay(std::unique_ptr<Overlay> overlay,
+        Component* pre_focus,
+        std::size_t focus_order,
+        std::shared_ptr<OverlayHandleState> handle_state) {
     if (!overlay) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Validation,
             "TUI cannot attach a null Overlay"));
     }
     auto& ref = *overlay;
-    overlays_.push_back(std::move(overlay));
+    const auto order = focus_order == 0 ? ++focus_order_counter_ : focus_order;
+    focus_order_counter_ = std::max(focus_order_counter_, order);
+    if (handle_state == nullptr) handle_state = std::make_shared<OverlayHandleState>();
+    overlays_.push_back(OverlayEntry{
+            .overlay = std::move(overlay),
+            .pre_focus = pre_focus,
+            .focus_order = order,
+            .hidden = false,
+            .bounds = std::nullopt,
+            .handle_state = std::move(handle_state),
+    });
     return ref;
 }
 
@@ -202,26 +214,75 @@ support::ExpectedVoid OverlayCompositor::remove(Overlay* overlay) {
             "Overlay is not attached to this TUI"));
     }
     const auto before = overlays_.size();
-    std::erase_if(overlays_, [overlay](const auto& ptr) { return ptr.get() == overlay; });
+    std::erase_if(overlays_, [overlay](const auto& entry) { return entry.overlay.get() == overlay; });
     if (overlays_.size() == before) {
         return std::unexpected(support::make_error(
             support::ErrorCode::Validation,
             "Overlay not found in TUI"));
     }
+    std::erase_if(focus_history_, [overlay](const auto& entry) { return entry.overlay == overlay; });
     return {};
 }
 
-bool OverlayCompositor::owns(const Overlay* overlay) const {
-    for (const auto& owned : overlays_) {
-        if (owned.get() == overlay) return true;
+bool OverlayCompositor::owns(const Overlay* overlay) const { return find_entry(overlay) != nullptr; }
+
+bool OverlayCompositor::is_hidden(const Overlay* overlay) const {
+    const auto* entry = find_entry(overlay);
+    return entry == nullptr || entry->hidden;
+}
+
+bool OverlayCompositor::set_hidden(Overlay* overlay, bool hidden) {
+    auto* entry = find_entry(overlay);
+    if (entry == nullptr) return false;
+    entry->hidden = hidden;
+    entry->handle_state->hidden = hidden;
+    if (hidden) entry->bounds.reset();
+    return true;
+}
+
+bool OverlayCompositor::visible(const Overlay* overlay, TerminalDimensions viewport) const {
+    const auto* entry = find_entry(overlay);
+    return entry != nullptr && !entry->hidden && entry->overlay->visible_at(viewport);
+}
+
+Component* OverlayCompositor::pre_focus(const Overlay* overlay) const {
+    const auto* entry = find_entry(overlay);
+    return entry == nullptr ? nullptr : entry->pre_focus;
+}
+
+std::optional<OverlayBounds> OverlayCompositor::bounds(const Overlay* overlay) const {
+    const auto* entry = find_entry(overlay);
+    return entry == nullptr ? std::nullopt : entry->bounds;
+}
+
+void OverlayCompositor::set_focus_order(Overlay* overlay, std::size_t order) {
+    focus_order_counter_ = std::max(focus_order_counter_, order);
+    if (auto* entry = find_entry(overlay)) entry->focus_order = order;
+}
+
+void OverlayCompositor::retarget_pre_focus(Overlay* removed, Component* replacement) {
+    for (auto& entry : overlays_) {
+        if (entry.overlay.get() != removed && entry.pre_focus == removed) entry.pre_focus = replacement;
     }
-    return false;
+}
+
+OverlayCompositor::OverlayEntry* OverlayCompositor::find_entry(const Overlay* overlay) {
+    const auto found = std::find_if(overlays_.begin(), overlays_.end(), [overlay](const auto& entry) {
+        return entry.overlay.get() == overlay;
+    });
+    return found == overlays_.end() ? nullptr : &*found;
+}
+
+const OverlayCompositor::OverlayEntry* OverlayCompositor::find_entry(const Overlay* overlay) const {
+    const auto found = std::find_if(overlays_.begin(), overlays_.end(), [overlay](const auto& entry) {
+        return entry.overlay.get() == overlay;
+    });
+    return found == overlays_.end() ? nullptr : &*found;
 }
 
 void OverlayCompositor::invalidate_all() {
-    for (const auto& overlay : overlays_) {
-        overlay->invalidate();
-    }
+    for (const auto& entry : overlays_)
+        entry.overlay->invalidate();
 }
 
 RenderResult OverlayCompositor::materialize_images(
@@ -310,10 +371,13 @@ support::ExpectedVoid OverlayCompositor::composite(
 
     output.cursor.reset();
     if (overlays_.empty()) return {};
+    for (auto& entry : overlays_)
+        entry.bounds.reset();
 
     std::vector<RenderedOverlay> rendered_overlays;
     std::size_t min_lines_needed = output.lines.size();
-    for (auto* overlay : sorted_visible(dimensions)) {
+    for (const auto* entry : sorted_visible(dimensions)) {
+        auto* overlay = entry->overlay.get();
         const auto initial_layout = overlay->resolve_layout(dimensions, 0);
         auto rendered = overlay->render(initial_layout.width);
         if (!rendered) return std::unexpected(rendered.error());
@@ -331,6 +395,12 @@ support::ExpectedVoid OverlayCompositor::composite(
         }
         if (layout.row <= std::numeric_limits<std::size_t>::max() - materialized.lines.size())
             min_lines_needed = std::max(min_lines_needed, layout.row + materialized.lines.size());
+        entry->bounds = OverlayBounds{
+                .row = layout.row,
+                .col = layout.col,
+                .width = layout.width,
+                .height = materialized.lines.size(),
+        };
         if (materialized.lines.empty()) continue;
         rendered_overlays.push_back({.content = std::move(materialized), .layout = layout});
     }
@@ -409,90 +479,85 @@ support::ExpectedVoid OverlayCompositor::composite(
     return {};
 }
 
-InputAdmissionOutcome OverlayCompositor::dispatch_input(
-        const InputEventVariant& event, TerminalDimensions viewport) const {
-    // Try overlays first (in reverse z-order, topmost first)
-    auto visible = sorted_visible(viewport);
-    for (auto it = visible.rbegin(); it != visible.rend(); ++it) {
-        auto* overlay = *it;
-        // Non-capturing overlays pass input through
-        if (overlay->options().non_capturing) continue;
-
-        if (auto* input_handler = dynamic_cast<InputHandler*>(overlay)) {
-            const auto outcome = input_handler->handle_input(event);
-            if (outcome == InputAdmissionOutcome::Consumed) {
-                return InputAdmissionOutcome::Consumed;
-            }
-        }
-    }
-    return InputAdmissionOutcome::Unhandled;
-}
-
 Overlay* OverlayCompositor::topmost_focusable(TerminalDimensions viewport) const {
     auto visible = sorted_visible(viewport);
     for (auto it = visible.rbegin(); it != visible.rend(); ++it) {
-        auto* focusable = dynamic_cast<Focusable*>(*it);
-        if (focusable != nullptr && !(*it)->options().non_capturing) return *it;
+        auto* overlay = (*it)->overlay.get();
+        auto* focusable = dynamic_cast<Focusable*>(overlay);
+        if (focusable != nullptr && !overlay->options().non_capturing) return overlay;
     }
     return nullptr;
 }
 
 bool OverlayCompositor::focus_target_available(Component* component, TerminalDimensions viewport) const {
-    auto* overlay = dynamic_cast<Overlay*>(component);
-    return overlay != nullptr && owns(overlay) && overlay->visible_at(viewport) &&
-        !overlay->options().non_capturing;
+    const auto* entry = find_entry(dynamic_cast<Overlay*>(component));
+    return entry != nullptr && !entry->hidden && entry->overlay->visible_at(viewport) &&
+           !entry->overlay->options().non_capturing;
 }
 
 void OverlayCompositor::remember_focus(Overlay* overlay, Component* previous) {
-    const auto found = std::find_if(
-        focus_history_.begin(),
-        focus_history_.end(),
-        [overlay](const auto& entry) { return entry.overlay == overlay; });
-    if (found == focus_history_.end()) {
+    const auto found = std::find_if(focus_history_.begin(), focus_history_.end(), [overlay](const auto& entry) {
+        return entry.overlay == overlay;
+    });
+    if (found == focus_history_.end())
         focus_history_.push_back({.overlay = overlay, .previous = previous});
-    } else {
+    else
         found->previous = previous;
-    }
 }
 
 Component* OverlayCompositor::return_focus(const Overlay* overlay) const {
-    const auto found = std::find_if(
-        focus_history_.begin(),
-        focus_history_.end(),
-        [overlay](const auto& entry) { return entry.overlay == overlay; });
+    const auto found = std::find_if(focus_history_.begin(), focus_history_.end(), [overlay](const auto& entry) {
+        return entry.overlay == overlay;
+    });
     return found == focus_history_.end() ? nullptr : found->previous;
 }
 
 void OverlayCompositor::forget_focus(Overlay* overlay, Component* replacement) {
+    retarget_pre_focus(overlay, replacement);
     for (auto& entry : focus_history_) {
-        if (entry.previous == static_cast<Component*>(overlay)) entry.previous = replacement;
+        if (entry.previous == overlay) entry.previous = replacement;
     }
-    std::erase_if(focus_history_, [overlay](const auto& entry) {
-        return entry.overlay == overlay;
-    });
+    std::erase_if(focus_history_, [overlay](const auto& entry) { return entry.overlay == overlay; });
 }
 
+void OverlayCompositor::clear_focus_history() { focus_history_.clear(); }
+
 void OverlayCompositor::forget_component(Component* component) {
+    for (auto& entry : overlays_) {
+        if (entry.pre_focus == component) entry.pre_focus = nullptr;
+    }
     for (auto& entry : focus_history_) {
         if (entry.previous == component) entry.previous = nullptr;
     }
 }
 
-void OverlayCompositor::clear_focus_history() {
-    focus_history_.clear();
+InputAdmissionOutcome OverlayCompositor::dispatch_input(
+        const InputEventVariant& event, TerminalDimensions viewport) const {
+    auto visible = sorted_visible(viewport);
+    for (auto it = visible.rbegin(); it != visible.rend(); ++it) {
+        auto* overlay = (*it)->overlay.get();
+        if (overlay->options().non_capturing) continue;
+        if (auto* handler = dynamic_cast<InputHandler*>(overlay);
+                handler != nullptr && handler->handle_input(event) == InputAdmissionOutcome::Consumed)
+            return InputAdmissionOutcome::Consumed;
+    }
+    return InputAdmissionOutcome::Unhandled;
 }
 
 bool OverlayCompositor::has_visible_overlays(TerminalDimensions viewport) const {
     return !sorted_visible(viewport).empty();
 }
 
-std::vector<Overlay*> OverlayCompositor::sorted_visible(TerminalDimensions viewport) const {
-    std::vector<Overlay*> visible;
-    for (const auto& overlay : overlays_) {
-        if (overlay->visible_at(viewport)) visible.push_back(overlay.get());
+std::vector<const OverlayCompositor::OverlayEntry*> OverlayCompositor::sorted_visible(
+        TerminalDimensions viewport) const {
+    std::vector<const OverlayEntry*> visible;
+    for (const auto& entry : overlays_) {
+        if (!entry.hidden && entry.overlay->visible_at(viewport)) visible.push_back(&entry);
     }
-    std::sort(visible.begin(), visible.end(), [](const Overlay* a, const Overlay* b) {
-        return a->options().z_index < b->options().z_index;
+    std::sort(visible.begin(), visible.end(), [](const OverlayEntry* left, const OverlayEntry* right) {
+        if (left->overlay->options().z_index != right->overlay->options().z_index)
+            return left->overlay->options().z_index < right->overlay->options().z_index;
+        return left->focus_order < right->focus_order;
     });
     return visible;
 }
