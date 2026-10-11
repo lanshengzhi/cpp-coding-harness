@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -40,7 +41,13 @@ struct SettingItem {
 
 using SettingsChangeSink = std::move_only_function<support::ExpectedVoid(std::string, std::string)>;
 using SettingsCancelSink = std::move_only_function<support::ExpectedVoid()>;
-using SettingsSubmenuDoneSink = std::move_only_function<support::ExpectedVoid(std::optional<std::string>)>;
+
+struct SettingsSubmenuOptions {
+    std::optional<std::string> navigate_to{std::nullopt};
+};
+
+using SettingsSubmenuDoneSink = std::move_only_function<support::ExpectedVoid(
+        std::optional<std::string>, std::optional<SettingsSubmenuOptions>)>;
 using SettingsSubmenuFactoryHook = std::move_only_function<std::unique_ptr<Component>(
     const SettingItem&,
     SettingsSubmenuDoneSink)>;
@@ -81,6 +88,7 @@ public:
     SettingsList& operator=(const SettingsList&) = delete;
 
     void update_value(std::string id, std::string new_value);
+    void select_item(std::string_view id);
     [[nodiscard]] std::optional<SettingItem> selected_item() const;
     [[nodiscard]] std::string search_query() const;
     [[nodiscard]] bool submenu_open() const;

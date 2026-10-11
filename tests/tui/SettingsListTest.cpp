@@ -11,8 +11,46 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
+
+namespace {
+
+struct SettingsSubmenuProbeState {
+    std::string label;
+    cch::tui::InputAdmissionOutcome input_outcome{cch::tui::InputAdmissionOutcome::Unhandled};
+    std::move_only_function<void()> on_input;
+    bool focused{false};
+};
+
+class SettingsSubmenuProbe final : public cch::tui::Component,
+                                   public cch::tui::InputHandler,
+                                   public cch::tui::Focusable {
+public:
+    explicit SettingsSubmenuProbe(std::shared_ptr<SettingsSubmenuProbeState> state) : state_(std::move(state)) {}
+
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{.lines = {state_->label}};
+    }
+
+    void invalidate() override {}
+
+    cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant&) override {
+        if (!state_->on_input) return state_->input_outcome;
+        auto on_input = std::move(state_->on_input);
+        on_input();
+        return cch::tui::InputAdmissionOutcome::Consumed;
+    }
+
+    void set_focused(bool focused) override { state_->focused = focused; }
+    [[nodiscard]] bool focused() const override { return state_->focused; }
+
+private:
+    std::shared_ptr<SettingsSubmenuProbeState> state_;
+};
+
+} // namespace
 
 TEST_CASE("SettingsList cycles values deterministically and reports updates",
         "[tui][settings-list][issue52][issue57][spec]") {
@@ -193,20 +231,21 @@ TEST_CASE("SettingsList delegates nested selection and restores its parent selec
             .submenu_factory = [](const cch::tui::SettingItem&, cch::tui::SettingsSubmenuDoneSink done) {
                 auto shared_done = std::make_shared<cch::tui::SettingsSubmenuDoneSink>(std::move(done));
                 return std::make_unique<cch::tui::SelectList>(
-                    std::vector<cch::tui::SelectItem>{
-                        {.value = "dark", .label = "Dark"},
-                        {.value = "light", .label = "Light"},
-                    },
-                    cch::tui::SelectListOptions{
-                        .on_select = [shared_done](const cch::tui::SelectItem& item) -> cch::support::ExpectedVoid {
-                            (void)(*shared_done)(item.value);
-                            return {};
+                        std::vector<cch::tui::SelectItem>{
+                                {.value = "dark", .label = "Dark"},
+                                {.value = "light", .label = "Light"},
                         },
-                        .on_cancel = [shared_done]() -> cch::support::ExpectedVoid {
-                            (void)(*shared_done)(std::nullopt);
-                            return {};
-                        },
-                    });
+                        cch::tui::SelectListOptions{
+                                .on_select = [shared_done](
+                                                     const cch::tui::SelectItem& item) -> cch::support::ExpectedVoid {
+                                    (void)(*shared_done)(item.value, std::nullopt);
+                                    return {};
+                                },
+                                .on_cancel = [shared_done]() -> cch::support::ExpectedVoid {
+                                    (void)(*shared_done)(std::nullopt, std::nullopt);
+                                    return {};
+                                },
+                        });
             },
         });
 
@@ -222,6 +261,146 @@ TEST_CASE("SettingsList delegates nested selection and restores its parent selec
     CHECK(list.selected_item()->current_value == "light");
     REQUIRE(updates.size() == 1);
     CHECK(updates[0] == "theme=light");
+}
+
+TEST_CASE("SettingsList selects an id from the unfiltered displayed items", "[tui][settings-list][issue968]") {
+    cch::tui::SettingsList list({
+            {.id = "alpha", .label = "Alpha"},
+            {.id = "beta", .label = "Beta"},
+            {.id = "gamma", .label = "Gamma"},
+    });
+
+    list.select_item("beta");
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->id == "beta");
+
+    list.select_item("missing");
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->id == "beta");
+}
+
+TEST_CASE("SettingsList selects an id in the active filtered items", "[tui][settings-list][issue968]") {
+    cch::tui::SettingsList list(
+            {
+                    {.id = "alpha", .label = "Alpha"},
+                    {.id = "alpine", .label = "Alpine"},
+                    {.id = "beta", .label = "Beta"},
+                    {.id = "gamma", .label = "Gamma"},
+            },
+            cch::tui::SettingsListOptions{.enable_search = true});
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "a"}));
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "l"}));
+
+    list.select_item("alpine");
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->id == "alpine");
+    list.select_item("beta");
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->id == "alpine");
+}
+
+TEST_CASE("SettingsList opens the navigated submenu after completion", "[tui][settings-list][issue968]") {
+    auto first_state = std::make_shared<SettingsSubmenuProbeState>();
+    first_state->label = "first submenu";
+    std::shared_ptr<cch::tui::SettingsSubmenuDoneSink> first_completion;
+    auto second_state = std::make_shared<SettingsSubmenuProbeState>();
+    second_state->label = "second submenu";
+    std::size_t factory_calls = 0;
+    cch::tui::SettingsList list(
+            {
+                    {.id = "first", .label = "First", .control = cch::tui::SettingSubmenu{}},
+                    {.id = "second", .label = "Second", .control = cch::tui::SettingSubmenu{}},
+            },
+            cch::tui::SettingsListOptions{
+                    .submenu_factory =
+                            [first_state, second_state, &first_completion, &factory_calls](
+                                    const cch::tui::SettingItem& item, cch::tui::SettingsSubmenuDoneSink done) {
+                                ++factory_calls;
+                                auto probe_state = item.id == "first" ? first_state : second_state;
+                                if (item.id == "first") {
+                                    first_completion =
+                                            std::make_shared<cch::tui::SettingsSubmenuDoneSink>(std::move(done));
+                                    first_state->on_input = [completion = first_completion] {
+                                        (void)(*completion)(std::nullopt,
+                                                cch::tui::SettingsSubmenuOptions{.navigate_to = "second"});
+                                    };
+                                }
+                                return std::make_unique<SettingsSubmenuProbe>(std::move(probe_state));
+                            },
+            });
+
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
+    REQUIRE(list.submenu_open());
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "complete"}));
+
+    REQUIRE(list.submenu_open());
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->id == "second");
+    CHECK(factory_calls == 2);
+    const auto rendered = list.render(40);
+    REQUIRE(rendered);
+    REQUIRE_FALSE(rendered->lines.empty());
+    CHECK(rendered->lines[0] == "second submenu");
+}
+
+TEST_CASE("SettingsList bubbles unhandled input from its submenu", "[tui][settings-list][issue968]") {
+    auto state = std::make_shared<SettingsSubmenuProbeState>();
+    state->label = "submenu";
+    state->input_outcome = cch::tui::InputAdmissionOutcome::Unhandled;
+    cch::tui::SettingsList list({{.id = "submenu", .label = "Submenu", .control = cch::tui::SettingSubmenu{}}},
+            cch::tui::SettingsListOptions{
+                    .submenu_factory =
+                            [state](const cch::tui::SettingItem&, cch::tui::SettingsSubmenuDoneSink) {
+                                return std::make_unique<SettingsSubmenuProbe>(state);
+                            },
+            });
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
+
+    CHECK(list.handle_input(cch::tui::KeyEvent{.key = "pageDown"}) == cch::tui::InputAdmissionOutcome::Unhandled);
+}
+
+TEST_CASE("SettingsList clears submenu focus and ignores its late completion", "[tui][settings-list][issue968]") {
+    auto state = std::make_shared<SettingsSubmenuProbeState>();
+    state->label = "submenu";
+    std::shared_ptr<cch::tui::SettingsSubmenuDoneSink> completion;
+    std::size_t updates = 0;
+    cch::tui::SettingsList list(
+            {{.id = "submenu", .label = "Submenu", .current_value = "before", .control = cch::tui::SettingSubmenu{}}},
+            cch::tui::SettingsListOptions{
+                    .on_change = [&updates](std::string, std::string) -> cch::support::ExpectedVoid {
+                        ++updates;
+                        return {};
+                    },
+                    .submenu_factory =
+                            [state, &completion](const cch::tui::SettingItem&, cch::tui::SettingsSubmenuDoneSink done) {
+                                completion = std::make_shared<cch::tui::SettingsSubmenuDoneSink>(std::move(done));
+                                return std::make_unique<SettingsSubmenuProbe>(state);
+                            },
+            });
+    list.set_focused(true);
+    static_cast<void>(list.handle_input(cch::tui::KeyEvent{.key = "enter"}));
+    REQUIRE(list.submenu_open());
+    CHECK(state->focused);
+
+    REQUIRE(completion);
+    (void)(*completion)(std::nullopt, std::nullopt);
+    CHECK_FALSE(list.submenu_open());
+    CHECK_FALSE(state->focused);
+    CHECK(updates == 0);
+    (void)(*completion)(std::string{"late"}, std::nullopt);
+    CHECK(updates == 0);
+    REQUIRE(list.selected_item());
+    CHECK(list.selected_item()->current_value == "before");
+}
+
+TEST_CASE("SettingsList preserves pi ellipses for long rows and hints", "[tui][settings-list][issue968]") {
+    cch::tui::SettingsList list({{.id = "long", .label = "Long settings label", .current_value = "value"}},
+            cch::tui::SettingsListOptions{});
+    const auto rendered = list.render(10);
+    REQUIRE(rendered);
+    CHECK(cch::tui::strip_terminal_sequences(rendered->lines[0]) == "→ Long ...");
+    CHECK(cch::tui::strip_terminal_sequences(rendered->lines.back()).ends_with("..."));
+    CHECK(cch::tui::visible_width(rendered->lines.back()) == 10);
 }
 
 TEST_CASE("SettingsList renders and dispatches hints from one effective registry",

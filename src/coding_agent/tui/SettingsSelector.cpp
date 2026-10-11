@@ -71,26 +71,25 @@ struct SettingsSelectorState {
     }
 
     auto completion = std::make_shared<cch::tui::SettingsSubmenuDoneSink>(std::move(done));
-    auto list = std::make_unique<cch::tui::SelectList>(
-        std::move(items),
-        cch::tui::SelectListOptions{
-            .max_visible = 10,
-            .theme = theme.select_list_theme(),
-            .on_select = [completion, state = &state](
-                             const cch::tui::SelectItem& item) -> support::ExpectedVoid {
-                // The state outlives the submenu (both live in the selector).
-                if (state->callbacks.on_thinking_level_change) {
-                    state->callbacks.on_thinking_level_change(item.value);
-                }
-                (void)(*completion)(item.value);
-                return {};
-            },
-            .on_cancel = [completion]() -> support::ExpectedVoid {
-                (void)(*completion)(std::nullopt);
-                return {};
-            },
-            .keybindings = keybindings,
-        });
+    auto list = std::make_unique<cch::tui::SelectList>(std::move(items),
+            cch::tui::SelectListOptions{
+                    .max_visible = 10,
+                    .theme = theme.select_list_theme(),
+                    .on_select = [completion, state = &state](
+                                         const cch::tui::SelectItem& item) -> support::ExpectedVoid {
+                        // The state outlives the submenu (both live in the selector).
+                        if (state->callbacks.on_thinking_level_change) {
+                            state->callbacks.on_thinking_level_change(item.value);
+                        }
+                        (void)(*completion)(item.value, std::nullopt);
+                        return {};
+                    },
+                    .on_cancel = [completion]() -> support::ExpectedVoid {
+                        (void)(*completion)(std::nullopt, std::nullopt);
+                        return {};
+                    },
+                    .keybindings = keybindings,
+            });
     list->set_selected_index(selected_index);
     return list;
 }
@@ -174,28 +173,27 @@ public:
                 : 0;
         }
 
-        auto select_list = std::make_unique<cch::tui::SelectList>(
-            std::move(items),
-            cch::tui::SelectListOptions{
-                .max_visible = 10,
-                .theme = theme.select_list_theme(),
-                .on_select = [completion](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
-                    (void)(*completion)(item.value);
-                    return {};
-                },
-                .on_cancel = [completion, preview, original_theme_setting]() -> support::ExpectedVoid {
-                    // pi `cancel()`: re-preview the original setting (never
-                    // a settings write) and complete without a value.
-                    preview(original_theme_setting);
-                    (void)(*completion)(std::nullopt);
-                    return {};
-                },
-                .on_selection_change = [preview](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
-                    preview(item.value);
-                    return {};
-                },
-                .keybindings = std::move(keybindings),
-            });
+        auto select_list = std::make_unique<cch::tui::SelectList>(std::move(items),
+                cch::tui::SelectListOptions{
+                        .max_visible = 10,
+                        .theme = theme.select_list_theme(),
+                        .on_select = [completion](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
+                            (void)(*completion)(item.value, std::nullopt);
+                            return {};
+                        },
+                        .on_cancel = [completion, preview, original_theme_setting]() -> support::ExpectedVoid {
+                            // pi `cancel()`: re-preview the original setting (never
+                            // a settings write) and complete without a value.
+                            preview(original_theme_setting);
+                            (void)(*completion)(std::nullopt, std::nullopt);
+                            return {};
+                        },
+                        .on_selection_change = [preview](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
+                            preview(item.value);
+                            return {};
+                        },
+                        .keybindings = std::move(keybindings),
+                });
         select_list_pointer_ = select_list.get();
         select_list->set_selected_index(selected_index);
         (void)content->add_child(std::move(select_list));
@@ -220,10 +218,8 @@ public:
         if (key != nullptr && key->type == cch::tui::KeyEventType::Release) {
             return cch::tui::InputAdmissionOutcome::Unhandled;
         }
-        if (select_list_pointer_ != nullptr) {
-            static_cast<void>(select_list_pointer_->handle_input(input));
-        }
-        return cch::tui::InputAdmissionOutcome::Consumed;
+        if (select_list_pointer_ == nullptr) return cch::tui::InputAdmissionOutcome::Unhandled;
+        return select_list_pointer_->handle_input(input);
     }
 
     void set_focused(bool focused) override {
@@ -441,8 +437,7 @@ cch::tui::InputAdmissionOutcome SettingsSelectorComponent::handle_input(const cc
     if (key != nullptr && key->type == cch::tui::KeyEventType::Release) {
         return cch::tui::InputAdmissionOutcome::Unhandled;
     }
-    static_cast<void>(impl_->list_.handle_input(input));
-    return cch::tui::InputAdmissionOutcome::Consumed;
+    return impl_->list_.handle_input(input);
 }
 
 void SettingsSelectorComponent::set_focused(bool focused) {

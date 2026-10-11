@@ -60,6 +60,8 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
     std::shared_ptr<const KeybindingRegistry> keybindings;
     std::shared_ptr<KeybindingsContext> keybinding_context;
     std::unique_ptr<Component> submenu;
+    std::optional<std::size_t> submenu_item_index;
+    std::optional<std::string> navigate_after_close;
     std::optional<support::Error> callback_error;
     bool focused{false};
 
@@ -116,13 +118,35 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
         }
     }
 
-    void close_submenu(std::size_t parent_selection) {
+    void close_submenu() {
         if (submenu) {
             if (auto* focusable = dynamic_cast<Focusable*>(submenu.get())) focusable->set_focused(false);
         }
         submenu.reset();
+        if (navigate_after_close) {
+            auto id = std::move(*navigate_after_close);
+            navigate_after_close.reset();
+            submenu_item_index.reset();
+            select_item(id);
+            activate_item();
+            return;
+        }
+        if (submenu_item_index) {
+            const auto parent_selection = *submenu_item_index;
+            submenu_item_index.reset();
+            const auto& displayed = displayed_indices();
+            selected_index = displayed.empty() ? 0 : std::min(parent_selection, displayed.size() - 1);
+        }
+    }
+
+    void select_item(std::string_view id) {
         const auto& displayed = displayed_indices();
-        selected_index = displayed.empty() ? 0 : std::min(parent_selection, displayed.size() - 1);
+        for (std::size_t index = 0; index < displayed.size(); ++index) {
+            if (items[displayed[index]].id == id) {
+                selected_index = index;
+                return;
+            }
+        }
     }
 
     void activate_item() {
@@ -137,10 +161,12 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
             }
             const auto item_index = static_cast<std::size_t>(item - items.data());
             const auto parent_selection = selected_index;
+            submenu_item_index = parent_selection;
             auto finished = std::make_shared<bool>(false);
             std::weak_ptr<Impl> weak = shared_from_this();
-            SettingsSubmenuDoneSink done = [weak, finished, item_index, parent_selection](
-                                           std::optional<std::string> selected_value) -> support::ExpectedVoid {
+            SettingsSubmenuDoneSink done =
+                    [weak, finished, item_index](std::optional<std::string> selected_value,
+                            std::optional<SettingsSubmenuOptions> submenu_options) -> support::ExpectedVoid {
                 if (*finished) return {};
                 *finished = true;
                 auto impl = weak.lock();
@@ -149,7 +175,12 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
                     impl->items[item_index].current_value = std::move(*selected_value);
                     impl->emit_change(impl->items[item_index]);
                 }
-                impl->close_submenu(parent_selection);
+                if (submenu_options && submenu_options->navigate_to && !submenu_options->navigate_to->empty()) {
+                    impl->navigate_after_close = std::move(submenu_options->navigate_to);
+                } else {
+                    impl->navigate_after_close.reset();
+                }
+                impl->close_submenu();
                 return {};
             };
             std::unique_ptr<Component> created;
@@ -178,7 +209,7 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
     }
 
     [[nodiscard]] support::Expected<std::string> hint_line(std::string text, std::size_t width) {
-        auto bounded = truncate_text(text, width, "");
+        auto bounded = truncate_text(text, width);
         if (!bounded) return std::unexpected(bounded.error());
         return detail::apply_text_style(theme.hint, std::move(*bounded), "SettingsList hint");
     }
@@ -221,6 +252,8 @@ void SettingsList::update_value(std::string id, std::string new_value) {
     });
     if (found != impl->items.end()) found->current_value = std::move(new_value);
 }
+
+void SettingsList::select_item(std::string_view id) { impl_->select_item(id); }
 
 std::optional<SettingItem> SettingsList::selected_item() const {
     const auto* item = impl_->selected();
@@ -299,17 +332,21 @@ support::Expected<RenderResult> SettingsList::render(std::size_t width) {
             auto styled_value =
                     detail::apply_selection_style(impl->theme.value, std::move(*value), selected, "SettingsList value");
             if (!styled_value) return std::unexpected(styled_value.error());
-            auto bounded = truncate_text(prefix + *styled_label + "  " + *styled_value, width, "");
+            auto bounded = truncate_text(prefix + *styled_label + "  " + *styled_value, width);
             if (!bounded) return std::unexpected(bounded.error());
             lines.push_back(std::move(*bounded));
         }
         if (range.begin > 0 || range.end < displayed.size()) {
-            // pi truncates the scroll indicator to `width - 2`, keeping it
-            // one column inside the row the list bounds every other line by.
-            auto scroll = impl->hint_line(
-                    std::format("  ({}/{})", impl->selected_index + 1, displayed.size()), width > 2 ? width - 2 : 1);
-            if (!scroll) return std::unexpected(scroll.error());
-            lines.push_back(std::move(*scroll));
+            // pi truncates the scroll indicator to `width - 2` with the theme
+            // hint's already-truncated text and the same empty ellipsis.
+            auto scroll_text = truncate_text(std::format("  ({}/{})", impl->selected_index + 1, displayed.size()),
+                    width > 2 ? width - 2 : 1,
+                    "");
+            if (!scroll_text) return std::unexpected(scroll_text.error());
+            auto styled_scroll =
+                    detail::apply_text_style(impl->theme.hint, std::move(*scroll_text), "SettingsList scroll");
+            if (!styled_scroll) return std::unexpected(styled_scroll.error());
+            lines.push_back(std::move(*styled_scroll));
         }
         const auto* selected = impl->selected();
         if (selected != nullptr && selected->description) {
@@ -361,9 +398,9 @@ InputAdmissionOutcome SettingsList::handle_input(const InputEventVariant& input)
     auto impl = impl_;
     if (impl->submenu) {
         if (auto* handler = dynamic_cast<InputHandler*>(impl->submenu.get())) {
-            static_cast<void>(handler->handle_input(input));
+            return handler->handle_input(input);
         }
-        return InputAdmissionOutcome::Consumed;
+        return InputAdmissionOutcome::Unhandled;
     }
     if (std::holds_alternative<PasteEvent>(input)) {
         if (!impl->search_enabled || !impl->search_input) return InputAdmissionOutcome::Unhandled;
