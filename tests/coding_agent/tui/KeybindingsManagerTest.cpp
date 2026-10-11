@@ -214,7 +214,7 @@ TEST_CASE("Known-but-unassembled tui ids are diagnosed as unavailable and never 
     CHECK(manager->registry->find("tui.input.copy") == nullptr);
     CHECK(manager->registry->find("tui.altScreen.pageUp") == nullptr);
     CHECK(manager->registry->find("tui.altScreen.previousPrompt") == nullptr);
-    CHECK(manager->registry->entries().size() == 30);
+    CHECK(manager->registry->entries().size() == 32);
     const auto text = coding_agent::tui::format_hotkeys_text(*manager->help);
     CHECK(text.find("tui.input.copy") == std::string::npos);
     CHECK(text.find("app.model.select") == std::string::npos);

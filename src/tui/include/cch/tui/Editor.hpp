@@ -55,6 +55,7 @@ struct EditorOptions {
     /// at least one content column remains at narrow widths.
     std::size_t padding_x{0};
     std::shared_ptr<const KeybindingRegistry> keybindings{};
+    std::shared_ptr<KeybindingsContext> keybinding_context{};
     /// One-shot timer for autocomplete debounce; without one, debounced
     /// requests run immediately (deterministic tests inject a manual timer).
     std::unique_ptr<AutocompleteDebounceTimer> autocomplete_debounce_timer{};
@@ -115,6 +116,7 @@ public:
     /// shape over the immutable registry, ADR 0035): subsequent input matches
     /// the new registry. Confined to the app layer's `/reload` re-catalog.
     void set_keybindings(std::shared_ptr<const KeybindingRegistry> keybindings);
+    void set_keybinding_context(std::shared_ptr<KeybindingsContext> context);
 
     /// Direct terminal echo configuration for pinned dock in-place prediction.
     /// The terminal is borrowed and must outlive every Editor operation.

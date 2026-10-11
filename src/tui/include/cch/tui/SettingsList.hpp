@@ -61,6 +61,7 @@ struct SettingsListOptions {
     SettingsCancelSink on_cancel{};
     SettingsSubmenuFactoryHook submenu_factory{};
     std::shared_ptr<const KeybindingRegistry> keybindings{};
+    std::shared_ptr<KeybindingsContext> keybinding_context{};
 };
 
 /// A searchable settings interaction with deterministic cycling and nested selection.

@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
@@ -67,6 +68,32 @@ private:
     std::vector<EffectiveKeybinding> entries_;
 };
 
+/// Per-instance update handle for immutable keybinding snapshots. Copies share
+/// the same context; consumers acquire a strong snapshot at the start of each
+/// operation so a later replacement cannot leave one pinned to an old table.
+class KeybindingsContext final {
+public:
+    KeybindingsContext();
+    explicit KeybindingsContext(std::shared_ptr<const KeybindingRegistry> initial);
+
+    [[nodiscard]] std::shared_ptr<const KeybindingRegistry> snapshot() const;
+    void replace(std::shared_ptr<const KeybindingRegistry> next);
+    [[nodiscard]] explicit operator bool() const;
+    [[nodiscard]] bool matches(const KeyEvent& event, std::string_view id) const;
+    [[nodiscard]] std::optional<std::string> first_match(
+            const KeyEvent& event, std::span<const std::string_view> candidate_ids) const;
+    [[nodiscard]] std::vector<std::string> keys(std::string_view id) const;
+    [[nodiscard]] std::string key_text(std::string_view id) const;
+
+private:
+    struct State {
+        explicit State(std::shared_ptr<const KeybindingRegistry> reg) : current(std::move(reg)) {}
+        mutable std::mutex mutex;
+        std::shared_ptr<const KeybindingRegistry> current;
+    };
+    std::shared_ptr<State> state_;
+};
+
 struct KeybindingResolutionRequest {
     std::vector<KeybindingDefinition> definitions{};
     std::vector<KeybindingOverride> overrides{};
@@ -82,8 +109,12 @@ struct KeybindingResolution {
 /// candidate order and the returned issues report the conflict.
 [[nodiscard]] support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolutionRequest request);
 
-/// Reusable actions implemented by cch_tui, pinned to pi baseline 83114817.
+/// Reusable regular-mode actions implemented by cch_tui, pinned to frozen pi v1.0.4.
 [[nodiscard]] std::vector<KeybindingDefinition> builtin_tui_keybinding_definitions();
+
+/// Frozen fullscreen navigation actions, kept separate until the fullscreen
+/// runtime assembles them.
+[[nodiscard]] std::vector<KeybindingDefinition> alt_screen_keybinding_definitions();
 
 /// Whether `id` is a known pi `tui.*` action that cch_tui recognizes but does
 /// not assemble in this phase: `tui.input.copy` and the six

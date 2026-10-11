@@ -75,6 +75,7 @@ struct SelectListOptions {
     SelectCancelSink on_cancel{};
     SelectItemSink on_selection_change{};
     std::shared_ptr<const KeybindingRegistry> keybindings{};
+    std::shared_ptr<KeybindingsContext> keybinding_context{};
     /// Whether up/down navigation wraps across the first and last items.
     /// Disable to clamp at list boundaries.
     bool wrap_navigation{true};

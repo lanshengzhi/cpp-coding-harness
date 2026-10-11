@@ -160,7 +160,11 @@ struct Input::Impl {
 
 Input::Input(InputOptions options, InputSubmitSink on_submit, InputEscapeSink on_escape)
     : impl_(std::make_unique<Impl>()) {
-    if (!options.keybindings) options.keybindings = default_tui_keybindings();
+    if (options.keybinding_context) {
+        options.keybindings = options.keybinding_context->snapshot();
+    } else if (!options.keybindings) {
+        options.keybindings = default_tui_keybindings();
+    }
     impl_->options = std::move(options);
     impl_->on_submit = std::move(on_submit);
     impl_->on_escape = std::move(on_escape);
@@ -182,6 +186,20 @@ void Input::set_value(std::string value) {
 }
 
 void Input::move_cursor_to_end() { impl_->buffer.move_to_line_end(); }
+
+void Input::set_keybindings(std::shared_ptr<const KeybindingRegistry> keybindings) {
+    if (keybindings) {
+        impl_->options.keybindings = std::move(keybindings);
+        impl_->options.keybinding_context.reset();
+    }
+}
+
+void Input::set_keybinding_context(std::shared_ptr<KeybindingsContext> context) {
+    if (context) {
+        impl_->options.keybindings = context->snapshot();
+        impl_->options.keybinding_context = std::move(context);
+    }
+}
 
 support::Expected<RenderResult> Input::render(std::size_t width) {
     if (impl_->callback_error) return std::unexpected(*impl_->callback_error);
@@ -243,7 +261,9 @@ InputAdmissionOutcome Input::handle_input(const InputEventVariant& input) {
     if (!carries_press_behavior(event)) {
         return InputAdmissionOutcome::Unhandled;
     }
-    const auto action = impl_->options.keybindings->first_match(*event, kInputActions);
+    const auto keybindings = impl_->options.keybinding_context ? impl_->options.keybinding_context->snapshot()
+                                                               : impl_->options.keybindings;
+    const auto action = keybindings->first_match(*event, kInputActions);
     if (action == "tui.select.cancel") {
         impl_->fire_escape();
         return InputAdmissionOutcome::Consumed;

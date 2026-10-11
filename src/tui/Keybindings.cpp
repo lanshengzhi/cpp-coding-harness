@@ -105,6 +105,41 @@ const std::vector<EffectiveKeybinding>& KeybindingRegistry::entries() const {
     return entries_;
 }
 
+KeybindingsContext::KeybindingsContext() : state_(std::make_shared<State>(default_tui_keybindings())) {}
+
+KeybindingsContext::KeybindingsContext(std::shared_ptr<const KeybindingRegistry> initial)
+    : state_(std::make_shared<State>(initial ? std::move(initial) : default_tui_keybindings())) {}
+
+std::shared_ptr<const KeybindingRegistry> KeybindingsContext::snapshot() const {
+    if (!state_) return default_tui_keybindings();
+    std::lock_guard lock(state_->mutex);
+    return state_->current ? state_->current : default_tui_keybindings();
+}
+
+void KeybindingsContext::replace(std::shared_ptr<const KeybindingRegistry> next) {
+    if (!state_) {
+        state_ = std::make_shared<State>(next ? std::move(next) : default_tui_keybindings());
+    } else {
+        std::lock_guard lock(state_->mutex);
+        state_->current = next ? std::move(next) : default_tui_keybindings();
+    }
+}
+
+KeybindingsContext::operator bool() const { return state_ != nullptr; }
+
+bool KeybindingsContext::matches(const KeyEvent& event, std::string_view id) const {
+    return snapshot()->matches(event, id);
+}
+
+std::optional<std::string> KeybindingsContext::first_match(
+        const KeyEvent& event, std::span<const std::string_view> candidate_ids) const {
+    return snapshot()->first_match(event, candidate_ids);
+}
+
+std::vector<std::string> KeybindingsContext::keys(std::string_view id) const { return snapshot()->keys(id); }
+
+std::string KeybindingsContext::key_text(std::string_view id) const { return snapshot()->key_text(id); }
+
 support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolutionRequest request) {
     std::map<std::string, std::size_t, std::less<>> definition_indices;
     std::vector<EffectiveKeybinding> entries;
@@ -381,6 +416,39 @@ std::vector<KeybindingDefinition> builtin_tui_keybinding_definitions() {
             make_definition("tui.select.pageDown", {"pageDown"}, "Selection page down", "Selection"),
             make_definition("tui.select.confirm", {"enter"}, "Confirm selection", "Selection"),
             make_definition("tui.select.cancel", {"escape", "ctrl+c"}, "Cancel selection", "Selection"),
+    };
+}
+
+std::vector<KeybindingDefinition> alt_screen_keybinding_definitions() {
+    return {
+            make_definition("tui.altScreen.pageUp", {"pageUp"}, "Scroll viewport up one page", "Alternate screen"),
+            make_definition(
+                    "tui.altScreen.pageDown", {"pageDown"}, "Scroll viewport down one page", "Alternate screen"),
+            make_definition("tui.altScreen.halfPageUp", {}, "Scroll viewport up half a page", "Alternate screen"),
+            make_definition("tui.altScreen.halfPageDown", {}, "Scroll viewport down half a page", "Alternate screen"),
+            make_definition("tui.altScreen.lineUp", {}, "Scroll viewport up one line", "Alternate screen"),
+            make_definition("tui.altScreen.lineDown", {}, "Scroll viewport down one line", "Alternate screen"),
+            make_definition("tui.altScreen.previousPrompt",
+                    {"ctrl+shift+up", "ctrl+up"},
+                    "Jump to previous semantic prompt",
+                    "Alternate screen"),
+            make_definition("tui.altScreen.nextPrompt",
+                    {"ctrl+shift+down", "ctrl+down"},
+                    "Jump to next semantic prompt",
+                    "Alternate screen"),
+            make_definition(
+                    "tui.altScreen.search", {"ctrl+shift+f"}, "Search the primary scroll view", "Alternate screen"),
+            make_definition("tui.altScreen.searchNext",
+                    {"enter", "ctrl+g"},
+                    "Select the next search match",
+                    "Alternate screen"),
+            make_definition("tui.altScreen.searchPrevious",
+                    {"shift+enter", "ctrl+shift+g"},
+                    "Select the previous search match",
+                    "Alternate screen"),
+            make_definition("tui.altScreen.searchClose", {"escape"}, "Close transcript search", "Alternate screen"),
+            make_definition("tui.altScreen.top", {"ctrl+home"}, "Scroll viewport to top", "Alternate screen"),
+            make_definition("tui.altScreen.bottom", {"ctrl+end"}, "Scroll viewport to bottom", "Alternate screen"),
     };
 }
 

@@ -25,6 +25,7 @@ struct InputOptions {
     /// Keybinding registry for action matching; defaults to the built-in
     /// `tui.*` table when null.
     std::shared_ptr<const KeybindingRegistry> keybindings{};
+    std::shared_ptr<KeybindingsContext> keybinding_context{};
     /// Optional prompt text rendered dimmed after the cursor while the value
     /// is empty (and truncated to the remaining line width). Never rendered
     /// once the value is non-empty or when no placeholder is supplied.
@@ -60,6 +61,8 @@ public:
     /// Move the cursor to the end without consulting user keybindings or
     /// changing the value.
     void move_cursor_to_end();
+    void set_keybindings(std::shared_ptr<const KeybindingRegistry> keybindings);
+    void set_keybinding_context(std::shared_ptr<KeybindingsContext> context);
 
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;

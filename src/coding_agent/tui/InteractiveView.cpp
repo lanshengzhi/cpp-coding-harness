@@ -32,6 +32,7 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
       editor_(
               cch::tui::EditorOptions{
                       .keybindings = keybindings_->get(),
+                      .keybinding_context = keybindings_->context(),
                       .autocomplete_debounce_timer = std::move(options.autocomplete_debounce_timer),
                       .render_request =
                               [this, upstream = std::move(options.render_request)]() mutable -> support::ExpectedVoid {

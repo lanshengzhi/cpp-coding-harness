@@ -127,6 +127,7 @@ struct SelectList::Impl {
     std::shared_ptr<SelectCancelSink> on_cancel;
     std::shared_ptr<SelectItemSink> on_selection_change;
     std::shared_ptr<const KeybindingRegistry> keybindings;
+    std::shared_ptr<KeybindingsContext> keybinding_context;
     std::optional<support::Error> callback_error;
     bool focused{false};
     bool wrap_navigation{true};
@@ -392,7 +393,10 @@ SelectList::SelectList(std::vector<SelectItem> items, SelectListOptions options)
     impl_->on_select = std::make_shared<SelectItemSink>(std::move(options.on_select));
     impl_->on_cancel = std::make_shared<SelectCancelSink>(std::move(options.on_cancel));
     impl_->on_selection_change = std::make_shared<SelectItemSink>(std::move(options.on_selection_change));
-    impl_->keybindings = options.keybindings ? std::move(options.keybindings) : default_tui_keybindings();
+    impl_->keybinding_context = std::move(options.keybinding_context);
+    impl_->keybindings = impl_->keybinding_context
+                                 ? impl_->keybinding_context->snapshot()
+                                 : (options.keybindings ? std::move(options.keybindings) : default_tui_keybindings());
     impl_->search_enabled = options.enable_search;
     impl_->wrap_navigation = options.wrap_navigation;
     impl_->raw_jk_navigation_enabled = options.enable_raw_jk_navigation && !options.enable_search;
@@ -406,6 +410,7 @@ SelectList::SelectList(std::vector<SelectItem> items, SelectListOptions options)
         // editing actions (incl. cancel-as-first-action) resolve identically.
         impl_->search_input = std::make_unique<Input>(InputOptions{
                 .keybindings = impl_->keybindings,
+                .keybinding_context = impl_->keybinding_context,
                 .placeholder = std::move(options.search_placeholder),
         });
         if (options.initial_search) {
@@ -577,7 +582,8 @@ InputAdmissionOutcome SelectList::handle_input(const InputEventVariant& input) {
     const auto* key = std::get_if<KeyEvent>(&input);
     if (!carries_press_behavior(key)) return InputAdmissionOutcome::Unhandled;
     const auto count = impl->filtered_indices.size();
-    const auto action = impl->keybindings->first_match(*key, kSelectListActions);
+    const auto keybindings = impl->keybinding_context ? impl->keybinding_context->snapshot() : impl->keybindings;
+    const auto action = keybindings->first_match(*key, kSelectListActions);
     const bool plain = !key->ctrl && !key->alt && !key->shift;
     const bool raw_up = impl->raw_jk_navigation_enabled && plain && key->key == "k";
     const bool raw_down = impl->raw_jk_navigation_enabled && plain && key->key == "j";

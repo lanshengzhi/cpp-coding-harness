@@ -829,7 +829,11 @@ struct Editor::Impl {
 
 Editor::Editor(EditorOptions options, EditorChangeSink on_change, EditorSubmitSink on_submit)
     : impl_(std::make_shared<Impl>()) {
-    if (!options.keybindings) options.keybindings = default_tui_keybindings();
+    if (options.keybinding_context) {
+        options.keybindings = options.keybinding_context->snapshot();
+    } else if (!options.keybindings) {
+        options.keybindings = default_tui_keybindings();
+    }
     impl_->options = std::move(options);
     impl_->on_change = std::move(on_change);
     impl_->on_submit = std::move(on_submit);
@@ -956,6 +960,17 @@ void Editor::set_keybindings(std::shared_ptr<const KeybindingRegistry> keybindin
     auto& impl = operation.impl;
     if (keybindings) {
         impl.options.keybindings = std::move(keybindings);
+        impl.options.keybinding_context.reset();
+    }
+    invalidate();
+}
+
+void Editor::set_keybinding_context(std::shared_ptr<KeybindingsContext> context) {
+    auto operation = impl_->serialized_operation(impl_);
+    auto& impl = operation.impl;
+    if (context) {
+        impl.options.keybindings = context->snapshot();
+        impl.options.keybinding_context = std::move(context);
     }
     invalidate();
 }
@@ -1008,9 +1023,10 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
     if (!carries_press_behavior(event)) {
         return InputAdmissionOutcome::Unhandled;
     }
-    const auto matches = [&impl, event](std::string_view action_id) {
-        return impl.options.keybindings->matches(*event, action_id);
-    };
+    const auto keybindings =
+            impl.options.keybinding_context ? impl.options.keybinding_context->snapshot() : impl.options.keybindings;
+    const auto matches = [&keybindings, event](
+                                 std::string_view action_id) { return keybindings->matches(*event, action_id); };
 
     if (impl.jump_direction) {
         if (matches("tui.editor.jumpForward") || matches("tui.editor.jumpBackward")) {
@@ -1029,7 +1045,7 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
     // The open completion menu's table dispatches ahead of the main table
     // (pi's autocomplete branch); a menu miss falls through to editing.
     if (impl.autocomplete_menu.open) {
-        if (const auto menu_action = impl.options.keybindings->first_match(*event, kCompletionMenuActions)) {
+        if (const auto menu_action = keybindings->first_match(*event, kCompletionMenuActions)) {
             if (*menu_action == "tui.select.cancel") {
                 impl.cancel_autocomplete();
                 return InputAdmissionOutcome::Consumed;
@@ -1061,7 +1077,7 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
     // Main dispatch in kEditorActions order. The raw shift+backspace /
     // shift+delete guards stay OR-ed at their chain positions (pi parity):
     // they fire exactly when no earlier-listed action claimed the event.
-    const auto action = impl.options.keybindings->first_match(*event, kEditorActions);
+    const auto action = keybindings->first_match(*event, kEditorActions);
     if (action == "tui.input.tab") {
         impl.handle_tab_completion();
         return InputAdmissionOutcome::Consumed;

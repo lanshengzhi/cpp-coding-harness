@@ -25,35 +25,39 @@ struct HotkeyHelpRow;
 /// `InteractiveView` supplies that serialization.
 class SharedKeybindings final {
 public:
-    SharedKeybindings() = default;
-    explicit SharedKeybindings(
-        std::shared_ptr<const cch::tui::KeybindingRegistry> current)
-        : current_(std::move(current)) {}
+    SharedKeybindings() : context_(std::make_shared<cch::tui::KeybindingsContext>()) {}
+
+    explicit SharedKeybindings(std::shared_ptr<const cch::tui::KeybindingRegistry> current)
+        : context_(std::make_shared<cch::tui::KeybindingsContext>(std::move(current))) {}
 
     SharedKeybindings(std::shared_ptr<const cch::tui::KeybindingRegistry> current,
             std::shared_ptr<const std::vector<HotkeyHelpRow>> help)
-        : current_(std::move(current)), help_(std::move(help)) {}
+        : context_(std::make_shared<cch::tui::KeybindingsContext>(std::move(current))), help_(std::move(help)) {}
 
     /// pi `KeybindingsManager.reload()`: swap the current registry. The
     /// previous registry is released once no observer references it.
     void replace(std::shared_ptr<const cch::tui::KeybindingRegistry> current,
             std::shared_ptr<const std::vector<HotkeyHelpRow>> help = {}) {
         std::lock_guard lock(mutex_);
-        current_ = std::move(current);
+        context_->replace(std::move(current));
         help_ = std::move(help);
     }
 
+    /// Access the underlying update handle / context.
+    [[nodiscard]] std::shared_ptr<cch::tui::KeybindingsContext> context() const { return context_; }
+
     /// The current registry as a strong reference (ephemeral consumers).
-    [[nodiscard]] std::shared_ptr<const cch::tui::KeybindingRegistry> get() const {
-        std::lock_guard lock(mutex_);
-        return current_;
-    }
+    [[nodiscard]] std::shared_ptr<const cch::tui::KeybindingRegistry> get() const { return context_->snapshot(); }
+
+    /// The current registry snapshot.
+    [[nodiscard]] std::shared_ptr<const cch::tui::KeybindingRegistry> snapshot() const { return context_->snapshot(); }
 
     /// The current registry by reference. The caller must serialize this
     /// reference against `replace` for the duration of its use.
     [[nodiscard]] const cch::tui::KeybindingRegistry& registry() const {
         std::lock_guard lock(mutex_);
-        return *current_;
+        cached_snapshot_ = context_->snapshot();
+        return *cached_snapshot_;
     }
 
     [[nodiscard]] std::shared_ptr<const std::vector<HotkeyHelpRow>> help() const {
@@ -61,11 +65,12 @@ public:
         return help_;
     }
 
-    [[nodiscard]] explicit operator bool() const { return get() != nullptr; }
+    [[nodiscard]] explicit operator bool() const { return context_ && bool(*context_); }
 
 private:
     mutable std::mutex mutex_;
-    std::shared_ptr<const cch::tui::KeybindingRegistry> current_;
+    std::shared_ptr<cch::tui::KeybindingsContext> context_;
+    mutable std::shared_ptr<const cch::tui::KeybindingRegistry> cached_snapshot_;
     std::shared_ptr<const std::vector<HotkeyHelpRow>> help_;
 };
 

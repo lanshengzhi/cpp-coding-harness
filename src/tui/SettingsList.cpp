@@ -58,6 +58,7 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
     std::shared_ptr<SettingsCancelSink> on_cancel;
     SettingsSubmenuFactoryHook submenu_factory;
     std::shared_ptr<const KeybindingRegistry> keybindings;
+    std::shared_ptr<KeybindingsContext> keybinding_context;
     std::unique_ptr<Component> submenu;
     std::optional<support::Error> callback_error;
     bool focused{false};
@@ -197,9 +198,15 @@ SettingsList::SettingsList(std::vector<SettingItem> items, SettingsListOptions o
     impl_->on_change = std::make_shared<SettingsChangeSink>(std::move(options.on_change));
     impl_->on_cancel = std::make_shared<SettingsCancelSink>(std::move(options.on_cancel));
     impl_->submenu_factory = std::move(options.submenu_factory);
-    impl_->keybindings = options.keybindings ? std::move(options.keybindings) : default_tui_keybindings();
+    impl_->keybinding_context = std::move(options.keybinding_context);
+    impl_->keybindings = impl_->keybinding_context
+                                 ? impl_->keybinding_context->snapshot()
+                                 : (options.keybindings ? std::move(options.keybindings) : default_tui_keybindings());
     if (impl_->search_enabled) {
-        impl_->search_input = std::make_unique<Input>(InputOptions{.keybindings = impl_->keybindings});
+        impl_->search_input = std::make_unique<Input>(InputOptions{
+                .keybindings = impl_->keybindings,
+                .keybinding_context = impl_->keybinding_context,
+        });
     }
 }
 
@@ -325,13 +332,14 @@ support::Expected<RenderResult> SettingsList::render(std::size_t width) {
 
     if (!impl->items.empty() || impl->search_enabled) {
         lines.emplace_back();
-        auto confirm_keys = impl->keybindings->key_text("tui.select.confirm");
+        const auto keybindings = impl->keybinding_context ? impl->keybinding_context->snapshot() : impl->keybindings;
+        auto confirm_keys = keybindings->key_text("tui.select.confirm");
         const KeyEvent space{.key = "space"};
-        if (!impl->keybindings->matches(space, "tui.select.confirm")) {
+        if (!keybindings->matches(space, "tui.select.confirm")) {
             if (!confirm_keys.empty()) confirm_keys += '/';
             confirm_keys += "space";
         }
-        const auto cancel_keys = impl->keybindings->key_text("tui.select.cancel");
+        const auto cancel_keys = keybindings->key_text("tui.select.cancel");
         const auto actions = std::format(
             "{} to change · {} to cancel",
             confirm_keys,
@@ -366,7 +374,8 @@ InputAdmissionOutcome SettingsList::handle_input(const InputEventVariant& input)
     const auto* key = std::get_if<KeyEvent>(&input);
     if (!carries_press_behavior(key)) return InputAdmissionOutcome::Unhandled;
     const auto& displayed = impl->displayed_indices();
-    const auto action = impl->keybindings->first_match(*key, kSettingsListActions);
+    const auto keybindings = impl->keybinding_context ? impl->keybinding_context->snapshot() : impl->keybindings;
+    const auto action = keybindings->first_match(*key, kSettingsListActions);
     if (action == "tui.select.up") {
         if (displayed.empty()) return InputAdmissionOutcome::Consumed;
         impl->selected_index = impl->selected_index == 0 ? displayed.size() - 1 : impl->selected_index - 1;
