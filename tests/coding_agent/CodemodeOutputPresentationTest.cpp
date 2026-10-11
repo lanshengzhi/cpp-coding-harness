@@ -163,8 +163,9 @@ TEST_CASE("a codemode tool's text and image output render through the fallback a
     const auto& image = rendered.images.front();
     CHECK(image.mime_type == "image/png");
     CHECK(image.encoded_data == tests::kTinyPngBase64);
-    // The image lands after the tool block, not over it: it is the last row.
-    CHECK(image.region.row == rendered.visible.size() - 1);
+    // The image allocation follows the tool block and reaches its last row;
+    // Kitty geometry may reserve multiple rows even for a tiny source image.
+    CHECK(image.region.row + image.region.rows == rendered.visible.size());
 }
 
 TEST_CASE("a codemode tool's output presents exactly like another unregistered tool's output",

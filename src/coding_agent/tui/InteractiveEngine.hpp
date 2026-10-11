@@ -522,7 +522,8 @@ private:
     /// replace_session().
     std::vector<std::unique_ptr<AgentSession>> retired_sessions_;
     cch::tui::Terminal& terminal_; // must outlive this interactive run.
-    cch::tui::Tui tui_;
+    cch::tui::MainScreen main_screen_;
+    cch::tui::ITui& tui_; // main_screen_ outlives this interface and every consumer.
     /// pi's mutable shared KeybindingsManager consumption shape (ADR 0035,
     /// #418): every durable view component observes this slot; `/reload`
     /// replaces the current registry so all consumers see the new bindings

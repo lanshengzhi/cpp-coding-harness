@@ -216,6 +216,7 @@ void ToolExecutionComponent::rebuild_image_slots() {
                                                     .max_height = std::nullopt,
                                             },
                                     .fallback_style = theme_.foreground_hook(ThemeToken::ToolOutput),
+                                    .defer_protocol_selection = true,
                             }),
                     .data = image->data,
                     .mime_type = image->mime_type,

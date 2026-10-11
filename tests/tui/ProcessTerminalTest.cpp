@@ -1130,13 +1130,17 @@ TEST_CASE("Process Terminal probes color scheme and OSC background without consu
         REQUIRE(pty);
         std::atomic<bool> answered{false};
         std::atomic<bool> delivered_input{false};
+        std::string delivered_text;
         std::jthread responder([&] { answered = answer_appearance_query(pty->master.get(), probe_case.response); });
         cch::tui::ProcessTerminal terminal(
                 {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
 
         REQUIRE(terminal.start(
                 [&](std::string input) -> cch::support::ExpectedVoid {
-                    if (input.find("typed") != std::string::npos) delivered_input = true;
+                    // StdinBuffer delivers framed keys separately (#951), so
+                    // assert retained text across callbacks, not read chunking.
+                    delivered_text += input;
+                    if (delivered_text.find("typed") != std::string::npos) delivered_input = true;
                     return {};
                 },
                 [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
@@ -2274,9 +2278,10 @@ TEST_CASE("Process Terminal restart drops the stale input decoder fragment", "[t
     REQUIRE(cch::tests::wait_until(
             [&] {
                 std::lock_guard lock(events_mutex);
-                return inputs.size() > before_restart &&
-                       std::ranges::any_of(inputs | std::views::drop(before_restart),
-                               [](const std::string& input) { return input == "5R"; });
+                std::string delivered;
+                for (const auto& input : inputs | std::views::drop(before_restart))
+                    delivered += input;
+                return delivered == "5R";
             },
             std::chrono::seconds(2)));
     {

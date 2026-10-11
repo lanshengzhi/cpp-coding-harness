@@ -3,7 +3,7 @@
 #include "coding_agent/TextBom.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
 
-#include <cch/tui/Tui.hpp>
+#include <cch/tui/ITui.hpp>
 #include <cch/support/Error.hpp>
 
 #include <array>
@@ -178,8 +178,8 @@ edit_in_external_editor(std::string command, std::string content) {
     co_return support::Expected<std::optional<std::string>>{std::move(edited)};
 }
 
-boost::asio::awaitable<support::Expected<std::optional<std::string>>>
-run_external_editor_flow(cch::tui::Tui& tui, std::string content) {
+boost::asio::awaitable<support::Expected<std::optional<std::string>>> run_external_editor_flow(
+        cch::tui::ITui& tui, std::string content) {
     const auto command = external_editor_command();
     const auto stopped = tui.stop();
     if (!stopped) {

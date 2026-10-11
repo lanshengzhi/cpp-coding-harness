@@ -4,7 +4,7 @@
 
 namespace cch::tui {
 
-class Tui;
+class MainScreen;
 
 } // namespace cch::tui
 
@@ -16,6 +16,6 @@ namespace cch::tui::detail::testing {
 /// This private hook exists only for the frame preparation regression test: a
 /// Preview Frame that changes nothing must prepare no rows, and a one-row view
 /// change must prepare that row instead of the whole transcript.
-[[nodiscard]] std::size_t frame_prepare_call_count(const cch::tui::Tui& tui) noexcept;
+[[nodiscard]] std::size_t frame_prepare_call_count(const cch::tui::MainScreen& tui) noexcept;
 
 } // namespace cch::tui::detail::testing

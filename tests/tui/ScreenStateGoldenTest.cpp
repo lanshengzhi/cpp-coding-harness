@@ -579,6 +579,11 @@ void check_evidence_frame(const tui::VirtualTerminal& terminal, const support::J
             .column = static_cast<std::size_t>(expected.at("cursor").at("column").get_number()),
             .row = static_cast<std::size_t>(expected.at("cursor").at("row").get_number()),
     };
+    INFO(std::format("cursor actual=({},{}), expected=({},{})",
+            terminal.cursor().column,
+            terminal.cursor().row,
+            cursor.column,
+            cursor.row));
     CHECK(terminal.cursor() == cursor);
     CHECK(terminal.modes().cursor_visible == expected.at("cursorVisible").get_boolean());
     const auto& rows = expected.at("cells").get_array();
@@ -645,4 +650,81 @@ TEST_CASE("Named pi-v1.0.4 screen evidence replays all styled cells and focused 
     REQUIRE(host.render());
     check_evidence_frame(terminal, scenario.at("expected").at("changed"));
     REQUIRE(host.stop());
+}
+
+TEST_CASE("Named pi-v1.0.4 common lifecycle replays component removal focus input and stop",
+        "[tui][differential][issue977][compat-pi]") {
+    class LifecycleInput final : public tui::Component, public tui::Focusable, public tui::InputHandler {
+    public:
+        LifecycleInput(std::string line, tui::CursorPosition cursor, std::vector<std::string>& events)
+            : line_(std::move(line)), cursor_(cursor), events_(events) {}
+        [[nodiscard]] support::Expected<tui::RenderResult> render(std::size_t) override {
+            return tui::RenderResult{.lines = {line_}};
+        }
+        void invalidate() override {}
+        void set_focused(bool focused) override {
+            focused_ = focused;
+            events_.push_back(std::format("focus:{}", focused));
+        }
+        [[nodiscard]] bool focused() const override { return focused_; }
+        [[nodiscard]] std::optional<tui::CursorPosition> cursor_location() const override {
+            return focused_ ? std::optional{cursor_} : std::nullopt;
+        }
+        [[nodiscard]] tui::InputAdmissionOutcome handle_input(const tui::InputEventVariant& event) override {
+            if (const auto* key = std::get_if<tui::KeyEvent>(&event)) {
+                if (auto text = tui::printable_text(*key)) events_.push_back("input:" + *text);
+            }
+            return tui::InputAdmissionOutcome::Consumed;
+        }
+
+    private:
+        std::string line_;
+        tui::CursorPosition cursor_;
+        std::vector<std::string>& events_; // must outlive this component.
+        bool focused_{false};
+    };
+
+    const auto fixture = tests::read_pi_tui_evidence("screen-state.json");
+    REQUIRE(fixture);
+    const auto& scenarios = fixture->at("scenarios").get_array();
+    const auto found = std::ranges::find_if(scenarios,
+            [](const auto& scenario) { return scenario.at("name").get_string() == "common-root-lifecycle"; });
+    REQUIRE(found != scenarios.end());
+    const auto& scenario = *found;
+    const auto& dimensions = scenario.at("dimensions");
+    const auto& inputs = scenario.at("inputs");
+    const auto& expected = scenario.at("expected");
+    std::vector<std::string> events;
+    tui::VirtualTerminal terminal({
+            .columns = static_cast<std::size_t>(dimensions.at("columns").get_number()),
+            .rows = static_cast<std::size_t>(dimensions.at("rows").get_number()),
+    });
+    tui::MainScreen main_screen(terminal);
+    tui::ITui& root = main_screen;
+    auto input = std::make_unique<LifecycleInput>(inputs.at("first").get_string(),
+            tui::CursorPosition{
+                    .column = static_cast<std::size_t>(inputs.at("cursor").at("column").get_number()),
+                    .row = static_cast<std::size_t>(inputs.at("cursor").at("row").get_number()),
+            },
+            events);
+    auto* input_pointer = input.get();
+    auto tail = std::make_unique<tui::Text>(inputs.at("second").get_string(), 0, 0);
+    auto* tail_pointer = tail.get();
+    REQUIRE(root.add_child(std::move(input)));
+    REQUIRE(root.add_child(std::move(tail)));
+    REQUIRE(root.start());
+    REQUIRE(root.set_focus(input_pointer));
+    REQUIRE(root.render());
+    check_evidence_frame(terminal, expected.at("initial"));
+    REQUIRE(terminal.inject_input(inputs.at("input").get_string()));
+    REQUIRE(root.remove_child(tail_pointer));
+    REQUIRE(root.render());
+    check_evidence_frame(terminal, expected.at("removed"));
+    REQUIRE(root.set_focus(nullptr));
+    root.clear_children();
+    REQUIRE(root.render());
+    check_evidence_frame(terminal, expected.at("cleared"));
+    REQUIRE(root.stop());
+    check_evidence_frame(terminal, expected.at("stopped"));
+    CHECK(events == evidence_strings(expected.at("events")));
 }

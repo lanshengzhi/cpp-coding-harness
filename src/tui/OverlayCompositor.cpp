@@ -228,12 +228,6 @@ RenderResult OverlayCompositor::materialize_images(
     const TerminalCapabilities& capabilities,
     std::size_t width,
     std::size_t available_rows) {
-    if (!capabilities.cell_pixels || capabilities.cell_pixels->width == 0 ||
-        capabilities.cell_pixels->height == 0) {
-        output.images.clear();
-        return output;
-    }
-
     auto candidates = std::move(output.images);
     output.images.clear();
     std::stable_sort(candidates.begin(), candidates.end(), [](const auto& left, const auto& right) {
@@ -242,9 +236,26 @@ RenderResult OverlayCompositor::materialize_images(
 
     std::ptrdiff_t row_adjustment = 0;
     for (auto& image : candidates) {
-        if (!protocol_supports_mime(capabilities.inline_images, image.mime_type) ||
-            image.pixel_width == 0 || image.pixel_height == 0 ||
-            image.region.column >= width || image.region.row >= output.lines.size()) {
+        const auto adjusted_row = static_cast<std::ptrdiff_t>(image.region.row) + row_adjustment;
+        if (adjusted_row < 0) continue;
+        const auto target_row = static_cast<std::size_t>(adjusted_row);
+        if (target_row >= output.lines.size()) continue;
+        const auto source_rows = image.rows_reserved_in_lines
+                                         ? std::min(image.region.rows, output.lines.size() - target_row)
+                                         : std::size_t{1};
+        const auto use_fallback = [&] {
+            output.lines[target_row] = image.fallback_text;
+            if (source_rows > 1) {
+                output.lines.erase(output.lines.begin() + static_cast<std::ptrdiff_t>(target_row + 1),
+                        output.lines.begin() + static_cast<std::ptrdiff_t>(target_row + source_rows));
+                row_adjustment -= static_cast<std::ptrdiff_t>(source_rows - 1);
+            }
+        };
+        if (!capabilities.cell_pixels || capabilities.cell_pixels->width == 0 ||
+                capabilities.cell_pixels->height == 0 ||
+                !protocol_supports_mime(capabilities.inline_images, image.mime_type) || image.pixel_width == 0 ||
+                image.pixel_height == 0 || image.region.column >= width) {
+            use_fallback();
             continue;
         }
 
@@ -265,21 +276,8 @@ RenderResult OverlayCompositor::materialize_images(
                 capabilities.inline_images == InlineImageProtocol::Kitty);
         const auto columns = size.columns;
         const auto rows = size.rows;
-        const auto adjusted_row = static_cast<std::ptrdiff_t>(image.region.row) + row_adjustment;
-        if (adjusted_row < 0) continue;
-        const auto target_row = static_cast<std::size_t>(adjusted_row);
-        if (target_row >= output.lines.size()) continue;
-
-        const auto source_rows = image.rows_reserved_in_lines
-                                         ? std::min(image.region.rows, output.lines.size() - target_row)
-                                         : std::size_t{1};
         if (target_row >= available_rows || rows > available_rows - target_row) {
-            output.lines[target_row] = image.fallback_text;
-            if (source_rows > 1) {
-                output.lines.erase(output.lines.begin() + static_cast<std::ptrdiff_t>(target_row + 1),
-                        output.lines.begin() + static_cast<std::ptrdiff_t>(target_row + source_rows));
-                row_adjustment -= static_cast<std::ptrdiff_t>(source_rows - 1);
-            }
+            use_fallback();
             continue;
         }
 
@@ -462,6 +460,12 @@ void OverlayCompositor::forget_focus(Overlay* overlay, Component* replacement) {
     std::erase_if(focus_history_, [overlay](const auto& entry) {
         return entry.overlay == overlay;
     });
+}
+
+void OverlayCompositor::forget_component(Component* component) {
+    for (auto& entry : focus_history_) {
+        if (entry.previous == component) entry.previous = nullptr;
+    }
 }
 
 void OverlayCompositor::clear_focus_history() {

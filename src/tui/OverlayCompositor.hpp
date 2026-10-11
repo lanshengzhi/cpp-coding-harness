@@ -93,6 +93,7 @@ public:
     /// Drop `overlay`'s history entry and re-point entries that returned
     /// focus to it at `replacement`.
     void forget_focus(Overlay* overlay, Component* replacement);
+    void forget_component(Component* component);
 
     void clear_focus_history();
 

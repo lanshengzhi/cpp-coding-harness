@@ -15,7 +15,7 @@
 
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/tui/Tui.hpp>
+#include <cch/tui/ITui.hpp>
 #include <cch/support/Error.hpp>
 
 #include <filesystem>
@@ -75,10 +75,10 @@ struct InteractiveThemeHooks {
 /// arrive with the boot session (`set_registered_themes` at bind). The
 /// settings manager reference must outlive the controller.
 [[nodiscard]] std::unique_ptr<ThemeController> make_interactive_theme_controller(
-    const std::filesystem::path& agent_config_directory,
-    coding_agent::SettingsManager& settings_manager,
-    cch::tui::TerminalColorCapability color_capability,
-    cch::tui::Tui& root,
-    InteractiveThemeHooks hooks);
+        const std::filesystem::path& agent_config_directory,
+        coding_agent::SettingsManager& settings_manager,
+        cch::tui::TerminalColorCapability color_capability,
+        cch::tui::ITui& root,
+        InteractiveThemeHooks hooks);
 
 } // namespace cch::coding_agent::tui

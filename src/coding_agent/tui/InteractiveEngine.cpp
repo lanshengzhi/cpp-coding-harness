@@ -63,8 +63,9 @@ using interactive_view_detail::queued_editor_texts;
 InteractiveEngine::~InteractiveEngine() = default;
 
 InteractiveEngine::InteractiveEngine(cch::tui::Terminal& terminal, boost::asio::any_io_executor executor)
-    : session_(nullptr), terminal_(terminal), tui_(terminal), executor_(std::move(executor)), exit_wait_(executor_),
-      render_retry_timer_(executor_), frame_ticker_(executor_), flows_settled_(executor_) {
+    : session_(nullptr), terminal_(terminal), main_screen_(terminal), tui_(main_screen_),
+      executor_(std::move(executor)), exit_wait_(executor_), render_retry_timer_(executor_), frame_ticker_(executor_),
+      flows_settled_(executor_) {
     exit_wait_.expires_at(std::chrono::steady_clock::time_point::max());
     render_retry_timer_.expires_at(std::chrono::steady_clock::time_point::max());
     frame_ticker_.expires_at(std::chrono::steady_clock::time_point::max());

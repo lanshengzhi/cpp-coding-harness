@@ -186,6 +186,45 @@ const screenArtifact = envelope([
 ], [{ name: "styled-frame-and-focused-cursor", dimensions: { columns: 16, rows: 6 }, inputs: screenInputs, expected: { initial, changed } }]);
 
 
+const lifecycleTerminal = new CaptureTerminal(16, 6);
+const lifecycleRoot = new TuiMainScreen(lifecycleTerminal, false);
+const lifecycleEvents: string[] = [];
+const lifecycleInputs = { first: "input", second: "tail", input: "x", cursor: { column: 2, row: 0 } };
+let lifecycleFocused = false;
+const lifecycleChild = {
+	get focused() { return lifecycleFocused; },
+	set focused(value: boolean) { lifecycleFocused = value; lifecycleEvents.push(`focus:${value}`); },
+	render: () => [lifecycleFocused
+		? lifecycleInputs.first.slice(0, lifecycleInputs.cursor.column) + CURSOR_MARKER + lifecycleInputs.first.slice(lifecycleInputs.cursor.column)
+		: lifecycleInputs.first],
+	invalidate: () => {},
+	handleInput: (data: string) => lifecycleEvents.push(`input:${data}`),
+};
+const lifecycleTail = { render: () => [lifecycleInputs.second], invalidate: () => {} };
+lifecycleRoot.addChild(lifecycleChild);
+lifecycleRoot.addChild(lifecycleTail);
+lifecycleRoot.start();
+lifecycleRoot.setFocus(lifecycleChild);
+lifecycleRoot.renderNow();
+const lifecycleInitial = await lifecycleTerminal.snapshot();
+lifecycleTerminal.sendInput(lifecycleInputs.input);
+lifecycleRoot.removeChild(lifecycleTail);
+lifecycleRoot.renderNow();
+const lifecycleRemoved = await lifecycleTerminal.snapshot();
+lifecycleRoot.setFocus(null);
+lifecycleRoot.clear();
+lifecycleRoot.renderNow();
+const lifecycleCleared = await lifecycleTerminal.snapshot();
+lifecycleRoot.stop();
+const lifecycleStopped = await lifecycleTerminal.snapshot();
+lifecycleTerminal.sendInput("after-stop");
+lifecycleTerminal.emulator.dispose();
+screenArtifact.sourceEndpoints.push("packages/tui/src/tui.ts:TuiBase.start,stop,setFocus,Container.addChild,removeChild,clear");
+screenArtifact.scenarios.push({
+	name: "common-root-lifecycle", dimensions: { columns: 16, rows: 6 }, inputs: lifecycleInputs,
+	expected: { initial: lifecycleInitial, removed: lifecycleRemoved, cleared: lifecycleCleared, stopped: lifecycleStopped, events: lifecycleEvents },
+});
+
 // Capability accounting observation: freeze the public index export set and ledger classifications.
 // The committed docs/research ledger is hashed as the C++/Pike accounting artifact; export names are
 // observed directly from the frozen index so a stale/partial ledger cannot pass silently.

@@ -76,7 +76,7 @@ void RenderPipeline::note_prepared_line() noexcept { ++frame_prepare_call_count_
 
 std::size_t RenderPipeline::frame_prepare_call_count() const noexcept { return frame_prepare_call_count_; }
 
-support::ExpectedVoid RenderPipeline::stop(std::optional<CursorPosition> stop_cursor) {
+support::ExpectedVoid RenderPipeline::stop(std::optional<CursorPosition>) {
     const auto image_result = remove_active_images();
     (void)terminal_.reset_scroll_margins();
     const auto dock_height = previous_dock_lines_.size();
@@ -84,47 +84,30 @@ support::ExpectedVoid RenderPipeline::stop(std::optional<CursorPosition> stop_cu
     const auto dock_capacity =
             dimensions.rows > previous_viewport_height_ ? dimensions.rows - previous_viewport_height_ : std::size_t{0};
     const auto visible_dock_height = std::min(dock_height, dock_capacity);
-    const auto dock_skip = dock_height - visible_dock_height;
     previous_dock_lines_.clear();
 
     support::ExpectedVoid exit_result;
     for (std::size_t row = dimensions.rows - visible_dock_height; row < dimensions.rows; ++row) {
-        if (auto cleared = clear_row(terminal_, row, dimensions.columns); !cleared) {
+        // Margins are reset, so dock coordinates address physical screen rows.
+        // Buffer coordinates would erase transcript rows after scrolling.
+        if (auto cleared = write_dock_line(terminal_, row, std::string(dimensions.columns, ' ')); !cleared) {
             exit_result = std::unexpected(cleared.error());
             break;
         }
     }
-    if (exit_result && !previous_lines_.empty()) {
+    if (exit_result && dock_height > 0) {
+        // Full-width clearing leaves deferred wrap pending. Reposition before
+        // the exit newline so it scrolls once without painting a wrapped space.
+        exit_result = terminal_.set_dock_cursor(dimensions.rows - 1, 0);
+        if (exit_result) exit_result = terminal_.write("\r\n");
+    } else if (exit_result && !previous_lines_.empty()) {
         if (auto written = terminal_.write(" "); !written) {
             exit_result = std::unexpected(written.error());
-        } else if (dock_height == 0) {
-            if (auto positioned = terminal_.set_cursor(CursorPosition{.column = 0, .row = previous_lines_.size()});
-                    !positioned) {
-                exit_result = std::unexpected(positioned.error());
-            } else if (auto newline = terminal_.write("\r\n"); !newline) {
-                exit_result = std::unexpected(newline.error());
-            }
-        } else {
-            std::size_t current_row = dimensions.rows - 1;
-            if (visible_dock_height > 0 && stop_cursor) {
-                std::size_t dock_row = stop_cursor->row;
-                if (dock_row >= previous_viewport_height_ && dock_row < dimensions.rows) {
-                    dock_row -= previous_viewport_height_;
-                }
-                if (dock_row < dock_height) {
-                    const auto visible_row = dock_row > dock_skip ? dock_row - dock_skip : 0;
-                    current_row =
-                            dimensions.rows - visible_dock_height + std::min(visible_row, visible_dock_height - 1);
-                } else {
-                    current_row = std::min(stop_cursor->row, dimensions.rows - 1);
-                }
-            }
-            auto rows_down = current_row < dimensions.rows - 1 ? dimensions.rows - 1 - current_row : std::size_t{0};
-            if (stop_cursor && stop_cursor->column >= dimensions.columns && rows_down > 0) --rows_down;
-            if (rows_down > 0) {
-                exit_result = terminal_.move_cursor_down(rows_down);
-            }
-            if (exit_result) exit_result = terminal_.write("\r\n");
+        } else if (auto positioned = terminal_.set_cursor(CursorPosition{.column = 0, .row = previous_lines_.size()});
+                !positioned) {
+            exit_result = std::unexpected(positioned.error());
+        } else if (auto newline = terminal_.write("\r\n"); !newline) {
+            exit_result = std::unexpected(newline.error());
         }
     }
 
@@ -639,6 +622,15 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
                     render_result = std::unexpected(cursor_result.error());
                 }
             }
+        }
+    }
+
+    // An empty root leaves the cursor at the origin after clearing stale
+    // rows. Cancel the deferred wrap from the last full-width erased row.
+    if (render_result && new_lines.empty() && !has_dock && !cursor_location) {
+        if (auto cursor_result = terminal_.set_cursor({}); !cursor_result) {
+            note_backpressure(cursor_result.error());
+            render_result = std::unexpected(cursor_result.error());
         }
     }
 

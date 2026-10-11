@@ -109,12 +109,11 @@ support::Expected<coding_agent::SettingsManager> create_interactive_settings_man
     return manager;
 }
 
-std::unique_ptr<ThemeController> make_interactive_theme_controller(
-    const std::filesystem::path& agent_config_directory,
-    coding_agent::SettingsManager& settings_manager,
-    cch::tui::TerminalColorCapability color_capability,
-    cch::tui::Tui& root,
-    InteractiveThemeHooks hooks) {
+std::unique_ptr<ThemeController> make_interactive_theme_controller(const std::filesystem::path& agent_config_directory,
+        coding_agent::SettingsManager& settings_manager,
+        cch::tui::TerminalColorCapability color_capability,
+        cch::tui::ITui& root,
+        InteractiveThemeHooks hooks) {
     return std::make_unique<ThemeController>(
         agent_config_directory.empty()
             ? std::filesystem::path{}

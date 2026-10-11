@@ -141,6 +141,7 @@ public:
                                             .max_height = std::nullopt,
                                     },
                             .fallback_style = theme_.foreground_hook(ThemeToken::CustomMessageText),
+                            .defer_protocol_selection = true,
                     });
             image_slots_.push_back(std::make_unique<ImageSlot>(ImageSlot{
                     .component = std::move(component),

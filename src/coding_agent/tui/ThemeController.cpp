@@ -204,24 +204,18 @@ std::string_view terminal_theme_name(TerminalTheme theme) {
 }
 
 struct ThemeController::Impl {
-    Impl(
-        std::filesystem::path configured_custom_themes_dir,
-        std::vector<RegisteredTheme> configured_registered,
-        ThemeSettingProvider configured_theme_setting,
-        ThemeSettingCommitter configured_committer,
-        cch::tui::TerminalColorCapability configured_capability,
-        cch::tui::Tui& configured_root,
-        ThemeErrorSink configured_show_error,
-        ThemeChangedSink configured_on_changed)
-        : custom_themes_dir(std::move(configured_custom_themes_dir)),
-          registered(std::move(configured_registered)),
-          theme_setting(std::move(configured_theme_setting)),
-          committer(std::move(configured_committer)),
-          capability(configured_capability),
-          root(configured_root),
-          show_error(std::move(configured_show_error)),
-          on_changed(std::move(configured_on_changed)),
-          terminal_theme(detect_terminal_theme_from_env().theme),
+    Impl(std::filesystem::path configured_custom_themes_dir,
+            std::vector<RegisteredTheme> configured_registered,
+            ThemeSettingProvider configured_theme_setting,
+            ThemeSettingCommitter configured_committer,
+            cch::tui::TerminalColorCapability configured_capability,
+            cch::tui::ITui& configured_root,
+            ThemeErrorSink configured_show_error,
+            ThemeChangedSink configured_on_changed)
+        : custom_themes_dir(std::move(configured_custom_themes_dir)), registered(std::move(configured_registered)),
+          theme_setting(std::move(configured_theme_setting)), committer(std::move(configured_committer)),
+          capability(configured_capability), root(configured_root), show_error(std::move(configured_show_error)),
+          on_changed(std::move(configured_on_changed)), terminal_theme(detect_terminal_theme_from_env().theme),
           live(builtin_dark_theme(), configured_capability) {
         // pi ctor: `activeThemeName = resolveThemeSetting(getThemeSetting(),
         // terminalTheme)` then `initTheme(activeThemeName)` — a defined
@@ -281,7 +275,7 @@ struct ThemeController::Impl {
     ThemeSettingProvider theme_setting;
     ThemeSettingCommitter committer;
     cch::tui::TerminalColorCapability capability{cch::tui::TerminalColorCapability::Xterm256};
-    cch::tui::Tui& root; // must outlive this controller.
+    cch::tui::ITui& root; // must outlive this controller.
     ThemeErrorSink show_error;
     ThemeChangedSink on_changed;
     TerminalTheme terminal_theme{TerminalTheme::Dark};
@@ -289,24 +283,22 @@ struct ThemeController::Impl {
     LiveTheme live;
 };
 
-ThemeController::ThemeController(
-    std::filesystem::path custom_themes_dir,
-    std::vector<RegisteredTheme> registered,
-    ThemeSettingProvider theme_setting,
-    ThemeSettingCommitter committer,
-    cch::tui::TerminalColorCapability color_capability,
-    cch::tui::Tui& root,
-    ThemeErrorSink show_error,
-    ThemeChangedSink on_changed)
-    : impl_(std::make_unique<Impl>(
-          std::move(custom_themes_dir),
-          std::move(registered),
-          std::move(theme_setting),
-          std::move(committer),
-          color_capability,
-          root,
-          std::move(show_error),
-          std::move(on_changed))) {}
+ThemeController::ThemeController(std::filesystem::path custom_themes_dir,
+        std::vector<RegisteredTheme> registered,
+        ThemeSettingProvider theme_setting,
+        ThemeSettingCommitter committer,
+        cch::tui::TerminalColorCapability color_capability,
+        cch::tui::ITui& root,
+        ThemeErrorSink show_error,
+        ThemeChangedSink on_changed)
+    : impl_(std::make_unique<Impl>(std::move(custom_themes_dir),
+              std::move(registered),
+              std::move(theme_setting),
+              std::move(committer),
+              color_capability,
+              root,
+              std::move(show_error),
+              std::move(on_changed))) {}
 
 ThemeController::~ThemeController() = default;
 

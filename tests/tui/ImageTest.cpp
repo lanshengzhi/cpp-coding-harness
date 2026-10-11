@@ -131,6 +131,47 @@ cch::tui::Image make_image(
 
 } // namespace
 
+TEST_CASE("MainScreen resolves image sidecars per terminal without changing global capabilities",
+        "[tui][image][issue977][spec]") {
+    ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::None});
+    const auto before_capabilities = cch::tui::get_image_capabilities();
+    const auto before_cells = cch::tui::get_cell_dimensions();
+    cch::tui::VirtualTerminal image_terminal({
+            .columns = 20,
+            .rows = 5,
+            .capabilities = {.inline_images = cch::tui::InlineImageProtocol::Kitty,
+                    .cell_pixels = cch::tui::CellPixelDimensions{.width = 9, .height = 18}},
+    });
+    cch::tui::VirtualTerminal text_terminal({.columns = 20, .rows = 5});
+    cch::tui::MainScreen image_screen(image_terminal);
+    cch::tui::MainScreen text_screen(text_terminal);
+    cch::tui::ITui& image_root = image_screen;
+    cch::tui::ITui& text_root = text_screen;
+    const auto add_image = [](cch::tui::ITui& root) {
+        return root.add_child(std::make_unique<cch::tui::Image>(
+                cch::tui::ImageContent{.encoded_data = base64_encode(png_header(10, 10)), .mime_type = "image/png"},
+                cch::tui::ImageOptions{
+                        .constraints = {.max_width = 2, .max_height = 1}, .defer_protocol_selection = true}));
+    };
+    REQUIRE(add_image(image_root));
+    REQUIRE(add_image(text_root));
+    REQUIRE(image_root.start());
+    REQUIRE(text_root.start());
+    REQUIRE(image_terminal.inject_input("\x1b[6;24;12t"));
+    CHECK(image_terminal.capabilities().cell_pixels == cch::tui::CellPixelDimensions{.width = 12, .height = 24});
+    REQUIRE(image_root.render());
+    REQUIRE(text_root.render());
+    CHECK(image_terminal.images().size() == 1);
+    CHECK(text_terminal.images().empty());
+    CHECK(text_terminal.screen().front().find("[Image:") != std::string::npos);
+    REQUIRE(text_root.stop());
+    REQUIRE(image_root.render());
+    CHECK(image_terminal.images().size() == 1);
+    REQUIRE(image_root.stop());
+    CHECK(cch::tui::get_image_capabilities() == before_capabilities);
+    CHECK(cch::tui::get_cell_dimensions() == before_cells);
+}
+
 TEST_CASE("Image reports PNG JPEG GIF and WebP dimensions", "[tui][image][issue53][issue994][spec]") {
     ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::ITerm2});
     struct Fixture {

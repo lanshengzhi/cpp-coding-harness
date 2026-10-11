@@ -4,18 +4,14 @@
 #include "tui/OverlayCompositor.hpp"
 #include "tui/RenderPipeline.hpp"
 #include "tui/RenderUtils.hpp"
+#include "tui/TuiTestHooks.hpp"
 
 #include <cch/support/Error.hpp>
+
 #include <algorithm>
-#include <cstddef>
 #include <format>
 #include <limits>
-#include <optional>
-#include <string>
-#include <string_view>
 #include <utility>
-#include <variant>
-#include <vector>
 
 namespace cch::tui {
 namespace {
@@ -27,22 +23,14 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
     return std::format("{} [{}]", error.message, error.detail);
 }
 
-[[nodiscard]] support::Error startup_rollback_error(
-    const support::Error& startup,
-    const support::Error& rollback) {
-    return support::make_error(
-        startup.code,
-        "TUI startup failed and terminal restoration was incomplete",
-        std::format(
-            "startup: {}; restoration: {}",
-            describe_error(startup),
-            describe_error(rollback)));
+[[nodiscard]] support::Error startup_rollback_error(const support::Error& startup, const support::Error& rollback) {
+    return support::make_error(startup.code,
+            "TUI startup failed and terminal restoration was incomplete",
+            std::format("startup: {}; restoration: {}", describe_error(startup), describe_error(rollback)));
 }
 
 /// The downstream consumer of the replies that survive the raw-input listener
-/// stage (pi tui.ts onLateReply): a cell-size reply refines the terminal's
-/// reported cell pixels here, after every listener has had its say. Consuming
-/// or rewriting the bytes in a listener is what suppresses this update.
+/// stage. Decoded responses are applied in order to the terminal instance.
 void apply_late_replies(Terminal& terminal, const std::vector<detail::TerminalResponseVariant>& responses) {
     for (const auto& response : responses) {
         const auto* cell_size = std::get_if<detail::CellSizeResponse>(&response);
@@ -56,27 +44,76 @@ void apply_late_replies(Terminal& terminal, const std::vector<detail::TerminalRe
 
 } // namespace
 
-Tui::Tui(Terminal& terminal)
+MainScreen::MainScreen(Terminal& terminal)
     : terminal_(terminal), stream_decoder_(std::make_unique<detail::TerminalStreamDecoder>()),
       compositor_(std::make_unique<detail::OverlayCompositor>()),
       render_pipeline_(std::make_unique<detail::RenderPipeline>(terminal)),
       raw_listeners_(std::make_shared<RawInputListenerChain>()) {}
 
-Tui::~Tui() { (void)stop(); }
+MainScreen::~MainScreen() { (void)stop(); }
 
-support::Expected<std::reference_wrapper<Component>> Tui::add_child(std::unique_ptr<Component> component) {
-    return detail::attach_child(children_, std::move(component), "");
+support::Expected<std::reference_wrapper<Component>> MainScreen::add_child(std::unique_ptr<Component> component) {
+    auto attached = detail::attach_child(children_, std::move(component), "");
+    if (attached) {
+        request_render();
+        return *attached;
+    }
+    return std::unexpected(attached.error());
 }
 
-support::Expected<std::reference_wrapper<Overlay>> Tui::add_overlay(std::unique_ptr<Overlay> overlay) {
-    return compositor_->add_overlay(std::move(overlay));
+support::ExpectedVoid MainScreen::remove_child(Component* component) {
+    if (component == nullptr) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "TUI child cannot be null"));
+    }
+
+    ChildOperation operation(*this);
+    auto found = std::find_if(
+            children_.begin(), children_.end(), [component](const auto& child) { return child.get() == component; });
+    if (found == children_.end()) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Component is not attached to this TUI"));
+    }
+
+    const bool was_focused = focused_ == component;
+    compositor_->forget_component(component);
+    retired_children_.push_back(std::move(*found));
+    children_.erase(found);
+    if (was_focused) {
+        apply_focus(nullptr);
+        if (focused_ == nullptr) fallback_focus();
+    }
+    request_render();
+    return {};
 }
 
-RawInputListenerHandle Tui::add_raw_input_listener(RawInputListener listener) {
+void MainScreen::clear_children() {
+    ChildOperation operation(*this);
+    const bool was_focused = focused_ != nullptr && owns(focused_);
+    for (const auto& child : children_)
+        compositor_->forget_component(child.get());
+    for (auto& child : children_)
+        retired_children_.push_back(std::move(child));
+    children_.clear();
+    if (was_focused) apply_focus(nullptr);
+    request_render();
+}
+
+void MainScreen::finish_child_operation() noexcept {
+    --child_operation_depth_;
+    if (child_operation_depth_ == 0) retired_children_.clear();
+}
+
+support::Expected<std::reference_wrapper<Overlay>> MainScreen::add_overlay(std::unique_ptr<Overlay> overlay) {
+    auto attached = compositor_->add_overlay(std::move(overlay));
+    if (attached) request_render();
+    return attached;
+}
+
+RawInputListenerHandle MainScreen::add_raw_input_listener(RawInputListener listener) {
     return raw_listeners_->add_owned(std::move(listener));
 }
 
-support::ExpectedVoid Tui::remove_raw_input_listener(RawInputListenerId id) {
+support::ExpectedVoid MainScreen::remove_raw_input_listener(RawInputListenerId id) {
     if (!raw_listeners_->remove(id)) {
         return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "Raw-input listener is not registered with this TUI"));
@@ -84,7 +121,7 @@ support::ExpectedVoid Tui::remove_raw_input_listener(RawInputListenerId id) {
     return {};
 }
 
-support::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
+support::ExpectedVoid MainScreen::remove_overlay(Overlay* overlay) {
     if (overlay == nullptr) return {};
     if (!compositor_->owns(overlay)) {
         return std::unexpected(
@@ -109,7 +146,7 @@ support::ExpectedVoid Tui::remove_overlay(Overlay* overlay) {
     return {};
 }
 
-support::ExpectedVoid Tui::hide_overlay(Overlay* overlay) {
+support::ExpectedVoid MainScreen::hide_overlay(Overlay* overlay) {
     if (overlay == nullptr) return {};
     if (!compositor_->owns(overlay)) {
         return std::unexpected(
@@ -132,7 +169,7 @@ support::ExpectedVoid Tui::hide_overlay(Overlay* overlay) {
     return {};
 }
 
-support::ExpectedVoid Tui::restore_overlay(Overlay* overlay) {
+support::ExpectedVoid MainScreen::restore_overlay(Overlay* overlay) {
     if (overlay == nullptr) return {};
     if (!compositor_->owns(overlay)) {
         return std::unexpected(
@@ -144,7 +181,7 @@ support::ExpectedVoid Tui::restore_overlay(Overlay* overlay) {
     return {};
 }
 
-support::ExpectedVoid Tui::start() {
+support::ExpectedVoid MainScreen::start() {
     if (started_) {
         return {};
     }
@@ -181,15 +218,14 @@ support::ExpectedVoid Tui::start() {
     return {};
 }
 
-support::ExpectedVoid Tui::stop() {
-    if (!started_) return {};
+support::ExpectedVoid MainScreen::stop() {
+    if (!started_ || stopping_) return {};
 
+    ChildOperation operation(*this);
+    stopping_ = true;
     started_ = false;
     const auto stop_cursor = resolve_cursor_location();
-    if (auto* focusable = dynamic_cast<Focusable*>(focused_)) {
-        focusable->set_focused(false);
-    }
-    focused_ = nullptr;
+    apply_focus(nullptr);
     compositor_->clear_focus_history();
 
     const auto exit_result = render_pipeline_->stop(stop_cursor);
@@ -197,6 +233,7 @@ support::ExpectedVoid Tui::stop() {
     stream_decoder_->reset();
     pending_render_ = false;
     const auto stop_result = terminal_.stop();
+    stopping_ = false;
 
     if (!exit_result) return std::unexpected(exit_result.error());
     if (!cursor_result) return std::unexpected(cursor_result.error());
@@ -204,7 +241,7 @@ support::ExpectedVoid Tui::stop() {
     return {};
 }
 
-support::ExpectedVoid Tui::clear_screen() {
+support::ExpectedVoid MainScreen::clear_screen() {
     if (!started_) {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "TUI must be started before clearing the screen"));
@@ -215,7 +252,8 @@ support::ExpectedVoid Tui::clear_screen() {
     return {};
 }
 
-support::ExpectedVoid Tui::render() {
+support::ExpectedVoid MainScreen::render() {
+    ChildOperation operation(*this);
     if (!started_) {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "TUI must be started before rendering"));
@@ -252,14 +290,21 @@ support::ExpectedVoid Tui::render() {
     return result;
 }
 
-support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensions, bool prepare_rows) {
+support::Expected<RenderResult> MainScreen::render_children(TerminalDimensions dimensions, bool prepare_rows) {
     RenderResult output;
-    for (const auto& child : children_) {
-        if (auto* viewport_aware = dynamic_cast<ViewportAware*>(child.get())) {
+    std::vector<Component*> children;
+    children.reserve(children_.size());
+    for (const auto& child : children_)
+        children.push_back(child.get());
+    for (auto* child : children) {
+        if (!owns(child)) continue;
+        if (auto* viewport_aware = dynamic_cast<ViewportAware*>(child)) {
             viewport_aware->set_available_height(dimensions.rows);
         }
+        if (!owns(child)) continue;
         auto rendered = child->render(dimensions.columns);
         if (!rendered) return std::unexpected(rendered.error());
+        if (!owns(child)) continue;
         const auto row_offset = output.lines.size();
         for (auto& line : rendered->lines) {
             if (!prepare_rows) {
@@ -295,20 +340,23 @@ support::Expected<RenderResult> Tui::render_children(TerminalDimensions dimensio
     return output;
 }
 
-support::ExpectedVoid Tui::set_focus(Component* component) {
+support::ExpectedVoid MainScreen::set_focus(Component* component) {
+    ChildOperation operation(*this);
+    if (component != nullptr && stopping_) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "TUI cannot focus components while stopping"));
+    }
     if (component != nullptr && !owns(component)) {
         // Check if component is inside an overlay
         auto* overlay = dynamic_cast<Overlay*>(component);
         if (overlay == nullptr || !compositor_->owns(overlay)) {
             return std::unexpected(support::make_error(
-                support::ErrorCode::Validation,
-                "TUI focus target is not attached to this root"));
+                    support::ErrorCode::Validation, "TUI focus target is not attached to this root"));
         }
     }
     if (component != nullptr && dynamic_cast<Focusable*>(component) == nullptr) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "TUI focus target does not participate in focus"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "TUI focus target does not participate in focus"));
     }
 
     if (auto* overlay = dynamic_cast<Overlay*>(component); overlay != nullptr && component != focused_) {
@@ -318,21 +366,31 @@ support::ExpectedVoid Tui::set_focus(Component* component) {
     return {};
 }
 
-void Tui::set_render_request_sink(TuiRenderRequestSink sink) { render_request_sink_ = std::move(sink); }
+void MainScreen::set_render_request_sink(TuiRenderRequestSink sink) { render_request_sink_ = std::move(sink); }
 
-void Tui::invalidate() {
-    const bool request_render = started_ && !pending_render_;
+void MainScreen::request_render() {
+    ChildOperation operation(*this);
+    const bool request = started_ && !pending_render_;
     pending_render_ = true;
-    for (const auto& child : children_) {
-        child->invalidate();
-    }
-    compositor_->invalidate_all();
-    if (request_render && render_request_sink_) {
-        (void)render_request_sink_();
-    }
+    if (request && render_request_sink_) (void)render_request_sink_();
 }
 
-bool Tui::owns(const Component* component) const {
+void MainScreen::invalidate() {
+    ChildOperation operation(*this);
+    const bool request = started_ && !pending_render_;
+    pending_render_ = true;
+    std::vector<Component*> children;
+    children.reserve(children_.size());
+    for (const auto& child : children_)
+        children.push_back(child.get());
+    for (auto* child : children) {
+        if (owns(child)) child->invalidate();
+    }
+    compositor_->invalidate_all();
+    if (request && render_request_sink_) (void)render_request_sink_();
+}
+
+bool MainScreen::owns(const Component* component) const {
     for (const auto& child : children_) {
         if (child.get() == component) {
             return true;
@@ -341,13 +399,14 @@ bool Tui::owns(const Component* component) const {
     return false;
 }
 
-void Tui::handle_input(std::string input) {
+void MainScreen::handle_input(std::string input) {
     if (!started_) return;
     stream_decoder_->set_kitty_protocol_active(terminal_.capabilities().keyboard_protocol == KeyboardProtocol::Kitty);
     if (input.empty()) {
         // ProcessTerminal applies out-of-band responses before delivering the
         // same bytes here; late response fragments are dropped by its flush.
-        for (const auto& event : stream_decoder_->flush().events) dispatch_input(event);
+        for (const auto& event : stream_decoder_->flush().events)
+            dispatch_input(event);
         return;
     }
 
@@ -368,7 +427,8 @@ void Tui::handle_input(std::string input) {
     }
 }
 
-void Tui::dispatch_input(const InputEventVariant& event) {
+void MainScreen::dispatch_input(const InputEventVariant& event) {
+    ChildOperation operation(*this);
     // Try overlays first (in reverse z-order, topmost first)
     if (compositor_->dispatch_input(event, render_pipeline_->committed_dimensions()) ==
             InputAdmissionOutcome::Consumed) {
@@ -386,31 +446,35 @@ void Tui::dispatch_input(const InputEventVariant& event) {
     static_cast<void>(input_handler->handle_input(event));
 }
 
-void Tui::handle_resize(TerminalDimensions) {
+void MainScreen::handle_resize(TerminalDimensions) {
     if (!started_) return;
     invalidate();
 }
 
-void Tui::apply_focus(Component* component) {
-    if (auto* previous = dynamic_cast<Focusable*>(focused_)) previous->set_focused(false);
+void MainScreen::apply_focus(Component* component) {
+    ChildOperation operation(*this);
+    auto* previous = focused_;
     focused_ = component;
-    if (auto* next = dynamic_cast<Focusable*>(focused_)) next->set_focused(true);
+    if (auto* focusable = dynamic_cast<Focusable*>(previous)) focusable->set_focused(false);
+    if (focused_ != component || !focus_target_available(component)) return;
+    if (auto* focusable = dynamic_cast<Focusable*>(component)) focusable->set_focused(true);
 }
 
-bool Tui::focus_target_available(Component* component) const {
+bool MainScreen::focus_target_available(Component* component) const {
     if (component == nullptr) return false;
     if (owns(component)) return dynamic_cast<Focusable*>(component) != nullptr;
     return compositor_->focus_target_available(component, render_pipeline_->committed_dimensions());
 }
 
-void Tui::fallback_focus() {
+void MainScreen::fallback_focus() {
+    ChildOperation operation(*this);
     if (auto* target = find_focusable_target()) {
         auto* as_component = dynamic_cast<Component*>(target);
         if (as_component != focused_) apply_focus(as_component);
     }
 }
 
-Focusable* Tui::find_focusable_target() {
+Focusable* MainScreen::find_focusable_target() {
     // Look in visible overlays first (topmost first)
     if (auto* overlay = compositor_->topmost_focusable(render_pipeline_->committed_dimensions())) {
         return overlay;
@@ -424,7 +488,7 @@ Focusable* Tui::find_focusable_target() {
     return nullptr;
 }
 
-std::optional<CursorPosition> Tui::resolve_cursor_location() const {
+std::optional<CursorPosition> MainScreen::resolve_cursor_location() const {
     if (focused_ == nullptr) return std::nullopt;
     auto* focusable = dynamic_cast<Focusable*>(focused_);
     if (focusable == nullptr) return std::nullopt;
@@ -434,7 +498,7 @@ std::optional<CursorPosition> Tui::resolve_cursor_location() const {
 
 namespace detail::testing {
 
-std::size_t frame_prepare_call_count(const Tui& tui) noexcept {
+std::size_t frame_prepare_call_count(const MainScreen& tui) noexcept {
     return tui.render_pipeline_->frame_prepare_call_count();
 }
 

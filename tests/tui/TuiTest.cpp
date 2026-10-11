@@ -1129,9 +1129,41 @@ TEST_CASE("Tui stop clears the bottom dock before placing the shell prompt", "[t
     REQUIRE(tui.stop());
 
     CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 4});
-    CHECK(terminal.screen()[1].find("editor") == std::string::npos);
-    CHECK(terminal.screen()[2].find("footer") == std::string::npos);
-    CHECK(terminal.scrollback().size() >= 2);
+    const std::vector<std::string> expected_scrollback{"one     "};
+    const std::vector<std::string> expected_screen{"two     ", "", "        ", "        ", ""};
+    CHECK(terminal.scrollback() == expected_scrollback);
+    CHECK(terminal.screen() == expected_screen);
+}
+
+TEST_CASE("MainScreen stop clears a dock after transcript scrolling without erasing transcript rows",
+        "[tui][terminal][issue832][issue977][spec]") {
+    class ScrolledDock final : public cch::tui::Component {
+    public:
+        [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+            return cch::tui::RenderResult{
+                    .lines = {"one", "two", "three", "four", "last"},
+                    .viewport_height = 3,
+                    .dock_lines = {"editor", "footer"},
+            };
+        }
+
+        void invalidate() override {}
+    };
+
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 5});
+    cch::tui::MainScreen main_screen(terminal);
+    cch::tui::ITui& tui = main_screen;
+    REQUIRE(tui.add_child(std::make_unique<ScrolledDock>()));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(terminal.viewport_top() == 2);
+    REQUIRE(tui.stop());
+
+    const std::vector<std::string> expected_scrollback{"one     ", "two     ", "three   "};
+    const std::vector<std::string> expected_screen{"four    ", "last    ", "        ", "        ", ""};
+    CHECK(terminal.scrollback() == expected_scrollback);
+    CHECK(terminal.screen() == expected_screen);
+    CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 4});
 }
 
 TEST_CASE("Tui stop moves focused dock cursor below the bottom dock", "[tui][terminal][issue832][spec]") {

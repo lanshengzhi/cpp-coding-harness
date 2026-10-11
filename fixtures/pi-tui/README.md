@@ -18,7 +18,7 @@ The initial independently captured cases are:
 | --- | --- | --- |
 | `input.json` | `parseKey` press/repeat/release identities; actual Input editing values and submit callbacks (`a`, `b`, Left, `c`, Enter → `acb`) | `PiTuiDifferentialTest` drives the decoder and real focused Input through Tui/VirtualTerminal |
 | `component.json` | Text wrapping, padding and full ANSI output before/after `setText` | `PiTuiDifferentialTest` drives public Text render/mutation |
-| `screen-state.json` | Two regular renderer frames; every cell's grapheme, continuation and style, visible rows, scrollback and cursor position/visibility | `ScreenStateGoldenTest` drives Component/Focusable/Tui over VirtualTerminal |
+| `screen-state.json` | Regular renderer frames and common-root add/remove/focus/input/clear/stop; every cell's grapheme, continuation and style, visible rows, scrollback, cursor position/visibility and callback order | `ScreenStateGoldenTest` drives Component/Focusable/MainScreen through `ITui` over VirtualTerminal |
 | `capability-ledger.json` | Frozen `packages/tui/src/index.ts` export set (173) with ledger classifications and required cross-references | `TuiCapabilityLedgerTest` + docs ledger; offline verify requires the family |
 | `fuzzy.json` | `fuzzyMatch` scores/matches and `fuzzyFilter` rankings over non-ASCII, combining, supplementary, final-sigma and no-break-space queries and texts, each row recording both UTF-16 and UTF-8 lengths of the text | `PiTuiDifferentialTest` drives `fuzzy_match`/`fuzzy_filter`; `FuzzyTest` pins the retained original-UTF-8 offset helper that pi does not export |
 | `latex.json` | Frozen `renderLatex` inline grammar (symbols, nested groups, fractions including `frac 1/2`, roots, accents, inline scripts, operators), its `undefined` failure value, and the `display` option | `LatexTest` replays every row through `cch_tui::render_latex` and compares complete values |
@@ -35,6 +35,15 @@ bit and style. Viewport strings use xterm's trim-right representation, while com
 comparisons retain all trailing cells and their attributes. Original captured bytes remain
 unchanged; no text, nonblank glyph, style, cursor or geometry is projected away. This initial capture uses no images, OSC 8 links, scrolling,
 real emulator or IME; those require their own later-ticket evidence.
+
+For #977, the named runner re-captured all 11 current families at the same frozen revision
+and added `common-root-lifecycle` to `screen-state.json`. Its replay exercises `ITui` with
+real component ownership and compares the initial, removed, cleared and stopped screens,
+all cells and cursor state, plus focus/input callback order. Unlike an interface-existence
+check, it detects detached content remaining visible, input going to the wrong component,
+and the deferred-wrap cursor left by clearing a full-width row. Separate regressions cover
+reentrant removal lifetimes, scrolled dock teardown, and concurrent terminals with different
+image protocols and late cell-size replies without modifying global capability state.
 
 Capture explicitly, from a clean frozen pi checkout with its existing dependencies:
 

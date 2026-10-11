@@ -99,8 +99,10 @@ support::Expected<RenderResult> Image::render(std::size_t width) {
     }
     if (!impl_->present) return RenderResult{};
 
-    const auto capabilities = get_image_capabilities();
-    const auto cell_dimensions = get_cell_dimensions();
+    const auto capabilities =
+            impl_->options.defer_protocol_selection ? DetectedImageCapabilities{} : get_image_capabilities();
+    const auto cell_dimensions =
+            impl_->options.defer_protocol_selection ? CellPixelDimensions{} : get_cell_dimensions();
     if (impl_->cache_valid && impl_->cached_width == width && impl_->cached_capabilities == capabilities &&
             impl_->cached_cell_dimensions == cell_dimensions) {
         return impl_->cached;
@@ -147,10 +149,14 @@ support::Expected<RenderResult> Image::render(std::size_t width) {
     const auto default_max_height = std::max<std::size_t>(
             1, static_cast<std::size_t>(std::ceil(static_cast<long double>(max_width) * cell_width / cell_height)));
     const auto max_height = impl_->options.constraints.max_height.value_or(default_max_height);
-    const auto default_geometry = calculate_image_cell_size(
-            dimensions, max_width, max_height, cell_dimensions, capabilities.images == InlineImageProtocol::Kitty);
-    if (capabilities.images != InlineImageProtocol::None &&
-            detail::protocol_supports_mime(capabilities.images, impl_->content.mime_type)) {
+    const auto default_geometry = calculate_image_cell_size(dimensions,
+            max_width,
+            max_height,
+            cell_dimensions,
+            impl_->options.defer_protocol_selection || capabilities.images == InlineImageProtocol::Kitty);
+    if (impl_->options.defer_protocol_selection ||
+            (capabilities.images != InlineImageProtocol::None &&
+                    detail::protocol_supports_mime(capabilities.images, impl_->content.mime_type))) {
         output.images.push_back({
                 .resource_id = impl_->resource_id,
                 .revision = impl_->revision,
@@ -160,7 +166,8 @@ support::Expected<RenderResult> Image::render(std::size_t width) {
                 .pixel_width = dimensions.width,
                 .pixel_height = dimensions.height,
                 .max_width = max_width,
-                .max_height = max_height,
+                .max_height = impl_->options.defer_protocol_selection ? impl_->options.constraints.max_height
+                                                                      : std::optional<std::size_t>{max_height},
                 .fallback_text = prepared->text,
                 .region =
                         {

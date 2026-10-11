@@ -58,21 +58,23 @@ UserMessageComponent::UserMessageComponent(
             const auto* image = std::get_if<ai::ImageContent>(&block);
             if (image == nullptr) continue;
             auto slot = std::make_unique<ImageSlot>(ImageSlot{
-                .component = std::make_unique<cch::tui::Image>(
-                    cch::tui::ImageContent{
-                        .encoded_data = image->data,
-                        .mime_type = image->mime_type,
-                        .filename = std::nullopt,
-                    },
-                    cch::tui::ImageOptions{
-                        .constraints = {
-                            .max_width = 60,
-                            .max_height = std::nullopt,
-                        },
-                        .fallback_style = theme.foreground_hook(ThemeToken::UserMessageText),
-                    }),
-                .data = image->data,
-                .mime_type = image->mime_type,
+                    .component = std::make_unique<cch::tui::Image>(
+                            cch::tui::ImageContent{
+                                    .encoded_data = image->data,
+                                    .mime_type = image->mime_type,
+                                    .filename = std::nullopt,
+                            },
+                            cch::tui::ImageOptions{
+                                    .constraints =
+                                            {
+                                                    .max_width = 60,
+                                                    .max_height = std::nullopt,
+                                            },
+                                    .fallback_style = theme.foreground_hook(ThemeToken::UserMessageText),
+                                    .defer_protocol_selection = true,
+                            }),
+                    .data = image->data,
+                    .mime_type = image->mime_type,
             });
             image_slots_.push_back(std::move(slot));
         }

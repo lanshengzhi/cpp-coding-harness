@@ -8,7 +8,7 @@
 #include <string>
 
 namespace cch::tui {
-class Tui;
+class ITui;
 } // namespace cch::tui
 
 namespace cch::coding_agent::tui {
@@ -35,7 +35,7 @@ edit_in_external_editor(std::string command, std::string content);
 /// the edited content on a clean editor exit (`std::nullopt` when the editor
 /// failed, matching pi's silent outcome); a TUI stop/resume/render failure
 /// returns the error for the host's completion path.
-[[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<std::string>>>
-run_external_editor_flow(cch::tui::Tui& tui, std::string content);
+[[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<std::string>>> run_external_editor_flow(
+        cch::tui::ITui& tui, std::string content);
 
 } // namespace cch::coding_agent::tui

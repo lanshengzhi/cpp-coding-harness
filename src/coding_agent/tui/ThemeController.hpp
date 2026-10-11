@@ -3,7 +3,7 @@
 #include "Theme.hpp"
 
 #include <cch/coding_agent/ProjectResources.hpp>
-#include <cch/tui/Tui.hpp>
+#include <cch/tui/ITui.hpp>
 #include <cch/support/Error.hpp>
 
 #include <filesystem>
@@ -115,15 +115,14 @@ public:
     /// `registered` are the resource-loader themes (pi `setRegisteredThemes`
     /// in the interactive-mode ctor). `theme_setting`/`committer` back the
     /// global-scope `theme` User Settings field.
-    ThemeController(
-        std::filesystem::path custom_themes_dir,
-        std::vector<RegisteredTheme> registered,
-        ThemeSettingProvider theme_setting,
-        ThemeSettingCommitter committer,
-        cch::tui::TerminalColorCapability color_capability,
-        cch::tui::Tui& root,
-        ThemeErrorSink show_error,
-        ThemeChangedSink on_changed);
+    ThemeController(std::filesystem::path custom_themes_dir,
+            std::vector<RegisteredTheme> registered,
+            ThemeSettingProvider theme_setting,
+            ThemeSettingCommitter committer,
+            cch::tui::TerminalColorCapability color_capability,
+            cch::tui::ITui& root,
+            ThemeErrorSink show_error,
+            ThemeChangedSink on_changed);
     ThemeController(ThemeController&&) = delete;
     ThemeController& operator=(ThemeController&&) = delete;
     ~ThemeController();

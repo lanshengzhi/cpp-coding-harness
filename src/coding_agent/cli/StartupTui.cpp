@@ -48,7 +48,7 @@ template <typename T> struct StartupSlot : std::enable_shared_from_this<StartupS
         });
     }
 
-    void request_render(cch::tui::Tui* tui) {
+    void request_render(cch::tui::ITui* tui) {
         const auto self = this->shared_from_this();
         boost::asio::post(executor, [self, tui] {
             if (!self->finished) (void)tui->render();

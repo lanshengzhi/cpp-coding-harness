@@ -28,6 +28,9 @@ struct ImageOptions {
     ImageCellConstraints constraints{};
     std::optional<ImagePixelSize> dimensions{std::nullopt};
     TextStyleHook fallback_style{};
+    /// Emit protocol-neutral image metadata for the root to resolve against
+    /// its terminal, independently of environment capability detection.
+    bool defer_protocol_selection{false};
 };
 
 /// A reusable encoded-image Component with a bounded textual fallback.

@@ -4349,14 +4349,14 @@ TEST_CASE("Native TUI autocomplete prefixes discovered templates and skills with
     CHECK(screen.find("project-prompt") != std::string::npos);
     CHECK(screen.find("Project prompt completion.") != std::string::npos);
 
-    // Deferred slashes never autocomplete (pi's 22-command catalog subset):
-    // `/export` and `/help` open no suggestion window (the editor line still
-    // shows the typed text, so the check is the absence of suggestion rows).
+    // Slash completion offers catalog entries (#963), including commands
+    // whose execution is deferred. Builtins have no discovery scope tag.
     REQUIRE(terminal.inject_input("\x03/export"));
     drain_ready(io);
-    CHECK(count_text(visible_screen(terminal), "> /") == 0);
-    // `/help` is a supported router spelling, so the palette offers it (the
-    // Deferred `/export` above stays without a suggestion; issue #791).
+    CHECK(count_text(visible_screen(terminal), "> /export") == 1);
+    CHECK(count_text(visible_screen(terminal), "[p]") == 0);
+    CHECK(count_text(visible_screen(terminal), "[u]") == 0);
+    // `/help` is an accepted router spelling in the same palette (#791).
     REQUIRE(terminal.inject_input("\x03/help"));
     drain_ready(io);
     CHECK(visible_screen(terminal).find("> /help") != std::string::npos);
