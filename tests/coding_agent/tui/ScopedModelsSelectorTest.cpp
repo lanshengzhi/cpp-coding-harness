@@ -374,7 +374,7 @@ TEST_CASE("ScopedModelsSelector reports the search cursor on the real search row
     const auto cursor = selector.cursor_location();
     REQUIRE(cursor.has_value());
     // The component renders border, title and session-only lines above the
-    // SelectList, whose search input is its own row 0: the reported row must
+    // SearchableSelectList, whose search input is its own row 0: the reported row must
     // land on the actual search line instead of floating at row 0.
     CHECK(cursor->row == 3);
     CHECK(cursor->column == 2);

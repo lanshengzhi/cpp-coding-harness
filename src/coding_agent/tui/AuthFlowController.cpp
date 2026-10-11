@@ -11,6 +11,7 @@
 #include "coding_agent/tui/PromptSlot.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "coding_agent/tui/SelectListPrompt.hpp"
 
 #include "support/AsyncResultBridge.hpp"
 
@@ -249,7 +250,7 @@ void AuthFlowController::show_login_auth_type_selector(
         items.push_back(cch::tui::SelectItem{.value = option, .label = option});
     }
     const auto& theme = hooks_.live_theme();
-    auto selector = std::make_shared<cch::tui::SelectList>(std::move(items),
+    auto list = std::make_unique<cch::tui::SelectList>(std::move(items),
             cch::tui::SelectListOptions{
                     .theme = theme.select_list_theme(),
                     .on_select = [weak, provider_options, subscription_label, selector_generation](
@@ -291,12 +292,11 @@ void AuthFlowController::show_login_auth_type_selector(
                         return {};
                     },
                     .keybindings = keybindings_->get(),
-                    .wrap_navigation = false,
-                    .enable_raw_jk_navigation = true,
-                    .title = title,
-                    .hint = generic_select_list_hint(*keybindings_->get()),
-                    .border_hook = theme.foreground_hook(ThemeToken::Border),
             });
+    auto selector = std::make_shared<SelectListPrompt>(title,
+            generic_select_list_hint(*keybindings_->get()),
+            theme.foreground_hook(ThemeToken::Border),
+            std::move(list));
     presenter_->replace_prompt_slot(std::move(selector));
 }
 
@@ -548,7 +548,7 @@ boost::asio::awaitable<support::Expected<std::string>> AuthFlowController::show_
     }
     const auto& theme = hooks_.live_theme();
     const auto weak = weak_from_this();
-    auto selector = std::make_shared<cch::tui::SelectList>(std::move(items),
+    auto list = std::make_unique<cch::tui::SelectList>(std::move(items),
             cch::tui::SelectListOptions{
                     .theme = theme.select_list_theme(),
                     .on_select = [weak, slot, dialog, options = select.options](
@@ -580,12 +580,11 @@ boost::asio::awaitable<support::Expected<std::string>> AuthFlowController::show_
                         return {};
                     },
                     .keybindings = keybindings_->get(),
-                    .wrap_navigation = false,
-                    .enable_raw_jk_navigation = true,
-                    .title = select.message,
-                    .hint = generic_select_list_hint(*keybindings_->get()),
-                    .border_hook = theme.foreground_hook(ThemeToken::Border),
             });
+    auto selector = std::make_shared<SelectListPrompt>(select.message,
+            generic_select_list_hint(*keybindings_->get()),
+            theme.foreground_hook(ThemeToken::Border),
+            std::move(list));
     presenter_->replace_prompt_slot(std::move(selector));
 
     // pi's per-prompt race: an aborted per-prompt token rejects without

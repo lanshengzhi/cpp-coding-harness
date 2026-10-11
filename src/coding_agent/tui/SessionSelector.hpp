@@ -6,7 +6,7 @@
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Input.hpp>
 #include <cch/tui/Keybindings.hpp>
-#include <cch/tui/SelectList.hpp>
+#include "coding_agent/tui/SearchableSelectList.hpp"
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
@@ -42,23 +42,22 @@ using SessionListLoader =
 /// threaded session tree with the current-folder/all scope toggle, the
 /// threaded/recent/relevance sort cycle, the named filter, the path toggle,
 /// rename mode, delete confirmation (trash with unlink fallback), and search
-/// through the shared `cch::tui::SelectList`.
+/// through SearchableSelectList composed with the toolkit SelectList.
 ///
 /// Presentation seam: the query text, the filtered flat list, and the cursor
-/// delegate to an embedded SelectList (`enable_search`). Session search keeps
-/// its own token/regex matcher and relevance ordering (`SessionSelectorSearch`
-/// — untouched) through `SelectListOptions.search_filter_hook`, which returns
-/// the filtered item indices in rank order. The SelectList renders only while
-/// a search query is active (its embedded Input is the single owner of the
-/// query text, so typing reaches it from the tree view too); while the query
-/// is empty/whitespace this component draws its own view — the threaded tree
+/// delegate to SearchableSelectList, which owns an Input and filters before
+/// rendering the toolkit SelectList. Session search keeps its own token/regex
+/// matcher and relevance ordering (`SessionSelectorSearch`) through a filter
+/// hook that returns matching item indices in rank order. The list renders
+/// only while a search query is active; for an empty or whitespace query this
+/// component draws its own view — the threaded tree
 /// (or the plain flat list for the Recent/Fuzzy sorts) with the count/age/
 /// cwd/path rows, the scope/sort/name-filter header and hint rows, the rename
 /// mode, the delete confirmation, and the status messages.
 ///
 /// Layout follows pi: a three-line header (title + sort/name/scope, then two
 /// hint lines that switch to the delete-confirmation or status message), the
-/// search line, and the list body (tree rows for an empty query, SelectList
+/// search line, and the list body (tree rows for an empty query, filtered
 /// rows for a search) between the two dynamic borders. Rendering and input
 /// run on the TUI thread; the loaders are synchronous best-effort scans.
 class SessionSelectorComponent final
@@ -90,11 +89,10 @@ public:
     [[nodiscard]] bool focused() const override;
     /// The active input's cursor translated into this component's own line
     /// coordinates. In the search/tree views the cursor belongs to the
-    /// embedded SelectList's search Input: SelectList reports the row of its
-    /// search line, and the component-owned rows above it (border, header,
-    /// hint rows, spacer — recorded at render, never a magic constant) are
-    /// added on top. In rename mode the cursor belongs to the rename Input,
-    /// offset by the rows emitted above its line.
+    /// SearchableSelectList Input, and the component-owned rows above it
+    /// (border, header, hint rows, spacer — recorded at render, never a magic
+    /// constant) are added on top. In rename mode the cursor belongs to the
+    /// rename Input, offset by the rows emitted above its line.
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override;
 
     /// The rename-mode Input (pi `getSessionList`-style test seam).
@@ -146,7 +144,7 @@ private:
     /// The domain empty-state row (search no-match or empty tree/flat view),
     /// styled and truncated to the render width (pi wording).
     [[nodiscard]] std::string empty_state_row(std::size_t width) const;
-    /// Forward one event to the embedded SelectList and reconcile the
+    /// Forward one event to SearchableSelectList and reconcile the
     /// tree/search seam: when the edit clears an active query, the tree/flat
     /// rows are rebuilt for the next render.
     void forward_to_select_list(const cch::tui::InputEventVariant& input);
@@ -182,12 +180,9 @@ private:
     std::string rename_target_path_;
     bool focused_{false};
 
-    /// The embedded search/list widget. It owns the query text and renders
-    /// the filtered flat list while a query is active; see the class comment
-    /// for the composition seam. Its construction-time ranking never touches
-    /// uninitialized members (the initial item set is empty), so it can be
-    /// declared alongside the state below it.
-    cch::tui::SelectList select_list_;
+    /// Searchable list composition; its filter uses initialized selector
+    /// state and item replacement preserves the query and selection.
+    SearchableSelectList select_list_;
     /// Row of the search line in the last render's output (rows emitted
     /// above it); cursor_location adds it to SelectList's reported row.
     std::size_t cursor_row_offset_{0};

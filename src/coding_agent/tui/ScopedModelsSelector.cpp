@@ -6,7 +6,6 @@
 #include "Theme.hpp"
 
 #include <cch/ai/Model.hpp>
-#include <cch/tui/Fuzzy.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Utils.hpp>
 
@@ -133,7 +132,8 @@ ScopedModelsSelectorComponent::ScopedModelsSelectorComponent(const LiveTheme& th
     : theme_(theme), keybindings_(std::move(keybindings)), on_change_(std::move(on_change)),
       on_persist_(std::move(on_persist)), on_cancel_(std::move(on_cancel)), models_by_id_(index_models(all_models)),
       all_ids_(model_keys(models_by_id_)), enabled_ids_(std::move(enabled_ids)), filtered_ids_{},
-      select_list_(build_items(theme_, models_by_id_, all_ids_, enabled_ids_),
+      select_list_(
+              build_items(theme_, models_by_id_, all_ids_, enabled_ids_),
               cch::tui::SelectListOptions{
                       .max_visible = kMaxVisible,
                       .theme = theme_.select_list_theme(),
@@ -150,32 +150,22 @@ ScopedModelsSelectorComponent::ScopedModelsSelectorComponent(const LiveTheme& th
                           return {};
                       },
                       .keybindings = keybindings_,
-                      .enable_search = true,
-                      .search_filter_hook =
-                              [this](std::string_view query, const std::vector<cch::tui::SelectItem>& items) {
-                                  // The default fuzzy ranking (identical semantics to the
-                                  // SelectList's built-in path), also recording the
-                                  // filtered ids in display order for the filtered
-                                  // enable-all/clear-all actions.
-                                  std::vector<std::size_t> indices(items.size());
-                                  std::iota(indices.begin(), indices.end(), 0);
-                                  if (!query.empty()) {
-                                      indices = cch::tui::fuzzy_filter(
-                                              std::move(indices), query, [&items](std::size_t index) {
-                                                  return cch::tui::select_item_search_text(items[index]);
-                                              });
-                                  }
-                                  filtered_ids_.clear();
-                                  filtered_ids_.reserve(indices.size());
-                                  for (const auto index : indices) {
-                                      filtered_ids_.push_back(items[index].value);
-                                  }
-                                  return indices;
-                              },
-                      // The SelectList's generic no-match row carries the
-                      // selector's pi wording.
-                      .no_match_text = "  No matching models",
-              }) {}
+              },
+              [this](std::string_view query, const std::vector<cch::tui::SelectItem>& items) {
+                  std::vector<std::size_t> indices(items.size());
+                  std::iota(indices.begin(), indices.end(), 0);
+                  if (!query.empty()) {
+                      indices = cch::tui::fuzzy_filter(std::move(indices), query, [&items](std::size_t index) {
+                          return cch::tui::select_item_search_text(items[index]);
+                      });
+                  }
+                  filtered_ids_.clear();
+                  filtered_ids_.reserve(indices.size());
+                  for (const auto index : indices)
+                      filtered_ids_.push_back(items[index].value);
+                  return indices;
+              },
+              "  No matching models") {}
 
 bool ScopedModelsSelectorComponent::is_enabled(std::string_view id) const {
     if (!enabled_ids_) return true;
@@ -328,7 +318,7 @@ support::Expected<cch::tui::RenderResult> ScopedModelsSelectorComponent::render(
     };
 
     // pi's composition: border / title / muted session-only line / list
-    // (search input, rows, scroll info — all from the SelectList) / selected
+    // (search input, rows, scroll info — all from SearchableSelectList) / selected
     // model name / footer hint / border.
     DynamicBorder top_border(theme_.foreground_hook(ThemeToken::Border));
     if (auto appended = append(top_border); !appended) return std::unexpected(appended.error());
@@ -382,7 +372,7 @@ support::Expected<cch::tui::RenderResult> ScopedModelsSelectorComponent::render(
 void ScopedModelsSelectorComponent::invalidate() { select_list_.invalidate(); }
 
 cch::tui::InputAdmissionOutcome ScopedModelsSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
-    // Paste events belong to the embedded search input; releases are dropped.
+    // Paste events belong to SearchableSelectList's Input; releases are dropped.
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
     if (key != nullptr && key->type == cch::tui::KeyEventType::Release) {
         return cch::tui::InputAdmissionOutcome::Unhandled;
@@ -485,9 +475,9 @@ cch::tui::InputAdmissionOutcome ScopedModelsSelectorComponent::handle_input(cons
         return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
-    // Escape cancels (pi); the SelectList dispatches its cancel action. All
+    // Escape cancels (pi); SearchableSelectList dispatches its cancel action. All
     // remaining keys (search editing, printable characters) also go to the
-    // embedded search input through the SelectList.
+    // search input through SearchableSelectList.
     static_cast<void>(select_list_.handle_input(input));
     return cch::tui::InputAdmissionOutcome::Consumed;
 }

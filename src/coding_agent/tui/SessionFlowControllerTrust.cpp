@@ -6,6 +6,7 @@
 #include "coding_agent/tui/PromptSlot.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "coding_agent/tui/SelectListPrompt.hpp"
 #include "support/AsyncResultBridge.hpp"
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
@@ -247,7 +248,7 @@ SessionFlowController::show_boot_trust_prompt(
     }
     const auto& theme = hooks_.live_theme();
     const auto weak = weak_from_this();
-    auto selector = std::make_shared<cch::tui::SelectList>(std::move(items),
+    auto list = std::make_unique<cch::tui::SelectList>(std::move(items),
             cch::tui::SelectListOptions{
                     .theme = theme.select_list_theme(),
                     .on_select = [weak, slot](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
@@ -269,12 +270,11 @@ SessionFlowController::show_boot_trust_prompt(
                         return {};
                     },
                     .keybindings = keybindings_->get(),
-                    .wrap_navigation = false,
-                    .enable_raw_jk_navigation = true,
-                    .title = format_project_trust_prompt(workspace),
-                    .hint = generic_select_list_hint(*keybindings_->get()),
-                    .border_hook = theme.foreground_hook(ThemeToken::Border),
             });
+    auto selector = std::make_shared<SelectListPrompt>(format_project_trust_prompt(workspace),
+            generic_select_list_hint(*keybindings_->get()),
+            theme.foreground_hook(ThemeToken::Border),
+            std::move(list));
     presenter_->replace_prompt_slot(std::move(selector));
 
     boost::system::error_code error;
@@ -308,7 +308,7 @@ boost::asio::awaitable<void> SessionFlowController::run_trust_selector() {
     }
     const auto& theme = hooks_.live_theme();
     const auto weak = weak_from_this();
-    auto selector = std::make_shared<cch::tui::SelectList>(std::move(items),
+    auto list = std::make_unique<cch::tui::SelectList>(std::move(items),
             cch::tui::SelectListOptions{
                     .theme = theme.select_list_theme(),
                     .on_select = [weak, slot](const cch::tui::SelectItem& item) -> support::ExpectedVoid {
@@ -330,12 +330,11 @@ boost::asio::awaitable<void> SessionFlowController::run_trust_selector() {
                         return {};
                     },
                     .keybindings = keybindings_->get(),
-                    .wrap_navigation = false,
-                    .enable_raw_jk_navigation = true,
-                    .title = format_project_trust_prompt(cwd),
-                    .hint = generic_select_list_hint(*keybindings_->get()),
-                    .border_hook = theme.foreground_hook(ThemeToken::Border),
             });
+    auto selector = std::make_shared<SelectListPrompt>(format_project_trust_prompt(cwd),
+            generic_select_list_hint(*keybindings_->get()),
+            theme.foreground_hook(ThemeToken::Border),
+            std::move(list));
     presenter_->replace_prompt_slot(std::move(selector));
 
     boost::system::error_code error;

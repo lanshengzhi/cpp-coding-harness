@@ -230,20 +230,18 @@ TEST_CASE("OAuthSelector submits the highlighted provider with id and auth type"
         },
         [] {});
 
-    // Both boundaries clamp: up at the first row stays there, and down at
-    // the last row does not wrap back to the first.
+    // Navigation wraps at both boundaries, as the frozen SelectList does.
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "up"}));
-    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
-    REQUIRE(selected.has_value());
-    CHECK(selected->first == "openai-codex");
-    CHECK(selected->second == AuthSelectorType::OAuth);
-
-    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
-    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(selected.has_value());
     CHECK(selected->first == "deepseek");
     CHECK(selected->second == AuthSelectorType::ApiKey);
+
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
+    REQUIRE(selected.has_value());
+    CHECK(selected->first == "openai-codex");
+    CHECK(selected->second == AuthSelectorType::OAuth);
 }
 
 TEST_CASE("OAuthSelector distinguishes OpenRouter auth methods that share a provider id",
@@ -330,7 +328,7 @@ TEST_CASE("OAuthSelector renders the login empty state and windows long lists wi
     CHECK(screen.find("(10/10)") != std::string::npos);
 }
 
-TEST_CASE("OAuthSelector reports the search cursor on the real search row of its chrome",
+TEST_CASE("OAuthSelector reports the composed search cursor at the rendered search row",
         "[coding_agent][tui][login][issue588][spec]") {
     auto theme = test_theme();
     using coding_agent::tui::AuthSelectorType;
@@ -347,11 +345,33 @@ TEST_CASE("OAuthSelector reports the search cursor on the real search row of its
     REQUIRE(selector.render(80));
     const auto cursor = selector.cursor_location();
     REQUIRE(cursor.has_value());
-    // The SelectList's chrome places the search input at row 4 (border,
-    // spacer, title, spacer); the old hard-coded `cursor->row += 4` is gone
-    // but the reported row must match.
     CHECK(cursor->row == 4);
     CHECK(cursor->column == 2);
+}
+
+TEST_CASE("OAuthSelector bubbles Page Down while keeping navigation and prompt callbacks composed",
+        "[coding_agent][tui][login][issue967][spec]") {
+    auto theme = test_theme();
+    using coding_agent::tui::AuthSelectorType;
+    std::vector<std::string> events;
+    coding_agent::tui::OAuthSelectorComponent selector(
+            theme,
+            test_keybindings(),
+            coding_agent::tui::AuthSelectorMode::Login,
+            std::vector<coding_agent::tui::AuthSelectorProvider>{
+                    provider("openai-codex", "OpenAI Codex", AuthSelectorType::OAuth),
+                    provider("deepseek", "DeepSeek", AuthSelectorType::ApiKey)},
+            [&events](std::string id, AuthSelectorType) -> support::ExpectedVoid {
+                events.push_back("select:" + id);
+                return {};
+            },
+            [&events] { events.push_back("cancel"); });
+
+    CHECK(selector.handle_input(tui::KeyEvent{.key = "pageDown"}) == tui::InputAdmissionOutcome::Unhandled);
+    CHECK(selector.handle_input(tui::KeyEvent{.key = "down"}) == tui::InputAdmissionOutcome::Consumed);
+    CHECK(selector.handle_input(tui::KeyEvent{.key = "enter"}) == tui::InputAdmissionOutcome::Consumed);
+    CHECK(selector.handle_input(tui::KeyEvent{.key = "escape"}) == tui::InputAdmissionOutcome::Consumed);
+    CHECK(events == std::vector<std::string>{"select:deepseek", "cancel"});
 }
 
 TEST_CASE("OAuthSelector bounds every row at narrow widths", "[coding_agent][tui][oauth-selector][issue790][spec]") {

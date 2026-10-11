@@ -4,7 +4,7 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
-#include <cch/tui/SelectList.hpp>
+#include "coding_agent/tui/SearchableSelectList.hpp"
 #include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -36,14 +36,13 @@ using ModelSelectorInvalidateSink = std::move_only_function<void()>;
 /// exposes a single composition-diagnostics channel rather than pi's
 /// per-provider error counts).
 ///
-/// The list rows and the search input are delegated to the shared
-/// `cch::tui::SelectList` (search enabled); the component owns the chrome
-/// around it (border, scope/warning lines, status/diagnostics rows) because
+/// The list rows are delegated to `SearchableSelectList`, which owns the
+/// search Input and passes filtered rows into the toolkit SelectList. This
+/// component owns the chrome (border, scope/warning, and status rows) because
 /// the refresh status appears and disappears as the background refresh
-/// settles — too dynamic for SelectList's construction-time title/hint. The
-/// scope toggle (Tab) is pre-dispatched here so the scope marker text can
-/// re-accent each render; everything else flows into SelectList (navigation,
-/// confirm/cancel, search editing).
+/// settles. The scope toggle (Tab) is pre-dispatched here so the scope
+/// marker text can re-accent each render; navigation, confirm/cancel, and
+/// search editing flow through SearchableSelectList.
 ///
 /// Selecting a model fires `on_select` (pi's `onSelect`); the save-as-default
 /// key (`app.models.save`, Ctrl+S) fires `on_select_as_default` (pi's
@@ -54,7 +53,7 @@ using ModelSelectorInvalidateSink = std::move_only_function<void()>;
 ///
 /// Threading: input handling and render run on the TUI thread; the background
 /// refresh runs on the injected executor. A mutex serializes the model lists
-/// and status state; the `SelectList` (and its embedded search Input) is only
+/// and status state; the `SearchableSelectList` and its toolkit list are only
 /// touched from the TUI thread, and its item set is refreshed at render time
 /// whenever the mutex-guarded revision advanced (refresh result or scope
 /// toggle), so the query and selection survive rebuilds.
@@ -87,10 +86,10 @@ public:
     void set_focused(bool focused) override;
     [[nodiscard]] bool focused() const override;
     /// The search input's cursor translated into this component's own line
-    /// coordinates: SelectList reports the row of its search line, and the
-    /// rows this component emits above the SelectList (border, spacer,
+    /// coordinates: SearchableSelectList reports the search cursor, and the
+    /// rows this component emits above the list (border, spacer,
     /// scope/warning block, spacer) are added on top. Reported only when
-    /// focused, rendered, and the SelectList itself reports a cursor.
+    /// focused and rendered.
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override;
 
 private:
@@ -127,7 +126,7 @@ private:
     ModelSelectorSelectAsDefaultSink on_select_as_default_;
     ModelSelectorCancelSink on_cancel_;
     ModelSelectorInvalidateSink on_invalidate_;
-    cch::tui::SelectList select_list_;
+    SearchableSelectList select_list_;
 
     mutable std::mutex mutex_;
     std::optional<ai::Model> current_model_;
@@ -139,12 +138,12 @@ private:
     std::string refresh_status_message_{"Refreshing model catalogs…"};
     bool refresh_status_success_{false};
     /// Bumped whenever the active item set changes (snapshot load or scope
-    /// toggle) so render can push fresh items into the SelectList exactly
+    /// toggle) so render can push fresh items into SearchableSelectList exactly
     /// once per change, preserving the query and selection.
     std::size_t items_revision_{0};
     std::size_t applied_items_revision_{0};
-    /// Rows this component emitted above the SelectList in the last
-    /// successful render; cursor_location adds it to SelectList's row.
+    /// Rows this component emitted above the list in the last successful
+    /// render; cursor_location adds the search cursor's relative row.
     std::size_t cursor_row_offset_{0};
     /// Set on the first render to start the one-shot background refresh.
     bool refresh_started_{false};

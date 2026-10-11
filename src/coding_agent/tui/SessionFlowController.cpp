@@ -8,6 +8,7 @@
 #include "coding_agent/tui/InteractiveView.hpp"
 #include "coding_agent/tui/KeybindingHints.hpp"
 #include "coding_agent/tui/PromptSlot.hpp"
+#include "coding_agent/tui/SelectListPrompt.hpp"
 #include "coding_agent/tui/ReloadBox.hpp"
 #include "coding_agent/tui/SessionSelector.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
@@ -454,7 +455,7 @@ SessionFlowController::prompt_for_missing_session_cwd(
             .fallback_cwd = fallback_cwd,
         });
     const auto title = "Session cwd not found\n" + prompt_text;
-    auto selector = std::make_shared<cch::tui::SelectList>(
+    auto list = std::make_unique<cch::tui::SelectList>(
             std::vector<cch::tui::SelectItem>{
                     {.value = "Yes", .label = "Yes"},
                     {.value = "No", .label = "No"},
@@ -471,12 +472,11 @@ SessionFlowController::prompt_for_missing_session_cwd(
                         return {};
                     },
                     .keybindings = keybindings_->get(),
-                    .wrap_navigation = false,
-                    .enable_raw_jk_navigation = true,
-                    .title = title,
-                    .hint = generic_select_list_hint(*keybindings_->get()),
-                    .border_hook = hooks_.live_theme().foreground_hook(ThemeToken::Border),
             });
+    auto selector = std::make_shared<SelectListPrompt>(title,
+            generic_select_list_hint(*keybindings_->get()),
+            hooks_.live_theme().foreground_hook(ThemeToken::Border),
+            std::move(list));
     presenter_->replace_prompt_slot(std::move(selector));
 
     boost::system::error_code error;

@@ -4,6 +4,7 @@
 #include "coding_agent/tui/KeybindingHints.hpp"
 #include "coding_agent/tui/KeybindingsManager.hpp"
 #include "coding_agent/tui/SessionSelector.hpp"
+#include "coding_agent/tui/SelectListPrompt.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
 #include "coding_agent/tui/TerminationSignals.hpp"
@@ -246,7 +247,7 @@ boost::asio::awaitable<support::Expected<bool>> run_startup_missing_cwd_prompt(
                 // pi `showStartupSelector`: Continue → the fallback cwd, Cancel
                 // → undefined (the boot exits 0). Each option is a SelectItem
                 // with value == label.
-                return std::make_unique<cch::tui::SelectList>(
+                auto list = std::make_unique<cch::tui::SelectList>(
                         std::vector<cch::tui::SelectItem>{
                                 {.value = "Continue", .label = "Continue"},
                                 {.value = "Cancel", .label = "Cancel"},
@@ -262,12 +263,11 @@ boost::asio::awaitable<support::Expected<bool>> run_startup_missing_cwd_prompt(
                                     return {};
                                 },
                                 .keybindings = keybindings,
-                                .wrap_navigation = false,
-                                .enable_raw_jk_navigation = true,
-                                .title = std::move(title),
-                                .hint = coding_agent::tui::generic_select_list_hint(*keybindings),
-                                .border_hook = live_theme.foreground_hook(cch::coding_agent::tui::ThemeToken::Border),
                         });
+                return std::make_unique<coding_agent::tui::SelectListPrompt>(std::move(title),
+                        coding_agent::tui::generic_select_list_hint(*keybindings),
+                        live_theme.foreground_hook(cch::coding_agent::tui::ThemeToken::Border),
+                        std::move(list));
             });
 }
 

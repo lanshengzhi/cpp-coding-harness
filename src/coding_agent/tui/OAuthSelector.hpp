@@ -1,8 +1,9 @@
 #pragma once
 
+#include "coding_agent/tui/SearchableSelectList.hpp"
+
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
-#include <cch/tui/SelectList.hpp>
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
@@ -16,25 +17,18 @@ namespace cch::coding_agent::tui {
 
 class LiveTheme;
 
-/// pi's `"oauth" | "api_key"` auth-type vocabulary.
 enum class AuthSelectorType { OAuth, ApiKey };
-/// pi's `"login" | "logout"` selector mode.
 enum class AuthSelectorMode { Login, Logout };
 
 [[nodiscard]] inline std::string_view auth_selector_type_wire_name(AuthSelectorType type) {
     return type == AuthSelectorType::OAuth ? "oauth" : "api_key";
 }
 
-/// Source/type-only stored-credential status for one provider row (pi
-/// `AuthCheck`; never resolves key values).
 struct AuthSelectorStatus {
     AuthSelectorType type{AuthSelectorType::ApiKey};
     std::optional<std::string> source{std::nullopt};
 };
 
-/// One provider row in the selector (pi `AuthSelectorProvider`). The optional
-/// method name feeds fuzzy search only (pi `method?.name`); `has_login`
-/// carries pi's `method?.login` presence for the api-key dialog branch.
 struct AuthSelectorProvider {
     std::string id{};
     std::string name{};
@@ -44,27 +38,13 @@ struct AuthSelectorProvider {
     bool has_login{false};
 };
 
-/// pi `formatAuthSelectorProviderType`: the row label vocabulary.
 [[nodiscard]] inline std::string_view format_auth_selector_provider_type(AuthSelectorType type) {
     return type == AuthSelectorType::OAuth ? "subscription" : "API key";
 }
 
-using AuthProviderSelectSink =
-    std::move_only_function<void(std::string, AuthSelectorType)>;
+using AuthProviderSelectSink = std::move_only_function<void(std::string, AuthSelectorType)>;
 using AuthProviderCancelSink = std::move_only_function<void()>;
 
-/// The OAuth selector (pi `oauth-selector.ts`): a fuzzy-searchable provider
-/// list for the login and logout flows, rendering per-row auth-status
-/// indicators and — when the list mixes auth types — `[subscription]`,
-/// `[account]`, or `[API key]` labels. OpenRouter's OAuth row is rendered as
-/// `[account]` because that flow yields an API key rather than subscription
-/// access. Selection still reports the provider id and OAuth auth type;
-/// cancellation reports the cancel sink.
-///
-/// List presentation, the embedded search input, fuzzy ranking and cursor
-/// reporting all delegate to a `cch::tui::SelectList` (chrome-framed with
-/// the mode title and borders); the component only resolves a selected row
-/// back to its `(id, auth type)` pair and keeps the per-mode empty messages.
 class OAuthSelectorComponent final
     : public cch::tui::Component,
       public cch::tui::InputHandler,
@@ -95,7 +75,10 @@ private:
     std::vector<AuthSelectorProvider> providers_;
     AuthProviderSelectSink on_select_;
     AuthProviderCancelSink on_cancel_;
-    cch::tui::SelectList select_list_;
+    std::string title_;
+    cch::tui::TextStyleHook border_style_;
+    SearchableSelectList select_list_;
+    std::size_t list_row_offset_{4};
 };
 
 } // namespace cch::coding_agent::tui

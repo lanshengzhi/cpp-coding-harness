@@ -2,7 +2,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
-#include <cch/tui/SelectList.hpp>
+#include "coding_agent/tui/SearchableSelectList.hpp"
 
 #include <cch/support/Error.hpp>
 
@@ -30,16 +30,15 @@ using ThinkingSelectorCancelSink = std::move_only_function<void()>;
 /// thinking level: <level>`) ride the flow controller's mutation options
 /// (#774); Shift+Tab keeps cycling in-session outside this selector.
 ///
-/// The list rows and the search input are delegated to the shared
-/// `cch::tui::SelectList` (search enabled) with pi's
+/// The list rows are delegated to `SearchableSelectList`, which owns its
+/// Input and the toolkit `SelectList`; the list uses pi's
 /// `THINKING_SELECT_LIST_LAYOUT` column bounds, so the level rows describe
-/// themselves right after a narrow label column; the component owns the
+/// themselves right after a narrow label column. The component owns the
 /// chrome around it (border, pi's `Spacer(1)` blank rows, title, cycle hint,
 /// save hint) because the save hint renders only when the save-as-default
 /// sink exists.
 ///
-/// Threading: constructed and driven on the TUI thread; the SelectList (and
-/// its embedded search Input) is only touched from the TUI thread.
+/// Threading: constructed and driven on the TUI thread.
 class ThinkingSelectorComponent final : public cch::tui::Component,
                                         public cch::tui::InputHandler,
                                         public cch::tui::Focusable {
@@ -63,11 +62,7 @@ public:
     cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override;
     void set_focused(bool focused) override;
     [[nodiscard]] bool focused() const override;
-    /// The search input's cursor translated into this component's own line
-    /// coordinates: SelectList reports the row of its search line, and the
-    /// rows this component emits above the SelectList (border, spacer, title,
-    /// spacer, cycle hint, spacer) are added on top. Reported only when
-    /// focused, rendered, and the SelectList itself reports a cursor.
+    /// The search cursor translated from the list's row into this component's layout.
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override;
 
 private:
@@ -84,9 +79,8 @@ private:
     ThinkingSelectorCancelSink on_cancel_;
     ThinkingSelectorSelectAsDefaultSink on_select_as_default_;
     std::optional<std::string> default_level_;
-    cch::tui::SelectList select_list_;
-    /// Rows this component emitted above the SelectList in the last
-    /// successful render; cursor_location adds it to SelectList's row.
+    SearchableSelectList select_list_;
+    /// Rows emitted above the list during the last successful render.
     std::size_t cursor_row_offset_{0};
     bool focused_{false};
 };

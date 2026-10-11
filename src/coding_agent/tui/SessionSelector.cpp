@@ -247,13 +247,8 @@ SessionSelectorComponent::SessionSelectorComponent(const LiveTheme& theme,
                   confirm_rename(std::move(value));
                   return {};
               }),
-      // List/search presentation lives in the shared SelectList (search
-      // enabled): it owns the query text, the filtered rows and the search
-      // cursor. The session-specific token/regex matching and relevance
-      // ordering ride through the ranking hook; the confirm/cancel sinks
-      // re-enter this component. The item set starts empty and is populated
-      // below (its construction-time ranking never sees uninitialized
-      // state).
+      // The searchable list owns its Input and calls back into this
+      // component for session specific relevance ranking and selection.
       select_list_(std::vector<cch::tui::SelectItem>{},
               cch::tui::SelectListOptions{
                       .max_visible = kMaxVisibleSessions,
@@ -267,11 +262,9 @@ SessionSelectorComponent::SessionSelectorComponent(const LiveTheme& theme,
                           return {};
                       },
                       .keybindings = keybindings_,
-                      .enable_search = true,
-                      .search_filter_hook =
-                              [this](std::string_view query, const std::vector<cch::tui::SelectItem>& items) {
-                                  return rank_sessions(query, items.size());
-                              },
+              },
+              [this](std::string_view query, const std::vector<cch::tui::SelectItem>& items) {
+                  return rank_sessions(query, items.size());
               }) {
     if (current_loader_) {
         current_sessions_ = current_loader_();
@@ -659,10 +652,8 @@ std::optional<cch::tui::CursorPosition> SessionSelectorComponent::cursor_locatio
                 .row = *rename_input_row_ + cursor->row,
         };
     }
-    // The search cursor lives in the embedded SelectList (its own search
-    // line coordinate); the rows this component emits above it (border,
-    // header, hint rows, spacer) are added on top. The offset is recorded
-    // when the search line renders — never a magic constant.
+    // The search cursor belongs to the composed Input; rows emitted above
+    // it are added to the component's recorded offset.
     const auto cursor = select_list_.cursor_location();
     if (!cursor) return std::nullopt;
     return cch::tui::CursorPosition{
@@ -704,8 +695,7 @@ cch::tui::InputAdmissionOutcome SessionSelectorComponent::handle_input(const cch
 
     if (key == nullptr) {
         // Pasted text (and any other non-key event) edits the search query;
-        // the SelectList owns the search Input in both the tree and search
-        // views, so the paste flows there from either.
+        // SearchableSelectList owns the Input in both tree and search views.
         forward_to_select_list(input);
         return cch::tui::InputAdmissionOutcome::Consumed;
     }
@@ -814,13 +804,13 @@ cch::tui::InputAdmissionOutcome SessionSelectorComponent::handle_input(const cch
         }
         return cch::tui::InputAdmissionOutcome::Consumed;
     }
-    // Remaining keys edit the search query through the SelectList's Input
+    // Remaining keys edit the query through SearchableSelectList's Input
     // (typing the first character hands the view over to the search list).
     forward_to_select_list(input);
     return cch::tui::InputAdmissionOutcome::Consumed;
 }
 
-/// Forward one event to the embedded SelectList and reconcile the
+/// Forward one event to the searchable list and reconcile the
 /// tree/search seam: clearing an active query hands the view back to this
 /// component's tree/flat rows (rebuilt here so the next render draws the
 /// empty-query state with the current scope/sort/filter), with the
@@ -958,12 +948,9 @@ support::Expected<cch::tui::RenderResult> SessionSelectorComponent::render(
     lines.push_back("");
 
     // ── Search input ──────────────────────────────────────────────────────
-    // The search line renders through the embedded SelectList in every state
-    // (it owns the query text); record its row so cursor_location can add
-    // the component-owned rows above it (never a magic constant). While a
-    // search query is active the SelectList also renders the filtered rows
-    // (its own body); otherwise only its search row is kept and this
-    // component draws the tree/flat view (or the rename mode) below.
+    // The search line renders through SearchableSelectList in every state;
+    // while a query is active it also renders filtered rows, otherwise this
+    // component draws the tree/flat view (or rename mode) below.
     cursor_row_offset_ = lines.size();
     const auto search_view = !mode_rename_ && search_active();
     const auto select_begin = lines.size();
@@ -973,11 +960,8 @@ support::Expected<cch::tui::RenderResult> SessionSelectorComponent::render(
         for (auto& line : select_rendered->lines) {
             lines.push_back(std::move(line));
         }
-        // The SelectList's generic no-match row is swapped for the domain
-        // empty-state message: its wording depends on the name filter and
-        // scope, which change while the list is open (the toolkit row text
-        // is fixed at construction). With search enabled and no chrome the
-        // no-match row is the line directly after the search row.
+        // The component owns the search empty state because its wording
+        // depends on the current scope and name filter.
         if (!select_list_.selected_item() && lines.size() >= select_begin + 2) {
             lines[select_begin + 1] = empty_state_row(width);
         }

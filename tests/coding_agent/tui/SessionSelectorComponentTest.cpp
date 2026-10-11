@@ -271,7 +271,7 @@ TEST_CASE("session selector rename mode confirms through the inline input",
     CHECK(renamed_value.find("pasted-name") != std::string::npos);
 }
 
-TEST_CASE("session selector search delegates the query and filtered rows to the SelectList",
+TEST_CASE("session selector search delegates the query and filtered rows to SearchableSelectList",
         "[coding_agent][tui][session-selector][issue590][spec]") {
     auto theme = test_theme();
     auto keybindings = test_keybindings();
@@ -298,13 +298,13 @@ TEST_CASE("session selector search delegates the query and filtered rows to the 
             [] {});
 
     // Empty query: the component's own tree rows render, with the search
-    // line (owned by the SelectList) above them.
+    // line (owned by SearchableSelectList) above them.
     auto text = render_text(component);
     CHECK(text.find("fix the parser bug") != std::string::npos);
     CHECK(text.find("refactor the loader") != std::string::npos);
 
-    // Typing hands the view over to the SelectList: the query line and the
-    // filtered flat rows come from it, the non-matching session disappears.
+    // Typing hands the view over to SearchableSelectList: its query line and
+    // filtered flat rows show, and the non-matching session disappears.
     for (const char character : std::string("parser")) {
         static_cast<void>(component.handle_input(tui::KeyEvent{.key = std::string(1, character)}));
     }
@@ -313,7 +313,7 @@ TEST_CASE("session selector search delegates the query and filtered rows to the 
     CHECK(text.find("fix the parser bug") != std::string::npos);
     CHECK(text.find("refactor the loader") == std::string::npos);
 
-    // The search cursor reports the SelectList search row plus the
+    // The search cursor reports its SearchableSelectList row plus the
     // component-owned rows above it (blank, border, blank, title, hints,
     // blank), recorded at render rather than assumed.
     component.set_focused(true);

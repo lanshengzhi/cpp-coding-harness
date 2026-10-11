@@ -3,7 +3,7 @@
 #include <cch/ai/Model.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
-#include <cch/tui/SelectList.hpp>
+#include "coding_agent/tui/SearchableSelectList.hpp"
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
@@ -40,12 +40,12 @@ using ScopedModelsCancelSink = std::move_only_function<void()>;
 /// `getSortedIds`). Sinks fire on the input thread; hosts post to their
 /// executor like the login presentation sinks.
 ///
-/// List presentation, fuzzy filtering, the embedded search input and the
-/// cursor delegate to a `cch::tui::SelectList`; the component keeps the
-/// title/session-only/footer chrome and intercepts the `app.models.*`
-/// domain actions (toggle-on-confirm, filtered enable-all/clear-all,
-/// provider toggling, reorder, save, Ctrl+C-clears-search-first) before the
-/// SelectList sees those keys.
+/// List presentation and the search Input are composed by SearchableSelectList,
+/// which applies fuzzy filtering before passing rows to the toolkit SelectList.
+/// This component keeps the title/session-only/footer chrome and intercepts
+/// the `app.models.*` domain actions (toggle-on-confirm, filtered
+/// enable-all/clear-all, provider toggling, reorder, save,
+/// Ctrl+C-clears-search-first) before the searchable list sees those keys.
 class ScopedModelsSelectorComponent final
     : public cch::tui::Component,
       public cch::tui::InputHandler,
@@ -98,14 +98,14 @@ private:
     /// list of full ids.
     std::optional<std::vector<std::string>> enabled_ids_{std::nullopt};
     /// The currently filtered ids in display order, captured by the search
-    /// filter hook on every ranking pass: the target set of the filtered
+    /// filter on every ranking pass: the target set of the filtered
     /// enable-all/clear-all actions.
     std::vector<std::string> filtered_ids_;
-    cch::tui::SelectList select_list_;
+    SearchableSelectList select_list_;
     bool dirty_{false};
-    /// Component chrome rows emitted above the SelectList at the last render;
-    /// the SelectList reports its search row relative to its own output, so
-    /// this offset moves the cursor onto the real search line.
+    /// Component chrome rows emitted above SearchableSelectList at the last
+    /// render; its cursor is relative to its own output, so this offset moves
+    /// it onto the real search line.
     std::size_t rows_before_list_{0};
 };
 

@@ -42,8 +42,8 @@ ModelSelectorComponent::ModelSelectorComponent(const LiveTheme& theme,
     : theme_(theme), keybindings_(std::move(keybindings)), runtime_(std::move(runtime)), executor_(std::move(executor)),
       on_select_(std::move(on_select)), on_select_as_default_(std::move(on_select_as_default)),
       on_cancel_(std::move(on_cancel)), on_invalidate_(std::move(on_invalidate)),
-      // The list/search presentation lives in the shared SelectList; sinks
-      // only re-enter this component (the SelectList outlives neither).
+      // SearchableSelectList owns the query Input and feeds filtered rows to
+      // the toolkit list; sinks only re-enter this component.
       select_list_(std::vector<cch::tui::SelectItem>{},
               cch::tui::SelectListOptions{
                       .max_visible = kMaxVisible,
@@ -57,10 +57,10 @@ ModelSelectorComponent::ModelSelectorComponent(const LiveTheme& theme,
                           return {};
                       },
                       .keybindings = keybindings_,
-                      .enable_search = true,
-                      .initial_search = initial_search_input,
-                      .no_match_text = "  No matching models",
-              }) {
+              },
+              {},
+              "  No matching models") {
+    if (initial_search_input) select_list_.set_filter(std::move(*initial_search_input));
     if (current_model != nullptr) current_model_ = *current_model;
     for (auto& scoped : scoped_models) {
         scoped_model_items_.push_back(ModelItem{
@@ -352,8 +352,8 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
         if (auto appended = append(spacer); !appended) return std::unexpected(appended.error());
     }
 
-    // The SelectList renders its search row first (no chrome framing here),
-    // directly followed by the item rows or the empty-state row. The rows
+    // SearchableSelectList renders its search row first, followed by item
+    // rows or the empty-state row. The rows
     // emitted above it fix the cursor offset for this render pass.
     cursor_row_offset_ = result.lines.size();
     {
@@ -455,7 +455,7 @@ cch::tui::InputAdmissionOutcome ModelSelectorComponent::handle_input(const cch::
     }
 
     // Everything else — navigation, confirm/cancel, and search editing —
-    // belongs to the SelectList.
+    // belongs to the SearchableSelectList.
     static_cast<void>(select_list_.handle_input(input));
     return cch::tui::InputAdmissionOutcome::Consumed;
 }

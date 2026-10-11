@@ -35,8 +35,8 @@ ThinkingSelectorComponent::ThinkingSelectorComponent(const LiveTheme& theme,
       available_levels_(std::move(available_levels)), on_select_(std::move(on_select)),
       on_cancel_(std::move(on_cancel)), on_select_as_default_(std::move(on_select_as_default)),
       default_level_(std::move(default_level)),
-      // The list/search presentation lives in the shared SelectList; sinks
-      // only re-enter this component (the SelectList outlives neither).
+      // SearchableSelectList owns the query Input and filters rows before
+      // handing them to the toolkit list.
       select_list_(build_items(),
               cch::tui::SelectListOptions{
                       .max_visible = 10,
@@ -55,9 +55,9 @@ ThinkingSelectorComponent::ThinkingSelectorComponent(const LiveTheme& theme,
                           return {};
                       },
                       .keybindings = keybindings_,
-                      .enable_search = true,
-                      .no_match_text = "  No matching levels",
-              }) {
+              },
+              {},
+              "  No matching levels") {
     // pi: the selector opens with the current level highlighted.
     for (std::size_t index = 0; index < available_levels_.size(); ++index) {
         if (available_levels_[index] == current_level_) {
@@ -95,9 +95,7 @@ support::Expected<cch::tui::RenderResult> ThinkingSelectorComponent::render(std:
     };
 
     // pi's constructor composition: border / spacer / title / spacer / cycle
-    // hint / spacer / list chrome / spacer / save hint / border. The list
-    // block (search input, rows, scroll info) renders from the shared
-    // SelectList.
+    // hint / spacer / list rows / spacer / save hint / border.
     //
     // pi's blank rows come from `Spacer(1)`, which renders one empty row;
     // `cch::tui::Text` with empty text renders no row at all, so the shared
@@ -163,8 +161,7 @@ cch::tui::InputAdmissionOutcome ThinkingSelectorComponent::handle_input(const cc
         }
         return cch::tui::InputAdmissionOutcome::Consumed;
     }
-    // Navigation, confirm/cancel, and search editing belong to the
-    // SelectList.
+    // Navigation, confirm and cancel belong to the SelectList.
     static_cast<void>(select_list_.handle_input(input));
     return cch::tui::InputAdmissionOutcome::Consumed;
 }

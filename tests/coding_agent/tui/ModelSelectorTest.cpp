@@ -516,7 +516,7 @@ TEST_CASE("ModelSelector wraps the save-as-default hint instead of dropping the 
     }
 }
 
-TEST_CASE("ModelSelector delegates search editing to the SelectList and reports its cursor on the search row",
+TEST_CASE("ModelSelector delegates search editing to SearchableSelectList and reports its cursor",
         "[coding_agent][tui][model-selector][issue589][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
@@ -534,10 +534,9 @@ TEST_CASE("ModelSelector delegates search editing to the SelectList and reports 
             [] {},
             [&io] { (void)io; });
 
-    // Focus + render: the SelectList reports its cursor in its own line
-    // coordinates (row 0 for the search row); the component must translate
-    // that by the chrome rows it emits above the SelectList so the cursor
-    // lands on the rendered search line rather than the top of the modal.
+    // Focus + render: SearchableSelectList reports its search cursor in its
+    // own line coordinates; the component adds its chrome rows so the cursor
+    // lands on the rendered search line.
     selector->set_focused(true);
     const auto rendered = selector->render(120);
     REQUIRE(rendered);
@@ -551,7 +550,7 @@ TEST_CASE("ModelSelector delegates search editing to the SelectList and reports 
     CHECK(cursor->row == search_row);
     CHECK(cursor->column == 2);
 
-    // Typing flows into the SelectList search: the cursor follows the typed
+    // Typing flows into SearchableSelectList: the cursor follows the typed
     // text on the same translated row.
     static_cast<void>(selector->handle_input(tui::KeyEvent{.key = "a"}));
     const auto narrowed = selector->render(120);
