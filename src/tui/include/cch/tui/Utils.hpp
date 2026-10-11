@@ -26,7 +26,28 @@ struct RgbColor {
     bool operator==(const RgbColor&) const = default;
 };
 
-using Color = std::variant<IndexedColor, RgbColor>;
+struct OklchColorValue {
+    double l{0};
+    double c{0};
+    double h{0};
+
+    bool operator==(const OklchColorValue&) const = default;
+};
+
+struct OkhslChannels {
+    double h{0};
+    double s{0};
+    double l{0};
+
+    bool operator==(const OkhslChannels&) const = default;
+};
+
+using Color = std::variant<IndexedColor, RgbColor, OklchColorValue>;
+
+enum class ColorMixSpace {
+    Oklch,
+    Srgb,
+};
 
 enum class TerminalColorMode {
     Xterm256,
@@ -51,14 +72,22 @@ struct TextStyle {
 /// Construct an RGB color after checking each frozen pi 0..255 channel range.
 [[nodiscard]] support::Expected<RgbColor> rgb_color(double red, double green, double blue);
 
-/// Parse an indexed color or a #RGB/#RRGGBB hexadecimal string (pi `parseColor`).
+/// Parse an indexed, hexadecimal, OKLCH, or OKHSL color (pi `parseColor`).
 [[nodiscard]] support::Expected<Color> parse_color(int index);
 [[nodiscard]] support::Expected<Color> parse_color(double index);
 [[nodiscard]] support::Expected<Color> parse_color(std::string_view value);
 
+/// Construct and convert colors in OKLCH and OKHSL.
+[[nodiscard]] support::Expected<OklchColorValue> oklch_color(double lightness, double chroma, double hue);
+[[nodiscard]] support::Expected<RgbColor> okhsl_to_rgb(double hue, double saturation, double lightness);
+[[nodiscard]] support::Expected<OklchColorValue> color_to_oklch(const Color& color);
+[[nodiscard]] support::Expected<OkhslChannels> color_to_okhsl(const Color& color);
+
 /// Convert a validated color to sRGB channels or canonical lowercase hex.
 [[nodiscard]] support::Expected<RgbColor> color_to_rgb(const Color& color);
 [[nodiscard]] support::Expected<std::string> color_to_hex(const Color& color);
+[[nodiscard]] support::Expected<Color> mix_colors(
+        const Color& first, const Color& second, double amount, ColorMixSpace space = ColorMixSpace::Oklch);
 
 /// Format a foreground/background SGR sequence for the terminal's color mode.
 [[nodiscard]] support::Expected<std::string> foreground_ansi(const Color& color, TerminalColorMode mode);

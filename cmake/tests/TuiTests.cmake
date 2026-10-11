@@ -35,6 +35,7 @@ include_guard(GLOBAL)
         tests/tui/AutocompleteContextTest.cpp
         tests/tui/AutocompleteRankingTest.cpp
         tests/tui/ContainerTest.cpp
+        tests/tui/ColorUtilsTest.cpp
         tests/tui/EditorTest.cpp
         tests/tui/EditorLayoutTest.cpp
         tests/tui/FuzzyTest.cpp

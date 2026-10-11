@@ -9,6 +9,7 @@ cch_parity_declare_target(
     SOURCES
         src/tui/Autocomplete.cpp
         src/tui/CancellableLoader.cpp
+        src/tui/ColorUtils.cpp
         src/tui/Container.cpp
         src/tui/Editor.cpp
         src/tui/EditorCompletionSession.cpp

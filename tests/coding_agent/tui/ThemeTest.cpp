@@ -219,6 +219,31 @@ TEST_CASE("Theme parsing accepts schema variables RGB xterm defaults references 
     CHECK(thumb_rgb->blue == 0x56);
 }
 
+TEST_CASE("Theme parsing resolves OKLCH and OKHSL colors through TUI color utilities",
+        "[coding_agent][theme][issue989][spec]") {
+    auto oklch_json = valid_custom_theme();
+    replace_once(oklch_json, "\"accent\": \"#010203\"", "\"accent\": \"oklch(0.6 0.2 150)\"");
+    const auto oklch_theme = coding_agent::tui::parse_theme_json("OKLCH fixture", oklch_json);
+    REQUIRE(oklch_theme);
+    const auto* oklch_accent = std::get_if<coding_agent::tui::RgbThemeColor>(
+            &coding_agent::tui::color_for(*oklch_theme, coding_agent::tui::ThemeToken::Accent));
+    REQUIRE(oklch_accent != nullptr);
+    CHECK(oklch_accent->red == 0);
+    CHECK(oklch_accent->green == 154);
+    CHECK(oklch_accent->blue == 70);
+
+    auto okhsl_json = valid_custom_theme();
+    replace_once(okhsl_json, "\"accent\": \"#010203\"", "\"accent\": \"okhsl(150 50% 80%)\"");
+    const auto okhsl_theme = coding_agent::tui::parse_theme_json("OKHSL fixture", okhsl_json);
+    REQUIRE(okhsl_theme);
+    const auto* okhsl_accent = std::get_if<coding_agent::tui::RgbThemeColor>(
+            &coding_agent::tui::color_for(*okhsl_theme, coding_agent::tui::ThemeToken::Accent));
+    REQUIRE(okhsl_accent != nullptr);
+    CHECK(okhsl_accent->red == 160);
+    CHECK(okhsl_accent->green == 214);
+    CHECK(okhsl_accent->blue == 170);
+}
+
 TEST_CASE("Theme parsing accepts empty names and rejects names containing a slash with pi's error",
         "[coding_agent][theme][issue400][spec]") {
     // pi's Type.String() name accepts the empty string; only the '/' rule

@@ -147,19 +147,28 @@ struct SchemaErrorLine {
 
 [[nodiscard]] support::Expected<RgbThemeColor> parse_rgb(std::string_view value) {
     auto color = cch::tui::parse_color(value);
-    if (!color || !std::holds_alternative<cch::tui::RgbColor>(*color)) {
+    if (!color) {
         return std::unexpected(verbatim_validation_error(
             support::ErrorCode::Validation,
             "Invalid hex color: " + bounded_redacted_presentation(std::string(value))));
     }
-    const auto& rgb = std::get<cch::tui::RgbColor>(*color);
-    const auto checked = cch::tui::rgb_color(rgb.red, rgb.green, rgb.blue);
-    if (!checked) return std::unexpected(checked.error());
+    auto rgb = cch::tui::color_to_rgb(*color);
+    if (!rgb) return std::unexpected(rgb.error());
     return RgbThemeColor{
-            .red = static_cast<std::uint8_t>(checked->red),
-            .green = static_cast<std::uint8_t>(checked->green),
-            .blue = static_cast<std::uint8_t>(checked->blue),
+            .red = static_cast<std::uint8_t>(rgb->red),
+            .green = static_cast<std::uint8_t>(rgb->green),
+            .blue = static_cast<std::uint8_t>(rgb->blue),
     };
+}
+
+[[nodiscard]] bool starts_with_color_function(std::string_view value, std::string_view function) {
+    if (value.size() < function.size()) return false;
+    for (std::size_t index = 0; index < function.size(); ++index) {
+        auto character = value[index];
+        if (character >= 'A' && character <= 'Z') character = static_cast<char>(character - 'A' + 'a');
+        if (character != function[index]) return false;
+    }
+    return true;
 }
 
 [[nodiscard]] support::Expected<ResolvedThemeColor> resolve_color(
@@ -177,6 +186,20 @@ struct SchemaErrorLine {
             auto rgb = parse_rgb(text);
             if (!rgb) return std::unexpected(rgb.error());
             return *rgb;
+        }
+        auto parsed_color = cch::tui::parse_color(text);
+        if (parsed_color) {
+            auto rgb = cch::tui::color_to_rgb(*parsed_color);
+            if (!rgb) return std::unexpected(rgb.error());
+            return RgbThemeColor{
+                    .red = static_cast<std::uint8_t>(rgb->red),
+                    .green = static_cast<std::uint8_t>(rgb->green),
+                    .blue = static_cast<std::uint8_t>(rgb->blue),
+            };
+        }
+        if (starts_with_color_function(text, "oklch(") || starts_with_color_function(text, "okhsl(")) {
+            return std::unexpected(verbatim_validation_error(
+                    support::ErrorCode::Validation, "Invalid color: " + bounded_redacted_presentation(text)));
         }
         if (visited.contains(text)) {
             return std::unexpected(verbatim_validation_error(

@@ -137,24 +137,6 @@ VisibleWidthMeasurement measure_visible_width(std::string_view text) {
 
 namespace {
 
-constexpr std::array<RgbColor, 16> kBasicColors{{
-        {.red = 0, .green = 0, .blue = 0},
-        {.red = 128, .green = 0, .blue = 0},
-        {.red = 0, .green = 128, .blue = 0},
-        {.red = 128, .green = 128, .blue = 0},
-        {.red = 0, .green = 0, .blue = 128},
-        {.red = 128, .green = 0, .blue = 128},
-        {.red = 0, .green = 128, .blue = 128},
-        {.red = 192, .green = 192, .blue = 192},
-        {.red = 128, .green = 128, .blue = 128},
-        {.red = 255, .green = 0, .blue = 0},
-        {.red = 0, .green = 255, .blue = 0},
-        {.red = 255, .green = 255, .blue = 0},
-        {.red = 0, .green = 0, .blue = 255},
-        {.red = 255, .green = 0, .blue = 255},
-        {.red = 0, .green = 255, .blue = 255},
-        {.red = 255, .green = 255, .blue = 255},
-}};
 constexpr std::array<double, 6> kColorCubeValues{0, 95, 135, 175, 215, 255};
 constexpr std::array<double, 24> kGrayValues{
         8,
@@ -182,24 +164,6 @@ constexpr std::array<double, 24> kGrayValues{
         228,
         238,
 };
-
-[[nodiscard]] std::optional<std::uint8_t> parse_hex_byte(std::string_view value) {
-    if (value.empty()) return std::nullopt;
-    unsigned int parsed = 0;
-    for (const char character : value) {
-        unsigned int digit = 0;
-        if (character >= '0' && character <= '9')
-            digit = static_cast<unsigned int>(character - '0');
-        else if (character >= 'a' && character <= 'f')
-            digit = static_cast<unsigned int>(character - 'a' + 10);
-        else if (character >= 'A' && character <= 'F')
-            digit = static_cast<unsigned int>(character - 'A' + 10);
-        else
-            return std::nullopt;
-        parsed = parsed * 16 + digit;
-    }
-    return static_cast<std::uint8_t>(parsed);
-}
 
 [[nodiscard]] int closest_color_index(double target, const std::array<double, 6>& values) {
     std::size_t closest = 0;
@@ -296,69 +260,6 @@ support::Expected<RgbColor> rgb_color(double red, double green, double blue) {
         return std::unexpected(invalid_color(std::format("blue must be between 0 and 255: {}", blue)));
     }
     return RgbColor{.red = red, .green = green, .blue = blue};
-}
-
-support::Expected<Color> parse_color(int index) {
-    auto indexed = indexed_color(index);
-    if (!indexed) return std::unexpected(indexed.error());
-    return Color{*indexed};
-}
-
-support::Expected<Color> parse_color(double index) {
-    if (!std::isfinite(index) || std::floor(index) != index || index < 0 || index > 255) {
-        return std::unexpected(
-                invalid_color(std::format("ANSI color index must be an integer from 0 to 255: {}", index)));
-    }
-    return parse_color(static_cast<int>(index));
-}
-
-support::Expected<Color> parse_color(std::string_view value) {
-    const auto invalid = [&]() -> support::Expected<Color> {
-        return std::unexpected(invalid_color("Invalid color value: " + std::string(value)));
-    };
-    if (value.size() != 4 && value.size() != 7) return invalid();
-    if (!value.starts_with('#')) return invalid();
-    if (value.size() == 4) {
-        const auto red = parse_hex_byte(value.substr(1, 1));
-        const auto green = parse_hex_byte(value.substr(2, 1));
-        const auto blue = parse_hex_byte(value.substr(3, 1));
-        if (!red || !green || !blue) return invalid();
-        return Color{RgbColor{.red = static_cast<double>(*red * 17),
-                .green = static_cast<double>(*green * 17),
-                .blue = static_cast<double>(*blue * 17)}};
-    }
-    const auto red = parse_hex_byte(value.substr(1, 2));
-    const auto green = parse_hex_byte(value.substr(3, 2));
-    const auto blue = parse_hex_byte(value.substr(5, 2));
-    if (!red || !green || !blue) return invalid();
-    return Color{RgbColor{.red = static_cast<double>(*red),
-            .green = static_cast<double>(*green),
-            .blue = static_cast<double>(*blue)}};
-}
-
-support::Expected<RgbColor> color_to_rgb(const Color& color) {
-    if (const auto* rgb = std::get_if<RgbColor>(&color)) return rgb_color(rgb->red, rgb->green, rgb->blue);
-    const auto index = static_cast<int>(std::get<IndexedColor>(color).index);
-    if (index < static_cast<int>(kBasicColors.size())) return kBasicColors[static_cast<std::size_t>(index)];
-    if (index < 232) {
-        const auto cube = index - 16;
-        return RgbColor{
-                .red = kColorCubeValues[static_cast<std::size_t>(cube / 36)],
-                .green = kColorCubeValues[static_cast<std::size_t>((cube % 36) / 6)],
-                .blue = kColorCubeValues[static_cast<std::size_t>(cube % 6)],
-        };
-    }
-    const auto gray = kGrayValues[static_cast<std::size_t>(index - 232)];
-    return RgbColor{.red = gray, .green = gray, .blue = gray};
-}
-
-support::Expected<std::string> color_to_hex(const Color& color) {
-    auto rgb = color_to_rgb(color);
-    if (!rgb) return std::unexpected(rgb.error());
-    return std::format("#{:02x}{:02x}{:02x}",
-            static_cast<int>(std::round(rgb->red)),
-            static_cast<int>(std::round(rgb->green)),
-            static_cast<int>(std::round(rgb->blue)));
 }
 
 support::Expected<std::string> foreground_ansi(const Color& color, TerminalColorMode mode) {
