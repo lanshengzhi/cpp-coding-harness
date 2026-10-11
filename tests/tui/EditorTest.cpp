@@ -1928,6 +1928,112 @@ TEST_CASE("Editor renders pi's top and bottom borders when a border hook is set"
     CHECK(rendered->lines[2] == rule);
 }
 
+// Compared independently with pi v1.0.4 editor.ts at 7c10bd4337495ee613f2224843ecdf349b80d1df:
+// a 40-row terminal yields a 12-line viewport and page movement.
+TEST_CASE("Editor uses the terminal-height viewport and page size", "[tui][editor][issue969][spec]") {
+    cch::tui::Editor editor;
+    editor.set_focused(true);
+    editor.set_available_height(40);
+    std::string text;
+    for (std::size_t index = 0; index < 36; ++index) {
+        if (!text.empty()) text.push_back('\n');
+        text += std::format("line {}", index);
+    }
+    editor.set_text(std::move(text));
+
+    auto rendered = editor.render(80);
+    REQUIRE(rendered);
+    CHECK(rendered->lines.size() == 12);
+
+    for (std::size_t index = 0; index < 12; ++index)
+        key(editor, "up");
+    key(editor, "pageDown");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 35, .column = 7}));
+    key(editor, "pageUp");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 23, .column = 7}));
+
+    rendered = editor.render(80);
+    REQUIRE(rendered);
+    CAPTURE(rendered->lines);
+    CHECK(cch::tui::strip_terminal_sequences(rendered->lines.front()).find("line 23") != std::string::npos);
+    auto cursor = editor.cursor_location();
+    REQUIRE(cursor);
+    CHECK(cursor->row == 0);
+
+    key(editor, "pageDown");
+    rendered = editor.render(80);
+    REQUIRE(rendered);
+    cursor = editor.cursor_location();
+    REQUIRE(cursor);
+    CHECK(cursor->row == 11);
+    CHECK(cch::tui::strip_terminal_sequences(rendered->lines.back()).find("line 35") != std::string::npos);
+}
+
+TEST_CASE(
+        "Editor page size follows terminal height when the viewport cap is explicit", "[tui][editor][issue969][spec]") {
+    cch::tui::Editor editor(cch::tui::EditorOptions{.max_visible_lines = 3});
+    editor.set_terminal_rows(40);
+    std::string text;
+    for (std::size_t index = 0; index < 30; ++index) {
+        if (!text.empty()) text.push_back('\n');
+        text += std::format("line {}", index);
+    }
+    editor.set_text(std::move(text));
+    for (std::size_t index = 0; index < 12; ++index)
+        key(editor, "up");
+    key(editor, "pageDown");
+    CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 29, .column = 7}));
+}
+
+TEST_CASE("Editor retains text and cursor across narrow wide short and tall layouts", "[tui][editor][issue969][spec]") {
+    cch::tui::Editor editor;
+    editor.set_focused(true);
+    std::string prompt;
+    for (std::size_t index = 0; index < 40; ++index)
+        prompt += "中文";
+    editor.set_text(std::move(prompt));
+    const auto expected_text = editor.text();
+    const auto expected_cursor = editor.cursor();
+
+    editor.set_terminal_rows(12);
+    editor.set_available_height(8);
+    auto rendered = editor.render(12);
+    REQUIRE(rendered);
+    CHECK(editor.text() == expected_text);
+    CHECK(editor.cursor() == expected_cursor);
+
+    editor.set_terminal_rows(40);
+    editor.set_available_height(40);
+    rendered = editor.render(100);
+    REQUIRE(rendered);
+    CHECK(editor.text() == expected_text);
+    CHECK(editor.cursor() == expected_cursor);
+    CHECK(rendered->lines.size() <= 12);
+}
+
+TEST_CASE(
+        "Editor clamps its terminal-height policy to the available bordered height", "[tui][editor][issue969][spec]") {
+    cch::tui::Editor editor;
+    cch::tui::EditorTheme theme;
+    theme.border = [](std::string text) { return text; };
+    editor.set_theme(std::move(theme));
+    editor.set_terminal_rows(40);
+    editor.set_available_height(8);
+    std::string text;
+    for (std::size_t index = 0; index < 20; ++index) {
+        if (!text.empty()) text.push_back('\n');
+        text += std::format("line {}", index);
+    }
+    editor.set_text(std::move(text));
+
+    const auto rendered = editor.render(80);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 8);
+    CHECK(rendered->lines.front().find("↑ 14 more") != std::string::npos);
+    CHECK(cch::tui::strip_terminal_sequences(rendered->lines[1]).find("line 14") != std::string::npos);
+    CHECK(cch::tui::strip_terminal_sequences(rendered->lines[6]).find("line 19") != std::string::npos);
+}
+
 TEST_CASE("Editor border shows pi scroll indicators while scrolled", "[tui][editor][theme][issue411][spec]") {
     cch::tui::Editor editor(cch::tui::EditorOptions{.max_visible_lines = 2});
     cch::tui::EditorTheme theme;
@@ -1989,7 +2095,7 @@ TEST_CASE("Editor renders a reverse-video fake cursor at the cursor position", "
 }
 
 TEST_CASE("Editor derives wrapping width from the rendered row width",
-        "[tui][editor][presentation][wrapping][width][issue795][spec]") {
+        "[tui][editor][presentation][wrapping][width][issue795][issue969][spec]") {
     struct WidthCase {
         std::size_t width;
         std::vector<std::size_t> expected_x_counts;
@@ -2049,7 +2155,7 @@ TEST_CASE("Editor derives wrapping width from the rendered row width",
 }
 
 TEST_CASE("Editor uses the shared break opportunities at formal terminal widths",
-        "[tui][editor][presentation][wrapping][unicode][width][issue795][spec]") {
+        "[tui][editor][presentation][wrapping][unicode][width][issue795][issue969][spec]") {
     std::string cjk;
     for (int index = 0; index < 20; ++index) cjk += "中文混";
     std::string mixed = "ASCII prefix ";

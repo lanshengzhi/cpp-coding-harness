@@ -50,7 +50,7 @@ using EditorTopBorderSink =
 using EditorRenderRequestSink = std::move_only_function<support::ExpectedVoid()>;
 
 struct EditorOptions {
-    std::size_t max_visible_lines{5};
+    std::optional<std::size_t> max_visible_lines{};
     /// Horizontal padding on each editor content row. Rendering clamps it so
     /// at least one content column remains at narrow widths.
     std::size_t padding_x{0};
@@ -135,6 +135,7 @@ public:
     [[nodiscard]] bool focused() const override;
     [[nodiscard]] std::optional<CursorPosition> cursor_location() const override;
     void set_available_height(std::size_t rows) override;
+    void set_terminal_rows(std::size_t rows);
 
 private:
     struct Impl;

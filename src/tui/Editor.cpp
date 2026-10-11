@@ -137,7 +137,8 @@ struct Editor::Impl {
     };
     std::optional<HistoryDraft> history_draft;
     bool focused{false};
-    std::size_t available_height{5};
+    std::size_t available_height{40};
+    std::size_t terminal_rows{40};
     std::size_t layout_width{80};
     std::size_t layout_padding{0};
     std::size_t scroll_offset{0};
@@ -163,10 +164,19 @@ struct Editor::Impl {
     /// low, on the bottom-border line).
     [[nodiscard]] std::size_t top_border_rows() const { return border_rows() != 0 ? 1 : 0; }
 
+    [[nodiscard]] std::size_t policy_max_visible_lines() const {
+        if (options.max_visible_lines) return *options.max_visible_lines;
+        return std::max<std::size_t>(5, static_cast<std::size_t>(terminal_rows * 0.3));
+    }
+
+    [[nodiscard]] std::size_t page_size() const {
+        return std::max<std::size_t>(5, static_cast<std::size_t>(terminal_rows * 0.3));
+    }
+
     /// Content rows available inside the border, at least 1.
     [[nodiscard]] std::size_t content_height() const {
         const auto bordered = available_height > border_rows() ? available_height - border_rows() : 1;
-        return std::max<std::size_t>(1, std::min(options.max_visible_lines, bordered));
+        return std::max<std::size_t>(1, std::min(policy_max_visible_lines(), bordered));
     }
 
     void notify_change() {
@@ -793,7 +803,7 @@ struct Editor::Impl {
                 .cursor = buffer.cursor(),
                 .width = width,
                 .padding_x = options.padding_x,
-                .max_visible_lines = options.max_visible_lines,
+                .max_visible_lines = policy_max_visible_lines(),
                 .available_height = available_height,
                 .scroll_offset = scroll_offset,
                 .theme = &theme,
@@ -1025,7 +1035,7 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
             .cursor = impl.buffer.cursor(),
             .width = width,
             .padding_x = impl.options.padding_x,
-            .max_visible_lines = impl.options.max_visible_lines,
+            .max_visible_lines = impl.policy_max_visible_lines(),
             .available_height = impl.available_height,
             .scroll_offset = impl.scroll_offset,
             .theme = &impl.theme,
@@ -1217,14 +1227,14 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.pageUp") {
-        for (std::size_t index = 0; index < impl.options.max_visible_lines; ++index) {
+        for (std::size_t index = 0; index < impl.page_size(); ++index) {
             impl.move_vertical(-1);
         }
         impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.pageDown") {
-        for (std::size_t index = 0; index < impl.options.max_visible_lines; ++index) {
+        for (std::size_t index = 0; index < impl.page_size(); ++index) {
             impl.move_vertical(1);
         }
         impl.echo_cursor();
@@ -1285,6 +1295,12 @@ void Editor::set_available_height(std::size_t rows) {
     auto operation = impl_->serialized_operation(impl_);
     auto& impl = operation.impl;
     impl.available_height = rows;
+}
+
+void Editor::set_terminal_rows(std::size_t rows) {
+    auto operation = impl_->serialized_operation(impl_);
+    auto& impl = operation.impl;
+    impl.terminal_rows = rows;
 }
 
 void Editor::set_terminal(Terminal* terminal) {

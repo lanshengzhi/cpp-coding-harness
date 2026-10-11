@@ -16,13 +16,13 @@
 #include "coding_agent/tui/KeybindingsManager.hpp"
 #include "coding_agent/tui/Theme.hpp"
 
-#include <cch/tui/VirtualTerminal.hpp>
+#include <cch/ai/Message.hpp>
 #include <cch/tui/Keys.hpp>
+#include <cch/tui/VirtualTerminal.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
-
 #include <memory>
 #include <optional>
 #include <string>
@@ -402,6 +402,62 @@ TEST_CASE("editor cursor navigation requests a Native TUI repaint", "[coding_age
     const auto back_at_end = view.cursor_location();
     REQUIRE(back_at_end);
     CHECK(back_at_end->column == at_end->column);
+}
+
+TEST_CASE("InteractiveView passes terminal rows separately from its dock editor budget",
+        "[coding_agent][tui][editor][issue969][spec]") {
+    ViewFixture fixture;
+    auto& view = *fixture.view;
+    view.set_available_height(40);
+    view.set_focused(true);
+
+    view.set_editor_text("line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\n"
+                         "line 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\n"
+                         "line 19\nline 20\nline 21\nline 22\nline 23\nline 24\nline 25\nline 26\nline 27\n"
+                         "line 28\nline 29");
+    const auto rendered = view.render(80);
+    REQUIRE(rendered);
+
+    std::size_t content_rows = 0;
+    for (const auto& line : rendered->dock_lines) {
+        if (line.find("line ") != std::string::npos) ++content_rows;
+    }
+    CHECK(content_rows == 12);
+    CHECK(rendered->dock_lines.size() == 18);
+
+    auto cursor = view.cursor_location();
+    REQUIRE(cursor);
+    CHECK(cursor->row == 14);
+    static_cast<void>(view.handle_input(key("pageUp")));
+    CHECK(view.editor_text().starts_with("line 0\nline 1"));
+    auto paged = view.render(80);
+    REQUIRE(paged);
+    cursor = view.cursor_location();
+    REQUIRE(cursor);
+    CHECK(cursor->row == 3);
+
+    static_cast<void>(view.handle_input(key("pageDown")));
+    paged = view.render(80);
+    REQUIRE(paged);
+    cursor = view.cursor_location();
+    REQUIRE(cursor);
+    CHECK(cursor->row == 14);
+    CHECK(view.editor_text().ends_with("line 29"));
+
+    agent::AgentInputQueues pending;
+    for (std::size_t index = 0; index < 25; ++index) {
+        pending.steering.messages.push_back(
+                ai::MessageVariant{ai::user_text_message(std::format("queued {}", index), index)});
+    }
+    view.set_pending_input(pending);
+    const auto constrained = view.render(80);
+    REQUIRE(constrained);
+    std::size_t constrained_content_rows = 0;
+    for (const auto& line : constrained->dock_lines) {
+        if (line.find("line ") != std::string::npos) ++constrained_content_rows;
+    }
+    CHECK(constrained_content_rows == 6);
+    CHECK(constrained->dock_lines.size() == 38);
 }
 
 TEST_CASE("the coalescible invalidate request stays separate from the action seam",

@@ -689,7 +689,10 @@ std::optional<cch::tui::CursorPosition> InteractiveView::cursor_location() const
     return cursor;
 }
 
-void InteractiveView::set_available_height(std::size_t rows) { available_rows_ = std::max<std::size_t>(1, rows); }
+void InteractiveView::set_available_height(std::size_t rows) {
+    available_rows_ = std::max<std::size_t>(1, rows);
+    editor_.set_terminal_rows(available_rows_);
+}
 
 void InteractiveView::record_callback_error(
     std::string message,

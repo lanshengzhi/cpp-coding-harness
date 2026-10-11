@@ -30,8 +30,8 @@ struct EditorLayoutOptions {
     BufferCursor cursor{};
     std::size_t width{0};
     std::size_t padding_x{0};
-    std::size_t max_visible_lines{5};
-    std::size_t available_height{5};
+    std::size_t max_visible_lines{12};
+    std::size_t available_height{40};
     std::size_t scroll_offset{0};
     EditorTheme* theme{nullptr};
     const EditorCompletionMenuPresentation* autocomplete_menu{nullptr};
