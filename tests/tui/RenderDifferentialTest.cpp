@@ -343,9 +343,8 @@ TEST_CASE("Tui pads composited overlay rows by visible width before overwriting 
 
     base_pointer->set_lines({""});
     cch::tui::OverlayOptions options;
-    options.position = cch::tui::OverlayPosition::Absolute;
-    options.absolute_column = 0;
-    options.absolute_row = 0;
+    options.col = 0.0;
+    options.row = 0.0;
     auto overlay = std::make_unique<cch::tui::Overlay>(options);
     REQUIRE(overlay->add_child(
             std::make_unique<FixedTextComponent>(std::vector<std::string>{"\x1b[38;5;196mX\x1b[39m"})));

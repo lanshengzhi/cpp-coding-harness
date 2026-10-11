@@ -9,45 +9,44 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace cch::tui {
 
-/// Strategy for positioning an overlay relative to its anchor area.
-enum class OverlayPosition {
-    /// Top-left corner of overlay aligns with top-left of anchor.
-    TopLeft,
-    /// Top-right corner of overlay aligns with top-right of anchor.
-    TopRight,
-    /// Bottom-left corner of overlay aligns with bottom-left of anchor.
-    BottomLeft,
-    /// Bottom-right corner of overlay aligns with bottom-right of anchor.
-    BottomRight,
-    /// Centered horizontally and vertically within the anchor.
+/// An absolute size or a percentage of the relevant terminal dimension.
+struct SizeValue {
+    double value{0.0};
+    bool percentage{false};
+    bool valid{true};
+
+    constexpr SizeValue() = default;
+    constexpr SizeValue(double absolute_value) : value(absolute_value) {}
+    constexpr SizeValue(double size_value, bool is_percentage, bool is_valid)
+        : value(size_value), percentage(is_percentage), valid(is_valid) {}
+    SizeValue(const char* value_text);
+    SizeValue(std::string_view value_text);
+    SizeValue(const std::string& value_text);
+
+    [[nodiscard]] static constexpr SizeValue absolute(double value) { return SizeValue(value, false, true); }
+
+    [[nodiscard]] static constexpr SizeValue percent(double value) { return SizeValue(value, true, true); }
+};
+
+/// Anchor used when an explicit row or column is not supplied.
+enum class OverlayAnchor {
     Center,
-    /// Anchored to the top edge, centered horizontally.
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
     TopCenter,
-    /// Anchored to the bottom edge, centered horizontally.
     BottomCenter,
-    /// Anchored to the left edge, centered vertically.
     LeftCenter,
-    /// Anchored to the right edge, centered vertically.
     RightCenter,
-    /// Absolute column/row position relative to the viewport.
-    Absolute,
-    /// Percentage of viewport for both column and row.
-    Percentage,
 };
 
-/// Constraints for overlay sizing.
-struct OverlaySizeConstraints {
-    std::optional<std::size_t> min_width;
-    std::optional<std::size_t> max_width;
-    std::optional<std::size_t> min_height;
-    std::optional<std::size_t> max_height;
-};
-
-/// Margins around an overlay.
+/// Margins between an overlay and the terminal viewport edges.
 struct OverlayMargins {
     std::size_t left{0};
     std::size_t right{0};
@@ -55,39 +54,37 @@ struct OverlayMargins {
     std::size_t bottom{0};
 };
 
-/// Visibility condition for responsive overlays.
-struct OverlayVisibility {
-    /// If set, the overlay is only visible when the viewport width
-    /// is at least this value.
-    std::optional<std::size_t> min_viewport_width;
-    /// If set, the overlay is only visible when the viewport height
-    /// is at least this value.
-    std::optional<std::size_t> min_viewport_height;
-    /// If set, the overlay is hidden when the viewport width exceeds
-    /// this value.
-    std::optional<std::size_t> max_viewport_width;
-    /// If set, the overlay is hidden when the viewport height exceeds
-    /// this value.
-    std::optional<std::size_t> max_viewport_height;
+/// Resolved overlay dimensions and terminal-relative position.
+struct OverlayLayout {
+    std::size_t width{1};
+    std::size_t row{0};
+    std::size_t col{0};
+    std::optional<std::size_t> max_height{std::nullopt};
+    std::size_t effective_height{0};
 };
 
 /// Overlay-specific options.
 struct OverlayOptions {
-    OverlayPosition position{OverlayPosition::TopLeft};
-    /// For Absolute position: column offset.
-    std::size_t absolute_column{0};
-    /// For Absolute position: row offset.
-    std::size_t absolute_row{0};
-    /// For Percentage position: column as a fraction of viewport width (0-100).
-    std::size_t percentage_column{50};
-    /// For Percentage position: row as a fraction of viewport height (0-100).
-    std::size_t percentage_row{50};
-    /// Size constraints for the overlay content area.
-    OverlaySizeConstraints size_constraints;
-    /// Margins around the overlay content inside its allocated area.
-    OverlayMargins margins;
-    /// Responsive visibility conditions.
-    OverlayVisibility visibility;
+    /// Width in columns, or a percentage of terminal width. Omitted width uses
+    /// the smaller of 80 columns and the viewport remaining after margins.
+    SizeValue width{80.0};
+    std::size_t min_width{0};
+    /// Maximum height in rows, or a percentage of terminal height.
+    std::optional<SizeValue> max_height{std::nullopt};
+
+    /// Anchor used independently for each unspecified coordinate.
+    OverlayAnchor anchor{OverlayAnchor::Center};
+    /// Absolute or percentage row and column positions.
+    std::optional<SizeValue> row{std::nullopt};
+    std::optional<SizeValue> col{std::nullopt};
+    /// Signed displacement from the resolved position.
+    std::ptrdiff_t offset_x{0};
+    std::ptrdiff_t offset_y{0};
+
+    OverlayMargins margins{};
+    /// Optional responsive visibility rule evaluated for the current viewport.
+    std::function<bool(TerminalDimensions)> visible_at{};
+
     /// Stacking order (higher values appear on top).
     std::size_t z_index{0};
     /// If true, this overlay does not capture input (passes through to
@@ -97,13 +94,9 @@ struct OverlayOptions {
 
 /// A positioned overlay that renders on top of base content.
 ///
-/// Overlays support:
-/// - Multiple position strategies (anchor-based, absolute, percentage)
-/// - Size constraints, margins, and responsive visibility
-/// - Z-index based stacking
-/// - Non-capturing mode for transparent input pass-through
-/// - Focus delegation to contained children
-/// - Deterministic clipping to viewport bounds
+/// Overlays support percentage and absolute sizing, independent row and column
+/// placement, viewport margins, responsive visibility, and deterministic
+/// clipping to terminal bounds.
 class Overlay final : public Component, public InputHandler, public Focusable {
 public:
     explicit Overlay(OverlayOptions options = {});
@@ -127,10 +120,6 @@ public:
     void set_visible(bool visible);
     [[nodiscard]] bool visible() const;
 
-    /// Set the anchor area within which position is computed.
-    /// The anchor is defined by its top-left column/row, width and height.
-    void set_anchor(std::size_t column, std::size_t row, std::size_t width, std::size_t height);
-
     /// Focus the first focusable child.
     [[nodiscard]] support::ExpectedVoid focus_first();
 
@@ -147,17 +136,10 @@ public:
     [[nodiscard]] bool focused() const override;
     [[nodiscard]] std::optional<CursorPosition> cursor_location() const override;
 
-    /// Compute the absolute viewport position of the overlay given
-    /// the viewport dimensions. Returns the top-left column/row where
-    /// rendered output starts.
-    [[nodiscard]] std::pair<std::size_t, std::size_t> layout_position(
-        std::size_t viewport_width,
-        std::size_t viewport_height,
-        std::size_t content_width,
-        std::size_t content_height) const;
+    /// Resolve width, height limit, anchor, offsets, and margins for a viewport.
+    [[nodiscard]] OverlayLayout resolve_layout(TerminalDimensions viewport, std::size_t content_height) const;
 
-    /// Returns true when this overlay would be visible given the viewport
-    /// dimensions and visibility conditions.
+    /// Returns true when this overlay is visible at the viewport dimensions.
     [[nodiscard]] bool visible_at(TerminalDimensions viewport) const;
 
 private:

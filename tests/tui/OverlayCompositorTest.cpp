@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,14 +16,15 @@ using namespace cch;
 
 namespace {
 
-class StaticComponent final : public tui::Component {
+class StaticComponent final : public tui::Component, public tui::Focusable {
 public:
-    explicit StaticComponent(
-        std::vector<std::string> lines,
-        std::vector<tui::InlineImageRenderRegion> images = {})
-        : lines_(std::move(lines)), images_(std::move(images)) {}
+    explicit StaticComponent(std::vector<std::string> lines,
+            std::vector<tui::InlineImageRenderRegion> images = {},
+            std::optional<tui::CursorPosition> cursor = std::nullopt)
+        : lines_(std::move(lines)), images_(std::move(images)), cursor_(cursor) {}
 
     [[nodiscard]] support::Expected<tui::RenderResult> render(std::size_t) override {
+        ++render_count;
         return tui::RenderResult{.lines = lines_, .images = images_};
     }
 
@@ -30,11 +32,22 @@ public:
         ++invalidation_count;
     }
 
+    void set_focused(bool focused) override { focused_ = focused; }
+
+    [[nodiscard]] bool focused() const override { return focused_; }
+
+    [[nodiscard]] std::optional<tui::CursorPosition> cursor_location() const override {
+        return focused_ ? cursor_ : std::nullopt;
+    }
+
     std::size_t invalidation_count{0};
+    std::size_t render_count{0};
 
 private:
     std::vector<std::string> lines_;
     std::vector<tui::InlineImageRenderRegion> images_;
+    std::optional<tui::CursorPosition> cursor_;
+    bool focused_{false};
 };
 
 class FocusableInputComponent final
@@ -99,9 +112,8 @@ private:
     std::size_t row,
     std::size_t z_index = 0) {
     tui::OverlayOptions options;
-    options.position = tui::OverlayPosition::Absolute;
-    options.absolute_column = column;
-    options.absolute_row = row;
+    options.col = static_cast<double>(column);
+    options.row = static_cast<double>(row);
     options.z_index = z_index;
     return options;
 }
@@ -144,24 +156,73 @@ TEST_CASE("OverlayCompositor splices overlay content at its viewport position", 
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};
 
     auto options = absolute_options(4, 1);
-    options.size_constraints.max_width = 2;
+    options.width = 2;
     auto overlay = std::make_unique<tui::Overlay>(options);
     REQUIRE(overlay->add_child(std::make_unique<StaticComponent>(std::vector<std::string>{"XX"})));
     REQUIRE(compositor.add_overlay(std::move(overlay)));
 
-    auto offscreen = std::make_unique<tui::Overlay>(absolute_options(12, 0));
+    auto offscreen_options = absolute_options(8, 0);
+    offscreen_options.width = 2;
+    auto offscreen = std::make_unique<tui::Overlay>(offscreen_options);
     REQUIRE(offscreen->add_child(std::make_unique<StaticComponent>(std::vector<std::string>{"YY"})));
     REQUIRE(compositor.add_overlay(std::move(offscreen)));
 
     tui::RenderResult output{.lines = std::vector<std::string>(4, "aaaaaaaaaa")};
     REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output));
 
-    CHECK(output.lines[0] == "aaaaaaaaaa");
+    CHECK(output.lines[0] == "aaaaaaaa\x1b[0mYY");
     CHECK(output.lines[1] == "aaaa\x1b[0mXXaaaa");
     CHECK(output.lines[2] == "aaaaaaaaaa");
-    for (const auto& line : output.lines) {
-        CHECK(line.find("YY") == std::string::npos);
-    }
+    CHECK(output.lines[0].ends_with("YY"));
+}
+
+TEST_CASE("OverlayCompositor pads to terminal height and masks declared width for short overlay lines",
+        "[tui][overlay][issue981]") {
+    tui::detail::OverlayCompositor compositor;
+    const tui::TerminalDimensions dimensions{.columns = 10, .rows = 5};
+    auto options = absolute_options(2, 1);
+    options.width = 4;
+    auto overlay = std::make_unique<tui::Overlay>(options);
+    auto child = std::make_unique<StaticComponent>(std::vector<std::string>{"X"});
+    auto* child_pointer = child.get();
+    REQUIRE(overlay->add_child(std::move(child)));
+    REQUIRE(compositor.add_overlay(std::move(overlay)));
+
+    tui::RenderResult output{.lines = {"..........", "base text"}};
+    REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output));
+
+    REQUIRE(output.lines.size() == 5);
+    CHECK(tui::visible_width(output.lines[1]) == 10);
+    CHECK(output.lines[1].find("se text") == std::string::npos);
+    CHECK(output.lines[1].find("ext") != std::string::npos);
+    CHECK(output.lines[2].empty());
+    CHECK(child_pointer->render_count == 1);
+}
+
+TEST_CASE("OverlayCompositor offsets nested cursor and image through viewport padding", "[tui][overlay][issue981]") {
+    tui::detail::OverlayCompositor compositor;
+    const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};
+    const auto capabilities = kitty_capabilities();
+    auto options = absolute_options(3, 1);
+    options.width = 4;
+    auto overlay = std::make_unique<tui::Overlay>(options);
+    auto child = std::make_unique<StaticComponent>(std::vector<std::string>{"ab", "cd"},
+            std::vector{single_cell_image(21, 1, 1)},
+            tui::CursorPosition{.column = 1, .row = 1});
+    auto* child_pointer = child.get();
+    REQUIRE(overlay->add_child(std::move(child)));
+    REQUIRE(overlay->focus_first());
+    REQUIRE(compositor.add_overlay(std::move(overlay)));
+
+    tui::RenderResult output{.lines = std::vector<std::string>(6, "----------")};
+    REQUIRE(compositor.composite(dimensions, capabilities, output));
+
+    REQUIRE(output.lines.size() == 6);
+    REQUIRE(output.cursor.has_value());
+    CHECK(output.cursor == tui::CursorPosition{.column = 4, .row = 4});
+    REQUIRE(output.images.size() == 1);
+    CHECK(output.images[0].region == tui::CellRegion{.column = 4, .row = 4, .columns = 1, .rows = 1});
+    CHECK(child_pointer->focused());
 }
 
 TEST_CASE("OverlayCompositor draws higher z-index overlays on top", "[tui][overlay][spec]") {
@@ -169,13 +230,13 @@ TEST_CASE("OverlayCompositor draws higher z-index overlays on top", "[tui][overl
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 1};
 
     auto low_options = absolute_options(0, 0, 1);
-    low_options.size_constraints.max_width = 4;
+    low_options.width = 4;
     auto low = std::make_unique<tui::Overlay>(low_options);
     REQUIRE(low->add_child(std::make_unique<StaticComponent>(std::vector<std::string>{"aaaa"})));
     REQUIRE(compositor.add_overlay(std::move(low)));
 
     auto high_options = absolute_options(0, 0, 2);
-    high_options.size_constraints.max_width = 2;
+    high_options.width = 2;
     auto high = std::make_unique<tui::Overlay>(high_options);
     REQUIRE(high->add_child(std::make_unique<StaticComponent>(std::vector<std::string>{"bb"})));
     REQUIRE(compositor.add_overlay(std::move(high)));
@@ -190,7 +251,7 @@ TEST_CASE("OverlayCompositor preserves ANSI styles when splicing line regions", 
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 1};
 
     auto options = absolute_options(1, 0);
-    options.size_constraints.max_width = 1;
+    options.width = 1;
     auto overlay = std::make_unique<tui::Overlay>(options);
     REQUIRE(overlay->add_child(std::make_unique<StaticComponent>(std::vector<std::string>{"X"})));
     REQUIRE(compositor.add_overlay(std::move(overlay)));
@@ -211,7 +272,7 @@ TEST_CASE("OverlayCompositor closes an open hyperlink once when the splice is sh
     const tui::TerminalDimensions dimensions{.columns = 8, .rows = 1};
 
     auto options = absolute_options(3, 0);
-    options.size_constraints.max_width = 2;
+    options.width = 2;
     auto overlay = std::make_unique<tui::Overlay>(options);
     REQUIRE(overlay->add_child(std::make_unique<StaticComponent>(std::vector<std::string>{"\x1b[31mXY"})));
     REQUIRE(compositor.add_overlay(std::move(overlay)));
@@ -245,7 +306,7 @@ TEST_CASE("OverlayCompositor clips base images intersecting overlaid regions", "
     REQUIRE(output.images.size() == 2);
 
     auto options = absolute_options(0, 0);
-    options.size_constraints.max_width = 1;
+    options.width = 1;
     auto overlay = std::make_unique<tui::Overlay>(options);
     REQUIRE(overlay->add_child(std::make_unique<StaticComponent>(std::vector<std::string>{"X"})));
     REQUIRE(compositor.add_overlay(std::move(overlay)));
@@ -293,7 +354,9 @@ TEST_CASE("OverlayCompositor offsets overlay images into the composed buffer", "
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};
     const auto capabilities = kitty_capabilities();
 
-    auto overlay = std::make_unique<tui::Overlay>(absolute_options(5, 2));
+    auto options = absolute_options(5, 2);
+    options.width = 1;
+    auto overlay = std::make_unique<tui::Overlay>(options);
     REQUIRE(overlay->add_child(std::make_unique<StaticComponent>(
         std::vector<std::string>{"X"},
         std::vector{single_cell_image(3, 0, 0)})));
@@ -315,7 +378,9 @@ TEST_CASE("OverlayCompositor substitutes fallback text for clipped overlay image
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};
     const auto capabilities = kitty_capabilities();
 
-    auto overlay = std::make_unique<tui::Overlay>(absolute_options(9, 0));
+    auto options = absolute_options(9, 0);
+    options.width = 1;
+    auto overlay = std::make_unique<tui::Overlay>(options);
     auto image = single_cell_image(4, 1, 0);
     image.fallback_text = "F";
     REQUIRE(overlay->add_child(std::make_unique<StaticComponent>(

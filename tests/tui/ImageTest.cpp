@@ -623,7 +623,7 @@ TEST_CASE("Overlay image materialization respects the overlay width allocation",
     });
     cch::tui::Tui tui(terminal);
     cch::tui::OverlayOptions options;
-    options.size_constraints.max_width = 10;
+    options.width = 10;
     auto overlay = std::make_unique<cch::tui::Overlay>(options);
     REQUIRE(overlay->add_child(std::make_unique<cch::tui::Image>(make_image(
         base64_encode(png_header(100, 10)),
@@ -658,7 +658,7 @@ TEST_CASE("Narrow overlays preserve lower images outside their allocation",
     REQUIRE(tui.add_child(std::move(box)));
 
     cch::tui::OverlayOptions options;
-    options.size_constraints.max_width = 4;
+    options.width = 4;
     auto overlay = std::make_unique<cch::tui::Overlay>(options);
     REQUIRE(overlay->add_child(std::make_unique<cch::tui::Text>("menu")));
     REQUIRE(tui.add_overlay(std::move(overlay)));
@@ -815,8 +815,8 @@ TEST_CASE("Hiding and restoring an image overlay reconciles owned regions",
     CHECK(terminal.images()[0].filename == std::optional<std::string>{"overlay.png"});
 }
 
-TEST_CASE("Clipped overlay images show fallback inside the visible allocation",
-        "[tui][image][overlay][issue53][spec][issue994]") {
+TEST_CASE("Overlay image placement clamps the image inside the visible allocation",
+        "[tui][image][overlay][issue53][issue994][issue981]") {
     ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::VirtualTerminal terminal({
         .columns = 30,
@@ -829,8 +829,9 @@ TEST_CASE("Clipped overlay images show fallback inside the visible allocation",
     });
     cch::tui::Tui tui(terminal);
     cch::tui::OverlayOptions options;
-    options.position = cch::tui::OverlayPosition::Absolute;
-    options.absolute_row = 2;
+    options.width = 30;
+    options.anchor = cch::tui::OverlayAnchor::TopLeft;
+    options.row = 2.0;
     auto overlay = std::make_unique<cch::tui::Overlay>(options);
     REQUIRE(overlay->add_child(std::make_unique<cch::tui::Image>(make_image(
         base64_encode(png_header(20, 20)),
@@ -841,8 +842,9 @@ TEST_CASE("Clipped overlay images show fallback inside the visible allocation",
     REQUIRE(tui.start());
     REQUIRE(tui.render());
 
-    CHECK(terminal.images().empty());
-    CHECK(terminal.screen()[2].find("Image") != std::string::npos);
+    REQUIRE(terminal.images().size() == 1);
+    CHECK(terminal.images()[0].region.row == 1);
+    CHECK(terminal.images()[0].region.rows == 2);
 }
 
 TEST_CASE("Private protocol encoders expose meaningful bounded parameters",

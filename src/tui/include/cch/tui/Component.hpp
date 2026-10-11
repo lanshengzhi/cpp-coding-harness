@@ -38,6 +38,8 @@ struct RenderResult {
     std::vector<InlineImageRenderRegion> images{};
     std::optional<std::size_t> viewport_height{std::nullopt};
     std::vector<std::string> dock_lines{};
+    /// Cursor position in the composed line buffer, populated by overlay composition.
+    std::optional<CursorPosition> cursor{std::nullopt};
 };
 
 /// A width-bounded piece of terminal presentation.

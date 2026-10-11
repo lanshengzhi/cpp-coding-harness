@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <exception>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -301,53 +302,57 @@ RenderResult OverlayCompositor::materialize_images(
 }
 
 support::ExpectedVoid OverlayCompositor::composite(
-    TerminalDimensions dimensions,
-    const TerminalCapabilities& capabilities,
-    RenderResult& output) const {
-    auto visible_overlays = sorted_visible(dimensions);
+        TerminalDimensions dimensions, const TerminalCapabilities& capabilities, RenderResult& output) {
+    struct RenderedOverlay {
+        RenderResult content;
+        OverlayLayout layout;
+    };
 
-    for (auto* overlay : visible_overlays) {
-        auto rendered = overlay->render(dimensions.columns);
+    output.cursor.reset();
+    if (overlays_.empty()) return {};
+
+    std::vector<RenderedOverlay> rendered_overlays;
+    std::size_t min_lines_needed = output.lines.size();
+    for (auto* overlay : sorted_visible(dimensions)) {
+        const auto initial_layout = overlay->resolve_layout(dimensions, 0);
+        auto rendered = overlay->render(initial_layout.width);
         if (!rendered) return std::unexpected(rendered.error());
-        const auto& constraints = overlay->options().size_constraints;
-        const auto max_height = constraints.max_height.value_or(dimensions.rows);
-        const auto materialization_width = std::min(
-            dimensions.columns,
-            constraints.max_width.value_or(dimensions.columns));
-        auto materialized = materialize_images(
-            std::move(*rendered),
-            capabilities,
-            materialization_width,
-            std::min(dimensions.rows, max_height));
-        if (materialized.lines.empty()) continue;
-
-        std::size_t content_width = 0;
-        for (const auto& line : materialized.lines) {
-            content_width = std::max(content_width, visible_width(line));
+        auto materialized = materialize_images(std::move(*rendered),
+                capabilities,
+                initial_layout.width,
+                initial_layout.max_height.value_or(dimensions.rows));
+        const auto layout = overlay->resolve_layout(dimensions, materialized.lines.size());
+        if (layout.max_height && materialized.lines.size() > *layout.max_height) {
+            materialized.lines.resize(*layout.max_height);
+            std::erase_if(materialized.images,
+                    [&](const auto& image) { return image.region.row >= materialized.lines.size(); });
+            if (materialized.cursor && materialized.cursor->row >= materialized.lines.size())
+                materialized.cursor.reset();
         }
-        const auto content_height = materialized.lines.size();
-        const auto [offset_col, offset_row] = overlay->layout_position(
-            dimensions.columns, dimensions.rows, content_width, content_height);
-        const auto& margins = overlay->options().margins;
-        const auto final_col = offset_col + margins.left;
-        const auto final_row = offset_row + margins.top;
-        if (final_col >= dimensions.columns || final_row >= dimensions.rows) continue;
+        if (layout.row <= std::numeric_limits<std::size_t>::max() - materialized.lines.size())
+            min_lines_needed = std::max(min_lines_needed, layout.row + materialized.lines.size());
+        if (materialized.lines.empty()) continue;
+        rendered_overlays.push_back({.content = std::move(materialized), .layout = layout});
+    }
 
-        // The composed buffer may exceed the viewport under the main-screen
-        // scrollback flow; overlays are viewport-positioned, so their rows are
-        // offset by the current viewport start (pi compositeOverlays
-        // `viewportStart = max(0, workingHeight - termHeight)`).
-        const auto viewport_start = output.lines.size() > dimensions.rows
-            ? output.lines.size() - dimensions.rows
-            : 0;
+    const auto working_height = std::max({output.lines.size(), dimensions.rows, min_lines_needed});
+    output.lines.resize(working_height);
+    const auto viewport_start = working_height > dimensions.rows ? working_height - dimensions.rows : 0;
+
+    for (auto& rendered : rendered_overlays) {
+        auto& materialized = rendered.content;
+        const auto& layout = rendered.layout;
+        const auto final_col = layout.col;
+        const auto final_row = layout.row;
+        if (final_col >= dimensions.columns || final_row >= dimensions.rows) continue;
 
         const auto overlay_columns = dimensions.columns - final_col;
         const auto overlay_rows = dimensions.rows - final_row;
         std::erase_if(materialized.images, [&](const auto& image) {
             const auto fits_columns = image.region.column < overlay_columns &&
                 image.region.columns <= overlay_columns - image.region.column;
-            const auto fits_rows = image.region.row < overlay_rows &&
-                image.region.rows <= overlay_rows - image.region.row;
+            const auto fits_rows =
+                    image.region.row < overlay_rows && image.region.rows <= overlay_rows - image.region.row;
             if (fits_columns && fits_rows) return false;
             if (image.region.row < materialized.lines.size()) {
                 materialized.lines[image.region.row] = image.fallback_text;
@@ -355,44 +360,49 @@ support::ExpectedVoid OverlayCompositor::composite(
             return true;
         });
 
-        std::size_t composited_width = 0;
-        for (const auto& line : materialized.lines) {
-            composited_width = std::max(composited_width, visible_width(line));
-        }
-        const auto overlay_width = std::min(composited_width, dimensions.columns - final_col);
-        for (std::size_t row = 0; row < content_height; ++row) {
+        const auto overlay_width = std::min(layout.width, overlay_columns);
+        for (std::size_t row = 0; row < materialized.lines.size(); ++row) {
             if (final_row + row >= dimensions.rows || overlay_width == 0) break;
             const auto target_row = viewport_start + final_row + row;
-            if (target_row >= output.lines.size()) output.lines.resize(target_row + 1);
             auto composited = replace_line_region(
-                output.lines[target_row],
-                materialized.lines[row],
-                final_col,
-                overlay_width,
-                dimensions.columns);
+                    output.lines[target_row], materialized.lines[row], final_col, overlay_width, dimensions.columns);
             if (!composited) return std::unexpected(composited.error());
             output.lines[target_row] = std::move(*composited);
 
             const CellRegion written{
-                .column = final_col,
-                .row = target_row,
-                .columns = overlay_width,
-                .rows = 1,
+                    .column = final_col,
+                    .row = target_row,
+                    .columns = overlay_width,
+                    .rows = 1,
             };
-            std::erase_if(output.images, [&](const auto& image) {
-                return cell_regions_intersect(image.region, written);
-            });
+            std::erase_if(
+                    output.images, [&](const auto& image) { return cell_regions_intersect(image.region, written); });
+        }
+
+        if (materialized.cursor && materialized.cursor->row < materialized.lines.size()) {
+            output.cursor = CursorPosition{
+                    .column = final_col + materialized.cursor->column,
+                    .row = viewport_start + final_row + materialized.cursor->row,
+            };
         }
 
         for (auto& image : materialized.images) {
             image.region.column += final_col;
             image.region.row += viewport_start + final_row;
             const auto fits_columns = image.region.column < dimensions.columns &&
-                image.region.columns <= dimensions.columns - image.region.column;
-            const auto viewport_row = image.region.row - viewport_start;
-            const auto fits_rows = viewport_row < dimensions.rows &&
-                image.region.rows <= dimensions.rows - viewport_row;
-            if (fits_columns && fits_rows) output.images.push_back(std::move(image));
+                                      image.region.columns <= dimensions.columns - image.region.column;
+            const auto image_viewport_row = image.region.row - viewport_start;
+            const auto fits_rows =
+                    image_viewport_row < dimensions.rows && image.region.rows <= dimensions.rows - image_viewport_row;
+            if (fits_columns && fits_rows) {
+                output.images.push_back(std::move(image));
+            } else if (image.region.row >= viewport_start && image.region.row < viewport_start + dimensions.rows) {
+                const auto fallback_row = image.region.row;
+                auto fallback_line = replace_line_region(
+                        output.lines[fallback_row], image.fallback_text, final_col, overlay_width, dimensions.columns);
+                if (!fallback_line) return std::unexpected(fallback_line.error());
+                output.lines[fallback_row] = std::move(*fallback_line);
+            }
         }
     }
 

@@ -331,8 +331,10 @@ support::ExpectedVoid MainScreen::render_frame() {
     if (auto overlay_result = compositor_->composite(dimensions, capabilities, materialized); !overlay_result) {
         return std::unexpected(overlay_result.error());
     }
+    const auto cursor_location = materialized.cursor ? materialized.cursor : resolve_cursor_location();
+    materialized.cursor.reset();
     auto result = render_pipeline_->render(
-            std::move(materialized), dimensions, capabilities, compose_overlays, resolve_cursor_location());
+            std::move(materialized), dimensions, capabilities, compose_overlays, cursor_location);
     return result;
 }
 

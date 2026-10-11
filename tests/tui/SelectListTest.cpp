@@ -200,7 +200,7 @@ TEST_CASE("SelectList renders descriptions in an overlay with bounded rows",
     cch::tui::VirtualTerminal terminal({.columns = 70, .rows = 6});
     cch::tui::Tui tui(terminal);
     cch::tui::OverlayOptions overlay_options;
-    overlay_options.size_constraints.max_height = 3;
+    overlay_options.max_height = 3.0;
     auto overlay = std::make_unique<cch::tui::Overlay>(std::move(overlay_options));
     auto list = std::make_unique<cch::tui::SelectList>(make_items(8), cch::tui::SelectListOptions{.max_visible = 2});
     REQUIRE(overlay->add_child(std::move(list)));
@@ -211,9 +211,9 @@ TEST_CASE("SelectList renders descriptions in an overlay with bounded rows",
     REQUIRE(tui.set_focus(overlay_ptr));
     REQUIRE(tui.render());
 
-    CHECK(terminal.screen()[0].find("Item 0") != std::string::npos);
-    CHECK(terminal.screen()[0].find("description 0") != std::string::npos);
-    CHECK(terminal.screen()[2].find("(1/8)") != std::string::npos);
+    CHECK(terminal.screen()[1].find("Item 0") != std::string::npos);
+    CHECK(terminal.screen()[1].find("description 0") != std::string::npos);
+    CHECK(terminal.screen()[3].find("(1/8)") != std::string::npos);
 }
 
 TEST_CASE("SelectList centers its default five item window and marks the selection", "[tui][select-list][issue967]") {

@@ -83,115 +83,115 @@ TEST_CASE("Overlay renders children and reports visibility", "[tui][overlay][iss
     CHECK(rendered->lines.empty());
 }
 
-TEST_CASE("Overlay supports position strategies", "[tui][overlay][issue50][spec]") {
-    // Absolute position
-    cch::tui::OverlayOptions opts;
-    opts.position = cch::tui::OverlayPosition::Absolute;
-    opts.absolute_column = 5;
-    opts.absolute_row = 3;
-    cch::tui::Overlay overlay(opts);
-    auto text = std::make_unique<cch::tui::Text>("x", 0, 0);
-    REQUIRE(overlay.add_child(std::move(text)));
+TEST_CASE("Overlay resolves centered 50 percent coordinates inside the viewport", "[tui][overlay][issue981]") {
+    cch::tui::OverlayOptions options;
+    options.width = cch::tui::SizeValue::absolute(20);
+    options.col = cch::tui::SizeValue::percent(50.0);
+    options.row = cch::tui::SizeValue{"50%"};
+    const cch::tui::Overlay overlay(options);
 
-    auto rendered = overlay.render(10);
-    REQUIRE(rendered);
-    REQUIRE_FALSE(rendered->lines.empty());
+    const auto layout = overlay.resolve_layout({.columns = 100, .rows = 30}, 10);
+    CHECK(layout.width == 20);
+    CHECK(layout.col == 40);
+    CHECK(layout.row == 10);
 
-    const auto [col, row] = overlay.layout_position(80, 24, 1, 1);
-    CHECK(col == 5);
-    CHECK(row == 3);
+    cch::tui::OverlayOptions centered_options;
+    centered_options.width = cch::tui::SizeValue::absolute(20);
+    const cch::tui::Overlay centered(centered_options);
+    const auto centered_layout = centered.resolve_layout({.columns = 100, .rows = 30}, 10);
+    CHECK(centered_layout.col == 40);
+    CHECK(centered_layout.row == 10);
 }
 
-TEST_CASE("Overlay layout position handles TopLeft anchor", "[tui][overlay][issue50][spec]") {
-    cch::tui::Overlay overlay;
-    overlay.set_anchor(10, 5, 20, 10);
-    const auto [col, row] = overlay.layout_position(80, 24, 8, 3);
-    CHECK(col == 10);
-    CHECK(row == 5);
+TEST_CASE("Overlay defaults to a safe centered anchor for empty and small viewports", "[tui][overlay][issue981]") {
+    const cch::tui::Overlay overlay;
+    const auto centered = overlay.resolve_layout({.columns = 80, .rows = 24}, 4);
+    CHECK(centered.width == 80);
+    CHECK(centered.col == 0);
+    CHECK(centered.row == 10);
+
+    const auto zero_viewport = overlay.resolve_layout({.columns = 0, .rows = 0}, 4);
+    CHECK(zero_viewport.width == 1);
+    CHECK(zero_viewport.col == 0);
+    CHECK(zero_viewport.row == 0);
+
+    cch::tui::OverlayOptions small_options;
+    small_options.width = cch::tui::SizeValue::absolute(20);
+    const cch::tui::Overlay small(small_options);
+    const auto oversized = small.resolve_layout({.columns = 2, .rows = 1}, 5);
+    CHECK(oversized.width == 2);
+    CHECK(oversized.col == 0);
+    CHECK(oversized.row == 0);
 }
 
-TEST_CASE("Overlay layout position handles Center anchor", "[tui][overlay][issue50][spec]") {
-    cch::tui::OverlayOptions opts;
-    opts.position = cch::tui::OverlayPosition::Center;
-    cch::tui::Overlay overlay(opts);
-    overlay.set_anchor(10, 5, 20, 10);
-    const auto [col, row] = overlay.layout_position(80, 24, 8, 3);
-    CHECK(col == 10 + (20 / 2) - (8 / 2)); // 16
-    CHECK(row == 5 + (10 / 2) - (3 / 2));  // 8
+TEST_CASE("Overlay anchors cover each viewport edge and center", "[tui][overlay][issue981]") {
+    const auto position_for = [](cch::tui::OverlayAnchor anchor) {
+        cch::tui::OverlayOptions options;
+        options.width = cch::tui::SizeValue::absolute(20);
+        options.anchor = anchor;
+        return cch::tui::Overlay(options).resolve_layout({.columns = 100, .rows = 30}, 10);
+    };
+
+    CHECK(position_for(cch::tui::OverlayAnchor::TopLeft).col == 0);
+    CHECK(position_for(cch::tui::OverlayAnchor::TopLeft).row == 0);
+    CHECK(position_for(cch::tui::OverlayAnchor::TopRight).col == 80);
+    CHECK(position_for(cch::tui::OverlayAnchor::TopRight).row == 0);
+    CHECK(position_for(cch::tui::OverlayAnchor::BottomLeft).col == 0);
+    CHECK(position_for(cch::tui::OverlayAnchor::BottomLeft).row == 20);
+    CHECK(position_for(cch::tui::OverlayAnchor::BottomRight).col == 80);
+    CHECK(position_for(cch::tui::OverlayAnchor::BottomRight).row == 20);
+    CHECK(position_for(cch::tui::OverlayAnchor::TopCenter).col == 40);
+    CHECK(position_for(cch::tui::OverlayAnchor::TopCenter).row == 0);
+    CHECK(position_for(cch::tui::OverlayAnchor::BottomCenter).col == 40);
+    CHECK(position_for(cch::tui::OverlayAnchor::BottomCenter).row == 20);
+    CHECK(position_for(cch::tui::OverlayAnchor::LeftCenter).col == 0);
+    CHECK(position_for(cch::tui::OverlayAnchor::LeftCenter).row == 10);
+    CHECK(position_for(cch::tui::OverlayAnchor::RightCenter).col == 80);
+    CHECK(position_for(cch::tui::OverlayAnchor::RightCenter).row == 10);
 }
 
-TEST_CASE("Overlay layout position handles BottomRight anchor", "[tui][overlay][issue50][spec]") {
-    cch::tui::OverlayOptions opts;
-    opts.position = cch::tui::OverlayPosition::BottomRight;
-    cch::tui::Overlay overlay(opts);
-    overlay.set_anchor(10, 5, 20, 10);
-    const auto [col, row] = overlay.layout_position(80, 24, 8, 3);
-    CHECK(col == 10 + 20 - 8); // 22
-    CHECK(row == 5 + 10 - 3);  // 12
+TEST_CASE("Overlay resolves percentage sizing independent coordinates margins and signed offsets",
+        "[tui][overlay][issue981]") {
+    cch::tui::OverlayOptions options;
+    options.width = cch::tui::SizeValue{"50%"};
+    options.min_width = 30;
+    options.max_height = cch::tui::SizeValue::percent(50.0);
+    options.col = cch::tui::SizeValue::percent(25.0);
+    options.row = cch::tui::SizeValue::percent(50.0);
+    options.offset_x = 2;
+    options.offset_y = -1;
+    options.margins = {.left = 5, .right = 7, .top = 3, .bottom = 4};
+    const cch::tui::Overlay overlay(options);
+
+    const auto layout = overlay.resolve_layout({.columns = 100, .rows = 30}, 20);
+    CHECK(layout.width == 50);
+    CHECK(layout.max_height == 15);
+    CHECK(layout.effective_height == 15);
+    CHECK(layout.col == 16);
+    CHECK(layout.row == 6);
+
+    options.offset_x = 1000;
+    options.offset_y = -1000;
+    const cch::tui::Overlay clamped(options);
+    const auto clamped_layout = clamped.resolve_layout({.columns = 100, .rows = 30}, 20);
+    CHECK(clamped_layout.col == 43);
+    CHECK(clamped_layout.row == 3);
 }
 
-TEST_CASE("Overlay layout position handles LeftCenter anchor", "[tui][overlay][issue50][spec]") {
-    cch::tui::OverlayOptions opts;
-    opts.position = cch::tui::OverlayPosition::LeftCenter;
-    cch::tui::Overlay overlay(opts);
-    overlay.set_anchor(10, 5, 20, 10);
-    const auto [col, row] = overlay.layout_position(80, 24, 8, 3);
-    CHECK(col == 10);
-    CHECK(row == 5 + (10 / 2) - (3 / 2)); // 8
-}
+TEST_CASE("Overlay percentages use remaining space and visibility responds to resize", "[tui][overlay][issue981]") {
+    cch::tui::OverlayOptions options;
+    options.width = cch::tui::SizeValue::absolute(20);
+    options.row = cch::tui::SizeValue::percent(100.0);
+    options.col = cch::tui::SizeValue::percent(100.0);
+    options.margins = {.left = 4, .right = 6, .top = 2, .bottom = 3};
+    options.visible_at = [](cch::tui::TerminalDimensions dimensions) { return dimensions.columns >= 40; };
+    const cch::tui::Overlay overlay(options);
 
-TEST_CASE("Overlay layout position handles RightCenter anchor", "[tui][overlay][issue50][spec]") {
-    cch::tui::OverlayOptions opts;
-    opts.position = cch::tui::OverlayPosition::RightCenter;
-    cch::tui::Overlay overlay(opts);
-    overlay.set_anchor(10, 5, 20, 10);
-    const auto [col, row] = overlay.layout_position(80, 24, 8, 3);
-    CHECK(col == 10 + 20 - 8); // 22
-    CHECK(row == 5 + (10 / 2) - (3 / 2)); // 8
-}
-
-TEST_CASE("Overlay layout position handles Percentage position", "[tui][overlay][issue50][spec]") {
-    cch::tui::OverlayOptions opts;
-    opts.position = cch::tui::OverlayPosition::Percentage;
-    opts.percentage_column = 50;
-    opts.percentage_row = 25;
-    cch::tui::Overlay overlay(opts);
-    const auto [col, row] = overlay.layout_position(80, 24, 8, 3);
-    CHECK(col == (80 * 50) / 100); // 40
-    CHECK(row == (24 * 25) / 100); // 6
-}
-
-TEST_CASE("Overlay visible_at checks viewport constraints", "[tui][overlay][issue50][spec]") {
-    cch::tui::OverlayOptions opts;
-    opts.visibility.min_viewport_width = 40;
-    opts.visibility.max_viewport_height = 30;
-    cch::tui::Overlay overlay(opts);
-
-    CHECK(overlay.visible_at({.columns = 50, .rows = 20}));
-    CHECK_FALSE(overlay.visible_at({.columns = 30, .rows = 20})); // too narrow
-    CHECK_FALSE(overlay.visible_at({.columns = 50, .rows = 40})); // too tall
-
-    // Hidden overlays are never visible
-    overlay.set_visible(false);
-    CHECK_FALSE(overlay.visible_at({.columns = 50, .rows = 20}));
-}
-
-TEST_CASE("Overlay size constraints limit rendered dimensions", "[tui][overlay][issue50][spec]") {
-    cch::tui::OverlayOptions opts;
-    opts.size_constraints.min_width = 20;
-    opts.size_constraints.min_height = 3;
-    opts.size_constraints.max_height = 5;
-    cch::tui::Overlay overlay(opts);
-    auto text = std::make_unique<cch::tui::Text>("short", 0, 0);
-    REQUIRE(overlay.add_child(std::move(text)));
-
-    auto rendered = overlay.render(10);
-    REQUIRE(rendered);
-    // Width should be at least min_width=20
-    CHECK(rendered->lines.front().size() >= 20);
-    // Height should be at least 3, at most 5
-    CHECK(rendered->lines.size() >= 3);
-    CHECK(rendered->lines.size() <= 5);
+    const auto layout = overlay.resolve_layout({.columns = 100, .rows = 30}, 10);
+    CHECK(layout.col == 74);
+    CHECK(layout.row == 17);
+    CHECK(overlay.visible_at({.columns = 40, .rows = 10}));
+    CHECK_FALSE(overlay.visible_at({.columns = 39, .rows = 10}));
 }
 
 TEST_CASE("Tui routes semantic input to exactly one focused target", "[tui][overlay][issue50][spec]") {
@@ -407,7 +407,27 @@ TEST_CASE("IME cursor location follows focused component", "[tui][overlay][issue
     CHECK(cursor.column > 0);
 }
 
-TEST_CASE("Overlay with Editor delegates cursor location", "[tui][overlay][issue50][spec]") {
+TEST_CASE("Overlay cursor uses the centered composed position", "[tui][overlay][issue981]") {
+    cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("base", 0, 0)));
+    REQUIRE(tui.start());
+
+    cch::tui::OverlayOptions options;
+    options.width = 4;
+    auto overlay = std::make_unique<cch::tui::Overlay>(options);
+    auto child = std::make_unique<FocusableInputComponent>("over");
+    REQUIRE(overlay->add_child(std::move(child)));
+    REQUIRE(overlay->focus_first());
+    auto* overlay_pointer = overlay.get();
+    REQUIRE(tui.add_overlay(std::move(overlay)));
+    REQUIRE(tui.set_focus(overlay_pointer));
+    REQUIRE(tui.render());
+
+    CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 4, .row = 2});
+}
+
+TEST_CASE("Overlay with Editor delegates cursor location", "[tui][overlay][issue981][issue50][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 10});
     cch::tui::Tui tui(terminal);
 
@@ -447,26 +467,20 @@ TEST_CASE("Stacked overlays render in z-order", "[tui][overlay][issue50][spec]")
     REQUIRE(tui.start());
 
     // Overlay 1 (lower z-index)
-    auto overlay1 = std::make_unique<cch::tui::Overlay>(
-        cch::tui::OverlayOptions{
-            .size_constraints = {},
-            .margins = {},
-            .visibility = {},
+    auto overlay1 = std::make_unique<cch::tui::Overlay>(cch::tui::OverlayOptions{
+            .visible_at = {},
             .z_index = 0,
-        });
+    });
 
     auto text1 = std::make_unique<cch::tui::Text>("overlay1", 0, 0);
     REQUIRE(overlay1->add_child(std::move(text1)));
     REQUIRE(tui.add_overlay(std::move(overlay1)));
 
     // Overlay 2 (higher z-index)
-    auto overlay2 = std::make_unique<cch::tui::Overlay>(
-        cch::tui::OverlayOptions{
-            .size_constraints = {},
-            .margins = {},
-            .visibility = {},
+    auto overlay2 = std::make_unique<cch::tui::Overlay>(cch::tui::OverlayOptions{
+            .visible_at = {},
             .z_index = 1,
-        });
+    });
 
     auto text2 = std::make_unique<cch::tui::Text>("overlay2", 0, 0);
     REQUIRE(overlay2->add_child(std::move(text2)));

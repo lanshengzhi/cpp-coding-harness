@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace cch::tui::detail {
@@ -60,9 +61,7 @@ public:
     /// viewport layout, ANSI-preserving line splicing, and image intersection
     /// clipping against overlaid regions.
     [[nodiscard]] support::ExpectedVoid composite(
-        TerminalDimensions dimensions,
-        const TerminalCapabilities& capabilities,
-        RenderResult& output) const;
+            TerminalDimensions dimensions, const TerminalCapabilities& capabilities, RenderResult& output);
 
     /// Whether any overlay is visible at these dimensions. Rows are only
     /// reusable while this is false: compositing splices overlays into

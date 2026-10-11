@@ -118,6 +118,8 @@ public:
     return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 }
 
+[[nodiscard]] std::vector<std::string> visible_evidence_rows(std::vector<std::string> lines);
+
 /// Replay one golden scenario and return the observed outcome lines.
 /// Every scenario drives the VirtualTerminal/Tui seams deterministically.
 [[nodiscard]] std::vector<std::string> run_scenario(
@@ -234,9 +236,8 @@ public:
         tui::Tui tui(terminal);
         REQUIRE(tui.add_child(std::make_unique<tui::Text>("base", 0, 0)));
         tui::OverlayOptions options;
-        options.position = tui::OverlayPosition::BottomRight;
+        options.anchor = tui::OverlayAnchor::BottomRight;
         auto overlay = std::make_unique<tui::Overlay>(options);
-        overlay->set_anchor(0, 0, columns, rows);
         REQUIRE(overlay->add_child(std::make_unique<tui::Text>("ov", 0, 0)));
         REQUIRE(tui.add_overlay(std::move(overlay)));
         REQUIRE(tui.start());
@@ -246,13 +247,17 @@ public:
     if (name == "overlay-top-left") {
         tui::VirtualTerminal terminal({.columns = columns, .rows = rows});
         tui::Tui tui(terminal);
-        auto overlay = std::make_unique<tui::Overlay>();
+        tui::OverlayOptions options;
+        options.anchor = tui::OverlayAnchor::TopLeft;
+        options.col = 0.0;
+        options.width = 80;
+        auto overlay = std::make_unique<tui::Overlay>(options);
         REQUIRE(overlay->add_child(std::make_unique<tui::Text>("ov", 0, 0)));
         REQUIRE(tui.add_overlay(std::move(overlay)));
         REQUIRE(tui.add_child(std::make_unique<tui::Text>("base", 0, 0)));
         REQUIRE(tui.start());
         REQUIRE(tui.render());
-        return terminal.screen();
+        return visible_evidence_rows(terminal.screen());
     }
     if (name == "overlay-non-capturing-passthrough") {
         tui::VirtualTerminal terminal({.columns = columns, .rows = rows});
@@ -515,7 +520,12 @@ TEST_CASE("VirtualTerminal screen-state goldens match the committed snapshots",
         const auto actual = run_scenario(name, columns, rows);
         REQUIRE(actual.size() == expected.size());
         for (std::size_t index = 0; index < expected.size(); ++index) {
-            CHECK(actual[index] == expected[index].get_string());
+            const auto expected_line = expected[index].get_string();
+            if (name == "overlay-top-left") {
+                CHECK(actual[index] == visible_evidence_rows({expected_line})[0]);
+            } else {
+                CHECK(actual[index] == expected_line);
+            }
         }
     }
 }

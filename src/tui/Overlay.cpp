@@ -5,27 +5,132 @@
 
 #include <cch/support/Error.hpp>
 #include <algorithm>
+#include <charconv>
+#include <cmath>
 #include <cstddef>
-#include <format>
+#include <limits>
 #include <memory>
 #include <optional>
-#include <string>
+#include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 namespace cch::tui {
 namespace {
+
+[[nodiscard]] std::optional<double> parse_size_value(std::string_view text) {
+    if (!text.ends_with('%')) return std::nullopt;
+    text.remove_suffix(1);
+    if (text.empty()) return std::nullopt;
+
+    double value = 0.0;
+    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (error != std::errc{} || end != text.data() + text.size() || !std::isfinite(value) || value < 0.0) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+[[nodiscard]] std::size_t size_from_value(SizeValue value, std::size_t reference) {
+    if (!value.valid || !std::isfinite(value.value) || value.value <= 0.0) return 0;
+    const auto resolved = value.percentage
+                                  ? static_cast<long double>(reference) * static_cast<long double>(value.value) / 100.0L
+                                  : static_cast<long double>(value.value);
+    if (resolved >= static_cast<long double>(std::numeric_limits<std::size_t>::max()))
+        return std::numeric_limits<std::size_t>::max();
+    return static_cast<std::size_t>(resolved);
+}
+
+[[nodiscard]] std::size_t available_after_margins(std::size_t dimension, std::size_t first, std::size_t second) {
+    const auto after_first = dimension > first ? dimension - first : std::size_t{0};
+    const auto after_both = after_first > second ? after_first - second : std::size_t{0};
+    return std::max<std::size_t>(1, after_both);
+}
+
+[[nodiscard]] std::size_t add_offset(std::size_t position, std::ptrdiff_t offset) {
+    if (offset >= 0) {
+        const auto positive_offset = static_cast<std::size_t>(offset);
+        if (position > std::numeric_limits<std::size_t>::max() - positive_offset)
+            return std::numeric_limits<std::size_t>::max();
+        return position + positive_offset;
+    }
+    const auto magnitude = static_cast<std::size_t>(-(offset + 1)) + 1;
+    return position > magnitude ? position - magnitude : 0;
+}
+
+[[nodiscard]] std::size_t clamped_position(
+        std::size_t position, std::ptrdiff_t offset, std::size_t lower, std::size_t upper) {
+    const auto adjusted = add_offset(position, offset);
+    return std::clamp(adjusted, lower, std::max(lower, upper));
+}
+
+[[nodiscard]] std::size_t anchor_column(
+        OverlayAnchor anchor, std::size_t margin_left, std::size_t available_width, std::size_t width) {
+    const auto max_column = available_width > width ? available_width - width : std::size_t{0};
+    switch (anchor) {
+    case OverlayAnchor::TopLeft:
+    case OverlayAnchor::LeftCenter:
+    case OverlayAnchor::BottomLeft:
+        return margin_left;
+    case OverlayAnchor::TopRight:
+    case OverlayAnchor::RightCenter:
+    case OverlayAnchor::BottomRight:
+        return margin_left + max_column;
+    case OverlayAnchor::Center:
+    case OverlayAnchor::TopCenter:
+    case OverlayAnchor::BottomCenter:
+        return margin_left + max_column / 2;
+    }
+    return margin_left + max_column / 2;
+}
+
+[[nodiscard]] std::size_t anchor_row(
+        OverlayAnchor anchor, std::size_t margin_top, std::size_t available_height, std::size_t height) {
+    const auto max_row = available_height > height ? available_height - height : std::size_t{0};
+    switch (anchor) {
+    case OverlayAnchor::TopLeft:
+    case OverlayAnchor::TopCenter:
+    case OverlayAnchor::TopRight:
+        return margin_top;
+    case OverlayAnchor::BottomLeft:
+    case OverlayAnchor::BottomCenter:
+    case OverlayAnchor::BottomRight:
+        return margin_top + max_row;
+    case OverlayAnchor::Center:
+    case OverlayAnchor::LeftCenter:
+    case OverlayAnchor::RightCenter:
+        return margin_top + max_row / 2;
+    }
+    return margin_top + max_row / 2;
+}
+
+[[nodiscard]] std::size_t percent_position(std::size_t available, double percent) {
+    if (!std::isfinite(percent) || percent <= 0.0) return 0;
+    const auto position = static_cast<long double>(available) * static_cast<long double>(percent) / 100.0L;
+    if (position >= static_cast<long double>(available)) return available;
+    return static_cast<std::size_t>(position);
+}
+
 } // namespace
+
+SizeValue::SizeValue(const char* value_text) : SizeValue(std::string_view(value_text == nullptr ? "" : value_text)) {}
+
+SizeValue::SizeValue(std::string_view value_text) {
+    if (const auto parsed = parse_size_value(value_text)) {
+        value = *parsed;
+        percentage = true;
+        return;
+    }
+    valid = false;
+}
+
+SizeValue::SizeValue(const std::string& value_text) : SizeValue(std::string_view(value_text)) {}
 
 struct Overlay::Impl {
     OverlayOptions options;
     bool visible_{true};
     std::vector<std::unique_ptr<Component>> children_;
-    /// Anchor area (viewport-relative coordinates).
-    std::size_t anchor_column{0};
-    std::size_t anchor_row{0};
-    std::size_t anchor_width{0};
-    std::size_t anchor_height{0};
     bool focused_{false};
     Focusable* focused_child_{nullptr};
 
@@ -49,8 +154,7 @@ struct Overlay::Impl {
         }
         return nullptr;
     }
-
-    };
+};
 
 Overlay::Overlay(OverlayOptions options)
     : impl_(std::make_unique<Impl>()) {
@@ -87,13 +191,6 @@ bool Overlay::visible() const {
     return impl_->visible_;
 }
 
-void Overlay::set_anchor(std::size_t column, std::size_t row, std::size_t width, std::size_t height) {
-    impl_->anchor_column = column;
-    impl_->anchor_row = row;
-    impl_->anchor_width = width;
-    impl_->anchor_height = height;
-}
-
 support::ExpectedVoid Overlay::focus_first() {
     auto* focusable = impl_->first_focusable();
     if (focusable == nullptr) {
@@ -113,21 +210,18 @@ support::ExpectedVoid Overlay::focus_first() {
 support::Expected<RenderResult> Overlay::render(std::size_t width) {
     if (!impl_->visible_) return RenderResult{};
 
-    std::size_t effective_width = width;
-    if (impl_->options.size_constraints.min_width) {
-        effective_width = std::max(effective_width, *impl_->options.size_constraints.min_width);
-    }
-    if (impl_->options.size_constraints.max_width) {
-        effective_width = std::min(effective_width, *impl_->options.size_constraints.max_width);
-    }
-
     RenderResult result;
     for (const auto& child : impl_->children_) {
-        auto rendered = child->render(effective_width);
+        auto rendered = child->render(width);
         if (!rendered) return std::unexpected(rendered.error());
         const auto row_offset = result.lines.size();
+        if (impl_->focused_ && child.get() == dynamic_cast<Component*>(impl_->focused_child_)) {
+            if (const auto cursor = impl_->focused_child_->cursor_location()) {
+                result.cursor = CursorPosition{.column = cursor->column, .row = row_offset + cursor->row};
+            }
+        }
         for (auto& line : rendered->lines) {
-            auto prepared = detail::prepare_rendered_line(line, effective_width);
+            auto prepared = detail::prepare_rendered_line(line, width);
             if (!prepared) return std::unexpected(prepared.error());
             result.lines.push_back(std::move(prepared->text));
         }
@@ -135,19 +229,6 @@ support::Expected<RenderResult> Overlay::render(std::size_t width) {
             image.region.row += row_offset;
             result.images.push_back(std::move(image));
         }
-    }
-
-    if (impl_->options.size_constraints.min_height) {
-        while (result.lines.size() < *impl_->options.size_constraints.min_height) {
-            result.lines.emplace_back(effective_width, ' ');
-        }
-    }
-    if (impl_->options.size_constraints.max_height &&
-        result.lines.size() > *impl_->options.size_constraints.max_height) {
-        result.lines.resize(*impl_->options.size_constraints.max_height);
-        std::erase_if(result.images, [&](const auto& image) {
-            return image.region.row >= result.lines.size();
-        });
     }
 
     return result;
@@ -158,7 +239,6 @@ void Overlay::invalidate() {
 }
 
 InputAdmissionOutcome Overlay::handle_input(const InputEventVariant& input) {
-    // Non-capturing overlays skip input handling (handled by Tui dispatch)
     if (impl_->options.non_capturing) return InputAdmissionOutcome::Unhandled;
 
     const auto* key = std::get_if<KeyEvent>(&input);
@@ -193,70 +273,61 @@ std::optional<CursorPosition> Overlay::cursor_location() const {
     return impl_->focused_child_->cursor_location();
 }
 
-std::pair<std::size_t, std::size_t> Overlay::layout_position(
-    std::size_t viewport_width,
-    std::size_t viewport_height,
-    std::size_t content_width,
-    std::size_t content_height) const {
-    const auto& opts = impl_->options;
-    switch (opts.position) {
-    case OverlayPosition::TopLeft:
-        return {impl_->anchor_column, impl_->anchor_row};
-    case OverlayPosition::TopRight: {
-        const auto col = impl_->anchor_column + impl_->anchor_width - std::min(content_width, impl_->anchor_width);
-        return {col, impl_->anchor_row};
+OverlayLayout Overlay::resolve_layout(TerminalDimensions viewport, std::size_t content_height) const {
+    const auto& options = impl_->options;
+    const auto& margins = options.margins;
+    const auto available_width = available_after_margins(viewport.columns, margins.left, margins.right);
+    const auto available_height = available_after_margins(viewport.rows, margins.top, margins.bottom);
+
+    auto width = options.width.valid ? size_from_value(options.width, viewport.columns)
+                                     : std::min<std::size_t>(80, available_width);
+    width = std::max(width, options.min_width);
+    width = std::clamp<std::size_t>(width, 1, available_width);
+
+    std::optional<std::size_t> max_height;
+    if (options.max_height && options.max_height->valid) {
+        max_height = std::clamp<std::size_t>(size_from_value(*options.max_height, viewport.rows), 1, available_height);
     }
-    case OverlayPosition::BottomLeft: {
-        const auto row = impl_->anchor_row + impl_->anchor_height - std::min(content_height, impl_->anchor_height);
-        return {impl_->anchor_column, row};
-    }
-    case OverlayPosition::BottomRight: {
-        const auto col = impl_->anchor_column + impl_->anchor_width - std::min(content_width, impl_->anchor_width);
-        const auto row = impl_->anchor_row + impl_->anchor_height - std::min(content_height, impl_->anchor_height);
-        return {col, row};
-    }
-    case OverlayPosition::Center: {
-        const auto col = impl_->anchor_column + (impl_->anchor_width / 2) - (content_width / 2);
-        const auto row = impl_->anchor_row + (impl_->anchor_height / 2) - (content_height / 2);
-        return {col, row};
-    }
-    case OverlayPosition::TopCenter: {
-        const auto col = impl_->anchor_column + (impl_->anchor_width / 2) - (content_width / 2);
-        return {col, impl_->anchor_row};
-    }
-    case OverlayPosition::BottomCenter: {
-        const auto col = impl_->anchor_column + (impl_->anchor_width / 2) - (content_width / 2);
-        const auto row = impl_->anchor_row + impl_->anchor_height - std::min(content_height, impl_->anchor_height);
-        return {col, row};
-    }
-    case OverlayPosition::LeftCenter: {
-        const auto row = impl_->anchor_row + (impl_->anchor_height / 2) - (content_height / 2);
-        return {impl_->anchor_column, row};
-    }
-    case OverlayPosition::RightCenter: {
-        const auto col = impl_->anchor_column + impl_->anchor_width - std::min(content_width, impl_->anchor_width);
-        const auto row = impl_->anchor_row + (impl_->anchor_height / 2) - (content_height / 2);
-        return {col, row};
-    }
-    case OverlayPosition::Absolute:
-        return {opts.absolute_column, opts.absolute_row};
-    case OverlayPosition::Percentage: {
-        const auto col = (viewport_width * opts.percentage_column) / 100;
-        const auto row = (viewport_height * opts.percentage_row) / 100;
-        return {col, row};
-    }
-    }
-    return {impl_->anchor_column, impl_->anchor_row};
+    const auto effective_height = max_height ? std::min(content_height, *max_height) : content_height;
+
+    const auto position_col = [&] {
+        if (!options.col) return anchor_column(options.anchor, margins.left, available_width, width);
+        if (!options.col->valid) return anchor_column(options.anchor, margins.left, available_width, width);
+        if (options.col->percentage) {
+            const auto max_column = available_width > width ? available_width - width : std::size_t{0};
+            return margins.left + percent_position(max_column, options.col->value);
+        }
+        return size_from_value(*options.col, std::numeric_limits<std::size_t>::max());
+    }();
+
+    const auto position_row = [&] {
+        if (!options.row) return anchor_row(options.anchor, margins.top, available_height, effective_height);
+        if (!options.row->valid) return anchor_row(options.anchor, margins.top, available_height, effective_height);
+        if (options.row->percentage) {
+            const auto max_row =
+                    available_height > effective_height ? available_height - effective_height : std::size_t{0};
+            return margins.top + percent_position(max_row, options.row->value);
+        }
+        return size_from_value(*options.row, std::numeric_limits<std::size_t>::max());
+    }();
+
+    const auto right_edge = viewport.columns > margins.right ? viewport.columns - margins.right : std::size_t{0};
+    const auto bottom_edge = viewport.rows > margins.bottom ? viewport.rows - margins.bottom : std::size_t{0};
+    const auto max_col = right_edge > width ? right_edge - width : std::size_t{0};
+    const auto max_row = bottom_edge > effective_height ? bottom_edge - effective_height : std::size_t{0};
+
+    return OverlayLayout{
+            .width = width,
+            .row = clamped_position(position_row, options.offset_y, margins.top, max_row),
+            .col = clamped_position(position_col, options.offset_x, margins.left, max_col),
+            .max_height = max_height,
+            .effective_height = effective_height,
+    };
 }
 
 bool Overlay::visible_at(TerminalDimensions viewport) const {
     if (!impl_->visible_) return false;
-    const auto& vis = impl_->options.visibility;
-    if (vis.min_viewport_width && viewport.columns < *vis.min_viewport_width) return false;
-    if (vis.min_viewport_height && viewport.rows < *vis.min_viewport_height) return false;
-    if (vis.max_viewport_width && viewport.columns > *vis.max_viewport_width) return false;
-    if (vis.max_viewport_height && viewport.rows > *vis.max_viewport_height) return false;
-    return true;
+    return !impl_->options.visible_at || impl_->options.visible_at(viewport);
 }
 
 } // namespace cch::tui
