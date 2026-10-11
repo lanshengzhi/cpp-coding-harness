@@ -44,6 +44,7 @@ public:
     [[nodiscard]] bool complete();
     [[nodiscard]] bool cancel();
     void stop();
+    void dispose();
     void set_message(std::string message);
     void set_indicator(std::optional<LoaderIndicatorOptions> indicator = std::nullopt);
 

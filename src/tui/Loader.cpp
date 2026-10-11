@@ -1,4 +1,5 @@
 #include <cch/tui/Loader.hpp>
+#include <cch/tui/Text.hpp>
 
 #include <cch/tui/Utils.hpp>
 
@@ -30,7 +31,16 @@ namespace {
 // setInterval (ADR 0035).
 constexpr std::chrono::milliseconds kDefaultInterval{80};
 const std::vector<std::string> kDefaultFrames{
-    "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏",
+        "⠋",
+        "⠙",
+        "⠹",
+        "⠸",
+        "⠼",
+        "⠴",
+        "⠦",
+        "⠧",
+        "⠇",
+        "⠏",
 };
 
 class SteadyAnimationTimer final : public AnimationTimer {
@@ -38,16 +48,12 @@ public:
     SteadyAnimationTimer() = default;
     SteadyAnimationTimer(SteadyAnimationTimer&&) = delete;
     SteadyAnimationTimer& operator=(SteadyAnimationTimer&&) = delete;
-    ~SteadyAnimationTimer() override {
-        stop();
-    }
+    ~SteadyAnimationTimer() override { stop(); }
 
     SteadyAnimationTimer(const SteadyAnimationTimer&) = delete;
     SteadyAnimationTimer& operator=(const SteadyAnimationTimer&) = delete;
 
-    [[nodiscard]] support::ExpectedVoid start(
-        std::chrono::milliseconds interval,
-        AnimationTickSink tick) override {
+    [[nodiscard]] support::ExpectedVoid start(std::chrono::milliseconds interval, AnimationTickSink tick) override {
         auto state = std::make_shared<State>();
         state->interval = interval;
         state->tick = std::move(tick);
@@ -132,6 +138,39 @@ struct Loader::Impl : public std::enable_shared_from_this<Loader::Impl> {
     std::unique_ptr<AnimationTimer> timer;
     std::optional<support::Error> error;
     std::atomic_flag requesting = ATOMIC_FLAG_INIT;
+    Text text_component_{"", 1, 0};
+
+    void sync_text() {
+        std::string frame;
+        std::string msg;
+        bool verbatim = false;
+        {
+            std::lock_guard lock(state_mutex);
+            frame = frames.empty() ? std::string{} : frames[current_frame % frames.size()];
+            msg = message;
+            verbatim = indicator_verbatim;
+        }
+
+        if (!verbatim && !frame.empty()) {
+            auto styled = detail::apply_text_style(spinner_style, std::move(frame), "Loader spinner");
+            if (styled) frame = std::move(*styled);
+        }
+        auto styled_message = detail::apply_text_style(message_style, std::move(msg), "Loader message");
+        std::string line;
+        if (!frame.empty()) {
+            line = frame + " ";
+        }
+        if (styled_message) {
+            line += *styled_message;
+        } else {
+            line += msg;
+        }
+
+        {
+            std::lock_guard lock(render_mutex);
+            text_component_.set_text(std::move(line));
+        }
+    }
 
     void request_render() {
         if (!request_render_sink || requesting.test_and_set()) return;
@@ -148,15 +187,15 @@ struct Loader::Impl : public std::enable_shared_from_this<Loader::Impl> {
             if (!running || frames.size() <= 1) return;
             current_frame = (current_frame + 1) % frames.size();
         }
+        sync_text();
         request_render();
     }
 
     void report_tick_failure() {
         std::lock_guard lock(state_mutex);
-        error = support::make_error(
-            support::ErrorCode::Unknown,
-            "TUI Loader animation tick failed",
-            "the animation callback threw an exception");
+        error = support::make_error(support::ErrorCode::Unknown,
+                "TUI Loader animation tick failed",
+                "the animation callback threw an exception");
         running = false;
     }
 
@@ -189,31 +228,29 @@ struct Loader::Impl : public std::enable_shared_from_this<Loader::Impl> {
     }
 };
 
-Loader::Loader(LoaderOptions options)
-    : impl_(std::make_shared<Impl>()) {
+Loader::Loader(LoaderOptions options) : impl_(std::make_shared<Impl>()) {
     impl_->request_render_sink = std::move(options.request_render);
     impl_->spinner_style = std::move(options.spinner_style);
     impl_->message_style = std::move(options.message_style);
     impl_->message = std::move(options.message);
-    impl_->timer = options.animation_timer
-                       ? std::move(options.animation_timer)
-                       : std::make_unique<SteadyAnimationTimer>();
+    impl_->timer =
+            options.animation_timer ? std::move(options.animation_timer) : std::make_unique<SteadyAnimationTimer>();
     impl_->indicator_verbatim = options.indicator.has_value();
     if (options.indicator) {
         impl_->frames = options.indicator->frames.value_or(kDefaultFrames);
         impl_->interval = normalized_interval(options.indicator->interval);
     }
+    impl_->sync_text();
     impl_->restart();
 }
 
 Loader::Loader(Loader&&) noexcept = default;
 Loader& Loader::operator=(Loader&&) noexcept = default;
 
-Loader::~Loader() {
-    stop();
-}
+Loader::~Loader() { stop(); }
 
 void Loader::start() {
+    impl_->sync_text();
     impl_->restart();
 }
 
@@ -238,6 +275,7 @@ void Loader::set_message(std::string message) {
         std::lock_guard lock(impl->state_mutex);
         impl->message = std::move(message);
     }
+    impl->sync_text();
     impl->request_render();
 }
 
@@ -250,44 +288,32 @@ void Loader::set_indicator(std::optional<LoaderIndicatorOptions> indicator) {
         impl->interval = normalized_interval(indicator ? indicator->interval : kDefaultInterval);
         impl->current_frame = 0;
     }
+    impl->sync_text();
     impl->restart();
 }
 
 support::Expected<RenderResult> Loader::render(std::size_t width) {
     auto impl = impl_;
     if (width == 0) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "TUI Loader requires a positive visible width"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "TUI Loader requires a positive visible width"));
     }
-    std::string frame;
-    std::string message;
-    bool verbatim = false;
     {
         std::lock_guard lock(impl->state_mutex);
         if (impl->error) return std::unexpected(*impl->error);
-        frame = impl->frames.empty() ? std::string{} : impl->frames[impl->current_frame % impl->frames.size()];
-        message = impl->message;
-        verbatim = impl->indicator_verbatim;
     }
 
     std::lock_guard render_lock(impl->render_mutex);
-    if (!verbatim && !frame.empty()) {
-        auto styled = detail::apply_text_style(impl->spinner_style, std::move(frame), "Loader spinner");
-        if (!styled) return std::unexpected(styled.error());
-        frame = std::move(*styled);
+    auto text_rendered = impl->text_component_.render(width);
+    if (!text_rendered) return std::unexpected(text_rendered.error());
+
+    std::vector<std::string> lines;
+    lines.reserve(1 + text_rendered->lines.size());
+    lines.emplace_back("");
+    for (auto& line : text_rendered->lines) {
+        lines.push_back(std::move(line));
     }
-    auto styled_message = detail::apply_text_style(
-        impl->message_style,
-        std::move(message),
-        "Loader message");
-    if (!styled_message) return std::unexpected(styled_message.error());
-    auto line = std::string(" ");
-    if (!frame.empty()) line += frame + " ";
-    line += *styled_message;
-    auto bounded = truncate_text(line, width, "");
-    if (!bounded) return std::unexpected(bounded.error());
-    return RenderResult{.lines = {"", std::move(*bounded)}};
+    return RenderResult{.lines = std::move(lines)};
 }
 
 support::Expected<std::string> Loader::rendered_indicator() const {
@@ -304,6 +330,13 @@ support::Expected<std::string> Loader::rendered_indicator() const {
     return detail::apply_text_style(impl->spinner_style, std::move(frame), "Loader spinner");
 }
 
-void Loader::invalidate() {}
+void Loader::invalidate() {
+    auto impl = impl_;
+    {
+        std::lock_guard lock(impl->render_mutex);
+        impl->text_component_.invalidate();
+    }
+    impl->sync_text();
+}
 
 } // namespace cch::tui

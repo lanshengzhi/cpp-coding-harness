@@ -13,8 +13,7 @@ namespace cch::tui {
 
 struct CancellableLoader::Impl {
     explicit Impl(CancellableLoaderOptions options)
-        : loader(std::move(options.loader)),
-          on_complete(std::move(options.on_complete)),
+        : loader(std::move(options.loader)), on_complete(std::move(options.on_complete)),
           on_cancel(std::move(options.on_cancel)),
           keybindings(options.keybindings ? std::move(options.keybindings) : default_tui_keybindings()) {}
 
@@ -28,22 +27,31 @@ struct CancellableLoader::Impl {
     std::optional<support::Error> callback_error;
     bool focused{false};
 
-    bool finish(CancellableLoaderState outcome) {
+    bool cancel() {
+        {
+            std::lock_guard lock(mutex);
+            if (state == CancellableLoaderState::Completed) return false;
+            state = CancellableLoaderState::Cancelled;
+        }
+        stop_source.request_stop();
+        loader.stop();
+        if (on_cancel) {
+            if (auto cancelled = on_cancel(); !cancelled) {
+                std::lock_guard lock(mutex);
+                callback_error = std::move(cancelled.error());
+            }
+        }
+        return true;
+    }
+
+    bool complete() {
         LoaderCompletionSink completion;
-        LoaderCancellationSink cancellation;
-        bool request_stop = false;
         {
             std::lock_guard lock(mutex);
             if (state != CancellableLoaderState::Active) return false;
-            state = outcome;
-            if (outcome == CancellableLoaderState::Cancelled) {
-                request_stop = true;
-                cancellation = std::move(on_cancel);
-            } else {
-                completion = std::move(on_complete);
-            }
+            state = CancellableLoaderState::Completed;
+            completion = std::move(on_complete);
         }
-        if (request_stop) stop_source.request_stop();
         loader.stop();
         if (completion) {
             if (auto completed = completion(); !completed) {
@@ -51,12 +59,6 @@ struct CancellableLoader::Impl {
                 callback_error = std::move(completed.error());
             }
         }
-            if (cancellation) {
-                if (auto cancelled = cancellation(); !cancelled) {
-                    std::lock_guard lock(mutex);
-                    callback_error = std::move(cancelled.error());
-                }
-            }
         return true;
     }
 };
@@ -67,9 +69,7 @@ CancellableLoader::CancellableLoader(CancellableLoaderOptions options)
 CancellableLoader::CancellableLoader(CancellableLoader&&) noexcept = default;
 CancellableLoader& CancellableLoader::operator=(CancellableLoader&&) noexcept = default;
 
-CancellableLoader::~CancellableLoader() {
-    stop();
-}
+CancellableLoader::~CancellableLoader() { stop(); }
 
 std::stop_token CancellableLoader::cancellation_token() const {
     std::lock_guard lock(impl_->mutex);
@@ -81,23 +81,23 @@ CancellableLoaderState CancellableLoader::state() const {
     return impl_->state;
 }
 
-bool CancellableLoader::cancelled() const {
-    return state() == CancellableLoaderState::Cancelled;
-}
+bool CancellableLoader::cancelled() const { return state() == CancellableLoaderState::Cancelled; }
 
 bool CancellableLoader::complete() {
     auto impl = impl_;
-    return impl->finish(CancellableLoaderState::Completed);
+    return impl->complete();
 }
 
 bool CancellableLoader::cancel() {
     auto impl = impl_;
-    return impl->finish(CancellableLoaderState::Cancelled);
+    return impl->cancel();
 }
 
 void CancellableLoader::stop() {
     if (impl_) impl_->loader.stop();
 }
+
+void CancellableLoader::dispose() { stop(); }
 
 void CancellableLoader::set_message(std::string message) {
     auto impl = impl_;
@@ -132,9 +132,7 @@ support::Expected<RenderResult> CancellableLoader::render(std::size_t width) {
     return impl->loader.render(width);
 }
 
-void CancellableLoader::invalidate() {
-    impl_->loader.invalidate();
-}
+void CancellableLoader::invalidate() { impl_->loader.invalidate(); }
 
 InputAdmissionOutcome CancellableLoader::handle_input(const InputEventVariant& input) {
     const auto* key = std::get_if<KeyEvent>(&input);
