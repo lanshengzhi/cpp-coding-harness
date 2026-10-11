@@ -74,6 +74,7 @@ CommandResult run_command(const std::string& command, const fs::path& capture_di
             "share/pike/licenses/boost.txt",
             "share/pike/licenses/fmt.txt",
             "share/pike/licenses/glaze.txt",
+            "share/pike/licenses/icu.txt",
             "share/pike/licenses/libwebp.txt",
             "share/pike/licenses/md4c.txt",
             "share/pike/licenses/openssl.txt",

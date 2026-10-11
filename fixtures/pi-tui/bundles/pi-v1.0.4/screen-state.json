@@ -1,7 +1,7 @@
 {
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-11T06:27:59.777Z",
+  "capturedAt": "2026-10-11T08:51:51.507Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -33,7 +33,12 @@
     "packages/tui/src/tui.ts:TuiBase.start,stop,setFocus,Container.addChild,removeChild,clear",
     "packages/tui/src/components/select-list.ts:constructor,render,handleInput,getSelectedItem,setFilter,setSelectedIndex",
     "packages/tui/src/keybindings.ts:getKeybindings",
-    "packages/tui/src/utils.ts:visibleWidth,truncateToWidth"
+    "packages/tui/src/utils.ts:visibleWidth,truncateToWidth",
+    "packages/tui/src/components/editor.ts:handleInput,setText,getText,getExpandedText,getCursor,addToHistory",
+    "packages/tui/src/word-navigation.ts:findWordBackward,findWordForward",
+    "packages/tui/src/undo-stack.ts:UndoStack.push,pop",
+    "packages/tui/src/kill-ring.ts:KillRing.push,rotate",
+    "packages/tui/src/keybindings.ts:KeybindingsManager.setUserBindings"
   ],
   "scenarios": [
     {
@@ -11379,6 +11384,625 @@
             "before": "first",
             "after": "first"
           }
+        ]
+      }
+    },
+    {
+      "name": "coalesced-unicode-edit-after-undo",
+      "dimensions": {
+        "columns": 40,
+        "rows": 8
+      },
+      "inputs": {
+        "keys": [
+          "h",
+          "é",
+          "😀",
+          " ",
+          "界",
+          "x"
+        ],
+        "undo": "ctrl+-",
+        "edit": "z"
+      },
+      "expected": {
+        "typed": {
+          "text": "hé😀 界x",
+          "expanded": "hé😀 界x",
+          "lines": [
+            "hé😀 界x"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 7,
+            "before": "hé😀 界x",
+            "after": ""
+          }
+        },
+        "undoFirst": {
+          "text": "hé😀",
+          "expanded": "hé😀",
+          "lines": [
+            "hé😀"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 4,
+            "before": "hé😀",
+            "after": ""
+          }
+        },
+        "undoSecond": {
+          "text": "",
+          "expanded": "",
+          "lines": [
+            ""
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": ""
+          }
+        },
+        "edited": {
+          "text": "z",
+          "expanded": "z",
+          "lines": [
+            "z"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 1,
+            "before": "z",
+            "after": ""
+          }
+        },
+        "undoAfterEdit": {
+          "text": "",
+          "expanded": "",
+          "lines": [
+            ""
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": ""
+          }
+        },
+        "changes": [
+          "h",
+          "hé",
+          "hé😀",
+          "hé😀 ",
+          "hé😀 界",
+          "hé😀 界x",
+          "hé😀",
+          "",
+          "z",
+          ""
+        ]
+      }
+    },
+    {
+      "name": "unicode-word-navigation-and-jump",
+      "dimensions": {
+        "columns": 40,
+        "rows": 8
+      },
+      "inputs": {
+        "text": "éclair 世界,foo_bar 😀done",
+        "home": "ctrl+a",
+        "wordRight": "ctrl+right",
+        "repetitions": 7,
+        "end": "ctrl+e",
+        "jumpForward": "ctrl+]",
+        "jumpBackward": "ctrl+alt+]",
+        "forwardTarget": "o",
+        "backwardTarget": "é"
+      },
+      "expected": {
+        "wordPositions": [
+          {
+            "text": "éclair 世界,foo_bar 😀done",
+            "expanded": "éclair 世界,foo_bar 😀done",
+            "lines": [
+              "éclair 世界,foo_bar 😀done"
+            ],
+            "cursor": {
+              "line": 0,
+              "utf16Column": 0,
+              "before": "",
+              "after": "éclair 世界,foo_bar 😀done"
+            }
+          },
+          {
+            "text": "éclair 世界,foo_bar 😀done",
+            "expanded": "éclair 世界,foo_bar 😀done",
+            "lines": [
+              "éclair 世界,foo_bar 😀done"
+            ],
+            "cursor": {
+              "line": 0,
+              "utf16Column": 6,
+              "before": "éclair",
+              "after": " 世界,foo_bar 😀done"
+            }
+          },
+          {
+            "text": "éclair 世界,foo_bar 😀done",
+            "expanded": "éclair 世界,foo_bar 😀done",
+            "lines": [
+              "éclair 世界,foo_bar 😀done"
+            ],
+            "cursor": {
+              "line": 0,
+              "utf16Column": 9,
+              "before": "éclair 世界",
+              "after": ",foo_bar 😀done"
+            }
+          },
+          {
+            "text": "éclair 世界,foo_bar 😀done",
+            "expanded": "éclair 世界,foo_bar 😀done",
+            "lines": [
+              "éclair 世界,foo_bar 😀done"
+            ],
+            "cursor": {
+              "line": 0,
+              "utf16Column": 10,
+              "before": "éclair 世界,",
+              "after": "foo_bar 😀done"
+            }
+          },
+          {
+            "text": "éclair 世界,foo_bar 😀done",
+            "expanded": "éclair 世界,foo_bar 😀done",
+            "lines": [
+              "éclair 世界,foo_bar 😀done"
+            ],
+            "cursor": {
+              "line": 0,
+              "utf16Column": 17,
+              "before": "éclair 世界,foo_bar",
+              "after": " 😀done"
+            }
+          },
+          {
+            "text": "éclair 世界,foo_bar 😀done",
+            "expanded": "éclair 世界,foo_bar 😀done",
+            "lines": [
+              "éclair 世界,foo_bar 😀done"
+            ],
+            "cursor": {
+              "line": 0,
+              "utf16Column": 20,
+              "before": "éclair 世界,foo_bar 😀",
+              "after": "done"
+            }
+          },
+          {
+            "text": "éclair 世界,foo_bar 😀done",
+            "expanded": "éclair 世界,foo_bar 😀done",
+            "lines": [
+              "éclair 世界,foo_bar 😀done"
+            ],
+            "cursor": {
+              "line": 0,
+              "utf16Column": 24,
+              "before": "éclair 世界,foo_bar 😀done",
+              "after": ""
+            }
+          },
+          {
+            "text": "éclair 世界,foo_bar 😀done",
+            "expanded": "éclair 世界,foo_bar 😀done",
+            "lines": [
+              "éclair 世界,foo_bar 😀done"
+            ],
+            "cursor": {
+              "line": 0,
+              "utf16Column": 24,
+              "before": "éclair 世界,foo_bar 😀done",
+              "after": ""
+            }
+          }
+        ],
+        "lineEnd": {
+          "text": "éclair 世界,foo_bar 😀done",
+          "expanded": "éclair 世界,foo_bar 😀done",
+          "lines": [
+            "éclair 世界,foo_bar 😀done"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 24,
+            "before": "éclair 世界,foo_bar 😀done",
+            "after": ""
+          }
+        },
+        "jumpForward": {
+          "text": "éclair 世界,foo_bar 😀done",
+          "expanded": "éclair 世界,foo_bar 😀done",
+          "lines": [
+            "éclair 世界,foo_bar 😀done"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 11,
+            "before": "éclair 世界,f",
+            "after": "oo_bar 😀done"
+          }
+        },
+        "jumpBackward": {
+          "text": "éclair 世界,foo_bar 😀done",
+          "expanded": "éclair 世界,foo_bar 😀done",
+          "lines": [
+            "éclair 世界,foo_bar 😀done"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": "éclair 世界,foo_bar 😀done"
+          }
+        }
+      }
+    },
+    {
+      "name": "kill-ring-accumulation-and-yank-rotation",
+      "dimensions": {
+        "columns": 40,
+        "rows": 8
+      },
+      "inputs": {
+        "kills": [
+          "FIRST",
+          "SECOND"
+        ],
+        "killBackward": "ctrl+w",
+        "yank": "ctrl+y",
+        "yankPop": "alt+y",
+        "breaker": "x"
+      },
+      "expected": {
+        "firstKill": {
+          "text": "",
+          "expanded": "",
+          "lines": [
+            ""
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": ""
+          }
+        },
+        "secondKill": {
+          "text": "",
+          "expanded": "",
+          "lines": [
+            ""
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": ""
+          }
+        },
+        "yankLatest": {
+          "text": "SECOND",
+          "expanded": "SECOND",
+          "lines": [
+            "SECOND"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 6,
+            "before": "SECOND",
+            "after": ""
+          }
+        },
+        "yankOlder": {
+          "text": "FIRST",
+          "expanded": "FIRST",
+          "lines": [
+            "FIRST"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 5,
+            "before": "FIRST",
+            "after": ""
+          }
+        },
+        "afterBreak": {
+          "text": "FIRSTx",
+          "expanded": "FIRSTx",
+          "lines": [
+            "FIRSTx"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 6,
+            "before": "FIRSTx",
+            "after": ""
+          }
+        },
+        "rejectedPop": {
+          "text": "FIRSTx",
+          "expanded": "FIRSTx",
+          "lines": [
+            "FIRSTx"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 6,
+            "before": "FIRSTx",
+            "after": ""
+          }
+        },
+        "changes": [
+          "FIRST",
+          "",
+          "SECOND",
+          "",
+          "",
+          "SECOND",
+          "",
+          "FIRST",
+          "FIRSTx"
+        ]
+      }
+    },
+    {
+      "name": "collapsed-paste-atomic-undo-submit",
+      "dimensions": {
+        "columns": 40,
+        "rows": 8
+      },
+      "inputs": {
+        "initial": "AB",
+        "payload": "😀猫xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "operations": [
+          "paste",
+          "left",
+          "right",
+          "backspace",
+          "undo",
+          "submit"
+        ]
+      },
+      "expected": {
+        "pasted": {
+          "text": "A[paste #1 1003 chars]B",
+          "expanded": "A😀猫xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxB",
+          "lines": [
+            "A[paste #1 1003 chars]B"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 22,
+            "before": "A[paste #1 1003 chars]",
+            "after": "B"
+          }
+        },
+        "left": {
+          "text": "A[paste #1 1003 chars]B",
+          "expanded": "A😀猫xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxB",
+          "lines": [
+            "A[paste #1 1003 chars]B"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 1,
+            "before": "A",
+            "after": "[paste #1 1003 chars]B"
+          }
+        },
+        "right": {
+          "text": "A[paste #1 1003 chars]B",
+          "expanded": "A😀猫xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxB",
+          "lines": [
+            "A[paste #1 1003 chars]B"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 22,
+            "before": "A[paste #1 1003 chars]",
+            "after": "B"
+          }
+        },
+        "deleted": {
+          "text": "AB",
+          "expanded": "AB",
+          "lines": [
+            "AB"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 1,
+            "before": "A",
+            "after": "B"
+          }
+        },
+        "undo": {
+          "text": "A[paste #1 1003 chars]B",
+          "expanded": "A😀猫xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxB",
+          "lines": [
+            "A[paste #1 1003 chars]B"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 22,
+            "before": "A[paste #1 1003 chars]",
+            "after": "B"
+          }
+        },
+        "submitted": [
+          "A😀猫xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxB"
+        ],
+        "changes": [
+          "AB",
+          "A[paste #1 1003 chars]B",
+          "AB",
+          "A[paste #1 1003 chars]B",
+          ""
+        ]
+      }
+    },
+    {
+      "name": "history-draft-and-undo",
+      "dimensions": {
+        "columns": 40,
+        "rows": 8
+      },
+      "inputs": {
+        "history": [
+          "first",
+          "second"
+        ],
+        "draft": "draft😀",
+        "left": "left",
+        "previous": "up",
+        "next": "down",
+        "undo": "ctrl+-"
+      },
+      "expected": {
+        "draft": {
+          "text": "draft😀",
+          "expanded": "draft😀",
+          "lines": [
+            "draft😀"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 5,
+            "before": "draft",
+            "after": "😀"
+          }
+        },
+        "movedToStart": {
+          "text": "draft😀",
+          "expanded": "draft😀",
+          "lines": [
+            "draft😀"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": "draft😀"
+          }
+        },
+        "recalled": {
+          "text": "second",
+          "expanded": "second",
+          "lines": [
+            "second"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": "second"
+          }
+        },
+        "restored": {
+          "text": "draft😀",
+          "expanded": "draft😀",
+          "lines": [
+            "draft😀"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": "draft😀"
+          }
+        },
+        "undo": {
+          "text": "draft😀",
+          "expanded": "draft😀",
+          "lines": [
+            "draft😀"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": "draft😀"
+          }
+        },
+        "changes": [
+          "draft😀",
+          "second",
+          "draft😀",
+          "draft😀"
+        ]
+      }
+    },
+    {
+      "name": "undo-shortcut-rebinding",
+      "dimensions": {
+        "columns": 40,
+        "rows": 8
+      },
+      "inputs": {
+        "keys": [
+          "a",
+          "b"
+        ],
+        "oldUndo": "ctrl+-",
+        "reboundUndo": "alt+u"
+      },
+      "expected": {
+        "typed": {
+          "text": "ab",
+          "expanded": "ab",
+          "lines": [
+            "ab"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 2,
+            "before": "ab",
+            "after": ""
+          }
+        },
+        "oldBinding": {
+          "text": "ab",
+          "expanded": "ab",
+          "lines": [
+            "ab"
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 2,
+            "before": "ab",
+            "after": ""
+          }
+        },
+        "rebound": {
+          "text": "",
+          "expanded": "",
+          "lines": [
+            ""
+          ],
+          "cursor": {
+            "line": 0,
+            "utf16Column": 0,
+            "before": "",
+            "after": ""
+          }
+        },
+        "changes": [
+          "a",
+          "ab",
+          ""
         ]
       }
     }

@@ -500,6 +500,10 @@ struct Editor::Impl {
         const auto last_codepoint = detail::last_codepoint_of(text);
         exit_history_browsing();
         buffer.insert_character(text);
+        if (buffer.error()) {
+            callback_error = *buffer.error();
+            return;
+        }
         notify_change();
         maybe_trigger_autocomplete(last_codepoint);
         echo_local();
@@ -511,6 +515,10 @@ struct Editor::Impl {
         const auto last_codepoint = detail::last_codepoint_of(text);
         exit_history_browsing();
         buffer.insert_text(text, record_undo);
+        if (buffer.error()) {
+            callback_error = *buffer.error();
+            return;
+        }
         notify_change();
         if (update_autocomplete) maybe_trigger_autocomplete(last_codepoint);
         echo_local();
@@ -522,6 +530,10 @@ struct Editor::Impl {
             buffer.backspace();
         } else {
             buffer.forward_delete();
+        }
+        if (buffer.error()) {
+            callback_error = *buffer.error();
+            return;
         }
         notify_change();
         update_or_retrigger_after_erase();
@@ -547,6 +559,7 @@ struct Editor::Impl {
         } else {
             buffer.move_word_backward();
         }
+        if (buffer.error()) callback_error = *buffer.error();
     }
 
     void kill_to_line(bool forward) {
@@ -566,6 +579,10 @@ struct Editor::Impl {
             buffer.delete_word_forward();
         } else {
             buffer.delete_word_backward();
+        }
+        if (buffer.error()) {
+            callback_error = *buffer.error();
+            return;
         }
         notify_change();
         echo_local();

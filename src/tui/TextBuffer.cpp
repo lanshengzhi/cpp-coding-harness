@@ -168,6 +168,7 @@ BufferCursor TextBuffer::cursor() const {
 }
 
 void TextBuffer::set_cursor(BufferCursor cursor) {
+    error_.reset();
     cursor_ = cursor;
     clamp_cursor();
     last_yank_ring_index_.reset();
@@ -209,6 +210,8 @@ std::size_t TextBuffer::paste_counter() const {
 std::shared_ptr<KillRing> TextBuffer::kill_ring() const {
     return kill_ring_;
 }
+
+const std::optional<support::Error>& TextBuffer::error() const { return error_; }
 
 void TextBuffer::clamp_cursor() {
     if (document_.empty()) document_.emplace_back();
@@ -335,10 +338,14 @@ void TextBuffer::clear_undo() {
 }
 
 void TextBuffer::set_text(std::string text, bool clear_undo_stack) {
+    error_.reset();
     text = sanitize_input(std::move(text), options_.multiline);
     if (clear_undo_stack) {
         clear_undo();
     }
+    last_yank_ring_index_.reset();
+    last_yank_range_.reset();
+    last_action_ = LastAction::None;
     pastes_.clear();
     paste_counter_ = 0;
     document_ = segment_lines(text);
@@ -347,6 +354,7 @@ void TextBuffer::set_text(std::string text, bool clear_undo_stack) {
 }
 
 void TextBuffer::insert_character(std::string_view grapheme) {
+    error_.reset();
     auto units = split_graphemes(grapheme);
     if (units.empty()) return;
     clamp_cursor();
@@ -369,6 +377,7 @@ void TextBuffer::insert_character(std::string_view grapheme) {
 }
 
 void TextBuffer::insert_text(std::string text, bool record_undo) {
+    error_.reset();
     text = sanitize_input(std::move(text), options_.multiline);
     if (text.empty()) return;
     if (record_undo) push_undo();
@@ -377,6 +386,7 @@ void TextBuffer::insert_text(std::string text, bool record_undo) {
 }
 
 void TextBuffer::insert_paste(std::string text) {
+    error_.reset();
     // Pasted content is normalized exactly once, at the insertion path shared by
     // the multiline Editor and the single-line Input (pi `handlePaste`).
     clamp_cursor();
@@ -406,6 +416,7 @@ void TextBuffer::insert_paste(std::string text) {
 }
 
 void TextBuffer::insert_newline() {
+    error_.reset();
     if (!options_.multiline) return;
     clamp_cursor();
     push_undo();
@@ -454,6 +465,7 @@ void TextBuffer::insert_segments(BufferDocument inserted) {
 }
 
 void TextBuffer::backspace() {
+    error_.reset();
     clamp_cursor();
     last_action_ = LastAction::None;
     if (cursor_.column > 0) {
@@ -478,6 +490,7 @@ void TextBuffer::backspace() {
 }
 
 void TextBuffer::forward_delete() {
+    error_.reset();
     clamp_cursor();
     last_action_ = LastAction::None;
     auto& line = document_[cursor_.line];
@@ -498,12 +511,19 @@ void TextBuffer::forward_delete() {
 }
 
 void TextBuffer::delete_word_backward() {
+    error_.reset();
     clamp_cursor();
     if (cursor_.column == 0 && (cursor_.line == 0 || !options_.multiline)) return;
 
     const auto was_kill = last_action_ == LastAction::Kill;
     const auto original = cursor_;
+    const auto original_action = last_action_;
     move_word_backward();
+    if (error_) {
+        cursor_ = original;
+        last_action_ = original_action;
+        return;
+    }
     const auto target = cursor_;
     if (original == target) return;
 
@@ -538,13 +558,20 @@ void TextBuffer::delete_word_backward() {
 }
 
 void TextBuffer::delete_word_forward() {
+    error_.reset();
     clamp_cursor();
     auto& line = document_[cursor_.line];
     if (cursor_.column >= line.size() && (cursor_.line + 1 >= document_.size() || !options_.multiline)) return;
 
     const auto was_kill = last_action_ == LastAction::Kill;
     const auto original = cursor_;
+    const auto original_action = last_action_;
     move_word_forward();
+    if (error_) {
+        cursor_ = original;
+        last_action_ = original_action;
+        return;
+    }
     const auto target = cursor_;
     if (original == target) return;
 
@@ -577,6 +604,7 @@ void TextBuffer::delete_word_forward() {
 }
 
 void TextBuffer::kill_to_line_start() {
+    error_.reset();
     clamp_cursor();
     const auto was_kill = last_action_ == LastAction::Kill;
     const auto target = std::size_t{0};
@@ -605,6 +633,7 @@ void TextBuffer::kill_to_line_start() {
 }
 
 void TextBuffer::kill_to_line_end() {
+    error_.reset();
     clamp_cursor();
     const auto was_kill = last_action_ == LastAction::Kill;
     const auto target = document_[cursor_.line].size();
@@ -630,6 +659,7 @@ void TextBuffer::kill_to_line_end() {
 }
 
 void TextBuffer::yank() {
+    error_.reset();
     if (!doc_kill_ring_.empty()) {
         push_undo();
         const auto start = cursor_;
@@ -648,6 +678,7 @@ void TextBuffer::yank() {
 }
 
 void TextBuffer::yank_pop() {
+    error_.reset();
     if (last_action_ != LastAction::Yank || !last_yank_ring_index_ || !last_yank_range_) return;
     if (doc_kill_ring_.size() < 2 && (!kill_ring_ || kill_ring_->length() < 2)) return;
 
@@ -677,6 +708,7 @@ void TextBuffer::yank_pop() {
 }
 
 void TextBuffer::undo() {
+    error_.reset();
     auto popped = undo_.pop();
     if (!popped) return;
     document_ = std::move(popped->document);
@@ -690,6 +722,7 @@ void TextBuffer::undo() {
 }
 
 void TextBuffer::move_left() {
+    error_.reset();
     clamp_cursor();
     if (cursor_.column > 0) {
         --cursor_.column;
@@ -702,6 +735,7 @@ void TextBuffer::move_left() {
 }
 
 void TextBuffer::move_right() {
+    error_.reset();
     clamp_cursor();
     if (cursor_.column < document_[cursor_.line].size()) {
         ++cursor_.column;
@@ -715,6 +749,7 @@ void TextBuffer::move_right() {
 
 void TextBuffer::move_up() {
     if (!options_.multiline) return;
+    error_.reset();
     clamp_cursor();
     if (cursor_.line > 0) {
         --cursor_.line;
@@ -726,6 +761,7 @@ void TextBuffer::move_up() {
 
 void TextBuffer::move_down() {
     if (!options_.multiline) return;
+    error_.reset();
     clamp_cursor();
     if (cursor_.line + 1 < document_.size()) {
         ++cursor_.line;
@@ -736,49 +772,64 @@ void TextBuffer::move_down() {
 }
 
 void TextBuffer::move_word_backward() {
+    error_.reset();
     clamp_cursor();
-    if (options_.multiline) {
-        while (cursor_.line > 0 || cursor_.column > 0) {
-            if (cursor_.column == 0) {
-                --cursor_.line;
-                cursor_.column = document_[cursor_.line].size();
-                continue;
-            }
-            if (is_word_segment(document_[cursor_.line][cursor_.column - 1].text)) break;
-            --cursor_.column;
-        }
-        while (cursor_.column > 0 && is_word_segment(document_[cursor_.line][cursor_.column - 1].text)) {
-            --cursor_.column;
-        }
+    if (cursor_.column == 0 && cursor_.line > 0 && options_.multiline) {
+        --cursor_.line;
+        cursor_.column = document_[cursor_.line].size();
     } else {
-        std::vector<std::string> graphemes;
-        for (const auto& s : document_.front()) graphemes.push_back(s.text);
-        cursor_.column = find_word_backward(graphemes, cursor_.column);
+        const auto line = line_text(document_[cursor_.line]);
+        std::vector<WordAtomicSpan> atomic_spans;
+        std::size_t byte_offset = 0;
+        for (const auto& segment : document_[cursor_.line]) {
+            const auto end = byte_offset + segment.text.size();
+            if (segment.paste_id) atomic_spans.push_back({.byte_start = byte_offset, .byte_end = end});
+            byte_offset = end;
+        }
+        auto previous = detail::find_word_backward(line, cursor_byte_offset(), atomic_spans);
+        if (!previous) {
+            error_ = previous.error();
+            return;
+        }
+        byte_offset = 0;
+        std::size_t column = 0;
+        while (column < document_[cursor_.line].size() && byte_offset < *previous) {
+            byte_offset += document_[cursor_.line][column].text.size();
+            ++column;
+        }
+        cursor_.column = column;
     }
     last_yank_ring_index_.reset();
     last_action_ = LastAction::None;
 }
 
 void TextBuffer::move_word_forward() {
+    error_.reset();
     clamp_cursor();
-    if (options_.multiline) {
-        while (cursor_.line + 1 < document_.size() || cursor_.column < document_[cursor_.line].size()) {
-            if (cursor_.column == document_[cursor_.line].size()) {
-                ++cursor_.line;
-                cursor_.column = 0;
-                continue;
-            }
-            if (is_word_segment(document_[cursor_.line][cursor_.column].text)) break;
-            ++cursor_.column;
-        }
-        while (cursor_.column < document_[cursor_.line].size() &&
-               is_word_segment(document_[cursor_.line][cursor_.column].text)) {
-            ++cursor_.column;
-        }
+    if (cursor_.column == document_[cursor_.line].size() && cursor_.line + 1 < document_.size() && options_.multiline) {
+        ++cursor_.line;
+        cursor_.column = 0;
     } else {
-        std::vector<std::string> graphemes;
-        for (const auto& s : document_.front()) graphemes.push_back(s.text);
-        cursor_.column = find_word_forward(graphemes, cursor_.column);
+        const auto line = line_text(document_[cursor_.line]);
+        std::vector<WordAtomicSpan> atomic_spans;
+        std::size_t byte_offset = 0;
+        for (const auto& segment : document_[cursor_.line]) {
+            const auto end = byte_offset + segment.text.size();
+            if (segment.paste_id) atomic_spans.push_back({.byte_start = byte_offset, .byte_end = end});
+            byte_offset = end;
+        }
+        auto next = detail::find_word_forward(line, cursor_byte_offset(), atomic_spans);
+        if (!next) {
+            error_ = next.error();
+            return;
+        }
+        byte_offset = 0;
+        std::size_t column = 0;
+        while (column < document_[cursor_.line].size() && byte_offset < *next) {
+            byte_offset += document_[cursor_.line][column].text.size();
+            ++column;
+        }
+        cursor_.column = column;
     }
     last_yank_ring_index_.reset();
     last_action_ = LastAction::None;

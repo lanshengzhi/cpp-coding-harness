@@ -112,6 +112,26 @@ TEST_CASE("Input edits Unicode with grapheme-aware cursor movement", "[tui][inpu
     CHECK(input.value().empty());
 }
 
+TEST_CASE("Input matches ICU word navigation and keeps deletion undo atomic", "[tui][input][issue961]") {
+    cch::tui::Input input;
+    type(input, "don't stop 日本語 123,456.78 cafe\xcc\x81! 😀done");
+    key(input, "home");
+    key(input, "right", true);
+    CHECK(input.value().substr(0, 3) == "don");
+    key(input, "right", true);
+    CHECK(input.value().substr(0, 4) == "don'");
+    key(input, "right", true);
+    CHECK(input.value().substr(0, 5) == "don't");
+    key(input, "w", true);
+    CHECK(input.value() == "don' stop 日本語 123,456.78 cafe\xcc\x81! 😀done");
+    key(input, "-", true);
+    CHECK(input.value() == "don't stop 日本語 123,456.78 cafe\xcc\x81! 😀done");
+
+    key(input, "home");
+    key(input, "w", true);
+    CHECK(input.value() == "don't stop 日本語 123,456.78 cafe\xcc\x81! 😀done");
+}
+
 TEST_CASE("Input undo coalesces typed words and steps back through snapshots", "[tui][input][issue380][spec]") {
     cch::tui::Input input;
     type(input, "abc");

@@ -44,10 +44,12 @@ cch_parity_declare_target(
         src/tui/UnicodeWidth.cpp
         src/tui/Utils.cpp
         src/tui/VirtualTerminal.cpp
+        src/tui/WordNavigation.cpp
     DEPENDS
         cch_support
         md4c::md4c@md4c
         utf8proc::utf8proc@utf8proc
+        ICU::i18n@icu
         Threads::Threads@threads
     INTERFACE_DEPENDS
         cch_support

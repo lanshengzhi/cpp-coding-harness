@@ -3,6 +3,8 @@
 #include "tui/KillRing.hpp"
 #include "tui/UndoStack.hpp"
 
+#include <cch/support/Error.hpp>
+
 #include <algorithm>
 #include <cstddef>
 #include <map>
@@ -61,6 +63,7 @@ public:
     [[nodiscard]] const std::map<std::size_t, std::string>& pastes() const;
     [[nodiscard]] std::size_t paste_counter() const;
     [[nodiscard]] std::shared_ptr<KillRing> kill_ring() const;
+    [[nodiscard]] const std::optional<support::Error>& error() const;
 
     // Content Mutations
     void set_text(std::string text, bool clear_undo_stack = false);
@@ -146,6 +149,7 @@ private:
     std::optional<std::size_t> last_yank_ring_index_{std::nullopt};
     std::optional<std::pair<BufferCursor, BufferCursor>> last_yank_range_{std::nullopt};
     LastAction last_action_{LastAction::None};
+    std::optional<support::Error> error_;
 };
 
 } // namespace cch::tui::detail

@@ -21,13 +21,12 @@
 namespace cch::tui {
 namespace {
 
-// Behavioral baseline: pi 83114817 packages/tui/src/components/input.ts
+// Behavioral baseline: pi v1.0.4 packages/tui/src/components/input.ts
 // (horizontal-scroll windowing with the cursor-at-end column reservation,
 // bracketed-paste normalization, kill ring with accumulate/prepend ordering,
-// undo with typing coalescing, word navigation, and the submit/escape sink
-// routing). Pasted control characters are dropped per this repository's
-// decoded-event hygiene, matching Editor::paste; word navigation uses the
-// C++ editor's per-grapheme classification (parity map #2 fork-B).
+// undo with typing coalescing, ICU word navigation, and the submit/escape
+// sink routing). Pasted control characters are dropped per this repository's
+// decoded-event hygiene, matching Editor::paste.
 
 /// The rendered prompt prefix, as in pi's input.ts.
 constexpr std::string_view kPrompt = "> ";
@@ -286,10 +285,12 @@ InputAdmissionOutcome Input::handle_input(const InputEventVariant& input) {
     }
     if (action == "tui.editor.deleteWordBackward") {
         impl_->buffer.delete_word_backward();
+        if (impl_->buffer.error()) impl_->callback_error = *impl_->buffer.error();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteWordForward") {
         impl_->buffer.delete_word_forward();
+        if (impl_->buffer.error()) impl_->callback_error = *impl_->buffer.error();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.deleteToLineStart") {
@@ -326,10 +327,12 @@ InputAdmissionOutcome Input::handle_input(const InputEventVariant& input) {
     }
     if (action == "tui.editor.cursorWordLeft") {
         impl_->buffer.move_word_backward();
+        if (impl_->buffer.error()) impl_->callback_error = *impl_->buffer.error();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorWordRight") {
         impl_->buffer.move_word_forward();
+        if (impl_->buffer.error()) impl_->callback_error = *impl_->buffer.error();
         return InputAdmissionOutcome::Consumed;
     }
     if (const auto text = printable_text(*event)) {

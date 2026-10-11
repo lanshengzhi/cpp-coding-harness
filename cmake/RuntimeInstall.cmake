@@ -38,6 +38,7 @@ function(cch_runtime_collect_licenses out_var)
         "md4c=md4c"
         "openssl=openssl"
         "utf8proc=utf8proc"
+        "icu=icu"
         "wasmedge=wasmedge"
         "spdlog=spdlog"
         "fmt=fmt"

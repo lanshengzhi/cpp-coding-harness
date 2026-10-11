@@ -6,6 +6,8 @@
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "support/PiTuiEvidence.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <format>
@@ -38,6 +40,14 @@ bool menu_rendered(cch::tui::Editor& editor, std::size_t width = 80) {
         if (line.starts_with("> /") || line.starts_with("  /")) return true;
     }
     return false;
+}
+
+[[nodiscard]] const cch::support::JsonValue* editor_evidence_scenario(
+        const cch::support::JsonValue& fixture, std::string_view name) {
+    for (const auto& scenario : fixture.at("scenarios").get_array()) {
+        if (scenario.at("name").get_string() == name) return &scenario;
+    }
+    return nullptr;
 }
 } // namespace
 
@@ -170,6 +180,133 @@ TEST_CASE("Editor uses UTF-16 paste thresholds and counts", "[tui][editor][issue
     paste(astral_above_threshold_editor, one_thousand_two_utf16_units);
     CHECK(astral_above_threshold_editor.text() == "[paste #1 1002 chars]");
     CHECK(astral_above_threshold_editor.expanded_text() == one_thousand_two_utf16_units);
+}
+
+TEST_CASE("Editor matches ICU word navigation through public keys", "[tui][editor][issue961]") {
+    cch::tui::Editor editor;
+    editor.set_text("foo.bar baz");
+    key(editor, "left");
+    key(editor, "left", true);
+    CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 8});
+    key(editor, "left", true);
+    CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 4});
+    key(editor, "left", true);
+    CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 3});
+
+    editor.set_text("don't stop 日本語 123,456.78 cafe\xcc\x81! 😀done");
+    key(editor, "home");
+    key(editor, "right", true);
+    CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 3});
+    key(editor, "right", true);
+    CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 4});
+    key(editor, "right", true);
+    CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 5});
+    key(editor, "right", true);
+    CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 10});
+    key(editor, "right", true);
+    CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 14});
+    key(editor, "right", true);
+    CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 18});
+    key(editor, "right", true);
+    CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 19});
+}
+
+TEST_CASE("Editor replays frozen pi editor navigation jump and kill ring scenarios",
+        "[tui][editor][issue961][compat-pi]") {
+    const auto fixture = cch::tests::read_pi_tui_evidence("screen-state.json");
+    REQUIRE(fixture);
+
+    // Scenario: unicode-word-navigation-and-jump
+    {
+        const auto* scenario = editor_evidence_scenario(*fixture, "unicode-word-navigation-and-jump");
+        REQUIRE(scenario != nullptr);
+        const auto& expected = scenario->at("expected");
+
+        cch::tui::Editor editor;
+        editor.set_text("éclair 世界,foo_bar 😀done");
+        key(editor, "a", true); // Home
+
+        const auto& word_positions = expected.at("wordPositions").get_array();
+        const std::vector<std::size_t> expected_grapheme_columns = {0, 6, 9, 10, 17, 19, 23, 23};
+        REQUIRE(word_positions.size() == expected_grapheme_columns.size());
+        CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = expected_grapheme_columns[0]});
+        for (std::size_t i = 1; i < expected_grapheme_columns.size(); ++i) {
+            key(editor, "right", true); // ctrl+right
+            CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = expected_grapheme_columns[i]});
+        }
+        key(editor, "e", true); // End (ctrl+e)
+        CHECK(editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 23});
+
+        key(editor, "a", true); // Return to home for jump tests
+        key(editor, "]", true); // Jump forward (ctrl+])
+        type(editor, "o");
+        CHECK(editor.cursor() ==
+                cch::tui::EditorCursor{
+                        .line = static_cast<std::size_t>(
+                                expected.at("jumpForward").at("cursor").at("line").get_number()),
+                        .column = static_cast<std::size_t>(
+                                expected.at("jumpForward").at("cursor").at("utf16Column").get_number()),
+                });
+        CHECK(editor.text() == expected.at("jumpForward").at("text").get_string());
+
+        key(editor, "]", true, false, true); // Jump backward (ctrl+alt+])
+        type(editor, "é");
+        CHECK(editor.cursor() ==
+                cch::tui::EditorCursor{
+                        .line = static_cast<std::size_t>(
+                                expected.at("jumpBackward").at("cursor").at("line").get_number()),
+                        .column = static_cast<std::size_t>(
+                                expected.at("jumpBackward").at("cursor").at("utf16Column").get_number()),
+                });
+        CHECK(editor.text() == expected.at("jumpBackward").at("text").get_string());
+    }
+
+    // Scenario: kill-ring-accumulation-and-yank-rotation
+    {
+        const auto* scenario = editor_evidence_scenario(*fixture, "kill-ring-accumulation-and-yank-rotation");
+        REQUIRE(scenario != nullptr);
+        const auto& expected = scenario->at("expected");
+
+        cch::tui::Editor editor;
+        editor.set_text("FIRST");
+        key(editor, "w", true); // kill word backward
+        editor.set_text("SECOND");
+        key(editor, "w", true); // kill word backward
+        editor.set_text("");
+        key(editor, "y", true); // yank (latest)
+        CHECK(editor.text() == expected.at("yankLatest").at("text").get_string());
+        key(editor, "y", false, false, true); // yank-pop (alt+y)
+        CHECK(editor.text() == expected.at("yankOlder").at("text").get_string());
+        type(editor, "x");
+        CHECK(editor.text() == expected.at("afterBreak").at("text").get_string());
+        key(editor, "y", false, false, true); // rejected yank-pop
+        CHECK(editor.text() == expected.at("rejectedPop").at("text").get_string());
+    }
+
+    // Scenario: coalesced-unicode-edit-after-undo
+    {
+        const auto* scenario = editor_evidence_scenario(*fixture, "coalesced-unicode-edit-after-undo");
+        REQUIRE(scenario != nullptr);
+        const auto& expected = scenario->at("expected");
+
+        cch::tui::Editor editor;
+        for (const auto& key_name : scenario->at("inputs").at("keys").get_array()) {
+            type(editor, key_name.get_string());
+        }
+        CHECK(editor.text() == expected.at("typed").at("text").get_string());
+
+        key(editor, "-", true); // undo 1
+        CHECK(editor.text() == expected.at("undoFirst").at("text").get_string());
+
+        key(editor, "-", true); // undo 2
+        CHECK(editor.text() == expected.at("undoSecond").at("text").get_string());
+
+        type(editor, "z");
+        CHECK(editor.text() == expected.at("edited").at("text").get_string());
+
+        key(editor, "-", true); // undo after edit
+        CHECK(editor.text() == expected.at("undoAfterEdit").at("text").get_string());
+    }
 }
 
 TEST_CASE("Editor keeps paste markers numbered through edits and undo", "[tui][editor][issue955]") {

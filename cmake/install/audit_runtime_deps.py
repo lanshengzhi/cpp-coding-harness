@@ -6,7 +6,7 @@ declared closure in cmake/install/runtime-deps.json: every resolved library
 must be a declared virtual/system/loader entry under an allowed system root;
 undeclared, unresolved, build-tree, or otherwise unsupported resolutions fail
 the audit. The third-party dependencies (Boost, OpenSSL, Glaze, md4c, libwebp,
-utf8proc) link statically from the pinned vcpkg manifest, so the
+utf8proc, ICU) link statically from the pinned vcpkg manifest, so the
 supported dynamic closure is the measured glibc/libstdc++ baseline.
 
 Python 3.12+ standard library only (same tooling policy as the Gate).

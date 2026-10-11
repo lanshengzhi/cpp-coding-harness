@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { captureSelectList } from "./select-list-scenarios.mts";
+import { captureEditorOperations } from "./editor-operations.mts";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), "..");
@@ -233,6 +234,13 @@ for (const endpoint of selectListObservation.sourceEndpoints) {
 	if (!screenArtifact.sourceEndpoints.includes(endpoint)) screenArtifact.sourceEndpoints.push(endpoint);
 }
 screenArtifact.scenarios.push(...selectListObservation.scenarios);
+
+// Observe Editor operations: undo, kill/yank, word navigation and jumping (#961)
+const editorObservation = await captureEditorOperations(pi);
+for (const endpoint of editorObservation.sourceEndpoints) {
+	if (!screenArtifact.sourceEndpoints.includes(endpoint)) screenArtifact.sourceEndpoints.push(endpoint);
+}
+screenArtifact.scenarios.push(...editorObservation.scenarios);
 
 // Capability accounting observation: freeze the public index export set and ledger classifications.
 // The committed docs/research ledger is hashed as the C++/Pike accounting artifact; export names are
@@ -839,10 +847,16 @@ const manifest = {
 	schema: "pike/tui-evidence/1", baseline, revision, capturedAt, environment,
 	generator: {
 		path: "capture/capture-named-tui.mts", sha256: sha256(readFileSync(scriptPath)),
-		sources: [{
-			path: "capture/select-list-scenarios.mts",
-			sha256: sha256(readFileSync(path.join(root, "capture/select-list-scenarios.mts"))),
-		}],
+		sources: [
+			{
+				path: "capture/select-list-scenarios.mts",
+				sha256: sha256(readFileSync(path.join(root, "capture/select-list-scenarios.mts"))),
+			},
+			{
+				path: "capture/editor-operations.mts",
+				sha256: sha256(readFileSync(path.join(root, "capture/editor-operations.mts"))),
+			},
+		],
 	},
 	artifacts: records,
 };

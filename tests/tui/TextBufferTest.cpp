@@ -69,6 +69,67 @@ TEST_CASE("TextBuffer cursor navigation and word movements", "[tui][text_buffer]
     CHECK(buffer.cursor().column == 12);
 }
 
+TEST_CASE("TextBuffer ICU word navigation preserves pi punctuation and Unicode boundaries",
+        "[tui][text_buffer][issue961]") {
+    TextBuffer buffer;
+    buffer.insert_text("foo.bar baz");
+    buffer.move_word_backward();
+    CHECK(buffer.cursor_byte_offset() == 8);
+    buffer.move_word_backward();
+    CHECK(buffer.cursor_byte_offset() == 4);
+    buffer.move_word_backward();
+    CHECK(buffer.cursor_byte_offset() == 3);
+    buffer.move_to_line_start();
+    buffer.move_word_forward();
+    CHECK(buffer.cursor_byte_offset() == 3);
+    buffer.move_word_forward();
+    CHECK(buffer.cursor_byte_offset() == 4);
+    buffer.move_word_forward();
+    CHECK(buffer.cursor_byte_offset() == 7);
+
+    buffer.set_text("don't stop 日本語 123,456.78 cafe\xcc\x81! 😀done");
+    buffer.move_to_line_start();
+    buffer.move_word_forward();
+    CHECK(buffer.cursor_byte_offset() == 3);
+    buffer.move_word_forward();
+    CHECK(buffer.cursor_byte_offset() == 4);
+    buffer.move_word_forward();
+    CHECK(buffer.cursor_byte_offset() == 5);
+    buffer.move_word_forward();
+    CHECK(buffer.line_prefix_before_cursor() == "don't stop");
+    CHECK(buffer.cursor_byte_offset() == 10);
+    buffer.move_word_forward();
+    CHECK(buffer.line_prefix_before_cursor() == "don't stop 日本語");
+    buffer.move_word_forward();
+    CHECK(buffer.line_prefix_before_cursor() == "don't stop 日本語 123");
+    buffer.move_word_forward();
+    CHECK(buffer.line_prefix_before_cursor() == "don't stop 日本語 123,");
+    buffer.move_word_forward();
+    CHECK(buffer.line_prefix_before_cursor() == "don't stop 日本語 123,456");
+    buffer.move_word_forward();
+    CHECK(buffer.line_prefix_before_cursor() == "don't stop 日本語 123,456.");
+    buffer.move_word_forward();
+    CHECK(buffer.line_prefix_before_cursor() == "don't stop 日本語 123,456.78");
+    buffer.move_word_forward();
+    CHECK(buffer.line_prefix_before_cursor() == "don't stop 日本語 123,456.78 cafe\xcc\x81");
+    buffer.move_word_forward();
+    CHECK(buffer.line_prefix_before_cursor() == "don't stop 日本語 123,456.78 cafe\xcc\x81!");
+    buffer.move_word_forward();
+    CHECK(buffer.text().substr(buffer.cursor_byte_offset()) == "done");
+    buffer.move_word_backward();
+    CHECK(buffer.line_prefix_before_cursor().ends_with("cafe\xcc\x81! "));
+    buffer.move_word_backward();
+    CHECK(buffer.line_prefix_before_cursor().ends_with("cafe\xcc\x81"));
+
+    TextBuffer punctuation;
+    punctuation.insert_text("!!!word");
+    punctuation.move_to_line_start();
+    punctuation.move_word_forward();
+    CHECK(punctuation.cursor_byte_offset() == 3);
+    punctuation.move_word_backward();
+    CHECK(punctuation.cursor_byte_offset() == 0);
+}
+
 TEST_CASE("TextBuffer multiline jump_to searches across lines", "[tui][text_buffer][spec]") {
     TextBuffer buffer;
     buffer.insert_text("line one\nline two\nline three");
