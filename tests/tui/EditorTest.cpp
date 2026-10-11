@@ -863,36 +863,93 @@ TEST_CASE("Editor allows opposite-direction cursor movement within a multi-line 
     CHECK((editor.cursor() == cch::tui::EditorCursor{.line = 0, .column = 0}));
 }
 
-TEST_CASE(
-        "Editor records every submit path and recalls the submitted entry", "[tui][editor][history][issue379][spec]") {
+TEST_CASE("Editor submits without recording text in reusable history",
+        "[tui][editor][history][issue379][issue960][spec]") {
     std::vector<std::string> submitted;
-    cch::tui::Editor editor(
-        {},
-        {},
-        [&submitted](std::string text) -> cch::support::ExpectedVoid {
-            submitted.push_back(std::move(text));
-            return {};
-        });
+    cch::tui::Editor editor({}, {}, [&submitted](std::string text) -> cch::support::ExpectedVoid {
+        submitted.push_back(std::move(text));
+        return {};
+    });
 
     type(editor, "one");
     key(editor, "enter");
-    REQUIRE(submitted.size() == 1);
-    CHECK(submitted[0] == "one");
-
-    // The submitted entry is immediately recallable
+    REQUIRE(submitted == std::vector<std::string>{"one"});
     key(editor, "up");
-    CHECK(editor.text() == "one");
-    key(editor, "down");  // back to the empty draft
+    CHECK(editor.text().empty());
 
-    // Whitespace-only submissions are trimmed away and not recorded
-    type(editor, "two");
-    key(editor, "enter");
-    REQUIRE(submitted.size() == 2);
-    type(editor, "   ");
-    key(editor, "enter");
-    REQUIRE(submitted.size() == 3);
+    // History remains available to the host through its explicit admission API.
+    editor.add_to_history("host admitted");
     key(editor, "up");
-    CHECK(editor.text() == "two");
+    CHECK(editor.text() == "host admitted");
+}
+
+TEST_CASE("Editor replaces a trailing backslash with a newline on submit", "[tui][editor][issue960][spec]") {
+    std::vector<std::string> submitted;
+    cch::tui::Editor editor({}, {}, [&submitted](std::string text) -> cch::support::ExpectedVoid {
+        submitted.push_back(std::move(text));
+        return {};
+    });
+
+    type(editor, R"(first\)");
+    key(editor, "enter");
+    CHECK(editor.text() == "first\n");
+    CHECK(submitted.empty());
+
+    type(editor, "second");
+    key(editor, "enter");
+    REQUIRE(submitted == std::vector<std::string>{"first\nsecond"});
+}
+
+TEST_CASE("Editor applies backslash continuation to the rebound submit key", "[tui][editor][issue960][spec]") {
+    cch::tui::KeybindingResolutionRequest request;
+    request.definitions = cch::tui::builtin_tui_keybinding_definitions();
+    request.overrides = {
+            {.id = "tui.input.submit", .keys = {"shift+enter"}},
+            {.id = "tui.input.newLine", .keys = {"ctrl+j"}},
+    };
+    const auto keybindings = cch::tui::resolve_keybindings(std::move(request));
+    REQUIRE(keybindings);
+
+    std::vector<std::string> submitted;
+    cch::tui::Editor editor(
+            {.keybindings = keybindings->registry}, {}, [&submitted](std::string text) -> cch::support::ExpectedVoid {
+                submitted.push_back(std::move(text));
+                return {};
+            });
+
+    type(editor, R"(first\)");
+    key(editor, "enter", false, true);
+    CHECK(editor.text() == "first\n");
+    CHECK(submitted.empty());
+
+    type(editor, "second");
+    key(editor, "j", true);
+    CHECK(editor.text() == "first\nsecond\n");
+    key(editor, "enter", false, true);
+    REQUIRE(submitted == std::vector<std::string>{"first\nsecond"});
+}
+
+TEST_CASE("Editor keeps text editable while submit is disabled", "[tui][editor][issue960][spec]") {
+    std::vector<std::string> submitted;
+    cch::tui::Editor editor({}, {}, [&submitted](std::string text) -> cch::support::ExpectedVoid {
+        submitted.push_back(std::move(text));
+        return {};
+    });
+
+    editor.set_submit_disabled(true);
+    CHECK(editor.submit_disabled());
+    type(editor, "draft");
+    key(editor, "enter");
+    CHECK(editor.text() == "draft");
+    CHECK(submitted.empty());
+
+    type(editor, "!");
+    CHECK(editor.text() == "draft!");
+    editor.set_submit_disabled(false);
+    CHECK_FALSE(editor.submit_disabled());
+    key(editor, "enter");
+    REQUIRE(submitted == std::vector<std::string>{"draft!"});
+    CHECK(editor.text().empty());
 }
 
 TEST_CASE("Editor recalling history is undoable back to the draft", "[tui][editor][history][issue379][spec]") {

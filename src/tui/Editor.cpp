@@ -131,6 +131,7 @@ struct Editor::Impl {
     // as pi's addToHistory unshifts; nullopt means not browsing.
     std::vector<std::string> history;
     std::optional<std::size_t> history_index;
+    bool submit_disabled{false};
     struct HistoryDraft {
         detail::TextBuffer buffer;
     };
@@ -681,9 +682,9 @@ struct Editor::Impl {
     }
 
     void submit() {
+        if (submit_disabled) return;
         const auto result = trim_outer_whitespace(expanded());
         exit_history_browsing();
-        add_to_history(result);
         buffer.set_text("");
         cancel_autocomplete(true);
         scroll_offset = 0;
@@ -695,6 +696,17 @@ struct Editor::Impl {
             // diagnostic (ADR 0017); it never vetoes editing state.
             callback_error = std::move(submitted.error());
         }
+    }
+
+    void continue_line_after_backslash() {
+        exit_history_browsing();
+        const auto cursor = buffer.cursor();
+        buffer.push_undo();
+        buffer.erase_range(detail::BufferCursor{.line = cursor.line, .column = cursor.column - 1}, cursor);
+        buffer.insert_text("\n", false);
+        cancel_autocomplete(true);
+        notify_change();
+        echo_local();
     }
 
     void paste(std::string text) {
@@ -920,6 +932,16 @@ void Editor::add_to_history(std::string text) {
     auto operation = impl_->serialized_operation(impl_);
     auto& impl = operation.impl;
     impl.add_to_history(std::move(text));
+}
+
+void Editor::set_submit_disabled(bool disabled) {
+    auto operation = impl_->serialized_operation(impl_);
+    operation.impl.submit_disabled = disabled;
+}
+
+bool Editor::submit_disabled() const {
+    auto operation = impl_->serialized_operation(impl_);
+    return operation.impl.submit_disabled;
 }
 
 void Editor::set_theme(EditorTheme theme) {
@@ -1197,7 +1219,14 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.input.submit") {
-        impl.submit();
+        const auto cursor = impl.buffer.cursor();
+        const bool cursor_at_end =
+                cursor.line + 1 == impl.buffer.line_count() && cursor.column == impl.buffer.document().back().size();
+        if (!impl.submit_disabled && cursor_at_end && impl.text().ends_with('\\')) {
+            impl.continue_line_after_backslash();
+        } else {
+            impl.submit();
+        }
         return InputAdmissionOutcome::Consumed;
     }
     if (const auto text = printable_text(*event)) {

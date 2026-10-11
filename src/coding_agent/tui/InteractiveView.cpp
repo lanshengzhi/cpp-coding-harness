@@ -67,6 +67,7 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
                   return {};
               },
               [this](std::string text) -> support::ExpectedVoid {
+                  editor_.add_to_history(text);
                   emit_action(
                           SubmitAction{
                                   .request =

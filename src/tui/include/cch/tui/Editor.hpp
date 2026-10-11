@@ -106,8 +106,10 @@ public:
     [[nodiscard]] EditorCursor cursor() const;
     void set_text(std::string text);
     void insert_text_at_cursor(std::string text);
-    /// Record a submitted prompt for cursor-boundary up/down recall (pi addToHistory).
+    /// Record a host-admitted prompt for cursor-boundary up/down recall (pi addToHistory).
     void add_to_history(std::string text);
+    void set_submit_disabled(bool disabled);
+    [[nodiscard]] bool submit_disabled() const;
     void set_theme(EditorTheme theme);
     void set_padding_x(std::size_t padding);
     [[nodiscard]] std::size_t padding_x() const;

@@ -306,6 +306,30 @@ TEST_CASE("submit and follow-up preserve the sampled editor payload", "[coding_a
     CHECK(follow_up.request.editor_revision == 3);
 }
 
+TEST_CASE("InteractiveView records submitted text at host admission, including rejected actions",
+        "[coding_agent][tui][issue960][spec]") {
+    ViewFixture fixture;
+    auto& view = *fixture.view;
+
+    fixture.type("older");
+    static_cast<void>(view.handle_input(key("enter")));
+    fixture.type("/command");
+    static_cast<void>(view.handle_input(key("enter")));
+    static_cast<void>(view.handle_input(key("up")));
+    CHECK(view.editor_text() == "/command");
+    static_cast<void>(view.handle_input(key("up")));
+    CHECK(view.editor_text() == "older");
+
+    ViewFixture rejected_fixture;
+    rejected_fixture.sink_error =
+            support::make_error(support::ErrorCode::Session, "host rejected the submitted action");
+    rejected_fixture.type("rejected");
+    static_cast<void>(rejected_fixture.view->handle_input(key("enter")));
+    CHECK(rejected_fixture.actions.empty());
+    static_cast<void>(rejected_fixture.view->handle_input(key("up")));
+    CHECK(rejected_fixture.view->editor_text() == "rejected");
+}
+
 TEST_CASE(
         "interrupt captures the bash-mode editor state at key-press time", "[coding_agent][tui][view_actions][spec]") {
     ViewFixture fixture{/*user_bash_available=*/true};
