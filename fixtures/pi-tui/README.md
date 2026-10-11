@@ -45,6 +45,14 @@ and the deferred-wrap cursor left by clearing a full-width row. Separate regress
 reentrant removal lifetimes, scrolled dock teardown, and concurrent terminals with different
 image protocols and late cell-size replies without modifying global capability state.
 
+For #967, the same screen-state artifact also records five independent SelectList scenarios:
+cyclic selection/callback order, the centered five-row window, description allocation at
+widths 40/41/60, wide-glyph truncation including the exact ANSI reset, and unbound-key
+non-mutation. `capture/select-list-scenarios.mts` executes the frozen component directly;
+its source digest is recorded alongside the main generator digest. Public C++ caller tests
+additionally verify key admission/propagation, which upstream's void `handleInput` cannot
+report directly.
+
 Capture explicitly, from a clean frozen pi checkout with its existing dependencies:
 
 ```bash

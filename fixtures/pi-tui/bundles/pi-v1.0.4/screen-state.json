@@ -1,7 +1,7 @@
 {
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-11T05:03:57.268Z",
+  "capturedAt": "2026-10-11T05:37:21.021Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -30,7 +30,10 @@
     "packages/tui/src/tui.ts:setFocus,CURSOR_MARKER",
     "packages/tui/test/virtual-terminal.ts:VirtualTerminal",
     "packages/tui/package.json:@xterm/headless",
-    "packages/tui/src/tui.ts:TuiBase.start,stop,setFocus,Container.addChild,removeChild,clear"
+    "packages/tui/src/tui.ts:TuiBase.start,stop,setFocus,Container.addChild,removeChild,clear",
+    "packages/tui/src/components/select-list.ts:constructor,render,handleInput,getSelectedItem",
+    "packages/tui/src/keybindings.ts:getKeybindings",
+    "packages/tui/src/utils.ts:visibleWidth,truncateToWidth"
   ],
   "scenarios": [
     {
@@ -10627,6 +10630,265 @@
           "focus:true",
           "input:x",
           "focus:false"
+        ]
+      }
+    },
+    {
+      "name": "select-list-cycling-and-selection",
+      "dimensions": {
+        "columns": 24,
+        "rows": 8
+      },
+      "inputs": {
+        "keys": [
+          "up",
+          "down",
+          "down",
+          "enter"
+        ],
+        "items": [
+          "alpha",
+          "beta",
+          "gamma"
+        ]
+      },
+      "expected": {
+        "initial": {
+          "selected": "alpha",
+          "rows": [
+            "→ Alpha",
+            "  Beta",
+            "  Gamma"
+          ],
+          "visibleWidths": [
+            7,
+            6,
+            7
+          ]
+        },
+        "up": {
+          "selected": "gamma",
+          "rows": [
+            "  Alpha",
+            "  Beta",
+            "→ Gamma"
+          ],
+          "visibleWidths": [
+            7,
+            6,
+            7
+          ]
+        },
+        "wrapped": {
+          "selected": "beta",
+          "rows": [
+            "  Alpha",
+            "→ Beta",
+            "  Gamma"
+          ],
+          "visibleWidths": [
+            7,
+            6,
+            7
+          ]
+        },
+        "callbackEvents": [
+          "change:gamma",
+          "change:alpha",
+          "change:beta",
+          "select:beta"
+        ]
+      }
+    },
+    {
+      "name": "select-list-centered-five-row-window",
+      "dimensions": {
+        "columns": 24,
+        "rows": 7
+      },
+      "inputs": {
+        "itemCount": 9,
+        "maxVisible": 5,
+        "downPresses": 6,
+        "thenDownPresses": 2
+      },
+      "expected": {
+        "initial": {
+          "selected": "item-1",
+          "rows": [
+            "→ Item 1",
+            "  Item 2",
+            "  Item 3",
+            "  Item 4",
+            "  Item 5",
+            "  (1/9)"
+          ],
+          "visibleWidths": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            7
+          ]
+        },
+        "middle": {
+          "selected": "item-7",
+          "rows": [
+            "  Item 5",
+            "  Item 6",
+            "→ Item 7",
+            "  Item 8",
+            "  Item 9",
+            "  (7/9)"
+          ],
+          "visibleWidths": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            7
+          ]
+        },
+        "end": {
+          "selected": "item-9",
+          "rows": [
+            "  Item 5",
+            "  Item 6",
+            "  Item 7",
+            "  Item 8",
+            "→ Item 9",
+            "  (9/9)"
+          ],
+          "visibleWidths": [
+            8,
+            8,
+            8,
+            8,
+            8,
+            7
+          ]
+        }
+      }
+    },
+    {
+      "name": "select-list-description-width-boundaries",
+      "dimensions": {
+        "columns": 60,
+        "rows": 4
+      },
+      "inputs": {
+        "widths": [
+          40,
+          41,
+          60
+        ]
+      },
+      "expected": {
+        "widths": [
+          {
+            "width": 40,
+            "selected": "a",
+            "rows": [
+              "→ Alpha",
+              "  Beta"
+            ],
+            "visibleWidths": [
+              7,
+              6
+            ]
+          },
+          {
+            "width": 41,
+            "selected": "a",
+            "rows": [
+              "→ Alpha",
+              "  Beta"
+            ],
+            "visibleWidths": [
+              7,
+              6
+            ]
+          },
+          {
+            "width": 60,
+            "selected": "a",
+            "rows": [
+              "→ Alpha                           First descriptive row",
+              "  Beta                            Second descriptive row"
+            ],
+            "visibleWidths": [
+              55,
+              56
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "select-list-narrow-wide-glyph-truncation",
+      "dimensions": {
+        "columns": 10,
+        "rows": 2
+      },
+      "inputs": {
+        "width": 10,
+        "label": "界界界界",
+        "description": "hidden when narrow"
+      },
+      "expected": {
+        "selected": "wide",
+        "rows": [
+          "→ 界界界\u001b[0m"
+        ],
+        "visibleWidths": [
+          8
+        ]
+      }
+    },
+    {
+      "name": "select-list-unbound-key-forwarding",
+      "dimensions": {
+        "columns": 24,
+        "rows": 3
+      },
+      "inputs": {
+        "keys": [
+          "j",
+          "k",
+          "\u001b[6~",
+          "/",
+          "x"
+        ]
+      },
+      "expected": {
+        "observations": [
+          {
+            "input": "j",
+            "before": "first",
+            "after": "first"
+          },
+          {
+            "input": "k",
+            "before": "first",
+            "after": "first"
+          },
+          {
+            "input": "\u001b[6~",
+            "before": "first",
+            "after": "first"
+          },
+          {
+            "input": "/",
+            "before": "first",
+            "after": "first"
+          },
+          {
+            "input": "x",
+            "before": "first",
+            "after": "first"
+          }
         ]
       }
     }

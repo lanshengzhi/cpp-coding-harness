@@ -10,6 +10,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { captureSelectList } from "./select-list-scenarios.mts";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), "..");
@@ -224,6 +225,14 @@ screenArtifact.scenarios.push({
 	name: "common-root-lifecycle", dimensions: { columns: 16, rows: 6 }, inputs: lifecycleInputs,
 	expected: { initial: lifecycleInitial, removed: lifecycleRemoved, cleared: lifecycleCleared, stopped: lifecycleStopped, events: lifecycleEvents },
 });
+
+// Observe reusable SelectList directly, preserving exact render rows, widths,
+// selection and callbacks; key propagation is additionally tested by callers.
+const selectListObservation = await captureSelectList(pi);
+for (const endpoint of selectListObservation.sourceEndpoints) {
+	if (!screenArtifact.sourceEndpoints.includes(endpoint)) screenArtifact.sourceEndpoints.push(endpoint);
+}
+screenArtifact.scenarios.push(...selectListObservation.scenarios);
 
 // Capability accounting observation: freeze the public index export set and ledger classifications.
 // The committed docs/research ledger is hashed as the C++/Pike accounting artifact; export names are
@@ -828,7 +837,13 @@ const records = artifacts.map(([file, family, artifact]) => {
 });
 const manifest = {
 	schema: "pike/tui-evidence/1", baseline, revision, capturedAt, environment,
-	generator: { path: "capture/capture-named-tui.mts", sha256: sha256(readFileSync(scriptPath)) },
+	generator: {
+		path: "capture/capture-named-tui.mts", sha256: sha256(readFileSync(scriptPath)),
+		sources: [{
+			path: "capture/select-list-scenarios.mts",
+			sha256: sha256(readFileSync(path.join(root, "capture/select-list-scenarios.mts"))),
+		}],
+	},
 	artifacts: records,
 };
 const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2) + "\n");
