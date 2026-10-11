@@ -1,4 +1,5 @@
 #include "ai/ModelStreamBridge.hpp"
+#include "coding_agent/tui/ClipboardPaste.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "support/FakeTool.hpp"
@@ -13,6 +14,7 @@
 
 #include <cch/ai/Content.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/tui/NativeClipboard.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "coding_agent/AgentSession.hpp"
@@ -34,6 +36,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <format>
 #include <fstream>
@@ -56,7 +59,7 @@ namespace {
 
 struct TestRunOptions {
     std::filesystem::path agent_config_directory{};
-    std::unique_ptr<coding_agent::tui::AsyncClipboardReader> clipboard_reader{nullptr};
+    std::unique_ptr<tui::NativeClipboard> native_clipboard{nullptr};
     std::optional<std::string> initial_prompt{std::nullopt};
     coding_agent::PromptOptions initial_prompt_options{};
     std::optional<std::string> model_fallback_message{std::nullopt};
@@ -68,7 +71,7 @@ struct TestRunOptions {
     return coding_agent::tui::InteractiveSessionRunBuilder{}
             .with_session(session)
             .with_agent_config_directory(std::move(options.agent_config_directory))
-            .with_clipboard_reader(std::move(options.clipboard_reader))
+            .with_native_clipboard(std::move(options.native_clipboard))
             .with_initial_prompt(std::move(options.initial_prompt))
             .with_initial_prompt_options(std::move(options.initial_prompt_options))
             .with_model_fallback_message(std::move(options.model_fallback_message))
@@ -180,29 +183,107 @@ struct RichThinkingSession {
     return position - (line_start == std::string_view::npos ? 0 : line_start + 1);
 }
 
-class FakeClipboardReader final : public coding_agent::tui::AsyncClipboardReader {
+class FakeNativeClipboard final : public tui::NativeClipboard {
 public:
-    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<coding_agent::tui::ClipboardImage>>>
-    read_image() override {
+    [[nodiscard]] support::AsyncResult<tui::NativeClipboardImageReadVariant> get_image(
+            std::stop_token stop_token) override {
+        if (stop_on_image_read != nullptr) stop_on_image_read->request_stop();
+        if (stop_token.stop_requested()) {
+            return support::AsyncResult<tui::NativeClipboardImageReadVariant>{
+                    std::unexpected(support::make_error(support::ErrorCode::Cancelled, "clipboard read cancelled"))};
+        }
         if (image_error) {
-            co_return std::unexpected(support::make_error(support::ErrorCode::Process, "clipboard image unavailable"));
+            return support::AsyncResult<tui::NativeClipboardImageReadVariant>{
+                    std::unexpected(support::make_error(support::ErrorCode::Process, "clipboard image unavailable"))};
         }
-        if (next_image >= images.size()) co_return std::nullopt;
-        co_return std::optional<coding_agent::tui::ClipboardImage>{images[next_image++]};
+        if (next_image >= images.size()) {
+            return support::AsyncResult<tui::NativeClipboardImageReadVariant>{
+                    tui::NativeClipboardImageReadVariant{std::optional<std::vector<std::uint8_t>>{std::nullopt}}};
+        }
+        return support::AsyncResult<tui::NativeClipboardImageReadVariant>{
+                tui::NativeClipboardImageReadVariant{std::optional<std::vector<std::uint8_t>>{images[next_image++]}}};
     }
 
-    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<std::string>>> read_text() override {
+    [[nodiscard]] support::AsyncResult<tui::NativeClipboardTextReadVariant> get_text(
+            std::stop_token stop_token) override {
+        ++text_read_count;
+        if (stop_token.stop_requested()) {
+            return support::AsyncResult<tui::NativeClipboardTextReadVariant>{
+                    std::unexpected(support::make_error(support::ErrorCode::Cancelled, "clipboard read cancelled"))};
+        }
         if (text_error) {
-            co_return std::unexpected(support::make_error(support::ErrorCode::Process, "clipboard text unavailable"));
+            return support::AsyncResult<tui::NativeClipboardTextReadVariant>{
+                    std::unexpected(support::make_error(support::ErrorCode::Process, "clipboard text unavailable"))};
         }
-        co_return text;
+        return support::AsyncResult<tui::NativeClipboardTextReadVariant>{tui::NativeClipboardTextReadVariant{text}};
     }
 
-    std::vector<coding_agent::tui::ClipboardImage> images;
+    [[nodiscard]] std::optional<support::AsyncResult<std::optional<std::vector<std::filesystem::path>>>> get_file_paths(
+            std::stop_token) override {
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<support::AsyncResult<void>> set_text(std::string) override { return std::nullopt; }
+
+    std::vector<std::vector<std::uint8_t>> images;
     std::optional<std::string> text{std::nullopt};
     std::size_t next_image{0};
     bool image_error{false};
     bool text_error{false};
+    std::stop_source* stop_on_image_read{nullptr};
+    std::size_t text_read_count{0};
+};
+
+[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> read_paste_content_for_test(tui::NativeClipboard& clipboard,
+        std::stop_token stop_token,
+        std::optional<std::optional<std::string>>& result) {
+    result = co_await coding_agent::tui::read_clipboard_insert_content(clipboard, stop_token);
+    co_return support::ExpectedVoid{};
+}
+
+[[nodiscard]] support::AsyncResult<tui::NativeClipboardImageReadVariant> pending_image_read(std::stop_token stop_token,
+        boost::asio::any_io_executor executor,
+        std::shared_ptr<std::atomic<bool>> late_completion) {
+    return support::AsyncResult<tui::NativeClipboardImageReadVariant>{
+            support::AsyncProducer<tui::NativeClipboardImageReadVariant, support::Error>{
+                    [stop_token, executor = std::move(executor), late_completion = std::move(late_completion)](
+                            support::AsyncCompletion<tui::NativeClipboardImageReadVariant, support::Error>
+                                    completion) mutable noexcept {
+                        auto timer = std::make_shared<boost::asio::steady_timer>(executor);
+                        timer->expires_after(std::chrono::milliseconds{20});
+                        timer->async_wait([timer, stop_token, late_completion, completion = std::move(completion)](
+                                                  boost::system::error_code error) mutable noexcept {
+                            late_completion->store(true, std::memory_order_release);
+                            if (stop_token.stop_requested() || error) {
+                                std::move(completion)(std::unexpected(support::make_error(
+                                        support::ErrorCode::Cancelled, "clipboard read cancelled")));
+                            } else {
+                                std::move(completion)(tui::NativeClipboardImageReadVariant{
+                                        std::optional<std::vector<std::uint8_t>>{{0x89, 0x50, 0x4e, 0x47}}});
+                            }
+                        });
+                    }}};
+}
+
+class PendingNativeClipboard final : public tui::NativeClipboard {
+public:
+    explicit PendingNativeClipboard(boost::asio::any_io_executor executor)
+        : executor_(std::move(executor)), late_completion(std::make_shared<std::atomic<bool>>(false)) {}
+
+    [[nodiscard]] support::AsyncResult<tui::NativeClipboardImageReadVariant> get_image(
+            std::stop_token stop_token) override {
+        return pending_image_read(stop_token, executor_, late_completion);
+    }
+
+    [[nodiscard]] support::AsyncResult<tui::NativeClipboardTextReadVariant> get_text(std::stop_token) override {
+        ++text_read_count;
+        return support::AsyncResult<tui::NativeClipboardTextReadVariant>{
+                tui::NativeClipboardTextReadVariant{std::optional<std::string>{"must not be inserted"}}};
+    }
+
+    std::size_t text_read_count{0};
+    boost::asio::any_io_executor executor_;
+    std::shared_ptr<std::atomic<bool>> late_completion;
 };
 
 class FailOnceChatProvider final : public tests::ScriptedProvider {
@@ -1409,8 +1490,24 @@ TEST_CASE("Native TUI keeps tail image sidecars visible while the old transcript
     CHECK(*run_result);
 }
 
+TEST_CASE("Native clipboard paste cancellation prevents fallback and safely ignores late completion",
+        "[coding_agent][tui][clipboard][issue992][spec]") {
+    boost::asio::io_context io;
+    PendingNativeClipboard clipboard{io.get_executor()};
+    std::stop_source cancellation;
+    std::optional<std::optional<std::string>> result;
+    boost::asio::co_spawn(
+            io, read_paste_content_for_test(clipboard, cancellation.get_token(), result), boost::asio::detached);
+    io.poll_one(); // Start the clipboard operation and suspend on the image result.
+    cancellation.request_stop();
+    drain_ready(io);
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->has_value());
+    CHECK(clipboard.text_read_count == 0);
+}
+
 TEST_CASE("Native TUI clipboard images become distinct supported temporary paths",
-        "[coding_agent][tui][clipboard][issue63][spec]") {
+        "[coding_agent][tui][clipboard][issue63][issue992][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
@@ -1418,7 +1515,7 @@ TEST_CASE("Native TUI clipboard images become distinct supported temporary paths
     auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
-    auto reader = std::make_unique<FakeClipboardReader>();
+    auto reader = std::make_unique<FakeNativeClipboard>();
     const std::array source_bytes{
             tests::decode_base64(tests::kTinyPngBase64),
             tests::decode_base64(tests::kTinyJpegBase64),
@@ -1426,10 +1523,7 @@ TEST_CASE("Native TUI clipboard images become distinct supported temporary paths
             tests::decode_base64(tests::kTinyWebpBase64),
     };
     for (const auto& bytes : source_bytes) {
-        reader->images.push_back({
-                .bytes = bytes,
-                .mime_type = "application/octet-stream",
-        });
+        reader->images.push_back(bytes);
     }
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
@@ -1441,7 +1535,7 @@ TEST_CASE("Native TUI clipboard images become distinct supported temporary paths
                     make_run(*created->session,
                             {
                                     .agent_config_directory = config_directory.path(),
-                                    .clipboard_reader = std::move(reader),
+                                    .native_clipboard = std::move(reader),
                             })),
             [&](std::exception_ptr exception, support::ExpectedVoid result) {
                 CHECK(exception == nullptr);
@@ -1499,7 +1593,7 @@ TEST_CASE("Native TUI clipboard images become distinct supported temporary paths
 }
 
 TEST_CASE("Native TUI clipboard falls back to text at the cursor and ignores read failures",
-        "[coding_agent][tui][clipboard][issue63][spec]") {
+        "[coding_agent][tui][clipboard][issue63][issue992][spec]") {
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
@@ -1507,11 +1601,8 @@ TEST_CASE("Native TUI clipboard falls back to text at the cursor and ignores rea
     auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
-    auto reader = std::make_unique<FakeClipboardReader>();
-    reader->images.push_back({
-            .bytes = {0x01, 0x02, 0x03},
-            .mime_type = "image/png",
-    });
+    auto reader = std::make_unique<FakeNativeClipboard>();
+    reader->images.push_back({0x01, 0x02, 0x03});
     reader->text = "clipboard text";
 
     std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
@@ -1524,7 +1615,7 @@ TEST_CASE("Native TUI clipboard falls back to text at the cursor and ignores rea
                     make_run(*created->session,
                             {
                                     .agent_config_directory = config_directory.path(),
-                                    .clipboard_reader = std::move(reader),
+                                    .native_clipboard = std::move(reader),
                             })),
             [&](std::exception_ptr exception, support::ExpectedVoid result) {
                 CHECK(exception == nullptr);
@@ -1556,7 +1647,7 @@ TEST_CASE("Native TUI clipboard falls back to text at the cursor and ignores rea
     auto failed_session = runtime.run(create_session_async(runtime, std::move(failed_options)));
     REQUIRE(failed_session);
     runtime_driver.emplace(runtime);
-    auto failed_reader = std::make_unique<FakeClipboardReader>();
+    auto failed_reader = std::make_unique<FakeNativeClipboard>();
     failed_reader->image_error = true;
     failed_reader->text_error = true;
     tui::VirtualTerminal failed_terminal({.columns = 80, .rows = 12});
@@ -1567,7 +1658,7 @@ TEST_CASE("Native TUI clipboard falls back to text at the cursor and ignores rea
                     make_run(*failed_session->session,
                             {
                                     .agent_config_directory = config_directory.path(),
-                                    .clipboard_reader = std::move(failed_reader),
+                                    .native_clipboard = std::move(failed_reader),
                             })),
             [&](std::exception_ptr exception, support::ExpectedVoid result) {
                 CHECK(exception == nullptr);

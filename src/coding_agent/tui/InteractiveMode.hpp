@@ -1,10 +1,9 @@
 #pragma once
 
-#include "coding_agent/tui/ClipboardReader.hpp"
-
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/NativeClipboard.hpp>
 #include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -93,16 +92,14 @@ using TuiActionResultVariant = std::variant<std::monostate, bool>;
 /// host in #466). Delivery is lossless: every admitted action is carried
 /// exactly once (render-state coalescing never applies here). A null sink
 /// falls back to the TUI-local platform defaults for environment operations.
-using TuiActionSink = std::move_only_function<
-    support::Expected<TuiActionResultVariant>(std::size_t action_generation,
-                                           TuiActionVariant action)>;
+using TuiActionSink = std::move_only_function<support::Expected<TuiActionResultVariant>(
+        std::size_t action_generation, TuiActionVariant action)>;
 
 /// Run the private Native TUI composition until its exit binding is received.
 /// The session intent in `run` selects whether to bind a pre-created Agent
 /// Session or defer creation to the boot trust prompt.
 /// The Terminal must outlive the returned coroutine.
 [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
-    cch::tui::Terminal& terminal,
-    InteractiveSessionRun run);
+        cch::tui::Terminal& terminal, InteractiveSessionRun run);
 
 } // namespace cch::coding_agent::tui

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "coding_agent/tui/ClipboardReader.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/AgentSession.hpp"
@@ -9,6 +8,7 @@
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
+#include <cch/tui/NativeClipboard.hpp>
 
 #include <atomic>
 #include <filesystem>
@@ -98,8 +98,8 @@ public:
     [[nodiscard]] const std::optional<std::string>& initial_prompt() const noexcept;
     [[nodiscard]] const PromptOptions& initial_prompt_options() const noexcept;
     [[nodiscard]] const std::optional<std::string>& model_fallback_message() const noexcept;
-    [[nodiscard]] bool has_clipboard_reader() const noexcept;
-    [[nodiscard]] std::unique_ptr<AsyncClipboardReader> take_clipboard_reader() noexcept;
+    [[nodiscard]] bool has_native_clipboard() const noexcept;
+    [[nodiscard]] std::unique_ptr<cch::tui::NativeClipboard> take_native_clipboard() noexcept;
     [[nodiscard]] const SessionIntentVariant& session_intent() const noexcept;
     [[nodiscard]] SessionIntentVariant take_session_intent() noexcept;
     [[nodiscard]] bool creation_failure_reported() const noexcept;
@@ -115,8 +115,7 @@ public:
     void report_boot_creation_failure(const support::Error& error) const;
 
     [[nodiscard]] support::Expected<TuiActionResultVariant> dispatch_action(
-        std::size_t action_generation,
-        TuiActionVariant action) const;
+            std::size_t action_generation, TuiActionVariant action) const;
 
     // ── Action sink ──────────────────────────────────────────────────────
 
@@ -131,7 +130,7 @@ private:
         std::optional<std::string> initial_prompt{std::nullopt};
         PromptOptions initial_prompt_options{};
         std::optional<std::string> model_fallback_message{std::nullopt};
-        std::unique_ptr<AsyncClipboardReader> clipboard_reader{nullptr};
+        std::unique_ptr<cch::tui::NativeClipboard> native_clipboard{nullptr};
         SessionIntentVariant session_intent{BindExistingSession{nullptr}};
 
         std::shared_ptr<harness::RuntimeRoot> runtime_root{nullptr};
@@ -160,38 +159,25 @@ public:
     InteractiveSessionRunBuilder(const InteractiveSessionRunBuilder&) = delete;
     InteractiveSessionRunBuilder& operator=(const InteractiveSessionRunBuilder&) = delete;
 
-    InteractiveSessionRunBuilder& with_session_intent(
-        SessionIntentVariant intent) noexcept;
-    InteractiveSessionRunBuilder& with_session(
-        AgentSession& session) noexcept;
-    InteractiveSessionRunBuilder& with_session(
-        AgentSession* session) noexcept;
-    InteractiveSessionRunBuilder& with_defer_boot(
-        runtime::AgentSessionCreationRequest request) noexcept;
-    InteractiveSessionRunBuilder& with_session_facts(
-        runtime::InteractiveSessionFacts facts) noexcept;
-    InteractiveSessionRunBuilder& with_agent_config_directory(
-        std::filesystem::path dir) noexcept;
-    InteractiveSessionRunBuilder& with_initial_prompt(
-        std::optional<std::string> prompt) noexcept;
-    InteractiveSessionRunBuilder& with_initial_prompt_options(
-        PromptOptions options) noexcept;
-    InteractiveSessionRunBuilder& with_model_fallback_message(
-        std::optional<std::string> message) noexcept;
-    InteractiveSessionRunBuilder& with_clipboard_reader(
-        std::unique_ptr<AsyncClipboardReader> reader) noexcept;
-    InteractiveSessionRunBuilder& with_runtime_root(
-        std::shared_ptr<harness::RuntimeRoot> runtime_root) noexcept;
+    InteractiveSessionRunBuilder& with_session_intent(SessionIntentVariant intent) noexcept;
+    InteractiveSessionRunBuilder& with_session(AgentSession& session) noexcept;
+    InteractiveSessionRunBuilder& with_session(AgentSession* session) noexcept;
+    InteractiveSessionRunBuilder& with_defer_boot(runtime::AgentSessionCreationRequest request) noexcept;
+    InteractiveSessionRunBuilder& with_session_facts(runtime::InteractiveSessionFacts facts) noexcept;
+    InteractiveSessionRunBuilder& with_agent_config_directory(std::filesystem::path dir) noexcept;
+    InteractiveSessionRunBuilder& with_initial_prompt(std::optional<std::string> prompt) noexcept;
+    InteractiveSessionRunBuilder& with_initial_prompt_options(PromptOptions options) noexcept;
+    InteractiveSessionRunBuilder& with_model_fallback_message(std::optional<std::string> message) noexcept;
+    InteractiveSessionRunBuilder& with_native_clipboard(
+            std::unique_ptr<cch::tui::NativeClipboard> native_clipboard) noexcept;
+    InteractiveSessionRunBuilder& with_runtime_root(std::shared_ptr<harness::RuntimeRoot> runtime_root) noexcept;
     InteractiveSessionRunBuilder& with_project_resource_filesystems(ProjectResourceFileSystems filesystems) noexcept;
     InteractiveSessionRunBuilder& with_shared_runtime(
-        std::shared_ptr<coding_agent::ModelRuntime> shared_runtime) noexcept;
+            std::shared_ptr<coding_agent::ModelRuntime> shared_runtime) noexcept;
     InteractiveSessionRunBuilder& with_model_runtime_cli_fake(bool model_runtime_cli_fake) noexcept;
-    InteractiveSessionRunBuilder& with_error_stream(
-        std::ostream* error_stream) noexcept;
-    InteractiveSessionRunBuilder& with_is_resume_target(
-        bool is_resume_target) noexcept;
-    InteractiveSessionRunBuilder& with_action_sink(
-        TuiActionSink sink) noexcept;
+    InteractiveSessionRunBuilder& with_error_stream(std::ostream* error_stream) noexcept;
+    InteractiveSessionRunBuilder& with_is_resume_target(bool is_resume_target) noexcept;
+    InteractiveSessionRunBuilder& with_action_sink(TuiActionSink sink) noexcept;
     InteractiveSessionRunBuilder& with_async_session_replacement_sink(AsyncSessionReplacementSink sink) noexcept;
 
     [[nodiscard]] InteractiveSessionRun build();

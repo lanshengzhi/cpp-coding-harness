@@ -124,7 +124,8 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         }
     }
 
-    clipboard_reader_ = run.take_clipboard_reader();
+    native_clipboard_ = run.take_native_clipboard();
+    stop_source_ = std::stop_source{};
     model_fallback_message_ = run.model_fallback_message();
     action_sink_ = run.make_action_sink();
     async_session_replacement_sink_ = run.make_async_session_replacement_sink();
@@ -359,7 +360,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
 }
 
 support::ExpectedVoid InteractiveEngine::re_catalog_keybindings() {
-    const auto actions = assemble_keybinding_actions(clipboard_reader_ != nullptr);
+    const auto actions = assemble_keybinding_actions(native_clipboard_ != nullptr);
     if (auto manager = load_app_keybinding_manager(agent_config_directory_, actions); !manager) {
         return std::unexpected(manager.error());
     } else {
@@ -378,7 +379,7 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
         const InteractiveSessionRun& run) {
     InteractiveStartupDiagnostics diagnostics;
     agent_config_directory_ = run.agent_config_directory();
-    const auto actions = assemble_keybinding_actions(clipboard_reader_ != nullptr);
+    const auto actions = assemble_keybinding_actions(native_clipboard_ != nullptr);
     if (auto manager = load_app_keybinding_manager(run.agent_config_directory(), actions); !manager) {
         return std::unexpected(manager.error());
     } else {

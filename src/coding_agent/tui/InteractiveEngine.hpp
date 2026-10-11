@@ -504,7 +504,7 @@ private:
     /// follow the session lifecycle.
     std::shared_ptr<SessionUiBinding> session_ui_;
     std::unique_ptr<ThemeController> theme_controller_;
-    std::unique_ptr<AsyncClipboardReader> clipboard_reader_;
+    std::unique_ptr<cch::tui::NativeClipboard> native_clipboard_;
     /// One move-only sink carrying closed application-level actions to the
     /// composition host (ADR 0040); null applies TUI-local platform defaults
     /// for the environment operations.

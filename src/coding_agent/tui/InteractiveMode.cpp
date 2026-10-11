@@ -53,16 +53,15 @@ using interactive_view_detail::trim_editor_submission;
 /// context; `!!` runs excluded from model conversion; `!!!foo` is excluded
 /// User Bash running `!foo`. A bare `!` or `!!` yields no invocation and
 /// falls through to an ordinary Agent Prompt.
-[[nodiscard]] std::optional<UserBashInvocation> parse_user_bash_invocation(
-    std::string text) {
+[[nodiscard]] std::optional<UserBashInvocation> parse_user_bash_invocation(std::string text) {
     text = trim_editor_submission(std::move(text));
     if (!text.starts_with('!')) return std::nullopt;
     const bool excluded = text.starts_with("!!");
     auto command = trim_editor_submission(text.substr(excluded ? 2 : 1));
     if (command.empty()) return std::nullopt;
     return UserBashInvocation{
-        .command = std::move(command),
-        .exclude_from_context = excluded,
+            .command = std::move(command),
+            .exclude_from_context = excluded,
     };
 }
 
@@ -71,106 +70,82 @@ using interactive_view_detail::trim_editor_submission;
 void InteractiveEngine::post_view_action(ViewAction action) {
     const auto weak = weak_from_this();
     const auto prompt_generation = generation();
-    boost::asio::post(
-        executor_,
-        [weak, prompt_generation, action = std::move(action)]() mutable {
-            if (const auto self = weak.lock()) {
-                self->dispatch_view_action(std::move(action), prompt_generation);
-            }
-        });
+    boost::asio::post(executor_, [weak, prompt_generation, action = std::move(action)]() mutable {
+        if (const auto self = weak.lock()) {
+            self->dispatch_view_action(std::move(action), prompt_generation);
+        }
+    });
 }
 
 void InteractiveEngine::dispatch_view_action(ViewAction action, std::size_t prompt_generation) {
     std::visit(
-        [this, prompt_generation](auto&& value) {
-            using T = std::decay_t<decltype(value)>;
-            if constexpr (std::is_same_v<T, InterruptAction>) {
-                request_interrupt(prompt_generation, value.request);
-            } else {
-                dispatch(std::move(value));
-            }
-        },
-        std::move(action));
+            [this, prompt_generation](auto&& value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, InterruptAction>) {
+                    request_interrupt(prompt_generation, value.request);
+                } else {
+                    dispatch(std::move(value));
+                }
+            },
+            std::move(action));
 }
 
 void InteractiveEngine::dispatch(SubmitAction action) {
-    submit(
-        std::move(action.request.text),
-        action.submission,
-        {},
-        SubmissionOrigin::FocusedEditor,
-        action.request.editor_revision);
+    submit(std::move(action.request.text),
+            action.submission,
+            {},
+            SubmissionOrigin::FocusedEditor,
+            action.request.editor_revision);
 }
 
 void InteractiveEngine::dispatch(ClipboardPasteAction) {
-    if (clipboard_reader_ == nullptr || clipboard_read_active_) return;
+    if (native_clipboard_ == nullptr || clipboard_read_active_) return;
     clipboard_read_active_ = true;
     const auto self = shared_from_this();
+    const auto stop_token = stop_source_.get_token();
     auto bridged = support::detail::make_async_result_on(
-            executor_, [self]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
-                auto content = co_await read_clipboard_insert_content(*self->clipboard_reader_);
+            executor_, [self, stop_token]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+                auto content = co_await read_clipboard_insert_content(*self->native_clipboard_, stop_token);
                 if (content && !content->empty() && self->running_ && self->view_ != nullptr) {
                     self->view_->insert_editor_text(std::move(*content));
                     self->invalidate_frame();
                 }
                 co_return support::ExpectedVoid{};
             });
-    std::move(bridged).start(
-        [weak = weak_from_this()](support::ExpectedVoid result) noexcept {
-            const auto engine = weak.lock();
-            if (!engine) return;
-            engine->clipboard_read_active_ = false;
-            // Baseline clipboard failures are intentionally silent; the
-            // private bridge already mapped a launch failure to the same
-            // generic outcome.
-            (void)result;
-        });
+    std::move(bridged).start([weak = weak_from_this()](support::ExpectedVoid result) noexcept {
+        const auto engine = weak.lock();
+        if (!engine) return;
+        engine->clipboard_read_active_ = false;
+        // Baseline clipboard failures are intentionally silent; the
+        // private bridge already mapped a launch failure to the same
+        // generic outcome.
+        (void)result;
+    });
 }
 
-void InteractiveEngine::dispatch(DequeueAction) {
-    dequeue_pending_input(true);
-}
+void InteractiveEngine::dispatch(DequeueAction) { dequeue_pending_input(true); }
 
-void InteractiveEngine::dispatch(ExitAction) {
-    request_exit();
-}
+void InteractiveEngine::dispatch(ExitAction) { request_exit(); }
 
 void InteractiveEngine::dispatch(CycleModelAction action) {
-    model_flows_->cycle_model(
-        action.direction == ModelCycleDirection::Forward ? "forward" : "backward");
+    model_flows_->cycle_model(action.direction == ModelCycleDirection::Forward ? "forward" : "backward");
 }
 
-void InteractiveEngine::dispatch(CycleThinkingAction) {
-    settings_flows_->cycle_thinking_level();
-}
+void InteractiveEngine::dispatch(CycleThinkingAction) { settings_flows_->cycle_thinking_level(); }
 
-void InteractiveEngine::dispatch(ToggleThinkingAction) {
-    settings_flows_->toggle_thinking_block_visibility();
-}
+void InteractiveEngine::dispatch(ToggleThinkingAction) { settings_flows_->toggle_thinking_block_visibility(); }
 
-void InteractiveEngine::dispatch(SelectModelAction) {
-    model_flows_->show_model_selector(std::nullopt);
-}
+void InteractiveEngine::dispatch(SelectModelAction) { model_flows_->show_model_selector(std::nullopt); }
 
-void InteractiveEngine::dispatch(ResumeSessionAction) {
-    session_flows_->open_resume();
-}
+void InteractiveEngine::dispatch(ResumeSessionAction) { session_flows_->open_resume(); }
 
-void InteractiveEngine::dispatch(ForkSessionAction) {
-    session_flows_->open_fork();
-}
+void InteractiveEngine::dispatch(ForkSessionAction) { session_flows_->open_fork(); }
 
-void InteractiveEngine::dispatch(NewSessionAction) {
-    session_flows_->open_new();
-}
+void InteractiveEngine::dispatch(NewSessionAction) { session_flows_->open_new(); }
 
-void InteractiveEngine::dispatch(CopyLastMessageAction) {
-    handle_copy_last_message();
-}
+void InteractiveEngine::dispatch(CopyLastMessageAction) { handle_copy_last_message(); }
 
-void InteractiveEngine::dispatch(OpenTreeSelectorAction) {
-    session_flows_->open_tree();
-}
+void InteractiveEngine::dispatch(OpenTreeSelectorAction) { session_flows_->open_tree(); }
 
 void InteractiveEngine::dispatch(SuspendAction) {
     if (suspend_controller_) suspend_controller_->suspend();
@@ -195,8 +170,7 @@ void InteractiveEngine::dispatch(ExternalEditorAction) {
 
 boost::asio::awaitable<void> InteractiveEngine::handle_open_external_editor() {
     if (view_ == nullptr) co_return;
-    auto result = co_await run_external_editor_flow(
-        tui_, view_->editor_expanded_text());
+    auto result = co_await run_external_editor_flow(tui_, view_->editor_expanded_text());
     if (!result) {
         completion_result_ = std::unexpected(result.error());
         request_exit();
@@ -231,8 +205,7 @@ bool InteractiveEngine::dispatch_command(std::string_view text) {
 }
 
 InteractiveEngine::InterruptRoute InteractiveEngine::admit_interrupt(
-    std::size_t captured_generation,
-    bool pending_bash) noexcept {
+        std::size_t captured_generation, bool pending_bash) noexcept {
     if (captured_generation != prompt_generation_.load()) return InterruptRoute::None;
     if (prompt_active_) {
         if (interrupt_requested_generation_ == prompt_generation_.load()) {
@@ -254,8 +227,7 @@ bool InteractiveEngine::dispatch_user_bash(const std::string& text, SubmissionOr
     if (user_bash_active_) {
         // pi: "A bash command is already running..." and setText(text).
         view_->restore_submitted_text(trim_editor_submission(text));
-        view_->append_user_bash_diagnostic(
-            "A User Bash command is already in flight");
+        view_->append_user_bash_diagnostic("A User Bash command is already in flight");
         invalidate_frame();
         return true;
     }
@@ -288,32 +260,28 @@ bool InteractiveEngine::dispatch_user_bash(const std::string& text, SubmissionOr
                 self->user_bash_finished(started_generation, std::move(result), recall);
                 co_return support::ExpectedVoid{};
             });
-    std::move(bridged).start(
-        [weak = weak_from_this(), started_generation](support::ExpectedVoid result) noexcept {
-            if (result) return;
-            if (const auto self = weak.lock()) {
-                if (self->generation_retired(started_generation)) {
-                    // A launch failure from a retired Session generation
-                    // cannot mutate or render as the current Session
-                    // (issue #466).
-                    return;
-                }
-                self->user_bash_active_ = false;
-                if (self->view_ != nullptr && self->running_) {
-                    self->view_->clear_user_bash_progress();
-                    self->view_->append_user_bash_diagnostic(
-                        "Native TUI User Bash coroutine failed");
-                    self->invalidate_frame();
-                }
-                if (self->exit_requested_) self->signal_exit();
+    std::move(bridged).start([weak = weak_from_this(), started_generation](support::ExpectedVoid result) noexcept {
+        if (result) return;
+        if (const auto self = weak.lock()) {
+            if (self->generation_retired(started_generation)) {
+                // A launch failure from a retired Session generation
+                // cannot mutate or render as the current Session
+                // (issue #466).
+                return;
             }
-        });
+            self->user_bash_active_ = false;
+            if (self->view_ != nullptr && self->running_) {
+                self->view_->clear_user_bash_progress();
+                self->view_->append_user_bash_diagnostic("Native TUI User Bash coroutine failed");
+                self->invalidate_frame();
+            }
+            if (self->exit_requested_) self->signal_exit();
+        }
+    });
     return true;
 }
 
-void InteractiveEngine::request_interrupt(
-    std::size_t prompt_generation,
-    const EditorInterruptRequest& request) {
+void InteractiveEngine::request_interrupt(std::size_t prompt_generation, const EditorInterruptRequest& request) {
     if (!running_ || exit_requested_) return;
     switch (admit_interrupt(prompt_generation, request.pending_bash)) {
     case InterruptRoute::AbortAgentRun:
@@ -349,15 +317,13 @@ void InteractiveEngine::request_interrupt(
     }
 }
 
-void InteractiveEngine::submit(
-    std::string text,
-    InputSubmission submission,
-    PromptOptions options,
-    SubmissionOrigin origin,
-    std::optional<std::size_t> editor_revision) {
+void InteractiveEngine::submit(std::string text,
+        InputSubmission submission,
+        PromptOptions options,
+        SubmissionOrigin origin,
+        std::optional<std::size_t> editor_revision) {
     if (!running_ || view_ == nullptr || text.empty()) return;
-    if (origin == SubmissionOrigin::FocusedEditor && editor_revision &&
-        cleared_editor_revision_ == editor_revision) {
+    if (origin == SubmissionOrigin::FocusedEditor && editor_revision && cleared_editor_revision_ == editor_revision) {
         return;
     }
     // pi handleFollowUp: while a run is active, Alt+Enter queues the
@@ -365,8 +331,7 @@ void InteractiveEngine::submit(
     // Bash parse, slash dispatch) does not run, and prompt-template
     // expansion happens inside the session admission; when idle,
     // Alt+Enter acts like regular Enter and runs the full editor chain.
-    const bool follow_up_while_active =
-        submission == InputSubmission::FollowUp && prompt_active_;
+    const bool follow_up_while_active = submission == InputSubmission::FollowUp && prompt_active_;
     if (!follow_up_while_active) {
         if (dispatch_user_bash(text, origin)) return;
         if (dispatch_command(text)) return;
@@ -384,16 +349,14 @@ void InteractiveEngine::submit(
         if (submission == InputSubmission::FollowUp) {
             if (auto admitted = session_->follow_up(text); !admitted) {
                 view_->restore_submitted_text(text);
-                view_->append_diagnostic(bounded_redacted_presentation(std::format(
-                    "Unable to queue follow-up input: {}",
-                    combined_error_text(admitted.error()))));
+                view_->append_diagnostic(bounded_redacted_presentation(
+                        std::format("Unable to queue follow-up input: {}", combined_error_text(admitted.error()))));
             }
         } else {
             if (auto admitted = session_->steer(text); !admitted) {
                 view_->restore_submitted_text(text);
-                view_->append_diagnostic(bounded_redacted_presentation(std::format(
-                    "Unable to queue steering input: {}",
-                    combined_error_text(admitted.error()))));
+                view_->append_diagnostic(bounded_redacted_presentation(
+                        std::format("Unable to queue steering input: {}", combined_error_text(admitted.error()))));
             }
         }
         session_ui_->sync_pending_input();
@@ -413,13 +376,12 @@ void InteractiveEngine::submit(
                 self->prompt_finished(started_generation, std::move(result), text);
                 co_return support::ExpectedVoid{};
             });
-    std::move(bridged).start(
-        [weak = weak_from_this(), started_generation](support::ExpectedVoid result) noexcept {
-            if (result) return;
-            if (const auto self = weak.lock()) {
-                self->prompt_launch_failed(started_generation);
-            }
-        });
+    std::move(bridged).start([weak = weak_from_this(), started_generation](support::ExpectedVoid result) noexcept {
+        if (result) return;
+        if (const auto self = weak.lock()) {
+            self->prompt_launch_failed(started_generation);
+        }
+    });
 }
 
 void InteractiveEngine::prompt_launch_failed(std::size_t started_generation) {
@@ -438,9 +400,7 @@ void InteractiveEngine::prompt_launch_failed(std::size_t started_generation) {
 }
 
 void InteractiveEngine::prompt_finished(
-    std::size_t started_generation,
-    support::ExpectedVoid result,
-    const std::string& submitted_text) {
+        std::size_t started_generation, support::ExpectedVoid result, const std::string& submitted_text) {
     if (generation_retired(started_generation)) {
         // A completion from a retired Session generation (the Session was
         // replaced or closed): the old Session's close already retired its
@@ -460,10 +420,9 @@ void InteractiveEngine::prompt_finished(
     if (exit_requested_ && !user_bash_active_) signal_exit();
 }
 
-void InteractiveEngine::user_bash_finished(
-    std::size_t started_generation,
-    support::Expected<runtime::UserBashCompletion> result,
-    const std::string& recall) {
+void InteractiveEngine::user_bash_finished(std::size_t started_generation,
+        support::Expected<runtime::UserBashCompletion> result,
+        const std::string& recall) {
     if (generation_retired(started_generation)) {
         // A completion from a retired Session generation (the Session was
         // replaced or closed): the old Session's close already retired its
@@ -480,8 +439,7 @@ void InteractiveEngine::user_bash_finished(
             // progress is cleared on this path.
             view_->clear_user_bash_progress();
             if (result->diagnostic) {
-                view_->append_user_bash_diagnostic(
-                    combined_error_text(*result->diagnostic));
+                view_->append_user_bash_diagnostic(combined_error_text(*result->diagnostic));
             }
         } else {
             view_->clear_user_bash_progress();
@@ -496,8 +454,7 @@ void InteractiveEngine::user_bash_finished(
 }
 
 boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
-    cch::tui::Terminal& terminal,
-    InteractiveSessionRun run) {
+        cch::tui::Terminal& terminal, InteractiveSessionRun run) {
     const auto executor = co_await boost::asio::this_coro::executor;
     const bool is_boot = std::holds_alternative<DeferBoot>(run.session_intent());
     auto engine = std::make_shared<InteractiveEngine>(terminal, executor);

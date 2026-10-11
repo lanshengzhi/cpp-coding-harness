@@ -9,20 +9,21 @@
 // Repository-private `cch_coding_agent` implementation header: not part of
 // an Owner Interface, not installed, never exported.
 
+#include <cch/tui/NativeClipboard.hpp>
+
 #include <boost/asio/awaitable.hpp>
 
 #include <optional>
+#include <stop_token>
 #include <string>
 
 namespace cch::coding_agent::tui {
 
-class AsyncClipboardReader;
-
-/// Read the next paste payload from the clipboard: the temp-file path of a
-/// supported image, or the clipboard text. Empty when no usable payload is
-/// available. Baseline clipboard failures are intentionally silent (pi
-/// treats paste as best-effort). Executor-confined like the reader.
-[[nodiscard]] boost::asio::awaitable<std::optional<std::string>>
-read_clipboard_insert_content(AsyncClipboardReader& reader);
+/// Read the next paste payload from the injected native clipboard: the
+/// temp-file path of a supported image, or the clipboard text. Empty when no
+/// usable payload is available. Baseline clipboard failures are intentionally
+/// silent (pi treats paste as best-effort); cancellation stops fallback reads.
+[[nodiscard]] boost::asio::awaitable<std::optional<std::string>> read_clipboard_insert_content(
+        cch::tui::NativeClipboard& native_clipboard, std::stop_token stop_token);
 
 } // namespace cch::coding_agent::tui

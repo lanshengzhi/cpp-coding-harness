@@ -43,8 +43,7 @@ ProjectResourceFileSystems make_project_resource_filesystems(std::shared_ptr<har
             std::move(home_directory));
 }
 
-InteractiveSessionRun::InteractiveSessionRun(std::shared_ptr<State> state)
-    : state_(std::move(state)) {}
+InteractiveSessionRun::InteractiveSessionRun(std::shared_ptr<State> state) : state_(std::move(state)) {}
 
 InteractiveSessionRun::InteractiveSessionRun(InteractiveSessionRun&&) noexcept = default;
 InteractiveSessionRun& InteractiveSessionRun::operator=(InteractiveSessionRun&&) noexcept = default;
@@ -86,13 +85,13 @@ const std::optional<std::string>& InteractiveSessionRun::model_fallback_message(
     return state_ ? state_->model_fallback_message : kEmptyFallback;
 }
 
-bool InteractiveSessionRun::has_clipboard_reader() const noexcept {
-    return state_ && state_->clipboard_reader != nullptr;
+bool InteractiveSessionRun::has_native_clipboard() const noexcept {
+    return state_ && state_->native_clipboard != nullptr;
 }
 
-std::unique_ptr<AsyncClipboardReader> InteractiveSessionRun::take_clipboard_reader() noexcept {
+std::unique_ptr<cch::tui::NativeClipboard> InteractiveSessionRun::take_native_clipboard() noexcept {
     if (!state_) return nullptr;
-    return std::move(state_->clipboard_reader);
+    return std::move(state_->native_clipboard);
 }
 
 const SessionIntentVariant& InteractiveSessionRun::session_intent() const noexcept {
@@ -109,17 +108,13 @@ bool InteractiveSessionRun::creation_failure_reported() const noexcept {
     return state_ && state_->creation_failure_reported.load(std::memory_order_relaxed);
 }
 
-void InteractiveSessionRun::open_browser(std::string url) const {
-    coding_agent::tui::open_browser(std::move(url));
-}
+void InteractiveSessionRun::open_browser(std::string url) const { coding_agent::tui::open_browser(std::move(url)); }
 
 bool InteractiveSessionRun::write_clipboard_text(const std::string& text) const {
     return coding_agent::tui::write_clipboard_text(text);
 }
 
-void InteractiveSessionRun::suspend_process() const {
-    (void)::kill(0, SIGTSTP);
-}
+void InteractiveSessionRun::suspend_process() const { (void)::kill(0, SIGTSTP); }
 
 AsyncSessionReplacementSink InteractiveSessionRun::make_async_session_replacement_sink() const {
     if (!state_) return nullptr;
@@ -175,15 +170,12 @@ void InteractiveSessionRun::report_boot_diagnostics(
     }
 }
 
-void InteractiveSessionRun::report_boot_creation_failure(
-    const support::Error& error) const {
+void InteractiveSessionRun::report_boot_creation_failure(const support::Error& error) const {
     if (!state_) return;
     state_->creation_failure_reported.store(true, std::memory_order_relaxed);
     if (!state_->error_stream) return;
-    *state_->error_stream << (state_->is_resume_target
-                                 ? "could not resume session: "
-                                 : "could not create session: ")
-                         << error.message;
+    *state_->error_stream << (state_->is_resume_target ? "could not resume session: " : "could not create session: ")
+                          << error.message;
     if (!error.detail.empty() && error.detail != error.message) {
         *state_->error_stream << ": " << error.detail;
     }
@@ -194,30 +186,29 @@ void InteractiveSessionRun::report_boot_creation_failure(
 }
 
 support::Expected<TuiActionResultVariant> InteractiveSessionRun::dispatch_action(
-    std::size_t /* action_generation */,
-    TuiActionVariant action) const {
+        std::size_t /* action_generation */, TuiActionVariant action) const {
     return std::visit(
-        [this](auto&& payload) -> support::Expected<TuiActionResultVariant> {
-            using T = std::decay_t<decltype(payload)>;
-            if constexpr (std::is_same_v<T, OpenBrowserAction>) {
-                open_browser(std::move(payload.url));
-                return TuiActionResultVariant{std::monostate{}};
-            } else if constexpr (std::is_same_v<T, WriteClipboardAction>) {
-                return TuiActionResultVariant{write_clipboard_text(payload.text)};
-            } else if constexpr (std::is_same_v<T, SuspendProcessAction>) {
-                suspend_process();
-                return TuiActionResultVariant{std::monostate{}};
-            } else if constexpr (std::is_same_v<T, ReportBootDiagnosticsAction>) {
-                report_boot_diagnostics(payload.diagnostics, payload.rendered_in_tui);
-                return TuiActionResultVariant{std::monostate{}};
-            } else if constexpr (std::is_same_v<T, ReportBootCreationFailureAction>) {
-                report_boot_creation_failure(payload.error);
-                return TuiActionResultVariant{std::monostate{}};
-            } else {
-                return TuiActionResultVariant{std::monostate{}};
-            }
-        },
-        std::move(action));
+            [this](auto&& payload) -> support::Expected<TuiActionResultVariant> {
+                using T = std::decay_t<decltype(payload)>;
+                if constexpr (std::is_same_v<T, OpenBrowserAction>) {
+                    open_browser(std::move(payload.url));
+                    return TuiActionResultVariant{std::monostate{}};
+                } else if constexpr (std::is_same_v<T, WriteClipboardAction>) {
+                    return TuiActionResultVariant{write_clipboard_text(payload.text)};
+                } else if constexpr (std::is_same_v<T, SuspendProcessAction>) {
+                    suspend_process();
+                    return TuiActionResultVariant{std::monostate{}};
+                } else if constexpr (std::is_same_v<T, ReportBootDiagnosticsAction>) {
+                    report_boot_diagnostics(payload.diagnostics, payload.rendered_in_tui);
+                    return TuiActionResultVariant{std::monostate{}};
+                } else if constexpr (std::is_same_v<T, ReportBootCreationFailureAction>) {
+                    report_boot_creation_failure(payload.error);
+                    return TuiActionResultVariant{std::monostate{}};
+                } else {
+                    return TuiActionResultVariant{std::monostate{}};
+                }
+            },
+            std::move(action));
 }
 
 TuiActionSink InteractiveSessionRun::make_action_sink() const {
@@ -226,8 +217,8 @@ TuiActionSink InteractiveSessionRun::make_action_sink() const {
         return std::move(state_->custom_action_sink.value());
     }
     const auto state = state_;
-    return [state](std::size_t action_generation, TuiActionVariant action)
-        -> support::Expected<TuiActionResultVariant> {
+    return [state](std::size_t action_generation,
+                   TuiActionVariant action) -> support::Expected<TuiActionResultVariant> {
         InteractiveSessionRun run(state);
         return run.dispatch_action(action_generation, std::move(action));
     };
@@ -238,13 +229,13 @@ InteractiveSessionRunBuilder::InteractiveSessionRunBuilder()
 
 InteractiveSessionRunBuilder::~InteractiveSessionRunBuilder() = default;
 InteractiveSessionRunBuilder::InteractiveSessionRunBuilder(InteractiveSessionRunBuilder&&) noexcept = default;
-InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::operator=(InteractiveSessionRunBuilder&&) noexcept = default;
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::operator=(
+        InteractiveSessionRunBuilder&&) noexcept = default;
 
-InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session_intent(
-    SessionIntentVariant intent) noexcept {
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session_intent(SessionIntentVariant intent) noexcept {
     if (auto* defer = std::get_if<DeferBoot>(&intent)) {
-        state_->is_resume_target = std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
-            defer->request.session_target);
+        state_->is_resume_target =
+                std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(defer->request.session_target);
     } else {
         state_->is_resume_target = false;
     }
@@ -252,64 +243,62 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session_intent(
     return *this;
 }
 
-InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session(
-    AgentSession& session) noexcept {
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session(AgentSession& session) noexcept {
     return with_session(&session);
 }
 
-InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session(
-    AgentSession* session) noexcept {
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session(AgentSession* session) noexcept {
     state_->is_resume_target = false;
     state_->session_intent = BindExistingSession{.session = session};
     return *this;
 }
 
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_defer_boot(
-    runtime::AgentSessionCreationRequest request) noexcept {
-    state_->is_resume_target = std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(
-        request.session_target);
+        runtime::AgentSessionCreationRequest request) noexcept {
+    state_->is_resume_target =
+            std::holds_alternative<coding_agent::ExplicitResumeSessionTarget>(request.session_target);
     state_->session_intent = DeferBoot{.request = std::move(request)};
     return *this;
 }
 
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session_facts(
-    runtime::InteractiveSessionFacts facts) noexcept {
+        runtime::InteractiveSessionFacts facts) noexcept {
     state_->session_facts = std::move(facts);
     return *this;
 }
 
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_agent_config_directory(
-    std::filesystem::path dir) noexcept {
+        std::filesystem::path dir) noexcept {
     state_->agent_config_directory = std::move(dir);
     return *this;
 }
 
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_initial_prompt(
-    std::optional<std::string> prompt) noexcept {
+        std::optional<std::string> prompt) noexcept {
     state_->initial_prompt = std::move(prompt);
     return *this;
 }
 
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_initial_prompt_options(
-    PromptOptions options) noexcept {
+        PromptOptions options) noexcept {
     state_->initial_prompt_options = std::move(options);
     return *this;
 }
 
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_model_fallback_message(
-    std::optional<std::string> message) noexcept {
+        std::optional<std::string> message) noexcept {
     state_->model_fallback_message = std::move(message);
     return *this;
 }
 
-InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_clipboard_reader(
-    std::unique_ptr<AsyncClipboardReader> reader) noexcept {
-    state_->clipboard_reader = std::move(reader);
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_native_clipboard(
+        std::unique_ptr<cch::tui::NativeClipboard> native_clipboard) noexcept {
+    state_->native_clipboard = std::move(native_clipboard);
     return *this;
 }
 
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_runtime_root(
-    std::shared_ptr<harness::RuntimeRoot> runtime_root) noexcept {
+        std::shared_ptr<harness::RuntimeRoot> runtime_root) noexcept {
     state_->runtime_root = std::move(runtime_root);
     return *this;
 }
@@ -321,7 +310,7 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_project_resourc
 }
 
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_shared_runtime(
-    std::shared_ptr<coding_agent::ModelRuntime> shared_runtime) noexcept {
+        std::shared_ptr<coding_agent::ModelRuntime> shared_runtime) noexcept {
     state_->shared_runtime = std::move(shared_runtime);
     return *this;
 }
@@ -332,20 +321,17 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_model_runtime_c
     return *this;
 }
 
-InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_error_stream(
-    std::ostream* error_stream) noexcept {
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_error_stream(std::ostream* error_stream) noexcept {
     state_->error_stream = error_stream;
     return *this;
 }
 
-InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_is_resume_target(
-    bool is_resume_target) noexcept {
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_is_resume_target(bool is_resume_target) noexcept {
     state_->is_resume_target = is_resume_target;
     return *this;
 }
 
-InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_action_sink(
-    TuiActionSink sink) noexcept {
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_action_sink(TuiActionSink sink) noexcept {
     state_->custom_action_sink = std::move(sink);
     return *this;
 }

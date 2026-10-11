@@ -50,6 +50,7 @@ tests/tui/KeysKittyTextTest.cpp
         tests/tui/LatexTest.cpp
         tests/tui/LoaderTest.cpp
         tests/tui/MarkdownTest.cpp
+        tests/tui/NativeClipboardTest.cpp
         tests/tui/OverlayTest.cpp
         tests/tui/OverlayCompositorTest.cpp
         tests/tui/PasteNormalizationTest.cpp

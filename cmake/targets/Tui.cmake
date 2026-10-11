@@ -8,6 +8,7 @@ cch_parity_declare_target(
     OWNER cch_tui
     SOURCES
         src/tui/Autocomplete.cpp
+        src/tui/NativeClipboard.cpp
         src/tui/CancellableLoader.cpp
         src/tui/ColorUtils.cpp
         src/tui/Container.cpp
