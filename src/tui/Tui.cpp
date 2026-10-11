@@ -396,8 +396,11 @@ support::ExpectedVoid MainScreen::start() {
     // The latch is armed before the terminal starts: ProcessTerminal
     // forwards startup-preserved input synchronously inside start(), and
     // dropping it on the not-yet-started guard would lose keystrokes typed
-    // during the capability probes (#610).
+    // during the capability probes (#610). A focus target is established
+    // first so those initial keystrokes reach a component; dispatch itself
+    // stays strictly focused-only afterwards (#982).
     started_ = true;
+    if (focused_ == nullptr) fallback_focus();
     if (auto result = terminal_.start(
                 [this](std::string input) -> support::ExpectedVoid {
                     handle_input(std::move(input));
@@ -612,6 +615,10 @@ support::ExpectedVoid MainScreen::set_focus(Component* component) {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "TUI overlay focus target is not visible"));
     }
+
+    // Focusing the already-focused target is a no-op: re-applying focus
+    // would emit spurious unfocus/focus transitions (upstream parity).
+    if (component == focused_) return {};
 
     set_focus_internal(component, false);
     return {};
