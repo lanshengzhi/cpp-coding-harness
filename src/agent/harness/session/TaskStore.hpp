@@ -13,12 +13,12 @@
 namespace cch::agent::session {
 
 struct DurableTask {
-    std::string id;
-    std::string kind;
-    std::string state;
-    std::string checkpoint;
-    std::string owner_session;
-    std::string parent_task_id;
+    std::string id{};
+    std::string kind{};
+    std::string state{};
+    std::string checkpoint{};
+    std::string owner_session{};
+    std::string parent_task_id{};
     std::int64_t definition_version{0};
     std::int64_t created_at{0};
     std::int64_t updated_at{0};
@@ -26,11 +26,11 @@ struct DurableTask {
 };
 
 struct TaskSubmission {
-    std::string id;
-    std::string task_id;
-    std::string kind;
-    std::string payload;
-    std::string state;
+    std::string id{};
+    std::string task_id{};
+    std::string kind{};
+    std::string payload{};
+    std::string state{};
     std::int64_t created_at{0};
 };
 

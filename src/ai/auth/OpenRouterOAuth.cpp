@@ -1,6 +1,7 @@
 #include "OpenRouterOAuth.hpp"
 
 #include <cch/ai/OAuthCallbackServer.hpp>
+#include "OAuthBind.hpp"
 #include <cch/ai/OAuthShared.hpp>
 #include <cch/ai/Pkce.hpp>
 #include <cch/ai/JsonAccess.hpp>

@@ -201,8 +201,8 @@ struct McpRegisteredTool {
 struct McpSurfaceTool {
     std::string name;
     mcp::McpExposure exposure{mcp::McpExposure::Codemode};
-    std::string description;
-    std::string namespace_name;
+    std::string description{};
+    std::string namespace_name{};
 };
 
 /// The session tool surface the manager re-registers tools on (pi
