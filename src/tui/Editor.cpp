@@ -803,6 +803,7 @@ struct Editor::Impl {
                 .cursor = buffer.cursor(),
                 .width = width,
                 .padding_x = options.padding_x,
+                .autocomplete_max_visible = options.autocomplete_max_visible,
                 .max_visible_lines = policy_max_visible_lines(),
                 .available_height = available_height,
                 .scroll_offset = scroll_offset,
@@ -873,6 +874,7 @@ Editor::Editor(EditorOptions options, EditorChangeSink on_change, EditorSubmitSi
     } else if (!options.keybindings) {
         options.keybindings = default_tui_keybindings();
     }
+    options.autocomplete_max_visible = std::clamp<std::size_t>(options.autocomplete_max_visible, 3, 20);
     impl_->options = std::move(options);
     impl_->on_change = std::move(on_change);
     impl_->on_submit = std::move(on_submit);
@@ -989,6 +991,20 @@ std::size_t Editor::padding_x() const {
     return operation.impl.options.padding_x;
 }
 
+void Editor::set_autocomplete_max_visible(std::size_t max_visible) {
+    auto operation = impl_->serialized_operation(impl_);
+    auto& impl = operation.impl;
+    const auto clamped = std::clamp<std::size_t>(max_visible, 3, 20);
+    if (impl.options.autocomplete_max_visible == clamped) return;
+    impl.options.autocomplete_max_visible = clamped;
+    impl.request_render();
+}
+
+std::size_t Editor::autocomplete_max_visible() const {
+    auto operation = impl_->serialized_operation(impl_);
+    return operation.impl.options.autocomplete_max_visible;
+}
+
 void Editor::set_autocomplete_provider(std::unique_ptr<AutocompleteProvider> provider) {
     auto operation = impl_->serialized_operation(impl_);
     auto& impl = operation.impl;
@@ -1035,6 +1051,7 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
             .cursor = impl.buffer.cursor(),
             .width = width,
             .padding_x = impl.options.padding_x,
+            .autocomplete_max_visible = impl.options.autocomplete_max_visible,
             .max_visible_lines = impl.policy_max_visible_lines(),
             .available_height = impl.available_height,
             .scroll_offset = impl.scroll_offset,

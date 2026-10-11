@@ -593,7 +593,7 @@ TEST_CASE("Process Terminal slash autocomplete under a shrink resize keeps the e
 
     // '/' at message start opens autocomplete in the main editor.
     REQUIRE(::write(pty->master.get(), "/", 1) == 1);
-    REQUIRE(drain_pty_until_all(pty->master.get(), output, {"> /"}));
+    REQUIRE(drain_pty_until_all(pty->master.get(), output, {"→ "}));
 
     // Shrink below the open dock's height. The editor/menu and footer remain
     // live at the physical bottom instead of turning a dock address error

@@ -18,6 +18,7 @@
 
 #include <cch/ai/Message.hpp>
 #include <cch/tui/Keys.hpp>
+#include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -193,10 +194,10 @@ struct ViewFixture {
 /// composed transcript and dock lines for the slash-menu row.
 [[nodiscard]] bool menu_row_in(const cch::tui::RenderResult& rendered) {
     for (const auto& line : rendered.lines) {
-        if (line.starts_with("> /help")) return true;
+        if (cch::tui::strip_terminal_sequences(line).starts_with("→ help")) return true;
     }
     for (const auto& line : rendered.dock_lines) {
-        if (line.starts_with("> /help")) return true;
+        if (cch::tui::strip_terminal_sequences(line).starts_with("→ help")) return true;
     }
     return false;
 }
@@ -522,7 +523,7 @@ TEST_CASE("autocomplete cancellation consumes the escape event before Interrupt 
     const auto rendered_closed = view.render(80);
     REQUIRE(rendered_closed);
     for (const auto& line : rendered_closed->lines) {
-        CHECK_FALSE(line.starts_with("> /help"));
+        CHECK_FALSE(cch::tui::strip_terminal_sequences(line).starts_with("→ help"));
     }
 
     // Following escape with menu closed enters Interrupt Admission exactly once.

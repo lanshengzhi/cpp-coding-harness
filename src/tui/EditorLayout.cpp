@@ -2,6 +2,7 @@
 
 #include <cch/tui/TruncatedText.hpp>
 #include <cch/tui/Utils.hpp>
+#include "tui/CompletionContext.hpp"
 #include "tui/InteractionUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
@@ -19,7 +20,9 @@
 namespace cch::tui::detail {
 namespace {
 
-constexpr std::size_t kMaxAutocompleteRows = 5;
+constexpr std::size_t kDefaultPrimaryColumnWidth = 32;
+constexpr std::size_t kPrimaryColumnGap = 2;
+constexpr std::size_t kMinDescriptionWidth = 10;
 
 [[nodiscard]] std::string horizontal_rule(std::size_t width) {
     std::string rule;
@@ -60,61 +63,126 @@ void insert_fake_cursor(const EditorVisualLine& visual_line,
     line += "\x1b[7m \x1b[27m";
 }
 
+[[nodiscard]] std::string single_line(std::string_view text) {
+    std::string result;
+    result.reserve(text.size());
+    for (std::size_t index = 0; index < text.size();) {
+        if (text[index] == '\r' || text[index] == '\n') {
+            result.push_back(' ');
+            do {
+                ++index;
+            } while (index < text.size() && (text[index] == '\r' || text[index] == '\n'));
+            continue;
+        }
+        const auto [codepoint, length] = decode_utf8(text, index);
+        (void)codepoint;
+        result.append(text, index, length);
+        index += length;
+    }
+    return std::string(detail::trim_completion_whitespace(result));
+}
+
+support::Expected<std::string> render_autocomplete_item(const AutocompleteItem& item,
+        bool selected,
+        std::size_t width,
+        std::size_t primary_column_width,
+        SelectListTheme& theme) {
+    constexpr std::size_t prefix_width = 2;
+    const std::string prefix = selected ? "→ " : "  ";
+    const auto label = item.label.empty() ? std::string_view{item.value} : std::string_view{item.label};
+    const auto description = single_line(item.description);
+    std::string line;
+    if (!description.empty() && width > 40) {
+        const auto effective_primary = std::max<std::size_t>(
+                1, std::min(primary_column_width, width > prefix_width + 4 ? width - prefix_width - 4 : 1));
+        const auto primary_limit = std::max<std::size_t>(1, effective_primary - kPrimaryColumnGap);
+        auto primary = truncate_text(label, primary_limit, "");
+        if (!primary) return std::unexpected(primary.error());
+        const auto primary_visible = visible_width(*primary);
+        const auto spacing_size = std::max<std::size_t>(1, effective_primary - primary_visible);
+        const auto description_start = prefix_width + primary_visible + spacing_size;
+        const auto remaining = width > description_start + 2 ? width - description_start - 2 : 0;
+        if (remaining > kMinDescriptionWidth) {
+            auto truncated_description = truncate_text(description, remaining, "");
+            if (!truncated_description) return std::unexpected(truncated_description.error());
+            const auto spacing = std::string(spacing_size, ' ');
+            if (selected) {
+                line = prefix + *primary + spacing + *truncated_description;
+            } else {
+                auto styled_description = detail::apply_text_style(
+                        theme.description, spacing + *truncated_description, "Editor autocomplete description");
+                if (!styled_description) return std::unexpected(styled_description.error());
+                line = prefix + *primary + *styled_description;
+            }
+        }
+    }
+    if (line.empty()) {
+        const auto available = width > prefix_width + 2 ? width - prefix_width - 2 : 0;
+        auto primary = truncate_text(label, available, "");
+        if (!primary) return std::unexpected(primary.error());
+        line = prefix + *primary;
+        auto bounded = truncate_text(line, width, "");
+        if (!bounded) return std::unexpected(bounded.error());
+        line = std::move(*bounded);
+    }
+    if (selected) {
+        auto styled =
+                detail::apply_text_style(theme.selected_text, std::move(line), "Editor autocomplete selected item");
+        if (!styled) return std::unexpected(styled.error());
+        line = std::move(*styled);
+    }
+    return line;
+}
+
 support::ExpectedVoid append_autocomplete_lines(const EditorCompletionMenuPresentation& menu,
         std::size_t available_height,
         std::size_t content_width,
         std::size_t padding,
+        std::size_t max_visible,
+        SelectListTheme& theme,
         std::vector<std::string>& result) {
     if (!menu.open || menu.items.empty()) return {};
     const auto text_lines_count = result.size();
     const auto remainder_height = available_height > text_lines_count ? available_height - text_lines_count : 0;
-    const auto autocomplete_capacity = std::min(kMaxAutocompleteRows, remainder_height);
-    if (autocomplete_capacity == 0) return {};
-    // pi select-list `scrollInfo`: a window that cannot show every ranked item
-    // spends one row on a `  (n/total)` counter, so the position and the
-    // hidden remainder stay legible. The reservation is taken before the
-    // window is cut, and the condition does not depend on the reduced
-    // capacity: more items than rows means a counter is owed either way. A
-    // single available row keeps the item and drops the counter, so a cramped
-    // editor never loses the menu outright.
-    const auto counter_owed = autocomplete_capacity >= 2 && menu.items.size() > autocomplete_capacity;
-    const auto item_capacity = autocomplete_capacity - (counter_owed ? 1U : 0U);
+    auto item_capacity = std::min(max_visible, remainder_height);
     if (item_capacity == 0) return {};
-    const auto selected = menu.selected_index;
-    const auto first_autocomplete = selected < item_capacity ? 0 : selected - item_capacity + 1;
-    const auto autocomplete_count =
-            std::min(item_capacity, menu.items.size() - std::min(first_autocomplete, menu.items.size()));
-    for (std::size_t offset = 0; offset < autocomplete_count; ++offset) {
-        const auto index = first_autocomplete + offset;
-        std::string text = index == selected ? "> /" : "  /";
-        text += menu.items[index].label;
-        if (!menu.items[index].description.empty()) {
-            text += " — " + menu.items[index].description;
-        }
-        TruncatedText item{std::move(text)};
-        if (auto rendered = item.render(content_width); !rendered) {
-            return std::unexpected(rendered.error());
-        } else if (!rendered->lines.empty()) {
-            std::string line(padding, ' ');
-            line += rendered->lines.front();
-            line.append(padding, ' ');
-            result.push_back(std::move(line));
-        }
+    if (menu.items.size() > item_capacity && item_capacity == remainder_height && remainder_height > 1) {
+        --item_capacity;
     }
-    // pi select-list `scrollInfo`: the visible window is a slice of a longer
-    // ranked list, so the row count and the selected position are the only
-    // way to tell how much of the list is hidden. The row is emitted only
-    // when the window does not cover every item, matching pi's condition.
-    if (counter_owed) {
-        TruncatedText counter{std::format("  ({}/{})", selected + 1, menu.items.size())};
-        if (auto rendered = counter.render(content_width); !rendered) {
-            return std::unexpected(rendered.error());
-        } else if (!rendered->lines.empty()) {
-            std::string line(padding, ' ');
-            line += rendered->lines.front();
-            line.append(padding, ' ');
-            result.push_back(std::move(line));
+    const auto range = detail::centered_visible_range(menu.items.size(), menu.selected_index, item_capacity);
+    const bool counter_owed = range.begin > 0 || range.end < menu.items.size();
+    std::size_t primary_column_width = kDefaultPrimaryColumnWidth;
+    if (menu.prefix.starts_with('/')) {
+        std::size_t widest = 0;
+        for (const auto& item : menu.items) {
+            const auto label = item.label.empty() ? std::string_view{item.value} : std::string_view{item.label};
+            widest = std::max(widest, visible_width(label) + kPrimaryColumnGap);
         }
+        primary_column_width = std::clamp<std::size_t>(widest, 12, 32);
+    }
+    for (std::size_t index = range.begin; index < range.end; ++index) {
+        auto rendered = render_autocomplete_item(
+                menu.items[index], index == menu.selected_index, content_width, primary_column_width, theme);
+        if (!rendered) return std::unexpected(rendered.error());
+        std::string line(padding, ' ');
+        line += std::move(*rendered);
+        const auto line_width = visible_width(line);
+        if (line_width < content_width + padding * 2) line.append(content_width + padding * 2 - line_width, ' ');
+        result.push_back(std::move(line));
+    }
+    if (counter_owed && range.end - range.begin < remainder_height) {
+        auto counter = truncate_text(std::format("  ({}/{})", menu.selected_index + 1, menu.items.size()),
+                content_width > 2 ? content_width - 2 : 0,
+                "");
+        if (!counter) return std::unexpected(counter.error());
+        auto styled =
+                detail::apply_text_style(theme.scroll_info, std::move(*counter), "Editor autocomplete scroll info");
+        if (!styled) return std::unexpected(styled.error());
+        std::string line(padding, ' ');
+        line += std::move(*styled);
+        const auto line_width = visible_width(line);
+        if (line_width < content_width + padding * 2) line.append(content_width + padding * 2 - line_width, ' ');
+        result.push_back(std::move(line));
     }
     return {};
 }
@@ -362,10 +430,14 @@ support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions 
     }
 
     if (options.include_autocomplete && options.autocomplete_menu) {
+        SelectListTheme default_select_list_theme;
+        auto& select_list_theme = options.theme ? options.theme->select_list : default_select_list_theme;
         if (auto appended = append_autocomplete_lines(*options.autocomplete_menu,
                     options.available_height,
                     widths.content,
                     widths.padding,
+                    options.autocomplete_max_visible,
+                    select_list_theme,
                     result);
                 !appended) {
             return std::unexpected(appended.error());

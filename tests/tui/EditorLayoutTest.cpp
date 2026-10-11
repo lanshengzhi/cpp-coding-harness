@@ -143,19 +143,25 @@ TEST_CASE("EditorLayout appends autocomplete items when menu is open",
     EditorLayoutOptions options{
             .document = &doc,
             .cursor = BufferCursor{.line = 0, .column = 2},
-            .width = 30,
+            .width = 60,
             .max_visible_lines = 5,
             .available_height = 5,
             .scroll_offset = 0,
             .autocomplete_menu = &menu,
             .include_autocomplete = true,
     };
+    EditorTheme theme;
+    theme.select_list.selected_text = [](std::string text) { return "\x1b[7m" + text + "\x1b[27m"; };
+    theme.select_list.description = [](std::string text) { return "\x1b[2m" + text + "\x1b[22m"; };
+    options.theme = &theme;
     const auto layout = EditorLayout::compute(std::move(options));
     REQUIRE(layout);
     // Line 0 is the editor text line. Lines 1 and 2 are autocomplete items.
     REQUIRE(layout->lines.size() == 3);
-    CHECK(layout->lines[1].starts_with("> /help — show help"));
-    CHECK(layout->lines[2].starts_with("  /history — show history"));
+    CHECK(layout->lines[1].starts_with("\x1b[7m→ help"));
+    CHECK(layout->lines[1].find("show help") != std::string::npos);
+    CHECK(layout->lines[2].starts_with("  history"));
+    CHECK(layout->lines[2].find("\x1b[2m     show history\x1b[22m") != std::string::npos);
 }
 
 TEST_CASE("EditorLayout computes cursor position for empty and bordered documents",

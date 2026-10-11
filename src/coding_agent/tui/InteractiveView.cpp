@@ -440,6 +440,7 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         const auto thinking_border_token = thinking_border_token_for(
             current_footer_data_.thinking_level);
         cch::tui::EditorTheme editor_theme;
+        editor_theme.select_list = theme_->select_list_theme();
         if (unsubmitted_bash_mode()) {
             editor_theme.border = theme_->foreground_hook(ThemeToken::BashMode);
         } else {

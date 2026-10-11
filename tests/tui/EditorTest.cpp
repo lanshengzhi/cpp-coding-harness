@@ -37,7 +37,7 @@ bool menu_rendered(cch::tui::Editor& editor, std::size_t width = 80) {
     const auto rendered = editor.render(width);
     if (!rendered) return false;
     for (const auto& line : rendered->lines) {
-        if (line.starts_with("> /") || line.starts_with("  /")) return true;
+        if (line.find("→ ") != std::string::npos) return true;
     }
     return false;
 }
@@ -421,11 +421,11 @@ TEST_CASE("Editor accepts caller supplied command and filesystem suggestions thr
 
     type(editor, "/");
     REQUIRE(menu_rendered(editor));
-    CHECK(editor.render(80)->lines[1].starts_with("> /help"));
+    CHECK(editor.render(80)->lines[1].starts_with("→ help"));
     key(editor, "down");
-    CHECK(editor.render(80)->lines[2].starts_with("> /history"));
+    CHECK(editor.render(80)->lines[2].starts_with("→ history"));
     key(editor, "up");
-    CHECK(editor.render(80)->lines[1].starts_with("> /help"));
+    CHECK(editor.render(80)->lines[1].starts_with("→ help"));
     key(editor, "tab");
     CHECK(provider_ptr->apply_calls == 1);
     CHECK(editor.text() == "/help ");
@@ -1236,6 +1236,21 @@ cch::tui::AutocompleteSuggestions slash_suggestions() {
     };
 }
 
+cch::tui::AutocompleteSuggestions numbered_suggestions(std::size_t count, std::string prefix = "/") {
+    cch::tui::AutocompleteSuggestions suggestions;
+    suggestions.prefix = std::move(prefix);
+    suggestions.items.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+        auto label = std::format("item{}", index);
+        suggestions.items.push_back(cch::tui::AutocompleteItem{
+                .value = label,
+                .label = std::move(label),
+                .description = {},
+        });
+    }
+    return suggestions;
+}
+
 struct EscapingSinkHolder {
     std::optional<cch::tui::AutocompleteResultSink> sink;
 };
@@ -1275,6 +1290,132 @@ private:
 };
 
 } // namespace
+
+TEST_CASE("Editor clamps and exposes the autocomplete item limit", "[tui][editor][autocomplete][issue970]") {
+    cch::tui::Editor editor;
+    CHECK(editor.autocomplete_max_visible() == 5);
+
+    editor.set_autocomplete_max_visible(0);
+    CHECK(editor.autocomplete_max_visible() == 3);
+    editor.set_autocomplete_max_visible(100);
+    CHECK(editor.autocomplete_max_visible() == 20);
+    editor.set_autocomplete_max_visible(8);
+    CHECK(editor.autocomplete_max_visible() == 8);
+
+    cch::tui::EditorOptions options{.autocomplete_max_visible = 1};
+    cch::tui::Editor clamped(std::move(options));
+    CHECK(clamped.autocomplete_max_visible() == 3);
+}
+
+TEST_CASE(
+        "Editor renders the configured autocomplete item limit and counter", "[tui][editor][autocomplete][issue970]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    provider->response = numbered_suggestions(10);
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+    type(editor, "/");
+
+    auto rendered = editor.render(80);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 7);
+    CHECK(rendered->lines[1].starts_with("→ item0"));
+    CHECK(rendered->lines[5].starts_with("  item4"));
+    CHECK(rendered->lines[6].starts_with("  (1/10)"));
+
+    editor.set_autocomplete_max_visible(8);
+    rendered = editor.render(80);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 10);
+    CHECK(rendered->lines[1].starts_with("→ item0"));
+    CHECK(rendered->lines[8].starts_with("  item7"));
+    CHECK(rendered->lines[9].starts_with("  (1/10)"));
+}
+
+TEST_CASE("Editor centers autocomplete selection and renders file labels without a slash",
+        "[tui][editor][autocomplete][issue970]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    provider->response = numbered_suggestions(10, "@");
+    provider->response->items[0].label = "src/";
+    provider->response->items[0].value = "@src/";
+    cch::tui::Editor editor;
+    editor.set_autocomplete_provider(std::move(provider));
+    type(editor, "@");
+    auto rendered = editor.render(80);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 7);
+    CHECK(rendered->lines[1].starts_with("→ src/"));
+    CHECK_FALSE(rendered->lines[1].starts_with("→ /"));
+
+    for (std::size_t index = 0; index < 7; ++index)
+        key(editor, "down");
+    rendered = editor.render(80);
+    REQUIRE(rendered);
+    CHECK(rendered->lines[1].starts_with("  item5"));
+    CHECK(rendered->lines[3].starts_with("→ item7"));
+    CHECK(rendered->lines[5].starts_with("  item9"));
+    CHECK(rendered->lines[6].starts_with("  (8/10)"));
+
+    key(editor, "up");
+    rendered = editor.render(80);
+    REQUIRE(rendered);
+    CHECK(rendered->lines[1].starts_with("  item4"));
+    CHECK(rendered->lines[3].starts_with("→ item6"));
+    CHECK(rendered->lines[5].starts_with("  item8"));
+    CHECK(rendered->lines[6].starts_with("  (7/10)"));
+}
+
+TEST_CASE("Editor completion preserves multiline text and cursor when canceled with a late result",
+        "[tui][editor][autocomplete][issue970]") {
+    auto provider = std::make_unique<HeldAutocompleteProvider>();
+    auto* provider_ptr = provider.get();
+    provider_ptr->immediate = false;
+    cch::tui::Editor editor;
+    editor.set_focused(true);
+    editor.set_autocomplete_provider(std::move(provider));
+    editor.set_text("first line\nsecond line");
+    key(editor, "home");
+    type(editor, "@");
+    REQUIRE(provider_ptr->requests.size() == 1);
+    REQUIRE(provider_ptr->held_sinks.size() == 1);
+    (void)provider_ptr->held_sinks[0](numbered_suggestions(1, "@"));
+    REQUIRE(menu_rendered(editor));
+
+    type(editor, "s");
+    const auto original_text = editor.text();
+    const auto original_cursor = editor.cursor();
+    REQUIRE(provider_ptr->requests.size() == 2);
+    REQUIRE(provider_ptr->held_sinks.size() == 2);
+    REQUIRE(menu_rendered(editor));
+    auto open_layout = editor.render(80);
+    REQUIRE(open_layout);
+    const auto cursor_with_menu = editor.cursor_location();
+    REQUIRE(cursor_with_menu.has_value());
+
+    key(editor, "escape");
+    CHECK_FALSE(menu_rendered(editor));
+    CHECK(editor.text() == original_text);
+    CHECK(editor.cursor() == original_cursor);
+    auto closed_layout = editor.render(80);
+    REQUIRE(closed_layout);
+    REQUIRE(closed_layout->lines.size() == 2);
+    const auto cursor_after_cancel = editor.cursor_location();
+    REQUIRE(cursor_after_cancel.has_value());
+    CHECK(cursor_after_cancel->row == cursor_with_menu->row);
+    CHECK(cursor_after_cancel->column == cursor_with_menu->column);
+
+    (void)provider_ptr->held_sinks[1](numbered_suggestions(1, "@s"));
+    CHECK_FALSE(menu_rendered(editor));
+    CHECK(editor.text() == original_text);
+    CHECK(editor.cursor() == original_cursor);
+    closed_layout = editor.render(80);
+    REQUIRE(closed_layout);
+    CHECK(closed_layout->lines.size() == 2);
+
+    auto rendered = editor.render(80);
+    REQUIRE(rendered);
+    CHECK(cch::tui::strip_terminal_sequences(rendered->lines[0]).starts_with("first line"));
+    CHECK(cch::tui::strip_terminal_sequences(rendered->lines[1]).starts_with("@ssecond line"));
+}
 
 TEST_CASE("Editor triggers attachment autocomplete after an opening wrapper", "[tui][editor][autocomplete][spec]") {
     auto timer = std::make_unique<ManualDebounceTimer>();
@@ -1391,7 +1532,7 @@ TEST_CASE("Editor accepts only the first delivery from one completion request",
     const auto screen = editor.render(80);
     REQUIRE(screen);
     REQUIRE(menu_rendered(editor));
-    CHECK(screen->lines[1].starts_with("> /help"));
+    CHECK(screen->lines[1].starts_with("→ help"));
 }
 
 TEST_CASE("Editor drops held completion callbacks after provider replacement and destruction",
@@ -1512,7 +1653,7 @@ TEST_CASE("Editor rejects stale autocomplete responses by generation", "[tui][ed
     (void)provider_ptr->held_sinks[1](slash_suggestions());
     type(editor, "e");
     REQUIRE(menu_rendered(editor));
-    CHECK(editor.render(80)->lines[1].starts_with("> /"));
+    CHECK(editor.render(80)->lines[1].starts_with("→ "));
 }
 
 TEST_CASE("Editor aborts an in-flight autocomplete request when superseded",
@@ -1681,7 +1822,7 @@ TEST_CASE("Editor keeps only the newer completion menu when the older slow reque
     });
     CHECK(render_requests == 1);
     REQUIRE(menu_rendered(editor));
-    CHECK(editor.render(80)->lines[1].starts_with("> /history"));
+    CHECK(editor.render(80)->lines[1].starts_with("→ history"));
     CHECK(editor.text() == "/h");
 
     // The older slow request finishes last: the stale result is dropped
@@ -1691,7 +1832,7 @@ TEST_CASE("Editor keeps only the newer completion menu when the older slow reque
     CHECK(render_requests == 1);
     CHECK(editor.text() == "/h");
     REQUIRE(menu_rendered(editor));
-    CHECK(editor.render(80)->lines[1].starts_with("> /history"));
+    CHECK(editor.render(80)->lines[1].starts_with("→ history"));
 }
 
 TEST_CASE("Editor keeps a newer applied completion when the older slow request finishes last",
@@ -1765,7 +1906,7 @@ TEST_CASE("Editor accepts a completion that finishes after focus loss, matching 
 
     (void)provider_ptr->held_sinks[0](slash_suggestions()); // completes while unfocused
     REQUIRE(menu_rendered(editor));
-    CHECK(editor.render(80)->lines[1].starts_with("> /help"));
+    CHECK(editor.render(80)->lines[1].starts_with("→ help"));
 
     editor.set_focused(true); // refocus keeps the delivered menu usable
     REQUIRE(menu_rendered(editor));
@@ -1797,8 +1938,8 @@ TEST_CASE("Editor keeps the open completion menu across focus loss and refocus, 
     key(editor, "down"); // selection still moves after refocus
     const auto screen = editor.render(80);
     REQUIRE(screen);
-    CHECK(screen->lines[1].starts_with("  /help"));
-    CHECK(screen->lines[2].starts_with("> /history"));
+    CHECK(screen->lines[1].starts_with("  help"));
+    CHECK(screen->lines[2].starts_with("→ history"));
     key(editor, "tab");
     CHECK(editor.text() == "/history ");
 }
@@ -2189,9 +2330,9 @@ TEST_CASE("Editor uses the shared break opportunities at formal terminal widths"
     }
 }
 
-TEST_CASE("Editor autocomplete presentation ownership: height allocation, 5-row cap, visibility, formatting, cursor "
-          "stability",
-        "[tui][editor][autocomplete][presentation][spec]") {
+TEST_CASE("Editor autocomplete presentation ownership: height allocation, configurable item cap, visibility, "
+          "formatting, cursor stability",
+        "[tui][editor][autocomplete][presentation][spec][issue970]") {
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
     provider_ptr->response = cch::tui::AutocompleteSuggestions{
@@ -2224,20 +2365,20 @@ TEST_CASE("Editor autocomplete presentation ownership: height allocation, 5-row 
     const auto cursor_before = editor.cursor_location();
     REQUIRE(cursor_before.has_value());
 
-    // With available height = 10 (text is 1 line -> 9 remainder):
-    // 5-row cap applies, and 8 items do not fit in 5 rows, so one row goes to
-    // pi's `scrollInfo` counter: 4 item lines + 1 counter line.
+    // With available height = 10 (text is 1 line -> 9 remainder), the default
+    // 5-item cap applies and the counter has its own row.
     editor.set_available_height(10);
     auto screen = editor.render(40);
     REQUIRE(screen);
-    // 1 text line + 4 item lines + 1 counter line = 6 lines
-    REQUIRE(screen->lines.size() == 6);
+    // 1 text line + 5 item rows + the actual out-of-window counter.
+    REQUIRE(screen->lines.size() == 7);
     CHECK(screen->lines[0].starts_with("/a"));
-    CHECK(screen->lines[1] == "> /apple — sweet fruit                  ");
-    CHECK(screen->lines[2] == "  /banana — yellow fruit                ");
-    CHECK(screen->lines[3] == "  /cherry — red fruit                   ");
-    CHECK(screen->lines[4] == "  /date — palm fruit                    ");
-    CHECK(screen->lines[5] == "  (1/8)                                 ");
+    CHECK(screen->lines[1].starts_with("→ apple"));
+    CHECK(screen->lines[2].starts_with("  banana"));
+    CHECK(screen->lines[3].starts_with("  cherry"));
+    CHECK(screen->lines[4].starts_with("  date"));
+    CHECK(screen->lines[5].starts_with("  elderberry"));
+    CHECK(screen->lines[6].starts_with("  (1/8)"));
 
     // Cursor location relative to editor block is unchanged
     const auto cursor_after = editor.cursor_location();
@@ -2245,38 +2386,38 @@ TEST_CASE("Editor autocomplete presentation ownership: height allocation, 5-row 
     CHECK(cursor_after->row == cursor_before->row);
     CHECK(cursor_after->column == cursor_before->column);
 
-    // Selected-item visibility scrolling: the counter follows the selection
-    // and the window slides to keep the selected row visible.
-    // Move down 5 times to select item 5 ("fig")
-    for (int i = 0; i < 5; ++i)
+    // The centered selection window moves around the selected item.
+    // The centered five item window surrounds item 4.
+    for (int i = 0; i < 4; ++i)
         key(editor, "down");
     screen = editor.render(40);
     REQUIRE(screen);
-    REQUIRE(screen->lines.size() == 6);
-    // Window scrolled: index 2 ("cherry") to 5 ("fig")
-    CHECK(screen->lines[1] == "  /cherry — red fruit                   ");
-    CHECK(screen->lines[4] == "> /fig — ficus fruit                    ");
-    CHECK(screen->lines[5] == "  (6/8)                                 ");
+    REQUIRE(screen->lines.size() == 7);
+    CHECK(screen->lines[1].starts_with("  cherry"));
+    CHECK(screen->lines[3].starts_with("→ elderberry"));
+    CHECK(screen->lines[5].starts_with("  grape"));
+    CHECK(screen->lines[6].starts_with("  (5/8)"));
 
-    // Move down to item 7 ("honeydew", empty description)
-    key(editor, "down"); // item 6 ("grape")
-    key(editor, "down"); // item 7 ("honeydew")
+    key(editor, "down");
+    key(editor, "down");
+    key(editor, "down");
     screen = editor.render(40);
     REQUIRE(screen);
-    REQUIRE(screen->lines.size() == 6);
-    CHECK(screen->lines[4] == "> /honeydew                             ");
-    CHECK(screen->lines[5] == "  (8/8)                                 ");
+    REQUIRE(screen->lines.size() == 7);
+    CHECK(screen->lines[1].starts_with("  date"));
+    CHECK(screen->lines[5].starts_with("→ honeydew"));
+    CHECK(screen->lines[6].starts_with("  (8/8)"));
 
     // Truncation on narrow width: the counter row is bounded too.
     key(editor, "up"); // item 6 ("grape" with very long description)
     screen = editor.render(25);
     REQUIRE(screen);
-    REQUIRE(screen->lines.size() == 6);
+    REQUIRE(screen->lines.size() == 7);
     // Line width is strictly bounded to 25 columns
     CHECK(cch::tui::visible_width(screen->lines[4]) <= 25);
-    CHECK(screen->lines[4].starts_with("> /grape — vine fruit "));
-    CHECK(cch::tui::visible_width(screen->lines[5]) <= 25);
-    CHECK(screen->lines[5].starts_with("  (7/8)"));
+    CHECK(screen->lines[4].starts_with("→ grape"));
+    CHECK(cch::tui::visible_width(screen->lines[6]) <= 25);
+    CHECK(screen->lines[6].starts_with("  (7/8)"));
 
     // Text priority & zero-remainder height allocation:
     // Text takes 1 line; if available_height is 1 -> remainder is 0 -> 0 menu rows!
@@ -2335,28 +2476,27 @@ TEST_CASE("Editor autocomplete scroll counter appears only while the ranked list
     // the absence of the row is the observable half of the property.
     const auto fitting = render_menu({item("apple"), item("banana"), item("cherry")}, 10);
     REQUIRE(fitting->lines.size() == 4);
-    CHECK(fitting->lines[1] == "> /apple — fruit");
-    CHECK(fitting->lines[3] == "  /cherry — fruit");
+    CHECK(fitting->lines[1].starts_with("→ apple"));
+    CHECK(fitting->lines[3].starts_with("  cherry"));
 
-    // Exactly at the row cap is still a fit, so still no counter.
+    // Exactly at the item cap is still a fit, so still no counter.
     const auto exact_fit =
             render_menu({item("apple"), item("banana"), item("cherry"), item("date"), item("elderberry")}, 10);
     REQUIRE(exact_fit->lines.size() == 6);
-    CHECK(exact_fit->lines[5] == "  /elderberry — fruit");
+    CHECK(exact_fit->lines[5].starts_with("  elderberry"));
 
-    // One item past the cap: the counter appears and the item window gives up
-    // a row to pay for it.
+    // One item past the item cap shows five actual suggestions plus a counter.
     const auto one_over = render_menu(
             {item("apple"), item("banana"), item("cherry"), item("date"), item("elderberry"), item("fig")}, 10);
-    REQUIRE(one_over->lines.size() == 6);
-    CHECK(one_over->lines[4] == "  /date — fruit");
-    CHECK(one_over->lines[5] == "  (1/6)");
+    REQUIRE(one_over->lines.size() == 7);
+    CHECK(one_over->lines[5].starts_with("  elderberry"));
+    CHECK(one_over->lines[6].starts_with("  (1/6)"));
 
     // A single available row keeps the selected item and drops the counter,
     // so the menu never disappears just because the editor is short.
     const auto cramped = render_menu({item("apple"), item("banana"), item("cherry")}, 2);
     REQUIRE(cramped->lines.size() == 2);
-    CHECK(cramped->lines[1] == "> /apple — fruit");
+    CHECK(cramped->lines[1].starts_with("→ apple"));
 }
 
 TEST_CASE("Editor presentation repaint notifications fire for menu navigation, cancel, and async delivery",
@@ -2536,10 +2676,9 @@ TEST_CASE("Editor keeps history, cursor, autocomplete, and submit in the local d
     editor.set_text({});
     type(editor, "/");
     REQUIRE(terminal.screen().size() == 12);
-    CHECK(terminal.screen()[1].starts_with("> /help"));
-
+    CHECK(terminal.screen()[1].starts_with("→ help"));
     key(editor, "down");
-    CHECK(terminal.screen()[2].starts_with("> /history"));
+    CHECK(terminal.screen()[2].starts_with("→ history"));
 
     key(editor, "tab");
     CHECK(editor.text() == "/history ");

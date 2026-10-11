@@ -2381,7 +2381,7 @@ TEST_CASE("User Bash input prefixes render in the header hints without a pseudo-
     // Typing a prefix opens no slash autocomplete.
     REQUIRE(terminal.inject_input("!"));
     drain_ready(io);
-    CHECK(count_occurrences(visible_screen(terminal), "> /") == 0);
+    CHECK(count_occurrences(visible_screen(terminal), "→ ") == 0);
     REQUIRE(terminal.inject_input("\x03"));
     drain_ready(io);
 

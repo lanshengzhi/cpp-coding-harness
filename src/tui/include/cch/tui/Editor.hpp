@@ -3,6 +3,7 @@
 #include <cch/tui/Autocomplete.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/SelectList.hpp>
 #include <cch/tui/Style.hpp>
 
 #include <cch/support/Error.hpp>
@@ -51,6 +52,7 @@ using EditorRenderRequestSink = std::move_only_function<support::ExpectedVoid()>
 
 struct EditorOptions {
     std::optional<std::size_t> max_visible_lines{};
+    std::size_t autocomplete_max_visible{5};
     /// Horizontal padding on each editor content row. Rendering clamps it so
     /// at least one content column remains at narrow widths.
     std::size_t padding_x{0};
@@ -75,6 +77,7 @@ struct EditorOptions {
 
 struct EditorTheme {
     TextStyleHook text{};
+    SelectListTheme select_list{};
     /// Optional top/bottom border hook (pi `editor-component.ts`
     /// `borderColor`). An empty hook renders no border lines. When set, the
     /// editor reserves two rows for the borders and renders pi's scroll
@@ -113,6 +116,8 @@ public:
     void set_theme(EditorTheme theme);
     void set_padding_x(std::size_t padding);
     [[nodiscard]] std::size_t padding_x() const;
+    void set_autocomplete_max_visible(std::size_t max_visible);
+    [[nodiscard]] std::size_t autocomplete_max_visible() const;
     void set_autocomplete_provider(std::unique_ptr<AutocompleteProvider> provider);
     /// Swap the live keybinding table (pi's shared KeybindingsManager reload
     /// shape over the immutable registry, ADR 0035): subsequent input matches

@@ -3565,12 +3565,12 @@ TEST_CASE("Native TUI command autocomplete includes effective commands and proje
     // The suggestion list is label-sorted and grows with every accepted
     // spelling, so walk to the row instead of counting arrows (issue #791).
     auto screen = visible_screen(terminal);
-    for (std::size_t index = 0; index < 40 && screen.find("> /settings") == std::string::npos; ++index) {
+    for (std::size_t index = 0; index < 40 && screen.find("→ settings") == std::string::npos; ++index) {
         REQUIRE(terminal.inject_input("\x1b[B"));
         drain_ready(io);
         screen = visible_screen(terminal);
     }
-    CHECK(screen.find("> /settings") != std::string::npos);
+    CHECK(screen.find("→ settings") != std::string::npos);
     REQUIRE(terminal.inject_input("\t"));
     drain_ready(io);
     CHECK(visible_screen(terminal).find("/settings") != std::string::npos);
@@ -4353,13 +4353,13 @@ TEST_CASE("Native TUI autocomplete prefixes discovered templates and skills with
     // whose execution is deferred. Builtins have no discovery scope tag.
     REQUIRE(terminal.inject_input("\x03/export"));
     drain_ready(io);
-    CHECK(count_text(visible_screen(terminal), "> /export") == 1);
+    CHECK(count_text(visible_screen(terminal), "→ export") == 1);
     CHECK(count_text(visible_screen(terminal), "[p]") == 0);
     CHECK(count_text(visible_screen(terminal), "[u]") == 0);
     // `/help` is an accepted router spelling in the same palette (#791).
     REQUIRE(terminal.inject_input("\x03/help"));
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("> /help") != std::string::npos);
+    CHECK(visible_screen(terminal).find("→ help") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x03\x04"));
     drain_ready(io);
