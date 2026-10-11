@@ -32,11 +32,16 @@ public:
     SearchableSelectList(std::vector<cch::tui::SelectItem> items,
             cch::tui::SelectListOptions options = {},
             SelectListSearchFilter filter = {},
-            std::optional<std::string> no_match_message = std::nullopt)
+            std::optional<std::string> no_match_message = std::nullopt,
+            std::optional<std::string> placeholder = std::nullopt,
+            cch::tui::PlaceholderStyle placeholder_style = {})
         : items_(std::move(items)), filter_(std::move(filter)), no_match_message_(std::move(no_match_message)),
           no_match_style_(std::move(options.theme.no_match)), input_(cch::tui::InputOptions{
                                                                       .keybindings = options.keybindings,
                                                                       .keybinding_context = options.keybinding_context,
+                                                                      .prompt = "> ",
+                                                                      .placeholder = std::move(placeholder),
+                                                                      .placeholder_style = std::move(placeholder_style),
                                                               }),
           list_(std::vector<cch::tui::SelectItem>{}, std::move(options)) {
         recompute(true);
@@ -54,6 +59,8 @@ public:
     }
 
     [[nodiscard]] std::string search_query() const { return input_.value(); }
+    [[nodiscard]] cch::tui::Input& input() noexcept { return input_; }
+    [[nodiscard]] const cch::tui::Input& input() const noexcept { return input_; }
     [[nodiscard]] std::optional<cch::tui::SelectItem> selected_item() const { return list_.selected_item(); }
     [[nodiscard]] const std::vector<cch::tui::SelectItem>& filtered_items() const { return filtered_items_; }
     void set_selected_index(std::size_t index) { list_.set_selected_index(index); }

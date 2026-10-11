@@ -709,3 +709,21 @@ TEST_CASE("ModelSelector renders pi's model row marker column, unpadded provider
         CHECK(cells.color_at("alpha-2 [alpha]") == "38;2;167;152;215");
     }
 }
+
+TEST_CASE("SearchableSelectList composes placeholder styling with select list rows", "[coding_agent][tui][issue962]") {
+    cch::tui::SelectItem item1{.value = "alpha", .label = "alpha"};
+    cch::tui::SelectItem item2{.value = "beta", .label = "beta"};
+
+    cch::coding_agent::tui::SearchableSelectList selector(
+            {item1, item2}, {}, {}, std::nullopt, "Filter items...", [](std::string_view text) {
+                return "\x1b[2m" + std::string(text) + "\x1b[22m";
+            });
+    selector.set_focused(true);
+
+    auto rendered = selector.render(30);
+    REQUIRE(rendered);
+    REQUIRE(!rendered->lines.empty());
+    // Search row reverses 'F' in "Filter items..." and applies custom placeholder styling
+    CHECK(rendered->lines[0].starts_with("> \x1b[7m\x1b[2mF\x1b[22m\x1b[27m\x1b[2milter items...\x1b[22m"));
+    CHECK(selector.cursor_location() == cch::tui::CursorPosition{.column = 2, .row = 0});
+}

@@ -28,9 +28,6 @@ namespace {
 // sink routing). Pasted control characters are dropped per this repository's
 // decoded-event hygiene, matching Editor::paste.
 
-/// The rendered prompt prefix, as in pi's input.ts.
-constexpr std::string_view kPrompt = "> ";
-
 /// Dispatch order (pi input.ts): cancel, undo, submit, deletions, kill ring,
 /// cursor movement, then printable characters. The first bound action in
 /// table order wins, so table order IS the precedence.
@@ -115,9 +112,10 @@ struct Input::Impl {
 
     /// The value window shown at `width` and the visible width of the text
     /// before the cursor within it (pi's render windowing; caller guarantees
-    /// `width >= 2` so the prompt's two columns are available).
+    /// `width >= prompt_w` so the prompt's columns are available).
     [[nodiscard]] support::Expected<VisibleWindow> visible_window(std::size_t width) const {
-        const auto available = width - 2;
+        const auto prompt_w = visible_width(options.prompt);
+        const auto available = width > prompt_w ? width - prompt_w : 0;
         const auto text = value();
         const auto total = visible_width(text);
         if (total < available) {
@@ -208,11 +206,35 @@ support::Expected<RenderResult> Input::render(std::size_t width) {
             "Input requires a positive visible width"));
     }
     impl_->layout_width = width;
-    if (width < 2) {
-        // No room for the prompt; pi returns the bare prompt in this case,
-        // truncated here to the width bound.
-        return RenderResult{.lines = {">"}};
+    const auto& prompt = impl_->options.prompt;
+    const auto prompt_w = visible_width(prompt);
+    if (width <= prompt_w) {
+        auto truncated = truncate_text(prompt, width, "");
+        if (!truncated) return std::unexpected(truncated.error());
+        return RenderResult{.lines = {std::move(*truncated)}};
     }
+    const auto available = width - prompt_w;
+
+    if (impl_->value().empty() && impl_->options.placeholder && !impl_->options.placeholder->empty()) {
+        auto placeholder_str = truncate_text(*impl_->options.placeholder, available, "");
+        if (!placeholder_str) return std::unexpected(placeholder_str.error());
+        const auto graphemes = detail::split_graphemes(*placeholder_str);
+        const std::string at_cursor = graphemes.empty() ? std::string(" ") : graphemes.front();
+        const std::string after_cursor = placeholder_str->substr(at_cursor.size());
+
+        const auto styled_at_cursor =
+                impl_->options.placeholder_style ? impl_->options.placeholder_style(at_cursor) : at_cursor;
+        const auto styled_after =
+                impl_->options.placeholder_style ? impl_->options.placeholder_style(after_cursor) : after_cursor;
+
+        const std::string cursor_char = "\x1b[7m" + styled_at_cursor + "\x1b[27m";
+        const std::string text_with_cursor = cursor_char + styled_after;
+        const auto visual_length = visible_width(text_with_cursor);
+        const auto padding = available > visual_length ? available - visual_length : 0;
+        std::string line = prompt + text_with_cursor + std::string(padding, ' ');
+        return RenderResult{.lines = {std::move(line)}};
+    }
+
     auto window = impl_->visible_window(width);
     if (!window) return std::unexpected(window.error());
 
@@ -222,30 +244,15 @@ support::Expected<RenderResult> Input::render(std::size_t width) {
     // caller-applied style.
     const auto before = window->text.substr(0, window->cursor_offset);
     const auto after = window->text.substr(window->cursor_offset);
-    std::string body;
-    if (after.empty()) {
-        body = before + "\x1b[7m \x1b[27m";
-        // Optional placeholder: dimmed text after the empty-value cursor,
-        // truncated to the columns left after the prompt and the cursor cell
-        // (ESC[22m restores normal intensity without resetting caller styles).
-        if (impl_->value().empty() && impl_->options.placeholder && !impl_->options.placeholder->empty() &&
-                width >= 3) {
-            const auto available = width - 3;
-            if (available > 0) {
-                auto placeholder = truncate_text(*impl_->options.placeholder, available, "");
-                if (!placeholder) return std::unexpected(placeholder.error());
-                body += "\x1b[2m" + *placeholder + "\x1b[22m";
-            }
-        }
-    } else {
-        const auto graphemes = detail::split_graphemes(after);
-        const auto& at_cursor = graphemes.front();
-        body = before + "\x1b[7m" + at_cursor + "\x1b[27m" + after.substr(at_cursor.size());
-    }
+    const auto graphemes = detail::split_graphemes(after);
+    const auto at_cursor = graphemes.empty() ? std::string(" ") : graphemes.front();
+    const auto after_cursor = graphemes.empty() ? std::string{} : after.substr(at_cursor.size());
 
-    std::string line = std::string(kPrompt) + body;
-    const auto line_width = 2 + visible_width(body);
-    if (line_width < width) line.append(width - line_width, ' ');
+    const std::string cursor_char = "\x1b[7m" + at_cursor + "\x1b[27m";
+    const std::string text_with_cursor = before + cursor_char + after_cursor;
+    const auto visual_length = visible_width(text_with_cursor);
+    const auto padding = available > visual_length ? available - visual_length : 0;
+    std::string line = prompt + text_with_cursor + std::string(padding, ' ');
     return RenderResult{.lines = {std::move(line)}};
 }
 
@@ -271,7 +278,8 @@ InputAdmissionOutcome Input::handle_input(const InputEventVariant& input) {
         impl_->buffer.undo();
         return InputAdmissionOutcome::Consumed;
     }
-    if (action == "tui.input.submit") {
+    const bool is_raw_lf = (event->raw_sequence == "\n") || (event->text == "\n");
+    if (action == "tui.input.submit" || is_raw_lf) {
         impl_->fire_submit();
         return InputAdmissionOutcome::Consumed;
     }
@@ -353,12 +361,19 @@ bool Input::focused() const {
 std::optional<CursorPosition> Input::cursor_location() const {
     if (!impl_->focused || impl_->layout_width == 0) return std::nullopt;
     const auto width = impl_->layout_width;
-    if (width < 2) return CursorPosition{.column = 0, .row = 0};
+    const auto prompt_w = visible_width(impl_->options.prompt);
+    if (width <= prompt_w) return CursorPosition{.column = 0, .row = 0};
+    if (impl_->value().empty() && impl_->options.placeholder && !impl_->options.placeholder->empty()) {
+        return CursorPosition{
+                .column = std::min(prompt_w, width - 1),
+                .row = 0,
+        };
+    }
     const auto window = impl_->visible_window(width);
     if (!window) return std::nullopt;
     return CursorPosition{
-        .column = std::min(2 + window->before_width, width - 1),
-        .row = 0,
+            .column = std::min(prompt_w + window->before_width, width - 1),
+            .row = 0,
     };
 }
 

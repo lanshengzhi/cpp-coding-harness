@@ -57,3 +57,37 @@ TEST_CASE("invalid canonical key identifiers fail without partial matches", "[tu
     CHECK_FALSE(cch::tui::matches_key(ctrl_c, "c"));
     CHECK_FALSE(cch::tui::matches_key(ctrl_c, "ctrl+d"));
 }
+
+TEST_CASE("raw sequence is diagnostic and excluded from semantic key identity", "[tui][input][issue962][spec]") {
+    // Two encodings of the same key differ only in the raw bytes the terminal
+    // used: a legacy byte and a Kitty CSI-u payload both mean ctrl+c.
+    const auto legacy = cch::tui::parse_key("\x03", false);
+    const auto kitty = cch::tui::parse_key("\x1b[99;5u", true);
+    REQUIRE(legacy);
+    REQUIRE(kitty);
+    CHECK(*legacy == *kitty);
+    CHECK(legacy->raw_sequence == "\x03");
+    CHECK(kitty->raw_sequence == "\x1b[99;5u");
+    CHECK(legacy->raw_sequence != kitty->raw_sequence);
+    // The shortcut identity the raw sequence reports is unaffected.
+    CHECK(cch::tui::key_id(*legacy) == "ctrl+c");
+    CHECK(cch::tui::matches_key(*kitty, "ctrl+c"));
+
+    // An identifier-parsed event carries no raw sequence and still matches
+    // the same semantic identity.
+    const auto from_identifier = cch::tui::parse_key_id("ctrl+c");
+    REQUIRE(from_identifier);
+    CHECK(from_identifier->raw_sequence.empty());
+    CHECK(*from_identifier == *legacy);
+
+    // The raw LF the raw-sequence bypass submits on is recorded verbatim.
+    const auto raw_lf = cch::tui::parse_key("\n", false);
+    REQUIRE(raw_lf);
+    CHECK(raw_lf->raw_sequence == "\n");
+
+    // A modifyOtherKeys encoding of the same key is again semantically equal.
+    const auto modify_other_keys = cch::tui::parse_key("\x1b[27;5;99~", false);
+    REQUIRE(modify_other_keys);
+    CHECK(*modify_other_keys == *legacy);
+    CHECK(modify_other_keys->raw_sequence == "\x1b[27;5;99~");
+}

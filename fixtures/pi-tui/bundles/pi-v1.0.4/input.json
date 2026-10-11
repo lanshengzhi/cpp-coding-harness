@@ -1,7 +1,7 @@
 {
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-11T08:51:51.507Z",
+  "capturedAt": "2026-10-11T10:35:55.164Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -27,7 +27,10 @@
   },
   "sourceEndpoints": [
     "packages/tui/src/keys.ts:parseKey,isKeyRepeat,isKeyRelease",
-    "packages/tui/src/components/input.ts:handleInput,getValue,onSubmit"
+    "packages/tui/src/components/input.ts:handleInput,getValue,onSubmit",
+    "packages/tui/src/components/input.ts:render,handleInput,handlePaste,getValue,onSubmit",
+    "packages/tui/src/keybindings.ts:KeybindingsManager",
+    "packages/tui/src/keys.ts:setKittyProtocolActive"
   ],
   "scenarios": [
     {
@@ -76,6 +79,85 @@
         "submitted": [
           "acb"
         ]
+      }
+    },
+    {
+      "name": "input-placeholder-reversal-and-custom-styling",
+      "dimensions": {
+        "columns": 20,
+        "rows": 3
+      },
+      "inputs": {
+        "defaultPlaceholder": "Search...",
+        "styledPlaceholder": "Filter items",
+        "styledPrompt": "Find: "
+      },
+      "expected": {
+        "defaultEmpty": {
+          "line": "> \u001b[7mS\u001b[27mearch...     ",
+          "visibleWidth": 16,
+          "cursorColumn": 2
+        },
+        "styledEmpty": {
+          "line": "Find: \u001b[7m\u001b[2mF\u001b[22m\u001b[27m\u001b[2milter items\u001b[22m  ",
+          "visibleWidth": 20,
+          "cursorColumn": 6
+        },
+        "populated": {
+          "line": "> abc\u001b[7m \u001b[27m          ",
+          "visibleWidth": 16,
+          "cursorColumn": 5
+        }
+      }
+    },
+    {
+      "name": "input-raw-lf-submission-and-rebound-submit",
+      "dimensions": {
+        "columns": 20,
+        "rows": 2
+      },
+      "inputs": {
+        "reboundSubmitKey": "ctrl+x",
+        "pastedText": "first\r\nsecond\nthird\tval"
+      },
+      "expected": {
+        "reboundCrSubmitted": [],
+        "reboundLfSubmitted": [
+          "hello"
+        ],
+        "kittyLfSubmitted": [
+          "kitty"
+        ],
+        "pastedValue": "firstsecondthird    val",
+        "pastedSubmitted": []
+      }
+    },
+    {
+      "name": "input-narrow-unicode-scroll-and-cursor",
+      "dimensions": {
+        "columns": 12,
+        "rows": 1
+      },
+      "inputs": {
+        "text": "éclair 世界 foo",
+        "width": 12
+      },
+      "expected": {
+        "stepHome": {
+          "line": "> \u001b[7mé\u001b[27mclair 世 ",
+          "visibleWidth": 12,
+          "cursorColumn": 2
+        },
+        "stepRight6": {
+          "line": "> clair\u001b[7m \u001b[27m世界",
+          "visibleWidth": 12,
+          "cursorColumn": 7
+        },
+        "stepEnd": {
+          "line": ">  世界 foo\u001b[7m \u001b[27m",
+          "visibleWidth": 12,
+          "cursorColumn": 11
+        }
       }
     }
   ]

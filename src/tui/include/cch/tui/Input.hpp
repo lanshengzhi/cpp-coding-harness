@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace cch::tui {
 
@@ -21,15 +22,22 @@ using InputSubmitSink = std::move_only_function<support::ExpectedVoid(std::strin
 /// a bounded callback diagnostic; it never vetoes input handling.
 using InputEscapeSink = std::move_only_function<support::ExpectedVoid()>;
 
+/// Custom placeholder styling function (pi `placeholderStyle`). Move-only like
+/// the toolkit style hooks (`TextStyleHook`): `InputOptions` is always built
+/// as a prvalue and moved into `Input`, never copied.
+using PlaceholderStyle = std::move_only_function<std::string(std::string_view)>;
+
 struct InputOptions {
     /// Keybinding registry for action matching; defaults to the built-in
     /// `tui.*` table when null.
     std::shared_ptr<const KeybindingRegistry> keybindings{};
     std::shared_ptr<KeybindingsContext> keybinding_context{};
-    /// Optional prompt text rendered dimmed after the cursor while the value
-    /// is empty (and truncated to the remaining line width). Never rendered
-    /// once the value is non-empty or when no placeholder is supplied.
+    /// Prompt prefix rendered before the input (pi `options.prompt ?? "> "`).
+    std::string prompt{"> "};
+    /// Optional placeholder text displayed while the value is empty (pi `options.placeholder`).
     std::optional<std::string> placeholder{std::nullopt};
+    /// Optional styling applied to placeholder characters (pi `options.placeholderStyle`).
+    PlaceholderStyle placeholder_style{};
 };
 
 /// Single-line text input with horizontal scrolling (pi `components/input.ts`).

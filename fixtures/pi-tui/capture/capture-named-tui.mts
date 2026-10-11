@@ -12,6 +12,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { captureSelectList } from "./select-list-scenarios.mts";
 import { captureEditorOperations } from "./editor-operations.mts";
+import { captureInputScenarios } from "./input-scenarios.mts";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), "..");
@@ -92,6 +93,13 @@ const inputArtifact = envelope([
 		})), values, submitted,
 	},
 }]);
+
+// Observe Input component presentation, LF submission, and scrolling (#962)
+const inputObservation = await captureInputScenarios(pi);
+for (const endpoint of inputObservation.sourceEndpoints) {
+	if (!inputArtifact.sourceEndpoints.includes(endpoint)) inputArtifact.sourceEndpoints.push(endpoint);
+}
+inputArtifact.scenarios.push(...inputObservation.scenarios);
 
 // Include child mutation so a render label or one cached frame cannot stand in for output.
 const textInputs = { text: "\x1b[31mhello\x1b[0m world", changedText: "\x1b[32mnext\x1b[0m text", paddingX: 1, paddingY: 0 };

@@ -29,8 +29,20 @@ struct KeyEvent {
     bool alt{false};
     bool super{false};
     KeyEventType type{KeyEventType::Press};
+    /// The original raw escape sequence or character data from which this key
+    /// was parsed. This is a diagnostic of the encoding the terminal used,
+    /// not part of the key's semantic identity: a legacy byte, a Kitty CSI-u
+    /// payload, and a modifyOtherKeys sequence can all decode to the same
+    /// key, so equality ignores it. Consumers that need the exact bytes
+    /// (pi `data === "\n"` submit) read this field directly.
+    std::string raw_sequence{};
 
-    bool operator==(const KeyEvent&) const = default;
+    /// Semantic identity: shortcut identity, printable text, modifiers, and
+    /// press type. Excludes `raw_sequence` (see above).
+    [[nodiscard]] bool operator==(const KeyEvent& other) const {
+        return key == other.key && text == other.text && ctrl == other.ctrl && shift == other.shift &&
+               alt == other.alt && super == other.super && type == other.type;
+    }
 };
 
 struct PasteEvent {

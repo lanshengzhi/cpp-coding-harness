@@ -3,6 +3,8 @@
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "support/PiTuiEvidence.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
@@ -315,15 +317,26 @@ TEST_CASE("Input renders a reverse-video fake cursor at the cursor position", "[
     }
 }
 
-TEST_CASE("Input renders a dimmed placeholder only while the value is empty", "[tui][input][issue586][spec]") {
+TEST_CASE("Input renders a placeholder reversing the first character only while the value is empty",
+        "[tui][input][issue586][issue962][spec]") {
+    // Empty value: reverses the first grapheme of the placeholder, followed by the rest,
+    // padded to the component width.
     cch::tui::Input input({.placeholder = "Type here"});
 
-    // Empty value: dimmed placeholder text after the highlighted cursor cell,
-    // padded to the component width.
     auto rendered = input.render(20);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 1);
-    CHECK(rendered->lines[0] == "> \x1b[7m \x1b[27m\x1b[2mType here\x1b[22m        ");
+    CHECK(rendered->lines[0] == "> \x1b[7mT\x1b[27mype here         ");
+    CHECK(cch::tui::visible_width(rendered->lines[0]) == 20);
+
+    // Styled placeholder: custom styling applies to each character run.
+    cch::tui::Input styled({
+            .placeholder = "Type here",
+            .placeholder_style = [](std::string_view text) { return "\x1b[2m" + std::string(text) + "\x1b[22m"; },
+    });
+    rendered = styled.render(20);
+    REQUIRE(rendered);
+    CHECK(rendered->lines[0] == "> \x1b[7m\x1b[2mT\x1b[22m\x1b[27m\x1b[2mype here\x1b[22m         ");
     CHECK(cch::tui::visible_width(rendered->lines[0]) == 20);
 
     // A non-empty value hides the placeholder entirely.
@@ -332,12 +345,11 @@ TEST_CASE("Input renders a dimmed placeholder only while the value is empty", "[
     REQUIRE(rendered);
     CHECK(rendered->lines[0] == "> a\x1b[7m \x1b[27m                ");
 
-    // The placeholder truncates to the columns left after prompt and cursor
-    // (truncate_text closes the run with an SGR reset when it cuts).
+    // The placeholder truncates to the columns left after prompt
     cch::tui::Input narrow({.placeholder = "Type here"});
     rendered = narrow.render(7);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> \x1b[7m \x1b[27m\x1b[2mType\x1b[0m\x1b[22m");
+    CHECK(rendered->lines[0] == "> \x1b[7mT\x1b[27mype \x1b[0m");
     CHECK(cch::tui::visible_width(rendered->lines[0]) == 7);
 
     // No placeholder keeps the historical empty-value rendering.
@@ -345,6 +357,177 @@ TEST_CASE("Input renders a dimmed placeholder only while the value is empty", "[
     rendered = plain.render(20);
     REQUIRE(rendered);
     CHECK(rendered->lines[0] == "> \x1b[7m \x1b[27m                 ");
+}
+
+TEST_CASE("Input aligns placeholder styling, LF submission, and scrolling with frozen pi", "[tui][input][issue962]") {
+    const auto fixture = cch::tests::read_pi_tui_evidence("input.json");
+    REQUIRE(fixture);
+
+    const auto find_scenario = [&](std::string_view name) -> const cch::support::JsonValue* {
+        for (const auto& scenario : fixture->at("scenarios").get_array()) {
+            if (scenario.at("name").get_string() == name) return &scenario;
+        }
+        return nullptr;
+    };
+
+    // Scenario 1: input-placeholder-reversal-and-custom-styling
+    {
+        const auto* scenario = find_scenario("input-placeholder-reversal-and-custom-styling");
+        REQUIRE(scenario != nullptr);
+        const auto& expected = scenario->at("expected");
+
+        cch::tui::Input input1a({
+                .prompt = "> ",
+                .placeholder = "Search...",
+        });
+        input1a.set_focused(true);
+        auto rendered1a = input1a.render(16);
+        REQUIRE(rendered1a);
+        CHECK(rendered1a->lines[0] == expected.at("defaultEmpty").at("line").get_string());
+        CHECK(cch::tui::visible_width(rendered1a->lines[0]) ==
+                static_cast<std::size_t>(expected.at("defaultEmpty").at("visibleWidth").get_number()));
+        CHECK(input1a.cursor_location() ==
+                cch::tui::CursorPosition{
+                        .column = static_cast<std::size_t>(expected.at("defaultEmpty").at("cursorColumn").get_number()),
+                        .row = 0,
+                });
+
+        cch::tui::Input input1b({
+                .prompt = "Find: ",
+                .placeholder = "Filter items",
+                .placeholder_style = [](std::string_view text) { return "\x1b[2m" + std::string(text) + "\x1b[22m"; },
+        });
+        input1b.set_focused(true);
+        auto rendered1b = input1b.render(20);
+        REQUIRE(rendered1b);
+        CHECK(rendered1b->lines[0] == expected.at("styledEmpty").at("line").get_string());
+        CHECK(cch::tui::visible_width(rendered1b->lines[0]) ==
+                static_cast<std::size_t>(expected.at("styledEmpty").at("visibleWidth").get_number()));
+        CHECK(input1b.cursor_location() ==
+                cch::tui::CursorPosition{
+                        .column = static_cast<std::size_t>(expected.at("styledEmpty").at("cursorColumn").get_number()),
+                        .row = 0,
+                });
+
+        cch::tui::Input input1c({
+                .prompt = "> ",
+                .placeholder = "Search...",
+        });
+        input1c.set_focused(true);
+        type(input1c, "abc");
+        auto rendered1c = input1c.render(16);
+        REQUIRE(rendered1c);
+        CHECK(rendered1c->lines[0] == expected.at("populated").at("line").get_string());
+        CHECK(cch::tui::visible_width(rendered1c->lines[0]) ==
+                static_cast<std::size_t>(expected.at("populated").at("visibleWidth").get_number()));
+        CHECK(input1c.cursor_location() ==
+                cch::tui::CursorPosition{
+                        .column = static_cast<std::size_t>(expected.at("populated").at("cursorColumn").get_number()),
+                        .row = 0,
+                });
+    }
+
+    // Scenario 2: input-raw-lf-submission-and-rebound-submit
+    {
+        const auto* scenario = find_scenario("input-raw-lf-submission-and-rebound-submit");
+        REQUIRE(scenario != nullptr);
+        const auto& expected = scenario->at("expected");
+
+        // Rebound submit to ctrl+x
+        auto resolution = cch::tui::resolve_keybindings({
+                .definitions = cch::tui::builtin_tui_keybinding_definitions(),
+                .overrides = {{.id = "tui.input.submit", .keys = {"ctrl+x"}}},
+        });
+        REQUIRE(resolution);
+        auto keybindings = resolution->registry;
+
+        std::vector<std::string> submitted2a;
+        cch::tui::Input input2a(cch::tui::InputOptions{.keybindings = keybindings},
+                [&submitted2a](std::string value) -> cch::support::ExpectedVoid {
+                    submitted2a.push_back(std::move(value));
+                    return {};
+                });
+
+        type(input2a, "hello");
+        // Enter (\r) does NOT submit when rebound
+        input2a.handle_input(cch::tui::KeyEvent{.key = "enter", .raw_sequence = "\r"});
+        CHECK(submitted2a.empty());
+
+        // Raw LF (\n) DOES submit even when submit action is rebound
+        input2a.handle_input(cch::tui::KeyEvent{.key = "enter", .raw_sequence = "\n"});
+        REQUIRE(submitted2a.size() == 1);
+        CHECK(submitted2a[0] == expected.at("reboundLfSubmitted").get_array()[0].get_string());
+
+        // Kitty protocol: \n decodes to shift+enter with raw_sequence "\n"
+        std::vector<std::string> submitted2b;
+        cch::tui::Input input2b(
+                cch::tui::InputOptions{}, [&submitted2b](std::string value) -> cch::support::ExpectedVoid {
+                    submitted2b.push_back(std::move(value));
+                    return {};
+                });
+        type(input2b, "kitty");
+        input2b.handle_input(cch::tui::KeyEvent{.key = "enter", .shift = true, .raw_sequence = "\n"});
+        REQUIRE(submitted2b.size() == 1);
+        CHECK(submitted2b[0] == expected.at("kittyLfSubmitted").get_array()[0].get_string());
+
+        // Multiline bracketed paste normalizes without submitting
+        std::vector<std::string> submitted2c;
+        cch::tui::Input input2c(
+                cch::tui::InputOptions{}, [&submitted2c](std::string value) -> cch::support::ExpectedVoid {
+                    submitted2c.push_back(std::move(value));
+                    return {};
+                });
+        input2c.handle_input(cch::tui::PasteEvent{
+                .text = "first\r\nsecond\nthird\tval",
+        });
+        CHECK(input2c.value() == expected.at("pastedValue").get_string());
+        CHECK(submitted2c.empty());
+    }
+
+    // Scenario 3: input-narrow-unicode-scroll-and-cursor
+    {
+        const auto* scenario = find_scenario("input-narrow-unicode-scroll-and-cursor");
+        REQUIRE(scenario != nullptr);
+        const auto& expected = scenario->at("expected");
+
+        cch::tui::Input input3({.prompt = "> "});
+        input3.set_value("éclair 世界 foo");
+        input3.set_focused(true);
+
+        // Home
+        key(input3, "home");
+        auto render_home = input3.render(12);
+        REQUIRE(render_home);
+        CHECK(render_home->lines[0] == expected.at("stepHome").at("line").get_string());
+        CHECK(input3.cursor_location() ==
+                cch::tui::CursorPosition{
+                        .column = static_cast<std::size_t>(expected.at("stepHome").at("cursorColumn").get_number()),
+                        .row = 0,
+                });
+
+        // Step right 6 times
+        for (int i = 0; i < 6; ++i)
+            key(input3, "right");
+        auto render_right6 = input3.render(12);
+        REQUIRE(render_right6);
+        CHECK(render_right6->lines[0] == expected.at("stepRight6").at("line").get_string());
+        CHECK(input3.cursor_location() ==
+                cch::tui::CursorPosition{
+                        .column = static_cast<std::size_t>(expected.at("stepRight6").at("cursorColumn").get_number()),
+                        .row = 0,
+                });
+
+        // End
+        key(input3, "end");
+        auto render_end = input3.render(12);
+        REQUIRE(render_end);
+        CHECK(render_end->lines[0] == expected.at("stepEnd").at("line").get_string());
+        CHECK(input3.cursor_location() ==
+                cch::tui::CursorPosition{
+                        .column = static_cast<std::size_t>(expected.at("stepEnd").at("cursorColumn").get_number()),
+                        .row = 0,
+                });
+    }
 }
 
 TEST_CASE("Input cursor location follows the focus lifecycle and windowing", "[tui][input][issue380][spec]") {
@@ -398,7 +581,7 @@ TEST_CASE("Input surfaces sink failures and degenerate widths", "[tui][input][is
     CHECK_FALSE(rendered.has_value());
     rendered = input.render(1);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == ">");
+    CHECK(rendered->lines[0] == ">\x1b[0m");
 }
 
 TEST_CASE("Input integrates with Tui through the VirtualTerminal seam", "[tui][input][issue380][spec]") {

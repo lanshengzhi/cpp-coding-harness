@@ -364,7 +364,7 @@ std::optional<KeyEvent> parse_legacy_sequence(std::string_view sequence) {
     return std::nullopt;
 }
 
-std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence, bool kitty_protocol_active = false) {
+std::optional<KeyEvent> parse_raw_sequence_inner(std::string_view sequence, bool kitty_protocol_active = false) {
     if (auto parsed = parse_modify_other_keys(sequence)) return parsed;
     if (auto parsed = parse_kitty_csi_u(sequence)) return parsed;
     if (auto parsed = parse_kitty_navigation(sequence)) return parsed;
@@ -425,13 +425,21 @@ std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence, bool kitty
     if (!kitty_protocol_active && sequence == kEscUpperB) return *parse_key_id("alt+left");
     if (!kitty_protocol_active && sequence == kEscUpperF) return *parse_key_id("alt+right");
     if (!kitty_protocol_active && sequence.size() >= 2 && sequence.front() == '\x1b') {
-        const auto key = parse_raw_sequence(sequence.substr(1), kitty_protocol_active);
+        const auto key = parse_raw_sequence_inner(sequence.substr(1), kitty_protocol_active);
         if (!key) return std::nullopt;
         auto modified = *key;
         modified.alt = true;
         return modified;
     }
     return std::nullopt;
+}
+
+std::optional<KeyEvent> parse_raw_sequence(std::string_view sequence, bool kitty_protocol_active = false) {
+    auto parsed = parse_raw_sequence_inner(sequence, kitty_protocol_active);
+    if (parsed) {
+        parsed->raw_sequence = std::string(sequence);
+    }
+    return parsed;
 }
 
 std::size_t utf8_sequence_length(unsigned char lead) {
