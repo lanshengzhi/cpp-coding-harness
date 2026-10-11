@@ -1,7 +1,7 @@
 {
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-11T05:37:21.021Z",
+  "capturedAt": "2026-10-11T06:27:59.777Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -31,7 +31,7 @@
     "packages/tui/test/virtual-terminal.ts:VirtualTerminal",
     "packages/tui/package.json:@xterm/headless",
     "packages/tui/src/tui.ts:TuiBase.start,stop,setFocus,Container.addChild,removeChild,clear",
-    "packages/tui/src/components/select-list.ts:constructor,render,handleInput,getSelectedItem",
+    "packages/tui/src/components/select-list.ts:constructor,render,handleInput,getSelectedItem,setFilter,setSelectedIndex",
     "packages/tui/src/keybindings.ts:getKeybindings",
     "packages/tui/src/utils.ts:visibleWidth,truncateToWidth"
   ],
@@ -10844,6 +10844,496 @@
         ],
         "visibleWidths": [
           8
+        ]
+      }
+    },
+    {
+      "name": "select-list-value-prefix-filter-and-selection-reset",
+      "dimensions": {
+        "columns": 60,
+        "rows": 7
+      },
+      "inputs": {
+        "items": [
+          {
+            "value": "Alpha",
+            "label": "Visible only"
+          },
+          {
+            "value": "Straße",
+            "label": "Other"
+          },
+          {
+            "value": "alphabet",
+            "label": "Prefix candidate"
+          },
+          {
+            "value": "axlxp",
+            "label": "alp label-only trap"
+          },
+          {
+            "value": "unrelated",
+            "label": "Alpha label-only"
+          },
+          {
+            "value": "İSTANBUL",
+            "label": "Dotted-I candidate"
+          },
+          {
+            "value": "ΟΣΟΣ",
+            "label": "Greek candidate"
+          },
+          {
+            "value": "𐐀lpha",
+            "label": "Supplementary candidate"
+          }
+        ],
+        "operations": [
+          {
+            "name": "select-before-filter",
+            "kind": "select",
+            "index": 2
+          },
+          {
+            "name": "value-prefix-not-label-or-subsequence",
+            "kind": "filter",
+            "value": "alp"
+          },
+          {
+            "name": "select-second-prefix-result",
+            "kind": "select",
+            "index": 1
+          },
+          {
+            "name": "same-filter-resets-selection",
+            "kind": "filter",
+            "value": "alp"
+          },
+          {
+            "name": "single-prefix-result",
+            "kind": "filter",
+            "value": "alphabet"
+          },
+          {
+            "name": "clear-filter-resets-selection",
+            "kind": "filter",
+            "value": ""
+          },
+          {
+            "name": "sharp-s-is-not-case-fold-expanded",
+            "kind": "filter",
+            "value": "STRASSE"
+          },
+          {
+            "name": "sharp-s-lowercase-prefix",
+            "kind": "filter",
+            "value": "straße"
+          },
+          {
+            "name": "dotted-i-expanded-prefix",
+            "kind": "filter",
+            "value": "İS"
+          },
+          {
+            "name": "dotted-i-does-not-lose-combining-dot",
+            "kind": "filter",
+            "value": "istan"
+          },
+          {
+            "name": "dotted-i-short-prefix",
+            "kind": "filter",
+            "value": "i"
+          },
+          {
+            "name": "uppercase-greek-prefix-final-sigma-context",
+            "kind": "filter",
+            "value": "ΟΣ"
+          },
+          {
+            "name": "internal-greek-sigma-prefix",
+            "kind": "filter",
+            "value": "οσ"
+          },
+          {
+            "name": "whole-greek-value-final-sigma-context",
+            "kind": "filter",
+            "value": "ΟΣΟΣ"
+          },
+          {
+            "name": "supplementary-lowercase-prefix",
+            "kind": "filter",
+            "value": "𐐨L"
+          }
+        ],
+        "maxVisible": 5
+      },
+      "expected": {
+        "observations": [
+          {
+            "name": "select-before-filter",
+            "selected": "alphabet",
+            "rows": [
+              "  Visible only",
+              "  Other",
+              "→ Prefix candidate",
+              "  alp label-only trap",
+              "  Alpha label-only",
+              "  (3/8)"
+            ],
+            "visibleWidths": [
+              14,
+              7,
+              18,
+              21,
+              18,
+              7
+            ],
+            "filteredValues": [
+              "Alpha",
+              "Straße",
+              "alphabet",
+              "axlxp",
+              "unrelated",
+              "İSTANBUL",
+              "ΟΣΟΣ",
+              "𐐀lpha"
+            ]
+          },
+          {
+            "name": "value-prefix-not-label-or-subsequence",
+            "selected": "Alpha",
+            "rows": [
+              "→ Visible only",
+              "  Prefix candidate"
+            ],
+            "visibleWidths": [
+              14,
+              18
+            ],
+            "filteredValues": [
+              "Alpha",
+              "alphabet"
+            ]
+          },
+          {
+            "name": "select-second-prefix-result",
+            "selected": "alphabet",
+            "rows": [
+              "  Visible only",
+              "→ Prefix candidate"
+            ],
+            "visibleWidths": [
+              14,
+              18
+            ],
+            "filteredValues": [
+              "Alpha",
+              "alphabet"
+            ]
+          },
+          {
+            "name": "same-filter-resets-selection",
+            "selected": "Alpha",
+            "rows": [
+              "→ Visible only",
+              "  Prefix candidate"
+            ],
+            "visibleWidths": [
+              14,
+              18
+            ],
+            "filteredValues": [
+              "Alpha",
+              "alphabet"
+            ]
+          },
+          {
+            "name": "single-prefix-result",
+            "selected": "alphabet",
+            "rows": [
+              "→ Prefix candidate"
+            ],
+            "visibleWidths": [
+              18
+            ],
+            "filteredValues": [
+              "alphabet"
+            ]
+          },
+          {
+            "name": "clear-filter-resets-selection",
+            "selected": "Alpha",
+            "rows": [
+              "→ Visible only",
+              "  Other",
+              "  Prefix candidate",
+              "  alp label-only trap",
+              "  Alpha label-only",
+              "  (1/8)"
+            ],
+            "visibleWidths": [
+              14,
+              7,
+              18,
+              21,
+              18,
+              7
+            ],
+            "filteredValues": [
+              "Alpha",
+              "Straße",
+              "alphabet",
+              "axlxp",
+              "unrelated",
+              "İSTANBUL",
+              "ΟΣΟΣ",
+              "𐐀lpha"
+            ]
+          },
+          {
+            "name": "sharp-s-is-not-case-fold-expanded",
+            "selected": null,
+            "rows": [
+              "  No matching commands"
+            ],
+            "visibleWidths": [
+              22
+            ],
+            "filteredValues": []
+          },
+          {
+            "name": "sharp-s-lowercase-prefix",
+            "selected": "Straße",
+            "rows": [
+              "→ Other"
+            ],
+            "visibleWidths": [
+              7
+            ],
+            "filteredValues": [
+              "Straße"
+            ]
+          },
+          {
+            "name": "dotted-i-expanded-prefix",
+            "selected": "İSTANBUL",
+            "rows": [
+              "→ Dotted-I candidate"
+            ],
+            "visibleWidths": [
+              20
+            ],
+            "filteredValues": [
+              "İSTANBUL"
+            ]
+          },
+          {
+            "name": "dotted-i-does-not-lose-combining-dot",
+            "selected": null,
+            "rows": [
+              "  No matching commands"
+            ],
+            "visibleWidths": [
+              22
+            ],
+            "filteredValues": []
+          },
+          {
+            "name": "dotted-i-short-prefix",
+            "selected": "İSTANBUL",
+            "rows": [
+              "→ Dotted-I candidate"
+            ],
+            "visibleWidths": [
+              20
+            ],
+            "filteredValues": [
+              "İSTANBUL"
+            ]
+          },
+          {
+            "name": "uppercase-greek-prefix-final-sigma-context",
+            "selected": null,
+            "rows": [
+              "  No matching commands"
+            ],
+            "visibleWidths": [
+              22
+            ],
+            "filteredValues": []
+          },
+          {
+            "name": "internal-greek-sigma-prefix",
+            "selected": "ΟΣΟΣ",
+            "rows": [
+              "→ Greek candidate"
+            ],
+            "visibleWidths": [
+              17
+            ],
+            "filteredValues": [
+              "ΟΣΟΣ"
+            ]
+          },
+          {
+            "name": "whole-greek-value-final-sigma-context",
+            "selected": "ΟΣΟΣ",
+            "rows": [
+              "→ Greek candidate"
+            ],
+            "visibleWidths": [
+              17
+            ],
+            "filteredValues": [
+              "ΟΣΟΣ"
+            ]
+          },
+          {
+            "name": "supplementary-lowercase-prefix",
+            "selected": "𐐀lpha",
+            "rows": [
+              "→ Supplementary candidate"
+            ],
+            "visibleWidths": [
+              25
+            ],
+            "filteredValues": [
+              "𐐀lpha"
+            ]
+          }
+        ],
+        "callbackEvents": []
+      }
+    },
+    {
+      "name": "select-list-unicode-description-normalization",
+      "dimensions": {
+        "columns": 80,
+        "rows": 5
+      },
+      "inputs": {
+        "items": [
+          {
+            "value": "nbsp",
+            "label": "NBSP",
+            "description": "  hello  "
+          },
+          {
+            "value": "ideographic",
+            "label": "Wide space",
+            "description": "　 wide words 　"
+          },
+          {
+            "value": "bom",
+            "label": "BOM",
+            "description": "﻿ hello ﻿"
+          },
+          {
+            "value": "crlf",
+            "label": "CRLF",
+            "description": " first\r\n\r\nsecond　"
+          },
+          {
+            "value": "empty",
+            "label": "Whitespace only",
+            "description": "　 ﻿\r\n"
+          }
+        ],
+        "selectedIndices": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "expected": {
+        "observations": [
+          {
+            "selected": "nbsp",
+            "rows": [
+              "→ NBSP                            hello",
+              "  Wide space                      wide words",
+              "  BOM                             hello",
+              "  CRLF                            first second",
+              "  Whitespace only"
+            ],
+            "visibleWidths": [
+              39,
+              44,
+              39,
+              46,
+              17
+            ]
+          },
+          {
+            "selected": "ideographic",
+            "rows": [
+              "  NBSP                            hello",
+              "→ Wide space                      wide words",
+              "  BOM                             hello",
+              "  CRLF                            first second",
+              "  Whitespace only"
+            ],
+            "visibleWidths": [
+              39,
+              44,
+              39,
+              46,
+              17
+            ]
+          },
+          {
+            "selected": "bom",
+            "rows": [
+              "  NBSP                            hello",
+              "  Wide space                      wide words",
+              "→ BOM                             hello",
+              "  CRLF                            first second",
+              "  Whitespace only"
+            ],
+            "visibleWidths": [
+              39,
+              44,
+              39,
+              46,
+              17
+            ]
+          },
+          {
+            "selected": "crlf",
+            "rows": [
+              "  NBSP                            hello",
+              "  Wide space                      wide words",
+              "  BOM                             hello",
+              "→ CRLF                            first second",
+              "  Whitespace only"
+            ],
+            "visibleWidths": [
+              39,
+              44,
+              39,
+              46,
+              17
+            ]
+          },
+          {
+            "selected": "empty",
+            "rows": [
+              "  NBSP                            hello",
+              "  Wide space                      wide words",
+              "  BOM                             hello",
+              "  CRLF                            first second",
+              "→ Whitespace only"
+            ],
+            "visibleWidths": [
+              39,
+              44,
+              39,
+              46,
+              17
+            ]
+          }
         ]
       }
     },

@@ -23,7 +23,7 @@ export async function captureSelectList(piCheckout: string) {
 		};
 	};
 	const sourceEndpoints = [
-		"packages/tui/src/components/select-list.ts:constructor,render,handleInput,getSelectedItem",
+		"packages/tui/src/components/select-list.ts:constructor,render,handleInput,getSelectedItem,setFilter,setSelectedIndex",
 		"packages/tui/src/keybindings.ts:getKeybindings",
 		"packages/tui/src/utils.ts:visibleWidth,truncateToWidth",
 	];
@@ -94,6 +94,69 @@ export async function captureSelectList(piCheckout: string) {
 		return { input, before: before.selected, after: observe(bubblingList, 24).selected };
 	});
 
+	const filterItems = [
+		{ value: "Alpha", label: "Visible only" },
+		{ value: "Straße", label: "Other" },
+		{ value: "alphabet", label: "Prefix candidate" },
+		{ value: "axlxp", label: "alp label-only trap" },
+		{ value: "unrelated", label: "Alpha label-only" },
+		{ value: "İSTANBUL", label: "Dotted-I candidate" },
+		{ value: "ΟΣΟΣ", label: "Greek candidate" },
+		{ value: "𐐀lpha", label: "Supplementary candidate" },
+	];
+	const filterOperations = [
+		{ name: "select-before-filter", kind: "select", index: 2 },
+		{ name: "value-prefix-not-label-or-subsequence", kind: "filter", value: "alp" },
+		{ name: "select-second-prefix-result", kind: "select", index: 1 },
+		{ name: "same-filter-resets-selection", kind: "filter", value: "alp" },
+		{ name: "single-prefix-result", kind: "filter", value: "alphabet" },
+		{ name: "clear-filter-resets-selection", kind: "filter", value: "" },
+		{ name: "sharp-s-is-not-case-fold-expanded", kind: "filter", value: "STRASSE" },
+		{ name: "sharp-s-lowercase-prefix", kind: "filter", value: "straße" },
+		{ name: "dotted-i-expanded-prefix", kind: "filter", value: "İS" },
+		{ name: "dotted-i-does-not-lose-combining-dot", kind: "filter", value: "istan" },
+		{ name: "dotted-i-short-prefix", kind: "filter", value: "i" },
+		{ name: "uppercase-greek-prefix-final-sigma-context", kind: "filter", value: "ΟΣ" },
+		{ name: "internal-greek-sigma-prefix", kind: "filter", value: "οσ" },
+		{ name: "whole-greek-value-final-sigma-context", kind: "filter", value: "ΟΣΟΣ" },
+		{ name: "supplementary-lowercase-prefix", kind: "filter", value: "𐐨L" },
+	];
+	const filterList = new SelectList(filterItems, 5, theme);
+	const filterEvents: string[] = [];
+	filterList.onSelectionChange = (item) => filterEvents.push(`change:${item.value}`);
+	// Enumerate identities only through public selection APIs. These items
+	// have distinct values; clamping to the final item terminates enumeration.
+	const observeFiltered = () => {
+		const snapshot = observe(filterList, 60);
+		const values: string[] = [];
+		for (let index = 0; index < filterItems.length; index++) {
+			filterList.setSelectedIndex(index);
+			const item = filterList.getSelectedItem();
+			if (!item || values.at(-1) === item.value) break;
+			values.push(item.value);
+		}
+		filterList.setSelectedIndex(Math.max(0, values.indexOf(snapshot.selected ?? "")));
+		return { ...snapshot, filteredValues: values };
+	};
+	const filters = filterOperations.map((operation) => {
+		if (operation.kind === "filter") filterList.setFilter(operation.value);
+		else filterList.setSelectedIndex(operation.index);
+		return { name: operation.name, ...observeFiltered() };
+	});
+
+	const normalizedDescriptionItems = [
+		{ value: "nbsp", label: "NBSP", description: "\u00a0 hello \u00a0" },
+		{ value: "ideographic", label: "Wide space", description: "\u3000 wide words \u3000" },
+		{ value: "bom", label: "BOM", description: "\ufeff hello \ufeff" },
+		{ value: "crlf", label: "CRLF", description: "\u00a0first\r\n\r\nsecond\u3000" },
+		{ value: "empty", label: "Whitespace only", description: "\u3000\u00a0\ufeff\r\n" },
+	];
+	const normalizedDescriptionList = new SelectList(normalizedDescriptionItems, 5, theme);
+	const normalizedDescriptions = [0, 1, 2, 3, 4].map((index) => {
+		normalizedDescriptionList.setSelectedIndex(index);
+		return observe(normalizedDescriptionList, 80);
+	});
+
 	return {
 		sourceEndpoints,
 		scenarios: [
@@ -120,6 +183,18 @@ export async function captureSelectList(piCheckout: string) {
 				dimensions: { columns: 10, rows: 2 },
 				inputs: { width: 10, label: "界界界界", description: "hidden when narrow" },
 				expected: narrow,
+			},
+			{
+				name: "select-list-value-prefix-filter-and-selection-reset",
+				dimensions: { columns: 60, rows: 7 },
+				inputs: { items: filterItems, operations: filterOperations, maxVisible: 5 },
+				expected: { observations: filters, callbackEvents: filterEvents },
+			},
+			{
+				name: "select-list-unicode-description-normalization",
+				dimensions: { columns: 80, rows: 5 },
+				inputs: { items: normalizedDescriptionItems, selectedIndices: [0, 1, 2, 3, 4] },
+				expected: { observations: normalizedDescriptions },
 			},
 			{
 				name: "select-list-unbound-key-forwarding",

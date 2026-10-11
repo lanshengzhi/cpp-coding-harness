@@ -45,10 +45,16 @@ and the deferred-wrap cursor left by clearing a full-width row. Separate regress
 reentrant removal lifetimes, scrolled dock teardown, and concurrent terminals with different
 image protocols and late cell-size replies without modifying global capability state.
 
-For #967, the same screen-state artifact also records five independent SelectList scenarios:
+For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
-widths 40/41/60, wide-glyph truncation including the exact ANSI reset, and unbound-key
-non-mutation. `capture/select-list-scenarios.mts` executes the frozen component directly;
+widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key
+non-mutation, value-prefix filtering/selection reset, and Unicode description normalization.
+The filtering observations distinguish value prefixes from labels and fuzzy subsequences,
+retain dotted-I expansion and Greek final-sigma context, reject `STRASSE` for `Straße`, and
+include supplementary case mapping. They record filtered identities through public selection
+APIs, plus silent repeated-filter resets and clearing. Description cases cover NBSP,
+ideographic spaces, BOM, repeated CRLF and whitespace-only content.
+`capture/select-list-scenarios.mts` executes the frozen component directly;
 its source digest is recorded alongside the main generator digest. Public C++ caller tests
 additionally verify key admission/propagation, which upstream's void `handleInput` cannot
 report directly.
