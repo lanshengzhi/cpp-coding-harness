@@ -80,14 +80,10 @@ namespace cch::coding_agent::tui {
 /// deferred-boot entry) → exit wait → `finish`. Executor-confined except
 /// where noted; collaborators capture it weakly and its Close awaits their
 /// quiescence (ADR 0040).
-class InteractiveEngine final
-    : public std::enable_shared_from_this<InteractiveEngine>,
-      public ModalPresenter {
+class InteractiveEngine final : public std::enable_shared_from_this<InteractiveEngine>, public ModalPresenter {
 public:
     /// The terminal must outlive the run.
-    InteractiveEngine(
-        cch::tui::Terminal& terminal,
-        boost::asio::any_io_executor executor);
+    InteractiveEngine(cch::tui::Terminal& terminal, boost::asio::any_io_executor executor);
     InteractiveEngine(InteractiveEngine&&) = delete;
     InteractiveEngine& operator=(InteractiveEngine&&) = delete;
     ~InteractiveEngine() override;
@@ -114,9 +110,7 @@ public:
     [[nodiscard]] boost::asio::awaitable<support::Expected<bool>> append_project_trust_warning_if_needed();
 
     /// The exit wait: released by `signal_exit` once the run may tear down.
-    [[nodiscard]] boost::asio::steady_timer& exit_wait() {
-        return exit_wait_;
-    }
+    [[nodiscard]] boost::asio::steady_timer& exit_wait() { return exit_wait_; }
 
     /// Whether exit was already requested (for example a quit input delivered
     /// while the deferred boot was still in flight). `exit_wait()` must not
@@ -137,18 +131,7 @@ public:
     /// finalizes synchronously here.
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> finish();
 
-    // ── Decoupled frame ticker (ADR 0051, #601; ADR 0052, #617) ─────────
-
-    /// Start the periodic frame ticker.
-    void start_frame_ticker();
-    void arm_frame_ticker();
-    void on_frame_tick();
-    [[nodiscard]] bool local_dock_dirty() const noexcept { return local_dock_dirty_.load(std::memory_order_acquire); }
-    void set_local_dock_dirty(bool dirty = true) noexcept { local_dock_dirty_.store(dirty, std::memory_order_release); }
     [[nodiscard]] std::size_t render_count() const noexcept { return render_count_; }
-    [[nodiscard]] bool ticker_running() const noexcept { return ticker_running_; }
-    [[nodiscard]] boost::asio::steady_timer& frame_ticker() noexcept { return frame_ticker_; }
-    static constexpr auto frame_interval() noexcept { return kFrameInterval; }
 
 private:
     // ── Submission kinds (folded from the deleted InteractionPolicy) ──────
@@ -170,10 +153,9 @@ private:
     [[nodiscard]] support::ExpectedVoid re_catalog_keybindings();
 
     [[nodiscard]] support::Expected<InteractiveStartupDiagnostics> load_startup_resources(
-        const InteractiveSessionRun& run);
+            const InteractiveSessionRun& run);
 
-    [[nodiscard]] std::unique_ptr<InteractiveView> make_interactive_view(
-        std::weak_ptr<InteractiveEngine> weak);
+    [[nodiscard]] std::unique_ptr<InteractiveView> make_interactive_view(std::weak_ptr<InteractiveEngine> weak);
 
     /// The view's user-shell hint: the interactive host always provides a
     /// User Shell to the boot session (`provide_user_shell`), so the boot
@@ -186,8 +168,7 @@ private:
     /// after a setting change exactly like pi's `setupAutocompleteProvider`.
     /// The boot path builds with the boot workspace and no discovered
     /// resources until the session binds (`boot_session` rebuilds it).
-    [[nodiscard]] std::unique_ptr<cch::tui::AutocompleteProvider>
-    build_autocomplete_provider();
+    [[nodiscard]] std::unique_ptr<cch::tui::AutocompleteProvider> build_autocomplete_provider();
 
     /// pi `setupAutocompleteProvider` after a settings change: swap the
     /// editor's autocomplete provider for a freshly built one.
@@ -213,14 +194,10 @@ private:
 
     void post_invalidate();
     void post_exit();
-    void post_render();
-    /// Mark the Tui dirty and schedule a coalesced immediate frame (#597:
-    /// every engine-side view mutation schedules; the 33 ms ticker stays the
-    /// counted authoritative render while the immediate flush is an
-    /// uncounted preview drained by ready handlers). Safe before start: the
-    /// flush drops while the dirty state persists.
+    /// Mark the TUI dirty and let its scheduler own frame timing.
     void invalidate_frame();
-    void schedule_render_retry();
+    [[nodiscard]] support::Expected<bool> prepare_frame();
+    void complete_frame(const support::ExpectedVoid& result);
     void post_close_overlay();
 
     /// Post one view-thread action to the executor.
@@ -269,8 +246,7 @@ private:
     /// values to the existing Native TUI flows.
     [[nodiscard]] bool dispatch_command(std::string_view text);
 
-    [[nodiscard]] support::ExpectedVoid execute_immediate_slash_command(
-        const SlashCommandInvocation& invocation);
+    [[nodiscard]] support::ExpectedVoid execute_immediate_slash_command(const SlashCommandInvocation& invocation);
 
     void dispatch_modal_slash_command(SlashCommandInvocation invocation);
 
@@ -290,9 +266,7 @@ private:
     //    deleted InterruptAdmission) ──────────────────────────────────────
 
     /// The prompt generation captured when an input-thread request is posted.
-    [[nodiscard]] std::size_t generation() const noexcept {
-        return prompt_generation_.load();
-    }
+    [[nodiscard]] std::size_t generation() const noexcept { return prompt_generation_.load(); }
 
     /// Advances admission state immediately before a new Agent prompt starts.
     void note_prompt_started() noexcept {
@@ -314,37 +288,29 @@ private:
     /// Admits a current interrupt request and selects its pi-ordered target:
     /// an active Agent run aborts first, then a running User Bash cancels,
     /// then a pending User Bash submission clears the editor.
-    [[nodiscard]] InterruptRoute admit_interrupt(
-        std::size_t captured_generation,
-        bool pending_bash) noexcept;
+    [[nodiscard]] InterruptRoute admit_interrupt(std::size_t captured_generation, bool pending_bash) noexcept;
 
-    void request_interrupt(
-        std::size_t prompt_generation,
-        const EditorInterruptRequest& request);
+    void request_interrupt(std::size_t prompt_generation, const EditorInterruptRequest& request);
 
     // ── Submission routing (pi setupEditorSubmitHandler, folded from the
     //    deleted InteractionPolicy) ───────────────────────────────────────
 
     [[nodiscard]] bool dispatch_user_bash(const std::string& text, SubmissionOrigin origin);
 
-    void submit(
-        std::string text,
-        InputSubmission submission,
-        PromptOptions options = {},
-        SubmissionOrigin origin = SubmissionOrigin::FocusedEditor,
-        std::optional<std::size_t> editor_revision = std::nullopt);
+    void submit(std::string text,
+            InputSubmission submission,
+            PromptOptions options = {},
+            SubmissionOrigin origin = SubmissionOrigin::FocusedEditor,
+            std::optional<std::size_t> editor_revision = std::nullopt);
 
     void dequeue_pending_input(bool announce);
 
     void prompt_launch_failed(std::size_t started_generation);
     void prompt_finished(
-        std::size_t started_generation,
-        support::ExpectedVoid result,
-        const std::string& submitted_text);
-    void user_bash_finished(
-        std::size_t started_generation,
-        support::Expected<runtime::UserBashCompletion> result,
-        const std::string& recall);
+            std::size_t started_generation, support::ExpectedVoid result, const std::string& submitted_text);
+    void user_bash_finished(std::size_t started_generation,
+            support::Expected<runtime::UserBashCompletion> result,
+            const std::string& recall);
 
     // ── Overlays and the ModalPresenter seam (#503): the engine is the
     //    production presenter — overlays, prompt-slot swaps, and status text
@@ -353,8 +319,7 @@ private:
     /// Append one bounded presentation error to the chat diagnostic area.
     void append_command_error(const support::Error& error);
 
-    [[nodiscard]] support::ExpectedVoid attach_overlay(
-        std::unique_ptr<cch::tui::Overlay> overlay);
+    [[nodiscard]] support::ExpectedVoid attach_overlay(std::unique_ptr<cch::tui::Overlay> overlay);
     void close_overlay() override;
 
     void show_overlay(std::unique_ptr<cch::tui::Overlay> overlay) override;
@@ -396,9 +361,7 @@ private:
     /// diagnostic (the user-bash precedent; the login flows use this too).
     /// Every admitted flow is counted so `finish()` can await quiescence
     /// (ADR 0040: terminal restoration never races a controller coroutine).
-    void spawn_flow(
-        std::move_only_function<boost::asio::awaitable<void>()> start,
-        std::string failure_label);
+    void spawn_flow(std::move_only_function<boost::asio::awaitable<void>()> start, std::string failure_label);
 
     /// One admitted detached flow reached its terminal outcome. The count is
     /// executor-confined (spawn and completion both run on the host
@@ -416,8 +379,7 @@ private:
     /// (pi `createRuntime` re-resolves the CLI options against the target
     /// cwd).
     [[nodiscard]] runtime::AgentSessionCreationRequest make_session_request(
-        std::filesystem::path workspace,
-        SessionTarget target) const;
+            std::filesystem::path workspace, SessionTarget target) const;
 
     /// The error a host without the asynchronous replacement capability
     /// returns to a Session replacement flow.
@@ -431,8 +393,7 @@ private:
     /// TUI-local platform default for the environment operations. Render
     /// state may coalesce, but this path never drops an admitted action.
     [[nodiscard]] support::Expected<TuiActionResultVariant> deliver_action(
-        std::size_t captured_generation,
-        TuiActionVariant action);
+            std::size_t captured_generation, TuiActionVariant action);
 
     /// Create and return a replacement/boot session through the
     /// composition host's asynchronous Session replacement strong
@@ -462,8 +423,7 @@ private:
     /// completions are retired by the generation stamp
     /// (`prompt_finished`/`user_bash_finished`); and the old Session's
     /// subscriptions are detached before the new one binds.
-    [[nodiscard]] support::ExpectedVoid replace_session(
-        std::unique_ptr<AgentSession> next);
+    [[nodiscard]] support::ExpectedVoid replace_session(std::unique_ptr<AgentSession> next);
 
     /// Retire the current action generation (session replacement or Close):
     /// later deliveries admitted by the retired generation are rejected.
@@ -480,32 +440,14 @@ private:
     /// retired Session generation (the Session was replaced or closed). Such
     /// late completions must not mutate or render as the current Session
     /// (issue #466).
-    [[nodiscard]] bool generation_retired(
-        std::size_t started_generation) const noexcept {
+    [[nodiscard]] bool generation_retired(std::size_t started_generation) const noexcept {
         return started_generation != action_generation_;
     }
 
-    // ── Frame painting ───────────────────────────────────────────────────
-
-    /// One frame attempt: painted, or owed and deferred to the retry timer.
-    enum class PaintOutcome { Painted, Deferred };
-    /// Attempt one frame through `Tui::render`. A typed `Busy` is terminal
-    /// output backpressure rather than a failure: the Tui has rolled its
-    /// differential state back, so the frame stays owed and is repainted by the
-    /// render-retry timer once the queue drains. Every other error is returned
-    /// to the caller. Deferral is the one policy, so a startup frame and a
-    /// ticker frame cannot disagree about it.
-    [[nodiscard]] support::Expected<PaintOutcome> paint_frame();
-
     // ── Exit gating ──────────────────────────────────────────────────────
 
-    [[nodiscard]] bool render();
     void request_exit();
     void signal_exit();
-    /// Synchronously reconcile and render the terminal publication once
-    /// (Session Close final paint; idempotent).
-    void paint_final_snapshot();
-
     // ── State ────────────────────────────────────────────────────────────
 
     AgentSession* session_; // must outlive this interactive run.
@@ -522,6 +464,7 @@ private:
     /// replace_session().
     std::vector<std::unique_ptr<AgentSession>> retired_sessions_;
     cch::tui::Terminal& terminal_; // must outlive this interactive run.
+    std::unique_ptr<cch::tui::TuiScheduler> tui_scheduler_;
     cch::tui::MainScreen main_screen_;
     cch::tui::ITui& tui_; // main_screen_ outlives this interface and every consumer.
     /// pi's mutable shared KeybindingsManager consumption shape (ADR 0035,
@@ -578,8 +521,7 @@ private:
     /// pi `projectTrustByCwd`: the boot-resolved trust decision for the boot
     /// workspace, reused by in-session session creations in the same
     /// workspace (a session-only choice leaves no store entry).
-    std::optional<std::pair<std::filesystem::path, bool>>
-        resolved_boot_trust_{std::nullopt};
+    std::optional<std::pair<std::filesystem::path, bool>> resolved_boot_trust_{std::nullopt};
     /// Action-generation counter for the closed action seam (ADR 0040):
     /// every action is delivered with the generation that admitted it, and
     /// `retire_action_generation()` rejects later deliveries from a retired
@@ -601,11 +543,6 @@ private:
     PromptOptions initial_prompt_options_{};
     boost::asio::any_io_executor executor_;
     boost::asio::steady_timer exit_wait_;
-    /// Retry timer for render-path terminal backpressure. It is executor-
-    /// confined and only armed after a typed Busy result.
-    boost::asio::steady_timer render_retry_timer_;
-    /// Decoupled frame ticker running at 30 FPS (~33ms interval) per ADR 0051 / #601.
-    boost::asio::steady_timer frame_ticker_;
     /// Detached-flow quiescence (ADR 0040): the number of admitted
     /// controller flows still in flight. `finish()` awaits `flows_settled_`
     /// until this reaches zero so terminal restoration never races an
@@ -614,7 +551,7 @@ private:
     boost::asio::steady_timer flows_settled_;
     /// SIGTSTP/SIGCONT suspend flow (pi `handleCtrlZ`); created at start.
     std::shared_ptr<SuspendController> suspend_controller_;
-    InteractiveView* view_{nullptr}; // aliases the child owned by tui_.
+    InteractiveView* view_{nullptr};             // aliases the child owned by tui_.
     cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_.
     SlashCommandRouter slash_command_router_;
     std::atomic<bool> running_{false};
@@ -632,13 +569,9 @@ private:
     /// editor, `doubleEscapeAction` default "tree"). Executor-confined.
     std::chrono::steady_clock::time_point last_escape_time_{};
     std::atomic<bool> local_dock_dirty_{false};
-    std::atomic<bool> frame_render_posted_{false};
-    bool immediate_frame_render_{false};
-    bool ticker_running_{false};
     std::size_t render_count_{0};
-    static constexpr auto kFrameInterval = std::chrono::milliseconds(33); // ~30 FPS
-    bool render_retry_pending_{false};
-    std::size_t render_retry_generation_{0};
+    bool first_frame_rendered_{false};
+    bool prepared_counted_frame_{false};
     // Prompt-generation staleness for interrupt requests (pi onEscape
     // routing; the deleted InterruptAdmission's generation). The generation
     // is read from the input thread at post time, so it stays atomic; the

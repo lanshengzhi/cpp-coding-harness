@@ -1728,9 +1728,9 @@ TEST_CASE("Native TUI renders a resumed rich transcript before accepting continu
 
     REQUIRE(terminal.inject_input("continue here\r"));
     REQUIRE(pump_until(io, [&] {
-        return resumed->session->message_count() == authoritative_before.size() + 2 && !resumed->session->is_busy();
+        return resumed->session->message_count() == authoritative_before.size() + 2 && !resumed->session->is_busy() &&
+               visible_screen(terminal).find("fake: continue here") != std::string::npos;
     }));
-    CHECK(visible_screen(terminal).find("fake: continue here") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
     REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
@@ -2297,20 +2297,21 @@ TEST_CASE("Native TUI retries a transient render backpressure failure", "[coding
             });
     drain_ready(io);
     REQUIRE_FALSE(run_result.has_value());
-    REQUIRE(terminal.render_end_calls == 2);
+    REQUIRE(terminal.render_end_calls == 1);
 
-    // The third frame is rejected with Busy. The retry timer must keep the
+    // The second frame is rejected with Busy. The retry timer must keep the
     // interactive run alive and submit the same pending presentation again.
     // A full-frame-producing action is required here: under the pinned-dock
     // projection plain editor input is echoed locally in the dock and no
     // longer triggers a TUI frame (#597), so toggle tool output instead.
+    terminal.fail_on_render_end = 2;
     REQUIRE(terminal.inject("\x0f"));
-    REQUIRE(pump_until(io, [&] { return terminal.render_end_calls >= 4; }, std::chrono::milliseconds{1000}));
+    REQUIRE(pump_until(io, [&] { return terminal.render_end_calls >= 3; }, std::chrono::milliseconds{1000}));
     CHECK_FALSE(run_result.has_value());
 
     // Other render failures remain fatal, but are presented as runtime render
     // failures rather than being mislabeled as startup failures.
-    terminal.fail_on_render_end = 5;
+    terminal.fail_on_render_end = 4;
     terminal.fail_with_process_error = true;
     REQUIRE(terminal.inject("\x0f"));
     REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
@@ -2329,12 +2330,8 @@ TEST_CASE(
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
     TransientRenderBackpressureTerminal terminal;
-    // Reject the second (last) startup frame, which is a startup render rather
-    // than a ticker frame. Startup used to call `Tui::render` directly and map
-    // this typed Busy onto `fail_start`, killing the run before the first
-    // prompt. Rejecting the last one matters: no later startup paint supersedes
-    // it, so the owed frame can only be repainted by the retry timer.
-    terminal.fail_on_render_end = 2;
+    // Reject the startup frame, which is scheduled by tui.start().
+    terminal.fail_on_render_end = 1;
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(io,
@@ -2349,8 +2346,8 @@ TEST_CASE(
     // run survives the rejected frame...
     CHECK_FALSE(run_result.has_value());
     // ...and the frame it still owes is repainted by the retry timer instead of
-    // being forgotten (the two startup paints plus the deferred frame's retry).
-    CHECK(pump_until(io, [&] { return terminal.render_end_calls >= 3; }, std::chrono::milliseconds{1000}));
+    // being forgotten (the startup paint attempt plus the deferred frame's retry).
+    CHECK(pump_until(io, [&] { return terminal.render_end_calls >= 2; }, std::chrono::milliseconds{1000}));
     CHECK_FALSE(run_result.has_value());
 }
 

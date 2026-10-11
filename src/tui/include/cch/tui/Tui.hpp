@@ -2,6 +2,7 @@
 
 #include <cch/tui/ITui.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -54,9 +55,12 @@ public:
     [[nodiscard]] support::ExpectedVoid clear_screen() override;
     [[nodiscard]] support::ExpectedVoid set_focus(Component* component) override;
     [[nodiscard]] Component* focus() const noexcept override { return focused_; }
-    void set_render_request_sink(TuiRenderRequestSink sink) override;
-    void request_render() override;
+    void request_render(bool force = false) override;
+    void request_immediate_render() override;
     void invalidate() override;
+    void set_scheduler(TuiScheduler* scheduler) override;
+    void set_render_prepare_sink(TuiRenderPrepareSink sink) override;
+    void set_render_complete_sink(TuiRenderCompleteSink sink) override;
 
     /// Register an ordered raw-input listener that observes every raw input
     /// fragment before typed dispatch (pi `addInputListener`). The returned
@@ -97,12 +101,19 @@ private:
         MainScreen& owner_;
     };
 
+    struct RenderScheduleState;
+
     void finish_child_operation() noexcept;
+    [[nodiscard]] support::ExpectedVoid render_now();
+    [[nodiscard]] support::ExpectedVoid render_frame();
+    void schedule_render();
     [[nodiscard]] bool owns(const Component* component) const;
     [[nodiscard]] support::Expected<RenderResult> render_children(TerminalDimensions dimensions, bool prepare_rows);
     void handle_input(std::string input);
     void dispatch_input(const InputEventVariant& event);
     void handle_resize(TerminalDimensions dimensions);
+    void cancel_scheduled_render() noexcept;
+    void execute_scheduled_render(std::size_t generation);
     void apply_focus(Component* component);
     [[nodiscard]] bool focus_target_available(Component* component) const;
     void fallback_focus();
@@ -110,10 +121,16 @@ private:
     [[nodiscard]] std::optional<CursorPosition> resolve_cursor_location() const;
 
     Terminal& terminal_; // must outlive this MainScreen.
+    std::shared_ptr<RenderScheduleState> render_schedule_state_;
+    TuiScheduler* scheduler_{nullptr}; // must outlive every scheduled render.
+    TuiRenderPrepareSink render_prepare_sink_;
+    TuiRenderCompleteSink render_complete_sink_;
+    std::optional<std::chrono::steady_clock::time_point> last_render_at_;
+    std::size_t render_generation_{0};
+    bool render_scheduled_{false};
     std::unique_ptr<detail::TerminalStreamDecoder> stream_decoder_;
     std::unique_ptr<detail::OverlayCompositor> compositor_;
     std::unique_ptr<detail::RenderPipeline> render_pipeline_;
-    TuiRenderRequestSink render_request_sink_;
     std::shared_ptr<RawInputListenerChain> raw_listeners_;
     std::vector<std::unique_ptr<Component>> children_;
     std::vector<std::unique_ptr<Component>> retired_children_;

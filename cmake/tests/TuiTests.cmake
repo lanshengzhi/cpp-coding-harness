@@ -65,6 +65,7 @@ tests/tui/KeysKittyTextTest.cpp
         tests/tui/StdinBufferTest.cpp
         tests/tui/TextBufferTest.cpp
         tests/tui/TruncatedTextTest.cpp
+        tests/tui/TuiRenderSchedulingTest.cpp
         tests/tui/TuiTest.cpp
         tests/tui/UnicodeWidthTest.cpp
         tests/tui/UtilsAnsiTest.cpp

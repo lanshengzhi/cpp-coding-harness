@@ -77,14 +77,14 @@ using interactive_view_detail::queued_editor_texts;
 void InteractiveEngine::show_help_command() {
     if (view_ == nullptr) return;
     view_->append_frontend_message(std::string{kHelpCommandText});
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 void InteractiveEngine::open_hotkeys() {
     if (view_ == nullptr || !keybindings_) return;
     const auto help = keybindings_->help();
     view_->append_frontend_message(help ? format_hotkeys_text(*help) : format_hotkeys_text(*keybindings_->get()));
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 void InteractiveEngine::handle_copy_last_message() {
@@ -109,7 +109,7 @@ void InteractiveEngine::handle_name_command(std::string name) {
         } else {
             view_->append_warning("Usage: /name <name>");
         }
-        tui_.invalidate();
+        invalidate_frame();
         return;
     }
     auto stored = session_->set_session_name(name);
@@ -127,12 +127,12 @@ void InteractiveEngine::handle_name_command(std::string name) {
     }
     view_->append_frontend_message(
         std::format("Session name set: {}", stored->value_or(name)));
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 void InteractiveEngine::handle_session_command() {
     view_->append_frontend_message(format_session_info(*session_));
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 bool InteractiveEngine::write_clipboard_text_sink(std::string text) {
@@ -297,8 +297,9 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(
         return {};
     case SlashCommandId::Quit:
         if (view_ != nullptr) {
+            local_dock_dirty_.store(true, std::memory_order_release);
             tui_.invalidate();
-            (void)render();
+            tui_.request_render(true);
         }
         request_exit();
         return {};
@@ -472,7 +473,7 @@ void InteractiveEngine::dequeue_pending_input(bool announce) {
     if (auto collected = queued_editor_texts(snapshot.agent_state.input_queues);
         !collected) {
         view_->append_diagnostic(collected.error().message);
-        tui_.invalidate();
+        invalidate_frame();
         return;
     } else {
         restored = std::move(*collected);
@@ -480,7 +481,7 @@ void InteractiveEngine::dequeue_pending_input(bool announce) {
     if (restored.empty()) {
         if (announce) view_->append_frontend_message("No queued messages to restore");
         session_ui_->sync_pending_input();
-        tui_.invalidate();
+        invalidate_frame();
         return;
     }
     if (auto cleared = session_->clear_input_queues(); !cleared) {
@@ -488,7 +489,7 @@ void InteractiveEngine::dequeue_pending_input(bool announce) {
             "Unable to restore queued input: {}",
             combined_error_text(cleared.error()))));
         session_ui_->sync_pending_input();
-        tui_.invalidate();
+        invalidate_frame();
         return;
     }
     view_->restore_queued_text(restored);
@@ -499,7 +500,7 @@ void InteractiveEngine::dequeue_pending_input(bool announce) {
             restored.size() == 1 ? "" : "s"));
     }
     session_ui_->sync_pending_input();
-    tui_.invalidate();
+    invalidate_frame();
 }
 
 void InteractiveEngine::retire_current_session() noexcept {

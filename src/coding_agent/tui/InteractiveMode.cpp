@@ -111,7 +111,7 @@ void InteractiveEngine::dispatch(ClipboardPasteAction) {
                 auto content = co_await read_clipboard_insert_content(*self->clipboard_reader_);
                 if (content && !content->empty() && self->running_ && self->view_ != nullptr) {
                     self->view_->insert_editor_text(std::move(*content));
-                    self->tui_.invalidate();
+                    self->invalidate_frame();
                 }
                 co_return support::ExpectedVoid{};
             });
@@ -204,7 +204,7 @@ boost::asio::awaitable<void> InteractiveEngine::handle_open_external_editor() {
     }
     if (*result && view_ != nullptr) {
         view_->set_editor_text(std::move(**result));
-        tui_.invalidate();
+        invalidate_frame();
     }
 }
 
@@ -256,7 +256,7 @@ bool InteractiveEngine::dispatch_user_bash(const std::string& text, SubmissionOr
         view_->restore_submitted_text(trim_editor_submission(text));
         view_->append_user_bash_diagnostic(
             "A User Bash command is already in flight");
-        tui_.invalidate();
+        invalidate_frame();
         return true;
     }
 
@@ -303,7 +303,7 @@ bool InteractiveEngine::dispatch_user_bash(const std::string& text, SubmissionOr
                     self->view_->clear_user_bash_progress();
                     self->view_->append_user_bash_diagnostic(
                         "Native TUI User Bash coroutine failed");
-                    self->tui_.invalidate();
+                    self->invalidate_frame();
                 }
                 if (self->exit_requested_) self->signal_exit();
             }
@@ -328,7 +328,7 @@ void InteractiveEngine::request_interrupt(
         cleared_editor_revision_ = request.editor_revision;
         if (view_ != nullptr) {
             view_->clear_pending_bash(request);
-            tui_.invalidate();
+            invalidate_frame();
         }
         return;
     case InterruptRoute::None:
@@ -378,7 +378,7 @@ void InteractiveEngine::submit(
             // would die with it, so the text returns to the editor.
             view_->restore_submitted_text(text);
             view_->append_diagnostic("A prompt is already in flight");
-            tui_.invalidate();
+            invalidate_frame();
             return;
         }
         if (submission == InputSubmission::FollowUp) {
@@ -397,7 +397,7 @@ void InteractiveEngine::submit(
             }
         }
         session_ui_->sync_pending_input();
-        tui_.invalidate();
+        invalidate_frame();
         return;
     }
 
@@ -432,7 +432,7 @@ void InteractiveEngine::prompt_launch_failed(std::size_t started_generation) {
     prompt_active_ = false;
     if (view_ != nullptr && running_) {
         view_->append_diagnostic("Native TUI prompt failed");
-        tui_.invalidate();
+        invalidate_frame();
     }
     if (exit_requested_) signal_exit();
 }
@@ -490,7 +490,7 @@ void InteractiveEngine::user_bash_finished(
                 view_->restore_submitted_text(recall);
             }
         }
-        tui_.invalidate();
+        invalidate_frame();
     }
     if (exit_requested_ && !prompt_active_) signal_exit();
 }

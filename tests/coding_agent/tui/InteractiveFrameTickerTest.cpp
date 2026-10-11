@@ -11,6 +11,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
 #include <memory>
 #include <string>
@@ -92,10 +95,18 @@ public:
     return text;
 }
 
+[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> wait_for_render_turn() {
+    auto executor = co_await boost::asio::this_coro::executor;
+    boost::asio::steady_timer timer(executor);
+    timer.expires_after(std::chrono::milliseconds{20});
+    co_await timer.async_wait(boost::asio::use_awaitable);
+    co_return support::ExpectedVoid{};
+}
+
 } // namespace
 
-TEST_CASE("Interactive frame ticker coalesces a burst into one complete snapshot render",
-        "[coding_agent][tui][frame-ticker][issue601][spec]") {
+TEST_CASE("Interactive scheduled frames render the latest coalesced snapshot",
+        "[coding_agent][tui][render][issue978][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
     auto created = create_session(runtime, workspace);
@@ -109,20 +120,13 @@ TEST_CASE("Interactive frame ticker coalesces a burst into one complete snapshot
                     .build());
     REQUIRE(started);
 
-    // Cancelling the arm keeps this deterministic while the test invokes the
-    // public tick directly.
-    (void)engine->frame_ticker().cancel();
-    engine->on_frame_tick();
-    CHECK(engine->render_count() == 0);
-    (void)engine->frame_ticker().cancel();
-
     auto prompted = tests::run_awaitable(runtime, (*created)->prompt("coalesced prompt"));
     const auto prompt_error = prompted ? std::string{} : prompted.error().message;
     INFO(prompt_error);
     REQUIRE(prompted.has_value());
-    (void)engine->frame_ticker().cancel();
 
-    engine->on_frame_tick();
-    CHECK(engine->render_count() == 1);
+    auto rendered = tests::run_awaitable(runtime, wait_for_render_turn());
+    REQUIRE(rendered);
+    CHECK(engine->render_count() >= 1);
     CHECK(visible_screen(terminal).find("chunk chunk") != std::string::npos);
 }

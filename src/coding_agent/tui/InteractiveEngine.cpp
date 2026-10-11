@@ -29,6 +29,7 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -51,10 +52,34 @@ namespace {
             support::ErrorCode::Workspace, "Project resource detection filesystem capability is unavailable");
 }
 
-/// Pi throttles render work to roughly one display frame while the terminal
-/// catches up. A typed terminal Busy result uses the same cadence instead of
-/// turning recoverable output backpressure into an application failure.
-constexpr auto kRenderRetryInterval = std::chrono::milliseconds(16);
+class AsioTuiScheduler final : public cch::tui::TuiScheduler {
+public:
+    explicit AsioTuiScheduler(boost::asio::any_io_executor executor)
+        : executor_(std::move(executor)), timer_(executor_) {}
+
+    [[nodiscard]] std::chrono::steady_clock::time_point now() const noexcept override {
+        return std::chrono::steady_clock::now();
+    }
+
+    void post(cch::tui::TuiScheduledWork work) override {
+        boost::asio::post(executor_, [work = std::move(work)]() mutable {
+            if (work) work();
+        });
+    }
+
+    void schedule(std::chrono::steady_clock::duration delay, cch::tui::TuiScheduledWork work) override {
+        timer_.expires_after(std::max(delay, std::chrono::steady_clock::duration::zero()));
+        timer_.async_wait([work = std::move(work)](const boost::system::error_code& error) mutable {
+            if (!error && work) work();
+        });
+    }
+
+    void cancel() noexcept override { (void)timer_.cancel(); }
+
+private:
+    boost::asio::any_io_executor executor_;
+    boost::asio::steady_timer timer_;
+};
 
 } // namespace
 
@@ -63,29 +88,28 @@ using interactive_view_detail::queued_editor_texts;
 InteractiveEngine::~InteractiveEngine() = default;
 
 InteractiveEngine::InteractiveEngine(cch::tui::Terminal& terminal, boost::asio::any_io_executor executor)
-    : session_(nullptr), terminal_(terminal), main_screen_(terminal), tui_(main_screen_),
-      executor_(std::move(executor)), exit_wait_(executor_), render_retry_timer_(executor_), frame_ticker_(executor_),
+    : session_(nullptr), terminal_(terminal), tui_scheduler_(std::make_unique<AsioTuiScheduler>(executor)),
+      main_screen_(terminal), tui_(main_screen_), executor_(std::move(executor)), exit_wait_(executor_),
       flows_settled_(executor_) {
     exit_wait_.expires_at(std::chrono::steady_clock::time_point::max());
-    render_retry_timer_.expires_at(std::chrono::steady_clock::time_point::max());
-    frame_ticker_.expires_at(std::chrono::steady_clock::time_point::max());
     flows_settled_.expires_at(std::chrono::steady_clock::time_point::max());
+    tui_.set_scheduler(tui_scheduler_.get());
 }
 
 support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     auto intent = run.take_session_intent();
     std::visit(
-        [this](auto&& it) {
-            using T = std::decay_t<decltype(it)>;
-            if constexpr (std::is_same_v<T, BindExistingSession>) {
-                session_ = it.session;
-                boot_request_ = std::nullopt;
-            } else if constexpr (std::is_same_v<T, DeferBoot>) {
-                session_ = nullptr;
-                boot_request_ = std::move(it.request);
-            }
-        },
-        intent);
+            [this](auto&& it) {
+                using T = std::decay_t<decltype(it)>;
+                if constexpr (std::is_same_v<T, BindExistingSession>) {
+                    session_ = it.session;
+                    boot_request_ = std::nullopt;
+                } else if constexpr (std::is_same_v<T, DeferBoot>) {
+                    session_ = nullptr;
+                    boot_request_ = std::move(it.request);
+                }
+            },
+            intent);
     const bool booting = boot_request_.has_value();
 
     runtime_root_ = run.runtime_root();
@@ -137,17 +161,19 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     if (!booting) {
         if (session_ == nullptr) {
             return fail_start(support::make_error(
-                support::ErrorCode::Unknown,
-                "BindExistingSession intent supplied a null session"));
+                    support::ErrorCode::Unknown, "BindExistingSession intent supplied a null session"));
         }
         if (auto subscribed = session_ui_->bind(*session_); !subscribed) {
             return fail_start(subscribed.error());
         }
     }
 
-    tui_.set_render_request_sink([weak]() -> support::ExpectedVoid {
-        if (const auto self = weak.lock()) self->post_render();
-        return {};
+    tui_.set_render_prepare_sink([weak]() -> support::Expected<bool> {
+        if (const auto self = weak.lock()) return self->prepare_frame();
+        return false;
+    });
+    tui_.set_render_complete_sink([weak](const support::ExpectedVoid& result) {
+        if (const auto self = weak.lock()) self->complete_frame(result);
     });
     if (auto started = tui_.start(); !started) return fail_start(started.error());
     tui_started_ = true;
@@ -163,17 +189,14 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         // bind at `bind_boot_session` already orders it this way).
         mcp_flows_->refresh_completion();
         rebuild_autocomplete_provider();
-        if (auto painted = paint_frame(); !painted) return fail_start(painted.error());
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
-        if (auto painted = paint_frame(); !painted) return fail_start(painted.error());
-        local_dock_dirty_.store(false, std::memory_order_release);
-        start_frame_ticker();
+        local_dock_dirty_.store(true, std::memory_order_release);
+        tui_.request_render();
         if (run.initial_prompt()) {
-            submit(
-                *run.initial_prompt(),
-                InputSubmission::Ordinary,
-                run.initial_prompt_options(),
-                SubmissionOrigin::InitialPrompt);
+            submit(*run.initial_prompt(),
+                    InputSubmission::Ordinary,
+                    run.initial_prompt_options(),
+                    SubmissionOrigin::InitialPrompt);
         }
     } else {
         // pi main.ts: the boot trust prompt resolves as an overlay on the
@@ -182,11 +205,9 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         // diagnostics render after bind, alongside the created session's
         // snapshot.
         startup_diagnostics_ = std::move(diagnostics);
-        if (auto painted = paint_frame(); !painted) return fail_start(painted.error());
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
-        if (auto painted = paint_frame(); !painted) return fail_start(painted.error());
-        local_dock_dirty_.store(false, std::memory_order_release);
-        start_frame_ticker();
+        local_dock_dirty_.store(true, std::memory_order_release);
+        tui_.request_render();
         initial_prompt_ = run.initial_prompt();
         initial_prompt_options_ = run.initial_prompt_options();
     }
@@ -207,8 +228,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         co_return std::unexpected(failed.error());
     }
     auto decision = co_await session_flows_->resolve_boot_trust(
-        boot_request_->workspace,
-        boot_request_->project_trust_override);
+            boot_request_->workspace, boot_request_->project_trust_override);
     if (!decision) {
         (void)deliver_action(action_generation_, TuiActionVariant{ReportBootCreationFailureAction{decision.error()}});
         auto failed = fail_start(decision.error());
@@ -228,9 +248,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         const support::Error failure = created.error();
         // pi `print_creation_failure`: the host reports the failure
         // through the closed action seam before the boot exits.
-        (void)deliver_action(
-            action_generation_,
-            TuiActionVariant{ReportBootCreationFailureAction{failure}});
+        (void)deliver_action(action_generation_, TuiActionVariant{ReportBootCreationFailureAction{failure}});
         // Stop the TUI so the terminal is restored before the host
         // reports the error; the session never bound.
         running_ = false;
@@ -263,8 +281,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
     // steps). Parse/collision diagnostics render with the startup
     // diagnostics.
     if (theme_controller_) {
-        auto discovery = coding_agent::tui::discover_themes(
-            std::move(created->theme_resources));
+        auto discovery = coding_agent::tui::discover_themes(std::move(created->theme_resources));
         loaded_theme_diagnostics_ = discovery.diagnostics;
         startup_diagnostics_.themes = std::move(discovery.diagnostics);
         theme_controller_->set_registered_themes(std::move(discovery.themes));
@@ -286,33 +303,24 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         auto failed = fail_start(warning.error());
         co_return std::unexpected(failed.error());
     }
-    if (auto painted = paint_frame(); !painted) {
-        co_return std::unexpected(painted.error());
-    }
     if (auto focused = tui_.set_focus(view_); !focused) {
         co_return std::unexpected(focused.error());
     }
-    if (auto painted = paint_frame(); !painted) {
-        co_return std::unexpected(painted.error());
-    }
-    local_dock_dirty_.store(false, std::memory_order_release);
+    local_dock_dirty_.store(true, std::memory_order_release);
+    tui_.request_render();
     if (initial_prompt_) {
-        submit(
-            std::move(*initial_prompt_),
-            InputSubmission::Ordinary,
-            std::move(initial_prompt_options_),
-            SubmissionOrigin::InitialPrompt);
+        submit(std::move(*initial_prompt_),
+                InputSubmission::Ordinary,
+                std::move(initial_prompt_options_),
+                SubmissionOrigin::InitialPrompt);
     }
     co_return support::ExpectedVoid{};
 }
 
 boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     stop_source_.request_stop();
-    ticker_running_ = false;
-    (void)frame_ticker_.cancel();
-    render_retry_pending_ = false;
-    ++render_retry_generation_;
-    (void)render_retry_timer_.cancel();
+    tui_.set_render_prepare_sink(nullptr);
+    tui_.set_render_complete_sink(nullptr);
     // Cancel extracted modal/session flows before terminal restoration;
     // their host-lifetime captures then let their coroutines quiesce
     // without touching a stopped presenter.
@@ -329,34 +337,30 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     if (in_flight_flows_ > 0) {
         flows_settled_.expires_at(std::chrono::steady_clock::time_point::max());
         boost::system::error_code wait_error;
-        co_await flows_settled_.async_wait(
-            boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+        co_await flows_settled_.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
     }
     const auto stopped = tui_.stop();
+    tui_.set_scheduler(nullptr);
     tui_started_ = false;
     if (!completion_result_) completion_result_.emplace();
     if (!*completion_result_) {
         if (!stopped) {
-            co_return std::unexpected(aggregate_presentation_errors(
-                completion_result_->error(),
-                stopped.error(),
-                "Native TUI failed and terminal restoration failed"));
+            co_return std::unexpected(aggregate_presentation_errors(completion_result_->error(),
+                    stopped.error(),
+                    first_frame_rendered_ ? "Native TUI failed and terminal restoration failed"
+                                          : "Native TUI startup and terminal restoration failed"));
         }
         co_return std::unexpected(completion_result_->error());
     }
     if (!stopped) {
-        co_return std::unexpected(presentation_error(
-            stopped.error(),
-            "Native TUI terminal restoration failed"));
+        co_return std::unexpected(presentation_error(stopped.error(), "Native TUI terminal restoration failed"));
     }
     co_return support::ExpectedVoid{};
 }
 
 support::ExpectedVoid InteractiveEngine::re_catalog_keybindings() {
-    const auto actions =
-        assemble_keybinding_actions(clipboard_reader_ != nullptr);
-    if (auto manager = load_app_keybinding_manager(agent_config_directory_, actions);
-        !manager) {
+    const auto actions = assemble_keybinding_actions(clipboard_reader_ != nullptr);
+    if (auto manager = load_app_keybinding_manager(agent_config_directory_, actions); !manager) {
         return std::unexpected(manager.error());
     } else {
         if (view_ != nullptr) {
@@ -371,13 +375,11 @@ support::ExpectedVoid InteractiveEngine::re_catalog_keybindings() {
 }
 
 support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup_resources(
-    const InteractiveSessionRun& run) {
+        const InteractiveSessionRun& run) {
     InteractiveStartupDiagnostics diagnostics;
     agent_config_directory_ = run.agent_config_directory();
-    const auto actions =
-        assemble_keybinding_actions(clipboard_reader_ != nullptr);
-    if (auto manager = load_app_keybinding_manager(run.agent_config_directory(), actions);
-        !manager) {
+    const auto actions = assemble_keybinding_actions(clipboard_reader_ != nullptr);
+    if (auto manager = load_app_keybinding_manager(run.agent_config_directory(), actions); !manager) {
         return std::unexpected(manager.error());
     } else {
         // The shared slot exists before the view is composed; the
@@ -393,8 +395,7 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
     // The manager stays owned by the state: the scoped-models selector
     // persists `enabledModels` through it (pi `setEnabledModels`) and the
     // theme committer below references it.
-    if (auto manager = create_interactive_settings_manager(run.agent_config_directory());
-        !manager) {
+    if (auto manager = create_interactive_settings_manager(run.agent_config_directory()); !manager) {
         return std::unexpected(manager.error());
     } else {
         settings_manager_.emplace(std::move(*manager));
@@ -414,9 +415,8 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
     InteractiveThemeHooks theme_hooks;
     theme_hooks.show_error = [weak_controller](std::string message) {
         if (const auto self = weak_controller.lock()) {
-            self->post_from_view([message = std::move(message)](InteractiveEngine& state) {
-                state.show_error(std::move(message));
-            });
+            self->post_from_view(
+                    [message = std::move(message)](InteractiveEngine& state) { state.show_error(std::move(message)); });
         }
     };
     theme_hooks.on_changed = [weak_controller] {
@@ -428,20 +428,18 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
             self->post_invalidate();
         }
     };
-    theme_controller_ = make_interactive_theme_controller(
-        run.agent_config_directory(),
-        *settings_manager_,
-        terminal_.capabilities().color,
-        tui_,
-        std::move(theme_hooks));
+    theme_controller_ = make_interactive_theme_controller(run.agent_config_directory(),
+            *settings_manager_,
+            terminal_.capabilities().color,
+            tui_,
+            std::move(theme_hooks));
     return diagnostics;
 }
 
-std::unique_ptr<InteractiveView> InteractiveEngine::make_interactive_view(
-    std::weak_ptr<InteractiveEngine> weak) {
+std::unique_ptr<InteractiveView> InteractiveEngine::make_interactive_view(std::weak_ptr<InteractiveEngine> weak) {
     InteractiveViewOptions options;
     options.keybindings = keybindings_;
-    options.terminal = &terminal_;
+    options.terminal = nullptr;
     // Preserve the existing production hint: the application supplies
     // the clipboard action path even when the clipboard reader is
     // unavailable, so the hint remains part of the assembled Native TUI.
@@ -455,8 +453,7 @@ std::unique_ptr<InteractiveView> InteractiveEngine::make_interactive_view(
     // is admitted through post_view_action, which captures the interrupt
     // prompt generation at admission and posts exactly once to the
     // serialized executor path.
-    options.action_sink =
-        [weak](ViewAction action) noexcept -> support::ExpectedVoid {
+    options.action_sink = [weak](ViewAction action) noexcept -> support::ExpectedVoid {
         if (const auto self = weak.lock()) {
             self->post_view_action(std::move(action));
         }
@@ -472,8 +469,7 @@ std::unique_ptr<InteractiveView> InteractiveEngine::make_interactive_view(
     options.output_pad = output_pad_;
     options.user_bash_available = view_user_shell_available();
     options.autocomplete_provider = build_autocomplete_provider();
-    options.autocomplete_debounce_timer =
-        std::make_unique<AsioAutocompleteDebounceTimer>(executor_);
+    options.autocomplete_debounce_timer = std::make_unique<AsioAutocompleteDebounceTimer>(executor_);
     options.render_request = [weak]() -> support::ExpectedVoid {
         if (const auto self = weak.lock()) self->post_invalidate();
         return {};
@@ -489,17 +485,14 @@ bool InteractiveEngine::view_user_shell_available() const {
     return boot_request_ && boot_request_->provide_user_shell;
 }
 
-std::unique_ptr<cch::tui::AutocompleteProvider>
-InteractiveEngine::build_autocomplete_provider() {
-    const bool include_skill_commands =
-        settings_manager_ && settings_manager_->get_enable_skill_commands();
+std::unique_ptr<cch::tui::AutocompleteProvider> InteractiveEngine::build_autocomplete_provider() {
+    const bool include_skill_commands = settings_manager_ && settings_manager_->get_enable_skill_commands();
     static const std::vector<PromptTemplate> kEmptyTemplates;
     static const std::vector<Skill> kEmptySkills;
     const auto& templates = session_ != nullptr ? session_->templates() : kEmptyTemplates;
     const auto& skills = session_ != nullptr ? session_->skills() : kEmptySkills;
-    const auto workspace = session_ != nullptr
-        ? session_->workspace()
-        : (boot_request_ ? boot_request_->workspace : std::filesystem::path{});
+    const auto workspace = session_ != nullptr ? session_->workspace()
+                                               : (boot_request_ ? boot_request_->workspace : std::filesystem::path{});
     // Every result must reach the editor's serialized domain on this
     // executor: the provider contract allows worker-thread delivery, and the
     // receiver re-enters the editor through the render request (#609).
@@ -524,11 +517,8 @@ void InteractiveEngine::refresh_loaded_resources() {
         return;
     }
     static const std::vector<RegisteredTheme> kNoRegisteredThemes;
-    const auto& registered = theme_controller_
-        ? theme_controller_->registered_themes()
-        : kNoRegisteredThemes;
-    view_->set_loaded_resources_data(collect_loaded_resources_data(
-        *session_, registered, loaded_theme_diagnostics_));
+    const auto& registered = theme_controller_ ? theme_controller_->registered_themes() : kNoRegisteredThemes;
+    view_->set_loaded_resources_data(collect_loaded_resources_data(*session_, registered, loaded_theme_diagnostics_));
 }
 
 void InteractiveEngine::initialize_view(const InteractiveStartupDiagnostics& diagnostics) {
@@ -623,59 +613,32 @@ support::ExpectedVoid InteractiveEngine::fail_start(const support::Error& error)
     tui_started_ = false;
     if (!stopped) {
         return std::unexpected(aggregate_presentation_errors(
-            error,
-            stopped.error(),
-            "Native TUI startup and terminal restoration failed"));
+                error, stopped.error(), "Native TUI startup and terminal restoration failed"));
     }
     return std::unexpected(startup_error(error));
 }
 
 void InteractiveEngine::post_invalidate() {
+    if (!running_) return;
     local_dock_dirty_.store(true, std::memory_order_release);
-    if (frame_render_posted_.exchange(true, std::memory_order_acq_rel)) return;
     const auto weak = weak_from_this();
     boost::asio::post(executor_, [weak] {
-        if (const auto self = weak.lock()) {
-            self->frame_render_posted_.store(false, std::memory_order_release);
-            if (self->running_) {
-                // Uncounted preview: the ticker keeps the counted frame and
-                // the version/dirty bookkeeping (#597). The preview never
-                // re-arms the ticker schedule.
-                self->immediate_frame_render_ = true;
-                self->on_frame_tick();
-                self->immediate_frame_render_ = false;
-            }
+        if (const auto self = weak.lock(); self && self->running_) {
+            self->local_dock_dirty_.store(true, std::memory_order_release);
+            self->tui_.invalidate();
         }
     });
 }
 
 void InteractiveEngine::invalidate_frame() {
+    local_dock_dirty_.store(true, std::memory_order_release);
     tui_.invalidate();
-    post_invalidate();
 }
 
 void InteractiveEngine::post_exit() {
     const auto weak = weak_from_this();
     boost::asio::post(executor_, [weak] {
         if (const auto self = weak.lock()) self->request_exit();
-    });
-}
-
-void InteractiveEngine::post_render() { post_invalidate(); }
-
-void InteractiveEngine::schedule_render_retry() {
-    if (!running_ || render_retry_pending_) return;
-    render_retry_pending_ = true;
-    const auto retry_generation = ++render_retry_generation_;
-    render_retry_timer_.expires_after(kRenderRetryInterval);
-    const auto weak = weak_from_this();
-    render_retry_timer_.async_wait([weak, retry_generation](const boost::system::error_code& error) {
-        const auto self = weak.lock();
-        if (!self || self->render_retry_generation_ != retry_generation) return;
-        self->render_retry_pending_ = false;
-        if (!error && self->running_) {
-            self->local_dock_dirty_.store(true, std::memory_order_release);
-        }
     });
 }
 
@@ -692,8 +655,7 @@ void InteractiveEngine::append_command_error(const support::Error& error) {
     invalidate_frame();
 }
 
-support::ExpectedVoid InteractiveEngine::attach_overlay(
-    std::unique_ptr<cch::tui::Overlay> overlay) {
+support::ExpectedVoid InteractiveEngine::attach_overlay(std::unique_ptr<cch::tui::Overlay> overlay) {
     auto* overlay_pointer = overlay.get();
     if (auto attached = tui_.add_overlay(std::move(overlay)); !attached) {
         return std::unexpected(attached.error());
@@ -703,9 +665,7 @@ support::ExpectedVoid InteractiveEngine::attach_overlay(
         const auto focus_error = focused.error();
         if (auto removed = tui_.remove_overlay(active_overlay_); !removed) {
             return std::unexpected(aggregate_presentation_errors(
-                focus_error,
-                removed.error(),
-                "Native TUI overlay focus and cleanup failed"));
+                    focus_error, removed.error(), "Native TUI overlay focus and cleanup failed"));
         }
         active_overlay_ = nullptr;
         return std::unexpected(focus_error);
@@ -779,100 +739,47 @@ void InteractiveEngine::show_warning(std::string text) {
 
 void InteractiveEngine::request_render() { invalidate_frame(); }
 
-void InteractiveEngine::invalidate() {
-    local_dock_dirty_.store(true, std::memory_order_release);
-    tui_.invalidate();
-}
+void InteractiveEngine::invalidate() { invalidate_frame(); }
 
-support::Expected<InteractiveEngine::PaintOutcome> InteractiveEngine::paint_frame() {
-    if (auto rendered = tui_.render(); !rendered) {
-        if (rendered.error().code != support::ErrorCode::Busy) {
-            return std::unexpected(rendered.error());
-        }
-        // Terminal output backpressure (#727): the terminal refused the frame
-        // because its bounded output queue is still draining. Keep the frame
-        // owed and repaint it on the retry timer. The retry re-marks the frame
-        // when it fires, so a caller that clears its own render bookkeeping in
-        // the meantime still repaints.
-        local_dock_dirty_.store(true, std::memory_order_release);
-        schedule_render_retry();
-        return PaintOutcome::Deferred;
-    }
-    if (render_retry_pending_) {
-        render_retry_pending_ = false;
-        ++render_retry_generation_;
-        (void)render_retry_timer_.cancel();
-    }
-    return PaintOutcome::Painted;
-}
-
-[[nodiscard]] bool InteractiveEngine::render() {
+support::Expected<bool> InteractiveEngine::prepare_frame() {
     if (!running_) return false;
-    if (!immediate_frame_render_) ++render_count_;
-    if (auto painted = paint_frame(); !painted) {
-        completion_result_ = std::unexpected(presentation_error(painted.error(), "Native TUI render failed"));
-        request_exit();
-        return false;
-    } else {
-        return *painted == PaintOutcome::Painted;
-    }
+    prepared_counted_frame_ = false;
+    if (session_ui_ == nullptr || view_ == nullptr) return true;
+
+    (void)session_ui_->drain_composed_snapshot();
+    if (!session_ui_->pending_counted_frame()) return true;
+    if (!session_ui_->reconcile_snapshot(session_ui_->composed_snapshot())) return false;
+    prepared_counted_frame_ = true;
+    return true;
 }
 
-void InteractiveEngine::start_frame_ticker() {
-    if (ticker_running_) return;
-    ticker_running_ = true;
-    arm_frame_ticker();
-}
-
-void InteractiveEngine::arm_frame_ticker() {
-    if (!running_ || !ticker_running_) return;
-    frame_ticker_.expires_after(kFrameInterval);
-    const auto weak = weak_from_this();
-    frame_ticker_.async_wait([weak](const boost::system::error_code& ec) {
-        if (ec) return;
-        if (const auto self = weak.lock()) {
-            self->on_frame_tick();
+void InteractiveEngine::complete_frame(const support::ExpectedVoid& result) {
+    if (!result) {
+        if (result.error().code == support::ErrorCode::Busy) {
+            local_dock_dirty_.store(true, std::memory_order_release);
+            return;
         }
-    });
-}
-
-void InteractiveEngine::on_frame_tick() {
-    if (!running_ || !ticker_running_) return;
-    // Previews render the latest composed snapshot without consuming the
-    // counted frame: the pending counted flag stays for the ticker's
-    // authoritative render and the pending ticker schedule is left
-    // undisturbed (#597, ADR 0051/0052).
-    const bool preview = immediate_frame_render_;
-    const bool counted_due = session_ui_ != nullptr && session_ui_->pending_counted_frame();
-
-    // Mailbox draining (ADR 0052): apply the queued stream messages to the
-    // composed snapshot; the ticker's counted frame consumes the flag.
-    const bool core_dirty = session_ui_ != nullptr && session_ui_->drain_composed_snapshot();
-    const bool dock_dirty = local_dock_dirty_.load(std::memory_order_acquire);
-    const bool frame_due = core_dirty || (counted_due && !preview);
-    bool snapshot_applied = !frame_due;
-
-    if (frame_due && view_ != nullptr && session_ui_ != nullptr) {
-        snapshot_applied = session_ui_->reconcile_snapshot(session_ui_->composed_snapshot());
+        completion_result_ = std::unexpected(presentation_error(
+                result.error(), first_frame_rendered_ ? "Native TUI render failed" : "Native TUI startup failed"));
+        const auto weak = weak_from_this();
+        boost::asio::post(executor_, [weak] {
+            if (const auto self = weak.lock()) self->request_exit();
+        });
+        return;
     }
 
-    if ((frame_due && snapshot_applied) || dock_dirty) {
-        if (render()) {
-            if (!preview) {
-                if (session_ui_ != nullptr) session_ui_->clear_pending_counted_frame();
-                local_dock_dirty_.store(false, std::memory_order_release);
-            }
-        }
+    first_frame_rendered_ = true;
+    ++render_count_;
+    local_dock_dirty_.store(false, std::memory_order_release);
+    if (prepared_counted_frame_ && session_ui_ != nullptr) {
+        session_ui_->clear_pending_counted_frame();
     }
-
-    if (!preview) arm_frame_ticker();
+    prepared_counted_frame_ = false;
 }
 
 void InteractiveEngine::request_exit() {
     if (!running_ || exit_requested_) return;
     exit_requested_ = true;
-    ticker_running_ = false;
-    (void)frame_ticker_.cancel();
     if (session_ != nullptr) session_->close();
     if (!prompt_active_ && !user_bash_active_ && !compaction_active_) {
         signal_exit();
@@ -880,27 +787,14 @@ void InteractiveEngine::request_exit() {
 }
 
 void InteractiveEngine::signal_exit() {
-    ticker_running_ = false;
-    (void)frame_ticker_.cancel();
-    // The ticker is stopped, so no further frames will pull the terminal
-    // publication (e.g. cancelled completions after Session Close): paint
-    // it synchronously before the run tears down (#597). Idempotent: the
-    // reconcile cursor and the Tui differential absorb repeat calls.
-    paint_final_snapshot();
-    (void)exit_wait_.cancel();
-}
-
-void InteractiveEngine::paint_final_snapshot() {
-    if (!running_ || view_ == nullptr || session_ == nullptr || session_ui_ == nullptr) return;
-    // The Close final paint consumes any pending Projection Stream state
-    // (ADR 0052 mailbox draining); the reconcile cursor and the Tui
-    // differential absorb repeat calls.
-    const bool core_dirty = session_ui_->drain_composed_snapshot();
-    if (core_dirty && !session_ui_->reconcile_snapshot(session_ui_->composed_snapshot())) return;
-    local_dock_dirty_.store(true, std::memory_order_release);
-    if (render()) {
-        local_dock_dirty_.store(false, std::memory_order_release);
+    if (view_ != nullptr && session_ != nullptr && session_ui_ != nullptr) {
+        (void)session_ui_->drain_composed_snapshot();
+        if (session_ui_->pending_counted_frame() && session_ui_->reconcile_snapshot(session_ui_->composed_snapshot())) {
+            local_dock_dirty_.store(true, std::memory_order_release);
+        }
     }
+    if (local_dock_dirty_.load(std::memory_order_acquire)) tui_.request_render(true);
+    (void)exit_wait_.cancel();
 }
 
 } // namespace cch::coding_agent::tui

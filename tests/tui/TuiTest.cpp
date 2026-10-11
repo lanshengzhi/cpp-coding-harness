@@ -22,6 +22,32 @@
 
 namespace {
 
+class ManualTuiScheduler final : public cch::tui::TuiScheduler {
+public:
+    [[nodiscard]] std::chrono::steady_clock::time_point now() const noexcept override { return now_; }
+    void post(cch::tui::TuiScheduledWork work) override { posted_.push_back(std::move(work)); }
+    void schedule(std::chrono::steady_clock::duration delay, cch::tui::TuiScheduledWork work) override {
+        scheduled_delay_ = delay;
+        scheduled_ = std::move(work);
+        ++schedule_count_;
+    }
+    void cancel() noexcept override { scheduled_ = nullptr; }
+
+    void advance(std::chrono::steady_clock::duration duration) { now_ += duration; }
+    void run_scheduled() {
+        auto scheduled = std::exchange(scheduled_, nullptr);
+        if (scheduled) scheduled();
+    }
+
+    std::chrono::steady_clock::duration scheduled_delay_{};
+    std::size_t schedule_count_{0};
+
+private:
+    std::chrono::steady_clock::time_point now_{};
+    cch::tui::TuiScheduledWork scheduled_;
+    std::vector<cch::tui::TuiScheduledWork> posted_;
+};
+
 class OverwideComponent final : public cch::tui::Component {
 public:
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
@@ -368,6 +394,8 @@ TEST_CASE("Tui rolls back viewport state after a backpressured frame", "[tui][is
     auto component = std::make_unique<MutableLinesComponent>();
     auto* component_pointer = component.get();
     REQUIRE(tui.add_child(std::move(component)));
+    ManualTuiScheduler scheduler;
+    tui.set_scheduler(&scheduler);
     REQUIRE(tui.start());
 
     const auto first = tui.render();
@@ -378,13 +406,16 @@ TEST_CASE("Tui rolls back viewport state after a backpressured frame", "[tui][is
     // next successful render is still the first frame and replaces it with a
     // one-line presentation.
     component_pointer->line_count = 1;
-    REQUIRE(tui.render());
+    scheduler.advance(std::chrono::milliseconds{16});
+    scheduler.run_scheduled();
 
     // With the viewport rolled back, growing to two lines is a normal
     // differential update. Without the rollback it looks like a change above
     // the stale viewport and incorrectly forces a full clear.
     component_pointer->line_count = 2;
-    REQUIRE(tui.render());
+    tui.invalidate();
+    scheduler.advance(std::chrono::milliseconds{16});
+    scheduler.run_scheduled();
     CHECK(terminal.clear_screen_calls == 0);
     REQUIRE(tui.stop());
 }
@@ -1028,11 +1059,8 @@ TEST_CASE("Tui coalesces repeated replaceable invalidations into one render requ
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("hi", 0, 0)));
 
-    std::size_t render_requests{0};
-    tui.set_render_request_sink([&render_requests]() -> cch::support::ExpectedVoid {
-        ++render_requests;
-        return {};
-    });
+    ManualTuiScheduler scheduler;
+    tui.set_scheduler(&scheduler);
     REQUIRE(tui.start());
 
     // Replaceable render state: repeated invalidations before the next render
@@ -1041,12 +1069,13 @@ TEST_CASE("Tui coalesces repeated replaceable invalidations into one render requ
     tui.invalidate();
     tui.invalidate();
     tui.invalidate();
-    CHECK(render_requests == 1);
+    CHECK(scheduler.schedule_count_ == 1);
+    CHECK(scheduler.scheduled_delay_ == std::chrono::steady_clock::duration::zero());
 
     // Rendering clears the pending flag; the next invalidation requests again.
     REQUIRE(tui.render());
     tui.invalidate();
-    CHECK(render_requests == 2);
+    CHECK(scheduler.schedule_count_ == 2);
 
     REQUIRE(tui.stop());
 }

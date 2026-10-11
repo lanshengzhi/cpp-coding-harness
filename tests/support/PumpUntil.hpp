@@ -24,7 +24,7 @@ namespace cch::tests {
 /// (one crossing Runtime worker or close-quiescence hops) must wait on the
 /// outcome itself with pump_until, never on a drain.
 inline void drain_ready(boost::asio::io_context& io,
-        std::chrono::milliseconds quiet = std::chrono::milliseconds{2},
+        std::chrono::milliseconds quiet = std::chrono::milliseconds{25},
         std::chrono::milliseconds budget = std::chrono::milliseconds{10000}) {
     const auto deadline = std::chrono::steady_clock::now() + budget;
     std::chrono::steady_clock::time_point quiet_since{};
@@ -66,8 +66,7 @@ inline void drain_ready(boost::asio::io_context& io,
         const std::atomic<bool>& done,
         std::chrono::milliseconds budget = std::chrono::milliseconds{60000}) {
     const auto deadline = std::chrono::steady_clock::now() + budget;
-    while (!done.load(std::memory_order_acquire) &&
-           std::chrono::steady_clock::now() < deadline) {
+    while (!done.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline) {
         if (io.stopped()) {
             io.restart();
         }

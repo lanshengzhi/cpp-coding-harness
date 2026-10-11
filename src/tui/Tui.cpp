@@ -44,13 +44,23 @@ void apply_late_replies(Terminal& terminal, const std::vector<detail::TerminalRe
 
 } // namespace
 
+struct MainScreen::RenderScheduleState {
+    MainScreen* owner{nullptr};
+};
+
 MainScreen::MainScreen(Terminal& terminal)
-    : terminal_(terminal), stream_decoder_(std::make_unique<detail::TerminalStreamDecoder>()),
+    : terminal_(terminal), render_schedule_state_(std::make_shared<RenderScheduleState>()),
+      stream_decoder_(std::make_unique<detail::TerminalStreamDecoder>()),
       compositor_(std::make_unique<detail::OverlayCompositor>()),
       render_pipeline_(std::make_unique<detail::RenderPipeline>(terminal)),
-      raw_listeners_(std::make_shared<RawInputListenerChain>()) {}
+      raw_listeners_(std::make_shared<RawInputListenerChain>()) {
+    render_schedule_state_->owner = this;
+}
 
-MainScreen::~MainScreen() { (void)stop(); }
+MainScreen::~MainScreen() {
+    (void)stop();
+    render_schedule_state_->owner = nullptr;
+}
 
 support::Expected<std::reference_wrapper<Component>> MainScreen::add_child(std::unique_ptr<Component> component) {
     auto attached = detail::attach_child(children_, std::move(component), "");
@@ -221,12 +231,17 @@ support::ExpectedVoid MainScreen::start() {
 
     render_pipeline_->start(terminal_.dimensions());
     pending_render_ = false;
+    if (scheduler_ != nullptr) last_render_at_.reset();
+    request_render();
     return {};
 }
 
 support::ExpectedVoid MainScreen::stop() {
     if (!started_ || stopping_) return {};
 
+    cancel_scheduled_render();
+    ++render_generation_;
+    render_scheduled_ = false;
     ChildOperation operation(*this);
     stopping_ = true;
     started_ = false;
@@ -238,6 +253,7 @@ support::ExpectedVoid MainScreen::stop() {
     const auto cursor_result = terminal_.set_cursor_visible(true);
     stream_decoder_->reset();
     pending_render_ = false;
+    last_render_at_.reset();
     const auto stop_result = terminal_.stop();
     stopping_ = false;
 
@@ -258,13 +274,40 @@ support::ExpectedVoid MainScreen::clear_screen() {
     return {};
 }
 
-support::ExpectedVoid MainScreen::render() {
-    ChildOperation operation(*this);
+support::ExpectedVoid MainScreen::render() { return render_now(); }
+
+support::ExpectedVoid MainScreen::render_now() {
     if (!started_) {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "TUI must be started before rendering"));
     }
 
+    cancel_scheduled_render();
+    ++render_generation_;
+    render_scheduled_ = false;
+    if (scheduler_ != nullptr) last_render_at_ = scheduler_->now();
+
+    if (render_prepare_sink_) {
+        auto prepared = render_prepare_sink_();
+        if (!prepared) {
+            support::ExpectedVoid result = std::unexpected(prepared.error());
+            if (render_complete_sink_) render_complete_sink_(result);
+            return result;
+        }
+        if (!*prepared) return {};
+    }
+
+    auto result = render_frame();
+    if (result) {
+        pending_render_ = false;
+    }
+    if (render_complete_sink_) render_complete_sink_(result);
+    if (!result && result.error().code == support::ErrorCode::Busy) request_render();
+    return result;
+}
+
+support::ExpectedVoid MainScreen::render_frame() {
+    ChildOperation operation(*this);
     const auto dimensions = terminal_.dimensions();
     if (dimensions.columns == 0 || dimensions.rows == 0) {
         return std::unexpected(
@@ -290,9 +333,6 @@ support::ExpectedVoid MainScreen::render() {
     }
     auto result = render_pipeline_->render(
             std::move(materialized), dimensions, capabilities, compose_overlays, resolve_cursor_location());
-    if (result) {
-        pending_render_ = false;
-    }
     return result;
 }
 
@@ -382,18 +422,37 @@ support::ExpectedVoid MainScreen::set_focus(Component* component) {
     return {};
 }
 
-void MainScreen::set_render_request_sink(TuiRenderRequestSink sink) { render_request_sink_ = std::move(sink); }
-
-void MainScreen::request_render() {
+void MainScreen::request_render(bool force) {
     ChildOperation operation(*this);
-    const bool request = started_ && !pending_render_;
     pending_render_ = true;
-    if (request && render_request_sink_) (void)render_request_sink_();
+    if (!started_ || stopping_ || scheduler_ == nullptr) return;
+    if (force) {
+        cancel_scheduled_render();
+        ++render_generation_;
+        render_scheduled_ = false;
+        (void)render_now();
+        return;
+    }
+    schedule_render();
+}
+
+void MainScreen::request_immediate_render() {
+    ChildOperation operation(*this);
+    pending_render_ = true;
+    if (!started_ || stopping_ || scheduler_ == nullptr) return;
+    cancel_scheduled_render();
+    const auto generation = ++render_generation_;
+    render_scheduled_ = true;
+    const std::weak_ptr<RenderScheduleState> weak_state = render_schedule_state_;
+    scheduler_->post([weak_state, generation] {
+        if (const auto state = weak_state.lock(); state && state->owner != nullptr) {
+            state->owner->execute_scheduled_render(generation);
+        }
+    });
 }
 
 void MainScreen::invalidate() {
     ChildOperation operation(*this);
-    const bool request = started_ && !pending_render_;
     pending_render_ = true;
     std::vector<Component*> children;
     children.reserve(children_.size());
@@ -405,7 +464,7 @@ void MainScreen::invalidate() {
         if (owns(child)) child->invalidate();
     }
     compositor_->invalidate_all();
-    if (request && render_request_sink_) (void)render_request_sink_();
+    request_render();
 }
 
 bool MainScreen::owns(const Component* component) const {
@@ -416,6 +475,46 @@ bool MainScreen::owns(const Component* component) const {
         }
     }
     return false;
+}
+
+void MainScreen::set_scheduler(TuiScheduler* scheduler) {
+    if (scheduler_ == scheduler) return;
+    cancel_scheduled_render();
+    ++render_generation_;
+    render_scheduled_ = false;
+    scheduler_ = scheduler;
+    if (started_ && pending_render_) schedule_render();
+}
+
+void MainScreen::set_render_prepare_sink(TuiRenderPrepareSink sink) { render_prepare_sink_ = std::move(sink); }
+
+void MainScreen::set_render_complete_sink(TuiRenderCompleteSink sink) { render_complete_sink_ = std::move(sink); }
+
+void MainScreen::schedule_render() {
+    if (!started_ || stopping_ || scheduler_ == nullptr || render_scheduled_) return;
+    auto delay = std::chrono::steady_clock::duration::zero();
+    if (last_render_at_) {
+        const auto elapsed = scheduler_->now() - *last_render_at_;
+        const auto interval = std::chrono::milliseconds{16};
+        if (elapsed < interval) delay = interval - elapsed;
+    }
+    const auto generation = ++render_generation_;
+    render_scheduled_ = true;
+    const std::weak_ptr<RenderScheduleState> weak_state = render_schedule_state_;
+    scheduler_->schedule(delay, [weak_state, generation] {
+        if (const auto state = weak_state.lock(); state && state->owner != nullptr) {
+            state->owner->execute_scheduled_render(generation);
+        }
+    });
+}
+
+void MainScreen::cancel_scheduled_render() noexcept {
+    if (scheduler_ != nullptr) scheduler_->cancel();
+}
+
+void MainScreen::execute_scheduled_render(std::size_t generation) {
+    if (!started_ || stopping_ || !render_scheduled_ || generation != render_generation_) return;
+    (void)render_now();
 }
 
 void MainScreen::handle_input(std::string input) {
@@ -451,6 +550,7 @@ void MainScreen::dispatch_input(const InputEventVariant& event) {
     // Try overlays first (in reverse z-order, topmost first)
     if (compositor_->dispatch_input(event, render_pipeline_->committed_dimensions()) ==
             InputAdmissionOutcome::Consumed) {
+        request_immediate_render();
         return;
     }
 
@@ -463,6 +563,7 @@ void MainScreen::dispatch_input(const InputEventVariant& event) {
         if (input_handler == nullptr) return;
     }
     static_cast<void>(input_handler->handle_input(event));
+    request_immediate_render();
 }
 
 void MainScreen::handle_resize(TerminalDimensions) {

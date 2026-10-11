@@ -19,10 +19,13 @@
 #include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/use_future.hpp>
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -32,6 +35,35 @@
 
 namespace cch::cli {
 namespace {
+
+class StartupTuiScheduler final : public cch::tui::TuiScheduler {
+public:
+    explicit StartupTuiScheduler(boost::asio::any_io_executor executor)
+        : executor_(std::move(executor)), timer_(executor_) {}
+
+    [[nodiscard]] std::chrono::steady_clock::time_point now() const noexcept override {
+        return std::chrono::steady_clock::now();
+    }
+
+    void post(cch::tui::TuiScheduledWork work) override {
+        boost::asio::post(executor_, [work = std::move(work)]() mutable {
+            if (work) work();
+        });
+    }
+
+    void schedule(std::chrono::steady_clock::duration delay, cch::tui::TuiScheduledWork work) override {
+        timer_.expires_after(std::max(delay, std::chrono::steady_clock::duration::zero()));
+        timer_.async_wait([work = std::move(work)](const boost::system::error_code& error) mutable {
+            if (!error && work) work();
+        });
+    }
+
+    void cancel() noexcept override { (void)timer_.cancel(); }
+
+private:
+    boost::asio::any_io_executor executor_;
+    boost::asio::steady_timer timer_;
+};
 
 /// One awaiting startup-TUI outcome (pi `startup-ui.ts` promise): first
 /// resolution wins, every callback hops to the consumer executor so the Tui
@@ -52,7 +84,7 @@ template <typename T> struct StartupSlot : std::enable_shared_from_this<StartupS
     void request_render(cch::tui::ITui* tui) {
         const auto self = this->shared_from_this();
         boost::asio::post(executor, [self, tui] {
-            if (!self->finished) (void)tui->render();
+            if (!self->finished) tui->request_render();
         });
     }
 
@@ -139,7 +171,9 @@ template <typename T, typename BuildSelector>
         co_return std::unexpected(keybindings.error());
     }
 
+    StartupTuiScheduler scheduler{executor};
     cch::tui::Tui tui{terminal};
+    tui.set_scheduler(&scheduler);
     CCH_TRY_VOID(tui.start());
     // The detected capabilities (color depth, ...) are known only after the
     // terminal starts (pi `createStartupTui` constructs the palette after
@@ -149,7 +183,6 @@ template <typename T, typename BuildSelector>
         slot->request_render(&tui);
         return {};
     };
-    tui.set_render_request_sink(request_render);
 
     auto selector = build_selector(live_theme, *keybindings, slot, std::move_only_function<void()>{[slot, &tui] {
         slot->request_render(&tui);
@@ -157,7 +190,7 @@ template <typename T, typename BuildSelector>
     auto* selector_ptr = selector.get();
     CCH_TRY_VOID(tui.add_child(std::move(selector)));
     CCH_TRY_VOID(tui.set_focus(selector_ptr));
-    CCH_TRY_VOID(tui.render());
+    tui.request_render(true);
 
     auto result = co_await slot->channel.async_receive(boost::asio::use_awaitable);
 

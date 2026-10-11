@@ -18,6 +18,26 @@
 namespace {
 
 /// A Component that returns a fixed set of lines on each render.
+class ManualTuiScheduler final : public cch::tui::TuiScheduler {
+public:
+    [[nodiscard]] std::chrono::steady_clock::time_point now() const noexcept override { return now_; }
+    void post(cch::tui::TuiScheduledWork work) override { posted_.push_back(std::move(work)); }
+    void schedule(std::chrono::steady_clock::duration delay, cch::tui::TuiScheduledWork work) override {
+        scheduled_delay_ = delay;
+        scheduled_ = std::move(work);
+        ++schedule_count_;
+    }
+    void cancel() noexcept override { scheduled_ = nullptr; }
+
+    std::chrono::steady_clock::duration scheduled_delay_{};
+    std::size_t schedule_count_{0};
+
+private:
+    std::chrono::steady_clock::time_point now_{};
+    cch::tui::TuiScheduledWork scheduled_;
+    std::vector<cch::tui::TuiScheduledWork> posted_;
+};
+
 class FixedTextComponent final : public cch::tui::Component {
 public:
     explicit FixedTextComponent(std::vector<std::string> lines) : lines_(std::move(lines)) {}
@@ -510,26 +530,23 @@ TEST_CASE("Supported synchronized output wraps a render atomically", "[tui][rend
 
 TEST_CASE("Render requests coalesce until render and include resize", "[tui][render][issue58][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 7, .rows = 2});
+    ManualTuiScheduler scheduler;
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("initial", 0, 0)));
-    std::size_t requests = 0;
-    tui.set_render_request_sink([&requests]() -> cch::support::ExpectedVoid {
-        ++requests;
-        return {};
-    });
+    tui.set_scheduler(&scheduler);
     REQUIRE(tui.start());
     REQUIRE(tui.render());
 
     tui.invalidate();
     tui.invalidate();
-    CHECK(requests == 1);
+    CHECK(scheduler.schedule_count_ == 2);
     REQUIRE(tui.render());
 
     tui.invalidate();
-    CHECK(requests == 2);
+    CHECK(scheduler.schedule_count_ == 3);
     REQUIRE(tui.render());
     REQUIRE(terminal.inject_resize({.columns = 8, .rows = 2}));
-    CHECK(requests == 3);
+    CHECK(scheduler.schedule_count_ == 4);
 }
 
 TEST_CASE("Repeated invalidate coalesces without losing latest state", "[tui][render][issue49][compat-pi]") {

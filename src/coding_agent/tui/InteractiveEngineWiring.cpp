@@ -55,7 +55,7 @@ void InteractiveEngine::spawn_flow(
                 self->flow_finished();
                 if (!result && self->running_ && self->view_ != nullptr) {
                     self->view_->append_diagnostic(std::move(failure_label));
-                    self->tui_.invalidate();
+                    self->invalidate_frame();
                 }
             }
         });
@@ -489,7 +489,10 @@ std::shared_ptr<SuspendController> InteractiveEngine::make_suspend_controller() 
         return {};
     };
     hooks.render_tui = [weak]() -> support::ExpectedVoid {
-        if (const auto self = weak.lock()) return self->tui_.render();
+        if (const auto self = weak.lock()) {
+            self->tui_.request_render(true);
+            return {};
+        }
         return {};
     };
     hooks.report_failure = [weak](support::Error error) {

@@ -194,9 +194,7 @@ boost::asio::awaitable<support::Expected<std::optional<std::string>>> run_extern
             started.error(),
             "Native TUI external editor resume failed"));
     }
-    if (auto rendered = tui.render(); !rendered) {
-        co_return std::unexpected(startup_error(rendered.error()));
-    }
+    tui.request_render(true);
     if (!result || !*result) {
         co_return std::optional<std::string>{std::nullopt};
     }
