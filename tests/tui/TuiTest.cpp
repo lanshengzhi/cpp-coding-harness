@@ -1,3 +1,4 @@
+#include <cch/tui/Container.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Keys.hpp>
 #include <cch/tui/Text.hpp>
@@ -32,18 +33,14 @@ public:
 
 class PartialStartupFailureTerminal final : public cch::tui::Terminal {
 public:
-    [[nodiscard]] cch::support::ExpectedVoid start(
-        cch::tui::TerminalInputSink,
-        cch::tui::TerminalResizeSink) override {
+    [[nodiscard]] cch::support::ExpectedVoid start(cch::tui::TerminalInputSink, cch::tui::TerminalResizeSink) override {
         modes_.started = true;
         return {};
     }
 
     [[nodiscard]] cch::support::ExpectedVoid stop() override {
         return std::unexpected(cch::support::make_error(
-            cch::support::ErrorCode::Process,
-            "terminal restoration failed",
-            "stop detail"));
+                cch::support::ErrorCode::Process, "terminal restoration failed", "stop detail"));
     }
 
     [[nodiscard]] cch::tui::TerminalDimensions dimensions() const override { return {}; }
@@ -55,9 +52,7 @@ public:
     [[nodiscard]] cch::support::ExpectedVoid set_cursor_visible(bool visible) override {
         if (!visible) {
             return std::unexpected(cch::support::make_error(
-                cch::support::ErrorCode::Process,
-                "cursor hiding failed",
-                "cursor detail"));
+                    cch::support::ErrorCode::Process, "cursor hiding failed", "cursor detail"));
         }
         return {};
     }
@@ -65,12 +60,11 @@ public:
     [[nodiscard]] cch::support::ExpectedVoid reset_scroll_margins() override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] cch::support::Expected<cch::tui::TerminalImageHandle> place_image(
-        const cch::tui::TerminalImage&) override {
+            const cch::tui::TerminalImage&) override {
         return cch::tui::TerminalImageHandle{};
     }
     [[nodiscard]] cch::support::ExpectedVoid remove_image(
-        cch::tui::TerminalImageHandle,
-        const cch::tui::CellRegion&) override {
+            cch::tui::TerminalImageHandle, const cch::tui::CellRegion&) override {
         return {};
     }
     [[nodiscard]] cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
@@ -78,8 +72,7 @@ public:
     [[nodiscard]] cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid set_progress(bool) override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid drain_input(
-        std::chrono::milliseconds,
-        std::chrono::milliseconds) override {
+            std::chrono::milliseconds, std::chrono::milliseconds) override {
         return {};
     }
 
@@ -89,9 +82,7 @@ private:
 
 class RenderBackpressureTerminal final : public cch::tui::Terminal {
 public:
-    [[nodiscard]] cch::support::ExpectedVoid start(
-        cch::tui::TerminalInputSink,
-        cch::tui::TerminalResizeSink) override {
+    [[nodiscard]] cch::support::ExpectedVoid start(cch::tui::TerminalInputSink, cch::tui::TerminalResizeSink) override {
         modes_.started = true;
         return {};
     }
@@ -101,13 +92,9 @@ public:
         return {};
     }
 
-    [[nodiscard]] cch::tui::TerminalDimensions dimensions() const override {
-        return {.columns = 10, .rows = 3};
-    }
+    [[nodiscard]] cch::tui::TerminalDimensions dimensions() const override { return {.columns = 10, .rows = 3}; }
 
-    [[nodiscard]] cch::tui::TerminalCapabilities capabilities() const override {
-        return {.synchronized_output = true};
-    }
+    [[nodiscard]] cch::tui::TerminalCapabilities capabilities() const override { return {.synchronized_output = true}; }
 
     [[nodiscard]] cch::tui::TerminalModeState modes() const override { return modes_; }
     [[nodiscard]] cch::support::ExpectedVoid clear_screen() override {
@@ -121,29 +108,26 @@ public:
     [[nodiscard]] cch::support::ExpectedVoid reset_scroll_margins() override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] cch::support::Expected<cch::tui::TerminalImageHandle> place_image(
-        const cch::tui::TerminalImage&) override {
+            const cch::tui::TerminalImage&) override {
         return cch::tui::TerminalImageHandle{};
     }
     [[nodiscard]] cch::support::ExpectedVoid remove_image(
-        cch::tui::TerminalImageHandle,
-        const cch::tui::CellRegion&) override {
+            cch::tui::TerminalImageHandle, const cch::tui::CellRegion&) override {
         return {};
     }
     [[nodiscard]] cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid end_synchronized_update() override {
         if (fail_next_end) {
             fail_next_end = false;
-            return std::unexpected(cch::support::make_error(
-                cch::support::ErrorCode::Busy,
-                "render frame was not admitted"));
+            return std::unexpected(
+                    cch::support::make_error(cch::support::ErrorCode::Busy, "render frame was not admitted"));
         }
         return {};
     }
     [[nodiscard]] cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid set_progress(bool) override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid drain_input(
-        std::chrono::milliseconds,
-        std::chrono::milliseconds) override {
+            std::chrono::milliseconds, std::chrono::milliseconds) override {
         return {};
     }
 
@@ -254,8 +238,7 @@ public:
 class MutableLinesComponent final : public cch::tui::Component {
 public:
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
-        return cch::tui::RenderResult{
-            .lines = std::vector<std::string>(line_count, "line")};
+        return cch::tui::RenderResult{.lines = std::vector<std::string>(line_count, "line")};
     }
 
     void invalidate() override {}
@@ -283,18 +266,15 @@ constexpr std::string_view kIssue954PasteSegment = "\xce\xb1\tprotocol \x1b[?997
     return hash;
 }
 
-class FocusableInputComponent final
-    : public cch::tui::Component,
-      public cch::tui::InputHandler,
-      public cch::tui::Focusable {
+class FocusableInputComponent final : public cch::tui::Component,
+                                      public cch::tui::InputHandler,
+                                      public cch::tui::Focusable {
 public:
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
         return cch::tui::RenderResult{.lines = {"x"}};
     }
 
-    void invalidate() override {
-        ++invalidation_count;
-    }
+    void invalidate() override { ++invalidation_count; }
 
     cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override {
         const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
@@ -304,13 +284,9 @@ public:
         received_input.push_back(input);
         return cch::tui::InputAdmissionOutcome::Consumed;
     }
-    void set_focused(bool focused) override {
-        focused_ = focused;
-    }
+    void set_focused(bool focused) override { focused_ = focused; }
 
-    [[nodiscard]] bool focused() const override {
-        return focused_;
-    }
+    [[nodiscard]] bool focused() const override { return focused_; }
 
     std::size_t invalidation_count{0};
     std::vector<cch::tui::InputEventVariant> received_input;
@@ -581,8 +557,8 @@ TEST_CASE("Tui maps baseline terminal protocols to the same semantic key", "[tui
 
     REQUIRE(component_pointer->received_input.size() == 3);
     const cch::tui::KeyEvent expected{
-        .key = "c",
-        .ctrl = true,
+            .key = "c",
+            .ctrl = true,
     };
     for (const auto& input : component_pointer->received_input) {
         CHECK(std::get<cch::tui::KeyEvent>(input) == expected);
@@ -595,18 +571,44 @@ TEST_CASE("Tui decodes the supported legacy special key vocabulary", "[tui][inpu
         std::string_view identifier;
     };
     constexpr std::array<RawKey, 32> kKeys{{
-        {"\t", "tab"}, {"\r", "enter"}, {" ", "space"}, {"\x7f", "backspace"},
-        {std::string_view{"\x00", 1}, "ctrl+space"},
-        {"\x1b[A", "up"}, {"\x1b[B", "down"}, {"\x1b[C", "right"}, {"\x1b[D", "left"},
-        {"\x1b[H", "home"}, {"\x1b[F", "end"}, {"\x1b[2~", "insert"}, {"\x1b[3~", "delete"},
-        {"\x1b[5~", "pageUp"}, {"\x1b[6~", "pageDown"}, {"\x1b[E", "clear"},
-        {"\x1bOP", "f1"}, {"\x1b[24~", "f12"}, {"\x1b[Z", "shift+tab"},
-        {"\x1b[2$", "shift+insert"}, {"\x1b[3$", "shift+delete"},
-        {"\x1b[5$", "shift+pageUp"}, {"\x1b[6$", "shift+pageDown"},
-        {"\x1b[7$", "shift+home"}, {"\x1b[8$", "shift+end"},
-        {"\x1b[2^", "ctrl+insert"}, {"\x1b[e", "shift+clear"}, {"\x1bOe", "ctrl+clear"},
-        {"\x1b" "B", "alt+left"}, {"\x1b" "F", "alt+right"},
-        {"\x1b" "b", "alt+left"}, {"A", "shift+a"},
+            {"\t", "tab"},
+            {"\r", "enter"},
+            {" ", "space"},
+            {"\x7f", "backspace"},
+            {std::string_view{"\x00", 1}, "ctrl+space"},
+            {"\x1b[A", "up"},
+            {"\x1b[B", "down"},
+            {"\x1b[C", "right"},
+            {"\x1b[D", "left"},
+            {"\x1b[H", "home"},
+            {"\x1b[F", "end"},
+            {"\x1b[2~", "insert"},
+            {"\x1b[3~", "delete"},
+            {"\x1b[5~", "pageUp"},
+            {"\x1b[6~", "pageDown"},
+            {"\x1b[E", "clear"},
+            {"\x1bOP", "f1"},
+            {"\x1b[24~", "f12"},
+            {"\x1b[Z", "shift+tab"},
+            {"\x1b[2$", "shift+insert"},
+            {"\x1b[3$", "shift+delete"},
+            {"\x1b[5$", "shift+pageUp"},
+            {"\x1b[6$", "shift+pageDown"},
+            {"\x1b[7$", "shift+home"},
+            {"\x1b[8$", "shift+end"},
+            {"\x1b[2^", "ctrl+insert"},
+            {"\x1b[e", "shift+clear"},
+            {"\x1bOe", "ctrl+clear"},
+            {"\x1b"
+             "B",
+                    "alt+left"},
+            {"\x1b"
+             "F",
+                    "alt+right"},
+            {"\x1b"
+             "b",
+                    "alt+left"},
+            {"A", "shift+a"},
     }};
 
     cch::tui::VirtualTerminal terminal;
@@ -617,13 +619,13 @@ TEST_CASE("Tui decodes the supported legacy special key vocabulary", "[tui][inpu
     REQUIRE(tui.start());
     REQUIRE(tui.set_focus(component_pointer));
 
-    for (const auto& key : kKeys) REQUIRE(terminal.inject_input(std::string(key.raw)));
+    for (const auto& key : kKeys)
+        REQUIRE(terminal.inject_input(std::string(key.raw)));
 
     REQUIRE(component_pointer->received_input.size() == kKeys.size());
     for (std::size_t index = 0; index < kKeys.size(); ++index) {
         CHECK(cch::tui::matches_key(
-            std::get<cch::tui::KeyEvent>(component_pointer->received_input[index]),
-            kKeys[index].identifier));
+                std::get<cch::tui::KeyEvent>(component_pointer->received_input[index]), kKeys[index].identifier));
     }
 }
 
@@ -637,11 +639,10 @@ TEST_CASE("Tui decodes Kitty alternate keys keypad and modified navigation", "[t
     REQUIRE(tui.start());
     REQUIRE(tui.set_focus(component_pointer));
 
-    REQUIRE(terminal.inject_input(
-        "\x1b[1089::99;5u"
-        "\x1b[57400u"
-        "\x1b[1;6:2D"
-        "\x1b[3;3:3~"));
+    REQUIRE(terminal.inject_input("\x1b[1089::99;5u"
+                                  "\x1b[57400u"
+                                  "\x1b[1;6:2D"
+                                  "\x1b[3;3:3~"));
 
     REQUIRE(component_pointer->received_input.size() == 4);
     CHECK(cch::tui::matches_key(std::get<cch::tui::KeyEvent>(component_pointer->received_input[0]), "ctrl+c"));
@@ -706,14 +707,12 @@ TEST_CASE("Tui filters key releases unless the focused Component opts in", "[tui
     REQUIRE(tui.set_focus(default_pointer));
     REQUIRE(terminal.inject_input("\x1b[97u\x1b[97;1:3u"));
     REQUIRE(default_pointer->received_input.size() == 1);
-    CHECK(std::get<cch::tui::KeyEvent>(default_pointer->received_input[0]).type ==
-        cch::tui::KeyEventType::Press);
+    CHECK(std::get<cch::tui::KeyEvent>(default_pointer->received_input[0]).type == cch::tui::KeyEventType::Press);
 
     REQUIRE(tui.set_focus(release_pointer));
     REQUIRE(terminal.inject_input("\x1b[97;1:3u"));
     REQUIRE(release_pointer->received_input.size() == 1);
-    CHECK(std::get<cch::tui::KeyEvent>(release_pointer->received_input[0]).type ==
-        cch::tui::KeyEventType::Release);
+    CHECK(std::get<cch::tui::KeyEvent>(release_pointer->received_input[0]).type == cch::tui::KeyEventType::Release);
 }
 
 TEST_CASE(
@@ -876,14 +875,14 @@ TEST_CASE("VirtualTerminal injects input and resize events deterministically", "
     std::optional<cch::tui::TerminalDimensions> received_resize;
 
     REQUIRE(terminal.start(
-        [&received_input](std::string input) -> cch::support::ExpectedVoid {
-            received_input = std::move(input);
-            return {};
-        },
-        [&received_resize](cch::tui::TerminalDimensions dimensions) -> cch::support::ExpectedVoid {
-            received_resize = dimensions;
-            return {};
-        }));
+            [&received_input](std::string input) -> cch::support::ExpectedVoid {
+                received_input = std::move(input);
+                return {};
+            },
+            [&received_resize](cch::tui::TerminalDimensions dimensions) -> cch::support::ExpectedVoid {
+                received_resize = dimensions;
+                return {};
+            }));
     REQUIRE(terminal.inject_input("x"));
     REQUIRE(terminal.inject_resize({.columns = 6, .rows = 2}));
 
@@ -896,9 +895,8 @@ TEST_CASE("VirtualTerminal injects input and resize events deterministically", "
 
 TEST_CASE("VirtualTerminal preserves cursor-positioned writes and rejects overflow", "[tui][issue45][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
-    REQUIRE(terminal.start(
-        [](std::string) -> cch::support::ExpectedVoid { return {}; },
-        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(terminal.set_cursor({.column = 2, .row = 0}));
     REQUIRE(terminal.write("x"));
 
@@ -917,9 +915,8 @@ TEST_CASE("VirtualTerminal preserves cursor-positioned writes and rejects overfl
 
 TEST_CASE("VirtualTerminal accepts Unicode output", "[tui][issue46][unicode][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
-    REQUIRE(terminal.start(
-        [](std::string) -> cch::support::ExpectedVoid { return {}; },
-        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
 
     const auto result = terminal.write("\xc3\xa9"); // é
 
@@ -930,9 +927,8 @@ TEST_CASE("VirtualTerminal accepts Unicode output", "[tui][issue46][unicode][spe
 
 TEST_CASE("VirtualTerminal exposes visible cells and final style", "[tui][issue46][unicode][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
-    REQUIRE(terminal.start(
-        [](std::string) -> cch::support::ExpectedVoid { return {}; },
-        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
 
     REQUIRE(terminal.write("\x1b[31mA"));
 
@@ -947,9 +943,8 @@ TEST_CASE("VirtualTerminal exposes visible cells and final style", "[tui][issue4
 
 TEST_CASE("VirtualTerminal clears complete wide graphemes on overwrite", "[tui][issue46][unicode][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
-    REQUIRE(terminal.start(
-        [](std::string) -> cch::support::ExpectedVoid { return {}; },
-        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(terminal.write("\xe4\xb8\xad"));
     REQUIRE(terminal.cells()[0][1].continuation);
 
@@ -966,14 +961,12 @@ TEST_CASE("VirtualTerminal clears complete wide graphemes on overwrite", "[tui][
 TEST_CASE("VirtualTerminal bounds callback failures", "[tui][issue45][issue485][spec]") {
     cch::tui::VirtualTerminal terminal;
     REQUIRE(terminal.start(
-        [](std::string) -> cch::support::ExpectedVoid {
-            return std::unexpected(cch::support::make_error(
-                cch::support::ErrorCode::Unknown, "input failure"));
-        },
-        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid {
-            return std::unexpected(cch::support::make_error(
-                cch::support::ErrorCode::Unknown, "resize failure"));
-        }));
+            [](std::string) -> cch::support::ExpectedVoid {
+                return std::unexpected(cch::support::make_error(cch::support::ErrorCode::Unknown, "input failure"));
+            },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid {
+                return std::unexpected(cch::support::make_error(cch::support::ErrorCode::Unknown, "resize failure"));
+            }));
 
     const auto input_result = terminal.inject_input("x");
     REQUIRE_FALSE(input_result);
@@ -986,9 +979,8 @@ TEST_CASE("VirtualTerminal bounds callback failures", "[tui][issue45][issue485][
 
 TEST_CASE("Terminal seam records title and progress through VirtualTerminal", "[tui][terminal][issue378][spec]") {
     cch::tui::VirtualTerminal terminal;
-    REQUIRE(terminal.start(
-        [](std::string) -> cch::support::ExpectedVoid { return {}; },
-        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
 
     REQUIRE(terminal.set_title("pike - session - workspace"));
     REQUIRE(terminal.set_progress(true));
@@ -1006,16 +998,15 @@ TEST_CASE("Terminal seam records title and progress through VirtualTerminal", "[
 
 TEST_CASE("VirtualTerminal stop clears an active progress indicator", "[tui][terminal][issue378][spec]") {
     cch::tui::VirtualTerminal terminal;
-    REQUIRE(terminal.start(
-        [](std::string) -> cch::support::ExpectedVoid { return {}; },
-        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
 
     REQUIRE(terminal.set_progress(true));
     REQUIRE(terminal.stop());
 
     const std::vector<std::string> expected_output{
-        "\x1b]9;4;3\x07",
-        "\x1b]9;4;0;\x07",
+            "\x1b]9;4;3\x07",
+            "\x1b]9;4;0;\x07",
     };
     CHECK(terminal.output() == expected_output);
 }
@@ -1026,9 +1017,8 @@ TEST_CASE("VirtualTerminal drain input is a started-gated no-op", "[tui][termina
     REQUIRE_FALSE(before_start);
     CHECK(before_start.error().message == "Virtual Terminal must be started before terminal operations");
 
-    REQUIRE(terminal.start(
-        [](std::string) -> cch::support::ExpectedVoid { return {}; },
-        [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     REQUIRE(terminal.drain_input());
     REQUIRE(terminal.drain_input(std::chrono::milliseconds(100), std::chrono::milliseconds(10)));
 }
@@ -1039,7 +1029,10 @@ TEST_CASE("Tui coalesces repeated replaceable invalidations into one render requ
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("hi", 0, 0)));
 
     std::size_t render_requests{0};
-    tui.set_render_request_sink([&render_requests]() -> cch::support::ExpectedVoid { ++render_requests; return {}; });
+    tui.set_render_request_sink([&render_requests]() -> cch::support::ExpectedVoid {
+        ++render_requests;
+        return {};
+    });
     REQUIRE(tui.start());
 
     // Replaceable render state: repeated invalidations before the next render
@@ -1098,9 +1091,9 @@ TEST_CASE("Tui stop scrolls the exit flow through the terminal scrollback on a f
     // twice more, so every transcript line but the last is in the terminal's
     // native scrollback and the cursor stays on the bottom row.
     const std::vector<std::string> expected_scrollback{
-        "one     ",
-        "two     ",
-        "three   ",
+            "one     ",
+            "two     ",
+            "three   ",
     };
     CHECK(terminal.scrollback() == expected_scrollback);
     CHECK(terminal.screen()[0].find("our") != std::string::npos);
@@ -1164,6 +1157,35 @@ TEST_CASE("MainScreen stop clears a dock after transcript scrolling without eras
     CHECK(terminal.scrollback() == expected_scrollback);
     CHECK(terminal.screen() == expected_screen);
     CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 4});
+}
+
+TEST_CASE("issue980 places the composed nested cursor on the hardware screen",
+        "[tui][terminal][cursor][issue980][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 30, .rows = 8});
+    cch::tui::Tui tui(terminal);
+    auto stacked = std::make_unique<cch::tui::Container>();
+    auto box = std::make_unique<cch::tui::Box>(1, 1);
+    auto container = std::make_unique<cch::tui::Container>();
+    REQUIRE(container->add_child(std::make_unique<cch::tui::Text>("first", 0, 0)));
+    auto editor = std::make_unique<cch::tui::Editor>();
+    auto* editor_ptr = editor.get();
+    editor_ptr->set_text("abc");
+    REQUIRE(container->add_child(std::move(editor)));
+    REQUIRE(box->add_child(std::move(container)));
+    REQUIRE(stacked->add_child(std::make_unique<cch::tui::Text>("header", 0, 0)));
+    REQUIRE(stacked->add_child(std::move(box)));
+    auto stacked_ref = tui.add_child(std::move(stacked));
+    REQUIRE(stacked_ref);
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(editor_ptr));
+    REQUIRE(tui.render());
+    CHECK(editor_ptr->cursor_location() == cch::tui::CursorPosition{.column = 3, .row = 0});
+    const auto expected = cch::tui::CursorPosition{.column = 4, .row = 3};
+    CHECK(terminal.cursor() == expected);
+    CHECK_FALSE(terminal.modes().cursor_visible);
+    REQUIRE(tui.set_focus(nullptr));
+    REQUIRE(tui.render());
+    REQUIRE(tui.stop());
 }
 
 TEST_CASE("Tui stop moves focused dock cursor below the bottom dock", "[tui][terminal][issue832][spec]") {

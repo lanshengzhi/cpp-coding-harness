@@ -117,6 +117,8 @@ private:
     std::shared_ptr<RawInputListenerChain> raw_listeners_;
     std::vector<std::unique_ptr<Component>> children_;
     std::vector<std::unique_ptr<Component>> retired_children_;
+    std::vector<std::size_t> rendered_child_rows_;
+    bool rendered_children_valid_{false};
     std::size_t child_operation_depth_{0};
     Component* focused_{nullptr}; // Null or aliases an element owned by children_ or the compositor's overlays.
     bool started_{false};

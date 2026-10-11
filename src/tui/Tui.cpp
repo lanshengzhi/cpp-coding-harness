@@ -55,6 +55,8 @@ MainScreen::~MainScreen() { (void)stop(); }
 support::Expected<std::reference_wrapper<Component>> MainScreen::add_child(std::unique_ptr<Component> component) {
     auto attached = detail::attach_child(children_, std::move(component), "");
     if (attached) {
+        rendered_child_rows_.clear();
+        rendered_children_valid_ = false;
         request_render();
         return *attached;
     }
@@ -78,6 +80,8 @@ support::ExpectedVoid MainScreen::remove_child(Component* component) {
     compositor_->forget_component(component);
     retired_children_.push_back(std::move(*found));
     children_.erase(found);
+    rendered_child_rows_.clear();
+    rendered_children_valid_ = false;
     if (was_focused) {
         apply_focus(nullptr);
         if (focused_ == nullptr) fallback_focus();
@@ -94,6 +98,8 @@ void MainScreen::clear_children() {
     for (auto& child : children_)
         retired_children_.push_back(std::move(child));
     children_.clear();
+    rendered_child_rows_.clear();
+    rendered_children_valid_ = false;
     if (was_focused) apply_focus(nullptr);
     request_render();
 }
@@ -292,6 +298,9 @@ support::ExpectedVoid MainScreen::render() {
 
 support::Expected<RenderResult> MainScreen::render_children(TerminalDimensions dimensions, bool prepare_rows) {
     RenderResult output;
+    rendered_child_rows_.clear();
+    rendered_children_valid_ = false;
+    std::vector<std::size_t> rendered_child_rows;
     std::vector<Component*> children;
     children.reserve(children_.size());
     for (const auto& child : children_)
@@ -303,9 +312,14 @@ support::Expected<RenderResult> MainScreen::render_children(TerminalDimensions d
         }
         if (!owns(child)) continue;
         auto rendered = child->render(dimensions.columns);
-        if (!rendered) return std::unexpected(rendered.error());
+        if (!rendered) {
+            rendered_child_rows_.clear();
+            rendered_children_valid_ = false;
+            return std::unexpected(rendered.error());
+        }
         if (!owns(child)) continue;
         const auto row_offset = output.lines.size();
+        rendered_child_rows.push_back(rendered->lines.size());
         for (auto& line : rendered->lines) {
             if (!prepare_rows) {
                 // Frame-level preparation follows the differential state in
@@ -337,6 +351,8 @@ support::Expected<RenderResult> MainScreen::render_children(TerminalDimensions d
             output.dock_lines.push_back(std::move(prepared->text));
         }
     }
+    rendered_child_rows_ = std::move(rendered_child_rows);
+    rendered_children_valid_ = true;
     return output;
 }
 
@@ -383,6 +399,8 @@ void MainScreen::invalidate() {
     children.reserve(children_.size());
     for (const auto& child : children_)
         children.push_back(child.get());
+    rendered_child_rows_.clear();
+    rendered_children_valid_ = false;
     for (auto* child : children) {
         if (owns(child)) child->invalidate();
     }
@@ -391,8 +409,9 @@ void MainScreen::invalidate() {
 }
 
 bool MainScreen::owns(const Component* component) const {
+    if (component == nullptr) return false;
     for (const auto& child : children_) {
-        if (child.get() == component) {
+        if (child && child->contains(component)) {
             return true;
         }
     }
@@ -489,10 +508,20 @@ Focusable* MainScreen::find_focusable_target() {
 }
 
 std::optional<CursorPosition> MainScreen::resolve_cursor_location() const {
+    if (rendered_children_valid_ && rendered_child_rows_.size() == children_.size()) {
+        std::size_t row_offset = 0;
+        for (std::size_t index = 0; index < children_.size(); ++index) {
+            const auto& child = children_[index];
+            if (const auto loc = child->cursor_location()) {
+                return CursorPosition{.column = loc->column, .row = row_offset + loc->row};
+            }
+            row_offset += rendered_child_rows_[index];
+        }
+    }
+
     if (focused_ == nullptr) return std::nullopt;
     auto* focusable = dynamic_cast<Focusable*>(focused_);
-    if (focusable == nullptr) return std::nullopt;
-    if (!focusable->focused()) return std::nullopt;
+    if (focusable == nullptr || !focusable->focused()) return std::nullopt;
     return focusable->cursor_location();
 }
 

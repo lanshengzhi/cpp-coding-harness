@@ -64,19 +64,17 @@ struct TestRunOptions {
     coding_agent::runtime::InteractiveSessionFacts session_facts{};
 };
 
-[[nodiscard]] auto make_run(
-    coding_agent::AgentSession& session,
-    TestRunOptions options = {}) {
+[[nodiscard]] auto make_run(coding_agent::AgentSession& session, TestRunOptions options = {}) {
     return coding_agent::tui::InteractiveSessionRunBuilder{}
-        .with_session(session)
-        .with_agent_config_directory(std::move(options.agent_config_directory))
-        .with_clipboard_reader(std::move(options.clipboard_reader))
-        .with_initial_prompt(std::move(options.initial_prompt))
-        .with_initial_prompt_options(std::move(options.initial_prompt_options))
-        .with_model_fallback_message(std::move(options.model_fallback_message))
-        .with_action_sink(std::move(options.action_sink))
-        .with_session_facts(std::move(options.session_facts))
-        .build();
+            .with_session(session)
+            .with_agent_config_directory(std::move(options.agent_config_directory))
+            .with_clipboard_reader(std::move(options.clipboard_reader))
+            .with_initial_prompt(std::move(options.initial_prompt))
+            .with_initial_prompt_options(std::move(options.initial_prompt_options))
+            .with_model_fallback_message(std::move(options.model_fallback_message))
+            .with_action_sink(std::move(options.action_sink))
+            .with_session_facts(std::move(options.session_facts))
+            .build();
 }
 
 [[nodiscard]] tests::ModelsSessionOptions session_options(
@@ -139,28 +137,24 @@ struct RichThinkingSession {
 
     void create() {
         session_file = workspace.path() / "rich-session.jsonl";
-        auto store = harness::session::SessionStore::create_new(
-            session_file,
-            {
-                .session_id = "rich-session",
-                .created_at = "2026-07-28T00:00:00Z",
-                .workspace = workspace.path(),
-                .provider = "fake",
-                .model = "fake-model",
-            });
+        auto store = harness::session::SessionStore::create_new(session_file,
+                {
+                        .session_id = "rich-session",
+                        .created_at = "2026-07-28T00:00:00Z",
+                        .workspace = workspace.path(),
+                        .provider = "fake",
+                        .model = "fake-model",
+                });
         REQUIRE(store);
-        REQUIRE(store->append(ai::MessageVariant{
-            ai::user_text_message("resume request", 1'700'000'000'000)}));
+        REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("resume request", 1'700'000'000'000)}));
         ai::AssistantMessage assistant;
         assistant.provider = "fake";
         assistant.api = "fake";
         assistant.model = "fake-model";
         assistant.stop_reason = ai::AssistantStopReason::ToolUse;
         assistant.timestamp = 1'700'000'000'001;
-        assistant.content.emplace_back(ai::thinking_content(
-            "inspect the saved state\nTHINKING END"));
-        assistant.content.emplace_back(ai::text_content(
-            "I will read the persisted file."));
+        assistant.content.emplace_back(ai::thinking_content("inspect the saved state\nTHINKING END"));
+        assistant.content.emplace_back(ai::text_content("I will read the persisted file."));
         REQUIRE(store->append(ai::MessageVariant{assistant}));
     }
 
@@ -179,9 +173,7 @@ struct RichThinkingSession {
 
 /// The column (0-based) at which `needle` starts in `screen`, counting from
 /// the beginning of its line.
-[[nodiscard]] std::size_t column_of(
-    std::string_view screen,
-    std::string_view needle) {
+[[nodiscard]] std::size_t column_of(std::string_view screen, std::string_view needle) {
     const auto position = screen.find(needle);
     REQUIRE(position != std::string_view::npos);
     const auto line_start = screen.rfind('\n', position);
@@ -193,20 +185,15 @@ public:
     [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<coding_agent::tui::ClipboardImage>>>
     read_image() override {
         if (image_error) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Process,
-                "clipboard image unavailable"));
+            co_return std::unexpected(support::make_error(support::ErrorCode::Process, "clipboard image unavailable"));
         }
         if (next_image >= images.size()) co_return std::nullopt;
         co_return std::optional<coding_agent::tui::ClipboardImage>{images[next_image++]};
     }
 
-    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<std::string>>>
-    read_text() override {
+    [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<std::string>>> read_text() override {
         if (text_error) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Process,
-                "clipboard text unavailable"));
+            co_return std::unexpected(support::make_error(support::ErrorCode::Process, "clipboard text unavailable"));
         }
         co_return text;
     }
@@ -224,23 +211,21 @@ public:
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
-                ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        if (calls++ == 0) {
-            co_return std::unexpected(support::make_error(
-                support::ErrorCode::Provider,
-                "provider failed",
-                std::format(
-                    "{} api_key=sk-abcdefghijklmnopqrstuvwxyz123456 {}",
-                    std::string(7500, 'x'),
-                    std::string(1500, 'y'))));
-        }
-        auto response = ai::assistant_text_message("recovered");
-        response.provider = "fake";
-        response.api = "fake";
-        response.model = model.id;
-        co_return response;
+                [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    if (calls++ == 0) {
+                        co_return std::unexpected(support::make_error(support::ErrorCode::Provider,
+                                "provider failed",
+                                std::format("{} api_key=sk-abcdefghijklmnopqrstuvwxyz123456 {}",
+                                        std::string(7500, 'x'),
+                                        std::string(1500, 'y'))));
+                    }
+                    auto response = ai::assistant_text_message("recovered");
+                    response.provider = "fake";
+                    response.api = "fake";
+                    response.model = model.id;
+                    co_return response;
                 });
     }
 
@@ -249,15 +234,10 @@ public:
 
 class FailingStartTerminal final : public tui::Terminal {
 public:
-    [[nodiscard]] support::ExpectedVoid start(
-        tui::TerminalInputSink,
-        tui::TerminalResizeSink) override {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Process,
-            "terminal acquisition failed",
-            std::format(
-                "api_key=sk-abcdefghijklmnopqrstuvwxyz123456 {}",
-                std::string(9000, 'x'))));
+    [[nodiscard]] support::ExpectedVoid start(tui::TerminalInputSink, tui::TerminalResizeSink) override {
+        return std::unexpected(support::make_error(support::ErrorCode::Process,
+                "terminal acquisition failed",
+                std::format("api_key=sk-abcdefghijklmnopqrstuvwxyz123456 {}", std::string(9000, 'x'))));
     }
     [[nodiscard]] support::ExpectedVoid stop() override { return {}; }
     [[nodiscard]] tui::TerminalDimensions dimensions() const override { return {}; }
@@ -270,31 +250,24 @@ public:
     [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
-    [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(
-        const tui::TerminalImage&) override {
+    [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(const tui::TerminalImage&) override {
         return tui::TerminalImageHandle{};
     }
-    [[nodiscard]] support::ExpectedVoid remove_image(
-        tui::TerminalImageHandle,
-        const tui::CellRegion&) override {
+    [[nodiscard]] support::ExpectedVoid remove_image(tui::TerminalImageHandle, const tui::CellRegion&) override {
         return {};
     }
     [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override { return {}; }
     [[nodiscard]] support::ExpectedVoid end_synchronized_update() override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_title(std::string_view) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_progress(bool) override { return {}; }
-    [[nodiscard]] support::ExpectedVoid drain_input(
-        std::chrono::milliseconds,
-        std::chrono::milliseconds) override {
+    [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds, std::chrono::milliseconds) override {
         return {};
     }
 };
 
 class TransientRenderBackpressureTerminal final : public tui::Terminal {
 public:
-    [[nodiscard]] support::ExpectedVoid start(
-        tui::TerminalInputSink input_sink,
-        tui::TerminalResizeSink) override {
+    [[nodiscard]] support::ExpectedVoid start(tui::TerminalInputSink input_sink, tui::TerminalResizeSink) override {
         input_sink_ = std::move(input_sink);
         modes_.started = true;
         return {};
@@ -306,12 +279,8 @@ public:
         return {};
     }
 
-    [[nodiscard]] tui::TerminalDimensions dimensions() const override {
-        return {.columns = 80, .rows = 24};
-    }
-    [[nodiscard]] tui::TerminalCapabilities capabilities() const override {
-        return {.synchronized_output = true};
-    }
+    [[nodiscard]] tui::TerminalDimensions dimensions() const override { return {.columns = 80, .rows = 24}; }
+    [[nodiscard]] tui::TerminalCapabilities capabilities() const override { return {.synchronized_output = true}; }
     [[nodiscard]] tui::TerminalModeState modes() const override { return modes_; }
     [[nodiscard]] support::ExpectedVoid clear_screen() override { return {}; }
     [[nodiscard]] support::ExpectedVoid write(std::string_view) override { return {}; }
@@ -320,13 +289,10 @@ public:
     [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
-    [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(
-        const tui::TerminalImage&) override {
+    [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(const tui::TerminalImage&) override {
         return tui::TerminalImageHandle{};
     }
-    [[nodiscard]] support::ExpectedVoid remove_image(
-        tui::TerminalImageHandle,
-        const tui::CellRegion&) override {
+    [[nodiscard]] support::ExpectedVoid remove_image(tui::TerminalImageHandle, const tui::CellRegion&) override {
         return {};
     }
     [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override { return {}; }
@@ -334,16 +300,14 @@ public:
         ++render_end_calls;
         if (render_end_calls == fail_on_render_end) {
             return std::unexpected(support::make_error(
-                fail_with_process_error ? support::ErrorCode::Process : support::ErrorCode::Busy,
-                fail_with_process_error ? "render frame failed" : "render frame was not admitted"));
+                    fail_with_process_error ? support::ErrorCode::Process : support::ErrorCode::Busy,
+                    fail_with_process_error ? "render frame failed" : "render frame was not admitted"));
         }
         return {};
     }
     [[nodiscard]] support::ExpectedVoid set_title(std::string_view) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_progress(bool) override { return {}; }
-    [[nodiscard]] support::ExpectedVoid drain_input(
-        std::chrono::milliseconds,
-        std::chrono::milliseconds) override {
+    [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds, std::chrono::milliseconds) override {
         return {};
     }
 
@@ -363,34 +327,26 @@ private:
 
 class FailingCleanupTerminal final : public tui::Terminal {
 public:
-    [[nodiscard]] support::ExpectedVoid start(
-        tui::TerminalInputSink,
-        tui::TerminalResizeSink) override {
+    [[nodiscard]] support::ExpectedVoid start(tui::TerminalInputSink, tui::TerminalResizeSink) override {
         modes_ = {
-            .started = true,
-            .raw_input = true,
-            .bracketed_paste = true,
-            .cursor_visible = true,
+                .started = true,
+                .raw_input = true,
+                .bracketed_paste = true,
+                .cursor_visible = true,
         };
         return {};
     }
     [[nodiscard]] support::ExpectedVoid stop() override {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Process,
-            "terminal restoration failed",
-            "api_key=sk-restoration-secret"));
+                support::ErrorCode::Process, "terminal restoration failed", "api_key=sk-restoration-secret"));
     }
-    [[nodiscard]] tui::TerminalDimensions dimensions() const override {
-        return {.columns = 20, .rows = 4};
-    }
+    [[nodiscard]] tui::TerminalDimensions dimensions() const override { return {.columns = 20, .rows = 4}; }
     [[nodiscard]] tui::TerminalCapabilities capabilities() const override { return {}; }
     [[nodiscard]] tui::TerminalModeState modes() const override { return modes_; }
     [[nodiscard]] support::ExpectedVoid clear_screen() override { return {}; }
     [[nodiscard]] support::ExpectedVoid write(std::string_view) override {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Process,
-            "initial render failed",
-            "api_key=sk-render-secret"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Process, "initial render failed", "api_key=sk-render-secret"));
     }
     [[nodiscard]] support::ExpectedVoid set_cursor(tui::CursorPosition) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_cursor_visible(bool visible) override {
@@ -400,22 +356,17 @@ public:
     [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
-    [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(
-        const tui::TerminalImage&) override {
+    [[nodiscard]] support::Expected<tui::TerminalImageHandle> place_image(const tui::TerminalImage&) override {
         return tui::TerminalImageHandle{};
     }
-    [[nodiscard]] support::ExpectedVoid remove_image(
-        tui::TerminalImageHandle,
-        const tui::CellRegion&) override {
+    [[nodiscard]] support::ExpectedVoid remove_image(tui::TerminalImageHandle, const tui::CellRegion&) override {
         return {};
     }
     [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override { return {}; }
     [[nodiscard]] support::ExpectedVoid end_synchronized_update() override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_title(std::string_view) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_progress(bool) override { return {}; }
-    [[nodiscard]] support::ExpectedVoid drain_input(
-        std::chrono::milliseconds,
-        std::chrono::milliseconds) override {
+    [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds, std::chrono::milliseconds) override {
         return {};
     }
 
@@ -435,82 +386,80 @@ public:
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
-                ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        ++request_count;
-        if (request_count > 1) {
-            recovery_uses_fresh_token = first_stop_token && options.stop_token != *first_stop_token;
-            recovery_stop_requested = options.stop_token.stop_requested();
-            auto recovered = ai::assistant_text_message("recovered after TUI abort");
-            recovered.provider = "abort-aware-fake";
-            recovered.api = "fake";
-            recovered.model = model.id;
-            co_return recovered;
-        }
+                [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink sink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    ++request_count;
+                    if (request_count > 1) {
+                        recovery_uses_fresh_token = first_stop_token && options.stop_token != *first_stop_token;
+                        recovery_stop_requested = options.stop_token.stop_requested();
+                        auto recovered = ai::assistant_text_message("recovered after TUI abort");
+                        recovered.provider = "abort-aware-fake";
+                        recovered.api = "fake";
+                        recovered.model = model.id;
+                        co_return recovered;
+                    }
 
-        const auto stop_token = options.stop_token;
-        first_stop_token = stop_token;
-        auto partial = ai::assistant_text_message("");
-        partial.provider = "abort-aware-fake";
-        partial.api = "fake";
-        partial.model = model.id;
-        partial.content.clear();
-        if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        partial.content.emplace_back(ai::text_content(""));
-        if (auto emitted = sink(ai::TextStartEvent{
-                .content_index = 0,
-                .partial = partial,
-            });
-            !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        std::get<ai::TextContent>(partial.content[0]).text = "partial assistant output";
-        if (auto emitted = sink(ai::TextDeltaEvent{
-                .content_index = 0,
-                .delta = "partial assistant output",
-                .partial = partial,
-            });
-            !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
+                    const auto stop_token = options.stop_token;
+                    first_stop_token = stop_token;
+                    auto partial = ai::assistant_text_message("");
+                    partial.provider = "abort-aware-fake";
+                    partial.api = "fake";
+                    partial.model = model.id;
+                    partial.content.clear();
+                    if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    partial.content.emplace_back(ai::text_content(""));
+                    if (auto emitted = sink(ai::TextStartEvent{
+                                .content_index = 0,
+                                .partial = partial,
+                        });
+                            !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    std::get<ai::TextContent>(partial.content[0]).text = "partial assistant output";
+                    if (auto emitted = sink(ai::TextDeltaEvent{
+                                .content_index = 0,
+                                .delta = "partial assistant output",
+                                .partial = partial,
+                        });
+                            !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
 
-        const auto executor = co_await boost::asio::this_coro::executor;
-        gate_.emplace(executor);
-        gate_->expires_at(std::chrono::steady_clock::time_point::max());
-        started = true;
-        std::stop_callback cancellation{stop_token, [this] {
-            ++stop_callback_count;
-            if (gate_) (void)gate_->cancel();
-        }};
-        boost::system::error_code error;
-        if (!stop_token.stop_requested()) {
-            co_await gate_->async_wait(
-                boost::asio::redirect_error(boost::asio::use_awaitable, error));
-        }
-        // The gate timer is bound to the run's executor; release it before
-        // that io_context dies so the provider can outlive the run (ASan,
-        // #473).
-        gate_.reset();
+                    const auto executor = co_await boost::asio::this_coro::executor;
+                    gate_.emplace(executor);
+                    gate_->expires_at(std::chrono::steady_clock::time_point::max());
+                    started = true;
+                    std::stop_callback cancellation{stop_token, [this] {
+                                                        ++stop_callback_count;
+                                                        if (gate_) (void)gate_->cancel();
+                                                    }};
+                    boost::system::error_code error;
+                    if (!stop_token.stop_requested()) {
+                        co_await gate_->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                    }
+                    // The gate timer is bound to the run's executor; release it before
+                    // that io_context dies so the provider can outlive the run (ASan,
+                    // #473).
+                    gate_.reset();
 
-        if (stop_token.stop_requested()) {
-            partial.stop_reason = ai::AssistantStopReason::Aborted;
-            partial.error_message = "prompt aborted";
-            if (auto emitted = sink(ai::AssistantErrorEvent{
-                    .reason = ai::AssistantStopReason::Aborted,
-                    .error = partial,
-                });
-                !emitted) {
-                co_return std::unexpected(emitted.error());
-            }
-            co_return partial;
-        }
+                    if (stop_token.stop_requested()) {
+                        partial.stop_reason = ai::AssistantStopReason::Aborted;
+                        partial.error_message = "prompt aborted";
+                        if (auto emitted = sink(ai::AssistantErrorEvent{
+                                    .reason = ai::AssistantStopReason::Aborted,
+                                    .error = partial,
+                            });
+                                !emitted) {
+                            co_return std::unexpected(emitted.error());
+                        }
+                        co_return partial;
+                    }
 
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "abort-aware fake released without cancellation"));
+                    co_return std::unexpected(support::make_error(
+                            support::ErrorCode::Unknown, "abort-aware fake released without cancellation"));
                 });
     }
 
@@ -537,34 +486,34 @@ public:
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
-                ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        auto partial = ai::assistant_text_message("");
-        partial.content.clear();
-        partial.provider = "fake";
-        partial.api = "fake";
-        partial.model = model.id;
-        if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
+                [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink sink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    auto partial = ai::assistant_text_message("");
+                    partial.content.clear();
+                    partial.provider = "fake";
+                    partial.api = "fake";
+                    partial.model = model.id;
+                    if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
 
-        const auto executor = co_await boost::asio::this_coro::executor;
-        gate_.emplace(executor);
-        gate_->expires_at(std::chrono::steady_clock::time_point::max());
-        started = true;
-        boost::system::error_code error;
-        co_await gate_->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
-        // The gate timer is bound to the run's executor; release it before
-        // that io_context dies. The injected ModelRuntime is host-owned, so
-        // the provider graph outlives the run (ASan, #473/#640).
-        gate_.reset();
+                    const auto executor = co_await boost::asio::this_coro::executor;
+                    gate_.emplace(executor);
+                    gate_->expires_at(std::chrono::steady_clock::time_point::max());
+                    started = true;
+                    boost::system::error_code error;
+                    co_await gate_->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                    // The gate timer is bound to the run's executor; release it before
+                    // that io_context dies. The injected ModelRuntime is host-owned, so
+                    // the provider graph outlives the run (ASan, #473/#640).
+                    gate_.reset();
 
-        auto response = ai::assistant_text_message("released");
-        response.provider = "fake";
-        response.api = "fake";
-        response.model = model.id;
-        co_return response;
+                    auto response = ai::assistant_text_message("released");
+                    response.provider = "fake";
+                    response.api = "fake";
+                    response.model = model.id;
+                    co_return response;
                 });
     }
 
@@ -590,38 +539,37 @@ public:
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
-                ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        ++request_count;
-        std::vector<std::string> users;
-        for (const auto& message : context.messages) {
-            if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
-                users.push_back(ai::text_from_user_message(*user));
-            }
-        }
-        observed_users.push_back(std::move(users));
+                [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    ++request_count;
+                    std::vector<std::string> users;
+                    for (const auto& message : context.messages) {
+                        if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+                            users.push_back(ai::text_from_user_message(*user));
+                        }
+                    }
+                    observed_users.push_back(std::move(users));
 
-        const auto executor = co_await boost::asio::this_coro::executor;
-        gate_.emplace(executor);
-        gate_->expires_at(std::chrono::steady_clock::time_point::max());
-        boost::system::error_code error;
-        co_await gate_->async_wait(
-            boost::asio::redirect_error(boost::asio::use_awaitable, error));
-        // The gate timer is bound to the run's executor; release it before
-        // that io_context dies so the host-owned provider graph can outlive
-        // the run (ASan, #473/#640).
-        gate_.reset();
+                    const auto executor = co_await boost::asio::this_coro::executor;
+                    gate_.emplace(executor);
+                    gate_->expires_at(std::chrono::steady_clock::time_point::max());
+                    boost::system::error_code error;
+                    co_await gate_->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                    // The gate timer is bound to the run's executor; release it before
+                    // that io_context dies so the host-owned provider graph can outlive
+                    // the run (ASan, #473/#640).
+                    gate_.reset();
 
-        auto response = ai::assistant_text_message(std::format("turn {}", request_count));
-        response.provider = "turn-gated-fake";
-        response.api = "fake";
-        response.model = model.id;
-        if (first_request_errors && request_count == 1) {
-            response.stop_reason = ai::AssistantStopReason::Error;
-            response.error_message = "accepted queued error";
-        }
-        co_return response;
+                    auto response = ai::assistant_text_message(std::format("turn {}", request_count));
+                    response.provider = "turn-gated-fake";
+                    response.api = "fake";
+                    response.model = model.id;
+                    if (first_request_errors && request_count == 1) {
+                        response.stop_reason = ai::AssistantStopReason::Error;
+                        response.error_message = "accepted queued error";
+                    }
+                    co_return response;
                 });
     }
 
@@ -719,8 +667,7 @@ public:
     }
 };
 
-[[nodiscard]] agent::AsyncToolExecutionResult gated_partial_final_result(
-    const agent::ToolInvocation& invocation) {
+[[nodiscard]] agent::AsyncToolExecutionResult gated_partial_final_result(const agent::ToolInvocation& invocation) {
     agent::AsyncToolExecutionResult result;
     if (invocation.raw_arguments.find("missing.txt") != std::string::npos) {
         result.content.emplace_back(ai::text_content("final tool failure"));
@@ -772,48 +719,45 @@ struct GatedPartialReadToolHandle {
     definition.description = "Stream a deterministic read result";
     definition.parameters = support::JsonValue::object_t{{"type", "object"}};
     return GatedPartialReadToolHandle{
-        tests::make_fake_tool(
-            std::move(definition),
-            agent::ToolConcurrency::Exclusive,
-            [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink update_sink)
-                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
-                {
-                    std::lock_guard lock(state->mutex);
-                    state->late_update_sink.emplace(std::move(update_sink));
-                }
-                agent::AsyncToolExecutionResult partial;
-                partial.content.emplace_back(ai::text_content(
-                    "partial tool output\nSTALE SNAPSHOT"));
-                if (auto updated = (*state->late_update_sink)(partial); !updated) {
-                    co_return std::unexpected(updated.error());
-                }
-                partial.content.clear();
-                partial.content.emplace_back(ai::text_content(
-                    "partial tool output\nLATEST SNAPSHOT"));
-                if (auto updated = (*state->late_update_sink)(partial); !updated) {
-                    co_return std::unexpected(updated.error());
-                }
+            tests::make_fake_tool(std::move(definition),
+                    agent::ToolConcurrency::Exclusive,
+                    [state](agent::ToolInvocation invocation, std::stop_token, agent::ToolUpdateSink update_sink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        {
+                            std::lock_guard lock(state->mutex);
+                            state->late_update_sink.emplace(std::move(update_sink));
+                        }
+                        agent::AsyncToolExecutionResult partial;
+                        partial.content.emplace_back(ai::text_content("partial tool output\nSTALE SNAPSHOT"));
+                        if (auto updated = (*state->late_update_sink)(partial); !updated) {
+                            co_return std::unexpected(updated.error());
+                        }
+                        partial.content.clear();
+                        partial.content.emplace_back(ai::text_content("partial tool output\nLATEST SNAPSHOT"));
+                        if (auto updated = (*state->late_update_sink)(partial); !updated) {
+                            co_return std::unexpected(updated.error());
+                        }
 
-                const auto executor = co_await boost::asio::this_coro::executor;
-                {
-                    std::lock_guard lock(state->mutex);
-                    state->gate.emplace(executor);
-                    state->gate->expires_at(std::chrono::steady_clock::time_point::max());
-                }
-                state->started.store(true, std::memory_order_release);
-                boost::system::error_code error;
-                co_await state->gate->async_wait(
-                    boost::asio::redirect_error(boost::asio::use_awaitable, error));
-                // The gate timer is bound to the run's executor; release it
-                // before that io_context dies so the state can outlive the
-                // run (ASan, #473).
-                {
-                    std::lock_guard lock(state->mutex);
-                    state->gate.reset();
-                }
-                co_return gated_partial_final_result(invocation);
-            }),
-        state,
+                        const auto executor = co_await boost::asio::this_coro::executor;
+                        {
+                            std::lock_guard lock(state->mutex);
+                            state->gate.emplace(executor);
+                            state->gate->expires_at(std::chrono::steady_clock::time_point::max());
+                        }
+                        state->started.store(true, std::memory_order_release);
+                        boost::system::error_code error;
+                        co_await state->gate->async_wait(
+                                boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                        // The gate timer is bound to the run's executor; release it
+                        // before that io_context dies so the state can outlive the
+                        // run (ASan, #473).
+                        {
+                            std::lock_guard lock(state->mutex);
+                            state->gate.reset();
+                        }
+                        co_return gated_partial_final_result(invocation);
+                    }),
+            state,
     };
 }
 
@@ -822,20 +766,18 @@ struct GatedPartialReadToolHandle {
     definition.name = "probe-read";
     definition.description = "Return deterministic text and image content";
     definition.parameters = support::JsonValue::object_t{{"type", "object"}};
-    return tests::make_fake_tool(
-        std::move(definition),
-        agent::ToolConcurrency::Exclusive,
-        [image_data = std::move(image_data)](
-            agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
-            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
-            agent::AsyncToolExecutionResult result;
-            result.content = {
-                ai::text_content("live tool before"),
-                ai::image_content(image_data, "image/png"),
-                ai::text_content("live tool after"),
-            };
-            co_return result;
-        });
+    return tests::make_fake_tool(std::move(definition),
+            agent::ToolConcurrency::Exclusive,
+            [image_data = std::move(image_data)](agent::ToolInvocation, std::stop_token, agent::ToolUpdateSink)
+                    -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                agent::AsyncToolExecutionResult result;
+                result.content = {
+                        ai::text_content("live tool before"),
+                        ai::image_content(image_data, "image/png"),
+                        ai::text_content("live tool after"),
+                };
+                co_return result;
+            });
 }
 
 struct DelayedCancellationToolState {
@@ -863,47 +805,44 @@ struct DelayedCancellationToolHandle {
     definition.description = "Wait until cancellation is allowed to quiesce";
     definition.parameters = support::JsonValue::object_t{{"type", "object"}};
     return DelayedCancellationToolHandle{
-        tests::make_fake_tool(
-            std::move(definition),
-            agent::ToolConcurrency::Exclusive,
-            [state](agent::ToolInvocation, std::stop_token stop_token, agent::ToolUpdateSink update_sink)
-                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
-                state->observed_stop_token = stop_token;
-                agent::AsyncToolExecutionResult partial;
-                partial.content.emplace_back(ai::text_content("partial tool output before abort"));
-                if (auto updated = update_sink(partial); !updated) {
-                    co_return std::unexpected(updated.error());
-                }
+            tests::make_fake_tool(std::move(definition),
+                    agent::ToolConcurrency::Exclusive,
+                    [state](agent::ToolInvocation, std::stop_token stop_token, agent::ToolUpdateSink update_sink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        state->observed_stop_token = stop_token;
+                        agent::AsyncToolExecutionResult partial;
+                        partial.content.emplace_back(ai::text_content("partial tool output before abort"));
+                        if (auto updated = update_sink(partial); !updated) {
+                            co_return std::unexpected(updated.error());
+                        }
 
-                const auto executor = co_await boost::asio::this_coro::executor;
-                {
-                    std::lock_guard lock(state->mutex);
-                    state->gate.emplace(executor);
-                    state->gate->expires_at(std::chrono::steady_clock::time_point::max());
-                }
-                state->started.store(true, std::memory_order_release);
-                std::stop_callback cancellation{stop_token, [state] {
-                    state->stop_callback_count.fetch_add(1, std::memory_order_relaxed);
-                }};
-                boost::system::error_code error;
-                co_await state->gate->async_wait(
-                    boost::asio::redirect_error(boost::asio::use_awaitable, error));
-                // The gate timer is bound to the run's executor; release it
-                // before that io_context dies so the state can outlive the
-                // run (ASan, #473).
-                {
-                    std::lock_guard lock(state->mutex);
-                    state->gate.reset();
-                }
+                        const auto executor = co_await boost::asio::this_coro::executor;
+                        {
+                            std::lock_guard lock(state->mutex);
+                            state->gate.emplace(executor);
+                            state->gate->expires_at(std::chrono::steady_clock::time_point::max());
+                        }
+                        state->started.store(true, std::memory_order_release);
+                        std::stop_callback cancellation{stop_token,
+                                [state] { state->stop_callback_count.fetch_add(1, std::memory_order_relaxed); }};
+                        boost::system::error_code error;
+                        co_await state->gate->async_wait(
+                                boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                        // The gate timer is bound to the run's executor; release it
+                        // before that io_context dies so the state can outlive the
+                        // run (ASan, #473).
+                        {
+                            std::lock_guard lock(state->mutex);
+                            state->gate.reset();
+                        }
 
-                if (stop_token.stop_requested()) {
-                    co_return std::unexpected(support::make_error(
-                        support::ErrorCode::Cancelled,
-                        "delayed tool aborted"));
-                }
-                co_return agent::AsyncToolExecutionResult{};
-            }),
-        state,
+                        if (stop_token.stop_requested()) {
+                            co_return std::unexpected(
+                                    support::make_error(support::ErrorCode::Cancelled, "delayed tool aborted"));
+                        }
+                        co_return agent::AsyncToolExecutionResult{};
+                    }),
+            state,
     };
 }
 
@@ -913,58 +852,53 @@ public:
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
-                ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        ++request_count;
-        if (options.stop_token.stop_requested()) {
-            completion_stop_token = options.stop_token;
-            auto aborted = ai::assistant_text_message("");
-            aborted.provider = "tool-abort-fake";
-            aborted.api = "fake";
-            aborted.model = model.id;
-            aborted.stop_reason = ai::AssistantStopReason::Aborted;
-            aborted.error_message = "tool prompt aborted";
-            if (auto emitted = sink(ai::AssistantErrorEvent{
-                    .reason = ai::AssistantStopReason::Aborted,
-                    .error = aborted,
-                });
-                !emitted) {
-                co_return std::unexpected(emitted.error());
-            }
-            co_return aborted;
-        }
+                [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink sink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    ++request_count;
+                    if (options.stop_token.stop_requested()) {
+                        completion_stop_token = options.stop_token;
+                        auto aborted = ai::assistant_text_message("");
+                        aborted.provider = "tool-abort-fake";
+                        aborted.api = "fake";
+                        aborted.model = model.id;
+                        aborted.stop_reason = ai::AssistantStopReason::Aborted;
+                        aborted.error_message = "tool prompt aborted";
+                        if (auto emitted = sink(ai::AssistantErrorEvent{
+                                    .reason = ai::AssistantStopReason::Aborted,
+                                    .error = aborted,
+                            });
+                                !emitted) {
+                            co_return std::unexpected(emitted.error());
+                        }
+                        co_return aborted;
+                    }
 
-        std::string prompt;
-        for (auto message = context.messages.rbegin();
-             message != context.messages.rend();
-             ++message) {
-            if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
-                prompt = ai::text_from_user_message(*user);
-                break;
-            }
-        }
-        if (prompt == "recover after tool abort") {
-            auto recovered = ai::assistant_text_message("recovered after tool abort");
-            recovered.provider = "tool-abort-fake";
-            recovered.api = "fake";
-            recovered.model = model.id;
-            co_return recovered;
-        }
+                    std::string prompt;
+                    for (auto message = context.messages.rbegin(); message != context.messages.rend(); ++message) {
+                        if (const auto* user = std::get_if<ai::UserMessage>(&*message)) {
+                            prompt = ai::text_from_user_message(*user);
+                            break;
+                        }
+                    }
+                    if (prompt == "recover after tool abort") {
+                        auto recovered = ai::assistant_text_message("recovered after tool abort");
+                        recovered.provider = "tool-abort-fake";
+                        recovered.api = "fake";
+                        recovered.model = model.id;
+                        co_return recovered;
+                    }
 
-        first_stop_token = options.stop_token;
-        auto response = ai::assistant_text_message("");
-        response.provider = "tool-abort-fake";
-        response.api = "fake";
-        response.model = model.id;
-        response.content.clear();
-        response.content.emplace_back(ai::tool_call_content(
-            "delayed-call",
-            "delayed",
-            "{}",
-            support::JsonValue::object_t{}));
-        response.stop_reason = ai::AssistantStopReason::ToolUse;
-        co_return response;
+                    first_stop_token = options.stop_token;
+                    auto response = ai::assistant_text_message("");
+                    response.provider = "tool-abort-fake";
+                    response.api = "fake";
+                    response.model = model.id;
+                    response.content.clear();
+                    response.content.emplace_back(
+                            ai::tool_call_content("delayed-call", "delayed", "{}", support::JsonValue::object_t{}));
+                    response.stop_reason = ai::AssistantStopReason::ToolUse;
+                    co_return response;
                 });
     }
 
@@ -1031,67 +965,52 @@ public:
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
-                ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        auto partial = ai::assistant_text_message("");
-        partial.content.clear();
-        partial.provider = "fake";
-        partial.api = "incremental-fake";
-        partial.model = model.id;
-        if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
+                [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink sink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    auto partial = ai::assistant_text_message("");
+                    partial.content.clear();
+                    partial.provider = "fake";
+                    partial.api = "incremental-fake";
+                    partial.model = model.id;
+                    if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
 
-        partial.content.emplace_back(ai::text_content(""));
-        if (auto emitted = sink(ai::TextStartEvent{0, partial}); !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        std::get<ai::TextContent>(partial.content[0]).text =
-            "old line 1\nold line 2\nTAIL PARTIAL";
-        if (auto emitted = sink(ai::TextDeltaEvent{
-                0,
-                "old line 1\nold line 2\nTAIL PARTIAL",
-                partial});
-            !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
+                    partial.content.emplace_back(ai::text_content(""));
+                    if (auto emitted = sink(ai::TextStartEvent{0, partial}); !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    std::get<ai::TextContent>(partial.content[0]).text = "old line 1\nold line 2\nTAIL PARTIAL";
+                    if (auto emitted = sink(ai::TextDeltaEvent{0, "old line 1\nold line 2\nTAIL PARTIAL", partial});
+                            !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
 
-        const auto executor = co_await boost::asio::this_coro::executor;
-        gate_.emplace(executor);
-        gate_->expires_at(std::chrono::steady_clock::time_point::max());
-        started = true;
-        boost::system::error_code error;
-        co_await gate_->async_wait(
-            boost::asio::redirect_error(boost::asio::use_awaitable, error));
-        // The gate timer is bound to the run's executor; release it before
-        // that io_context dies so the host-owned provider graph can outlive
-        // the run (ASan, #473/#640).
-        gate_.reset();
+                    const auto executor = co_await boost::asio::this_coro::executor;
+                    gate_.emplace(executor);
+                    gate_->expires_at(std::chrono::steady_clock::time_point::max());
+                    started = true;
+                    boost::system::error_code error;
+                    co_await gate_->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                    // The gate timer is bound to the run's executor; release it before
+                    // that io_context dies so the host-owned provider graph can outlive
+                    // the run (ASan, #473/#640).
+                    gate_.reset();
 
-        std::get<ai::TextContent>(partial.content[0]).text =
-            "new line 1\nnew line 2\nTAIL COMPLETE";
-        if (auto emitted = sink(ai::TextDeltaEvent{
-                0,
-                "new line 1\nnew line 2\nTAIL COMPLETE",
-                partial});
-            !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        if (auto emitted = sink(ai::TextEndEvent{
-                0,
-                "new line 1\nnew line 2\nTAIL COMPLETE",
-                partial});
-            !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        if (auto emitted = sink(ai::AssistantDoneEvent{
-                ai::AssistantStopReason::Stop,
-                partial});
-            !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        co_return partial;
+                    std::get<ai::TextContent>(partial.content[0]).text = "new line 1\nnew line 2\nTAIL COMPLETE";
+                    if (auto emitted = sink(ai::TextDeltaEvent{0, "new line 1\nnew line 2\nTAIL COMPLETE", partial});
+                            !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    if (auto emitted = sink(ai::TextEndEvent{0, "new line 1\nnew line 2\nTAIL COMPLETE", partial});
+                            !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    if (auto emitted = sink(ai::AssistantDoneEvent{ai::AssistantStopReason::Stop, partial}); !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    co_return partial;
                 });
     }
 
@@ -1117,36 +1036,29 @@ public:
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this,
-             model = std::move(model),
-             context = std::move(context),
-             options = std::move(options)](
-                ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-                ++request_count;
-                if (request_count == 3) {
-                    const auto executor =
-                        co_await boost::asio::this_coro::executor;
-                    gate_.emplace(executor);
-                    gate_->expires_at(
-                        std::chrono::steady_clock::time_point::max());
-                    boost::system::error_code error;
-                    co_await gate_->async_wait(boost::asio::redirect_error(
-                        boost::asio::use_awaitable, error));
-                    gate_.reset();
-                }
-                auto response = ai::assistant_text_message(
-                    request_count == 3 ? "## Goal\nCompacted exit summary"
-                                       : "setup reply");
-                response.provider = "gated-compaction-fake";
-                response.api = "fake";
-                response.model = model.id;
-                // Session files require real epoch timestamps on assistant
-                // messages; stamp the deterministic value the other
-                // scripted fakes use.
-                response.timestamp = 1718000000123;
-                co_return response;
-            });
+                [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    ++request_count;
+                    if (request_count == 3) {
+                        const auto executor = co_await boost::asio::this_coro::executor;
+                        gate_.emplace(executor);
+                        gate_->expires_at(std::chrono::steady_clock::time_point::max());
+                        boost::system::error_code error;
+                        co_await gate_->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                        gate_.reset();
+                    }
+                    auto response = ai::assistant_text_message(
+                            request_count == 3 ? "## Goal\nCompacted exit summary" : "setup reply");
+                    response.provider = "gated-compaction-fake";
+                    response.api = "fake";
+                    response.model = model.id;
+                    // Session files require real epoch timestamps on assistant
+                    // messages; stamp the deterministic value the other
+                    // scripted fakes use.
+                    response.timestamp = 1718000000123;
+                    co_return response;
+                });
     }
 
     void release() {
@@ -1167,24 +1079,23 @@ TEST_CASE("Native TUI renders resumed and live message images in source order wi
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     const auto session_file = workspace.path() / "image-session.jsonl";
-    auto store = harness::session::SessionStore::create_new(
-        session_file,
-        {
-            .session_id = "image-session",
-            .created_at = "2026-07-28T00:00:00Z",
-            .workspace = workspace.path(),
-            .provider = "fake",
-            .model = "fake-model",
-        });
+    auto store = harness::session::SessionStore::create_new(session_file,
+            {
+                    .session_id = "image-session",
+                    .created_at = "2026-07-28T00:00:00Z",
+                    .workspace = workspace.path(),
+                    .provider = "fake",
+                    .model = "fake-model",
+            });
     REQUIRE(store);
 
     const auto png_data = std::string{tests::kTinyPngBase64};
     ai::UserMessage user;
     user.timestamp = 1'700'000'000'000;
     user.content = std::vector<ai::Content>{
-        ai::text_content("user before"),
-        ai::image_content(png_data, "image/png"),
-        ai::text_content("user after"),
+            ai::text_content("user before"),
+            ai::image_content(png_data, "image/png"),
+            ai::text_content("user after"),
     };
     REQUIRE(store->append(ai::MessageVariant{user}));
 
@@ -1202,9 +1113,9 @@ TEST_CASE("Native TUI renders resumed and live message images in source order wi
     tool_result.tool_name = "read";
     tool_result.timestamp = 1'700'000'000'002;
     tool_result.content = {
-        ai::text_content("tool before"),
-        ai::image_content(png_data, "image/png"),
-        ai::text_content("tool after"),
+            ai::text_content("tool before"),
+            ai::image_content(png_data, "image/png"),
+            ai::text_content("tool after"),
     };
     REQUIRE(store->append(ai::MessageVariant{tool_result}));
 
@@ -1212,15 +1123,15 @@ TEST_CASE("Native TUI renders resumed and live message images in source order wi
     custom.custom_type = "image-notice";
     custom.timestamp = 1'700'000'000'003;
     custom.content = {
-        ai::text_content("custom before"),
-        ai::image_content(png_data, "image/png"),
-        ai::text_content("after png"),
-        ai::image_content(std::string{tests::kTinyJpegBase64}, "image/jpeg"),
-        ai::text_content("after jpeg"),
-        ai::image_content(std::string{tests::kTinyGifBase64}, "image/gif"),
-        ai::text_content("after gif"),
-        ai::image_content(std::string{tests::kTinyWebpBase64}, "image/webp"),
-        ai::text_content("custom after"),
+            ai::text_content("custom before"),
+            ai::image_content(png_data, "image/png"),
+            ai::text_content("after png"),
+            ai::image_content(std::string{tests::kTinyJpegBase64}, "image/jpeg"),
+            ai::text_content("after jpeg"),
+            ai::image_content(std::string{tests::kTinyGifBase64}, "image/gif"),
+            ai::text_content("after gif"),
+            ai::image_content(std::string{tests::kTinyWebpBase64}, "image/webp"),
+            ai::text_content("custom after"),
     };
     REQUIRE(store->append(ai::MessageVariant{custom}));
 
@@ -1235,25 +1146,24 @@ TEST_CASE("Native TUI renders resumed and live message images in source order wi
     std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
     runtime_driver.emplace(runtime);
     tui::VirtualTerminal terminal({
-        .columns = 72,
-        .rows = 300,
-        .capabilities = {
-            .synchronized_output = true,
-            .inline_images = tui::InlineImageProtocol::ITerm2,
-            .cell_pixels = tui::CellPixelDimensions{.width = 9, .height = 18},
-        },
+            .columns = 72,
+            .rows = 300,
+            .capabilities =
+                    {
+                            .synchronized_output = true,
+                            .inline_images = tui::InlineImageProtocol::ITerm2,
+                            .cell_pixels = tui::CellPixelDimensions{.width = 9, .height = 18},
+                    },
     });
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*resumed->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*resumed->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.images().size() == 6);
@@ -1265,7 +1175,7 @@ TEST_CASE("Native TUI renders resumed and live message images in source order wi
         }
     }
     const std::array<std::string_view, 6> resumed_mime_types{
-        "image/png", "image/png", "image/png", "image/jpeg", "image/gif", "image/webp"};
+            "image/png", "image/png", "image/png", "image/jpeg", "image/gif", "image/webp"};
     for (std::size_t index = 0; index < resumed_mime_types.size(); ++index) {
         CHECK(terminal.images()[index].mime_type == resumed_mime_types[index]);
     }
@@ -1283,13 +1193,12 @@ TEST_CASE("Native TUI renders resumed and live message images in source order wi
     coding_agent::PromptOptions live_options;
     live_options.images.push_back(ai::image_content(png_data, "image/png"));
     std::optional<support::ExpectedVoid> prompt_result;
-    boost::asio::co_spawn(
-        io,
-        resumed->session->prompt("live user text", std::move(live_options)),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            prompt_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            resumed->session->prompt("live user text", std::move(live_options)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                prompt_result.emplace(std::move(result));
+            });
     REQUIRE(pump_until(io, [&] { return prompt_result.has_value() && terminal.images().size() == 7; }));
     CHECK(*prompt_result);
     REQUIRE(terminal.images().size() == 7);
@@ -1300,19 +1209,16 @@ TEST_CASE("Native TUI renders resumed and live message images in source order wi
 
     const auto authoritative_after = resumed->session->snapshot().agent_state.messages;
     REQUIRE(authoritative_after.size() == authoritative_before.size() + 2);
-    const auto* live_user = std::get_if<ai::UserMessage>(
-        &authoritative_after[authoritative_before.size()]);
+    const auto* live_user = std::get_if<ai::UserMessage>(&authoritative_after[authoritative_before.size()]);
     REQUIRE(live_user != nullptr);
     REQUIRE(std::get<std::vector<ai::Content>>(live_user->content).size() == 2);
     CHECK(std::get<ai::ImageContent>(std::get<std::vector<ai::Content>>(live_user->content)[1]).data == png_data);
     CHECK(std::get<ai::ImageContent>(
-        std::get<std::vector<ai::Content>>(
-            std::get<ai::UserMessage>(authoritative_after[0]).content)[1])
-        .data == png_data);
-    CHECK(std::get<ai::ImageContent>(
-        std::get<ai::ToolResultMessage>(authoritative_after[2]).content[1]).data == png_data);
-    CHECK(std::get<ai::ImageContent>(
-        std::get<ai::CustomMessage>(authoritative_after[3]).content[1]).data == png_data);
+                  std::get<std::vector<ai::Content>>(std::get<ai::UserMessage>(authoritative_after[0]).content)[1])
+                    .data == png_data);
+    CHECK(std::get<ai::ImageContent>(std::get<ai::ToolResultMessage>(authoritative_after[2]).content[1]).data ==
+            png_data);
+    CHECK(std::get<ai::ImageContent>(std::get<ai::CustomMessage>(authoritative_after[3]).content[1]).data == png_data);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -1331,15 +1237,13 @@ TEST_CASE("Native TUI renders resumed and live message images in source order wi
     tui::VirtualTerminal fallback_terminal({.columns = 72, .rows = 50});
     boost::asio::io_context fallback_io;
     std::optional<support::ExpectedVoid> fallback_result;
-    boost::asio::co_spawn(
-        fallback_io,
-        coding_agent::tui::run_interactive_mode(
-            fallback_terminal,
-            make_run(*fallback_session->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            fallback_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(fallback_io,
+            coding_agent::tui::run_interactive_mode(
+                    fallback_terminal, make_run(*fallback_session->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                fallback_result.emplace(std::move(result));
+            });
     drain_ready(fallback_io);
 
     const auto fallback_screen = visible_screen(fallback_terminal);
@@ -1352,9 +1256,8 @@ TEST_CASE("Native TUI renders resumed and live message images in source order wi
     const auto fallback_after = fallback_session->session->snapshot().agent_state.messages;
     REQUIRE(fallback_after.size() == fallback_before.size());
     CHECK(std::get<ai::ImageContent>(
-        std::get<std::vector<ai::Content>>(
-            std::get<ai::UserMessage>(fallback_after[0]).content)[1])
-        .data == png_data);
+                  std::get<std::vector<ai::Content>>(std::get<ai::UserMessage>(fallback_after[0]).content)[1])
+                    .data == png_data);
 
     REQUIRE(fallback_terminal.inject_input("\x04"));
     drain_ready(fallback_io);
@@ -1367,35 +1270,31 @@ TEST_CASE("Native TUI renders a live image-bearing tool result through the trans
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
-    auto options = session_options(
-        workspace,
-        std::make_shared<RepeatedReadCallChatProvider>());
-    options.custom_tools.push_back(make_image_read_tool(
-        std::string{tests::kTinyPngBase64}));
+    auto options = session_options(workspace, std::make_shared<RepeatedReadCallChatProvider>());
+    options.custom_tools.push_back(make_image_read_tool(std::string{tests::kTinyPngBase64}));
     auto created = runtime.run(create_session_async(runtime, std::move(options)));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({
-        .columns = 80,
-        .rows = 80,
-        .capabilities = {
-            .synchronized_output = true,
-            .inline_images = tui::InlineImageProtocol::ITerm2,
-            .cell_pixels = tui::CellPixelDimensions{.width = 9, .height = 18},
-        },
+            .columns = 80,
+            .rows = 80,
+            .capabilities =
+                    {
+                            .synchronized_output = true,
+                            .inline_images = tui::InlineImageProtocol::ITerm2,
+                            .cell_pixels = tui::CellPixelDimensions{.width = 9, .height = 18},
+                    },
     });
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config_directory.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config_directory.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
     REQUIRE(terminal.inject_input("read live.png\r"));
     drain_ready(io);
@@ -1405,17 +1304,13 @@ TEST_CASE("Native TUI renders a live image-bearing tool result through the trans
     const auto screen = visible_screen(terminal);
     CHECK(screen.find("live tool before") < screen.find("live tool after"));
     const auto snapshot = created->session->snapshot();
-    const auto result = std::find_if(
-        snapshot.agent_state.messages.begin(),
-        snapshot.agent_state.messages.end(),
-        [](const ai::MessageVariant& message) {
-            return std::holds_alternative<ai::ToolResultMessage>(message);
-        });
+    const auto result = std::find_if(snapshot.agent_state.messages.begin(),
+            snapshot.agent_state.messages.end(),
+            [](const ai::MessageVariant& message) { return std::holds_alternative<ai::ToolResultMessage>(message); });
     REQUIRE(result != snapshot.agent_state.messages.end());
     const auto& tool_result = std::get<ai::ToolResultMessage>(*result);
     REQUIRE(tool_result.content.size() == 3);
-    CHECK(std::get<ai::ImageContent>(tool_result.content[1]).data ==
-        tests::kTinyPngBase64);
+    CHECK(std::get<ai::ImageContent>(tool_result.content[1]).data == tests::kTinyPngBase64);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -1429,27 +1324,25 @@ TEST_CASE("Native TUI keeps tail image sidecars visible while the old transcript
     tests::TempWorkspace workspace;
     tests::TempWorkspace config_directory;
     const auto session_file = workspace.path() / "viewport-images.jsonl";
-    auto store = harness::session::SessionStore::create_new(
-        session_file,
-        {
-            .session_id = "viewport-images",
-            .created_at = "2026-07-28T00:00:00Z",
-            .workspace = workspace.path(),
-            .provider = "fake",
-            .model = "fake-model",
-        });
+    auto store = harness::session::SessionStore::create_new(session_file,
+            {
+                    .session_id = "viewport-images",
+                    .created_at = "2026-07-28T00:00:00Z",
+                    .workspace = workspace.path(),
+                    .provider = "fake",
+                    .model = "fake-model",
+            });
     REQUIRE(store);
     for (std::size_t index = 0; index < 30; ++index) {
-        REQUIRE(store->append(ai::MessageVariant{
-            ai::user_text_message("old transcript line " + std::to_string(index),
+        REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("old transcript line " + std::to_string(index),
                 1'700'000'000'000 + static_cast<ai::TimestampMs>(index))}));
     }
     ai::CustomMessage tail;
     tail.custom_type = "tail";
     tail.content = {
-        ai::text_content("tail before"),
-        ai::image_content(std::string{tests::kTinyPngBase64}, "image/png"),
-        ai::text_content("tail after"),
+            ai::text_content("tail before"),
+            ai::image_content(std::string{tests::kTinyPngBase64}, "image/png"),
+            ai::text_content("tail after"),
     };
     tail.timestamp = 1'700'000'000'100;
     REQUIRE(store->append(ai::MessageVariant{tail}));
@@ -1462,25 +1355,24 @@ TEST_CASE("Native TUI keeps tail image sidecars visible while the old transcript
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
     tui::VirtualTerminal terminal({
-        .columns = 72,
-        .rows = 42,
-        .capabilities = {
-            .synchronized_output = true,
-            .inline_images = tui::InlineImageProtocol::ITerm2,
-            .cell_pixels = tui::CellPixelDimensions{.width = 9, .height = 18},
-        },
+            .columns = 72,
+            .rows = 42,
+            .capabilities =
+                    {
+                            .synchronized_output = true,
+                            .inline_images = tui::InlineImageProtocol::ITerm2,
+                            .cell_pixels = tui::CellPixelDimensions{.width = 9, .height = 18},
+                    },
     });
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config_directory.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config_directory.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.images().size() == 1);
@@ -1528,15 +1420,15 @@ TEST_CASE("Native TUI clipboard images become distinct supported temporary paths
 
     auto reader = std::make_unique<FakeClipboardReader>();
     const std::array source_bytes{
-        tests::decode_base64(tests::kTinyPngBase64),
-        tests::decode_base64(tests::kTinyJpegBase64),
-        tests::decode_base64(tests::kTinyGifBase64),
-        tests::decode_base64(tests::kTinyWebpBase64),
+            tests::decode_base64(tests::kTinyPngBase64),
+            tests::decode_base64(tests::kTinyJpegBase64),
+            tests::decode_base64(tests::kTinyGifBase64),
+            tests::decode_base64(tests::kTinyWebpBase64),
     };
     for (const auto& bytes : source_bytes) {
         reader->images.push_back({
-            .bytes = bytes,
-            .mime_type = "application/octet-stream",
+                .bytes = bytes,
+                .mime_type = "application/octet-stream",
         });
     }
 
@@ -1544,18 +1436,17 @@ TEST_CASE("Native TUI clipboard images become distinct supported temporary paths
     tui::VirtualTerminal terminal({.columns = 120, .rows = 16});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {
-                .agent_config_directory = config_directory.path(),
-                .clipboard_reader = std::move(reader),
-            })),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal,
+                    make_run(*created->session,
+                            {
+                                    .agent_config_directory = config_directory.path(),
+                                    .clipboard_reader = std::move(reader),
+                            })),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     for (std::size_t index = 0; index < source_bytes.size(); ++index) {
@@ -1578,14 +1469,14 @@ TEST_CASE("Native TUI clipboard images become distinct supported temporary paths
     REQUIRE(user != nullptr);
     std::istringstream paths{ai::text_from_user_message(*user)};
     std::vector<std::filesystem::path> inserted_paths;
-    for (std::filesystem::path path; paths >> path;) inserted_paths.push_back(std::move(path));
+    for (std::filesystem::path path; paths >> path;)
+        inserted_paths.push_back(std::move(path));
     REQUIRE(inserted_paths.size() == 4);
     const std::array<std::string_view, 4> extensions{".png", ".jpg", ".gif", ".webp"};
     for (std::size_t index = 0; index < inserted_paths.size(); ++index) {
         CHECK(inserted_paths[index].extension() == extensions[index]);
-        CHECK(read_binary_file(inserted_paths[index]) == std::string(
-            reinterpret_cast<const char*>(source_bytes[index].data()),
-            source_bytes[index].size()));
+        CHECK(read_binary_file(inserted_paths[index]) ==
+                std::string(reinterpret_cast<const char*>(source_bytes[index].data()), source_bytes[index].size()));
         if (index > 0) CHECK(inserted_paths[index] != inserted_paths[index - 1]);
     }
 
@@ -1618,8 +1509,8 @@ TEST_CASE("Native TUI clipboard falls back to text at the cursor and ignores rea
 
     auto reader = std::make_unique<FakeClipboardReader>();
     reader->images.push_back({
-        .bytes = {0x01, 0x02, 0x03},
-        .mime_type = "image/png",
+            .bytes = {0x01, 0x02, 0x03},
+            .mime_type = "image/png",
     });
     reader->text = "clipboard text";
 
@@ -1628,18 +1519,17 @@ TEST_CASE("Native TUI clipboard falls back to text at the cursor and ignores rea
     tui::VirtualTerminal terminal({.columns = 80, .rows = 12});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {
-                .agent_config_directory = config_directory.path(),
-                .clipboard_reader = std::move(reader),
-            })),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal,
+                    make_run(*created->session,
+                            {
+                                    .agent_config_directory = config_directory.path(),
+                                    .clipboard_reader = std::move(reader),
+                            })),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
     REQUIRE(terminal.inject_input("AB\x1b[D\x16"));
     drain_ready(io);
@@ -1672,18 +1562,17 @@ TEST_CASE("Native TUI clipboard falls back to text at the cursor and ignores rea
     tui::VirtualTerminal failed_terminal({.columns = 80, .rows = 12});
     boost::asio::io_context failed_io;
     std::optional<support::ExpectedVoid> failed_result;
-    boost::asio::co_spawn(
-        failed_io,
-        coding_agent::tui::run_interactive_mode(
-            failed_terminal,
-            make_run(*failed_session->session, {
-                .agent_config_directory = config_directory.path(),
-                .clipboard_reader = std::move(failed_reader),
-            })),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            failed_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(failed_io,
+            coding_agent::tui::run_interactive_mode(failed_terminal,
+                    make_run(*failed_session->session,
+                            {
+                                    .agent_config_directory = config_directory.path(),
+                                    .clipboard_reader = std::move(failed_reader),
+                            })),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                failed_result.emplace(std::move(result));
+            });
     drain_ready(failed_io);
     REQUIRE(failed_terminal.inject_input("unchanged\x16"));
     drain_ready(failed_io);
@@ -1707,35 +1596,29 @@ TEST_CASE("Native TUI renders a resumed rich transcript before accepting continu
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    config.write(
-        "keybindings.json",
-        R"({"app.thinking.toggle":"f8","app.tools.expand":[]})");
+    config.write("keybindings.json", R"({"app.thinking.toggle":"f8","app.tools.expand":[]})");
     const auto session_file = workspace.path() / "rich-session.jsonl";
-    auto store = harness::session::SessionStore::create_new(
-        session_file,
-        {
-            .session_id = "rich-session",
-            .created_at = "2026-07-28T00:00:00Z",
-            .workspace = workspace.path(),
-            .provider = "fake",
-            .model = "fake-model",
-        });
+    auto store = harness::session::SessionStore::create_new(session_file,
+            {
+                    .session_id = "rich-session",
+                    .created_at = "2026-07-28T00:00:00Z",
+                    .workspace = workspace.path(),
+                    .provider = "fake",
+                    .model = "fake-model",
+            });
     REQUIRE(store);
-    REQUIRE(store->append(ai::MessageVariant{
-        ai::user_text_message("before compaction", 1'700'000'000'000)}));
-    REQUIRE(store->append(ai::MessageVariant{
-        ai::user_text_message("resume request", 1'700'000'000'001)}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("before compaction", 1'700'000'000'000)}));
+    REQUIRE(store->append(ai::MessageVariant{ai::user_text_message("resume request", 1'700'000'000'001)}));
     auto loaded = harness::session::SessionStore::load(session_file);
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() >= 3);
     const auto kept_entry_id = loaded->entries[2].entry_id;
-    REQUIRE(store->append_compaction(
-        std::nullopt,
-        harness::session::CompactionEntryValue{
-            .summary = "compacted persisted context",
-            .first_kept_entry_id = kept_entry_id,
-            .tokens_before = 1200,
-        }));
+    REQUIRE(store->append_compaction(std::nullopt,
+            harness::session::CompactionEntryValue{
+                    .summary = "compacted persisted context",
+                    .first_kept_entry_id = kept_entry_id,
+                    .tokens_before = 1200,
+            }));
 
     ai::AssistantMessage assistant;
     assistant.provider = "fake";
@@ -1743,28 +1626,18 @@ TEST_CASE("Native TUI renders a resumed rich transcript before accepting continu
     assistant.model = "fake-model";
     assistant.stop_reason = ai::AssistantStopReason::ToolUse;
     assistant.timestamp = 1'700'000'000'002;
-    const std::string thinking_text =
-        "inspect the saved state\n"
-        "compare the active path\n"
-        "retain every correlation\n"
-        "THINKING END";
+    const std::string thinking_text = "inspect the saved state\n"
+                                      "compare the active path\n"
+                                      "retain every correlation\n"
+                                      "THINKING END";
     assistant.content.emplace_back(ai::thinking_content(thinking_text));
     assistant.content.emplace_back(ai::text_content("I will read the persisted file."));
-    const auto persisted_arguments = std::format(
-        R"({{"path":"saved.txt","padding":"{}"}})",
-        std::string(700, 'A'));
-    assistant.content.emplace_back(ai::tool_call_content(
-        "resume-call-7",
-        "read",
-        persisted_arguments));
+    const auto persisted_arguments = std::format(R"({{"path":"saved.txt","padding":"{}"}})", std::string(700, 'A'));
+    assistant.content.emplace_back(ai::tool_call_content("resume-call-7", "read", persisted_arguments));
     assistant.content.emplace_back(ai::text_content("I will continue after the tool."));
     REQUIRE(store->append(ai::MessageVariant{assistant}));
-    REQUIRE(store->append(ai::MessageVariant{ai::tool_result_message(
-        "resume-call-7",
-        "read",
-        "persisted tool output",
-        false,
-        1'700'000'000'003)}));
+    REQUIRE(store->append(ai::MessageVariant{
+            ai::tool_result_message("resume-call-7", "read", "persisted tool output", false, 1'700'000'000'003)}));
 
     ai::CustomMessage custom;
     custom.custom_type = "notice";
@@ -1772,9 +1645,9 @@ TEST_CASE("Native TUI renders a resumed rich transcript before accepting continu
     custom.timestamp = 1'700'000'000'004;
     REQUIRE(store->append(ai::MessageVariant{custom}));
     REQUIRE(store->append(ai::MessageVariant{ai::BranchSummaryMessage{
-        .summary = "abandoned branch context",
-        .from_id = "branch-entry",
-        .timestamp = 1'700'000'000'006,
+            .summary = "abandoned branch context",
+            .from_id = "branch-entry",
+            .timestamp = 1'700'000'000'006,
     }}));
 
     coding_agent::runtime::AgentSessionCreationRequest resume;
@@ -1794,15 +1667,13 @@ TEST_CASE("Native TUI renders a resumed rich transcript before accepting continu
     tui::VirtualTerminal terminal({.columns = 72, .rows = 52});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*resumed->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*resumed->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     const auto screen = visible_screen(terminal);
@@ -1850,12 +1721,10 @@ TEST_CASE("Native TUI renders a resumed rich transcript before accepting continu
 
     const auto unchanged = resumed->session->snapshot().agent_state.messages;
     REQUIRE(unchanged.size() == authoritative_before.size());
-    CHECK(std::get<ai::ThinkingContent>(
-        std::get<ai::AssistantMessage>(unchanged[2]).content[0]).thinking ==
-        thinking_text);
+    CHECK(std::get<ai::ThinkingContent>(std::get<ai::AssistantMessage>(unchanged[2]).content[0]).thinking ==
+            thinking_text);
     CHECK(std::get<ai::ToolResultMessage>(unchanged[3]).tool_call_id == "resume-call-7");
-    CHECK(std::get<ai::CompactionSummaryMessage>(unchanged[0]).summary ==
-        "compacted persisted context");
+    CHECK(std::get<ai::CompactionSummaryMessage>(unchanged[0]).summary == "compacted persisted context");
 
     REQUIRE(terminal.inject_input("continue here\r"));
     REQUIRE(pump_until(io, [&] {
@@ -1897,15 +1766,13 @@ TEST_CASE("Native TUI presents fresh and resumed persisted history equivalently"
     tui::VirtualTerminal fresh_terminal({.columns = 64, .rows = 10});
     boost::asio::io_context fresh_io;
     std::optional<support::ExpectedVoid> fresh_result;
-    boost::asio::co_spawn(
-        fresh_io,
-        coding_agent::tui::run_interactive_mode(
-            fresh_terminal,
-            make_run(*fresh->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            fresh_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(fresh_io,
+            coding_agent::tui::run_interactive_mode(
+                    fresh_terminal, make_run(*fresh->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                fresh_result.emplace(std::move(result));
+            });
     drain_ready(fresh_io);
     const auto fresh_screen = visible_screen(fresh_terminal);
     REQUIRE(fresh_terminal.inject_input("\x04"));
@@ -1925,15 +1792,13 @@ TEST_CASE("Native TUI presents fresh and resumed persisted history equivalently"
     tui::VirtualTerminal resumed_terminal({.columns = 64, .rows = 10});
     boost::asio::io_context resumed_io;
     std::optional<support::ExpectedVoid> resumed_result;
-    boost::asio::co_spawn(
-        resumed_io,
-        coding_agent::tui::run_interactive_mode(
-            resumed_terminal,
-            make_run(*resumed->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            resumed_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(resumed_io,
+            coding_agent::tui::run_interactive_mode(
+                    resumed_terminal, make_run(*resumed->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                resumed_result.emplace(std::move(result));
+            });
     drain_ready(resumed_io);
     CHECK(visible_screen(resumed_terminal) == fresh_screen);
 
@@ -1948,9 +1813,7 @@ TEST_CASE("Native TUI correlates repeated Tool Call IDs and locally expands long
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    auto options = session_options(
-        workspace,
-        std::make_shared<RepeatedReadCallChatProvider>());
+    auto options = session_options(workspace, std::make_shared<RepeatedReadCallChatProvider>());
     auto tool = make_gated_partial_read_tool();
     auto* tool_pointer = tool.state.get();
     options.custom_tools.push_back(std::move(tool.tool));
@@ -1961,15 +1824,13 @@ TEST_CASE("Native TUI correlates repeated Tool Call IDs and locally expands long
     tui::VirtualTerminal terminal({.columns = 72, .rows = 32});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("read large.txt\r"));
@@ -2057,15 +1918,13 @@ TEST_CASE("Native TUI interrupt cancels autocomplete before aborting active work
     tui::VirtualTerminal terminal({.columns = 72, .rows = 16});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("cancel me\r"));
@@ -2076,13 +1935,13 @@ TEST_CASE("Native TUI interrupt cancels autocomplete before aborting active work
 
     REQUIRE(terminal.inject_input("/"));
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("/compact") != std::string::npos);
+    CHECK(visible_screen(terminal).find("compact") != std::string::npos);
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.flush_input());
     drain_ready(io);
     CHECK(created->session->is_busy());
     CHECK(client_pointer->stop_callback_count == 0);
-    CHECK(visible_screen(terminal).find("/compact") == std::string::npos);
+    CHECK(visible_screen(terminal).find("compact") == std::string::npos);
 
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.flush_input());
@@ -2100,8 +1959,7 @@ TEST_CASE("Native TUI interrupt cancels autocomplete before aborting active work
     drain_ready(io);
     CHECK_FALSE(client_pointer->recovery_stop_requested);
     CHECK(client_pointer->recovery_uses_fresh_token);
-    CHECK(visible_screen(terminal).find("recovered after TUI abort") !=
-        std::string::npos);
+    CHECK(visible_screen(terminal).find("recovered after TUI abort") != std::string::npos);
 
     REQUIRE(terminal.inject_input("draft"));
     REQUIRE(terminal.inject_input("\x1b"));
@@ -2122,9 +1980,7 @@ TEST_CASE("Native TUI repeated interrupt and shutdown input restores the termina
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    config.write(
-        "keybindings.json",
-        R"({"app.interrupt":"f7","app.exit":"f6"})");
+    config.write("keybindings.json", R"({"app.interrupt":"f7","app.exit":"f6"})");
     auto client = std::make_shared<AbortAwareInteractiveChatProvider>();
     auto* client_pointer = client.get();
     // Keep an owning copy: shutdown closes the Session, which releases its
@@ -2136,15 +1992,13 @@ TEST_CASE("Native TUI repeated interrupt and shutdown input restores the termina
     tui::VirtualTerminal terminal({.columns = 72, .rows = 12});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // Joins the spawned run on scope exit while the captured terminal and
@@ -2187,15 +2041,13 @@ TEST_CASE("Native TUI waits for cancelled tool quiescence before accepting the n
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("use delayed tool\r"));
@@ -2219,7 +2071,7 @@ TEST_CASE("Native TUI waits for cancelled tool quiescence before accepting the n
 
     REQUIRE(terminal.inject_input("/"));
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("/compact") != std::string::npos);
+    CHECK(visible_screen(terminal).find("compact") != std::string::npos);
     REQUIRE(terminal.inject_input("\x1b[18~\x1b[18~"));
     drain_ready(io);
     CHECK(created->session->is_busy());
@@ -2229,8 +2081,7 @@ TEST_CASE("Native TUI waits for cancelled tool quiescence before accepting the n
     REQUIRE(terminal.inject_input("\x03recover after tool abort\r"));
     drain_ready(io);
     CHECK(created->session->message_count() == 3);
-    CHECK(visible_screen(terminal).find("A prompt is already in flight") !=
-        std::string::npos);
+    CHECK(visible_screen(terminal).find("A prompt is already in flight") != std::string::npos);
 
     tool_pointer->release();
     drain_ready(io);
@@ -2245,8 +2096,7 @@ TEST_CASE("Native TUI waits for cancelled tool quiescence before accepting the n
     REQUIRE(terminal.inject_input("\r"));
     drain_ready(io);
     CHECK(created->session->message_count() == 7);
-    CHECK(visible_screen(terminal).find("recovered after tool abort") !=
-        std::string::npos);
+    CHECK(visible_screen(terminal).find("recovered after tool abort") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -2264,15 +2114,12 @@ TEST_CASE("Native TUI distinguishes subscriber diagnostics and remains usable",
     REQUIRE(created);
     std::vector<coding_agent::EventSubscription> failing_subscriptions;
     for (std::size_t index = 0; index < 16; ++index) {
-        auto subscription = created->session->subscribe(
-            [index](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
-                return std::unexpected(support::make_error(
-                    support::ErrorCode::Unknown,
-                    "subscriber failed",
-                    std::format(
-                        "api_key=sk-subscriber-secret-123456 initial subscriber {}",
-                        index)));
-            });
+        auto subscription =
+                created->session->subscribe([index](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
+                    return std::unexpected(support::make_error(support::ErrorCode::Unknown,
+                            "subscriber failed",
+                            std::format("api_key=sk-subscriber-secret-123456 initial subscriber {}", index)));
+                });
         REQUIRE(subscription);
         failing_subscriptions.push_back(std::move(*subscription));
     }
@@ -2281,15 +2128,13 @@ TEST_CASE("Native TUI distinguishes subscriber diagnostics and remains usable",
     tui::VirtualTerminal terminal({.columns = 100, .rows = 40});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("survive subscriber failure\r"));
@@ -2300,20 +2145,16 @@ TEST_CASE("Native TUI distinguishes subscriber diagnostics and remains usable",
     CHECK(screen.find("sk-subscriber-secret-123456") == std::string::npos);
     CHECK(screen.find("[REDACTED]") != std::string::npos);
 
-    auto rollover_subscription = created->session->subscribe(
-        [](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Unknown,
-                "late subscriber rollover"));
-        });
+    auto rollover_subscription =
+            created->session->subscribe([](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
+                return std::unexpected(support::make_error(support::ErrorCode::Unknown, "late subscriber rollover"));
+            });
     REQUIRE(rollover_subscription);
     REQUIRE(terminal.inject_input("recover subscriber\r"));
     drain_ready(io);
     CHECK(created->session->message_count() == 5);
-    CHECK(visible_screen(terminal).find("late subscriber rollover") !=
-        std::string::npos);
-    CHECK(visible_screen(terminal).find("fake: recover subscriber") !=
-        std::string::npos);
+    CHECK(visible_screen(terminal).find("late subscriber rollover") != std::string::npos);
+    CHECK(visible_screen(terminal).find("fake: recover subscriber") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -2338,15 +2179,13 @@ TEST_CASE("Native TUI distinguishes persistence failures and remains usable",
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     harness::session::testing::fail_nth_append_for_test(session_file, 2);
@@ -2363,11 +2202,8 @@ TEST_CASE("Native TUI distinguishes persistence failures and remains usable",
     REQUIRE(terminal.inject_input("\x03recover persistence\r"));
     drain_ready(io);
     CHECK(created->session->message_count() == 3);
-    CHECK(visible_screen(terminal).find(
-              "session persistence failed; rejecting new prompt") !=
-        std::string::npos);
-    CHECK(visible_screen(terminal).find("fake: recover persistence") ==
-        std::string::npos);
+    CHECK(visible_screen(terminal).find("session persistence failed; rejecting new prompt") != std::string::npos);
+    CHECK(visible_screen(terminal).find("fake: recover persistence") == std::string::npos);
 
     // The rejected prompt restores the submitted text so the editor stays
     // usable; clear it (ctrl+c) before exiting (ctrl+d exits only on an
@@ -2392,15 +2228,13 @@ TEST_CASE("Native TUI renders accepted provider outcomes once and remains usable
     tui::VirtualTerminal terminal({.columns = 72, .rows = 20});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("provider error\r"));
@@ -2434,8 +2268,7 @@ TEST_CASE("Native TUI renders accepted provider outcomes once and remains usable
     REQUIRE(terminal.inject_input("recover\r"));
     drain_ready(io);
     CHECK(created->session->message_count() == 11);
-    CHECK(visible_screen(terminal).find("recovered after accepted outcomes") !=
-        std::string::npos);
+    CHECK(visible_screen(terminal).find("recovered after accepted outcomes") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -2448,22 +2281,20 @@ TEST_CASE("Native TUI retries a transient render backpressure failure", "[coding
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     auto created = runtime.run(
-        create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
 
     tests::RuntimeLoopDriver runtime_driver(runtime);
     TransientRenderBackpressureTerminal terminal;
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
     REQUIRE_FALSE(run_result.has_value());
     REQUIRE(terminal.render_end_calls == 2);
@@ -2474,9 +2305,7 @@ TEST_CASE("Native TUI retries a transient render backpressure failure", "[coding
     // projection plain editor input is echoed locally in the dock and no
     // longer triggers a TUI frame (#597), so toggle tool output instead.
     REQUIRE(terminal.inject("\x0f"));
-    REQUIRE(pump_until(io, [&] {
-        return terminal.render_end_calls >= 4;
-    }, std::chrono::milliseconds{1000}));
+    REQUIRE(pump_until(io, [&] { return terminal.render_end_calls >= 4; }, std::chrono::milliseconds{1000}));
     CHECK_FALSE(run_result.has_value());
 
     // Other render failures remain fatal, but are presented as runtime render
@@ -2538,15 +2367,13 @@ TEST_CASE("Native TUI redacts startup failures and leaves the Session closed",
     FailingStartTerminal terminal;
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(run_result);
@@ -2572,21 +2399,18 @@ TEST_CASE("Native TUI reports both post-acquisition startup and restoration fail
     FailingCleanupTerminal terminal;
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(run_result);
     REQUIRE_FALSE(*run_result);
-    CHECK(run_result->error().message ==
-        "Native TUI startup and terminal restoration failed");
+    CHECK(run_result->error().message == "Native TUI startup and terminal restoration failed");
     CHECK(run_result->error().detail.find("initial render failed") != std::string::npos);
     CHECK(run_result->error().detail.find("terminal restoration failed") != std::string::npos);
     CHECK(run_result->error().detail.find("sk-render-secret") == std::string::npos);
@@ -2608,15 +2432,13 @@ TEST_CASE("Native TUI submits two fresh prompts and replaces streamed assistant 
     tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
     CHECK(terminal.modes().started);
 
@@ -2660,15 +2482,13 @@ TEST_CASE(
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("initial\x1b[13;3u"));
@@ -2701,22 +2521,20 @@ TEST_CASE(
     drain_ready(io);
     CHECK(client_pointer->request_count == 2);
     REQUIRE(client_pointer->observed_users.size() == 2);
-    CHECK((client_pointer->observed_users[1] ==
-        std::vector<std::string>{"initial", "steer one"}));
+    CHECK((client_pointer->observed_users[1] == std::vector<std::string>{"initial", "steer one"}));
 
     client_pointer->release();
     drain_ready(io);
     CHECK(client_pointer->request_count == 3);
     REQUIRE(client_pointer->observed_users.size() == 3);
-    CHECK((client_pointer->observed_users[2] ==
-        std::vector<std::string>{"initial", "steer one", "steer two"}));
+    CHECK((client_pointer->observed_users[2] == std::vector<std::string>{"initial", "steer one", "steer two"}));
 
     client_pointer->release();
     drain_ready(io);
     CHECK(client_pointer->request_count == 4);
     REQUIRE(client_pointer->observed_users.size() == 4);
     CHECK((client_pointer->observed_users[3] ==
-        std::vector<std::string>{"initial", "steer one", "steer two", "follow one"}));
+            std::vector<std::string>{"initial", "steer one", "steer two", "follow one"}));
 
     client_pointer->release();
     drain_ready(io);
@@ -2754,15 +2572,13 @@ TEST_CASE("Native TUI preserves bounded rejected input and dequeues pending text
     tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("initial\r"));
@@ -2784,13 +2600,12 @@ TEST_CASE("Native TUI preserves bounded rejected input and dequeues pending text
     CHECK(snapshot.agent_state.input_queues.max_messages == 2);
     CHECK(snapshot.agent_state.input_queues.max_bytes == 4);
     REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 2);
-    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(
-        snapshot.agent_state.input_queues.steering.messages[0])) == "é");
-    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(
-        snapshot.agent_state.input_queues.steering.messages[1])) == "é");
+    CHECK(ai::text_from_user_message(
+                  std::get<ai::UserMessage>(snapshot.agent_state.input_queues.steering.messages[0])) == "é");
+    CHECK(ai::text_from_user_message(
+                  std::get<ai::UserMessage>(snapshot.agent_state.input_queues.steering.messages[1])) == "é");
     screen = visible_screen(terminal);
-    CHECK(screen.find("Unable to queue steering input: too many queued messages") !=
-        std::string::npos);
+    CHECK(screen.find("Unable to queue steering input: too many queued messages") != std::string::npos);
     CHECK(screen.find("Steering: é") != std::string::npos);
     CHECK(screen.find("x") != std::string::npos);
 
@@ -2798,8 +2613,7 @@ TEST_CASE("Native TUI preserves bounded rejected input and dequeues pending text
     drain_ready(io);
     snapshot = created->session->snapshot();
     REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 2);
-    CHECK(visible_screen(terminal).find("Unable to queue steering input") !=
-        std::string::npos);
+    CHECK(visible_screen(terminal).find("Unable to queue steering input") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x1b[1;3A"));
     drain_ready(io);
@@ -2821,11 +2635,10 @@ TEST_CASE("Native TUI preserves bounded rejected input and dequeues pending text
     drain_ready(io);
     snapshot = created->session->snapshot();
     REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 1);
-    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(
-        snapshot.agent_state.input_queues.steering.messages[0])) == "éé");
+    CHECK(ai::text_from_user_message(
+                  std::get<ai::UserMessage>(snapshot.agent_state.input_queues.steering.messages[0])) == "éé");
     screen = visible_screen(terminal);
-    CHECK(screen.find("Unable to queue steering input: queued messages too large") !=
-        std::string::npos);
+    CHECK(screen.find("Unable to queue steering input: queued messages too large") != std::string::npos);
     CHECK(screen.find("x") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x1b[1;3A"));
@@ -2834,8 +2647,8 @@ TEST_CASE("Native TUI preserves bounded rejected input and dequeues pending text
     drain_ready(io);
     snapshot = created->session->snapshot();
     REQUIRE(snapshot.agent_state.input_queues.steering.messages.size() == 1);
-    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(
-        snapshot.agent_state.input_queues.steering.messages[0])) == "ok");
+    CHECK(ai::text_from_user_message(
+                  std::get<ai::UserMessage>(snapshot.agent_state.input_queues.steering.messages[0])) == "ok");
 
     client_pointer->release();
     drain_ready(io);
@@ -2865,15 +2678,13 @@ TEST_CASE("Native TUI preserves follow-up after an accepted error and remains us
     tui::VirtualTerminal terminal({.columns = 72, .rows = 16});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("initial\rfollow after error\x1b[13;3u"));
@@ -2928,15 +2739,13 @@ TEST_CASE("Native TUI restores pending input before abort and accepts it after q
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("abort queues\rsteer later\rfollow later\x1b[13;3udraft"));
@@ -2969,8 +2778,7 @@ TEST_CASE("Native TUI restores pending input before abort and accepts it after q
     REQUIRE(terminal.inject_input("\x03recover\r"));
     drain_ready(io);
     CHECK_FALSE(created->session->is_busy());
-    CHECK(visible_screen(terminal).find("recovered after TUI abort") !=
-        std::string::npos);
+    CHECK(visible_screen(terminal).find("recovered after TUI abort") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);
@@ -2992,15 +2800,13 @@ TEST_CASE("Native TUI records accepted follow-up in editor history and queues sl
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("initial\r"));
@@ -3032,8 +2838,8 @@ TEST_CASE("Native TUI records accepted follow-up in editor history and queues sl
     drain_ready(io);
     snapshot = created->session->snapshot();
     REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 2);
-    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(
-        snapshot.agent_state.input_queues.follow_up.messages[1])) == "/hotkeys");
+    CHECK(ai::text_from_user_message(
+                  std::get<ai::UserMessage>(snapshot.agent_state.input_queues.follow_up.messages[1])) == "/hotkeys");
     screen = visible_screen(terminal);
     CHECK(screen.find("Follow-up: /hotkeys") != std::string::npos);
     CHECK(screen.find("Hotkeys") == std::string::npos);
@@ -3042,14 +2848,12 @@ TEST_CASE("Native TUI records accepted follow-up in editor history and queues sl
     drain_ready(io);
     CHECK(client_pointer->request_count == 2);
     REQUIRE(client_pointer->observed_users.size() == 2);
-    CHECK((client_pointer->observed_users[1] ==
-        std::vector<std::string>{"initial", "follow one"}));
+    CHECK((client_pointer->observed_users[1] == std::vector<std::string>{"initial", "follow one"}));
     client_pointer->release();
     drain_ready(io);
     CHECK(client_pointer->request_count == 3);
     REQUIRE(client_pointer->observed_users.size() == 3);
-    CHECK((client_pointer->observed_users[2] ==
-        std::vector<std::string>{"initial", "follow one", "/hotkeys"}));
+    CHECK((client_pointer->observed_users[2] == std::vector<std::string>{"initial", "follow one", "/hotkeys"}));
     client_pointer->release();
     drain_ready(io);
     CHECK_FALSE(created->session->is_busy());
@@ -3077,15 +2881,13 @@ TEST_CASE("Native TUI rejects follow-up admission at capacity and restores the t
     tui::VirtualTerminal terminal({.columns = 80, .rows = 20});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("initial\r"));
@@ -3105,8 +2907,7 @@ TEST_CASE("Native TUI rejects follow-up admission at capacity and restores the t
     snapshot = created->session->snapshot();
     REQUIRE(snapshot.agent_state.input_queues.follow_up.messages.size() == 1);
     auto screen = visible_screen(terminal);
-    CHECK(screen.find("Unable to queue follow-up input: too many queued messages") !=
-        std::string::npos);
+    CHECK(screen.find("Unable to queue follow-up input: too many queued messages") != std::string::npos);
     CHECK(screen.find("Follow-up: fu one") != std::string::npos);
     CHECK(screen.find("Follow-up: fu two") == std::string::npos);
     // The rejected text is back in the editor, unchanged.
@@ -3144,15 +2945,13 @@ TEST_CASE("Native TUI dequeue restores steering, then follow-up, then draft with
     tui::VirtualTerminal terminal({.columns = 72, .rows = 18});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("initial\r"));
@@ -3185,7 +2984,8 @@ TEST_CASE("Native TUI dequeue restores steering, then follow-up, then draft with
     {
         std::stringstream stream(screen);
         std::string line;
-        while (std::getline(stream, line)) lines.push_back(std::move(line));
+        while (std::getline(stream, line))
+            lines.push_back(std::move(line));
     }
     const auto find_line = [&lines](std::string_view needle) {
         for (std::size_t index = 0; index < lines.size(); ++index) {
@@ -3233,15 +3033,13 @@ TEST_CASE("Native TUI expanded header hints assemble followUp and dequeue with p
     tui::VirtualTerminal terminal({.columns = 90, .rows = 26});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // app.tools.expand (ctrl+o) reveals the expanded startup instructions
@@ -3274,15 +3072,13 @@ TEST_CASE("Native TUI queues batched submissions across deferred prompt dispatch
     tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("first batched\rsecond batched\r"));
@@ -3330,15 +3126,13 @@ TEST_CASE("Native TUI replaces one visible assistant entry during incremental st
     tui::VirtualTerminal terminal({.columns = 30, .rows = 15});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("stream\r"));
@@ -3385,14 +3179,10 @@ TEST_CASE("Native TUI keeps input and resize responsive while a prompt is suspen
     tui::VirtualTerminal terminal({.columns = 40, .rows = 16});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr, support::ExpectedVoid result) {
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr, support::ExpectedVoid result) { run_result.emplace(std::move(result)); });
     drain_ready(io);
 
     // Joins the spawned run on scope exit while the captured terminal and
@@ -3435,15 +3225,13 @@ TEST_CASE("Native TUI routes slash commands without submitting builtins as Agent
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
     const auto initial_messages = created->session->snapshot().agent_state.messages;
     REQUIRE(initial_messages.size() == 1);
@@ -3525,19 +3313,17 @@ TEST_CASE("Native TUI command autocomplete includes effective commands and proje
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    workspace.write(
-        ".pi/skills/project-skill/SKILL.md",
-        "---\n"
-        "name: project-skill\n"
-        "description: Project skill completion.\n"
-        "---\n"
-        "Project skill body.\n");
-    workspace.write(
-        ".pi/prompts/project-prompt.md",
-        "---\n"
-        "description: Project prompt completion.\n"
-        "---\n"
-        "Expanded project prompt: $ARGUMENTS\n");
+    workspace.write(".pi/skills/project-skill/SKILL.md",
+            "---\n"
+            "name: project-skill\n"
+            "description: Project skill completion.\n"
+            "---\n"
+            "Project skill body.\n");
+    workspace.write(".pi/prompts/project-prompt.md",
+            "---\n"
+            "description: Project prompt completion.\n"
+            "---\n"
+            "Expanded project prompt: $ARGUMENTS\n");
     auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.project_trust_override = true;
     auto created = runtime.run(create_session_async(runtime, std::move(options)));
@@ -3549,15 +3335,13 @@ TEST_CASE("Native TUI command autocomplete includes effective commands and proje
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("/"));
@@ -3613,13 +3397,12 @@ TEST_CASE("Native TUI skill commands autocomplete follows the enableSkillCommand
     tests::TempWorkspace config;
     // The global setting gates `/skill:` registration + autocomplete.
     config.write("settings.json", R"({"enableSkillCommands": false})");
-    workspace.write(
-        ".pi/skills/project-skill/SKILL.md",
-        "---\n"
-        "name: project-skill\n"
-        "description: Project skill completion.\n"
-        "---\n"
-        "Project skill body.\n");
+    workspace.write(".pi/skills/project-skill/SKILL.md",
+            "---\n"
+            "name: project-skill\n"
+            "description: Project skill completion.\n"
+            "---\n"
+            "Project skill body.\n");
     auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.project_trust_override = true;
     auto created = runtime.run(create_session_async(runtime, std::move(options)));
@@ -3631,15 +3414,13 @@ TEST_CASE("Native TUI skill commands autocomplete follows the enableSkillCommand
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // With the setting disabled, `skill:` entries are absent from the
@@ -3647,13 +3428,13 @@ TEST_CASE("Native TUI skill commands autocomplete follows the enableSkillCommand
     REQUIRE(terminal.inject_input("/"));
     drain_ready(io);
     auto screen = visible_screen(terminal);
-    for (std::size_t index = 0; index < 40 && screen.find("/scoped-models") == std::string::npos; ++index) {
+    for (std::size_t index = 0; index < 40 && screen.find("scoped-models") == std::string::npos; ++index) {
         REQUIRE(terminal.inject_input("\x1b[B"));
         drain_ready(io);
         screen = visible_screen(terminal);
     }
     CHECK(screen.find("skill:project-skill") == std::string::npos);
-    CHECK(screen.find("/scoped-models") != std::string::npos);
+    CHECK(screen.find("scoped-models") != std::string::npos);
 
     // Toggle the setting on through /settings (first item, confirm), close
     // the selector, and reopen autocomplete: `skill:` entries register (pi
@@ -3676,8 +3457,7 @@ TEST_CASE("Native TUI skill commands autocomplete follows the enableSkillCommand
     }
     CHECK(screen.find("skill:project-skill") != std::string::npos);
     // The toggle persisted to the global settings file.
-    CHECK(read_binary_file(config.path() / "settings.json").find(
-              "\"enableSkillCommands\": true") != std::string::npos);
+    CHECK(read_binary_file(config.path() / "settings.json").find("\"enableSkillCommands\": true") != std::string::npos);
 
     // Clear the editor so the exit binding reaches the app.
     REQUIRE(terminal.inject_input("\x03\x04"));
@@ -3700,15 +3480,13 @@ TEST_CASE("Native TUI /reload refuses while streaming with pi's verbatim warning
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // Start a stream and gate it so the Agent run stays in flight.
@@ -3721,10 +3499,7 @@ TEST_CASE("Native TUI /reload refuses while streaming with pi's verbatim warning
     REQUIRE(terminal.inject_input("/reload\r"));
     drain_ready(io);
     auto screen = visible_screen(terminal);
-    CHECK(
-        screen.find(
-            "Wait for the current response to finish before reloading.") !=
-        std::string::npos);
+    CHECK(screen.find("Wait for the current response to finish before reloading.") != std::string::npos);
 
     client_pointer->release();
     drain_ready(io);
@@ -3739,19 +3514,17 @@ TEST_CASE("Native TUI /reload re-reads resources, refreshes the presentation, an
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    workspace.write(
-        ".pi/skills/proj-skill/SKILL.md",
-        "---\n"
-        "name: proj-skill\n"
-        "description: initial skill description.\n"
-        "---\n"
-        "Initial skill body.\n");
-    workspace.write(
-        ".pi/prompts/proj-prompt.md",
-        "---\n"
-        "description: initial prompt description.\n"
-        "---\n"
-        "Initial prompt body: $ARGUMENTS\n");
+    workspace.write(".pi/skills/proj-skill/SKILL.md",
+            "---\n"
+            "name: proj-skill\n"
+            "description: initial skill description.\n"
+            "---\n"
+            "Initial skill body.\n");
+    workspace.write(".pi/prompts/proj-prompt.md",
+            "---\n"
+            "description: initial prompt description.\n"
+            "---\n"
+            "Initial prompt body: $ARGUMENTS\n");
     auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.project_trust_override = true;
     auto created = runtime.run(create_session_async(runtime, std::move(options)));
@@ -3761,36 +3534,32 @@ TEST_CASE("Native TUI /reload re-reads resources, refreshes the presentation, an
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // The startup container renders the loaded-resources sections with the
     // compact name lists and the two-line header notice (AC3).
     auto screen = visible_screen(terminal);
     CHECK(screen.find("Press ") != std::string::npos);
-    CHECK(screen.find("to show full startup help and loaded resources.") !=
-          std::string::npos);
+    CHECK(screen.find("to show full startup help and loaded resources.") != std::string::npos);
     CHECK(screen.find("[Skills]") != std::string::npos);
     CHECK(screen.find("proj-skill") != std::string::npos);
     CHECK(screen.find("[Prompts]") != std::string::npos);
     CHECK(screen.find("/proj-prompt") != std::string::npos);
 
     // Edit the skill between boot and reload.
-    workspace.write(
-        ".pi/skills/proj-skill/SKILL.md",
-        "---\n"
-        "name: proj-skill\n"
-        "description: reloaded skill description.\n"
-        "---\n"
-        "Reloaded skill body.\n");
+    workspace.write(".pi/skills/proj-skill/SKILL.md",
+            "---\n"
+            "name: proj-skill\n"
+            "description: reloaded skill description.\n"
+            "---\n"
+            "Reloaded skill body.\n");
 
     REQUIRE(terminal.inject_input("/reload\r"));
     REQUIRE(tests::pump_until(io, [&] {
@@ -3800,14 +3569,10 @@ TEST_CASE("Native TUI /reload re-reads resources, refreshes the presentation, an
     screen = visible_screen(terminal);
     // The pi-trimmed status line ("extensions" dropped, AC2) reports the
     // successful reload.
-    CHECK(
-        screen.find(
-            "Reloaded keybindings, skills, prompts, themes, and context files") !=
-        std::string::npos);
+    CHECK(screen.find("Reloaded keybindings, skills, prompts, themes, and context files") != std::string::npos);
     CHECK(screen.find("extensions") == std::string::npos);
     // The loaded-resources presentation refreshed from the reloaded session.
-    CHECK(created->session->skills().front().description ==
-          "reloaded skill description.");
+    CHECK(created->session->skills().front().description == "reloaded skill description.");
 
     REQUIRE(terminal.inject_input("\x04"));
     REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
@@ -3828,15 +3593,13 @@ TEST_CASE("Native TUI /reload re-catalogs keybindings.json into the shared slot"
     tui::VirtualTerminal terminal({.columns = 100, .rows = 24});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // The boot catalog reads keybindings.json: the header's interrupt hint
@@ -3876,15 +3639,13 @@ TEST_CASE("Native TUI settings opens only supported overlays and hotkeys renders
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("/settings\r"));
@@ -3958,14 +3719,10 @@ TEST_CASE("Native TUI retains bounded terminal provider failures and allows retr
     tui::VirtualTerminal terminal({.columns = 100, .rows = 20});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr, support::ExpectedVoid result) {
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr, support::ExpectedVoid result) { run_result.emplace(std::move(result)); });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("fail\r"));
@@ -3993,24 +3750,20 @@ TEST_CASE("Native TUI app.thinking.toggle persists hideThinkingBlock and reports
     RichThinkingSession fixture;
     fixture.create();
     tests::TempWorkspace config;
-    config.write(
-        "keybindings.json",
-        R"({"app.thinking.toggle":"f8","app.exit":"f6"})");
+    config.write("keybindings.json", R"({"app.thinking.toggle":"f8","app.exit":"f6"})");
     auto resumed = fixture.resume();
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*resumed->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*resumed->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // The thinking block renders at boot (default hideThinkingBlock false).
@@ -4025,16 +3778,14 @@ TEST_CASE("Native TUI app.thinking.toggle persists hideThinkingBlock and reports
     CHECK(screen.find("Thinking blocks: hidden") != std::string::npos);
     const auto settings_path = config.path() / "settings.json";
     REQUIRE(std::filesystem::exists(settings_path));
-    CHECK(read_binary_file(settings_path).find("\"hideThinkingBlock\": true") !=
-        std::string::npos);
+    CHECK(read_binary_file(settings_path).find("\"hideThinkingBlock\": true") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x1b[19~"));
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(screen.find("inspect the saved state") != std::string::npos);
     CHECK(screen.find("Thinking blocks: visible") != std::string::npos);
-    CHECK(read_binary_file(settings_path).find("\"hideThinkingBlock\": false") !=
-        std::string::npos);
+    CHECK(read_binary_file(settings_path).find("\"hideThinkingBlock\": false") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x1b[17~"));
     drain_ready(io);
@@ -4047,24 +3798,20 @@ TEST_CASE("Native TUI boots with the persisted hideThinkingBlock and outputPad r
     RichThinkingSession fixture;
     fixture.create();
     tests::TempWorkspace config;
-    config.write(
-        "settings.json",
-        R"({"hideThinkingBlock": true, "outputPad": 0})");
+    config.write("settings.json", R"({"hideThinkingBlock": true, "outputPad": 0})");
     auto resumed = fixture.resume();
     tests::RuntimeLoopDriver runtime_driver(fixture.runtime);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*resumed->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*resumed->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     const auto screen = visible_screen(terminal);
@@ -4095,15 +3842,13 @@ TEST_CASE("Native TUI settings selector changes render settings live and they su
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*resumed->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*resumed->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     const auto settings_path = config.path() / "settings.json";
@@ -4131,8 +3876,7 @@ TEST_CASE("Native TUI settings selector changes render settings live and they su
     CHECK(screen.find("inspect the saved state") == std::string::npos);
     CHECK(screen.find("Thinking...") != std::string::npos);
     REQUIRE(std::filesystem::exists(settings_path));
-    CHECK(read_binary_file(settings_path).find("\"hideThinkingBlock\": true") !=
-        std::string::npos);
+    CHECK(read_binary_file(settings_path).find("\"hideThinkingBlock\": true") != std::string::npos);
 
     // Up to output-padding and confirm: the padding cycles 1 → 0, the user
     // message re-renders one column left, and the setting persists.
@@ -4159,15 +3903,13 @@ TEST_CASE("Native TUI settings selector changes render settings live and they su
     tui::VirtualTerminal reboot_terminal({.columns = 72, .rows = 30});
     boost::asio::io_context reboot_io;
     std::optional<support::ExpectedVoid> reboot_result;
-    boost::asio::co_spawn(
-        reboot_io,
-        coding_agent::tui::run_interactive_mode(
-            reboot_terminal,
-            make_run(*rebooted->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            reboot_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(reboot_io,
+            coding_agent::tui::run_interactive_mode(
+                    reboot_terminal, make_run(*rebooted->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                reboot_result.emplace(std::move(result));
+            });
     drain_ready(reboot_io);
     const auto reboot_screen = visible_screen(reboot_terminal);
     CHECK(reboot_screen.find("inspect the saved state") == std::string::npos);
@@ -4192,15 +3934,13 @@ TEST_CASE("Native TUI /compact and /trust bind to their runtime flows without ch
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // `/compact` dispatches through the runtime compact flow; failures are
@@ -4250,8 +3990,7 @@ TEST_CASE("Native TUI exit during an admitted manual compaction waits for the co
     auto client = std::make_shared<GatedCompactionChatProvider>();
     auto* gated = client.get();
     tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{
-        workspace.path() / "compact-exit.jsonl"};
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{workspace.path() / "compact-exit.jsonl"};
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
     auto created = runtime.run(create_session_async(runtime, std::move(options)));
@@ -4261,15 +4000,13 @@ TEST_CASE("Native TUI exit during an admitted manual compaction waits for the co
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // Joins the spawned run on scope exit while the captured terminal and
@@ -4314,12 +4051,11 @@ TEST_CASE("Native TUI autocomplete prefixes discovered templates and skills with
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    workspace.write(
-        ".pi/prompts/project-prompt.md",
-        "---\n"
-        "description: Project prompt completion.\n"
-        "---\n"
-        "Expanded project prompt: $ARGUMENTS\n");
+    workspace.write(".pi/prompts/project-prompt.md",
+            "---\n"
+            "description: Project prompt completion.\n"
+            "---\n"
+            "Expanded project prompt: $ARGUMENTS\n");
     auto options = session_options(workspace, tests::make_scripted_fake_provider());
     options.project_trust_override = true;
     auto created = runtime.run(create_session_async(runtime, std::move(options)));
@@ -4329,15 +4065,13 @@ TEST_CASE("Native TUI autocomplete prefixes discovered templates and skills with
     tui::VirtualTerminal terminal({.columns = 100, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // The project-scoped template carries the `[p]` scope tag (pi

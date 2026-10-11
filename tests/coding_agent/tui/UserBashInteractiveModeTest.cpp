@@ -62,19 +62,19 @@ public:
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
-                ai::AssistantEventSink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        requests.push_back(tests::RecordedProviderRequest{model, context, options});
-        auto response = ai::assistant_text_message("provider reply");
-        // The session wire validation rejects an assistant message without a
-        // real epoch-millis timestamp (EntrySerializer append-time check), so
-        // the scripted reply stamps one; ADR 0064 persists it verbatim.
-        response.timestamp = 1'700'000'000'000;
-        response.api = "fake";
-        response.provider = "fake";
-        response.model = model.id;
-        co_return response;
+                [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    requests.push_back(tests::RecordedProviderRequest{model, context, options});
+                    auto response = ai::assistant_text_message("provider reply");
+                    // The session wire validation rejects an assistant message without a
+                    // real epoch-millis timestamp (EntrySerializer append-time check), so
+                    // the scripted reply stamps one; ADR 0064 persists it verbatim.
+                    response.timestamp = 1'700'000'000'000;
+                    response.api = "fake";
+                    response.provider = "fake";
+                    response.model = model.id;
+                    co_return response;
                 });
     }
 
@@ -90,9 +90,7 @@ public:
     return text;
 }
 
-[[nodiscard]] bool has_bash_command(
-    const std::vector<ai::MessageVariant>& messages,
-    std::string_view command) {
+[[nodiscard]] bool has_bash_command(const std::vector<ai::MessageVariant>& messages, std::string_view command) {
     return std::any_of(messages.begin(), messages.end(), [command](const auto& message) {
         const auto* bash = std::get_if<ai::BashExecutionMessage>(&message);
         return bash != nullptr && bash->command == command;
@@ -105,15 +103,13 @@ struct TestRunOptions {
     coding_agent::PromptOptions initial_prompt_options{};
 };
 
-[[nodiscard]] auto make_run(
-    coding_agent::AgentSession& session,
-    TestRunOptions options = {}) {
+[[nodiscard]] auto make_run(coding_agent::AgentSession& session, TestRunOptions options = {}) {
     return coding_agent::tui::InteractiveSessionRunBuilder{}
-        .with_session(session)
-        .with_agent_config_directory(std::move(options.agent_config_directory))
-        .with_initial_prompt(std::move(options.initial_prompt))
-        .with_initial_prompt_options(std::move(options.initial_prompt_options))
-        .build();
+            .with_session(session)
+            .with_agent_config_directory(std::move(options.agent_config_directory))
+            .with_initial_prompt(std::move(options.initial_prompt))
+            .with_initial_prompt_options(std::move(options.initial_prompt_options))
+            .build();
 }
 
 /// Extracts the leading SGR parameter list from a themed probe string.
@@ -125,9 +121,7 @@ struct TestRunOptions {
     return styled.substr(begin + 2, end - begin - 2);
 }
 
-[[nodiscard]] std::string fg_at_text(
-    const tui::VirtualTerminal& terminal,
-    std::string_view text) {
+[[nodiscard]] std::string fg_at_text(const tui::VirtualTerminal& terminal, std::string_view text) {
     const auto screen = terminal.screen();
     for (std::size_t row = 0; row < screen.size(); ++row) {
         const auto column = screen[row].find(text);
@@ -163,75 +157,73 @@ public:
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
-                ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        ++request_count;
-        if (request_count > 1) {
-            auto recovered = ai::assistant_text_message("recovery reply");
-            recovered.provider = "abort-gated-fake";
-            recovered.api = "fake";
-            recovered.model = model.id;
-            co_return recovered;
-        }
+                [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink sink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    ++request_count;
+                    if (request_count > 1) {
+                        auto recovered = ai::assistant_text_message("recovery reply");
+                        recovered.provider = "abort-gated-fake";
+                        recovered.api = "fake";
+                        recovered.model = model.id;
+                        co_return recovered;
+                    }
 
-        const auto stop_token = options.stop_token;
-        auto partial = ai::assistant_text_message("");
-        partial.provider = "abort-gated-fake";
-        partial.api = "fake";
-        partial.model = model.id;
-        partial.content.clear();
-        if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        partial.content.emplace_back(ai::text_content(""));
-        if (auto emitted = sink(ai::TextStartEvent{
-                .content_index = 0,
-                .partial = partial,
-            });
-            !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
-        std::get<ai::TextContent>(partial.content[0]).text = "partial assistant output";
-        if (auto emitted = sink(ai::TextDeltaEvent{
-                .content_index = 0,
-                .delta = "partial assistant output",
-                .partial = partial,
-            });
-            !emitted) {
-            co_return std::unexpected(emitted.error());
-        }
+                    const auto stop_token = options.stop_token;
+                    auto partial = ai::assistant_text_message("");
+                    partial.provider = "abort-gated-fake";
+                    partial.api = "fake";
+                    partial.model = model.id;
+                    partial.content.clear();
+                    if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    partial.content.emplace_back(ai::text_content(""));
+                    if (auto emitted = sink(ai::TextStartEvent{
+                                .content_index = 0,
+                                .partial = partial,
+                        });
+                            !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    std::get<ai::TextContent>(partial.content[0]).text = "partial assistant output";
+                    if (auto emitted = sink(ai::TextDeltaEvent{
+                                .content_index = 0,
+                                .delta = "partial assistant output",
+                                .partial = partial,
+                        });
+                            !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
 
-        const auto executor = co_await boost::asio::this_coro::executor;
-        gate_.emplace(executor);
-        gate_->expires_at(std::chrono::steady_clock::time_point::max());
-        started = true;
-        std::stop_callback cancellation{stop_token, [this] {
-            ++stop_callback_count;
-            if (gate_) (void)gate_->cancel();
-        }};
-        boost::system::error_code error;
-        if (!stop_token.stop_requested()) {
-            co_await gate_->async_wait(
-                boost::asio::redirect_error(boost::asio::use_awaitable, error));
-        }
-        gate_.reset();
+                    const auto executor = co_await boost::asio::this_coro::executor;
+                    gate_.emplace(executor);
+                    gate_->expires_at(std::chrono::steady_clock::time_point::max());
+                    started = true;
+                    std::stop_callback cancellation{stop_token, [this] {
+                                                        ++stop_callback_count;
+                                                        if (gate_) (void)gate_->cancel();
+                                                    }};
+                    boost::system::error_code error;
+                    if (!stop_token.stop_requested()) {
+                        co_await gate_->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                    }
+                    gate_.reset();
 
-        if (stop_token.stop_requested()) {
-            partial.stop_reason = ai::AssistantStopReason::Aborted;
-            partial.error_message = "prompt aborted";
-            if (auto emitted = sink(ai::AssistantErrorEvent{
-                    .reason = ai::AssistantStopReason::Aborted,
-                    .error = partial,
-                });
-                !emitted) {
-                co_return std::unexpected(emitted.error());
-            }
-            co_return partial;
-        }
-        co_return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "abort-gated fake released without cancellation"));
+                    if (stop_token.stop_requested()) {
+                        partial.stop_reason = ai::AssistantStopReason::Aborted;
+                        partial.error_message = "prompt aborted";
+                        if (auto emitted = sink(ai::AssistantErrorEvent{
+                                    .reason = ai::AssistantStopReason::Aborted,
+                                    .error = partial,
+                            });
+                                !emitted) {
+                            co_return std::unexpected(emitted.error());
+                        }
+                        co_return partial;
+                    }
+                    co_return std::unexpected(support::make_error(
+                            support::ErrorCode::Unknown, "abort-gated fake released without cancellation"));
                 });
     }
 
@@ -251,39 +243,36 @@ public:
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
         return ai::detail::make_model_stream(
-            [this, model = std::move(model), context = std::move(context), options = std::move(options)](
-                ai::AssistantEventSink sink) mutable
-                -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
-        ++request_count;
-        if (options.stop_token.stop_requested() || request_count > 1) {
-            auto aborted = ai::assistant_text_message("");
-            aborted.provider = "tool-abort-fake";
-            aborted.api = "fake";
-            aborted.model = model.id;
-            aborted.stop_reason = ai::AssistantStopReason::Aborted;
-            aborted.error_message = "close prompt aborted";
-            if (auto emitted = sink(ai::AssistantErrorEvent{
-                    .reason = ai::AssistantStopReason::Aborted,
-                    .error = aborted,
-                });
-                !emitted) {
-                co_return std::unexpected(emitted.error());
-            }
-            co_return aborted;
-        }
+                [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink sink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    ++request_count;
+                    if (options.stop_token.stop_requested() || request_count > 1) {
+                        auto aborted = ai::assistant_text_message("");
+                        aborted.provider = "tool-abort-fake";
+                        aborted.api = "fake";
+                        aborted.model = model.id;
+                        aborted.stop_reason = ai::AssistantStopReason::Aborted;
+                        aborted.error_message = "close prompt aborted";
+                        if (auto emitted = sink(ai::AssistantErrorEvent{
+                                    .reason = ai::AssistantStopReason::Aborted,
+                                    .error = aborted,
+                            });
+                                !emitted) {
+                            co_return std::unexpected(emitted.error());
+                        }
+                        co_return aborted;
+                    }
 
-        auto response = ai::assistant_text_message("");
-        response.provider = "tool-abort-fake";
-        response.api = "fake";
-        response.model = model.id;
-        response.content.clear();
-        response.content.emplace_back(ai::tool_call_content(
-            "delayed-call",
-            "delayed",
-            "{}",
-            support::JsonValue::object_t{}));
-        response.stop_reason = ai::AssistantStopReason::ToolUse;
-        co_return response;
+                    auto response = ai::assistant_text_message("");
+                    response.provider = "tool-abort-fake";
+                    response.api = "fake";
+                    response.model = model.id;
+                    response.content.clear();
+                    response.content.emplace_back(
+                            ai::tool_call_content("delayed-call", "delayed", "{}", support::JsonValue::object_t{}));
+                    response.stop_reason = ai::AssistantStopReason::ToolUse;
+                    co_return response;
                 });
     }
 
@@ -315,37 +304,34 @@ struct GatedCloseToolHandle {
     definition.description = "Wait until close cancellation is observable";
     definition.parameters = support::JsonValue::object_t{{"type", "object"}};
     return GatedCloseToolHandle{
-        tests::make_fake_tool(
-            std::move(definition),
-            agent::ToolConcurrency::Exclusive,
-            [state](agent::ToolInvocation, std::stop_token stop_token, agent::ToolUpdateSink)
-                -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
-                const auto executor = co_await boost::asio::this_coro::executor;
-                {
-                    std::lock_guard lock(state->mutex);
-                    state->gate.emplace(executor);
-                    state->gate->expires_at(std::chrono::steady_clock::time_point::max());
-                }
-                state->started.store(true, std::memory_order_release);
-                std::stop_callback cancellation{stop_token, [state] {
-                    state->stop_callback_count.fetch_add(1, std::memory_order_relaxed);
-                }};
-                boost::system::error_code error;
-                co_await state->gate->async_wait(
-                    boost::asio::redirect_error(boost::asio::use_awaitable, error));
-                {
-                    std::lock_guard lock(state->mutex);
-                    state->gate.reset();
-                }
+            tests::make_fake_tool(std::move(definition),
+                    agent::ToolConcurrency::Exclusive,
+                    [state](agent::ToolInvocation, std::stop_token stop_token, agent::ToolUpdateSink)
+                            -> boost::asio::awaitable<support::Expected<agent::AsyncToolExecutionResult>> {
+                        const auto executor = co_await boost::asio::this_coro::executor;
+                        {
+                            std::lock_guard lock(state->mutex);
+                            state->gate.emplace(executor);
+                            state->gate->expires_at(std::chrono::steady_clock::time_point::max());
+                        }
+                        state->started.store(true, std::memory_order_release);
+                        std::stop_callback cancellation{stop_token,
+                                [state] { state->stop_callback_count.fetch_add(1, std::memory_order_relaxed); }};
+                        boost::system::error_code error;
+                        co_await state->gate->async_wait(
+                                boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                        {
+                            std::lock_guard lock(state->mutex);
+                            state->gate.reset();
+                        }
 
-                if (stop_token.stop_requested()) {
-                    co_return std::unexpected(support::make_error(
-                        support::ErrorCode::Cancelled,
-                        "gated tool aborted by close"));
-                }
-                co_return agent::AsyncToolExecutionResult{};
-            }),
-        state,
+                        if (stop_token.stop_requested()) {
+                            co_return std::unexpected(
+                                    support::make_error(support::ErrorCode::Cancelled, "gated tool aborted by close"));
+                        }
+                        co_return agent::AsyncToolExecutionResult{};
+                    }),
+            state,
     };
 }
 
@@ -360,16 +346,16 @@ TEST_CASE("focused User Bash commits included and excluded results through the p
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
-        .updates = {"first update", "\nsecond update\nincluded output"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = true,
+            .updates = {"first update", "\nsecond update\nincluded output"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
     });
     shell_pointer->enqueue({
-        .updates = {"excluded output"},
-        .result = {.exit_code = 7},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {"excluded output"},
+            .result = {.exit_code = 7},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
 
     tests::ModelsSessionOptions options;
@@ -387,15 +373,13 @@ TEST_CASE("focused User Bash commits included and excluded results through the p
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = workspace.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = workspace.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("!  echo included  \r"));
@@ -490,20 +474,17 @@ TEST_CASE("only non-empty focused editor prefixes enter the private User Shell p
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(
-                *created->session,
-                {
-                    .agent_config_directory = workspace.path(),
-                    .initial_prompt = "! positional input",
-                })),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal,
+                    make_run(*created->session,
+                            {
+                                    .agent_config_directory = workspace.path(),
+                                    .initial_prompt = "! positional input",
+                            })),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
     REQUIRE(client_pointer->requests.size() == 1);
     CHECK(shell_pointer->commands.empty());
@@ -533,16 +514,17 @@ TEST_CASE("User Bash sanitizes and bounds retained output and spills the complet
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     const std::string bulk(60 * 1024, 'x');
     shell_pointer->enqueue({
-        .updates = {
-            "\x1b[31mlive api_",
-            "key=" + secret.substr(0, 10),
-            secret.substr(10) + "\rupdate\x1b[0m\n",
-            bulk,
-            "\r\napi_key=" + secret,
-        },
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates =
+                    {
+                            "\x1b[31mlive api_",
+                            "key=" + secret.substr(0, 10),
+                            secret.substr(10) + "\rupdate\x1b[0m\n",
+                            bulk,
+                            "\r\napi_key=" + secret,
+                    },
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
 
     tests::ModelsSessionOptions options;
@@ -558,11 +540,10 @@ TEST_CASE("User Bash sanitizes and bounds retained output and spills the complet
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
     std::size_t lifecycle_events = 0;
-    auto subscription = created->session->subscribe(
-        [&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
-            ++lifecycle_events;
-            return {};
-        });
+    auto subscription = created->session->subscribe([&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
+        ++lifecycle_events;
+        return {};
+    });
     REQUIRE(subscription);
 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
@@ -574,26 +555,22 @@ TEST_CASE("User Bash sanitizes and bounds retained output and spills the complet
     // behaves the same).
     std::optional<support::ExpectedVoid> seed_result;
     boost::asio::co_spawn(
-        io,
-        created->session->prompt("seed"),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            seed_result.emplace(std::move(result));
-        });
+            io, created->session->prompt("seed"), [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                seed_result.emplace(std::move(result));
+            });
     drain_ready(io);
     REQUIRE(seed_result);
     REQUIRE(*seed_result);
     const auto pre_bash_lifecycle_events = lifecycle_events;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = workspace.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = workspace.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     const auto raw_command = "printf api_key=" + secret;
@@ -629,9 +606,7 @@ TEST_CASE("User Bash sanitizes and bounds retained output and spills the complet
     const std::filesystem::path spill_path{*bash->full_output_path};
     CHECK(spill_path.parent_path() == spill_dir);
     std::ifstream spill_input{spill_path, std::ios::binary};
-    const std::string spilled{
-        std::istreambuf_iterator<char>(spill_input),
-        std::istreambuf_iterator<char>()};
+    const std::string spilled{std::istreambuf_iterator<char>(spill_input), std::istreambuf_iterator<char>()};
     CHECK(spilled.size() > 60 * 1024);
     CHECK(spilled.find(secret) != std::string::npos);
     CHECK(spilled.find("live api_key=" + secret + "update\n") != std::string::npos);
@@ -646,9 +621,7 @@ TEST_CASE("User Bash sanitizes and bounds retained output and spills the complet
     REQUIRE(*run_result);
 
     std::ifstream persisted{session_path, std::ios::binary};
-    const std::string persisted_text{
-        std::istreambuf_iterator<char>(persisted),
-        std::istreambuf_iterator<char>()};
+    const std::string persisted_text{std::istreambuf_iterator<char>(persisted), std::istreambuf_iterator<char>()};
     CHECK(persisted_text.find(secret) != std::string::npos);
     auto resumed = harness::session::resume_session(session_path);
     REQUIRE(resumed);
@@ -674,13 +647,11 @@ TEST_CASE("User Shell infrastructure failure creates no Bash message and leaves 
     auto shell = std::make_unique<tests::FakeUserShell>();
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     shell->enqueue({
-        .updates = {},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = support::make_error(
-            support::ErrorCode::Process,
-            "spawn failed",
-            "api_key=" + secret),
-        .gated = false,
+            .updates = {},
+            .result = {.exit_code = 0},
+            .infrastructure_failure =
+                    support::make_error(support::ErrorCode::Process, "spawn failed", "api_key=" + secret),
+            .gated = false,
     });
 
     tests::ModelsSessionOptions options;
@@ -698,15 +669,13 @@ TEST_CASE("User Shell infrastructure failure creates no Bash message and leaves 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = workspace.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = workspace.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("!  fail\r"));
@@ -742,10 +711,10 @@ TEST_CASE("User Shell progress callback failure creates no Bash message and leav
     auto shell = std::make_unique<tests::FakeUserShell>();
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     shell->enqueue({
-        .updates = {"callback update api_key=" + secret},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {"callback update api_key=" + secret},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
 
     tests::ModelsSessionOptions options;
@@ -762,26 +731,21 @@ TEST_CASE("User Shell progress callback failure creates no Bash message and leav
 
     boost::asio::io_context io;
     std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> completion;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(
-            *created->session,
-            "callback failure",
-            false,
-            [&secret](const coding_agent::runtime::UserBashProgress& progress)
-                -> support::ExpectedVoid {
-                if (progress.output.empty()) return {};
-                return std::unexpected(support::make_error(
-                    support::ErrorCode::Process,
-                    "progress rejected",
-                    "api_key=" + secret + " " +
-                        std::string(coding_agent::kMaxPresentationPayloadBytes * 2, 'x')));
-            }),
-        [&](std::exception_ptr exception,
-            support::Expected<coding_agent::runtime::UserBashCompletion> result) {
-            REQUIRE(exception == nullptr);
-            completion.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(*created->session,
+                    "callback failure",
+                    false,
+                    [&secret](const coding_agent::runtime::UserBashProgress& progress) -> support::ExpectedVoid {
+                        if (progress.output.empty()) return {};
+                        return std::unexpected(support::make_error(support::ErrorCode::Process,
+                                "progress rejected",
+                                "api_key=" + secret + " " +
+                                        std::string(coding_agent::kMaxPresentationPayloadBytes * 2, 'x')));
+                    }),
+            [&](std::exception_ptr exception, support::Expected<coding_agent::runtime::UserBashCompletion> result) {
+                REQUIRE(exception == nullptr);
+                completion.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(completion);
@@ -791,17 +755,15 @@ TEST_CASE("User Shell progress callback failure creates no Bash message and leav
     CHECK(std::holds_alternative<ai::SystemMessage>(after_failure.front()));
     CHECK(completion->error().message == "progress rejected");
     CHECK(completion->error().detail ==
-        "api_key=" + secret + " " +
-            std::string(coding_agent::kMaxPresentationPayloadBytes * 2, 'x'));
+            "api_key=" + secret + " " + std::string(coding_agent::kMaxPresentationPayloadBytes * 2, 'x'));
 
     std::optional<support::ExpectedVoid> prompt_result;
-    boost::asio::co_spawn(
-        io,
-        created->session->prompt("later prompt"),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            prompt_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            created->session->prompt("later prompt"),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                prompt_result.emplace(std::move(result));
+            });
     drain_ready(io);
     REQUIRE(prompt_result);
     CHECK(*prompt_result);
@@ -817,10 +779,10 @@ TEST_CASE("private User Bash cancellation commits one cancelled terminal outcome
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
-        .updates = {"partial output"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = true,
+            .updates = {"partial output"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
     });
 
     tests::ModelsSessionOptions options;
@@ -836,34 +798,27 @@ TEST_CASE("private User Bash cancellation commits one cancelled terminal outcome
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
     std::size_t lifecycle_events = 0;
-    auto subscription = created->session->subscribe(
-        [&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
-            ++lifecycle_events;
-            return {};
-        });
+    auto subscription = created->session->subscribe([&](const agent::AgentLifecycleEvent&) -> support::ExpectedVoid {
+        ++lifecycle_events;
+        return {};
+    });
     REQUIRE(subscription);
 
     boost::asio::io_context io;
     std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> completion;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(
-            *created->session,
-            "long command",
-            false,
-            [](const coding_agent::runtime::UserBashProgress&) {
-                return support::ExpectedVoid{};
-            }),
-        [&](std::exception_ptr exception,
-            support::Expected<coding_agent::runtime::UserBashCompletion> result) {
-            REQUIRE(exception == nullptr);
-            completion.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(*created->session,
+                    "long command",
+                    false,
+                    [](const coding_agent::runtime::UserBashProgress&) { return support::ExpectedVoid{}; }),
+            [&](std::exception_ptr exception, support::Expected<coding_agent::runtime::UserBashCompletion> result) {
+                REQUIRE(exception == nullptr);
+                completion.emplace(std::move(result));
+            });
     drain_ready(io);
     CHECK(shell_pointer->started_count == 1);
 
-    coding_agent::detail::AgentSessionInteractiveAccess::cancel_user_bash(
-        *created->session);
+    coding_agent::detail::AgentSessionInteractiveAccess::cancel_user_bash(*created->session);
     drain_ready(io);
     REQUIRE(completion);
     REQUIRE(*completion);
@@ -884,18 +839,16 @@ TEST_CASE("User Bash output spill failure preserves the bounded truncated result
         "[coding_agent][runtime][issue86][issue97][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    tests::EnvVarGuard tmpdir{
-        "TMPDIR",
-        (workspace.path() / "missing" / "deeper").string()};
+    tests::EnvVarGuard tmpdir{"TMPDIR", (workspace.path() / "missing" / "deeper").string()};
     auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     const std::string bulk(60 * 1024, 'y');
     shell->enqueue({
-        .updates = {bulk + "\napi_key=" + secret},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {bulk + "\napi_key=" + secret},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
 
     tests::ModelsSessionOptions options;
@@ -913,22 +866,18 @@ TEST_CASE("User Bash output spill failure preserves the bounded truncated result
     boost::asio::io_context io;
     std::optional<support::Expected<coding_agent::runtime::UserBashCompletion>> completion;
     std::string streamed_tail;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(
-            *created->session,
-            "huge output",
-            false,
-            [&streamed_tail](const coding_agent::runtime::UserBashProgress& progress)
-                -> support::ExpectedVoid {
-                if (!progress.output.empty()) streamed_tail = progress.output;
-                return {};
-            }),
-        [&](std::exception_ptr exception,
-            support::Expected<coding_agent::runtime::UserBashCompletion> result) {
-            REQUIRE(exception == nullptr);
-            completion.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::detail::AgentSessionInteractiveAccess::run_user_bash(*created->session,
+                    "huge output",
+                    false,
+                    [&streamed_tail](const coding_agent::runtime::UserBashProgress& progress) -> support::ExpectedVoid {
+                        if (!progress.output.empty()) streamed_tail = progress.output;
+                        return {};
+                    }),
+            [&](std::exception_ptr exception, support::Expected<coding_agent::runtime::UserBashCompletion> result) {
+                REQUIRE(exception == nullptr);
+                completion.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(completion);
@@ -942,10 +891,8 @@ TEST_CASE("User Bash output spill failure preserves the bounded truncated result
     CHECK(bash.output.find(secret) != std::string::npos);
     CHECK_FALSE(bash.full_output_path.has_value());
     REQUIRE((*completion)->diagnostic.has_value());
-    CHECK((*completion)->diagnostic->message.size() <=
-        coding_agent::kMaxPresentationPayloadBytes);
-    CHECK((*completion)->diagnostic->detail.size() <=
-        coding_agent::kMaxPresentationPayloadBytes);
+    CHECK((*completion)->diagnostic->message.size() <= coding_agent::kMaxPresentationPayloadBytes);
+    CHECK((*completion)->diagnostic->detail.size() <= coding_agent::kMaxPresentationPayloadBytes);
     CHECK((*completion)->diagnostic->detail.find(secret) == std::string::npos);
 }
 
@@ -957,16 +904,16 @@ TEST_CASE("User Bash overlaps an active Agent run through the Native TUI", "[cod
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
-        .updates = {"overlap output"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = true,
+            .updates = {"overlap output"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
     });
     shell_pointer->enqueue({
-        .updates = {"later output"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = true,
+            .updates = {"later output"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
     });
 
     tests::ModelsSessionOptions options;
@@ -984,15 +931,13 @@ TEST_CASE("User Bash overlaps an active Agent run through the Native TUI", "[cod
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = workspace.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = workspace.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("prompt one\r"));
@@ -1019,8 +964,7 @@ TEST_CASE("User Bash overlaps an active Agent run through the Native TUI", "[cod
     drain_ready(io);
     // Completed during the run: the pending block shows the completed form
     // (no loader) and is not yet committed.
-    CHECK_FALSE(has_bash_command(
-        created->session->snapshot().agent_state.messages, "during run"));
+    CHECK_FALSE(has_bash_command(created->session->snapshot().agent_state.messages, "during run"));
     screen = visible_screen(terminal);
     CHECK(screen.find("$ during run") != std::string::npos);
     CHECK(screen.find("overlap output") != std::string::npos);
@@ -1047,8 +991,7 @@ TEST_CASE("User Bash overlaps an active Agent run through the Native TUI", "[cod
 
     shell_pointer->release();
     drain_ready(io);
-    CHECK_FALSE(has_bash_command(
-        created->session->snapshot().agent_state.messages, "later bash"));
+    CHECK_FALSE(has_bash_command(created->session->snapshot().agent_state.messages, "later bash"));
     client_pointer->release();
     drain_ready(io);
     snapshot = created->session->snapshot();
@@ -1073,16 +1016,16 @@ TEST_CASE("Native TUI interrupt cancels an active Agent run before an overlappin
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
-        .updates = {"partial bash output"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = true,
+            .updates = {"partial bash output"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
     });
     shell_pointer->enqueue({
-        .updates = {"second command output"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {"second command output"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
 
     tests::ModelsSessionOptions options;
@@ -1100,15 +1043,13 @@ TEST_CASE("Native TUI interrupt cancels an active Agent run before an overlappin
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("stream\r"));
@@ -1126,11 +1067,11 @@ TEST_CASE("Native TUI interrupt cancels an active Agent run before an overlappin
     // Autocomplete cancellation precedes both active operations.
     REQUIRE(terminal.inject_input("/"));
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("/compact") != std::string::npos);
+    CHECK(visible_screen(terminal).find("compact") != std::string::npos);
     REQUIRE(terminal.inject_input("\x1b"));
     REQUIRE(terminal.flush_input());
     drain_ready(io);
-    CHECK(visible_screen(terminal).find("/compact") == std::string::npos);
+    CHECK(visible_screen(terminal).find("compact") == std::string::npos);
     CHECK(client_pointer->stop_callback_count == 0);
     CHECK(shell_pointer->cancellation_request_count == 0);
     REQUIRE(terminal.inject_input("\x03"));
@@ -1142,8 +1083,7 @@ TEST_CASE("Native TUI interrupt cancels an active Agent run before an overlappin
     drain_ready(io);
     CHECK(client_pointer->stop_callback_count == 1);
     CHECK(shell_pointer->cancellation_request_count == 0);
-    CHECK(visible_screen(terminal).find("prompt aborted") !=
-        std::string::npos);
+    CHECK(visible_screen(terminal).find("prompt aborted") != std::string::npos);
     CHECK(created->session->is_busy());
 
     // A later interrupt reaches the User Bash once the Agent is idle.
@@ -1216,10 +1156,10 @@ TEST_CASE("idle Bash-mode interrupt clears the editor without creating a command
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
-        .updates = {"done output"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {"done output"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
 
     tests::ModelsSessionOptions options;
@@ -1237,15 +1177,13 @@ TEST_CASE("idle Bash-mode interrupt clears the editor without creating a command
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // Unsubmitted Bash-mode input: interrupt clears it without side effects.
@@ -1318,16 +1256,16 @@ TEST_CASE("repeated User Bash interrupts coalesce and recovery still works", "[c
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
-        .updates = {"held output"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = true,
+            .updates = {"held output"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
     });
     shell_pointer->enqueue({
-        .updates = {"next output"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {"next output"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
 
     tests::ModelsSessionOptions options;
@@ -1345,15 +1283,13 @@ TEST_CASE("repeated User Bash interrupts coalesce and recovery still works", "[c
     tui::VirtualTerminal terminal({.columns = 72, .rows = 30});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("!echo hold\r"));
@@ -1405,10 +1341,10 @@ TEST_CASE("Session Close through the exit command cancels gated provider, tool, 
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
-        .updates = {"close bash partial"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = true,
+            .updates = {"close bash partial"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
     });
 
     tests::ModelsSessionOptions options;
@@ -1427,15 +1363,13 @@ TEST_CASE("Session Close through the exit command cancels gated provider, tool, 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // Tool start and shell execution settle through Runtime hops; wait on
@@ -1445,20 +1379,15 @@ TEST_CASE("Session Close through the exit command cancels gated provider, tool, 
     const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
 
     REQUIRE(terminal.inject_input("use the tool\r"));
-    REQUIRE(tests::pump_until(
-        io, [&] { return tool_pointer->started.load(std::memory_order_acquire); }));
+    REQUIRE(tests::pump_until(io, [&] { return tool_pointer->started.load(std::memory_order_acquire); }));
     REQUIRE(terminal.inject_input("!echo close\r"));
     REQUIRE(tests::pump_until(io, [&] { return shell_pointer->commands.size() == 1; }));
 
     // Close requests both cancellations and waits for quiescence: the run
     // cannot finish while the tool callback is still gated.
     REQUIRE(terminal.inject_input("/quit\r"));
-    REQUIRE(tests::pump_until(
-        io,
-        [&] {
-            return tool_pointer->stop_callback_count == 1 &&
-                shell_pointer->cancellation_request_count == 1;
-        }));
+    REQUIRE(tests::pump_until(io,
+            [&] { return tool_pointer->stop_callback_count == 1 && shell_pointer->cancellation_request_count == 1; }));
     CHECK(created->session->is_busy());
     REQUIRE_FALSE(run_result.has_value());
 
@@ -1491,10 +1420,10 @@ TEST_CASE("Session Close through the effective exit keybinding cancels gated pro
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
-        .updates = {"keybinding close partial"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = true,
+            .updates = {"keybinding close partial"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
     });
 
     tests::ModelsSessionOptions options;
@@ -1513,15 +1442,13 @@ TEST_CASE("Session Close through the effective exit keybinding cancels gated pro
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // Tool start and shell execution settle through Runtime hops; wait on
@@ -1531,18 +1458,13 @@ TEST_CASE("Session Close through the effective exit keybinding cancels gated pro
     const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
 
     REQUIRE(terminal.inject_input("use the tool\r"));
-    REQUIRE(tests::pump_until(
-        io, [&] { return tool_pointer->started.load(std::memory_order_acquire); }));
+    REQUIRE(tests::pump_until(io, [&] { return tool_pointer->started.load(std::memory_order_acquire); }));
     REQUIRE(terminal.inject_input("!echo f6 close\r"));
     REQUIRE(tests::pump_until(io, [&] { return shell_pointer->commands.size() == 1; }));
 
     REQUIRE(terminal.inject_input("\x1b[17~"));
-    REQUIRE(tests::pump_until(
-        io,
-        [&] {
-            return tool_pointer->stop_callback_count == 1 &&
-                shell_pointer->cancellation_request_count == 1;
-        }));
+    REQUIRE(tests::pump_until(io,
+            [&] { return tool_pointer->stop_callback_count == 1 && shell_pointer->cancellation_request_count == 1; }));
     CHECK(created->session->is_busy());
     REQUIRE_FALSE(run_result.has_value());
 
@@ -1574,16 +1496,16 @@ TEST_CASE("committed User Bash blocks preview the output tail and expand through
         many_lines += std::format("line-{:02}", index);
     }
     shell_pointer->enqueue({
-        .updates = {many_lines},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {many_lines},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
     shell_pointer->enqueue({
-        .updates = {"failing output"},
-        .result = {.exit_code = 3},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {"failing output"},
+            .result = {.exit_code = 3},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
 
     tests::ModelsSessionOptions options;
@@ -1604,15 +1526,13 @@ TEST_CASE("committed User Bash blocks preview the output tail and expand through
     tui::VirtualTerminal terminal({.columns = 72, .rows = 54});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = workspace.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = workspace.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("!make lines\r"));
@@ -1664,15 +1584,14 @@ TEST_CASE("resumed User Bash messages render in original order with their record
     tests::TempWorkspace config;
     tests::RuntimeFixture runtime;
     const auto session_file = workspace.path() / "bash-resume.jsonl";
-    auto store = harness::session::SessionStore::create_new(
-        session_file,
-        {
-            .session_id = "bash-resume",
-            .created_at = "2026-07-28T00:00:00Z",
-            .workspace = workspace.path(),
-            .provider = "fake",
-            .model = "fake-model",
-        });
+    auto store = harness::session::SessionStore::create_new(session_file,
+            {
+                    .session_id = "bash-resume",
+                    .created_at = "2026-07-28T00:00:00Z",
+                    .workspace = workspace.path(),
+                    .provider = "fake",
+                    .model = "fake-model",
+            });
     REQUIRE(store);
 
     ai::UserMessage before;
@@ -1722,15 +1641,13 @@ TEST_CASE("resumed User Bash messages render in original order with their record
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*resumed->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*resumed->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     const auto screen = visible_screen(terminal);
@@ -1772,16 +1689,16 @@ TEST_CASE("live User Bash blocks stream through one status block with a loader a
     auto* shell_pointer = shell.get();
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     shell_pointer->enqueue({
-        .updates = {"streamed partial api_key=" + secret + "\n"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = true,
+            .updates = {"streamed partial api_key=" + secret + "\n"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
     });
     shell_pointer->enqueue({
-        .updates = {},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = true,
+            .updates = {},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
     });
 
     tests::ModelsSessionOptions options;
@@ -1799,15 +1716,13 @@ TEST_CASE("live User Bash blocks stream through one status block with a loader a
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = workspace.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = workspace.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("!watch out\r"));
@@ -1865,16 +1780,16 @@ TEST_CASE("User Bash blocks style model-context inclusion through theme tokens",
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
-        .updates = {"styled output"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {"styled output"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
     shell_pointer->enqueue({
-        .updates = {"hidden output"},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {"hidden output"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
 
     tests::ModelsSessionOptions options;
@@ -1892,15 +1807,13 @@ TEST_CASE("User Bash blocks style model-context inclusion through theme tokens",
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = workspace.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = workspace.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("!echo styled\r"));
@@ -1911,14 +1824,10 @@ TEST_CASE("User Bash blocks style model-context inclusion through theme tokens",
 
     // The included block uses the bashMode token; the excluded block is dimmed.
     coding_agent::tui::LiveTheme probe_theme(
-        coding_agent::tui::select_builtin_theme(terminal.capabilities()),
-        terminal.capabilities().color);
-    const auto styled_params = sgr_params(
-        probe_theme.foreground(coding_agent::tui::ThemeToken::BashMode, "x"));
-    const auto dimmed_params = sgr_params(
-        probe_theme.foreground(coding_agent::tui::ThemeToken::Dim, "x"));
-    const auto muted_params = sgr_params(
-        probe_theme.foreground(coding_agent::tui::ThemeToken::Muted, "x"));
+            coding_agent::tui::select_builtin_theme(terminal.capabilities()), terminal.capabilities().color);
+    const auto styled_params = sgr_params(probe_theme.foreground(coding_agent::tui::ThemeToken::BashMode, "x"));
+    const auto dimmed_params = sgr_params(probe_theme.foreground(coding_agent::tui::ThemeToken::Dim, "x"));
+    const auto muted_params = sgr_params(probe_theme.foreground(coding_agent::tui::ThemeToken::Muted, "x"));
     CHECK(fg_at_text(terminal, "$ echo styled") == styled_params);
     CHECK(fg_at_text(terminal, "$ echo hidden") == dimmed_params);
     CHECK(fg_at_text(terminal, "styled output") == muted_params);
@@ -1938,10 +1847,10 @@ TEST_CASE("the editor enters Bash mode on trimmed ! input and recalls the origin
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
-        .updates = {},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = true,
+            .updates = {},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
     });
 
     tests::ModelsSessionOptions options;
@@ -1959,20 +1868,17 @@ TEST_CASE("the editor enters Bash mode on trimmed ! input and recalls the origin
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = workspace.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = workspace.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     coding_agent::tui::LiveTheme probe_theme(
-        coding_agent::tui::select_builtin_theme(terminal.capabilities()),
-        terminal.capabilities().color);
+            coding_agent::tui::select_builtin_theme(terminal.capabilities()), terminal.capabilities().color);
     const auto bash_params = sgr_params(probe_theme.foreground(coding_agent::tui::ThemeToken::BashMode, "x"));
 
     // Bash mode starts as soon as the trimmed input begins with !. pi styles
@@ -2031,16 +1937,16 @@ TEST_CASE("User Bash hints follow effective remapped interruption and expansion 
         many_lines += std::format("remap-{:02}", index);
     }
     shell_pointer->enqueue({
-        .updates = {many_lines},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {many_lines},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
     shell_pointer->enqueue({
-        .updates = {},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = true,
+            .updates = {},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
     });
 
     tests::ModelsSessionOptions options;
@@ -2058,15 +1964,13 @@ TEST_CASE("User Bash hints follow effective remapped interruption and expansion 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = config.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("!remap lines\r"));
@@ -2102,10 +2006,10 @@ TEST_CASE("the collapsed User Bash block renders at most 20 visual lines on a na
         wide_output += std::string(190, static_cast<char>('a' + index - 1));
     }
     shell_pointer->enqueue({
-        .updates = {wide_output},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {wide_output},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
 
     tests::ModelsSessionOptions options;
@@ -2123,15 +2027,13 @@ TEST_CASE("the collapsed User Bash block renders at most 20 visual lines on a na
     tui::VirtualTerminal terminal({.columns = 40, .rows = 60});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = workspace.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = workspace.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("!narrow\r"));
@@ -2169,22 +2071,22 @@ TEST_CASE("focused User Bash dispatch trims, parses prefixes, and falls through 
     auto shell = std::make_unique<tests::FakeUserShell>();
     auto* shell_pointer = shell.get();
     shell_pointer->enqueue({
-        .updates = {},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
     shell_pointer->enqueue({
-        .updates = {},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
     shell_pointer->enqueue({
-        .updates = {},
-        .result = {.exit_code = 0},
-        .infrastructure_failure = std::nullopt,
-        .gated = false,
+            .updates = {},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = false,
     });
 
     tests::ModelsSessionOptions options;
@@ -2202,15 +2104,13 @@ TEST_CASE("focused User Bash dispatch trims, parses prefixes, and falls through 
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = workspace.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = workspace.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // Surrounding whitespace does not alter dispatch; the remainder is trimmed.
@@ -2262,19 +2162,17 @@ TEST_CASE("Skill and Prompt Template expansions beginning with ! stay ordinary A
         "[coding_agent][tui][issue89][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    workspace.write(
-        ".pi/skills/bang-skill/SKILL.md",
-        "---\n"
-        "name: bang-skill\n"
-        "description: Skill whose body begins with a bang.\n"
-        "---\n"
-        "!echo skill-body\n");
-    workspace.write(
-        ".pi/prompts/bang-prompt.md",
-        "---\n"
-        "description: Template whose expansion begins with a bang.\n"
-        "---\n"
-        "!echo template-body $ARGUMENTS\n");
+    workspace.write(".pi/skills/bang-skill/SKILL.md",
+            "---\n"
+            "name: bang-skill\n"
+            "description: Skill whose body begins with a bang.\n"
+            "---\n"
+            "!echo skill-body\n");
+    workspace.write(".pi/prompts/bang-prompt.md",
+            "---\n"
+            "description: Template whose expansion begins with a bang.\n"
+            "---\n"
+            "!echo template-body $ARGUMENTS\n");
     auto client = std::make_shared<RecordingChatProvider>();
     auto* client_pointer = client.get();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -2296,31 +2194,26 @@ TEST_CASE("Skill and Prompt Template expansions beginning with ! stay ordinary A
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = workspace.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = workspace.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     REQUIRE(terminal.inject_input("/skill:bang-skill\r"));
     drain_ready(io);
     REQUIRE(client_pointer->requests.size() == 1);
-    const auto& skill_user = std::get<ai::UserMessage>(
-        client_pointer->requests[0].context.messages.back());
-    CHECK(ai::text_from_user_message(skill_user).find("!echo skill-body") !=
-        std::string::npos);
+    const auto& skill_user = std::get<ai::UserMessage>(client_pointer->requests[0].context.messages.back());
+    CHECK(ai::text_from_user_message(skill_user).find("!echo skill-body") != std::string::npos);
     CHECK(shell_pointer->commands.empty());
 
     REQUIRE(terminal.inject_input("/bang-prompt target\r"));
     drain_ready(io);
     REQUIRE(client_pointer->requests.size() == 2);
-    const auto& template_user = std::get<ai::UserMessage>(
-        client_pointer->requests[1].context.messages.back());
+    const auto& template_user = std::get<ai::UserMessage>(client_pointer->requests[1].context.messages.back());
     CHECK(ai::text_from_user_message(template_user) == "!echo template-body target");
     CHECK(shell_pointer->commands.empty());
 
@@ -2352,15 +2245,13 @@ TEST_CASE("User Bash input prefixes render in the header hints without a pseudo-
     tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(
-        io,
-        coding_agent::tui::run_interactive_mode(
-            terminal,
-            make_run(*created->session, {.agent_config_directory = workspace.path()})),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            REQUIRE(exception == nullptr);
-            run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = workspace.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
     drain_ready(io);
 
     // The header hints document ! and !! as raw input prefixes (pi

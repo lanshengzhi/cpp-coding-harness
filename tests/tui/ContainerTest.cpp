@@ -1,4 +1,5 @@
 #include <cch/tui/Container.hpp>
+#include <cch/tui/Editor.hpp>
 #include <cch/tui/Image.hpp>
 #include <cch/tui/Input.hpp>
 #include <cch/tui/Text.hpp>
@@ -31,8 +32,7 @@ namespace {
 // Text renders no rows, and Box therefore emits no padding rows for that child.
 class RawLineComponent final : public cch::tui::Component {
 public:
-    explicit RawLineComponent(std::string line)
-        : line_(std::move(line)) {}
+    explicit RawLineComponent(std::string line) : line_(std::move(line)) {}
 
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
         return cch::tui::RenderResult{.lines = {line_}};
@@ -194,9 +194,7 @@ TEST_CASE("Box cache keeps public Image sidecars current when lines are unchange
 
 TEST_CASE("Box owns a move-only background hook", "[tui][issue46][container][spec]") {
     auto prefix = std::make_unique<std::string>("\x1b[44m");
-    cch::tui::Box box(0, 0, [owned = std::move(prefix)](std::string line) {
-        return *owned + line;
-    });
+    cch::tui::Box box(0, 0, [owned = std::move(prefix)](std::string line) { return *owned + line; });
     REQUIRE(box.add_child(std::make_unique<cch::tui::Text>("x", 0, 0)));
 
     const auto result = box.render(2);
@@ -360,6 +358,78 @@ TEST_CASE("Box removes re-adds and renders retained component capabilities", "[t
     CHECK(rendered->lines[4] == " abc\x1b[0m...\x1b[0m ");
     REQUIRE(input_ptr->cursor_location());
     CHECK(input_ptr->cursor_location()->column > 0);
+}
+
+TEST_CASE("issue980 composes editor cursors through Containers and padded Boxes",
+        "[tui][container][cursor][issue980][spec]") {
+    cch::tui::Container container;
+    for (std::size_t index = 0; index < 5; ++index)
+        REQUIRE(container.add_child(std::make_unique<cch::tui::Text>(std::format("row {}", index), 0, 0)));
+
+    auto outer_box = std::make_unique<cch::tui::Box>(2, 1);
+    auto inner_container = std::make_unique<cch::tui::Container>();
+    auto inner_box = std::make_unique<cch::tui::Box>(1, 2);
+    auto editor = std::make_unique<cch::tui::Editor>();
+    auto* editor_ptr = editor.get();
+    editor_ptr->set_text("a\nb\nc");
+    editor_ptr->set_focused(true);
+    REQUIRE(inner_box->add_child(std::move(editor)));
+    REQUIRE(inner_container->add_child(std::move(inner_box)));
+    REQUIRE(outer_box->add_child(std::move(inner_container)));
+    REQUIRE(container.add_child(std::move(outer_box)));
+
+    const auto rendered = container.render(40);
+    REQUIRE(rendered);
+    REQUIRE(editor_ptr->cursor_location());
+    CHECK(container.cursor_location() == cch::tui::CursorPosition{.column = 4, .row = 10});
+
+    container.invalidate();
+    CHECK(container.cursor_location() == std::nullopt);
+    REQUIRE(container.render(40));
+    CHECK(container.cursor_location() == cch::tui::CursorPosition{.column = 4, .row = 10});
+    editor_ptr->set_focused(false);
+    CHECK(container.cursor_location() == std::nullopt);
+}
+
+TEST_CASE("issue980 clears composed cursor after removing its child", "[tui][container][cursor][issue980][spec]") {
+    cch::tui::Container container;
+    auto editor = std::make_unique<cch::tui::Editor>();
+    auto* editor_ptr = editor.get();
+    editor_ptr->set_focused(true);
+    REQUIRE(container.add_child(std::make_unique<cch::tui::Text>("before", 0, 0)));
+    REQUIRE(container.add_child(std::move(editor)));
+    REQUIRE(container.render(20));
+    REQUIRE(container.cursor_location());
+
+    auto removed = container.remove_child(editor_ptr);
+    REQUIRE(removed);
+    CHECK(container.cursor_location() == std::nullopt);
+}
+
+TEST_CASE("issue980 composes nested image metadata through Container and Box",
+        "[tui][container][image][issue980][spec]") {
+    cch::tests::ImageCapabilitiesGuard capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
+    cch::tui::Container container;
+    REQUIRE(container.add_child(std::make_unique<cch::tui::Text>("five rows", 0, 0)));
+
+    auto outer_box = std::make_unique<cch::tui::Box>(2, 1);
+    auto inner_container = std::make_unique<cch::tui::Container>();
+    auto inner_box = std::make_unique<cch::tui::Box>(1, 2);
+    REQUIRE(inner_box->add_child(std::make_unique<cch::tui::Image>(
+            cch::tui::ImageContent{.encoded_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAElFTkSuQmCC",
+                    .mime_type = "image/png",
+                    .filename = "nested.png"},
+            cch::tui::ImageOptions{.dimensions = cch::tui::ImagePixelSize{.width = 1, .height = 1}})));
+    REQUIRE(inner_container->add_child(std::move(inner_box)));
+    REQUIRE(outer_box->add_child(std::move(inner_container)));
+    REQUIRE(container.add_child(std::move(outer_box)));
+
+    const auto rendered = container.render(40);
+    REQUIRE(rendered);
+    REQUIRE(rendered->images.size() == 1);
+    CHECK(rendered->images[0].filename == std::optional<std::string>{"nested.png"});
+    CHECK(rendered->images[0].region.row == 4);
+    CHECK(rendered->images[0].region.column == 3);
 }
 
 TEST_CASE("Spacer renders empty lines", "[tui][issue46][container][spec]") {

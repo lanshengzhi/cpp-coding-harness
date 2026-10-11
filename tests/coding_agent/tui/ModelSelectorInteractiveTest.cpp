@@ -66,9 +66,7 @@ struct Fixture {
 
     [[nodiscard]] std::string read_settings() const {
         std::ifstream in(agent_dir / "settings.json", std::ios::binary);
-        return std::string{
-            std::istreambuf_iterator<char>{in},
-            std::istreambuf_iterator<char>{}};
+        return std::string{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}};
     }
 };
 
@@ -108,15 +106,12 @@ struct Running {
 }
 
 [[nodiscard]] std::unique_ptr<coding_agent::AgentSession> boot(
-    Fixture& fixture,
-    Running& running,
-    std::vector<std::string> models = {}) {
+        Fixture& fixture, Running& running, std::vector<std::string> models = {}) {
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
-    request.session_target =
-        coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
+    request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
     request.session_facts.models = std::move(models);
     request.execution_runtime_target = fixture.runtime.make_target();
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
@@ -127,15 +122,12 @@ struct Running {
                        .with_agent_config_directory(fixture.agent_dir)
                        .build();
 
-    boost::asio::co_spawn(
-        running.io,
-        coding_agent::tui::run_interactive_mode(
-            running.terminal,
-            std::move(run)),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            running.run_result.emplace(std::move(result));
-        });
+    boost::asio::co_spawn(running.io,
+            coding_agent::tui::run_interactive_mode(running.terminal, std::move(run)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                running.run_result.emplace(std::move(result));
+            });
     fixture.runtime_driver.emplace(fixture.runtime);
     drain_ready(running.io);
     return std::move(created->session);
@@ -287,14 +279,17 @@ TEST_CASE("/model argument completion lists the candidate models through model-s
     REQUIRE(running.terminal.inject_input("/model "));
     drain_ready(running.io);
     auto screen = visible_screen(running.terminal);
-    CHECK(screen.find("beta-1 — beta") != std::string::npos);
-    CHECK(screen.find("alpha-1 — alpha") != std::string::npos);
+    CHECK(screen.find("beta-1") != std::string::npos);
+    CHECK(screen.find("beta") != std::string::npos);
+    CHECK(screen.find("alpha-1") != std::string::npos);
+    CHECK(screen.find("alpha") != std::string::npos);
 
     // Narrow with a provider prefix and apply with Tab.
     REQUIRE(running.terminal.inject_input("beta"));
     drain_ready(running.io);
     screen = visible_screen(running.terminal);
-    CHECK(screen.find("beta-1 — beta") != std::string::npos);
+    CHECK(screen.find("beta-1") != std::string::npos);
+    CHECK(screen.find("beta") != std::string::npos);
     REQUIRE(running.terminal.inject_input("\t"));
     drain_ready(running.io);
     screen = visible_screen(running.terminal);

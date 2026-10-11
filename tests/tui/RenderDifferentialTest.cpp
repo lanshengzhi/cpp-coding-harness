@@ -20,8 +20,7 @@ namespace {
 /// A Component that returns a fixed set of lines on each render.
 class FixedTextComponent final : public cch::tui::Component {
 public:
-    explicit FixedTextComponent(std::vector<std::string> lines)
-        : lines_(std::move(lines)) {}
+    explicit FixedTextComponent(std::vector<std::string> lines) : lines_(std::move(lines)) {}
 
     void set_lines(std::vector<std::string> lines) {
         lines_ = std::move(lines);
@@ -35,9 +34,7 @@ public:
         return cch::tui::RenderResult{.lines = lines_};
     }
 
-    void invalidate() override {
-        cache_valid_ = false;
-    }
+    void invalidate() override { cache_valid_ = false; }
 
 private:
     std::vector<std::string> lines_;
@@ -47,16 +44,11 @@ private:
 
 /// A focusable that reports a fixed buffer-relative cursor row and renders no
 /// lines, for pinning the IME cursor viewport clamp over scrolled content.
-class CursorReportingComponent final
-    : public cch::tui::Component,
-      public cch::tui::Focusable {
+class CursorReportingComponent final : public cch::tui::Component, public cch::tui::Focusable {
 public:
-    explicit CursorReportingComponent(std::size_t cursor_row)
-        : cursor_row_(cursor_row) {}
+    explicit CursorReportingComponent(std::size_t cursor_row) : cursor_row_(cursor_row) {}
 
-    void set_row(std::size_t row) {
-        cursor_row_ = row;
-    }
+    void set_row(std::size_t row) { cursor_row_ = row; }
 
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
         return cch::tui::RenderResult{};
@@ -64,13 +56,9 @@ public:
 
     void invalidate() override {}
 
-    void set_focused(bool focused) override {
-        focused_ = focused;
-    }
+    void set_focused(bool focused) override { focused_ = focused; }
 
-    [[nodiscard]] bool focused() const override {
-        return focused_;
-    }
+    [[nodiscard]] bool focused() const override { return focused_; }
 
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
         return cch::tui::CursorPosition{.column = 0, .row = cursor_row_};
@@ -287,11 +275,11 @@ TEST_CASE("Normal updates begin at first changed visible line", "[tui][render][i
 
     // Screen should show updated content
     const std::vector<std::string> expected_screen{
-        "line one  ",
-        "line two  ",
-        "line chg  ",
-        "",
-        "",
+            "line one  ",
+            "line two  ",
+            "line chg  ",
+            "",
+            "",
     };
     CHECK(terminal.screen() == expected_screen);
 }
@@ -425,10 +413,10 @@ TEST_CASE("Tui clamps the IME cursor to the visible viewport over scrolled conte
         "[tui][render][issue49][issue435][compat-pi]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
     cch::tui::Tui tui(terminal);
-    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one\ntwo\nthree\nfour\nfive", 0, 0)));
     auto cursor = std::make_unique<CursorReportingComponent>(4);
     auto* cursor_ptr = cursor.get();
     REQUIRE(tui.add_child(std::move(cursor)));
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one\ntwo\nthree\nfour\nfive", 0, 0)));
     REQUIRE(tui.start());
     REQUIRE(tui.set_focus(cursor_ptr));
     REQUIRE(tui.render());
@@ -525,7 +513,10 @@ TEST_CASE("Render requests coalesce until render and include resize", "[tui][ren
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("initial", 0, 0)));
     std::size_t requests = 0;
-    tui.set_render_request_sink([&requests]() -> cch::support::ExpectedVoid { ++requests; return {}; });
+    tui.set_render_request_sink([&requests]() -> cch::support::ExpectedVoid {
+        ++requests;
+        return {};
+    });
     REQUIRE(tui.start());
     REQUIRE(tui.render());
 
@@ -1003,8 +994,7 @@ TEST_CASE("Tui forces a clean repaint when content above a pending clear changes
     };
 }
 
-TEST_CASE("Shrinking the dock over a scrolled transcript leaves no stale dock rows",
-        "[tui][dock]") {
+TEST_CASE("Shrinking the dock over a scrolled transcript leaves no stale dock rows", "[tui][dock]") {
     // Model-selector close shape: a tall editor-slot replacement shrinks back
     // to the plain editor while the transcript grows by one status line and
     // the viewport grows into the vacated rows. Stale selector pixels must not
@@ -1040,8 +1030,7 @@ TEST_CASE("Shrinking the dock over a scrolled transcript leaves no stale dock ro
     CHECK(screen.find("edit") != std::string::npos);
 }
 
-TEST_CASE("Shrinking the dock over a short transcript repaints without clearing scrollback",
-        "[tui][dock]") {
+TEST_CASE("Shrinking the dock over a short transcript repaints without clearing scrollback", "[tui][dock]") {
     // The common selector-close shape: the transcript never scrolled, so the
     // repartition must stay on the no-clear path (#597) and still leave no
     // stale dock pixels in the grown viewport.

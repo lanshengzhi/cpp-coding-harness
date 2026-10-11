@@ -47,6 +47,11 @@ public:
 
     [[nodiscard]] virtual support::Expected<RenderResult> render(std::size_t width) = 0;
     virtual void invalidate() = 0;
+    /// Render-time cursor location for IME positioning, relative to this component.
+    /// Returns std::nullopt when no cursor should be shown.
+    [[nodiscard]] virtual std::optional<CursorPosition> cursor_location() const { return std::nullopt; }
+    /// Whether this component or any descendant matches target.
+    [[nodiscard]] virtual bool contains(const Component* target) const { return this == target; }
 };
 
 /// Outcome of offering a decoded terminal input event to an input handler.

@@ -506,9 +506,11 @@ TEST_CASE("Focusable Components expose cursor_location for IME", "[tui][overlay]
 }
 
 TEST_CASE("Default cursor_location returns nullopt for non-focusable", "[tui][overlay][issue50][spec]") {
-    // Text is not Focusable, so it has no cursor location: proven at compile
-    // time (the dynamic_cast would be constant-false).
-    static_assert(!std::is_base_of_v<cch::tui::Focusable, cch::tui::Text>);
+    // Text is not Focusable, so it has no cursor location: its Component
+    // default stays nullopt even after rendering.
+    cch::tui::Text text("hello", 0, 0);
+    REQUIRE(text.render(10));
+    CHECK(text.cursor_location() == std::nullopt);
 }
 
 TEST_CASE("Overlay rejects a disposed component after removal", "[tui][overlay][issue50][spec]") {

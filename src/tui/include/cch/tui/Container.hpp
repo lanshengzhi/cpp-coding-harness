@@ -32,8 +32,7 @@ public:
     Container(const Container&) = delete;
     Container& operator=(const Container&) = delete;
 
-    [[nodiscard]] support::Expected<std::reference_wrapper<Component>> add_child(
-        std::unique_ptr<Component> component);
+    [[nodiscard]] support::Expected<std::reference_wrapper<Component>> add_child(std::unique_ptr<Component> component);
     /// Detach a child by identity and return its ownership, or null when absent.
     [[nodiscard]] std::unique_ptr<Component> remove_child(const Component* component);
     /// Remove all children (pi `Container.clear`); used by streaming
@@ -42,18 +41,19 @@ public:
 
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
+    [[nodiscard]] std::optional<CursorPosition> cursor_location() const override;
+    [[nodiscard]] bool contains(const Component* target) const override;
 
 private:
     std::vector<std::unique_ptr<Component>> children_;
+    std::vector<std::size_t> rendered_child_rows_;
+    bool render_valid_{false};
 };
 
 /// A Container with padding and an optional background hook.
 class Box final : public Component {
 public:
-    explicit Box(
-        std::size_t padding_x = 1,
-        std::size_t padding_y = 1,
-        BackgroundHook background_hook = {});
+    explicit Box(std::size_t padding_x = 1, std::size_t padding_y = 1, BackgroundHook background_hook = {});
     Box(Box&&) noexcept;
     Box& operator=(Box&&) noexcept;
     ~Box() override;
@@ -61,8 +61,7 @@ public:
     Box(const Box&) = delete;
     Box& operator=(const Box&) = delete;
 
-    [[nodiscard]] support::Expected<std::reference_wrapper<Component>> add_child(
-        std::unique_ptr<Component> component);
+    [[nodiscard]] support::Expected<std::reference_wrapper<Component>> add_child(std::unique_ptr<Component> component);
     /// Detach a child by identity and return its ownership, or null when absent.
     [[nodiscard]] std::unique_ptr<Component> remove_child(const Component* component);
     void clear();
@@ -72,6 +71,8 @@ public:
 
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
+    [[nodiscard]] std::optional<CursorPosition> cursor_location() const override;
+    [[nodiscard]] bool contains(const Component* target) const override;
 
 private:
     friend std::size_t detail::testing::box_tokenize_terminal_output_call_count(const Box& box) noexcept;
@@ -84,7 +85,12 @@ private:
     BackgroundHook background_hook_;
     RenderResult cached_result_;
     std::vector<std::string> cached_child_lines_;
+    /// Rendered row count per child in render order; cursor_location offsets
+    /// the reporting child by the preceding counts.
+    std::vector<std::size_t> rendered_child_rows_;
     std::optional<std::string> cached_background_sample_;
+    bool rendered_padding_fits_{false};
+    bool render_valid_{false};
     std::size_t cached_width_{0};
     std::size_t last_render_tokenize_calls_{0};
     bool cache_valid_{false};
