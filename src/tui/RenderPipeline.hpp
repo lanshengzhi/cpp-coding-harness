@@ -48,12 +48,20 @@ public:
             bool clear_on_shrink,
             std::optional<CursorPosition> cursor_location);
 
+    [[nodiscard]] std::size_t admitted_prefix(TerminalDimensions dimensions) const noexcept;
+
 private:
     struct ActiveImage {
         TerminalImageHandle handle;
         CellRegion region;
         std::uint64_t resource_id{0};
         std::uint64_t revision{0};
+    };
+
+    struct AdmittedFrame {
+        std::size_t rows{0};
+        TerminalDimensions dimensions{};
+        bool cleared{false};
     };
 
     [[nodiscard]] support::ExpectedVoid remove_active_images();
@@ -73,6 +81,7 @@ private:
     /// The last committed frame's dimensions: reset at start, committed with a
     /// successful render, and reset by clear_screen.
     std::optional<TerminalDimensions> previous_dimensions_{};
+    AdmittedFrame admitted_{};
     std::vector<ActiveImage> active_images_;
 
     void position_hardware_cursor(const std::optional<CursorPosition>& cursor_pos, std::size_t total_lines);

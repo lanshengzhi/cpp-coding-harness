@@ -4,6 +4,7 @@
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <cch/support/Error.hpp>
+#include "tui/RenderPipeline.hpp"
 #include "tui/TuiTestHooks.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -703,4 +704,194 @@ TEST_CASE("A one-row view change prepares only the changed composed row", "[tui]
     REQUIRE(tui.render());
     CHECK(cch::tui::detail::testing::frame_prepare_call_count(tui) == 1);
     CHECK(terminal.screen().front() == "one       ");
+}
+
+namespace {
+
+class MockFaultyTerminal final : public cch::tui::Terminal {
+public:
+    explicit MockFaultyTerminal(cch::tui::VirtualTerminalOptions options = {}) : inner_(std::move(options)) {}
+
+    cch::support::ExpectedVoid start(
+            cch::tui::TerminalInputSink input_sink, cch::tui::TerminalResizeSink resize_sink) override {
+        return inner_.start(std::move(input_sink), std::move(resize_sink));
+    }
+    cch::support::ExpectedVoid stop() override { return inner_.stop(); }
+    cch::tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
+    cch::tui::TerminalCapabilities capabilities() const override { return inner_.capabilities(); }
+    cch::tui::TerminalModeState modes() const override { return inner_.modes(); }
+
+    cch::support::ExpectedVoid clear_screen() override {
+        ++clear_count;
+        return inner_.clear_screen();
+    }
+
+    cch::support::ExpectedVoid write(std::string_view output) override {
+        ++write_count;
+        if (write_count == fail_on_write_index) {
+            return std::unexpected(cch::support::make_error(fail_code, "injected fault"));
+        }
+        written_chunks.emplace_back(output);
+        return inner_.write(output);
+    }
+
+    cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition position) override {
+        return inner_.set_cursor(position);
+    }
+    cch::support::ExpectedVoid set_cursor_visible(bool visible) override { return inner_.set_cursor_visible(visible); }
+    cch::support::ExpectedVoid set_scroll_margins(std::size_t top_row, std::size_t bottom_row) override {
+        return inner_.set_scroll_margins(top_row, bottom_row);
+    }
+    cch::support::ExpectedVoid reset_scroll_margins() override { return inner_.reset_scroll_margins(); }
+    cch::support::ExpectedVoid set_dock_cursor(std::size_t dock_row, std::size_t column) override {
+        return inner_.set_dock_cursor(dock_row, column);
+    }
+    cch::support::Expected<cch::tui::TerminalImageHandle> place_image(const cch::tui::TerminalImage& image) override {
+        return inner_.place_image(image);
+    }
+    cch::support::ExpectedVoid remove_image(
+            cch::tui::TerminalImageHandle handle, const cch::tui::CellRegion& region) override {
+        return inner_.remove_image(handle, region);
+    }
+    cch::support::ExpectedVoid begin_synchronized_update() override { return inner_.begin_synchronized_update(); }
+    cch::support::ExpectedVoid end_synchronized_update() override { return inner_.end_synchronized_update(); }
+    cch::support::ExpectedVoid set_title(std::string_view title) override { return inner_.set_title(title); }
+    cch::support::ExpectedVoid apply_cell_pixel_dimensions(cch::tui::CellPixelDimensions pixels) override {
+        return inner_.apply_cell_pixel_dimensions(pixels);
+    }
+    cch::support::ExpectedVoid set_progress(bool active) override { return inner_.set_progress(active); }
+    cch::support::ExpectedVoid drain_input(std::chrono::milliseconds max_ms = cch::tui::kDrainInputMaxMs,
+            std::chrono::milliseconds idle_ms = cch::tui::kDrainInputIdleMs) override {
+        return inner_.drain_input(max_ms, idle_ms);
+    }
+
+    std::size_t clear_count{0};
+    std::size_t write_count{0};
+    std::size_t fail_on_write_index{std::numeric_limits<std::size_t>::max()};
+    cch::support::ErrorCode fail_code{cch::support::ErrorCode::Busy};
+    std::vector<std::string> written_chunks;
+
+private:
+    cch::tui::VirtualTerminal inner_;
+};
+
+} // namespace
+
+TEST_CASE("RenderPipeline tracks admitted frame prefix and exact-once frame accounting under Busy",
+        "[tui][render][issue986][spec]") {
+    MockFaultyTerminal terminal;
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    cch::tui::detail::RenderPipeline pipeline(terminal);
+    const cch::tui::TerminalDimensions dims{.columns = 40, .rows = 10};
+    pipeline.start(dims);
+
+    CHECK(pipeline.admitted_prefix(dims) == 0);
+
+    // In full_render with 4 lines, each line is a separate write:
+    // write 1: line 0
+    // write 2: line 1
+    // write 3: line 2 -> injected fault
+    terminal.fail_on_write_index = 3;
+    terminal.fail_code = cch::support::ErrorCode::Busy;
+
+    cch::tui::RenderResult frame1;
+    frame1.lines = {"alpha", "beta", "gamma", "delta"};
+    const cch::tui::TerminalCapabilities caps{.synchronized_output = false};
+    auto res1 = pipeline.render(std::move(frame1), dims, caps, false, false, false, std::nullopt);
+    REQUIRE_FALSE(res1);
+    CHECK(res1.error().code == cch::support::ErrorCode::Busy);
+
+    // Lines 0 and 1 were admitted before the write failed at line 2.
+    CHECK(pipeline.admitted_prefix(dims) == 2);
+    // On resize, admitted prefix resets to 0.
+    CHECK(pipeline.admitted_prefix({.columns = 50, .rows = 10}) == 0);
+
+    // Retry the frame on the same dimensions without fault.
+    terminal.fail_on_write_index = std::numeric_limits<std::size_t>::max();
+    terminal.written_chunks.clear();
+
+    cch::tui::RenderResult frame2;
+    frame2.lines = {"alpha", "beta", "gamma", "delta"};
+    auto res2 = pipeline.render(std::move(frame2), dims, caps, false, false, false, std::nullopt);
+    REQUIRE(res2);
+
+    // Exact-once accounting: alpha and beta were not re-emitted; gamma and delta were written.
+    CHECK(pipeline.admitted_prefix(dims) == 4);
+    REQUIRE(terminal.written_chunks.size() == 1);
+    CHECK(terminal.written_chunks[0].find("alpha") == std::string::npos);
+    CHECK(terminal.written_chunks[0].find("beta") == std::string::npos);
+    CHECK(terminal.written_chunks[0].find("gamma") != std::string::npos);
+    CHECK(terminal.written_chunks[0].find("delta") != std::string::npos);
+}
+
+TEST_CASE("RenderPipeline rollback on non-busy failure preserves admitted state", "[tui][render][issue986][spec]") {
+    MockFaultyTerminal terminal;
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    cch::tui::detail::RenderPipeline pipeline(terminal);
+    const cch::tui::TerminalDimensions dims{.columns = 40, .rows = 10};
+    pipeline.start(dims);
+
+    // Inject non-busy Process error on first render.
+    terminal.fail_on_write_index = 2;
+    terminal.fail_code = cch::support::ErrorCode::Process;
+
+    cch::tui::RenderResult frame;
+    frame.lines = {"one", "two", "three"};
+    const cch::tui::TerminalCapabilities caps{.synchronized_output = false};
+    auto res = pipeline.render(std::move(frame), dims, caps, false, false, false, std::nullopt);
+    REQUIRE_FALSE(res);
+    CHECK(res.error().code == cch::support::ErrorCode::Process);
+
+    // Non-busy error rolls back: nothing is admitted.
+    CHECK(pipeline.admitted_prefix(dims) == 0);
+}
+
+TEST_CASE("RenderPipeline cleared screen frame recovery under Busy", "[tui][render][issue986][spec]") {
+    MockFaultyTerminal terminal;
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    cch::tui::detail::RenderPipeline pipeline(terminal);
+    const cch::tui::TerminalDimensions dims{.columns = 40, .rows = 10};
+    pipeline.start(dims);
+
+    // Initial render of 4 lines succeeds.
+    cch::tui::RenderResult initial_frame;
+    initial_frame.lines = {"A", "B", "C", "D"};
+    const cch::tui::TerminalCapabilities caps{.synchronized_output = false};
+    REQUIRE(pipeline.render(std::move(initial_frame), dims, caps, false, false, false, std::nullopt));
+    CHECK(pipeline.admitted_prefix(dims) == 4);
+
+    const auto clear_count_before = terminal.clear_count;
+
+    // Shrinking from 4 to 2 lines with clear_on_shrink=true triggers a clear_screen.
+    // In full_render(true), write 1 is line 0 ("X"), write 2 is line 1 ("Y").
+    // Inject Busy fault on write 2 (line 1).
+    terminal.fail_on_write_index = terminal.write_count + 2;
+    terminal.fail_code = cch::support::ErrorCode::Busy;
+
+    cch::tui::RenderResult shrink_frame1;
+    shrink_frame1.lines = {"X", "Y"};
+    auto res_shrink1 = pipeline.render(std::move(shrink_frame1), dims, caps, false, false, true, std::nullopt);
+    REQUIRE_FALSE(res_shrink1);
+    CHECK(res_shrink1.error().code == cch::support::ErrorCode::Busy);
+    CHECK(terminal.clear_count == clear_count_before + 1);
+    // Line 0 was admitted on the cleared screen.
+    CHECK(pipeline.admitted_prefix(dims) == 1);
+
+    // Retry the shrink frame: resumable clear must NOT clear the screen a second time.
+    terminal.fail_on_write_index = std::numeric_limits<std::size_t>::max();
+    terminal.written_chunks.clear();
+
+    cch::tui::RenderResult shrink_frame2;
+    shrink_frame2.lines = {"X", "Y"};
+    auto res_shrink2 = pipeline.render(std::move(shrink_frame2), dims, caps, false, false, true, std::nullopt);
+    REQUIRE(res_shrink2);
+    // Screen was NOT cleared again!
+    CHECK(terminal.clear_count == clear_count_before + 1);
+    CHECK(pipeline.admitted_prefix(dims) == 2);
+    // Only line 1 ("Y") was written on retry.
+    REQUIRE(terminal.written_chunks.size() == 1);
+    CHECK(terminal.written_chunks[0].find("Y") != std::string::npos);
 }

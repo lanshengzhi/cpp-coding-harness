@@ -83,6 +83,11 @@ constexpr auto kResizeWatchdogInterval = std::chrono::milliseconds(500);
 constexpr std::size_t kOutputQueueMaxBytes = 1024 * 1024;
 
 [[nodiscard]] support::Error process_error(std::string message, std::string_view operation, int error_number) {
+    if (error_number == EAGAIN || error_number == EWOULDBLOCK) {
+        return support::make_error(support::ErrorCode::Busy,
+                std::move(message),
+                std::format("{} temporarily unavailable (errno {})", operation, error_number));
+    }
     return support::make_error(support::ErrorCode::Process,
             std::move(message),
             std::format("{} failed (errno {})", operation, error_number));
@@ -94,7 +99,9 @@ struct WriteAttempt {
 };
 
 [[nodiscard]] WriteAttempt attempt_write_all(int descriptor, std::string_view output) {
+    constexpr std::size_t kMaxWritePollRetries = 5;
     WriteAttempt attempt;
+    std::size_t poll_retries = 0;
     while (attempt.bytes_written < output.size()) {
         const auto written =
                 ::write(descriptor, output.data() + attempt.bytes_written, output.size() - attempt.bytes_written);
@@ -103,6 +110,20 @@ struct WriteAttempt {
             continue;
         }
         if (written < 0 && errno == EINTR) continue;
+        if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            // A persistently unwritable descriptor must report Busy instead of
+            // stalling the render call forever, so the retry budget is bounded.
+            if (poll_retries < kMaxWritePollRetries) {
+                ++poll_retries;
+                pollfd pfd{.fd = descriptor, .events = POLLOUT, .revents = 0};
+                const int poll_result = ::poll(&pfd, 1, 100);
+                if (poll_result > 0 && (pfd.revents & POLLOUT) != 0) continue;
+                if (poll_result < 0 && errno == EINTR) continue;
+            }
+            attempt.result =
+                    std::unexpected(process_error("Process Terminal could not write terminal output", "write", EAGAIN));
+            return attempt;
+        }
         const auto error_number = written < 0 ? errno : EIO;
         attempt.result = std::unexpected(
                 process_error("Process Terminal could not write terminal output", "write", error_number));
@@ -764,6 +785,44 @@ template <typename T> void ensure_input_nonblocking(T& impl) noexcept {
     (void)::fcntl(impl.options.input_fd, F_SETFL, flags | O_NONBLOCK);
 }
 
+template <typename T> [[nodiscard]] support::ExpectedVoid restore_terminal_modes(T& impl);
+
+template <typename T> void handle_pty_close(T& impl) {
+    {
+        std::lock_guard lock(impl.mutex);
+        if (!impl.modes.started) return;
+        if (impl.session_alive) {
+            impl.session_alive->store(false);
+        }
+        if (impl.input_stream) {
+            boost::system::error_code error;
+            impl.input_stream->cancel(error);
+            impl.input_stream->release();
+            impl.input_stream.reset();
+        }
+        if (impl.output_stream) {
+            boost::system::error_code error;
+            impl.output_stream->cancel(error);
+            impl.output_stream->release();
+            impl.output_stream.reset();
+        }
+        if (impl.keepalive_timer) {
+            impl.keepalive_timer->cancel();
+            impl.keepalive_timer.reset();
+        }
+        if (impl.readiness_timer) {
+            impl.readiness_timer->cancel();
+            impl.readiness_timer.reset();
+        }
+        impl.output_wait_armed = false;
+        impl.input_sink.reset();
+        impl.resize_sink.reset();
+        impl.modes.started = false;
+        impl.modes.raw_input = false;
+    }
+    (void)restore_terminal_modes(impl);
+}
+
 template <typename T> void poll_nonblocking(T& impl) {
     {
         std::lock_guard lock(impl.mutex);
@@ -782,6 +841,9 @@ template <typename T> void poll_nonblocking(T& impl) {
             break;
         } else if (read_count < 0 && errno == EINTR) {
             continue;
+        } else if (read_count == 0 || (read_count < 0 && errno == EIO)) {
+            handle_pty_close(impl);
+            break;
         } else {
             break;
         }
@@ -804,7 +866,11 @@ template <typename T> void start_async_read(T& impl) {
                 const auto alive = weak_alive.lock();
                 if (!alive || !alive->load()) return;
                 if (ec) {
-                    if (ec == boost::asio::error::operation_aborted || ec == boost::asio::error::eof) {
+                    if (ec == boost::asio::error::operation_aborted) {
+                        return;
+                    }
+                    if (ec == boost::asio::error::eof || ec.value() == EIO) {
+                        handle_pty_close(impl);
                         return;
                     }
                     record_worker_error(impl,
@@ -1007,10 +1073,14 @@ template <typename T> [[nodiscard]] support::ExpectedVoid restore_terminal_modes
         retain_error(first_error, std::move(reset_margins));
     }
     if (impl.has_original_termios) {
-        if (::tcsetattr(impl.options.input_fd, TCSAFLUSH, &impl.original_termios) == 0) {
+        if (::tcsetattr(impl.options.input_fd, TCSADRAIN, &impl.original_termios) == 0) {
             impl.has_original_termios = false;
             impl.modes.raw_input = false;
         } else {
+            if (errno == EIO) {
+                impl.has_original_termios = false;
+                impl.modes.raw_input = false;
+            }
             retain_error(first_error,
                     std::unexpected(
                             process_error("Process Terminal could not restore input mode", "tcsetattr", errno)));

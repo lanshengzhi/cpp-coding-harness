@@ -2147,3 +2147,100 @@ TEST_CASE("Process Terminal stops promptly after input EOF without hanging", "[t
     const auto second_elapsed = std::chrono::steady_clock::now() - second_started;
     CHECK(second_elapsed < std::chrono::milliseconds(400));
 }
+
+TEST_CASE("Process Terminal failed startup restores modes with TCSADRAIN preserving unread input",
+        "[tui][terminal][issue986][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+
+    // Write input into master PTY before starting.
+    const std::string pending_input = "caller-preservation-token\n";
+    REQUIRE(::write(pty->master.get(), pending_input.data(), pending_input.size()) ==
+            static_cast<ssize_t>(pending_input.size()));
+
+    // Provide a read-only output descriptor so startup fails during bracketed paste enable.
+    auto read_only_output = cch::support::UniqueFd(::open("/dev/null", O_RDONLY));
+    REQUIRE(read_only_output);
+
+    cch::tui::ProcessTerminal terminal({.input_fd = pty->slave.get(),
+            .output_fd = read_only_output.get(),
+            .executor = test_io().io.get_executor()});
+
+    const auto result = terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; });
+    REQUIRE_FALSE(result);
+
+    // Because restore_terminal_modes uses TCSADRAIN instead of TCSAFLUSH,
+    // the pending input in the slave queue is preserved.
+    std::array<char, 128> buf{};
+    const int flags = ::fcntl(pty->slave.get(), F_GETFL);
+    (void)::fcntl(pty->slave.get(), F_SETFL, flags | O_NONBLOCK);
+    const auto read_bytes = ::read(pty->slave.get(), buf.data(), buf.size());
+    REQUIRE(read_bytes > 0);
+    const std::string_view read_view(buf.data(), static_cast<std::size_t>(read_bytes));
+    CHECK(read_view == pending_input);
+}
+
+TEST_CASE("Process Terminal handles PTY close by restoring modes and stopping callbacks",
+        "[tui][terminal][issue986][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.modes().started);
+
+    // Close master PTY descriptor to trigger EOF / EIO on slave.
+    REQUIRE(pty->master.close() == 0);
+
+    // Wait for the async read handler to receive EOF/EIO and invoke handle_pty_close.
+    REQUIRE(cch::tests::wait_until([&] { return !terminal.modes().started; }, std::chrono::seconds(2)));
+
+    CHECK_FALSE(terminal.modes().started);
+    CHECK_FALSE(terminal.modes().raw_input);
+
+    // Subsequent stop() is idempotent and returns promptly.
+    const auto stopped = terminal.stop();
+    if (!stopped) {
+        CHECK(stopped.error().code == cch::support::ErrorCode::Process);
+    }
+}
+
+TEST_CASE(
+        "Process Terminal progress keepalive pulses OSC 9;4 every 1s while active", "[tui][terminal][issue986][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    REQUIRE(terminal.set_title("test-title"));
+    std::string received = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50));
+    CHECK(received.find("\x1b]0;test-title\x07") != std::string::npos);
+
+    REQUIRE(terminal.set_progress(true));
+    received = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50));
+    CHECK(received.find("\x1b]9;4;3\x07") != std::string::npos);
+
+    // Wait for keepalive timer to fire (OSC 9;4 keepalive interval is 1s).
+    const auto keepalive_received = cch::tests::wait_until(
+            [&] {
+                const auto chunk = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(100));
+                return chunk.find("\x1b]9;4;3\x07") != std::string::npos;
+            },
+            std::chrono::milliseconds(2500));
+    CHECK(keepalive_received);
+
+    REQUIRE(terminal.set_progress(false));
+    received = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50));
+    CHECK(received.find("\x1b]9;4;0;\x07") != std::string::npos);
+
+    REQUIRE(terminal.stop());
+}
