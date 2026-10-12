@@ -4,6 +4,7 @@
 
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/tui/ITui.hpp>
+#include <cch/tui/TerminalColors.hpp>
 #include <cch/support/Error.hpp>
 
 #include <filesystem>
@@ -17,39 +18,24 @@
 namespace cch::coding_agent::tui {
 
 /// pi `TerminalTheme` (`theme.ts`): the dark/light terminal appearance used
-/// by the default theme selection. The subset derives it from COLORFGBG
-/// only; OSC 11/DSR queries, the automatic `light/dark` pair, auto-sync,
-/// and the file watcher are Deferred with no placeholder.
+/// by automatic theme selection.
 enum class TerminalTheme {
     Dark,
     Light,
 };
 
-/// pi `detectTerminalBackgroundFromEnv` result subset: the detected theme
-/// plus the confidence that decides whether a detected default persists to
-/// the User Settings (`applyFromSettings` high-confidence write). The OSC 11
-/// "terminal background" source is absent.
-struct TerminalThemeDetection {
-    TerminalTheme theme{TerminalTheme::Dark};
-    /// pi `confidence`: high when COLORFGBG carried a background index,
-    /// low for the dark fallback.
-    bool high_confidence{false};
-};
-
-/// pi `detectTerminalBackgroundFromEnv` pure subset: parse COLORFGBG
-/// (`"fg;bg"` or more fields; the last field that parses to a 0..255 index
-/// is the background), classify the ANSI index by relative luminance
-/// (≥ 0.5 → light), and fall back to dark when no index is present.
-[[nodiscard]] TerminalThemeDetection terminal_theme_from_colorfgbg(
-    std::string_view colorfgbg);
+/// pi `detectColorFgBgTheme`: the last COLORFGBG field must be one or two
+/// decimal digits in 0..15; indexes 0..6 and 8 are dark, 7 and 9..15 are
+/// light. Any other value is undefined, so the reported scheme and then the
+/// dark fallback decide the appearance.
+[[nodiscard]] std::optional<TerminalTheme> terminal_theme_from_colorfgbg(std::string_view colorfgbg);
 
 /// pi `detectTerminalBackgroundFromEnv`: the env-only default detection,
 /// reading `COLORFGBG`.
-[[nodiscard]] TerminalThemeDetection detect_terminal_theme_from_env();
+[[nodiscard]] std::optional<TerminalTheme> detect_terminal_theme_from_env();
 
-/// pi `resolveThemeSetting` subset: the automatic `light/dark` settings pair
-/// (any value containing "/") reads as unset; other string values pass
-/// through unchanged.
+/// pi `resolveThemeSetting`: explicit names pass through, valid `light/dark`
+/// pairs select by terminal appearance, and malformed slash settings are unset.
 [[nodiscard]] std::optional<std::string> resolve_theme_setting(
     const std::optional<std::string>& setting,
     TerminalTheme terminal_theme);
@@ -76,27 +62,22 @@ using ThemeErrorSink = std::move_only_function<void(std::string)>;
 /// pi `InteractiveThemeController` `onChanged` sink (pi
 /// `updateEditorBorderColor`).
 using ThemeChangedSink = std::move_only_function<void()>;
+using ThemeTerminalColorsSink = std::move_only_function<void(cch::tui::TerminalColors)>;
+using ThemeTerminalColorSchemeSink = std::move_only_function<void(TerminalTheme)>;
 /// pi `settingsManager.getThemeSetting()` provider (the raw global-scope
 /// value; slash automatic pairs read as unset).
 using ThemeSettingProvider = std::move_only_function<std::optional<std::string>()>;
-/// pi `settingsManager.setTheme(themeSetting)` global-scope write, used by
-/// `applyFromSettings`' high-confidence default persistence.
-using ThemeSettingCommitter =
-    std::move_only_function<support::ExpectedVoid(std::string_view)>;
-
 /// The pi `InteractiveThemeController` subset (`theme-controller.ts`) over
 /// the `theme.ts` subset, owning the live palette every component renders
 /// through (pi's module-global `theme` instance):
 ///
-/// - Boot init: the constructor resolves the settings theme (slash values
-///   read as unset) against the env-only COLORFGBG terminal theme and
-///   initializes the palette with pi's silent dark fallback (pi ctor
-///   `initTheme`).
-/// - `apply_from_settings` is pi `applyFromSettings` minus the OSC 11/DSR
-///   query, the automatic pair, and auto-sync: a defined setting applies
-///   with `showError` (the verbatim `Failed to load theme "<name>":
-///   <error>\nFell back to dark theme.`), an unset setting applies the
-///   env detection and persists it to the global scope on high confidence.
+/// - Boot init resolves explicit or paired settings against COLORFGBG,
+///   then the dark fallback; no setting maps the unsupported generated
+///   `system` theme to the appearance-selected built-in theme (#991 scope).
+/// - `apply_from_settings` applies the current selection, queries OSC 10/11/4
+///   and DA1, consumes partial and late replies, and enables mode 2031 only
+///   for automatic selection. Reported background appearance outranks live
+///   scheme, COLORFGBG, and dark fallback.
 /// - `apply_theme_name` replicates pi `applyThemeName`: failure replaces
 ///   the palette with `dark`, records the fallback as active, and reports
 ///   the verbatim message when `show_error` is set.
@@ -106,23 +87,23 @@ using ThemeSettingCommitter =
 ///   (pi `notifyChanged` → `ui.invalidate()` + `onChanged`), which the
 ///   interactive host wires to the editor border refresh.
 ///
-/// OSC 11/DSR queries, the automatic `light/dark` pair, auto-sync, and the
-/// file watcher are absent with no placeholder.
+/// Generated system-theme colors and the file watcher remain outside #991.
 class ThemeController final {
 public:
     /// `custom_themes_dir` is the user custom-themes directory
     /// (`<agent_config_directory>/themes`; empty skips the directory).
     /// `registered` are the resource-loader themes (pi `setRegisteredThemes`
-    /// in the interactive-mode ctor). `theme_setting`/`committer` back the
-    /// global-scope `theme` User Settings field.
+    /// in the interactive-mode ctor). `theme_setting` reads the global-scope
+    /// `theme` User Settings field.
     ThemeController(std::filesystem::path custom_themes_dir,
             std::vector<RegisteredTheme> registered,
             ThemeSettingProvider theme_setting,
-            ThemeSettingCommitter committer,
             cch::tui::TerminalColorCapability color_capability,
             cch::tui::ITui& root,
             ThemeErrorSink show_error,
-            ThemeChangedSink on_changed);
+            ThemeChangedSink on_changed,
+            ThemeTerminalColorsSink on_terminal_colors,
+            ThemeTerminalColorSchemeSink on_terminal_color_scheme);
     ThemeController(ThemeController&&) = delete;
     ThemeController& operator=(ThemeController&&) = delete;
     ~ThemeController();
@@ -139,8 +120,18 @@ public:
     /// Themes section (#418).
     [[nodiscard]] const std::vector<RegisteredTheme>& registered_themes() const;
 
-    /// pi `applyFromSettings` (sync subset; see the class comment).
+    /// pi `applyFromSettings`: apply the current preference and query terminal colors.
     void apply_from_settings();
+
+    /// Apply terminal reports on the product executor (the TUI delivers them
+    /// from its timer or input path).
+    void apply_terminal_colors(cch::tui::TerminalColors colors);
+    void apply_terminal_color_scheme(TerminalTheme scheme);
+
+    /// Re-register exactly one listener after a TUI rebind; dispose detaches
+    /// it and disables mode 2031 before terminal shutdown.
+    void rebind_terminal_color_scheme_listener();
+    void dispose();
 
     /// pi `setThemeName` → `applyThemeName`; returns success.
     [[nodiscard]] bool set_theme_name(std::string_view name, bool show_error);

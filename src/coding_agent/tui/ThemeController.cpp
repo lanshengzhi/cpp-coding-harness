@@ -1,17 +1,19 @@
 #include "coding_agent/tui/ThemeController.hpp"
 
+#include "coding_agent/tui/theme_color_math.hpp"
 #include "coding_agent/ResourceDiagnosticPolicy.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include <cch/support/Error.hpp>
 
 #include <algorithm>
-#include <array>
 #include <charconv>
-#include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
@@ -29,73 +31,24 @@ namespace {
     return error.message + ": " + error.detail;
 }
 
-/// pi `ansi256ToHex` subset: the ANSI 256-color index → RGB mapping used by
-/// the COLORFGBG luminance classification (basic 0-15, 6x6x6 cube 16-231,
-/// grayscale 232-255).
-[[nodiscard]] std::array<double, 3> ansi256_to_rgb(int index) {
-    constexpr std::array<std::array<double, 3>, 16> kBasic{{
-        {{0, 0, 0}}, {{128, 0, 0}}, {{0, 128, 0}}, {{128, 128, 0}},
-        {{0, 0, 128}}, {{128, 0, 128}}, {{0, 128, 128}}, {{192, 192, 192}},
-        {{128, 128, 128}}, {{255, 0, 0}}, {{0, 255, 0}}, {{255, 255, 0}},
-        {{0, 0, 255}}, {{255, 0, 255}}, {{0, 255, 255}}, {{255, 255, 255}},
-    }};
-    if (index < 16) return kBasic[static_cast<std::size_t>(index)];
-    if (index < 232) {
-        const auto cube = index - 16;
-        const auto channel = [](int value) {
-            return static_cast<double>(value == 0 ? 0 : 55 + value * 40);
-        };
-        return {
-            channel(cube / 36),
-            channel((cube % 36) / 6),
-            channel(cube % 6),
-        };
+/// pi `detectColorFgBgTheme`: only a one- or two-digit basic-16 index is
+/// known; 0..6 and 8 are dark, 7 and 9..15 are light.
+[[nodiscard]] std::optional<TerminalTheme> colorfgbg_theme(std::string_view colorfgbg) {
+    const auto separator = colorfgbg.rfind(';');
+    auto background = colorfgbg.substr(separator == std::string_view::npos ? 0 : separator + 1);
+    const auto first = background.find_first_not_of(" \t\r\n");
+    if (first == std::string_view::npos) return std::nullopt;
+    const auto last = background.find_last_not_of(" \t\r\n");
+    background = background.substr(first, last - first + 1);
+    if (background.empty() || background.size() > 2) return std::nullopt;
+    // pi's `/^\d{1,2}$/` pin: a sign or any other non-digit is undefined.
+    if (background.find_first_not_of("0123456789") != std::string_view::npos) return std::nullopt;
+    int index = 0;
+    const auto [end, error] = std::from_chars(background.data(), background.data() + background.size(), index);
+    if (error != std::errc{} || end != background.data() + background.size() || index > 15) {
+        return std::nullopt;
     }
-    const auto gray = 8 + (index - 232) * 10;
-    return {static_cast<double>(gray), static_cast<double>(gray), static_cast<double>(gray)};
-}
-
-/// pi `getRgbColorLuminance` for an ANSI index (pi `getAnsiColorLuminance`):
-/// relative luminance from the sRGB channels; ≥ 0.5 classifies light.
-[[nodiscard]] bool ansi_index_is_light(int index) {
-    const auto rgb = ansi256_to_rgb(index);
-    const auto to_linear = [](double channel) {
-        const auto value = channel / 255.0;
-        return value <= 0.03928 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
-    };
-    const auto luminance = 0.2126 * to_linear(rgb[0]) +
-        0.7152 * to_linear(rgb[1]) + 0.0722 * to_linear(rgb[2]);
-    return luminance >= 0.5;
-}
-
-/// pi `getColorFgBgBackgroundIndex`: the last `;`-separated COLORFGBG field
-/// that parses to a 0..255 integer is the background index.
-[[nodiscard]] std::optional<int> colorfgbg_background_index(std::string_view colorfgbg) {
-    std::optional<int> background;
-    std::size_t start = 0;
-    while (start <= colorfgbg.size()) {
-        const auto separator = colorfgbg.find(';', start);
-        const auto end = separator == std::string_view::npos ? colorfgbg.size() : separator;
-        auto part = colorfgbg.substr(start, end - start);
-        const auto first = part.find_first_not_of(" \t\r\n");
-        if (first == std::string_view::npos) {
-            part = {};
-        } else {
-            const auto last = part.find_last_not_of(" \t\r\n");
-            part = part.substr(first, last - first + 1);
-        }
-        if (part.starts_with('+')) part.remove_prefix(1);
-        if (!part.empty()) {
-            int parsed = 0;
-            const auto [pointer, error] = std::from_chars(
-                part.data(), part.data() + part.size(), parsed);
-            (void)pointer; // pi baseline parseInt semantics accept a valid numeric prefix.
-            if (error == std::errc{} && parsed >= 0 && parsed <= 255) background = parsed;
-        }
-        if (separator == std::string_view::npos) break;
-        start = separator + 1;
-    }
-    return background;
+    return index <= 6 || index == 8 ? TerminalTheme::Dark : TerminalTheme::Light;
 }
 
 /// pi `loadTheme` subset: registered themes first (already-parsed
@@ -121,6 +74,38 @@ namespace {
     return std::unexpected(support::make_error(
         support::ErrorCode::Validation,
         std::format("Theme not found: {}", name)));
+}
+
+/// Shared dispatch state for one TUI report sink. The TUI may invoke a
+/// registered callback after the controller is gone (a timed-out color query
+/// keeps listening for late replies until the TUI stops), so callbacks hold
+/// this state and see `active == false` instead of a dangling controller.
+template <typename Sink> struct ReportDispatch {
+    std::mutex mutex;
+    bool active{true};
+    /// Bumped on rebind so a callback the TUI copied before it cannot
+    /// deliver through the new registration.
+    std::uint64_t generation{0};
+    std::shared_ptr<Sink> sink;
+
+    void deactivate() {
+        std::lock_guard lock(mutex);
+        active = false;
+        sink.reset();
+    }
+};
+
+template <typename Sink, typename... Args>
+void deliver_report(
+        const std::shared_ptr<ReportDispatch<Sink>>& state, std::optional<std::uint64_t> generation, Args... args) {
+    std::shared_ptr<Sink> sink;
+    {
+        std::lock_guard lock(state->mutex);
+        if (!state->active) return;
+        if (generation && state->generation != *generation) return;
+        sink = state->sink;
+    }
+    if (sink && *sink) (*sink)(std::move(args)...);
 }
 
 void bound_diagnostics(std::vector<ResourceDiagnostic>& diagnostics) {
@@ -161,42 +146,34 @@ template <typename Provider>
     return provider();
 }
 
-/// Fallible §5.4 callback boundary for the settings committer: failures
-/// (including a throwing sink) return the converted error.
-template <typename Sink, typename... Args>
-[[nodiscard]] support::ExpectedVoid invoke_fallible_sink(Sink&& sink, Args&&... args) {
-    if (!sink) return {};
-    return std::forward<Sink>(sink)(std::forward<Args>(args)...);
-}
-
 } // namespace
 
-TerminalThemeDetection terminal_theme_from_colorfgbg(std::string_view colorfgbg) {
-    const auto background = colorfgbg_background_index(colorfgbg);
-    if (!background) {
-        return {.theme = TerminalTheme::Dark, .high_confidence = false};
-    }
-    return {
-        .theme = ansi_index_is_light(*background) ? TerminalTheme::Light
-                                                  : TerminalTheme::Dark,
-        .high_confidence = true,
-    };
+std::optional<TerminalTheme> terminal_theme_from_colorfgbg(std::string_view colorfgbg) {
+    return colorfgbg_theme(colorfgbg);
 }
 
-TerminalThemeDetection detect_terminal_theme_from_env() {
+std::optional<TerminalTheme> detect_terminal_theme_from_env() {
     const char* colorfgbg = std::getenv("COLORFGBG");
     return terminal_theme_from_colorfgbg(
         colorfgbg == nullptr ? std::string_view{} : std::string_view{colorfgbg});
 }
 
 std::optional<std::string> resolve_theme_setting(
-    const std::optional<std::string>& setting,
-    TerminalTheme /*terminal_theme*/) {
-    // pi `resolveThemeSetting` subset: the automatic `light/dark` pair
-    // (any value containing "/") reads as unset; other string values pass
-    // through.
-    if (!setting || setting->find('/') != std::string::npos) return std::nullopt;
-    return *setting;
+        const std::optional<std::string>& setting, TerminalTheme terminal_theme) {
+    if (!setting) return std::nullopt;
+    const auto separator = setting->find('/');
+    if (separator == std::string::npos) return *setting;
+    if (setting->find('/', separator + 1) != std::string::npos) return std::nullopt;
+    const auto trim = [](std::string_view value) {
+        const auto first = value.find_first_not_of(" \t\r\n");
+        if (first == std::string_view::npos) return std::string{};
+        const auto last = value.find_last_not_of(" \t\r\n");
+        return std::string{value.substr(first, last - first + 1)};
+    };
+    const auto light = trim(std::string_view{*setting}.substr(0, separator));
+    const auto dark = trim(std::string_view{*setting}.substr(separator + 1));
+    if (light.empty() || dark.empty()) return std::nullopt;
+    return terminal_theme == TerminalTheme::Light ? light : dark;
 }
 
 std::string_view terminal_theme_name(TerminalTheme theme) {
@@ -207,40 +184,38 @@ struct ThemeController::Impl {
     Impl(std::filesystem::path configured_custom_themes_dir,
             std::vector<RegisteredTheme> configured_registered,
             ThemeSettingProvider configured_theme_setting,
-            ThemeSettingCommitter configured_committer,
             cch::tui::TerminalColorCapability configured_capability,
             cch::tui::ITui& configured_root,
             ThemeErrorSink configured_show_error,
-            ThemeChangedSink configured_on_changed)
+            ThemeChangedSink configured_on_changed,
+            ThemeTerminalColorsSink configured_on_terminal_colors,
+            ThemeTerminalColorSchemeSink configured_on_terminal_color_scheme)
         : custom_themes_dir(std::move(configured_custom_themes_dir)), registered(std::move(configured_registered)),
-          theme_setting(std::move(configured_theme_setting)), committer(std::move(configured_committer)),
-          capability(configured_capability), root(configured_root), show_error(std::move(configured_show_error)),
-          on_changed(std::move(configured_on_changed)), terminal_theme(detect_terminal_theme_from_env().theme),
+          theme_setting(std::move(configured_theme_setting)), capability(configured_capability), root(configured_root),
+          show_error(std::move(configured_show_error)), on_changed(std::move(configured_on_changed)),
           live(builtin_dark_theme(), configured_capability) {
-        // pi ctor: `activeThemeName = resolveThemeSetting(getThemeSetting(),
-        // terminalTheme)` then `initTheme(activeThemeName)` — a defined
-        // setting applies, otherwise the env-detected default, with pi's
-        // silent dark fallback on load failure.
-        const auto setting = read_theme_setting(theme_setting);
-        const auto resolved = resolve_theme_setting(setting, terminal_theme);
-        const auto name = resolved
-            ? *resolved
-            : std::string{terminal_theme_name(terminal_theme)};
-        auto loaded = load_theme_by_name(name, custom_themes_dir, registered);
-        if (loaded) {
-            live.replace(std::move(*loaded), capability);
-            active_name = std::move(name);
-        } else {
-            live.replace(builtin_dark_theme(), capability);
-            active_name = "dark";
-        }
+        color_dispatch->sink = std::make_shared<ThemeTerminalColorsSink>(std::move(configured_on_terminal_colors));
+        scheme_dispatch->sink =
+                std::make_shared<ThemeTerminalColorSchemeSink>(std::move(configured_on_terminal_color_scheme));
+        terminal_theme = detected_terminal_theme();
+        apply_current_selection(false, false);
+    }
+
+    /// The TUI delivers query results and scheme reports from its timer and
+    /// input threads, so the callbacks address shared dispatch state instead
+    /// of this controller: a report that arrives after destruction sees
+    /// `active == false` rather than a dangling pointer.
+    ~Impl() {
+        color_dispatch->deactivate();
+        scheme_dispatch->deactivate();
     }
 
     /// pi `applyThemeName` + `setTheme`: load by name; success replaces the
     /// palette and records the name, failure replaces the palette with
     /// `dark` and records the fallback. Either way the change notifies; the
-    /// verbatim fallback message reports only when `show_error` is set.
-    [[nodiscard]] bool apply_theme_name(std::string_view name, bool show_error_) {
+    /// verbatim fallback message reports only when `show_error` is set. The
+    /// constructor loads the boot theme without notifying (pi `initTheme`).
+    [[nodiscard]] bool apply_theme_name(std::string_view name, bool show_error_, bool notify = true) {
         auto loaded = load_theme_by_name(name, custom_themes_dir, registered);
         std::optional<std::string> error;
         if (loaded) {
@@ -251,7 +226,7 @@ struct ThemeController::Impl {
             active_name = "dark";
             error = combined_theme_error(loaded.error());
         }
-        notify_changed();
+        if (notify) notify_changed();
         if (error && show_error_) {
             // pi `applyThemeName` verbatim:
             // `Failed to load theme "<name>": <error>\nFell back to dark theme.`
@@ -270,37 +245,112 @@ struct ThemeController::Impl {
         invoke_best_effort_sink(on_changed);
     }
 
+    [[nodiscard]] TerminalTheme detected_terminal_theme() {
+        if (terminal_colors && terminal_colors->background) {
+            const auto appearance =
+                    theme_color_math::terminal_appearance(*terminal_colors->background, terminal_colors->foreground);
+            return appearance == theme_color_math::TerminalAppearance::Light ? TerminalTheme::Light
+                                                                             : TerminalTheme::Dark;
+        }
+        if (terminal_scheme) return *terminal_scheme;
+        return detect_terminal_theme_from_env().value_or(TerminalTheme::Dark);
+    }
+
+    [[nodiscard]] bool automatic_setting() {
+        const auto setting = read_theme_setting(theme_setting);
+        return !setting || setting->find('/') != std::string::npos || *setting == "system";
+    }
+
+    [[nodiscard]] std::optional<std::string> effective_theme_setting() {
+        const auto setting = read_theme_setting(theme_setting);
+        if (!setting || *setting == "system") return std::nullopt;
+        return resolve_theme_setting(setting, detected_terminal_theme());
+    }
+
+    void apply_current_selection(bool show_error, bool notify = true) {
+        terminal_theme = detected_terminal_theme();
+        auto theme_name = effective_theme_setting();
+        if (!theme_name) theme_name = std::string{terminal_theme_name(terminal_theme)};
+        (void)apply_theme_name(*theme_name, show_error, notify);
+    }
+
+    void reapply_for_terminal() {
+        if (active_name == "<in-memory>") return;
+        const auto theme_name = effective_theme_setting();
+        if (!theme_name || *theme_name != active_name) {
+            apply_current_selection(false);
+        }
+    }
+
+    /// pi `queryTerminalColors`: one OSC 10/11/4 + DA1 burst; the timeout
+    /// result and every later reply carry the theme update. A report from an
+    /// older query still applies: the TUI answers the frontmost pending
+    /// query, so the reply to a superseded burst can be the only one that
+    /// arrives.
+    void start_color_query() {
+        {
+            std::lock_guard lock(color_dispatch->mutex);
+            if (!color_dispatch->active) return;
+        }
+        cch::tui::TerminalColorsQueryOptions options;
+        options.timeout = std::chrono::milliseconds{100};
+        options.on_complete = [state = color_dispatch](cch::tui::TerminalColors colors) {
+            deliver_report(state, std::nullopt, std::move(colors));
+        };
+        options.on_late_reply = [state = color_dispatch](cch::tui::TerminalColors colors) {
+            deliver_report(state, std::nullopt, std::move(colors));
+        };
+        (void)root.query_terminal_colors(std::move(options));
+    }
+
+    void set_auto_sync(bool enabled) {
+        if (auto_sync_enabled == enabled) return;
+        auto_sync_enabled = enabled;
+        root.set_terminal_color_scheme_notifications(enabled);
+    }
+
     std::filesystem::path custom_themes_dir;
     std::vector<RegisteredTheme> registered;
     ThemeSettingProvider theme_setting;
-    ThemeSettingCommitter committer;
     cch::tui::TerminalColorCapability capability{cch::tui::TerminalColorCapability::Xterm256};
     cch::tui::ITui& root; // must outlive this controller.
     ThemeErrorSink show_error;
     ThemeChangedSink on_changed;
     TerminalTheme terminal_theme{TerminalTheme::Dark};
     std::string active_name{"dark"};
+    std::shared_ptr<ReportDispatch<ThemeTerminalColorsSink>> color_dispatch{
+            std::make_shared<ReportDispatch<ThemeTerminalColorsSink>>()};
+    std::shared_ptr<ReportDispatch<ThemeTerminalColorSchemeSink>> scheme_dispatch{
+            std::make_shared<ReportDispatch<ThemeTerminalColorSchemeSink>>()};
+    cch::tui::TerminalColorSchemeListenerHandle scheme_listener;
+    std::optional<cch::tui::TerminalColors> terminal_colors;
+    std::optional<TerminalTheme> terminal_scheme;
+    bool auto_sync_enabled{false};
     LiveTheme live;
 };
 
 ThemeController::ThemeController(std::filesystem::path custom_themes_dir,
         std::vector<RegisteredTheme> registered,
         ThemeSettingProvider theme_setting,
-        ThemeSettingCommitter committer,
         cch::tui::TerminalColorCapability color_capability,
         cch::tui::ITui& root,
         ThemeErrorSink show_error,
-        ThemeChangedSink on_changed)
+        ThemeChangedSink on_changed,
+        ThemeTerminalColorsSink on_terminal_colors,
+        ThemeTerminalColorSchemeSink on_terminal_color_scheme)
     : impl_(std::make_unique<Impl>(std::move(custom_themes_dir),
               std::move(registered),
               std::move(theme_setting),
-              std::move(committer),
               color_capability,
               root,
               std::move(show_error),
-              std::move(on_changed))) {}
+              std::move(on_changed),
+              std::move(on_terminal_colors),
+              std::move(on_terminal_color_scheme))) {
+    rebind_terminal_color_scheme_listener();
+}
 
-ThemeController::~ThemeController() = default;
+ThemeController::~ThemeController() { dispose(); }
 
 void ThemeController::set_registered_themes(std::vector<RegisteredTheme> registered) {
     // pi `setRegisteredThemes`: replace the name → theme map (last wins;
@@ -313,38 +363,69 @@ const std::vector<RegisteredTheme>& ThemeController::registered_themes() const {
 }
 
 void ThemeController::apply_from_settings() {
-    // pi `applyFromSettings` subset: the automatic `light/dark` pair (slash
-    // settings values read as unset), the OSC 11/DSR query, auto-sync, and
-    // the watcher are absent. A defined setting applies with the verbatim
-    // failure message; an unset setting applies the env-only detection and
-    // persists it to the global scope on high confidence (pi's
-    // `settingsManager.setTheme(detection.theme)` + flush, best-effort).
-    const auto raw_setting = read_theme_setting(impl_->theme_setting);
-    const auto theme_setting = resolve_theme_setting(raw_setting, impl_->terminal_theme);
-    if (theme_setting) {
-        // Best-effort: a rejected theme name is surfaced by the settings
-        // path, not by this env-detection fallback.
-        (void)impl_->apply_theme_name(*theme_setting, /*show_error=*/true);
-        return;
+    const auto setting = read_theme_setting(impl_->theme_setting);
+    impl_->set_auto_sync(impl_->automatic_setting());
+    impl_->apply_current_selection(setting.has_value());
+    impl_->start_color_query();
+}
+
+void ThemeController::apply_terminal_colors(cch::tui::TerminalColors colors) {
+    const auto previous = impl_->terminal_colors.value_or(cch::tui::TerminalColors{});
+    cch::tui::TerminalColors next;
+    next.foreground = colors.foreground ? colors.foreground : previous.foreground;
+    next.background = colors.background ? colors.background : previous.background;
+    next.palette = colors.palette ? colors.palette : previous.palette;
+    // pi `applyTerminalColors`: skip the rebuild when the report repeats the
+    // retained colors (timeouts report nothing), otherwise reapply and repaint.
+    if (impl_->terminal_colors && *impl_->terminal_colors == next) return;
+    impl_->terminal_colors = next;
+    impl_->reapply_for_terminal();
+    impl_->root.invalidate();
+    impl_->root.request_render();
+}
+
+void ThemeController::apply_terminal_color_scheme(TerminalTheme scheme) {
+    if (!impl_->auto_sync_enabled) return;
+    const auto previous = impl_->detected_terminal_theme();
+    impl_->terminal_scheme = scheme;
+    if (impl_->detected_terminal_theme() != previous) impl_->reapply_for_terminal();
+    impl_->start_color_query();
+}
+
+void ThemeController::rebind_terminal_color_scheme_listener() {
+    if (impl_->scheme_listener.active()) impl_->scheme_listener.reset();
+    std::uint64_t generation = 0;
+    {
+        std::lock_guard lock(impl_->scheme_dispatch->mutex);
+        if (!impl_->scheme_dispatch->active) return;
+        generation = ++impl_->scheme_dispatch->generation;
     }
-    const auto detection = detect_terminal_theme_from_env();
-    impl_->terminal_theme = detection.theme;
-    if (!impl_->apply_theme_name(
-            terminal_theme_name(detection.theme),
-            /*show_error=*/false)) {
-        return;
-    }
-    if (detection.high_confidence && impl_->committer) {
-        // pi: `this.settingsManager.setTheme(detection.theme); await
-        // flush();` — best-effort, errors ignored like pi's unhandled
-        // setTheme.
-        (void)invoke_fallible_sink(impl_->committer, terminal_theme_name(detection.theme));
-    }
+    impl_->scheme_listener = impl_->root.on_terminal_color_scheme_change(
+            [state = impl_->scheme_dispatch, generation](cch::tui::TerminalColorScheme scheme) {
+                deliver_report(state,
+                        generation,
+                        scheme == cch::tui::TerminalColorScheme::Light ? TerminalTheme::Light : TerminalTheme::Dark);
+            });
+    // pi `rebindTui`: the re-registered TUI re-applies the current mode.
+    impl_->root.set_terminal_color_scheme_notifications(impl_->auto_sync_enabled);
+}
+
+void ThemeController::dispose() {
+    if (!impl_) return;
+    impl_->set_auto_sync(false);
+    impl_->scheme_listener.reset();
 }
 
 bool ThemeController::set_theme_name(std::string_view name, bool show_error) {
-    // pi `setThemeName`: disables auto-sync (absent in the subset) and
-    // applies.
+    if (name == "system") {
+        // pi `setThemeName` enables auto-sync for the system theme, whose
+        // generated colors are outside #991: the appearance-selected
+        // built-in theme stands in for it.
+        impl_->set_auto_sync(true);
+        impl_->apply_current_selection(show_error);
+        return true;
+    }
+    impl_->set_auto_sync(false);
     return impl_->apply_theme_name(name, show_error);
 }
 
@@ -428,10 +509,8 @@ ResolvedTheme init_boot_theme(
     // silently. Registered themes are absent at boot (registration follows
     // session creation), exactly like pi's main.ts initTheme.
     const auto detection = detect_terminal_theme_from_env();
-    const auto resolved = resolve_theme_setting(theme_setting, detection.theme);
-    const auto name = resolved
-        ? *resolved
-        : std::string{terminal_theme_name(detection.theme)};
+    const auto resolved = resolve_theme_setting(theme_setting, detection.value_or(TerminalTheme::Dark));
+    const auto name = resolved ? *resolved : std::string{terminal_theme_name(detection.value_or(TerminalTheme::Dark))};
     const auto custom_themes_dir = agent_config_directory.empty()
         ? std::filesystem::path{}
         : agent_config_directory / "themes";

@@ -328,6 +328,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     if (auth_flows_) auth_flows_->close();
     if (session_flows_) session_flows_->close();
     running_ = false;
+    if (theme_controller_) theme_controller_->dispose();
     // Retire the action generation so late deliveries from captured
     // hooks are rejected after Close (ADR 0040).
     retire_current_session();
@@ -395,7 +396,7 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
 
     // The manager stays owned by the state: the scoped-models selector
     // persists `enabledModels` through it (pi `setEnabledModels`) and the
-    // theme committer below references it.
+    // theme controller's settings provider below references it.
     if (auto manager = create_interactive_settings_manager(run.agent_config_directory()); !manager) {
         return std::unexpected(manager.error());
     } else {
@@ -421,12 +422,20 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
         }
     };
     theme_hooks.on_changed = [weak_controller] {
-        // pi `onChanged` → `updateEditorBorderColor`: the C++ editor
-        // border re-derives from the live palette at render, so the
-        // change notification requests a render (pi's
-        // `ui.requestRender`); the controller itself invalidates.
+        if (const auto self = weak_controller.lock()) self->post_invalidate();
+    };
+    theme_hooks.on_terminal_colors = [weak_controller](cch::tui::TerminalColors colors) {
         if (const auto self = weak_controller.lock()) {
-            self->post_invalidate();
+            self->post_from_view([colors = std::move(colors)](InteractiveEngine& state) mutable {
+                if (state.theme_controller_) state.theme_controller_->apply_terminal_colors(std::move(colors));
+            });
+        }
+    };
+    theme_hooks.on_terminal_color_scheme = [weak_controller](TerminalTheme scheme) {
+        if (const auto self = weak_controller.lock()) {
+            self->post_from_view([scheme](InteractiveEngine& state) {
+                if (state.theme_controller_) state.theme_controller_->apply_terminal_color_scheme(scheme);
+            });
         }
     };
     theme_controller_ = make_interactive_theme_controller(run.agent_config_directory(),
@@ -609,6 +618,7 @@ support::ExpectedVoid InteractiveEngine::fail_start(const support::Error& error)
         session_->close();
     }
     support::ExpectedVoid stopped;
+    if (theme_controller_) theme_controller_->dispose();
     if (tui_started_) stopped = tui_.stop();
     tui_started_ = false;
     if (!stopped) {

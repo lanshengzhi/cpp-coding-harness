@@ -1,25 +1,33 @@
-// The pi `InteractiveThemeController` subset (G5): env-only COLORFGBG
-// default detection, `resolveThemeSetting` with slash automatic-pair values
-// read as unset, `applyThemeName` fallback semantics with the verbatim
-// failure message, `applyFromSettings` (persist on high confidence),
-// in-memory `preview`, registered themes + `discover_themes` dedupe with pi's
+// The pi `InteractiveThemeController` subset (G5): the frozen v1.0.4
+// COLORFGBG basic-16 rule, `resolveThemeSetting` with automatic pairs,
+// `applyThemeName` fallback semantics with the verbatim failure message,
+// `applyFromSettings` with the terminal color query (timeout, late reply,
+// live mode-2031 reports, and the automatic/defined precedence), in-memory
+// `preview`, registered themes + `discover_themes` dedupe with pi's
 // collision diagnostics, and the boot theme init (`init_boot_theme`).
 
 #include "coding_agent/tui/ThemeController.hpp"
+#include "coding_agent/tui/theme_color_math.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ThemeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
+#include <cch/tui/TerminalColors.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <cch/support/Error.hpp>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <filesystem>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -40,38 +48,117 @@ public:
     std::size_t invalidations{0};
 };
 
+/// One report the TUI delivered to the host hook (the interactive engine
+/// posts it to the executor; the harness records it and `pump` applies it).
+struct ThemeReport {
+    std::optional<tui::TerminalColors> colors;
+    std::optional<coding_agent::tui::TerminalTheme> scheme;
+};
+
 struct ControllerHarness {
-    tui::VirtualTerminal terminal;
+    tui::VirtualTerminal terminal{{.columns = 40, .rows = 6}};
     tui::Tui root;
     std::unique_ptr<InvalidatingText> base;
     InvalidatingText* base_pointer{nullptr};
     std::vector<std::string> errors;
     std::size_t changed{0};
-    std::vector<std::string> committed;
+    bool started{false};
+    mutable std::mutex reports_mutex;
+    std::vector<ThemeReport> reports;
 
     ControllerHarness()
         : root(terminal) {
         base = std::make_unique<InvalidatingText>();
         base_pointer = base.get();
         REQUIRE(root.add_child(std::move(base)));
+        REQUIRE(root.start());
+        started = true;
+    }
+
+    ControllerHarness(const ControllerHarness&) = delete;
+    ControllerHarness& operator=(const ControllerHarness&) = delete;
+
+    ~ControllerHarness() {
+        if (started) (void)root.stop();
+    }
+
+    /// Everything the terminal received so far (the color query writes its
+    /// OSC 10/11/4 + DA1 burst here, and mode 2031 toggles are visible).
+    [[nodiscard]] std::string written() const {
+        std::string output;
+        for (const auto& chunk : terminal.output())
+            output += chunk;
+        return output;
+    }
+
+    void record_colors(tui::TerminalColors colors) {
+        std::lock_guard lock(reports_mutex);
+        reports.push_back(ThemeReport{.colors = std::move(colors), .scheme = std::nullopt});
+    }
+
+    void record_scheme(coding_agent::tui::TerminalTheme scheme) {
+        std::lock_guard lock(reports_mutex);
+        reports.push_back(ThemeReport{.colors = std::nullopt, .scheme = scheme});
+    }
+
+    [[nodiscard]] std::size_t report_count() const {
+        std::lock_guard lock(reports_mutex);
+        return reports.size();
+    }
+
+    /// Apply every report the TUI thread delivered, in order (the host's
+    /// executor hop), and return how many were applied.
+    [[nodiscard]] std::size_t pump(coding_agent::tui::ThemeController& controller) {
+        std::vector<ThemeReport> pending;
+        {
+            std::lock_guard lock(reports_mutex);
+            pending.swap(reports);
+        }
+        for (auto& report : pending) {
+            if (report.colors) {
+                controller.apply_terminal_colors(std::move(*report.colors));
+            } else if (report.scheme) {
+                controller.apply_terminal_color_scheme(*report.scheme);
+            }
+        }
+        return pending.size();
     }
 };
 
-[[nodiscard]] coding_agent::tui::ThemeController make_controller(
-    ControllerHarness& harness,
-    std::filesystem::path custom_themes_dir = {},
-    std::vector<coding_agent::tui::RegisteredTheme> registered = {},
-    std::optional<std::string> theme_setting = std::nullopt,
-    coding_agent::tui::ThemeSettingCommitter committer = {}) {
+/// The number of OSC 10/11 + DA1 query bursts the terminal received.
+[[nodiscard]] std::size_t count_query_bursts(const std::string& output) {
+    static constexpr std::string_view kQuery{"\x1b]10;?\x07\x1b]11;?\x07"};
+    std::size_t count = 0;
+    for (auto at = output.find(kQuery); at != std::string::npos; at = output.find(kQuery, at + kQuery.size())) {
+        ++count;
+    }
+    return count;
+}
+
+/// Wait for the 100 ms query timeout to deliver its report.
+[[nodiscard]] bool wait_for_reports(const ControllerHarness& harness, std::size_t count) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (harness.report_count() < count) {
+        if (std::chrono::steady_clock::now() >= deadline) return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+    }
+    return true;
+}
+
+[[nodiscard]] coding_agent::tui::ThemeController make_controller(ControllerHarness& harness,
+        std::filesystem::path custom_themes_dir = {},
+        std::vector<coding_agent::tui::RegisteredTheme> registered = {},
+        std::optional<std::string> theme_setting = std::nullopt) {
     return coding_agent::tui::ThemeController(
-        std::move(custom_themes_dir),
-        std::move(registered),
-        [theme_setting = std::move(theme_setting)]() mutable { return theme_setting; },
-        std::move(committer),
-        tui::TerminalColorCapability::TrueColor,
-        harness.root,
-        [&harness](std::string message) { harness.errors.push_back(std::move(message)); },
-        [&harness] { ++harness.changed; });
+            std::move(custom_themes_dir),
+            std::move(registered),
+            [theme_setting = std::move(theme_setting)]() mutable { return theme_setting; },
+            tui::TerminalColorCapability::TrueColor,
+            harness.root,
+            [&harness](std::string message) { harness.errors.push_back(std::move(message)); },
+            [&harness] { ++harness.changed; },
+            [&harness](tui::TerminalColors colors) { harness.record_colors(std::move(colors)); },
+            [&harness](coding_agent::tui::TerminalTheme scheme) { harness.record_scheme(scheme); });
 }
 
 [[nodiscard]] coding_agent::tui::RgbThemeColor accent_of(
@@ -84,44 +171,231 @@ struct ControllerHarness {
 
 } // namespace
 
-TEST_CASE("COLORFGBG detection classifies the background index by luminance",
-        "[coding_agent][theme][controller][issue415][spec]") {
+TEST_CASE("COLORFGBG detection classifies the basic-16 background index",
+        "[coding_agent][theme][controller][issue991][spec]") {
+    using coding_agent::tui::terminal_theme_from_colorfgbg;
     using coding_agent::tui::TerminalTheme;
-    const auto light = coding_agent::tui::terminal_theme_from_colorfgbg("0;15");
-    CHECK(light.theme == TerminalTheme::Light);
-    CHECK(light.high_confidence);
+    CHECK(terminal_theme_from_colorfgbg("0;15") == TerminalTheme::Light);
+    CHECK(terminal_theme_from_colorfgbg("15;0") == TerminalTheme::Dark);
 
-    const auto dark = coding_agent::tui::terminal_theme_from_colorfgbg("15;0");
-    CHECK(dark.theme == TerminalTheme::Dark);
-    CHECK(dark.high_confidence);
+    // The last COLORFGBG field is the background (pi `split(";").at(-1)`).
+    CHECK(terminal_theme_from_colorfgbg("0;7;15") == TerminalTheme::Light);
 
-    // The last COLORFGBG field is the background (pi test pin).
-    const auto last_field = coding_agent::tui::terminal_theme_from_colorfgbg("0;7;15");
-    CHECK(last_field.theme == TerminalTheme::Light);
-    CHECK(last_field.high_confidence);
-
-    const auto fallback = coding_agent::tui::terminal_theme_from_colorfgbg("");
-    CHECK(fallback.theme == TerminalTheme::Dark);
-    CHECK_FALSE(fallback.high_confidence);
-    CHECK(coding_agent::tui::terminal_theme_from_colorfgbg("abc").high_confidence == false);
+    // pi `detectColorFgBgTheme`: 0..6 and 8 are dark, 7 and 9..15 light.
+    CHECK(terminal_theme_from_colorfgbg("0;8") == TerminalTheme::Dark);
+    CHECK(terminal_theme_from_colorfgbg("0;7") == TerminalTheme::Light);
+    CHECK(terminal_theme_from_colorfgbg("0;9") == TerminalTheme::Light);
+    // Anything but a one- or two-digit index in 0..15 is undefined, so the
+    // reported scheme and the dark fallback decide instead.
+    for (const auto* value : {"", "abc", "0;16", "0;-1", "0;007"}) {
+        CHECK_FALSE(terminal_theme_from_colorfgbg(value).has_value());
+    }
+    // The last field is trimmed like pi's `.at(-1)?.trim()`.
+    CHECK(terminal_theme_from_colorfgbg("0; 7") == TerminalTheme::Light);
 }
 
-TEST_CASE("resolve_theme_setting reads slash automatic-pair values as unset",
-        "[coding_agent][theme][controller][issue415][spec]") {
+TEST_CASE("resolve_theme_setting reads automatic pairs and rejects malformed slash values",
+        "[coding_agent][theme][controller][issue991][spec]") {
     using coding_agent::tui::TerminalTheme;
     using coding_agent::tui::resolve_theme_setting;
 
     CHECK(resolve_theme_setting(std::optional<std::string>{"dark"}, TerminalTheme::Light) ==
         std::optional<std::string>{"dark"});
-    // The automatic `light/dark` pair is absent: slash values read as unset.
-    CHECK_FALSE(resolve_theme_setting(
-        std::optional<std::string>{"light/dark"}, TerminalTheme::Dark).has_value());
+    // pi `resolveThemeSetting`: a `light/dark` pair selects by terminal appearance.
+    CHECK(resolve_theme_setting(std::optional<std::string>{"light/dark"}, TerminalTheme::Dark) ==
+            std::optional<std::string>{"dark"});
+    CHECK(resolve_theme_setting(std::optional<std::string>{"light/dark"}, TerminalTheme::Light) ==
+            std::optional<std::string>{"light"});
+    // pi `parseAutoThemeSetting` trims the pair halves.
+    CHECK(resolve_theme_setting(std::optional<std::string>{" light / dark "}, TerminalTheme::Dark) ==
+            std::optional<std::string>{"dark"});
+    // More than one slash, or an empty half, is a malformed pair and reads as unset.
     CHECK_FALSE(resolve_theme_setting(
         std::optional<std::string>{"light/dark/extra"}, TerminalTheme::Dark).has_value());
     CHECK_FALSE(resolve_theme_setting(
         std::optional<std::string>{"/dark"}, TerminalTheme::Dark).has_value());
+    CHECK_FALSE(resolve_theme_setting(std::optional<std::string>{"light/"}, TerminalTheme::Dark).has_value());
     CHECK_FALSE(resolve_theme_setting(
         std::optional<std::string>{}, TerminalTheme::Dark).has_value());
+}
+
+TEST_CASE("apply_from_settings resolves the setting, queries colors, and syncs only automatic values",
+        "[coding_agent][theme][controller][issue991][spec]") {
+    ControllerHarness harness;
+
+    {
+        // A defined choice applies and stays: pi `applyFromSettings` does not
+        // write the setting back, and mode 2031 stays off.
+        tests::EnvVarGuard env("COLORFGBG", std::nullopt);
+        auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"dark"});
+        const auto before = harness.written().size();
+        controller.apply_from_settings();
+        CHECK(controller.active_theme_name() == "dark");
+        CHECK(harness.errors.empty());
+        CHECK(harness.written().find("\x1b[?2031h") == std::string::npos);
+        // The query burst is written even though the choice is explicit.
+        CHECK(harness.written().substr(before).starts_with("\x1b]10;?\x07\x1b]11;?\x07"));
+    }
+    {
+        // Unset setting: the COLORFGBG default applies and auto-sync turns on.
+        tests::EnvVarGuard env("COLORFGBG", "0;15");
+        auto controller = make_controller(harness);
+        controller.apply_from_settings();
+        CHECK(controller.active_theme_name() == "light");
+        CHECK(harness.written().find("\x1b[?2031h") != std::string::npos);
+    }
+    {
+        // No COLORFGBG: the dark fallback applies, still with auto-sync on.
+        tests::EnvVarGuard env("COLORFGBG", std::nullopt);
+        auto controller = make_controller(harness);
+        controller.apply_from_settings();
+        CHECK(controller.active_theme_name() == "dark");
+        CHECK(harness.written().find("\x1b[?2031h") != std::string::npos);
+    }
+    {
+        // A pair resolves through the COLORFGBG appearance and stays automatic.
+        tests::EnvVarGuard env("COLORFGBG", "15;0");
+        auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"light/dark"});
+        controller.apply_from_settings();
+        CHECK(controller.active_theme_name() == "dark");
+        CHECK(harness.written().find("\x1b[?2031h") != std::string::npos);
+    }
+}
+
+TEST_CASE("terminal color replies drive the pair and outrank the reported scheme",
+        "[coding_agent][theme][controller][issue991][spec]") {
+    ControllerHarness harness;
+    tests::EnvVarGuard env("COLORFGBG", "0;15");
+    auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"light/dark"});
+
+    controller.apply_from_settings();
+    CHECK(controller.active_theme_name() == "light");
+    REQUIRE(count_query_bursts(harness.written()) == 1);
+
+    // A live mode-2031 report decides while no background is reported: it
+    // outranks COLORFGBG (pi `detectTerminalTheme` order).
+    REQUIRE(harness.terminal.inject_input("\x1b[?997;1n"));
+    REQUIRE(harness.pump(controller) == 1);
+    CHECK(controller.terminal_theme() == coding_agent::tui::TerminalTheme::Dark);
+    CHECK(controller.active_theme_name() == "dark");
+    // pi `applyTerminalColorSchemeChange` queries the colors again.
+    CHECK(count_query_bursts(harness.written()) == 2);
+
+    // The startup query's replies arrive together: the reported light
+    // background now outranks the live scheme and selects the light half.
+    REQUIRE(harness.terminal.inject_input("\x1b]11;#f0f0f0\x07\x1b[?1;2c"));
+    REQUIRE(harness.pump(controller) >= 1);
+    CHECK(controller.terminal_theme() == coding_agent::tui::TerminalTheme::Light);
+    CHECK(controller.active_theme_name() == "light");
+
+    // Another live report cannot override the reported background.
+    REQUIRE(harness.terminal.inject_input("\x1b[?997;1n"));
+    REQUIRE(harness.pump(controller) == 1);
+    CHECK(controller.terminal_theme() == coding_agent::tui::TerminalTheme::Light);
+    CHECK(controller.active_theme_name() == "light");
+}
+
+TEST_CASE("a late color reply after the query timeout still applies",
+        "[coding_agent][theme][controller][issue991][spec]") {
+    ControllerHarness harness;
+    tests::EnvVarGuard env("COLORFGBG", std::nullopt);
+    auto controller = make_controller(harness);
+
+    controller.apply_from_settings();
+    CHECK(controller.active_theme_name() == "dark");
+    // The 100 ms timeout reports nothing: the palette and the appearance stay.
+    REQUIRE(wait_for_reports(harness, 1));
+    REQUIRE(harness.pump(controller) == 1);
+    CHECK(controller.terminal_theme() == coding_agent::tui::TerminalTheme::Dark);
+    CHECK(controller.active_theme_name() == "dark");
+
+    // pi `onLateReply`: a reply after the timeout is applied again.
+    REQUIRE(harness.terminal.inject_input("\x1b]11;#f0f0f0\x07"));
+    REQUIRE(harness.report_count() == 1);
+    REQUIRE(harness.pump(controller) == 1);
+    CHECK(controller.terminal_theme() == coding_agent::tui::TerminalTheme::Light);
+    CHECK(controller.active_theme_name() == "light");
+}
+
+TEST_CASE("an explicit theme ignores live scheme reports", "[coding_agent][theme][controller][issue991][spec]") {
+    ControllerHarness harness;
+    tests::EnvVarGuard env("COLORFGBG", std::nullopt);
+    auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"dark"});
+
+    controller.apply_from_settings();
+    const auto queries = count_query_bursts(harness.written());
+    const auto changed = harness.changed;
+
+    // The listener is registered either way; the host gate drops the report
+    // before it can change anything (pi `applyTerminalColorSchemeChange`).
+    REQUIRE(harness.terminal.inject_input("\x1b[?997;2n"));
+    REQUIRE(harness.report_count() == 1);
+    CHECK(harness.pump(controller) == 1);
+    CHECK(controller.terminal_theme() == coding_agent::tui::TerminalTheme::Dark);
+    CHECK(controller.active_theme_name() == "dark");
+    CHECK(harness.changed == changed);
+    // No re-query and no mode-2031 toggle for a defined choice.
+    CHECK(count_query_bursts(harness.written()) == queries);
+    CHECK(harness.written().find("\x1b[?2031h") == std::string::npos);
+}
+
+TEST_CASE("the scheme listener keeps exactly one registration across rebind and dispose",
+        "[coding_agent][theme][controller][issue991][spec]") {
+    ControllerHarness harness;
+    tests::EnvVarGuard env("COLORFGBG", std::nullopt);
+    auto controller = make_controller(harness);
+    controller.apply_from_settings();
+
+    // One registration: each terminal report reaches the host hook once.
+    REQUIRE(harness.terminal.inject_input("\x1b[?997;2n"));
+    CHECK(harness.report_count() == 1);
+    (void)harness.pump(controller);
+
+    // pi `rebindTui` replaces the registration instead of adding one.
+    controller.rebind_terminal_color_scheme_listener();
+    REQUIRE(harness.terminal.inject_input("\x1b[?997;1n"));
+    CHECK(harness.report_count() == 1);
+    (void)harness.pump(controller);
+    controller.rebind_terminal_color_scheme_listener();
+    controller.rebind_terminal_color_scheme_listener();
+    REQUIRE(harness.terminal.inject_input("\x1b[?997;2n"));
+    CHECK(harness.report_count() == 1);
+    (void)harness.pump(controller);
+
+    // pi `dispose`: the listener is detached and mode 2031 is disabled.
+    controller.dispose();
+    CHECK(harness.written().find("\x1b[?2031l") != std::string::npos);
+    REQUIRE(harness.terminal.inject_input("\x1b[?997;1n"));
+    CHECK(harness.report_count() == 0);
+    CHECK(controller.active_theme_name() == "light");
+}
+
+TEST_CASE("shared theme color math classifies terminal appearance like the frozen system theme",
+        "[coding_agent][theme][color][issue991][spec]") {
+    using coding_agent::tui::theme_color_math::relative_luminance;
+    using coding_agent::tui::theme_color_math::terminal_appearance;
+    using coding_agent::tui::theme_color_math::TerminalAppearance;
+    using coding_agent::tui::theme_color_math::wcag_contrast;
+    const tui::RgbColor black{.red = 0, .green = 0, .blue = 0};
+    const tui::RgbColor white{.red = 255, .green = 255, .blue = 255};
+    const tui::RgbColor light_background{.red = 0xf0, .green = 0xf0, .blue = 0xf0};
+    const tui::RgbColor dark_background{.red = 0x10, .green = 0x10, .blue = 0x10};
+
+    // WCAG 2 relative luminance and the 0.04045 sRGB transfer threshold.
+    CHECK(relative_luminance(black) == 0.0);
+    CHECK(relative_luminance(white) == Catch::Approx(1.0));
+    CHECK(relative_luminance(light_background) > relative_luminance(dark_background));
+    CHECK(wcag_contrast(black, white) == Catch::Approx(21.0));
+    CHECK(wcag_contrast(white, light_background) == Catch::Approx(1.13).epsilon(0.01));
+
+    // A readable foreground sets the appearance; otherwise white-versus-black
+    // contrast on the background decides (pi `terminalAppearance`).
+    CHECK(terminal_appearance(light_background, black) == TerminalAppearance::Light);
+    CHECK(terminal_appearance(dark_background, white) == TerminalAppearance::Dark);
+    CHECK(terminal_appearance(light_background, std::nullopt) == TerminalAppearance::Light);
+    CHECK(terminal_appearance(dark_background, std::nullopt) == TerminalAppearance::Dark);
+    // A foreground below the 4.5 text contrast minimum does not decide.
+    CHECK(terminal_appearance(light_background, light_background) == TerminalAppearance::Light);
 }
 
 TEST_CASE("init_boot_theme resolves the setting or the env default with silent dark fallback",
@@ -224,73 +498,6 @@ TEST_CASE("apply_theme_name failure falls back to dark with the verbatim message
     harness.errors.clear();
     CHECK_FALSE(controller.set_theme_name("missing", false));
     CHECK(harness.errors.empty());
-}
-
-TEST_CASE("apply_from_settings applies a defined setting and persists a confident default",
-        "[coding_agent][theme][controller][issue415][spec]") {
-    ControllerHarness harness;
-
-    {
-        tests::EnvVarGuard env("COLORFGBG", std::nullopt);
-        std::vector<std::string> committed;
-        auto controller = make_controller(
-            harness, {}, {}, std::optional<std::string>{"dark"},
-            [&committed](std::string_view name) {
-                committed.emplace_back(name);
-                return support::ExpectedVoid{};
-            });
-        controller.apply_from_settings();
-        CHECK(controller.active_theme_name() == "dark");
-        CHECK(committed.empty());
-    }
-    {
-        // Unset setting + high-confidence COLORFGBG detection: the detected
-        // default applies and persists to the global scope (pi
-        // `settingsManager.setTheme(detection.theme)` + flush).
-        tests::EnvVarGuard env("COLORFGBG", "0;15");
-        std::vector<std::string> committed;
-        auto controller = make_controller(
-            harness, {}, {}, std::nullopt,
-            [&committed](std::string_view name) {
-                committed.emplace_back(name);
-                return support::ExpectedVoid{};
-            });
-        controller.apply_from_settings();
-        CHECK(controller.active_theme_name() == "light");
-        REQUIRE(committed.size() == 1);
-        CHECK(committed[0] == "light");
-    }
-    {
-        // No COLORFGBG: the dark fallback applies without persisting.
-        tests::EnvVarGuard env("COLORFGBG", std::nullopt);
-        std::size_t commits = 0;
-        auto controller = make_controller(
-            harness, {}, {}, std::nullopt,
-            [&commits](std::string_view) {
-                ++commits;
-                return support::ExpectedVoid{};
-            });
-        controller.apply_from_settings();
-        CHECK(controller.active_theme_name() == "dark");
-        CHECK(commits == 0);
-    }
-    {
-        // Slash automatic-pair settings read as unset and boot identically:
-        // the env detection applies and persists on high confidence (pi
-        // `applyFromSettings` unset branch).
-        tests::EnvVarGuard env("COLORFGBG", "15;0");
-        std::vector<std::string> committed;
-        auto controller = make_controller(
-            harness, {}, {}, std::optional<std::string>{"light/dark"},
-            [&committed](std::string_view name) {
-                committed.emplace_back(name);
-                return support::ExpectedVoid{};
-            });
-        controller.apply_from_settings();
-        CHECK(controller.active_theme_name() == "dark");
-        REQUIRE(committed.size() == 1);
-        CHECK(committed[0] == "dark");
-    }
 }
 
 TEST_CASE("preview applies in memory without committing or changing the active name",
