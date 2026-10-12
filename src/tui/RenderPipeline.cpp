@@ -13,6 +13,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -26,14 +27,16 @@ namespace cch::tui::detail {
 
 RenderPipeline::RenderPipeline(Terminal& terminal) : terminal_(terminal) {}
 
-void RenderPipeline::start(TerminalDimensions dimensions) noexcept {
+void RenderPipeline::start(TerminalDimensions) noexcept {
     first_render_ = true;
     hardware_cursor_row_ = 0;
     max_lines_rendered_ = 0;
     previous_viewport_top_ = 0;
     previous_lines_.clear();
     previous_raw_lines_.clear();
-    previous_dimensions_ = dimensions;
+    previous_dimensions_.reset();
+    previous_kitty_image_ids_.clear();
+    image_placements_.clear();
     admitted_ = {};
 }
 
@@ -51,7 +54,10 @@ void RenderPipeline::note_prepared_line() noexcept { ++frame_prepare_call_count_
 std::size_t RenderPipeline::frame_prepare_call_count() const noexcept { return frame_prepare_call_count_; }
 
 support::ExpectedVoid RenderPipeline::stop(std::optional<CursorPosition>) {
-    const auto image_result = remove_active_images();
+    const auto delete_seq = delete_kitty_images(previous_kitty_image_ids_);
+    if (!delete_seq.empty()) {
+        (void)terminal_.write(delete_seq);
+    }
     support::ExpectedVoid exit_result;
     if (!previous_lines_.empty()) {
         std::string buffer;
@@ -67,7 +73,8 @@ support::ExpectedVoid RenderPipeline::stop(std::optional<CursorPosition>) {
         exit_result = terminal_.write(buffer);
     }
 
-    active_images_.clear();
+    previous_kitty_image_ids_.clear();
+    image_placements_.clear();
     first_render_ = true;
     previous_lines_.clear();
     previous_raw_lines_.clear();
@@ -76,17 +83,19 @@ support::ExpectedVoid RenderPipeline::stop(std::optional<CursorPosition>) {
     hardware_cursor_row_ = 0;
     max_lines_rendered_ = 0;
     admitted_ = {};
-    if (!image_result) return std::unexpected(image_result.error());
     return exit_result;
 }
 
 support::ExpectedVoid RenderPipeline::clear_screen() {
-    if (auto removed = remove_active_images(); !removed) {
-        return std::unexpected(removed.error());
+    const auto delete_seq = delete_kitty_images(previous_kitty_image_ids_);
+    if (!delete_seq.empty()) {
+        (void)terminal_.write(delete_seq);
     }
     if (auto cleared = terminal_.clear_screen(); !cleared) {
         return std::unexpected(cleared.error());
     }
+    previous_kitty_image_ids_.clear();
+    image_placements_.clear();
     previous_lines_.clear();
     previous_raw_lines_.clear();
     previous_viewport_top_ = 0;
@@ -133,8 +142,16 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
         bool has_overlay_entries,
         bool clear_on_shrink,
         std::optional<CursorPosition> cursor_location) {
+    const auto initial_image_placements = image_placements_;
+    compose_images(materialized.lines, materialized.images, capabilities.inline_images);
+    if (capabilities.inline_images == InlineImageProtocol::None) {
+        for (const auto& image : materialized.images) {
+            if (image.region.row < materialized.lines.size()) {
+                materialized.lines[image.region.row] = image.fallback_text;
+            }
+        }
+    }
     auto& new_lines = materialized.lines;
-    auto desired_images = std::move(materialized.images);
 
     const auto initial_first_render = first_render_;
     const auto initial_lines = previous_lines_;
@@ -143,7 +160,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     const auto initial_max_lines = max_lines_rendered_;
     const auto initial_viewport_top = previous_viewport_top_;
     const auto initial_cursor_row = hardware_cursor_row_;
-    const auto initial_active_images = active_images_;
+    const auto initial_kitty_ids = previous_kitty_image_ids_;
 
     const auto rollback = [&] {
         first_render_ = initial_first_render;
@@ -153,7 +170,8 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
         max_lines_rendered_ = initial_max_lines;
         previous_viewport_top_ = initial_viewport_top;
         hardware_cursor_row_ = initial_cursor_row;
-        active_images_ = initial_active_images;
+        previous_kitty_image_ids_ = initial_kitty_ids;
+        image_placements_ = initial_image_placements;
     };
 
     const bool supports_sync = capabilities.synchronized_output;
@@ -181,7 +199,18 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     };
 
     const auto pad_and_reset_rows = [&](std::vector<std::string>& lines) {
-        for (auto& line : lines) {
+        std::size_t skip_reserved = 0;
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+            auto& line = lines[i];
+            if (is_image_line(line)) {
+                skip_reserved = get_kitty_image_reserved_rows(lines, i, lines.empty() ? 0 : lines.size() - 1);
+                if (skip_reserved > 0) --skip_reserved;
+                continue;
+            }
+            if (skip_reserved > 0) {
+                --skip_reserved;
+                continue;
+            }
             const auto visible_columns = detail::measure_visible_width(line).width;
             if (visible_columns < dimensions.columns) {
                 line.append(dimensions.columns - visible_columns, ' ');
@@ -196,7 +225,21 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     } else {
         const bool rows_reusable = !first_render && !width_changed;
         next_raw_lines.resize(new_lines.size());
+        std::size_t skip_reserved = 0;
         for (std::size_t index = 0; index < new_lines.size(); ++index) {
+            const bool is_image = is_image_line(new_lines[index]);
+            if (is_image) {
+                skip_reserved =
+                        get_kitty_image_reserved_rows(new_lines, index, new_lines.empty() ? 0 : new_lines.size() - 1);
+                if (skip_reserved > 0) --skip_reserved;
+                next_raw_lines[index] = new_lines[index];
+                continue;
+            }
+            if (skip_reserved > 0) {
+                --skip_reserved;
+                next_raw_lines[index] = new_lines[index];
+                continue;
+            }
             const bool reusable = rows_reusable && index < previous_lines_.size() &&
                                   index < previous_raw_lines_.size() && new_lines[index] == previous_raw_lines_[index];
             next_raw_lines[index] = std::move(new_lines[index]);
@@ -273,17 +316,30 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     };
 
     auto full_render = [&](bool clear) -> support::ExpectedVoid {
+        // Frozen `fullRender` opens the synchronized-output block before it
+        // clears: the delete/clear bytes are part of the same atomic update.
         const bool resumable = clear && admitted_.cleared && admitted_prefix(dimensions) != 0;
-        if (clear && !resumable) {
-            cleared_frame = true;
-            if (auto removed = remove_active_images(); !removed) {
+        if (supports_sync) {
+            if (auto begin_result = terminal_.begin_synchronized_update(); !begin_result) {
                 rollback();
-                return std::unexpected(removed.error());
+                return std::unexpected(begin_result.error());
+            }
+        }
+        if (clear && !resumable) {
+            const auto delete_seq = delete_kitty_images(previous_kitty_image_ids_);
+            if (!delete_seq.empty()) {
+                if (auto del_res = terminal_.write(delete_seq); !del_res) {
+                    if (supports_sync) (void)terminal_.end_synchronized_update();
+                    rollback();
+                    return std::unexpected(del_res.error());
+                }
             }
             if (auto cleared = terminal_.clear_screen(); !cleared) {
+                if (supports_sync) (void)terminal_.end_synchronized_update();
                 rollback();
                 return std::unexpected(cleared.error());
             }
+            cleared_frame = true;
             admitted_ = {};
             frame_write_start = 0;
             admitted_watermark = 0;
@@ -298,16 +354,34 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
             prev_viewport_top = 0;
             hardware_cursor_row = hardware_cursor_row_;
         }
-        if (supports_sync) {
-            if (auto begin_result = terminal_.begin_synchronized_update(); !begin_result) {
-                rollback();
-                return std::unexpected(begin_result.error());
-            }
-        }
         for (std::size_t i = frame_write_start; i < new_lines.size(); ++i) {
             std::string line_to_write;
             if (i > 0) line_to_write += "\r\n";
-            line_to_write += new_lines[i];
+            const auto& line = new_lines[i];
+            const bool is_image = is_image_line(line);
+            const auto image_reserved_rows =
+                    is_image ? get_kitty_image_reserved_rows(new_lines, i, new_lines.empty() ? 0 : new_lines.size() - 1)
+                             : 1;
+            if (image_reserved_rows > 1 && image_reserved_rows <= height) {
+                for (std::size_t row = 1; row < image_reserved_rows; ++row) {
+                    line_to_write += "\r\n";
+                }
+                line_to_write += std::format("\x1b[{}A", image_reserved_rows - 1);
+                line_to_write += line;
+                line_to_write += std::format("\x1b[{}B", image_reserved_rows - 1);
+                if (auto result = terminal_.write(line_to_write); !result) {
+                    // The reserved-row group is one write: a refusal leaves the
+                    // whole group unadmitted, so the retry rewrites it.
+                    note_backpressure(result.error(), i);
+                    if (supports_sync) (void)terminal_.end_synchronized_update();
+                    return std::unexpected(result.error());
+                }
+                admitted_watermark = i + image_reserved_rows;
+                hardware_cursor_row = i + image_reserved_rows - 1;
+                i += image_reserved_rows - 1;
+                continue;
+            }
+            line_to_write += line;
             if (auto result = terminal_.write(line_to_write); !result) {
                 note_backpressure(result.error(), i);
                 if (supports_sync) (void)terminal_.end_synchronized_update();
@@ -332,6 +406,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
         previous_viewport_top_ = buffer_length > height ? buffer_length - height : 0;
 
         position_hardware_cursor(cursor_location, new_lines.size());
+        previous_kitty_image_ids_ = collect_kitty_image_ids(new_lines);
         previous_lines_ = std::move(new_lines);
         previous_raw_lines_ = std::move(next_raw_lines);
         previous_dimensions_ = dimensions;
@@ -344,40 +419,24 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
         return {};
     };
 
-    const auto update_images = [&]() -> support::ExpectedVoid {
-        if (auto stale_result = remove_stale_images(desired_images); !stale_result) {
-            active_images_ = initial_active_images;
-            return stale_result;
-        }
-        if (auto place_result = place_images(desired_images); !place_result) {
-            active_images_ = initial_active_images;
-            return place_result;
-        }
-        return {};
-    };
-
     // 1. First render
     if ((first_render || previous_lines_.empty()) && !width_changed && !height_changed) {
-        if (auto result = full_render(false); !result) return finish(result);
-        return finish(update_images());
+        return finish(full_render(false));
     }
 
     // 2. Width changed
     if (width_changed) {
-        if (auto result = full_render(true); !result) return finish(result);
-        return finish(update_images());
+        return finish(full_render(true));
     }
 
     // 3. Height changed
     if (height_changed) {
-        if (auto result = full_render(true); !result) return finish(result);
-        return finish(update_images());
+        return finish(full_render(true));
     }
 
     // 4. clearOnShrink
     if (clear_on_shrink && new_lines.size() < max_lines_rendered_ && !has_overlay_entries) {
-        if (auto result = full_render(true); !result) return finish(result);
-        return finish(update_images());
+        return finish(full_render(true));
     }
 
     // 5. Compute diff
@@ -392,6 +451,14 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
             last_changed = static_cast<std::ptrdiff_t>(i);
         }
     }
+    for (const auto& img : materialized.images) {
+        auto it = initial_image_placements.find(img.resource_id);
+        if (it != initial_image_placements.end() && it->second.revision != img.revision) {
+            const auto row = static_cast<std::ptrdiff_t>(img.region.row);
+            if (first_changed == -1 || row < first_changed) first_changed = row;
+            if (row > last_changed) last_changed = row;
+        }
+    }
     const bool appended_lines = new_lines.size() > previous_lines_.size();
     if (appended_lines) {
         if (first_changed == -1) first_changed = static_cast<std::ptrdiff_t>(previous_lines_.size());
@@ -399,6 +466,13 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     }
     const bool append_start =
             appended_lines && first_changed == static_cast<std::ptrdiff_t>(previous_lines_.size()) && first_changed > 0;
+
+    if (first_changed != -1) {
+        const auto [exp_first, exp_last] =
+                expand_changed_range_for_kitty_images(first_changed, last_changed, previous_lines_, new_lines);
+        first_changed = exp_first;
+        last_changed = exp_last;
+    }
 
     // 6. No changes - only reposition hardware cursor (no synchronized output)
     if (first_changed == -1) {
@@ -410,7 +484,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
                 .dimensions = dimensions,
                 .cleared = false,
         };
-        return finish(update_images());
+        return finish(support::ExpectedVoid{});
     }
 
     // 7. All changes are in deleted lines
@@ -418,16 +492,15 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
         if (previous_lines_.size() > new_lines.size()) {
             const std::size_t target_row = new_lines.empty() ? 0 : new_lines.size() - 1;
             if (target_row < prev_viewport_top) {
-                if (auto result = full_render(true); !result) return finish(result);
-                return finish(update_images());
+                return finish(full_render(true));
             }
             const auto line_diff = compute_line_diff(target_row);
             const auto extra_lines = previous_lines_.size() - new_lines.size();
             if (extra_lines > height) {
-                if (auto result = full_render(true); !result) return finish(result);
-                return finish(update_images());
+                return finish(full_render(true));
             }
             std::string buffer;
+            buffer += delete_changed_kitty_images(first_changed, last_changed, previous_lines_);
             if (line_diff > 0) {
                 buffer += std::format("\x1b[{}B", line_diff);
             } else if (line_diff < 0) {
@@ -466,6 +539,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
             hardware_cursor_row_ = target_row;
         }
         position_hardware_cursor(cursor_location, new_lines.size());
+        previous_kitty_image_ids_ = collect_kitty_image_ids(new_lines);
         previous_lines_ = std::move(new_lines);
         previous_raw_lines_ = std::move(next_raw_lines);
         previous_dimensions_ = dimensions;
@@ -475,13 +549,12 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
                 .dimensions = dimensions,
                 .cleared = false,
         };
-        return finish(update_images());
+        return finish(support::ExpectedVoid{});
     }
 
     // 8. firstChanged < prevViewportTop
     if (first_changed < static_cast<std::ptrdiff_t>(prev_viewport_top)) {
-        if (auto result = full_render(true); !result) return finish(result);
-        return finish(update_images());
+        return finish(full_render(true));
     }
 
     // 9. Differential write
@@ -497,6 +570,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
             append_start ? static_cast<std::size_t>(first_changed - 1) : static_cast<std::size_t>(first_changed);
 
     std::string buffer;
+    buffer += delete_changed_kitty_images(first_changed, last_changed, previous_lines_);
 
     if (move_target_row > prev_viewport_bottom) {
         const std::size_t current_screen_row = std::min(height - 1,
@@ -526,8 +600,29 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     const std::size_t render_end = std::min(static_cast<std::size_t>(last_changed), new_lines.size() - 1);
     for (std::size_t i = static_cast<std::size_t>(first_changed); i <= render_end; ++i) {
         if (i > static_cast<std::size_t>(first_changed)) buffer += "\r\n";
+        const auto& line = new_lines[i];
+        const bool is_image = is_image_line(line);
+        const auto image_reserved_rows = is_image ? get_kitty_image_reserved_rows(new_lines, i, render_end) : 1;
+        if (image_reserved_rows > 1) {
+            const auto image_start_screen_row =
+                    static_cast<std::ptrdiff_t>(i) - static_cast<std::ptrdiff_t>(viewport_top);
+            if (image_start_screen_row < 0 ||
+                    static_cast<std::size_t>(image_start_screen_row) + image_reserved_rows > height) {
+                if (supports_sync) (void)terminal_.end_synchronized_update();
+                return full_render(true);
+            }
+            buffer += "\x1b[2K";
+            for (std::size_t row = 1; row < image_reserved_rows; ++row) {
+                buffer += "\r\n\x1b[2K";
+            }
+            buffer += std::format("\x1b[{}A", image_reserved_rows - 1);
+            buffer += line;
+            buffer += std::format("\x1b[{}B", image_reserved_rows - 1);
+            i += image_reserved_rows - 1;
+            continue;
+        }
         buffer += "\x1b[2K";
-        buffer += new_lines[i];
+        buffer += line;
     }
 
     std::size_t final_cursor_row = render_end;
@@ -563,6 +658,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
             std::max(prev_viewport_top, final_cursor_row >= height ? final_cursor_row - height + 1 : std::size_t{0});
 
     position_hardware_cursor(cursor_location, new_lines.size());
+    previous_kitty_image_ids_ = collect_kitty_image_ids(new_lines);
     previous_lines_ = std::move(new_lines);
     previous_raw_lines_ = std::move(next_raw_lines);
     previous_dimensions_ = dimensions;
@@ -571,78 +667,85 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
             .dimensions = dimensions,
             .cleared = false,
     };
-    return finish(update_images());
+    return finish(support::ExpectedVoid{});
 }
 
-support::ExpectedVoid RenderPipeline::remove_active_images() {
-    while (!active_images_.empty()) {
-        const auto image = active_images_.back();
-        if (auto removed = terminal_.remove_image(image.handle, image.region); !removed) {
-            return std::unexpected(removed.error());
-        }
-        active_images_.pop_back();
-    }
-    return {};
-}
+void RenderPipeline::compose_images(std::vector<std::string>& lines,
+        const std::vector<InlineImageRenderRegion>& images,
+        InlineImageProtocol protocol) {
+    if (protocol != InlineImageProtocol::None) {
+        for (const auto& image : images) {
+            const auto start_row = image.region.row;
+            const auto num_rows = image.region.rows;
+            const auto start_col = image.region.column;
+            if (num_rows == 0) continue;
+            if (lines.size() < start_row + num_rows) {
+                lines.resize(start_row + num_rows);
+            }
 
-support::ExpectedVoid RenderPipeline::remove_stale_images(
-        const std::vector<InlineImageRenderRegion>& desired_images) {
-    std::size_t index = 0;
-    while (index < active_images_.size()) {
-        const auto& active = active_images_[index];
-        const auto retained = std::find_if(desired_images.begin(), desired_images.end(), [&](const auto& desired) {
-            return active.resource_id == desired.resource_id && active.region == desired.region;
-        });
-        if (retained != desired_images.end()) {
-            ++index;
-            continue;
-        }
-        if (auto removed = terminal_.remove_image(active.handle, active.region); !removed) {
-            return std::unexpected(removed.error());
-        }
-        active_images_.erase(active_images_.begin() + static_cast<std::ptrdiff_t>(index));
-    }
-    return {};
-}
+            std::optional<std::string_view> filename;
+            if (image.filename) filename = *image.filename;
 
-support::ExpectedVoid RenderPipeline::place_images(const std::vector<InlineImageRenderRegion>& desired_images) {
-    for (const auto& image : desired_images) {
-        const auto active = std::find_if(active_images_.begin(), active_images_.end(), [&](const auto& candidate) {
-            return candidate.resource_id == image.resource_id && candidate.region == image.region;
-        });
-        if (active != active_images_.end() && active->revision == image.revision) {
-            continue;
-        }
+            TerminalImage term_img{
+                    .encoded_data = image.encoded_data,
+                    .mime_type = image.mime_type,
+                    .filename = filename,
+                    .pixel_width = image.pixel_width,
+                    .pixel_height = image.pixel_height,
+                    .resource_id = image.resource_id,
+                    .revision = image.revision,
+                    .region = image.region,
+            };
 
-        std::optional<std::string_view> filename;
-        if (image.filename) filename = *image.filename;
-        TerminalImage terminal_image{
-                .encoded_data = image.encoded_data,
-                .mime_type = image.mime_type,
-                .filename = filename,
-                .pixel_width = image.pixel_width,
-                .pixel_height = image.pixel_height,
-                .resource_id = image.resource_id,
-                .revision = image.revision,
-                .region = image.region,
-        };
-        if (active != active_images_.end()) {
-            terminal_image.preferred_handle = active->handle;
+            TerminalImageHandle handle{0};
+            if (image.resource_id > 0) {
+                auto it = image_placements_.find(image.resource_id);
+                if (it != image_placements_.end() && it->second.region == image.region) {
+                    handle = it->second.handle;
+                    it->second.revision = image.revision;
+                } else {
+                    handle = allocate_image_id();
+                    image_placements_[image.resource_id] = {
+                            .handle = handle,
+                            .region = image.region,
+                            .revision = image.revision,
+                    };
+                }
+            } else {
+                handle = allocate_image_id();
+            }
+
+            if (protocol == InlineImageProtocol::Kitty) {
+                auto encoded = detail::encode_terminal_image(protocol, term_img, handle);
+                if (!encoded) continue;
+                lines[start_row] = std::string(start_col, ' ') + *encoded;
+                for (std::size_t r = start_row + 1; r < start_row + num_rows; ++r) {
+                    lines[r] = "";
+                }
+            } else if (protocol == InlineImageProtocol::ITerm2) {
+                auto encoded = detail::encode_terminal_image(protocol, term_img, handle);
+                if (!encoded) continue;
+                for (std::size_t r = start_row; r < start_row + num_rows - 1; ++r) {
+                    lines[r] = "";
+                }
+                if (num_rows > 1) {
+                    lines[start_row + num_rows - 1] = std::format("\x1b[{}A\r", num_rows - 1) +
+                                                      std::string(start_col, ' ') + *encoded +
+                                                      std::format("\x1b[{}B\r", num_rows - 1);
+                } else {
+                    lines[start_row] = std::string(start_col, ' ') + *encoded;
+                }
+            }
         }
-        auto placed = terminal_.place_image(terminal_image);
-        if (!placed) return std::unexpected(placed.error());
-        if (active != active_images_.end()) {
-            active->revision = image.revision;
-            continue;
-        }
-        active_images_.push_back({
-                .handle = *placed,
-                .region = image.region,
-                .resource_id = image.resource_id,
-                .revision = image.revision,
-        });
     }
-    return {};
+
+    std::unordered_set<std::uint64_t> active_resources;
+    if (protocol != InlineImageProtocol::None) {
+        for (const auto& img : images) {
+            if (img.resource_id > 0) active_resources.insert(img.resource_id);
+        }
+    }
+    std::erase_if(image_placements_, [&](const auto& pair) { return !active_resources.contains(pair.first); });
 }
 
 } // namespace cch::tui::detail

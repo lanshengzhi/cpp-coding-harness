@@ -318,8 +318,7 @@ struct ProcessTerminal::Impl {
     /// Screen row where buffer row 0 was first written. Regular rendering
     /// flows relative to the inherited shell cursor (#983), so the renderer
     /// never learns the absolute origin and keeps it at 0; a retained
-    /// buffer-to-screen base for image placement until #995 composes regular
-    /// image placement inline in the line flow.
+    /// buffer-to-screen base for set_cursor.
     std::size_t scroll_origin{0};
     /// Total native scrolls since the anchor, mirroring VirtualTerminal's
     /// scroll emulation: the renderer writes the full composed buffer with
@@ -328,8 +327,8 @@ struct ProcessTerminal::Impl {
     /// `set_cursor` emits pi's CRLF line flow so the real terminal's native
     /// scrollback receives the overflow. The screen row of buffer row b is
     /// `scroll_origin + b - viewport_top`; the first visible buffer row is
-    /// `max(0, viewport_top - scroll_origin)`. `set_cursor`/`place_image`
-    /// convert buffer rows to screen rows using this mapping before emitting
+    /// `max(0, viewport_top - scroll_origin)`. `set_cursor`
+    /// converts buffer rows to screen rows using this mapping before emitting
     /// ANSI sequences.
     std::size_t viewport_top{0};
     termios original_termios{};
@@ -1548,88 +1547,6 @@ support::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
     auto result = enqueue_output(*impl_, visible ? kCursorShow : kCursorHide);
     if (result) impl_->modes.cursor_visible = visible;
     return result;
-}
-
-support::Expected<TerminalImageHandle> ProcessTerminal::place_image(const TerminalImage& image) {
-    std::lock_guard lock(impl_->mutex);
-    if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-    const auto handle =
-            image.preferred_handle ? *image.preferred_handle : TerminalImageHandle{.value = impl_->next_image_handle};
-    auto encoded = detail::encode_terminal_image(impl_->capabilities.inline_images, image, handle);
-    if (!encoded) return std::unexpected(encoded.error());
-    if (image.region.column >= impl_->dimensions.columns ||
-            image.region.columns > impl_->dimensions.columns - image.region.column) {
-        return std::unexpected(support::make_error(
-                support::ErrorCode::Validation, "Inline image region is outside terminal dimensions"));
-    }
-    // Image regions are buffer-absolute under the main-screen scrollback flow.
-    // A region whose buffer row has scrolled into the terminal's native
-    // scrollback (above the first visible buffer row) cannot be addressed by
-    // the real terminal and is already held by its scroll history; skip the
-    // placement but keep
-    // the handle allocation so the renderer's active-image tracking stays
-    // consistent (fork-B image-follows-content, ADR 0037).
-    const auto first_visible_row =
-            impl_->viewport_top > impl_->scroll_origin ? impl_->viewport_top - impl_->scroll_origin : std::size_t{0};
-    if (image.region.row < first_visible_row) {
-        if (!image.preferred_handle) ++impl_->next_image_handle;
-        return handle;
-    }
-    const auto screen_row = impl_->scroll_origin + image.region.row - impl_->viewport_top;
-    if (screen_row >= impl_->dimensions.rows || image.region.rows > impl_->dimensions.rows - screen_row) {
-        return std::unexpected(support::make_error(
-                support::ErrorCode::Validation, "Inline image region is outside terminal dimensions"));
-    }
-    // Both protocols anchor the image's top-left at the cursor, so position
-    // the cursor at the region origin before emitting the sequence.
-    if (auto positioned = enqueue_output(*impl_, std::format("\x1b[{};{}H", screen_row + 1, image.region.column + 1));
-            !positioned) {
-        return std::unexpected(positioned.error());
-    }
-    if (auto written = enqueue_output(*impl_, *encoded); !written) {
-        return std::unexpected(written.error());
-    }
-    if (!image.preferred_handle) ++impl_->next_image_handle;
-    return handle;
-}
-
-support::ExpectedVoid ProcessTerminal::remove_image(TerminalImageHandle handle, const CellRegion& region) {
-    std::lock_guard lock(impl_->mutex);
-    if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-    if (region.column >= impl_->dimensions.columns) {
-        return std::unexpected(support::make_error(
-                support::ErrorCode::Validation, "Inline image removal region is outside terminal dimensions"));
-    }
-    // Buffer-absolute removal region (fork-B): regions that scrolled into the
-    // native scrollback (above the first visible buffer row) are already out
-    // of the visible screen, so there is
-    // nothing to blank in place; skip them.
-    const auto first_visible_row =
-            impl_->viewport_top > impl_->scroll_origin ? impl_->viewport_top - impl_->scroll_origin : std::size_t{0};
-    if (region.row >= first_visible_row) {
-        const auto screen_row = impl_->scroll_origin + region.row - impl_->viewport_top;
-        const auto columns = std::min(region.columns, impl_->dimensions.columns - region.column);
-        if (screen_row >= impl_->dimensions.rows) {
-            return std::unexpected(support::make_error(
-                    support::ErrorCode::Validation, "Inline image removal region is outside terminal dimensions"));
-        }
-        const auto rows = std::min(region.rows, impl_->dimensions.rows - screen_row);
-        auto removal = detail::encode_terminal_image_removal(impl_->capabilities.inline_images, handle);
-        if (!removal) return std::unexpected(removal.error());
-        if (auto written = enqueue_output(*impl_, *removal); !written) {
-            return std::unexpected(written.error());
-        }
-        // iTerm2 has no addressable deletion: blank the owned cells. Kitty's
-        // delete restores the blanked cells the TUI placed the image over, and
-        // the blanking is idempotent with it (matching the VirtualTerminal
-        // recorded removal semantics).
-        if (auto cleared = enqueue_output(*impl_,
-                    std::format("\x1b[{};{}H{}", screen_row + 1, region.column + 1, std::string(columns * rows, ' ')));
-                !cleared) {
-            return std::unexpected(cleared.error());
-        }
-    }
-    return {};
 }
 
 support::ExpectedVoid ProcessTerminal::begin_synchronized_update() {

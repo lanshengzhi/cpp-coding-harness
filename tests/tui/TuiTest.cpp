@@ -85,14 +85,6 @@ public:
     [[nodiscard]] cch::support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid reset_scroll_margins() override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
-    [[nodiscard]] cch::support::Expected<cch::tui::TerminalImageHandle> place_image(
-            const cch::tui::TerminalImage&) override {
-        return cch::tui::TerminalImageHandle{};
-    }
-    [[nodiscard]] cch::support::ExpectedVoid remove_image(
-            cch::tui::TerminalImageHandle, const cch::tui::CellRegion&) override {
-        return {};
-    }
     [[nodiscard]] cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid end_synchronized_update() override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }
@@ -133,14 +125,6 @@ public:
     [[nodiscard]] cch::support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid reset_scroll_margins() override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
-    [[nodiscard]] cch::support::Expected<cch::tui::TerminalImageHandle> place_image(
-            const cch::tui::TerminalImage&) override {
-        return cch::tui::TerminalImageHandle{};
-    }
-    [[nodiscard]] cch::support::ExpectedVoid remove_image(
-            cch::tui::TerminalImageHandle, const cch::tui::CellRegion&) override {
-        return {};
-    }
     [[nodiscard]] cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid end_synchronized_update() override {
         if (fail_next_end) {

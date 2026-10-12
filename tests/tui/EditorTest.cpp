@@ -3085,12 +3085,6 @@ public:
         if (set_dock_cursor_error) return std::unexpected(*set_dock_cursor_error);
         return {};
     }
-    cch::support::Expected<cch::tui::TerminalImageHandle> place_image(const cch::tui::TerminalImage&) override {
-        return cch::tui::TerminalImageHandle{0};
-    }
-    cch::support::ExpectedVoid remove_image(cch::tui::TerminalImageHandle, const cch::tui::CellRegion&) override {
-        return {};
-    }
     cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
     cch::support::ExpectedVoid end_synchronized_update() override { return {}; }
     cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }

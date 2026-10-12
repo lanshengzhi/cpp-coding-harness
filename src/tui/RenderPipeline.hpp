@@ -11,6 +11,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Terminal.hpp>
+#include <cch/tui/TerminalImage.hpp>
 
 #include <cch/support/Error.hpp>
 
@@ -18,6 +19,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace cch::tui::detail {
@@ -26,9 +28,9 @@ namespace cch::tui::detail {
 class RenderPipeline final {
 public:
     explicit RenderPipeline(Terminal& terminal);
-    /// Arm a fresh differential baseline; the committed dimensions start at
-    /// the terminal's dimensions so the first render is not misread as a
-    /// resize reflow.
+    /// Arm a fresh differential baseline. The committed dimensions start
+    /// unset, so the first render is neither misread as a resize reflow nor
+    /// cleared (frozen `previousWidth == 0` semantics).
     void start(TerminalDimensions dimensions) noexcept;
     void begin_frame() noexcept;
     void note_prepared_line() noexcept;
@@ -38,6 +40,7 @@ public:
     [[nodiscard]] TerminalDimensions committed_dimensions() const noexcept {
         return previous_dimensions_.value_or(TerminalDimensions{});
     }
+    [[nodiscard]] std::size_t admitted_prefix(TerminalDimensions dimensions) const noexcept;
     [[nodiscard]] support::ExpectedVoid stop(std::optional<CursorPosition> stop_cursor);
     [[nodiscard]] support::ExpectedVoid clear_screen();
     [[nodiscard]] support::ExpectedVoid render(RenderResult materialized,
@@ -48,15 +51,10 @@ public:
             bool clear_on_shrink,
             std::optional<CursorPosition> cursor_location);
 
-    [[nodiscard]] std::size_t admitted_prefix(TerminalDimensions dimensions) const noexcept;
-
 private:
-    struct ActiveImage {
-        TerminalImageHandle handle;
-        CellRegion region;
-        std::uint64_t resource_id{0};
-        std::uint64_t revision{0};
-    };
+    void compose_images(std::vector<std::string>& lines,
+            const std::vector<InlineImageRenderRegion>& images,
+            InlineImageProtocol protocol);
 
     struct AdmittedFrame {
         std::size_t rows{0};
@@ -64,10 +62,11 @@ private:
         bool cleared{false};
     };
 
-    [[nodiscard]] support::ExpectedVoid remove_active_images();
-    [[nodiscard]] support::ExpectedVoid remove_stale_images(
-            const std::vector<InlineImageRenderRegion>& desired_images);
-    [[nodiscard]] support::ExpectedVoid place_images(const std::vector<InlineImageRenderRegion>& desired_images);
+    struct ImagePlacementState {
+        TerminalImageHandle handle;
+        CellRegion region;
+        std::uint64_t revision{0};
+    };
 
     Terminal& terminal_; // must outlive this pipeline.
     bool first_render_{true};
@@ -82,7 +81,8 @@ private:
     /// successful render, and reset by clear_screen.
     std::optional<TerminalDimensions> previous_dimensions_{};
     AdmittedFrame admitted_{};
-    std::vector<ActiveImage> active_images_;
+    std::vector<std::uint32_t> previous_kitty_image_ids_;
+    std::unordered_map<std::uint64_t, ImagePlacementState> image_placements_;
 
     void position_hardware_cursor(const std::optional<CursorPosition>& cursor_pos, std::size_t total_lines);
 };

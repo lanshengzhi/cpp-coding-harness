@@ -90,6 +90,26 @@ struct ImageCellSize {
 [[nodiscard]] std::string delete_all_kitty_placements();
 [[nodiscard]] bool is_image_line(std::string_view line);
 
+struct KittyImageHeader {
+    std::vector<std::uint32_t> ids;
+    std::size_t rows{1};
+};
+
+[[nodiscard]] std::optional<KittyImageHeader> parse_kitty_image_header(std::string_view line);
+[[nodiscard]] std::vector<std::uint32_t> extract_kitty_image_ids(std::string_view line);
+[[nodiscard]] std::size_t extract_kitty_image_rows(std::string_view line);
+[[nodiscard]] std::size_t get_kitty_image_reserved_rows(
+        const std::vector<std::string>& lines, std::size_t index, std::size_t max_index);
+[[nodiscard]] std::pair<std::ptrdiff_t, std::ptrdiff_t> expand_changed_range_for_kitty_images(
+        std::ptrdiff_t first_changed,
+        std::ptrdiff_t last_changed,
+        const std::vector<std::string>& previous_lines,
+        const std::vector<std::string>& new_lines);
+[[nodiscard]] std::string delete_changed_kitty_images(
+        std::ptrdiff_t first_changed, std::ptrdiff_t last_changed, const std::vector<std::string>& previous_lines);
+[[nodiscard]] std::string delete_kitty_images(const std::vector<std::uint32_t>& ids);
+[[nodiscard]] std::vector<std::uint32_t> collect_kitty_image_ids(const std::vector<std::string>& lines);
+
 /// Per-emulator env-rule capability detection exactly as pi's
 /// `detectCapabilities`: tmux and screen disable inline images (tmux probes
 /// OSC 8 forwarding), Kitty/Ghostty/WezTerm/Warp report the Kitty protocol,
@@ -170,6 +190,20 @@ struct CellSizeInputResult {
     InlineImageProtocol protocol,
     TerminalImageHandle handle);
 [[nodiscard]] support::Expected<std::string> encode_terminal_image_removal_all(InlineImageProtocol protocol);
+
+struct ImagePlacementMetadata {
+    std::uint64_t resource_id{0};
+    std::uint64_t revision{0};
+    std::optional<std::string> filename;
+    std::string mime_type;
+    std::size_t pixel_width{0};
+    std::size_t pixel_height{0};
+};
+
+void register_image_metadata(TerminalImageHandle handle, ImagePlacementMetadata metadata);
+[[nodiscard]] std::optional<ImagePlacementMetadata> lookup_image_metadata(TerminalImageHandle handle);
+void unregister_image_metadata(TerminalImageHandle handle);
+void clear_image_metadata();
 
 } // namespace detail
 

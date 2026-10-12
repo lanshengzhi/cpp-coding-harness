@@ -170,17 +170,6 @@ public:
     /// to the dock starting row, i.e., margin_bottom + 1 when margins are active).
     [[nodiscard]] virtual support::ExpectedVoid set_dock_cursor(std::size_t dock_row, std::size_t column) = 0;
 
-    /// Place one validated image inside a TUI-owned absolute cell region. The
-    /// terminal positions the cursor at the region origin before emitting the
-    /// protocol sequence; the returned handle becomes the protocol image ID.
-    [[nodiscard]] virtual support::Expected<TerminalImageHandle> place_image(const TerminalImage& image) = 0;
-
-    /// Remove one image previously returned by place_image(). The region is supplied
-    /// so protocols without addressable deletion can clear exactly the owned cells.
-    [[nodiscard]] virtual support::ExpectedVoid remove_image(
-        TerminalImageHandle handle,
-        const CellRegion& region) = 0;
-
     /// Begin a synchronized update region. Intermediate writes are not displayed
     /// until end_synchronized_update(). Terminals that do not support this
     /// capability may ignore the start/end markers.

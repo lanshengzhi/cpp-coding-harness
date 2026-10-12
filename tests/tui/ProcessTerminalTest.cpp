@@ -1503,8 +1503,8 @@ TEST_CASE("Process Terminal hands appearance and keyboard replies to the Tui roo
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("Process Terminal places and removes images with pi-exact protocol bytes",
-        "[tui][terminal][image][issue385][spec]") {
+TEST_CASE("Process Terminal writes Kitty and iTerm2 inline image sequences to pty",
+        "[tui][terminal][image][issue385][spec][issue995]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ImageEnvironmentGuard environment;
@@ -1526,44 +1526,24 @@ TEST_CASE("Process Terminal places and removes images with pi-exact protocol byt
             .revision = 2,
             .region = {.column = 2, .row = 1, .columns = 2, .rows = 2},
     };
-    const auto placed = terminal.place_image(image);
-    REQUIRE(placed);
+    auto encoded = cch::tui::detail::encode_terminal_image(
+            cch::tui::InlineImageProtocol::Kitty, image, cch::tui::TerminalImageHandle{.value = 1});
+    REQUIRE(encoded);
+    REQUIRE(terminal.write(*encoded));
     const auto placed_output = cch::tests::read_available(pty->master.get());
-    // Cursor positioned at the region origin (row 1 -> 2, column 2 -> 3),
-    // then the Kitty placement with the handle as the image ID.
-    CHECK(placed_output.find("\x1b[2;3H") != std::string::npos);
     CHECK(placed_output.find("\x1b_Ga=T,f=100,q=2,C=1,c=2,r=2,i=1;QUFBQQ==\x1b\\") != std::string::npos);
 
-    // An animation frame re-place reuses the protocol image id (pi imageId
-    // reuse): the same `i=1` is re-transmitted and no fresh id is allocated.
-    const cch::tui::TerminalImage frame{
-            .encoded_data = "QUFBQQ==",
-            .mime_type = "image/png",
-            .pixel_width = 10,
-            .pixel_height = 10,
-            .resource_id = 7,
-            .revision = 3,
-            .region = {.column = 2, .row = 1, .columns = 2, .rows = 2},
-            .preferred_handle = *placed,
-    };
-    const auto replaced = terminal.place_image(frame);
-    REQUIRE(replaced);
-    CHECK(*replaced == *placed);
-    const auto replaced_output = cch::tests::read_available(pty->master.get());
-    CHECK(replaced_output.find("\x1b_Ga=T,f=100,q=2,C=1,c=2,r=2,i=1;QUFBQQ==\x1b\\") != std::string::npos);
-
-    REQUIRE(terminal.remove_image(*placed, image.region));
+    auto removal = cch::tui::detail::encode_terminal_image_removal(
+            cch::tui::InlineImageProtocol::Kitty, cch::tui::TerminalImageHandle{.value = 1});
+    REQUIRE(removal);
+    REQUIRE(terminal.write(*removal));
     const auto removed_output = cch::tests::read_available(pty->master.get());
     CHECK(removed_output.find("\x1b_Ga=d,d=I,i=1,q=2\x1b\\") != std::string::npos);
-    // The owned cells are blanked so protocols without addressable deletion
-    // (iTerm2) clear exactly the placement, matching VirtualTerminal.
-    CHECK(removed_output.find("\x1b[2;3H") != std::string::npos);
-    CHECK(removed_output.find(std::string(4, ' ')) != std::string::npos);
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal iTerm2 placement omits default preserveAspectRatio and blanks removal",
-        "[tui][terminal][image][issue385][spec]") {
+TEST_CASE("Process Terminal iTerm2 placement omits default preserveAspectRatio",
+        "[tui][terminal][image][issue385][spec][issue995]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ImageEnvironmentGuard environment;
@@ -1584,16 +1564,13 @@ TEST_CASE("Process Terminal iTerm2 placement omits default preserveAspectRatio a
             .revision = 1,
             .region = {.column = 0, .row = 0, .columns = 1, .rows = 1},
     };
-    const auto placed = terminal.place_image(image);
-    REQUIRE(placed);
+    auto encoded = cch::tui::detail::encode_terminal_image(
+            cch::tui::InlineImageProtocol::ITerm2, image, cch::tui::TerminalImageHandle{.value = 1});
+    REQUIRE(encoded);
+    REQUIRE(terminal.write(*encoded));
     const auto placed_output = cch::tests::read_available(pty->master.get());
     CHECK(placed_output.find("inline=1;width=1;height=1;size=4:QUFBQQ==") != std::string::npos);
     CHECK(placed_output.find("preserveAspectRatio") == std::string::npos);
-
-    REQUIRE(terminal.remove_image(*placed, image.region));
-    const auto removed_output = cch::tests::read_available(pty->master.get());
-    CHECK(removed_output.find("a=d") == std::string::npos);
-    CHECK(removed_output.find(" ") != std::string::npos);
     REQUIRE(terminal.stop());
 }
 

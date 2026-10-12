@@ -746,13 +746,6 @@ public:
     cch::support::ExpectedVoid set_dock_cursor(std::size_t dock_row, std::size_t column) override {
         return inner_.set_dock_cursor(dock_row, column);
     }
-    cch::support::Expected<cch::tui::TerminalImageHandle> place_image(const cch::tui::TerminalImage& image) override {
-        return inner_.place_image(image);
-    }
-    cch::support::ExpectedVoid remove_image(
-            cch::tui::TerminalImageHandle handle, const cch::tui::CellRegion& region) override {
-        return inner_.remove_image(handle, region);
-    }
     cch::support::ExpectedVoid begin_synchronized_update() override { return inner_.begin_synchronized_update(); }
     cch::support::ExpectedVoid end_synchronized_update() override { return inner_.end_synchronized_update(); }
     cch::support::ExpectedVoid set_title(std::string_view title) override { return inner_.set_title(title); }

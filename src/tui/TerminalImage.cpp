@@ -507,7 +507,18 @@ support::Expected<std::string> encode_terminal_image(
             support::ErrorCode::Validation,
             "Inline image format is unsupported by the terminal protocol"));
     }
-    if (protocol == InlineImageProtocol::Kitty) return encode_kitty(image, handle);
+    if (protocol == InlineImageProtocol::Kitty) {
+        detail::register_image_metadata(handle,
+                {
+                        .resource_id = image.resource_id,
+                        .revision = image.revision,
+                        .filename = image.filename ? std::optional<std::string>(*image.filename) : std::nullopt,
+                        .mime_type = std::string(image.mime_type),
+                        .pixel_width = image.pixel_width,
+                        .pixel_height = image.pixel_height,
+                });
+        return encode_kitty(image, handle);
+    }
     if (protocol == InlineImageProtocol::ITerm2) return encode_iterm2(image);
     return std::unexpected(support::make_error(
         support::ErrorCode::Validation,

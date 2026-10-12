@@ -1,5 +1,6 @@
 #include "tui/UnicodeWidth.hpp"
 
+#include <cch/tui/TerminalImage.hpp>
 #include <cch/support/Error.hpp>
 #include <utf8proc.h>
 
@@ -192,8 +193,37 @@ namespace {
         const auto is_hyperlink = body.starts_with("8;") && body.find(';', 2) != std::string_view::npos;
         const auto is_osc133 = (body == "133;A" || body == "133;B" || body == "133;C");
         const auto is_color_report = body.starts_with("10;") || body.starts_with("11;") || body.starts_with("4;");
-        if (!is_hyperlink && !is_osc133 && !is_color_report) {
-            return std::unexpected(invalid_terminal_text("Only OSC 8 hyperlinks and OSC 133 zones are supported"));
+        const auto is_iterm2 = body.starts_with("1337;File=");
+        if (!is_hyperlink && !is_osc133 && !is_color_report && !is_iterm2) {
+            return std::unexpected(
+                    invalid_terminal_text("Only OSC 8 hyperlinks, OSC 133 zones, and iTerm2 images are supported"));
+        }
+        return AnsiCode{
+                .code = std::string(text.substr(position, cursor + terminator_length - position)),
+                .length = cursor + terminator_length - position,
+        };
+    }
+
+    if (kind == '_') {
+        if (position + 2 >= text.size() || text[position + 2] != 'G') {
+            return std::unexpected(invalid_terminal_text("Unsupported ANSI escape sequence"));
+        }
+        std::size_t cursor = position + 3;
+        std::size_t terminator_length = 0;
+        while (cursor < text.size()) {
+            const auto byte = static_cast<unsigned char>(text[cursor]);
+            if (byte == 0x07) {
+                terminator_length = 1;
+                break;
+            }
+            if (byte == 0x1B && cursor + 1 < text.size() && text[cursor + 1] == '\\') {
+                terminator_length = 2;
+                break;
+            }
+            ++cursor;
+        }
+        if (terminator_length == 0) {
+            return std::unexpected(invalid_terminal_text("Incomplete APC sequence"));
         }
         return AnsiCode{
                 .code = std::string(text.substr(position, cursor + terminator_length - position)),
@@ -712,7 +742,9 @@ support::Expected<PreparedRenderedLine> prepare_rendered_line(std::string_view l
     if (!tokens) return std::unexpected(tokens.error());
     for (const auto& token : *tokens) {
         if (token.kind == TerminalTokenKind::CursorMove || token.kind == TerminalTokenKind::ClearLine) {
-            return std::unexpected(invalid_terminal_text("Cursor movement not allowed in component text"));
+            if (!is_image_line(line)) {
+                return std::unexpected(invalid_terminal_text("Cursor movement not allowed in component text"));
+            }
         }
     }
     auto line_width = token_width(*tokens);

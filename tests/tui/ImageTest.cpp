@@ -741,8 +741,8 @@ TEST_CASE("Replacing one image preserves an unaffected image handle", "[tui][ima
     CHECK(second->handle == second_handle);
 }
 
-TEST_CASE(
-        "VirtualTerminal enforces targeted image region ownership", "[tui][image][terminal][issue53][issue994][spec]") {
+TEST_CASE("VirtualTerminal enforces targeted image region ownership",
+        "[tui][image][terminal][issue53][issue994][spec][issue995]") {
     ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
     cch::tui::VirtualTerminal terminal({
         .columns = 4,
@@ -766,15 +766,17 @@ TEST_CASE(
             .revision = 1,
             .region = {.column = 1, .row = 0, .columns = 1, .rows = 1},
     };
-    const auto placed = terminal.place_image(image);
-    REQUIRE(placed);
-
-    const auto wrong_region = terminal.remove_image(
-        *placed,
-        {.column = 0, .row = 0, .columns = 1, .rows = 1});
-    REQUIRE_FALSE(wrong_region);
+    auto encoded = cch::tui::detail::encode_terminal_image(
+            cch::tui::InlineImageProtocol::Kitty, image, cch::tui::TerminalImageHandle{.value = 1});
+    REQUIRE(encoded);
+    REQUIRE(terminal.write(*encoded));
     REQUIRE(terminal.images().size() == 1);
-    REQUIRE(terminal.remove_image(*placed, image.region));
+    CHECK(terminal.images()[0].handle.value == 1);
+
+    auto removal = cch::tui::detail::encode_terminal_image_removal(
+            cch::tui::InlineImageProtocol::Kitty, cch::tui::TerminalImageHandle{.value = 1});
+    REQUIRE(removal);
+    REQUIRE(terminal.write(*removal));
     CHECK(terminal.images().empty());
 }
 
@@ -887,4 +889,161 @@ TEST_CASE("Private protocol encoders expose meaningful bounded parameters",
     CHECK(removed->find("d=I") != std::string::npos);
     CHECK(removed->find("i=42") != std::string::npos);
     CHECK(removed->find("d=A") == std::string::npos);
+}
+
+TEST_CASE("Inline Kitty image placement composed directly into line flow with row reservation",
+        "[tui][image][issue995]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
+    cch::tui::VirtualTerminal terminal({
+            .columns = 20,
+            .rows = 6,
+            .capabilities =
+                    {
+                            .synchronized_output = true,
+                            .inline_images = cch::tui::InlineImageProtocol::Kitty,
+                            .cell_pixels = cch::tui::CellPixelDimensions{.width = 10, .height = 10},
+                    },
+    });
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("Header Line", 0, 0)));
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Image>(make_image(
+            base64_encode(png_header(20, 20)), "image/png", "flow.png", {.max_width = 2, .max_height = 2}))));
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("Footer Line", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    REQUIRE(terminal.images().size() == 1);
+    CHECK(terminal.images()[0].region.row == 1);
+    CHECK(terminal.images()[0].region.rows == 2);
+    CHECK(terminal.screen()[0].find("Header Line") != std::string::npos);
+    CHECK(terminal.screen()[3].find("Footer Line") != std::string::npos);
+}
+
+TEST_CASE("Inline image placement inside padded Box offsets row and column accurately", "[tui][image][box][issue995]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
+    cch::tui::VirtualTerminal terminal({
+            .columns = 20,
+            .rows = 6,
+            .capabilities =
+                    {
+                            .synchronized_output = true,
+                            .inline_images = cch::tui::InlineImageProtocol::Kitty,
+                            .cell_pixels = cch::tui::CellPixelDimensions{.width = 10, .height = 10},
+                    },
+    });
+    cch::tui::Tui tui(terminal);
+    auto box = std::make_unique<cch::tui::Box>(2, 1);
+    REQUIRE(box->add_child(std::make_unique<cch::tui::Text>("Inside Box", 0, 0)));
+    REQUIRE(box->add_child(std::make_unique<cch::tui::Image>(make_image(
+            base64_encode(png_header(20, 20)), "image/png", "boxed.png", {.max_width = 2, .max_height = 2}))));
+    REQUIRE(tui.add_child(std::move(box)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    REQUIRE(terminal.images().size() == 1);
+    CHECK(terminal.images()[0].region.column == 2);
+    CHECK(terminal.images()[0].region.row == 2);
+    CHECK(terminal.images()[0].region.rows == 2);
+}
+
+TEST_CASE("Differential rendering with inline Kitty images handles changes above and below without corruption",
+        "[tui][image][diff][issue995]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
+    cch::tui::VirtualTerminal terminal({
+            .columns = 20,
+            .rows = 6,
+            .capabilities =
+                    {
+                            .synchronized_output = true,
+                            .inline_images = cch::tui::InlineImageProtocol::Kitty,
+                            .cell_pixels = cch::tui::CellPixelDimensions{.width = 10, .height = 10},
+                    },
+    });
+    cch::tui::Tui tui(terminal);
+    auto top_text = std::make_unique<cch::tui::Text>("Initial Top", 0, 0);
+    auto* top_ptr = top_text.get();
+    REQUIRE(tui.add_child(std::move(top_text)));
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Image>(make_image(
+            base64_encode(png_header(20, 20)), "image/png", "diff.png", {.max_width = 2, .max_height = 2}))));
+    auto bottom_text = std::make_unique<cch::tui::Text>("Initial Bottom", 0, 0);
+    auto* bottom_ptr = bottom_text.get();
+    REQUIRE(tui.add_child(std::move(bottom_text)));
+
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(terminal.images().size() == 1);
+    const auto image_handle = terminal.images()[0].handle;
+
+    bottom_ptr->set_text("Updated Bottom");
+    REQUIRE(tui.render());
+    REQUIRE(terminal.images().size() == 1);
+    CHECK(terminal.images()[0].handle == image_handle);
+    CHECK(terminal.screen()[3].find("Updated Bottom") != std::string::npos);
+
+    top_ptr->set_text("Updated Top");
+    REQUIRE(tui.render());
+    REQUIRE(terminal.images().size() == 1);
+    CHECK(terminal.screen()[0].find("Updated Top") != std::string::npos);
+}
+
+TEST_CASE("Protocol switch to None renders fallback text without stale terminal images",
+        "[tui][image][fallback][issue995]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
+    cch::tui::VirtualTerminal terminal({
+            .columns = 60,
+            .rows = 4,
+            .capabilities =
+                    {
+                            .synchronized_output = true,
+                            .inline_images = cch::tui::InlineImageProtocol::Kitty,
+                            .cell_pixels = cch::tui::CellPixelDimensions{.width = 10, .height = 10},
+                    },
+    });
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Image>(make_image(
+            base64_encode(png_header(20, 20)), "image/png", "sample.png", {.max_width = 2, .max_height = 2}))));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(terminal.images().size() == 1);
+
+    cch::tui::set_image_capabilities({.images = cch::tui::InlineImageProtocol::None});
+    REQUIRE(tui.render());
+    CHECK(terminal.images().empty());
+    CHECK(terminal.screen()[0].find("sample.png") != std::string::npos);
+}
+
+TEST_CASE("Terminal clear_screen and stop delete active Kitty images", "[tui][image][lifecycle][issue995]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
+    cch::tui::VirtualTerminal terminal({
+            .columns = 20,
+            .rows = 4,
+            .capabilities =
+                    {
+                            .synchronized_output = true,
+                            .inline_images = cch::tui::InlineImageProtocol::Kitty,
+                            .cell_pixels = cch::tui::CellPixelDimensions{.width = 10, .height = 10},
+                    },
+    });
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Image>(make_image(
+            base64_encode(png_header(20, 20)), "image/png", "lifecycle.png", {.max_width = 2, .max_height = 2}))));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(terminal.images().size() == 1);
+
+    REQUIRE(tui.clear_screen());
+    CHECK(terminal.images().empty());
+
+    REQUIRE(tui.render());
+    REQUIRE(terminal.images().size() == 1);
+
+    REQUIRE(tui.stop());
+    bool found_kitty_delete = false;
+    for (const auto& out : terminal.output()) {
+        if (out.find("\x1b_Ga=d") != std::string::npos) {
+            found_kitty_delete = true;
+            break;
+        }
+    }
+    CHECK(found_kitty_delete);
 }

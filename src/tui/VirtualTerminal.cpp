@@ -58,6 +58,24 @@ namespace {
 
 constexpr std::string_view kBeginSync = "\x1b[?2026h";
 constexpr std::string_view kEndSync = "\x1b[?2026l";
+
+[[nodiscard]] std::string decode_base64(std::string_view input) {
+    static constexpr std::string_view kChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    int val = 0, valb = -8;
+    for (unsigned char c : input) {
+        if (c == '=') break;
+        auto pos = kChars.find(c);
+        if (pos == std::string_view::npos) continue;
+        val = (val << 6) + static_cast<int>(pos);
+        valb += 6;
+        if (valb >= 0) {
+            out.push_back(static_cast<char>((val >> valb) & 0xFF));
+            valb -= 8;
+        }
+    }
+    return out;
+}
 // pi's resize full-redraw clears screen, homes, and clears scrollback
 // (packages/tui/src/terminal.ts clearScreen). The double records the emitted
 // sequence in output() so the byte-level `\x1b[3J` is pinned through the seam.
@@ -226,6 +244,8 @@ void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
                 impl.scrollback_cells.clear();
                 impl.viewport_top = 0;
                 impl.scroll_origin = 0;
+                impl.images.clear();
+                detail::clear_image_metadata();
                 impl.cursor = {};
             } else if (token.text.find("3J") != std::string::npos) {
                 // Clear-scrollback only: this model keeps scrollback cells with
@@ -268,6 +288,109 @@ void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
             continue;
         }
         if (token.kind != detail::TerminalTokenKind::Grapheme) {
+            if (token.text.starts_with("\x1b_G")) {
+                if (token.text.find("a=d") != std::string::npos) {
+                    if (token.text.find("d=a") != std::string::npos || token.text.find("d=A") != std::string::npos) {
+                        impl.images.clear();
+                    } else if (token.text.find("d=I") != std::string::npos ||
+                               token.text.find("d=i") != std::string::npos) {
+                        const auto header = parse_kitty_image_header(token.text);
+                        if (header) {
+                            for (const auto id : header->ids) {
+                                std::erase_if(impl.images, [&](const auto& img) { return img.handle.value == id; });
+                            }
+                        }
+                    }
+                } else if (token.text.find("a=T") != std::string::npos || token.text.find("a=t") != std::string::npos) {
+                    const auto header = parse_kitty_image_header(token.text);
+                    const auto handle_val = header && !header->ids.empty() ? header->ids.front() : std::uint32_t{0};
+                    std::size_t cols = 1;
+                    const auto c_pos = token.text.find("c=");
+                    if (c_pos != std::string::npos) {
+                        (void)std::from_chars(
+                                token.text.data() + c_pos + 2, token.text.data() + token.text.size(), cols);
+                    }
+                    const auto handle = TerminalImageHandle{.value = handle_val};
+                    const auto meta = detail::lookup_image_metadata(handle);
+                    const auto col = impl.cursor.column;
+                    const auto row = impl.cursor.row + impl.viewport_top;
+                    const auto rows = header ? header->rows : 1;
+                    VirtualTerminalImage vt_img{
+                            .handle = handle,
+                            .resource_id = meta ? meta->resource_id : 0,
+                            .revision = meta ? meta->revision : 0,
+                            .region = {.column = col, .row = row, .columns = cols, .rows = rows},
+                            .protocol = InlineImageProtocol::Kitty,
+                            .mime_type = meta ? meta->mime_type : "image/png",
+                            .filename = meta ? meta->filename : std::nullopt,
+                            .pixel_width = meta ? meta->pixel_width : 0,
+                            .pixel_height = meta ? meta->pixel_height : 0,
+                    };
+                    auto it = std::find_if(impl.images.begin(), impl.images.end(), [&](const auto& img) {
+                        return img.handle == handle;
+                    });
+                    if (it != impl.images.end()) {
+                        *it = std::move(vt_img);
+                    } else {
+                        impl.images.push_back(std::move(vt_img));
+                    }
+                }
+            } else if (token.text.starts_with("\x1b]1337;File=")) {
+                const auto colon_pos = token.text.find(':');
+                if (colon_pos != std::string::npos) {
+                    const auto params = token.text.substr(12, colon_pos - 12);
+                    std::size_t cols = 1;
+                    std::size_t rows = 1;
+                    std::optional<std::string> filename;
+                    std::size_t p_start = 0;
+                    while (p_start <= params.size()) {
+                        const auto p_end = params.find(';', p_start);
+                        const auto param = params.substr(
+                                p_start, p_end == std::string_view::npos ? params.size() - p_start : p_end - p_start);
+                        if (param.starts_with("width=")) {
+                            (void)std::from_chars(param.data() + 6, param.data() + param.size(), cols);
+                        } else if (param.starts_with("height=")) {
+                            (void)std::from_chars(param.data() + 7, param.data() + param.size(), rows);
+                        } else if (param.starts_with("name=")) {
+                            filename = decode_base64(param.substr(5));
+                        }
+                        if (p_end == std::string_view::npos) break;
+                        p_start = p_end + 1;
+                    }
+                    const auto handle = TerminalImageHandle{.value = impl.next_image_handle++};
+                    const auto col = impl.cursor.column;
+                    const auto row = impl.cursor.row + impl.viewport_top;
+                    const auto payload = token.text.substr(colon_pos + 1);
+                    std::string mime_type = "image/png";
+                    if (payload.starts_with("/9j/")) {
+                        mime_type = "image/jpeg";
+                    } else if (payload.starts_with("R0lGOD")) {
+                        mime_type = "image/gif";
+                    } else if (payload.starts_with("UklGR")) {
+                        mime_type = "image/webp";
+                    } else if (filename) {
+                        if (filename->ends_with(".jpeg") || filename->ends_with(".jpg")) {
+                            mime_type = "image/jpeg";
+                        } else if (filename->ends_with(".gif")) {
+                            mime_type = "image/gif";
+                        } else if (filename->ends_with(".webp")) {
+                            mime_type = "image/webp";
+                        }
+                    }
+                    VirtualTerminalImage vt_img{
+                            .handle = handle,
+                            .resource_id = 0,
+                            .revision = 1,
+                            .region = {.column = col, .row = row, .columns = cols, .rows = rows},
+                            .protocol = InlineImageProtocol::ITerm2,
+                            .mime_type = std::move(mime_type),
+                            .filename = filename,
+                            .pixel_width = 0,
+                            .pixel_height = 0,
+                    };
+                    impl.images.push_back(std::move(vt_img));
+                }
+            }
             impl.style.process_ansi(token.text);
             continue;
         }
@@ -424,6 +547,7 @@ support::ExpectedVoid VirtualTerminal::clear_screen() {
     impl_->viewport_top = 0;
     impl_->scroll_origin = 0;
     impl_->images.clear();
+    detail::clear_image_metadata();
     impl_->cursor = {};
     refresh_screen(*impl_);
     return {};
@@ -486,15 +610,9 @@ support::ExpectedVoid VirtualTerminal::write(std::string_view output) {
     // past the last column wraps to the next row first (the deferred-wrap
     // state a real terminal enters after writing a full-width line).
     std::size_t line_width = 0;
-    std::size_t first_line_width = 0;
-    bool first_line = true;
     auto available = impl_->dimensions.columns - impl_->cursor.column;
     for (const auto& token : *tokens) {
         if (token.kind == detail::TerminalTokenKind::Newline) {
-            if (first_line) {
-                first_line_width = line_width;
-                first_line = false;
-            }
             line_width = 0;
             available = impl_->dimensions.columns;
             continue;
@@ -522,23 +640,6 @@ support::ExpectedVoid VirtualTerminal::write(std::string_view output) {
                     line_width,
                     available)));
         }
-    }
-    if (first_line) first_line_width = line_width;
-
-    if (first_line_width > 0) {
-        const CellRegion written{
-            .column = impl_->cursor.column,
-            // The cursor row is screen-relative; image regions are
-            // buffer-absolute under the anchored main-screen scrollback flow
-            // (ADR 0041): buffer row = screen row + scrolls since the anchor.
-            .row = impl_->cursor.row + impl_->viewport_top -
-                std::min(impl_->cursor.row + impl_->viewport_top, impl_->scroll_origin),
-            .columns = first_line_width,
-            .rows = 1,
-        };
-        std::erase_if(impl_->images, [&](const auto& image) {
-            return detail::cell_regions_intersect(image.region, written);
-        });
     }
 
     std::string normalized;
@@ -635,102 +736,6 @@ support::ExpectedVoid VirtualTerminal::set_dock_cursor(std::size_t dock_row, std
 support::ExpectedVoid VirtualTerminal::set_cursor_visible(bool visible) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     impl_->modes.cursor_visible = visible;
-    return {};
-}
-
-support::Expected<TerminalImageHandle> VirtualTerminal::place_image(const TerminalImage& image) {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
-    if (impl_->capabilities.inline_images == InlineImageProtocol::None) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Virtual Terminal does not support inline images"));
-    }
-    if (!detail::protocol_supports_mime(
-            impl_->capabilities.inline_images,
-            image.mime_type)) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Inline image format is unsupported by the Virtual Terminal protocol"));
-    }
-    if (image.region.columns == 0 || image.region.rows == 0 ||
-        image.region.column >= impl_->dimensions.columns ||
-        image.region.columns > impl_->dimensions.columns - image.region.column) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Inline image region is outside Virtual Terminal dimensions"));
-    }
-    for (const auto& visible : impl_->images) {
-        if (detail::cell_regions_intersect(visible.region, image.region)) {
-            // A re-placement of the same protocol image (an animation frame
-            // update) replaces the prior record in place instead of
-            // overlapping it.
-            if (image.preferred_handle && visible.handle == *image.preferred_handle) {
-                continue;
-            }
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Validation,
-                "Inline image regions cannot overlap"));
-        }
-    }
-
-    const TerminalImageHandle handle = image.preferred_handle
-        ? *image.preferred_handle
-        : TerminalImageHandle{.value = impl_->next_image_handle++};
-    // The re-transmit replaces the previous record carrying this handle.
-    std::erase_if(impl_->images, [&](const auto& visible) {
-        return visible.handle == handle;
-    });
-    impl_->images.push_back({
-        .handle = handle,
-        .resource_id = image.resource_id,
-        .revision = image.revision,
-        .region = image.region,
-        .protocol = impl_->capabilities.inline_images,
-        .mime_type = std::string(image.mime_type),
-        .filename = image.filename ? std::optional<std::string>(*image.filename) : std::nullopt,
-        .pixel_width = image.pixel_width,
-        .pixel_height = image.pixel_height,
-    });
-    return handle;
-}
-
-support::ExpectedVoid VirtualTerminal::remove_image(
-    TerminalImageHandle handle,
-    const CellRegion& region) {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
-    const auto found = std::find_if(impl_->images.begin(), impl_->images.end(), [&](const auto& image) {
-        return image.handle == handle;
-    });
-    if (found == impl_->images.end()) return {};
-    if (found->region != region) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Inline image removal region does not match its owned region"));
-    }
-    const auto owned_region = found->region;
-    impl_->images.erase(found);
-    // The region is buffer-absolute: only cells inside the visible viewport
-    // can be cleared (rows scrolled into the terminal's scrollback keep their
-    // content, matching pi's keep-history semantics). Rows convert to screen
-    // rows through the anchored mapping (ADR 0041).
-    const auto first_visible_row = impl_->viewport_top > impl_->scroll_origin
-        ? impl_->viewport_top - impl_->scroll_origin
-        : std::size_t{0};
-    const auto start_row = std::max(owned_region.row, first_visible_row);
-    const auto end_row = owned_region.row + owned_region.rows;
-    if (start_row < end_row) {
-        const auto end_column = std::min(
-            impl_->dimensions.columns,
-            owned_region.column + owned_region.columns);
-        for (auto row = start_row; row < end_row; ++row) {
-            const auto screen_row = impl_->scroll_origin + row - impl_->viewport_top;
-            if (screen_row >= impl_->dimensions.rows) break;
-            for (auto column = owned_region.column; column < end_column; ++column) {
-                clear_grapheme(impl_->cells[screen_row], column);
-            }
-        }
-    }
-    refresh_screen(*impl_);
     return {};
 }
 
