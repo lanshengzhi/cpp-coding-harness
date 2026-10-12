@@ -124,6 +124,24 @@ struct ImageCapabilityOverrides {
     std::optional<bool> hyperlinks{std::nullopt};
 };
 
+/// Synchronous conversion of encoded image data to base64 PNG for terminal
+/// protocols that carry PNG only (pi components/image.ts `ImageTranscoder`).
+/// Null results mean the conversion is unavailable or failed; callers stay on
+/// the image's text fallback.
+using ImageTranscoder =
+        std::function<std::optional<std::string>(std::string_view base64_data, std::string_view mime_type)>;
+
+/// Install or replace the injected conversion capability; `clear_image_transcoder()`
+/// removes it. Either call drops every cached conversion result.
+void set_image_transcoder(ImageTranscoder transcoder);
+void clear_image_transcoder();
+
+/// Convert image data through the registered capability; null when none is
+/// registered or the conversion fails. Successes and failures are cached by
+/// base64 payload in a 32-entry LRU. The registered converter runs under the
+/// registry lock, so it must not re-enter this registry.
+[[nodiscard]] std::optional<std::string> to_png(std::string_view base64_data, std::string_view mime_type);
+
 /// Cached `detect_image_capabilities()` result with test overrides, mirroring
 /// pi's `getCapabilities`/`setCapabilities`/`resetCapabilitiesCache`.
 [[nodiscard]] DetectedImageCapabilities get_image_capabilities();

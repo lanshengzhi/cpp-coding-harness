@@ -8,6 +8,7 @@
 #include "coding_agent/tui/AuthFlowController.hpp"
 #include "coding_agent/tui/EditorAutocomplete.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
+#include "coding_agent/tui/ImageTranscoder.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/InteractiveView.hpp"
 #include "coding_agent/tui/LoadedResources.hpp"
@@ -179,6 +180,14 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     if (auto started = tui_.start(); !started) return fail_start(started.error());
     tui_started_ = true;
     running_ = true;
+
+    // pi main.ts `ensurePngTranscoder` right after `ui.start()`: a Kitty
+    // terminal only places non-PNG images once the host conversion capability
+    // is registered, and the hook repaints images that fell back to text
+    // because a registration landed after their first frame (issue #996).
+    ensure_png_transcoder([weak]() {
+        if (const auto self = weak.lock()) self->invalidate_frame();
+    });
 
     if (!booting) {
         initialize_view(diagnostics);

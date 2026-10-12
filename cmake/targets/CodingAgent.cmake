@@ -118,6 +118,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/ExternalEditor.cpp
         src/coding_agent/tui/Footer.cpp
         src/coding_agent/tui/FooterDataProvider.cpp
+        src/coding_agent/tui/ImageTranscoder.cpp
         src/coding_agent/tui/InteractiveEngine.cpp
         src/coding_agent/tui/InteractiveEngineHost.cpp
         src/coding_agent/tui/InteractiveEngineWiring.cpp

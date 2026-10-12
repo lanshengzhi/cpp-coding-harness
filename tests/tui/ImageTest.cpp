@@ -129,6 +129,28 @@ cch::tui::Image make_image(
         cch::tui::ImageOptions{.constraints = constraints});
 }
 
+cch::tui::Image make_deferred_image(
+        std::string encoded_data, std::string mime_type, cch::tui::ImageCellConstraints constraints = {}) {
+    return cch::tui::Image(
+            cch::tui::ImageContent{
+                    .encoded_data = std::move(encoded_data),
+                    .mime_type = std::move(mime_type),
+            },
+            cch::tui::ImageOptions{
+                    .constraints = constraints,
+                    .defer_protocol_selection = true,
+            });
+}
+
+std::string joined_screen(const cch::tui::VirtualTerminal& terminal) {
+    std::string text;
+    for (const auto& line : terminal.screen()) {
+        text.append(line);
+        text.push_back('\n');
+    }
+    return text;
+}
+
 } // namespace
 
 TEST_CASE("MainScreen resolves image sidecars per terminal without changing global capabilities",
@@ -1046,4 +1068,246 @@ TEST_CASE("Terminal clear_screen and stop delete active Kitty images", "[tui][im
         }
     }
     CHECK(found_kitty_delete);
+}
+
+TEST_CASE(
+        "Kitty non-PNG sidecars convert through the injected transcoder", "[tui][image][transcoder][issue996][spec]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
+    cch::tui::VirtualTerminal terminal({
+            .columns = 22,
+            .rows = 8,
+            .capabilities =
+                    {
+                            .synchronized_output = true,
+                            .inline_images = cch::tui::InlineImageProtocol::Kitty,
+                            .cell_pixels = cch::tui::CellPixelDimensions{.width = 10, .height = 10},
+                    },
+    });
+    const auto source = base64_encode(jpeg_header(640, 480));
+    const auto converted = base64_encode(png_header(40, 10));
+    std::size_t conversions = 0;
+    cch::tui::set_image_transcoder([&](std::string_view data, std::string_view mime_type) {
+        ++conversions;
+        CHECK(mime_type == "image/jpeg");
+        return data == source ? std::optional<std::string>{converted} : std::nullopt;
+    });
+
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Image>(
+            make_deferred_image(source, "image/jpeg", {.max_width = 20, .max_height = 20}))));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    REQUIRE(terminal.images().size() == 1);
+    const auto& image = terminal.images()[0];
+    CHECK(image.mime_type == "image/png");
+    CHECK(image.pixel_width == 40);
+    CHECK(image.pixel_height == 10);
+    CHECK(image.region.columns == 20);
+    CHECK(image.region.rows == 5);
+    CHECK(terminal.screen()[0].find("[Image:") == std::string::npos);
+    CHECK(conversions == 1);
+    bool wrote_converted_png = false;
+    for (const auto& out : terminal.output()) {
+        if (out.find(converted) != std::string::npos) wrote_converted_png = true;
+    }
+    CHECK(wrote_converted_png);
+
+    // pi `toPng` caches per payload, so a repaint reuses the conversion.
+    REQUIRE(tui.render());
+    REQUIRE(terminal.images().size() == 1);
+    CHECK(conversions == 1);
+
+    cch::tui::clear_image_transcoder();
+}
+
+TEST_CASE("Kitty non-PNG sidecars without a transcoder keep their text fallback",
+        "[tui][image][transcoder][issue996][spec]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
+    cch::tui::clear_image_transcoder();
+    cch::tui::VirtualTerminal terminal({
+            .columns = 30,
+            .rows = 8,
+            .capabilities =
+                    {
+                            .synchronized_output = true,
+                            .inline_images = cch::tui::InlineImageProtocol::Kitty,
+                            .cell_pixels = cch::tui::CellPixelDimensions{.width = 10, .height = 10},
+                    },
+    });
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Image>(
+            make_deferred_image(base64_encode(jpeg_header(640, 480)), "image/jpeg"))));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    CHECK(terminal.images().empty());
+    CHECK(joined_screen(terminal).find("[Image: [image/jpeg] 640x480]") != std::string::npos);
+}
+
+TEST_CASE("A failed Kitty conversion keeps the image's text fallback", "[tui][image][transcoder][issue996][spec]") {
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
+    cch::tui::VirtualTerminal terminal({
+            .columns = 30,
+            .rows = 8,
+            .capabilities =
+                    {
+                            .synchronized_output = true,
+                            .inline_images = cch::tui::InlineImageProtocol::Kitty,
+                            .cell_pixels = cch::tui::CellPixelDimensions{.width = 10, .height = 10},
+                    },
+    });
+    std::size_t conversions = 0;
+    cch::tui::set_image_transcoder([&](std::string_view, std::string_view) -> std::optional<std::string> {
+        ++conversions;
+        return std::nullopt;
+    });
+
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Image>(
+            make_deferred_image(base64_encode(jpeg_header(640, 480)), "image/jpeg"))));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    CHECK(terminal.images().empty());
+    CHECK(joined_screen(terminal).find("[Image: [image/jpeg] 640x480]") != std::string::npos);
+    CHECK(conversions == 1);
+
+    cch::tui::clear_image_transcoder();
+}
+
+TEST_CASE("PNG and non-Kitty images never consult the transcoder", "[tui][image][transcoder][issue996][spec]") {
+    std::size_t conversions = 0;
+    cch::tui::set_image_transcoder([&](std::string_view, std::string_view) -> std::optional<std::string> {
+        ++conversions;
+        return std::nullopt;
+    });
+    ImageCapabilitiesGuard image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
+
+    {
+        cch::tui::VirtualTerminal terminal({
+                .columns = 22,
+                .rows = 8,
+                .capabilities =
+                        {
+                                .synchronized_output = true,
+                                .inline_images = cch::tui::InlineImageProtocol::Kitty,
+                                .cell_pixels = cch::tui::CellPixelDimensions{.width = 10, .height = 10},
+                        },
+        });
+        cch::tui::Tui tui(terminal);
+        REQUIRE(tui.add_child(std::make_unique<cch::tui::Image>(make_deferred_image(
+                base64_encode(png_header(40, 10)), "image/png", {.max_width = 20, .max_height = 20}))));
+        REQUIRE(tui.start());
+        REQUIRE(tui.render());
+        REQUIRE(terminal.images().size() == 1);
+        CHECK(terminal.images()[0].mime_type == "image/png");
+        CHECK(conversions == 0);
+    }
+
+    {
+        cch::tui::VirtualTerminal terminal({
+                .columns = 20,
+                .rows = 8,
+                .capabilities =
+                        {
+                                .synchronized_output = true,
+                                .inline_images = cch::tui::InlineImageProtocol::ITerm2,
+                                .cell_pixels = cch::tui::CellPixelDimensions{.width = 10, .height = 10},
+                        },
+        });
+        cch::tui::Tui tui(terminal);
+        REQUIRE(tui.add_child(std::make_unique<cch::tui::Image>(make_deferred_image(
+                base64_encode(jpeg_header(640, 480)), "image/jpeg", {.max_width = 4, .max_height = 4}))));
+        REQUIRE(tui.start());
+        REQUIRE(tui.render());
+        REQUIRE(terminal.images().size() == 1);
+        CHECK(terminal.images()[0].mime_type == "image/jpeg");
+        CHECK(conversions == 0);
+    }
+
+    {
+        cch::tui::VirtualTerminal terminal({
+                .columns = 20,
+                .rows = 8,
+                .capabilities = {.synchronized_output = true, .inline_images = cch::tui::InlineImageProtocol::None},
+        });
+        cch::tui::Tui tui(terminal);
+        REQUIRE(tui.add_child(std::make_unique<cch::tui::Image>(
+                make_deferred_image(base64_encode(jpeg_header(640, 480)), "image/jpeg"))));
+        REQUIRE(tui.start());
+        REQUIRE(tui.render());
+        CHECK(terminal.images().empty());
+        CHECK(joined_screen(terminal).find("[Image:") != std::string::npos);
+        CHECK(conversions == 0);
+    }
+
+    cch::tui::clear_image_transcoder();
+}
+
+TEST_CASE("to_png caches successes, failures, and a 32-entry recency window",
+        "[tui][image][transcoder][issue996][spec]") {
+    const auto converted = base64_encode(png_header(1, 1));
+    std::size_t conversions = 0;
+    cch::tui::set_image_transcoder([&](std::string_view data, std::string_view) -> std::optional<std::string> {
+        ++conversions;
+        if (data == "known") return converted;
+        return std::nullopt;
+    });
+
+    CHECK(cch::tui::to_png("known", "image/jpeg") == converted);
+    CHECK(cch::tui::to_png("known", "image/jpeg") == converted);
+    CHECK(conversions == 1);
+    // Failures are cached like successes: a payload the host cannot convert
+    // must not retry on every frame.
+    CHECK_FALSE(cch::tui::to_png("missing", "image/jpeg"));
+    CHECK_FALSE(cch::tui::to_png("missing", "image/jpeg"));
+    CHECK(conversions == 2);
+
+    // 32 further payloads push both early entries out of the 32-entry window.
+    for (std::size_t index = 0; index < 32; ++index) {
+        CHECK_FALSE(cch::tui::to_png("payload-" + std::to_string(index), "image/jpeg"));
+    }
+    CHECK(conversions == 34);
+    CHECK(cch::tui::to_png("known", "image/jpeg") == converted);
+    CHECK(conversions == 35);
+    CHECK_FALSE(cch::tui::to_png("missing", "image/jpeg"));
+    CHECK(conversions == 36);
+
+    // A repeated lookup refreshes recency (delete + insert), so filling the
+    // window past its bound evicts the least recently used payload instead of
+    // the refreshed one.
+    std::size_t window_conversions = 0;
+    cch::tui::set_image_transcoder([&](std::string_view data, std::string_view) -> std::optional<std::string> {
+        ++window_conversions;
+        if (data == "known") return converted;
+        return std::nullopt;
+    });
+    for (std::size_t index = 0; index < 32; ++index) {
+        CHECK_FALSE(cch::tui::to_png("entry-" + std::to_string(index), "image/jpeg"));
+    }
+    CHECK(window_conversions == 32);
+    CHECK_FALSE(cch::tui::to_png("entry-0", "image/jpeg"));
+    CHECK(window_conversions == 32);
+    CHECK_FALSE(cch::tui::to_png("extra", "image/jpeg"));
+    CHECK(window_conversions == 33);
+    CHECK_FALSE(cch::tui::to_png("extra", "image/jpeg"));
+    CHECK(window_conversions == 33);
+    CHECK_FALSE(cch::tui::to_png("entry-0", "image/jpeg"));
+    CHECK(window_conversions == 33);
+    CHECK_FALSE(cch::tui::to_png("entry-1", "image/jpeg"));
+    CHECK(window_conversions == 34);
+
+    // Replacing the transcoder drops cached results; clearing it disables
+    // conversion rather than serving stale conversions.
+    std::size_t replacements = 0;
+    cch::tui::set_image_transcoder([&](std::string_view, std::string_view) -> std::optional<std::string> {
+        ++replacements;
+        return converted;
+    });
+    CHECK(cch::tui::to_png("entry-0", "image/jpeg") == converted);
+    CHECK(replacements == 1);
+    cch::tui::clear_image_transcoder();
+    CHECK_FALSE(cch::tui::to_png("entry-0", "image/jpeg"));
+    CHECK(replacements == 1);
 }

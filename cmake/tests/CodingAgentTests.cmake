@@ -51,6 +51,7 @@ include_guard(GLOBAL)
         tests/support/ModelRuntimeTestSupport.cpp
         tests/coding_agent/tui/AssistantMessageComponentTest.cpp
         tests/coding_agent/tui/ExternalEditorTest.cpp
+        tests/coding_agent/tui/ImageTranscoderTest.cpp
         tests/coding_agent/tui/ChatContainerTest.cpp
         tests/coding_agent/tui/TerminationSignalsTest.cpp
         tests/coding_agent/tui/tool_renderers/BashRendererTest.cpp

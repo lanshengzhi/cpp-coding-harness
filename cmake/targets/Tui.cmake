@@ -19,6 +19,7 @@ cch_parity_declare_target(
         src/tui/Image.cpp
         src/tui/ImageDimensions.cpp
         src/tui/ImageGeometry.cpp
+        src/tui/ImageTranscoder.cpp
         src/tui/Input.cpp
         src/tui/InputDecoder.cpp
         src/tui/Keybindings.cpp

@@ -313,6 +313,25 @@ RenderResult OverlayCompositor::materialize_images(
                 row_adjustment -= static_cast<std::ptrdiff_t>(source_rows - 1);
             }
         };
+        if (capabilities.inline_images == InlineImageProtocol::Kitty && image.mime_type != "image/png") {
+            // Kitty's graphics protocol carries PNG data only, so a non-PNG
+            // image places only after the registered converter replaced its
+            // payload; a missing or failed conversion keeps the text fallback
+            // (pi components/image.ts `toPng`). The converted PNG's dimensions
+            // are the ones cell geometry measures, so the EXIF-oriented size
+            // drives placement.
+            const auto converted = to_png(image.encoded_data, image.mime_type);
+            const auto converted_dimensions = converted ? get_png_dimensions(*converted) : std::nullopt;
+            if (!converted || converted->empty() || !converted_dimensions) {
+                use_fallback();
+                continue;
+            }
+            image.encoded_data = *converted;
+            image.mime_type = "image/png";
+            image.pixel_width = converted_dimensions->width;
+            image.pixel_height = converted_dimensions->height;
+        }
+
         if (!capabilities.cell_pixels || capabilities.cell_pixels->width == 0 ||
                 capabilities.cell_pixels->height == 0 ||
                 !protocol_supports_mime(capabilities.inline_images, image.mime_type) || image.pixel_width == 0 ||
