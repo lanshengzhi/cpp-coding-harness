@@ -86,6 +86,20 @@ namespace {
     const auto kind = text[position + 1];
     if (kind == '[') {
         std::size_t cursor = position + 2;
+        if (cursor < text.size() && text[cursor] == '?') {
+            ++cursor;
+            while (cursor < text.size() && text[cursor] >= '0' && text[cursor] <= '9') {
+                ++cursor;
+            }
+            if (cursor < text.size() && (text[cursor] == 'h' || text[cursor] == 'l')) {
+                return AnsiCode{
+                        .code = std::string(text.substr(position, cursor + 1 - position)),
+                        .length = cursor + 1 - position,
+                };
+            }
+            return std::unexpected(invalid_terminal_text("Unsupported private CSI sequence"));
+        }
+
         while (cursor < text.size()) {
             const auto byte = static_cast<unsigned char>(text[cursor]);
             if (byte >= 0x40 && byte <= 0x7E) break;
@@ -97,7 +111,8 @@ namespace {
         if (cursor >= text.size()) {
             return std::unexpected(invalid_terminal_text("Incomplete CSI sequence"));
         }
-        if (text[cursor] == 'A' || text[cursor] == 'B') {
+        const char final_byte = text[cursor];
+        if (final_byte == 'A' || final_byte == 'B' || final_byte == 'G') {
             const auto parameters = text.substr(position + 2, cursor - position - 2);
             for (char c : parameters) {
                 if (c < '0' || c > '9') {
@@ -109,7 +124,13 @@ namespace {
                     .length = cursor + 1 - position,
             };
         }
-        if (text[cursor] != 'm') {
+        if (final_byte == 'K' || final_byte == 'J' || final_byte == 'H') {
+            return AnsiCode{
+                    .code = std::string(text.substr(position, cursor + 1 - position)),
+                    .length = cursor + 1 - position,
+            };
+        }
+        if (final_byte != 'm') {
             return std::unexpected(invalid_terminal_text("Only SGR CSI sequences are supported"));
         }
         const auto parameters = text.substr(position + 2, cursor - position - 2);
@@ -370,8 +391,11 @@ support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::stri
             auto ansi = parse_supported_ansi(text, position);
             if (!ansi) return std::unexpected(ansi.error());
             TerminalTokenKind token_kind = TerminalTokenKind::Sgr;
-            if (ansi->code.ends_with('A') || ansi->code.ends_with('B')) {
+            if (ansi->code.ends_with('A') || ansi->code.ends_with('B') || ansi->code.ends_with('G') ||
+                    ansi->code.ends_with('H')) {
                 token_kind = TerminalTokenKind::CursorMove;
+            } else if (ansi->code.ends_with('K') || ansi->code.ends_with('J')) {
+                token_kind = TerminalTokenKind::ClearLine;
             } else if (!ansi->code.starts_with("\x1b[")) {
                 token_kind = TerminalTokenKind::Hyperlink;
             }
@@ -388,11 +412,19 @@ support::Expected<std::vector<TerminalToken>> tokenize_terminal_output(std::stri
             continue;
         }
         if (text[position] == '\r') {
-            if (position + 1 < text.size() && text[position + 1] == '\n') ++position;
+            if (position + 1 < text.size() && text[position + 1] == '\n') {
+                if (preserve_text) {
+                    tokens.push_back({.kind = TerminalTokenKind::Newline, .text = "\n", .width = 0});
+                } else {
+                    tokens.push_back({.kind = TerminalTokenKind::Newline, .text = {}, .width = 0});
+                }
+                position += 2;
+                continue;
+            }
             if (preserve_text) {
-                tokens.push_back({.kind = TerminalTokenKind::Newline, .text = "\n", .width = 0});
+                tokens.push_back({.kind = TerminalTokenKind::CarriageReturn, .text = "\r", .width = 0});
             } else {
-                tokens.push_back({.kind = TerminalTokenKind::Newline, .text = {}, .width = 0});
+                tokens.push_back({.kind = TerminalTokenKind::CarriageReturn, .text = {}, .width = 0});
             }
             ++position;
             continue;
@@ -640,12 +672,28 @@ void AnsiStyleState::reset() {
 support::Expected<std::string> normalize_terminal_output(std::string_view text) {
     auto tokens = tokenize_terminal_output(text);
     if (!tokens) return std::unexpected(tokens.error());
-    return normalized_text(*tokens);
+    std::string result;
+    for (const auto& token : *tokens) {
+        if (token.kind == TerminalTokenKind::CursorMove || token.kind == TerminalTokenKind::ClearLine) {
+            return std::unexpected(invalid_terminal_text("Cursor movement not allowed in component text"));
+        }
+        if (token.kind == TerminalTokenKind::CarriageReturn) {
+            result += '\n';
+        } else {
+            result += token.text;
+        }
+    }
+    return result;
 }
 
 support::Expected<PreparedRenderedLine> prepare_rendered_line(std::string_view line, std::size_t width) {
     auto tokens = tokenize_terminal_output(line);
     if (!tokens) return std::unexpected(tokens.error());
+    for (const auto& token : *tokens) {
+        if (token.kind == TerminalTokenKind::CursorMove || token.kind == TerminalTokenKind::ClearLine) {
+            return std::unexpected(invalid_terminal_text("Cursor movement not allowed in component text"));
+        }
+    }
     auto line_width = token_width(*tokens);
     if (!line_width) return std::unexpected(line_width.error());
     if (*line_width > width) {

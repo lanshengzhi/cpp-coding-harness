@@ -52,18 +52,9 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
                       },
               },
               [this](std::string text) -> support::ExpectedVoid {
-                  // Direct dock echo owns local editor presentation when a
-                  // terminal is configured; a full view invalidation would
-                  // route ordinary typing back through ChatContainer::render.
-                  // The one exception is crossing the bash-mode boundary: the
-                  // editor border token is applied by the full view render
-                  // (pi updateEditorBorderColor), so a `!` prefix or its
-                  // removal must repaint the dock with the new theme.
                   if (!text.empty()) ++editor_revision_;
-                  const bool bash_mode = user_bash_editor_mode(editor_.expanded_text(), user_bash_available_);
-                  const bool bash_toggled = bash_mode != presented_bash_mode_;
-                  presented_bash_mode_ = bash_mode;
-                  if (!editor_.has_local_echo() || bash_toggled) invoke_invalidate();
+                  presented_bash_mode_ = user_bash_editor_mode(editor_.expanded_text(), user_bash_available_);
+                  invoke_invalidate();
                   return {};
               },
               [this](std::string text) -> support::ExpectedVoid {
@@ -83,7 +74,6 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
     chat_.set_hide_thinking_block(options.hide_thinking_block);
     chat_.set_output_pad(options.output_pad);
     editor_.set_autocomplete_provider(std::move(options.autocomplete_provider));
-    editor_.set_terminal(options.terminal);
 }
 
 void InteractiveView::initialize(const AgentSessionSnapshot& snapshot) { chat_.initialize(snapshot); }
@@ -104,8 +94,6 @@ void InteractiveView::set_keybindings(std::shared_ptr<const cch::tui::Keybinding
     keybindings_->replace(registry, help);
     editor_.set_keybindings(std::move(registry));
 }
-
-void InteractiveView::set_terminal(cch::tui::Terminal* terminal) { editor_.set_terminal(terminal); }
 
 void InteractiveView::apply_event(const agent::AgentLifecycleEvent& event) { chat_.apply_event(event); }
 
@@ -468,12 +456,7 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         chat_result = std::move(*rendered);
     }
 
-    const std::size_t dock_line_count =
-            pending_lines.size() + status_lines.size() + editor_lines.size() + footer_lines.size();
-    const std::size_t viewport_height = available_rows_ > dock_line_count ? (available_rows_ - dock_line_count) : 0;
-
     cch::tui::RenderResult transcript_result;
-    transcript_result.viewport_height = viewport_height;
     transcript_result.lines = std::move(header_lines);
     transcript_result.lines.insert(
         transcript_result.lines.end(),
@@ -488,21 +471,23 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         std::make_move_iterator(chat_result.lines.begin()),
         std::make_move_iterator(chat_result.lines.end()));
 
-    transcript_result.dock_lines.reserve(dock_line_count);
-    transcript_result.dock_lines.insert(transcript_result.dock_lines.end(),
+    transcript_result.lines.insert(transcript_result.lines.end(),
             std::make_move_iterator(pending_lines.begin()),
             std::make_move_iterator(pending_lines.end()));
-    transcript_result.dock_lines.insert(transcript_result.dock_lines.end(),
+    transcript_result.lines.insert(transcript_result.lines.end(),
             std::make_move_iterator(status_lines.begin()),
             std::make_move_iterator(status_lines.end()));
-    editor_row_offset_ = pending_lines.size() + status_lines.size();
+
+    editor_row_offset_ = transcript_result.lines.size();
     editor_.set_dock_offset(editor_row_offset_);
-    transcript_result.dock_lines.insert(transcript_result.dock_lines.end(),
+
+    transcript_result.lines.insert(transcript_result.lines.end(),
             std::make_move_iterator(editor_lines.begin()),
             std::make_move_iterator(editor_lines.end()));
-    transcript_result.dock_lines.insert(transcript_result.dock_lines.end(),
+    transcript_result.lines.insert(transcript_result.lines.end(),
             std::make_move_iterator(footer_lines.begin()),
             std::make_move_iterator(footer_lines.end()));
+
     return transcript_result;
 }
 

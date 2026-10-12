@@ -574,19 +574,6 @@ support::Expected<RenderResult> MainScreen::render_children(TerminalDimensions d
             image.region.row += row_offset;
             output.images.push_back(std::move(image));
         }
-        if (rendered->viewport_height.has_value()) {
-            output.viewport_height = rendered->viewport_height;
-        }
-        for (auto& line : rendered->dock_lines) {
-            if (!prepare_rows) {
-                output.dock_lines.push_back(std::move(line));
-                continue;
-            }
-            render_pipeline_->note_prepared_line();
-            auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
-            if (!prepared) return std::unexpected(prepared.error());
-            output.dock_lines.push_back(std::move(prepared->text));
-        }
     }
     rendered_child_rows_ = std::move(rendered_child_rows);
     rendered_children_valid_ = true;

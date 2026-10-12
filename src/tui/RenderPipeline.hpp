@@ -54,37 +54,27 @@ private:
         std::uint64_t revision{0};
     };
 
-    struct AdmittedFrame {
-        std::size_t rows{0};
-        TerminalDimensions dimensions{};
-        std::size_t viewport_height{0};
-        bool cleared{false};
-        std::size_t stale_below{0};
-        std::size_t stale_cleared{0};
-    };
-
     [[nodiscard]] support::ExpectedVoid remove_active_images();
     [[nodiscard]] support::ExpectedVoid remove_images_intersecting(const CellRegion& region);
     [[nodiscard]] support::ExpectedVoid remove_stale_images(
             const std::vector<InlineImageRenderRegion>& desired_images);
     [[nodiscard]] support::ExpectedVoid place_images(const std::vector<InlineImageRenderRegion>& desired_images);
-    [[nodiscard]] std::size_t admitted_prefix(TerminalDimensions dimensions, std::size_t viewport_height) const;
 
     Terminal& terminal_; // must outlive this pipeline.
     bool first_render_{true};
     std::vector<std::string> previous_lines_;
-    std::vector<std::string> previous_dock_lines_;
     /// Composed rows before frame-level preparation, used to reuse finalized rows.
     std::vector<std::string> previous_raw_lines_;
-    std::vector<std::string> previous_raw_dock_lines_;
     std::size_t frame_prepare_call_count_{0};
-    std::size_t previous_viewport_height_{0};
-    std::size_t viewport_top_{0};
+    std::size_t hardware_cursor_row_{0};
+    std::size_t max_lines_rendered_{0};
+    std::size_t previous_viewport_top_{0};
     /// The last committed frame's dimensions: set at start, committed with a
     /// successful render, and reset by clear_screen.
     TerminalDimensions previous_dimensions_{};
-    AdmittedFrame admitted_;
     std::vector<ActiveImage> active_images_;
+
+    void position_hardware_cursor(const std::optional<CursorPosition>& cursor_pos, std::size_t total_lines);
 };
 
 } // namespace cch::tui::detail

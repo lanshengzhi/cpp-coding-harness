@@ -359,3 +359,71 @@ TEST_CASE("VirtualTerminal reset_scroll_margins restores full-screen scrolling",
 
     REQUIRE(terminal.stop());
 }
+
+TEST_CASE("VirtualTerminal starts regular TUI rendering using relative line flow without DSR or clearing scrollback",
+        "[tui][terminal][issue983][spec]") {
+    tui::VirtualTerminal terminal({.columns = 40, .rows = 10});
+    REQUIRE(terminal.seed_shell_content(
+            {"user@box:~$ ls", "file1.txt  file2.txt", "user@box:~$ echo hi"}, {.column = 0, .row = 3}));
+    tui::Tui tui(terminal);
+    auto lines = std::make_unique<LinesComponent>(std::vector<std::string>{"initial line 1", "initial line 2"});
+    REQUIRE(tui.add_child(std::move(lines)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // Relative rendering starts at cursor row 3 without clearing screen or scrollback
+    const auto& screen = terminal.screen();
+    CHECK(screen[0] == "user@box:~$ ls");
+    CHECK(screen[1] == "file1.txt  file2.txt");
+    CHECK(screen[2] == "user@box:~$ echo hi");
+    CHECK(screen[3].starts_with("initial line 1"));
+    CHECK(screen[4].starts_with("initial line 2"));
+    CHECK(terminal.scrollback().empty());
+
+    // Stop flows cursor below rendered lines. Frozen pi-v1.0.4 observation
+    // (TuiMainScreen.beforeTerminalStop: space, line diff move, then "\r\n"):
+    // seeded content rows 3-4 raise the cursor to row 6, not row 5.
+    REQUIRE(tui.stop());
+    CHECK(terminal.cursor().row == 6);
+}
+
+TEST_CASE("Tui starts regular rendering on dirty screens at physical rows 1 and 4 without CPR",
+        "[tui][terminal][issue983][spec]") {
+    // Frozen pi TuiMainScreen flows rendered lines relative to whatever shell
+    // cursor it inherits: content above the cursor stays untouched, the frame
+    // starts at the cursor row, and stop() leaves the cursor below the frame
+    // (space, line-diff move, CRLF). No CPR reply is available to any case.
+    const auto render_from = [](std::size_t seed_row) {
+        tui::VirtualTerminal terminal({.columns = 24, .rows = 8});
+        std::vector<std::string> shell_lines;
+        for (std::size_t row = 0; row < seed_row; ++row)
+            shell_lines.push_back(std::format("shell row {}", row));
+        REQUIRE(terminal.seed_shell_content(shell_lines, {.column = 0, .row = seed_row}));
+
+        tui::Tui tui(terminal);
+        auto lines = std::make_unique<LinesComponent>(std::vector<std::string>{"alpha", "beta"});
+        REQUIRE(tui.add_child(std::move(lines)));
+        REQUIRE(tui.start());
+        REQUIRE(tui.render());
+
+        const auto& screen = terminal.screen();
+        for (std::size_t row = 0; row < seed_row; ++row)
+            CHECK(screen[row] == std::format("shell row {}", row));
+        CHECK(screen[seed_row].starts_with("alpha"));
+        CHECK(screen[seed_row + 1].starts_with("beta"));
+        CHECK(terminal.scrollback().empty());
+        // The frame flows from the shell cursor; it never clears the screen
+        // or scrollback and never depends on a cursor-position reply.
+        for (const auto& chunk : terminal.output()) {
+            CHECK(chunk.find("\x1b[6n") == std::string::npos);
+            CHECK(chunk.find("\x1b[2J") == std::string::npos);
+            CHECK(chunk.find("\x1b[3J") == std::string::npos);
+        }
+
+        REQUIRE(tui.stop());
+        CHECK(terminal.cursor().row == seed_row + 3);
+    };
+
+    render_from(1);
+    render_from(4);
+}

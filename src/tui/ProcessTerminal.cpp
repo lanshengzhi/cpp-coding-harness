@@ -62,10 +62,8 @@ constexpr std::string_view kKeyboardProtocolQuery = "\x1b[?u\x1b[c";
 constexpr std::string_view kKeyboardProtocolPop = "\x1b[<u";
 constexpr std::string_view kColorSchemeQuery = "\x1b[?996n";
 constexpr std::string_view kBackgroundColorQuery = "\x1b]11;?\x07";
-// ADR 0041 anchored absolute flow: the startup DSR cursor-position query
-// (`\x1b[6n`) establishes the shell's cursor row as the buffer-to-screen
-// origin; the answer is a CPR (`ESC [ rows ; cols R`, 1-based).
-constexpr std::string_view kCursorPositionQuery = "\x1b[6n";
+// pi `TuiMainScreen` relative line-flow and scrollback flow:
+// No startup DSR query (`\x1b[6n`) is sent during regular TUI startup or rendering.
 constexpr std::string_view kModifyOtherKeysEnable = "\x1b[>4;2m";
 constexpr std::string_view kModifyOtherKeysDisable = "\x1b[>4;0m";
 constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
@@ -75,10 +73,6 @@ constexpr auto kProgressKeepalive = std::chrono::milliseconds(1000);
 /// queries run before asynchronous I/O starts; pi probes synchronously at
 /// startup).
 constexpr auto kAppearanceProbeTimeout = std::chrono::milliseconds(100);
-/// Startup cursor-position poll bound (ADR 0041): a terminal that does not
-/// answer the DSR query within this window falls back to clear-screen + home +
-/// scrollback with the origin at row 0.
-constexpr auto kCursorPositionTimeout = std::chrono::milliseconds(250);
 /// The readiness timer re-reads TIOCGWINSZ at least this often so resizes are
 /// detected even without SIGWINCH delivery.
 /// This is a low-rate watchdog timer, not input polling.
@@ -255,17 +249,15 @@ struct StartupProbe {
     detail::TerminalStreamDecoder decoder;
     std::optional<TerminalAppearance> color_scheme{std::nullopt};
     std::optional<TerminalAppearance> background{std::nullopt};
-    /// The reported cursor position (0-based) when a CPR arrived in time.
-    std::optional<CursorPosition> position{std::nullopt};
     std::string forwarded_input;
 };
 
 void collect_probe_responses(StartupProbe& probe, const std::vector<detail::TerminalResponseVariant>& responses) {
     for (const auto& response : responses) {
-        if (const auto* position = std::get_if<CursorPosition>(&response)) {
-            probe.position = *position;
-            continue;
-        }
+        // Cursor-position reports are no longer requested at startup (#983):
+        // regular rendering flows relative to the inherited shell cursor. A
+        // late report is consumed here so it never reaches the input sink.
+        if (std::get_if<CursorPosition>(&response) != nullptr) continue;
         if (const auto* scheme = std::get_if<detail::ColorSchemeResponse>(&response)) {
             if (scheme->kind == detail::ColorSchemeResponseKind::ColorScheme) {
                 probe.color_scheme = scheme->appearance;
@@ -282,14 +274,11 @@ void collect_probe_responses(StartupProbe& probe, const std::vector<detail::Term
 
 /// Poll the input descriptor until the timeout passes, feeding every chunk
 /// through the probe's decoder (pi's synchronous startup probes). The
-/// appearance probe always runs out its full window; the cursor-position
-/// probe returns early once the DSR answer arrives (ADR 0041).
-void poll_startup_probe(
-        StartupProbe& probe, int descriptor, std::chrono::milliseconds timeout, bool stop_at_cursor_position) {
+/// appearance probe always runs out its full window.
+void poll_startup_probe(StartupProbe& probe, int descriptor, std::chrono::milliseconds timeout) {
     constexpr std::size_t kProbeReadChunkBytes{4096};
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     while (true) {
-        if (stop_at_cursor_position && probe.position) return;
         const auto remaining =
                 std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
         if (remaining.count() <= 0) return;
@@ -374,10 +363,11 @@ struct ProcessTerminal::Impl {
     std::size_t margin_top{0};
     std::size_t margin_bottom{0};
     bool margins_active{false};
-    /// Screen row where buffer row 0 was first written: the shell's cursor row
-    /// at startup (0-based), established once by the startup cursor-position
-    /// probe (ADR 0041 anchored absolute flow; the DSR timeout fallback clears
-    /// the screen and anchors at row 0).
+    /// Screen row where buffer row 0 was first written. Regular rendering
+    /// flows relative to the inherited shell cursor (#983), so the renderer
+    /// never learns the absolute origin and keeps it at 0; a retained
+    /// buffer-to-screen base for image placement until #995 composes regular
+    /// image placement inline in the line flow.
     std::size_t scroll_origin{0};
     /// Total native scrolls since the anchor, mirroring VirtualTerminal's
     /// scroll emulation: the renderer writes the full composed buffer with
@@ -787,9 +777,9 @@ void apply_terminal_responses(
             continue;
         }
         if (std::get_if<CursorPosition>(&response) != nullptr) {
-            // A CPR arriving on the worker is a late or duplicate answer to
-            // the startup DSR query. The anchor is established once at
-            // startup, so consume and ignore it (ADR 0041).
+            // A CPR arriving on the worker answers no query any more (#983):
+            // startup no longer probes the cursor position, so consume and
+            // ignore the unsolicited report.
             continue;
         }
         const auto* appearance = std::get_if<detail::ColorSchemeResponse>(&response);
@@ -1239,41 +1229,15 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
         return fail_startup(appearance_query.result.error());
     }
     StartupProbe probe;
-    poll_startup_probe(probe, impl_->options.input_fd, kAppearanceProbeTimeout, false);
+    poll_startup_probe(probe, impl_->options.input_fd, kAppearanceProbeTimeout);
     impl_->capabilities.appearance = probe.color_scheme.value_or(probe.background.value_or(environment_appearance));
-
-    // ADR 0041 anchored absolute flow (issue #476): query the cursor position
-    // once (DSR `\x1b[6n`) through the same blocking startup write path and
-    // poll for the CPR response. The reported row anchors the buffer-to-screen
-    // origin (`scroll_origin`), so the first frame lands at the shell's cursor
-    // row instead of a hard-coded screen row 0, and the tracked cursor becomes
-    // the real hardware position for later relative math.
-    auto cursor_query = attempt_write_all(impl_->options.output_fd, kCursorPositionQuery);
-    if (!cursor_query.result) {
-        return fail_startup(cursor_query.result.error());
-    }
-    poll_startup_probe(probe, impl_->options.input_fd, kCursorPositionTimeout, true);
-    impl_->capabilities.appearance = probe.color_scheme.value_or(probe.background.value_or(environment_appearance));
-    if (probe.position) {
-        impl_->scroll_origin = probe.position->row;
-        impl_->viewport_top = 0;
-        impl_->cursor = *probe.position;
-    } else {
-        // DSR timeout fallback (ADR 0041): clear screen, home, and clear
-        // scrollback, then anchor at row 0 — deterministic on terminals that
-        // do not answer DSR, at the cost of losing on-screen shell content.
-        auto cleared = attempt_write_all(impl_->options.output_fd, kClearScreen);
-        if (!cleared.result) {
-            return fail_startup(cleared.result.error());
-        }
-        impl_->scroll_origin = 0;
-        impl_->viewport_top = 0;
-        impl_->cursor = {};
-    }
     auto flushed_probe = probe.decoder.flush();
     probe.forwarded_input += std::move(flushed_probe.forwarded_input);
     impl_->startup_color_scheme_reported = probe.color_scheme.has_value();
     impl_->startup_input = std::move(probe.forwarded_input);
+    impl_->scroll_origin = 0;
+    impl_->viewport_top = 0;
+    impl_->cursor = {};
 
     auto keyboard_push = attempt_write_all(impl_->options.output_fd, kKeyboardProtocolPush);
     if (!keyboard_push.result) {
@@ -1488,10 +1452,9 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
     // Absolute CUP beyond the bottom clamps without scrolling on real
     // terminals, so mirror pi's append (`"\r\n".repeat(scroll)`) by moving to
     // the bottom and emitting CRLF line flow: the real terminal scrolls its
-    // scroll history natively. Under the anchored absolute flow (ADR 0041) the
-    // screen row of buffer row b is `scroll_origin + b - viewport_top`, and
-    // the emulated scroll count stays in sync with the renderer's own tracked
-    // viewport.
+    // scroll history natively. Relative flow keeps the buffer origin at 0, so
+    // the screen row of buffer row b is `b - viewport_top`, and the emulated
+    // scroll count stays in sync with the renderer's own tracked viewport.
     const auto first_visible_row =
             impl_->viewport_top > impl_->scroll_origin ? impl_->viewport_top - impl_->scroll_origin : std::size_t{0};
     if (position.row < first_visible_row) {
@@ -1624,9 +1587,9 @@ support::Expected<TerminalImageHandle> ProcessTerminal::place_image(const Termin
     }
     // Image regions are buffer-absolute under the main-screen scrollback flow.
     // A region whose buffer row has scrolled into the terminal's native
-    // scrollback (above the first visible buffer row under the anchored
-    // mapping, ADR 0041) cannot be addressed by the real terminal and is
-    // already held by its scroll history; skip the placement but keep
+    // scrollback (above the first visible buffer row) cannot be addressed by
+    // the real terminal and is already held by its scroll history; skip the
+    // placement but keep
     // the handle allocation so the renderer's active-image tracking stays
     // consistent (fork-B image-follows-content, ADR 0037).
     const auto first_visible_row =
@@ -1661,8 +1624,8 @@ support::ExpectedVoid ProcessTerminal::remove_image(TerminalImageHandle handle, 
                 support::ErrorCode::Validation, "Inline image removal region is outside terminal dimensions"));
     }
     // Buffer-absolute removal region (fork-B): regions that scrolled into the
-    // native scrollback (above the first visible buffer row under the anchored
-    // mapping, ADR 0041) are already out of the visible screen, so there is
+    // native scrollback (above the first visible buffer row) are already out
+    // of the visible screen, so there is
     // nothing to blank in place; skip them.
     const auto first_visible_row =
             impl_->viewport_top > impl_->scroll_origin ? impl_->viewport_top - impl_->scroll_origin : std::size_t{0};

@@ -473,10 +473,29 @@ TEST_CASE("Box background covers every cell of a styled row", "[tui][box][backgr
     const std::vector<std::string> expected_output{
             "\x1b[?2026h",
             "\x1b[48;5;22m        \x1b[49m\x1b[0m\x1b]8;;\x07",
-            "\x1b[48;5;22m \x1b[2mdim    \x1b[49m\x1b[0m\x1b]8;;\x07",
-            "\x1b[48;5;22m plain  \x1b[49m\x1b[0m\x1b]8;;\x07",
-            "\x1b[48;5;22m        \x1b[49m\x1b[0m\x1b]8;;\x07",
+            "\n\x1b[48;5;22m \x1b[2mdim    \x1b[49m\x1b[0m\x1b]8;;\x07",
+            "\n\x1b[48;5;22m plain  \x1b[49m\x1b[0m\x1b]8;;\x07",
+            "\n\x1b[48;5;22m        \x1b[49m\x1b[0m\x1b]8;;\x07",
             "\x1b[?2026l",
     };
-    CHECK(terminal.output() == expected_output);
+    REQUIRE(terminal.output().size() == expected_output.size());
+    for (std::size_t i = 0; i < expected_output.size(); ++i) {
+        if (terminal.output()[i] != expected_output[i]) {
+            for (char c : terminal.output()[i]) {
+                if (c >= 32 && c <= 126)
+                    printf("%c", c);
+                else
+                    printf("\\x%02x", (unsigned char)c);
+            }
+            printf("\n");
+            for (char c : expected_output[i]) {
+                if (c >= 32 && c <= 126)
+                    printf("%c", c);
+                else
+                    printf("\\x%02x", (unsigned char)c);
+            }
+            printf("\n");
+        }
+        CHECK(terminal.output()[i] == expected_output[i]);
+    }
 }

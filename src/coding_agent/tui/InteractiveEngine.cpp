@@ -440,7 +440,6 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
 std::unique_ptr<InteractiveView> InteractiveEngine::make_interactive_view(std::weak_ptr<InteractiveEngine> weak) {
     InteractiveViewOptions options;
     options.keybindings = keybindings_;
-    options.terminal = nullptr;
     // Preserve the existing production hint: the application supplies
     // the clipboard action path even when the clipboard reader is
     // unavailable, so the hint remains part of the assembled Native TUI.

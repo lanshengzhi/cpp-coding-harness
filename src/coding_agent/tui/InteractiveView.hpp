@@ -184,9 +184,6 @@ struct InteractiveViewOptions {
     cch::tui::EditorRenderRequestSink render_request;
     /// Must outlive the view: controller-owned live theme.
     const LiveTheme* theme{nullptr};
-    /// Borrowed by the editor for local dock echo; it must outlive every view
-    /// operation.
-    cch::tui::Terminal* terminal{nullptr};
 };
 
 /// The pi main-screen composition. Emits one closed `ViewAction` per
@@ -221,7 +218,6 @@ public:
     void set_keybindings(std::shared_ptr<const cch::tui::KeybindingRegistry> registry,
             std::shared_ptr<const std::vector<HotkeyHelpRow>> help);
     /// The terminal is borrowed and must outlive every view operation.
-    void set_terminal(cch::tui::Terminal* terminal);
     void apply_event(const agent::AgentLifecycleEvent& event);
     void clear_transcript();
     void append_frontend_message(std::string text);

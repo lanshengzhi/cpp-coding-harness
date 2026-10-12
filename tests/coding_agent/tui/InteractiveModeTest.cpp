@@ -4242,3 +4242,71 @@ TEST_CASE("Native TUI command autocomplete offers every accepted slash spelling"
     REQUIRE(run_result);
     CHECK(*run_result);
 }
+
+TEST_CASE("Native TUI starts regular rendering on a dirty screen at physical rows 1 and 4 without CPR",
+        "[coding_agent][tui][rendering][issue983][spec]") {
+    // Frozen pi TuiMainScreen regular mode flows its whole composition from
+    // the shell cursor: shell content above it survives, nothing clears the
+    // screen or scrollback, and no cursor-position reply is needed. This is
+    // the actual Native caller comparison against the reusable-toolkit case
+    // in `VirtualTerminalTest.cpp`; absence of DSR bytes alone is not enough.
+    const auto run_from = [](std::size_t seed_row) {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config_directory;
+        auto options = session_options(workspace, tests::make_scripted_fake_provider());
+        auto created = runtime.run(create_session_async(runtime, std::move(options)));
+        REQUIRE(created);
+
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+        tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
+        std::vector<std::string> shell_lines;
+        for (std::size_t row = 0; row < seed_row; ++row)
+            shell_lines.push_back(std::format("user@box:~$ shell row {}", row));
+        REQUIRE(terminal.seed_shell_content(shell_lines, {.column = 0, .row = seed_row}));
+
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        boost::asio::co_spawn(io,
+                coding_agent::tui::run_interactive_mode(
+                        terminal, make_run(*created->session, {.agent_config_directory = config_directory.path()})),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+
+        // The full buffer — what scrolled out plus the visible viewport —
+        // still carries every seeded shell row in order, so startup neither
+        // cleared the screen nor destroyed scrollback.
+        std::vector<std::string> buffer = terminal.scrollback();
+        buffer.insert(buffer.end(), terminal.screen().begin(), terminal.screen().end());
+        for (const auto& shell_line : shell_lines) {
+            const auto found = std::ranges::find_if(
+                    buffer, [&shell_line](const std::string& row) { return row.starts_with(shell_line); });
+            CHECK(found != buffer.end());
+        }
+
+        // No startup DSR query and no destructive clear, at the protocol byte
+        // seam as well as the modeled screen.
+        for (const auto& chunk : terminal.output()) {
+            CHECK(chunk.find("\x1b[6n") == std::string::npos);
+            CHECK(chunk.find("\x1b[2J") == std::string::npos);
+            CHECK(chunk.find("\x1b[3J") == std::string::npos);
+        }
+
+        // The Native composition rendered on the same screen: the editor and
+        // footer flowed below the inherited cursor rather than into a reserved
+        // dock partition.
+        const auto screen = visible_screen(terminal);
+        CHECK(screen.find("─") != std::string::npos);
+
+        REQUIRE(terminal.inject_input("\x04"));
+        drain_ready(io);
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    };
+
+    run_from(1);
+    run_from(4);
+}

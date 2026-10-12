@@ -167,100 +167,6 @@ private:
 /// A component that renders no transcript lines and a dock taller than the
 /// terminal: the replacement-dialog overflow shape behind the #607
 /// slash-exit (an unbounded dialog's dock lines outgrow the addressable
-/// bottom rows).
-class DockFloodComponent final : public cch::tui::Component {
-public:
-    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
-        cch::tui::RenderResult result;
-        result.viewport_height = std::size_t{0};
-        result.dock_lines = {"s1", "s2", "edit", "foot1", "foot2"};
-        return result;
-    }
-
-    void invalidate() override {}
-};
-
-/// A terminal whose writes fail: pins that the dock-overflow crop does not
-/// swallow real terminal errors.
-class FailingWriteTerminal final : public cch::tui::Terminal {
-public:
-    [[nodiscard]] cch::support::ExpectedVoid start(cch::tui::TerminalInputSink, cch::tui::TerminalResizeSink) override {
-        modes_.started = true;
-        return {};
-    }
-
-    [[nodiscard]] cch::support::ExpectedVoid stop() override {
-        modes_.started = false;
-        return {};
-    }
-
-    [[nodiscard]] cch::tui::TerminalDimensions dimensions() const override { return {.columns = 8, .rows = 3}; }
-    [[nodiscard]] cch::tui::TerminalCapabilities capabilities() const override { return {}; }
-    [[nodiscard]] cch::tui::TerminalModeState modes() const override { return modes_; }
-    [[nodiscard]] cch::support::ExpectedVoid clear_screen() override { return {}; }
-    [[nodiscard]] cch::support::ExpectedVoid write(std::string_view) override {
-        return std::unexpected(
-                cch::support::make_error(cch::support::ErrorCode::Process, "terminal write failed", "write detail"));
-    }
-    [[nodiscard]] cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition) override { return {}; }
-    [[nodiscard]] cch::support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
-    [[nodiscard]] cch::support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
-    [[nodiscard]] cch::support::ExpectedVoid reset_scroll_margins() override { return {}; }
-    [[nodiscard]] cch::support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
-    [[nodiscard]] cch::support::Expected<cch::tui::TerminalImageHandle> place_image(
-            const cch::tui::TerminalImage&) override {
-        return cch::tui::TerminalImageHandle{};
-    }
-    [[nodiscard]] cch::support::ExpectedVoid remove_image(
-            cch::tui::TerminalImageHandle, const cch::tui::CellRegion&) override {
-        return {};
-    }
-    [[nodiscard]] cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
-    [[nodiscard]] cch::support::ExpectedVoid end_synchronized_update() override { return {}; }
-    [[nodiscard]] cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }
-    [[nodiscard]] cch::support::ExpectedVoid set_progress(bool) override { return {}; }
-    [[nodiscard]] cch::support::ExpectedVoid drain_input(
-            std::chrono::milliseconds, std::chrono::milliseconds) override {
-        return {};
-    }
-
-private:
-    cch::tui::TerminalModeState modes_;
-};
-
-/// A component whose dock height changes between renders: the autocomplete
-/// open/close shape behind the #607 slash-exit (closing the menu shrinks the
-/// dock and moves the viewport boundary down).
-class DockShrinkComponent final : public cch::tui::Component {
-public:
-    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
-        cch::tui::RenderResult result;
-        result.lines = {"chat1", "chat2"};
-        result.dock_lines = dock_lines;
-        result.viewport_height = std::size_t{6} - dock_lines.size();
-        return result;
-    }
-
-    void invalidate() override {}
-
-    std::vector<std::string> dock_lines{"s1", "edit", "auto1", "auto2", "foot"};
-};
-
-/// A one-row viewport with a one-line dock: the single transcript row must
-/// stay visible above the dock instead of being overwritten by it (#611).
-class OneRowViewportDockComponent final : public cch::tui::Component {
-public:
-    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
-        cch::tui::RenderResult result;
-        result.lines = {"chat1"};
-        result.dock_lines = {"edit"};
-        result.viewport_height = 1;
-        return result;
-    }
-
-    void invalidate() override {}
-};
-
 class MutableLinesComponent final : public cch::tui::Component {
 public:
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
@@ -324,70 +230,6 @@ private:
 
 } // namespace
 
-TEST_CASE(
-        "Tui crops an overflowing dock to the bottom rows without failing the render", "[tui][dock][issue607][spec]") {
-    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
-    cch::tui::Tui tui(terminal);
-    REQUIRE(tui.add_child(std::make_unique<DockFloodComponent>()));
-
-    REQUIRE(tui.start());
-    // The five dock rows outgrow the three-row terminal; the render drops
-    // the leading overflow rows instead of failing, keeping the editor and
-    // footer rows on the physical bottom rows.
-    REQUIRE(tui.render());
-    const std::vector<std::string> expected_screen{"edit    ", "foot1   ", "foot2   "};
-    CHECK(terminal.screen() == expected_screen);
-    // A repeat render of the unchanged cropped dock stays a stable no-op.
-    REQUIRE(tui.render());
-    CHECK(terminal.screen() == expected_screen);
-    REQUIRE(tui.stop());
-}
-
-TEST_CASE("Tui propagates real terminal write failures while cropping an overflowing dock",
-        "[tui][dock][issue607][spec]") {
-    FailingWriteTerminal terminal;
-    cch::tui::Tui tui(terminal);
-    REQUIRE(tui.add_child(std::make_unique<DockFloodComponent>()));
-
-    REQUIRE(tui.start());
-    const auto rendered = tui.render();
-    REQUIRE_FALSE(rendered);
-    CHECK(rendered.error().code == cch::support::ErrorCode::Process);
-    CHECK(rendered.error().message == "terminal write failed");
-    REQUIRE(tui.stop());
-}
-
-TEST_CASE("Tui keeps a shrinking cropped dock inside the terminal rows", "[tui][dock][issue607][spec]") {
-    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 6});
-    cch::tui::Tui tui(terminal);
-    auto component = std::make_unique<DockShrinkComponent>();
-    auto* component_pointer = component.get();
-    REQUIRE(tui.add_child(std::move(component)));
-
-    REQUIRE(tui.start());
-    REQUIRE(tui.render());
-    component_pointer->dock_lines = {"s1", "edit", "foot"};
-    REQUIRE(tui.render());
-    CHECK(terminal.screen().size() == 6);
-    REQUIRE(tui.stop());
-}
-
-TEST_CASE("Tui places the dock below the transcript on a one-row viewport", "[tui][dock][issue611][spec]") {
-    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 2});
-    cch::tui::Tui tui(terminal);
-    REQUIRE(tui.add_child(std::make_unique<OneRowViewportDockComponent>()));
-
-    REQUIRE(tui.start());
-    REQUIRE(tui.render());
-    // A one-row viewport is a one-row scroll region: the dock start is the
-    // row below the transcript row, not row 0 overwriting it.
-    CHECK(terminal.screen() == std::vector<std::string>{"chat1   ", "edit    "});
-    // A repeat render of the unchanged one-row partition stays a stable no-op.
-    REQUIRE(tui.render());
-    CHECK(terminal.screen() == std::vector<std::string>{"chat1   ", "edit    "});
-    REQUIRE(tui.stop());
-}
-
 TEST_CASE("Tui rolls back viewport state after a backpressured frame", "[tui][issue462][spec]") {
     RenderBackpressureTerminal terminal;
     cch::tui::Tui tui(terminal);
@@ -438,7 +280,7 @@ TEST_CASE("Tui renders attached Text through the VirtualTerminal seam", "[tui][i
     CHECK(terminal.output()[0] == "\x1b[?2026h");
     CHECK(terminal.output()[1] == "hello   \x1b[0m\x1b]8;;\x07");
     CHECK(terminal.output()[2] == "\x1b[?2026l");
-    const cch::tui::CursorPosition expected_cursor{.column = 0, .row = 0};
+    const cch::tui::CursorPosition expected_cursor{.column = 8, .row = 0};
     CHECK(terminal.cursor() == expected_cursor);
     CHECK(terminal.final_style() == cch::tui::TerminalStyle{});
     CHECK_FALSE(terminal.modes().cursor_visible);
@@ -1116,76 +958,15 @@ TEST_CASE("Tui stop scrolls the exit flow through the terminal scrollback on a f
 
     REQUIRE(tui.stop());
 
-    // The exit flow (set_cursor one row past the buffer, then CRLF) scrolls
-    // twice more, so every transcript line but the last is in the terminal's
-    // native scrollback and the cursor stays on the bottom row.
+    // In relative line flow, exit flows below the composed buffer with CRLF.
     const std::vector<std::string> expected_scrollback{
             "one     ",
             "two     ",
-            "three   ",
     };
     CHECK(terminal.scrollback() == expected_scrollback);
-    CHECK(terminal.screen()[0].find("our") != std::string::npos);
+    CHECK(terminal.screen()[1].find("our") != std::string::npos);
     CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 2});
     CHECK(terminal.modes().cursor_visible);
-}
-TEST_CASE("Tui stop clears the bottom dock before placing the shell prompt", "[tui][terminal][issue832][spec]") {
-    class DockedExitComponent final : public cch::tui::Component {
-    public:
-        [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
-            return cch::tui::RenderResult{
-                    .lines = {"one", "two"},
-                    .viewport_height = 3,
-                    .dock_lines = {"editor", "footer"},
-            };
-        }
-
-        void invalidate() override {}
-    };
-
-    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 5});
-    cch::tui::Tui tui(terminal);
-    REQUIRE(tui.add_child(std::make_unique<DockedExitComponent>()));
-    REQUIRE(tui.start());
-    REQUIRE(tui.render());
-    REQUIRE(tui.stop());
-
-    CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 4});
-    const std::vector<std::string> expected_scrollback{"one     "};
-    const std::vector<std::string> expected_screen{"two     ", "", "        ", "        ", ""};
-    CHECK(terminal.scrollback() == expected_scrollback);
-    CHECK(terminal.screen() == expected_screen);
-}
-
-TEST_CASE("MainScreen stop clears a dock after transcript scrolling without erasing transcript rows",
-        "[tui][terminal][issue832][issue977][spec]") {
-    class ScrolledDock final : public cch::tui::Component {
-    public:
-        [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
-            return cch::tui::RenderResult{
-                    .lines = {"one", "two", "three", "four", "last"},
-                    .viewport_height = 3,
-                    .dock_lines = {"editor", "footer"},
-            };
-        }
-
-        void invalidate() override {}
-    };
-
-    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 5});
-    cch::tui::MainScreen main_screen(terminal);
-    cch::tui::ITui& tui = main_screen;
-    REQUIRE(tui.add_child(std::make_unique<ScrolledDock>()));
-    REQUIRE(tui.start());
-    REQUIRE(tui.render());
-    REQUIRE(terminal.viewport_top() == 2);
-    REQUIRE(tui.stop());
-
-    const std::vector<std::string> expected_scrollback{"one     ", "two     ", "three   "};
-    const std::vector<std::string> expected_screen{"four    ", "last    ", "        ", "        ", ""};
-    CHECK(terminal.scrollback() == expected_scrollback);
-    CHECK(terminal.screen() == expected_screen);
-    CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 4});
 }
 
 TEST_CASE("issue980 places the composed nested cursor on the hardware screen",
@@ -1215,43 +996,4 @@ TEST_CASE("issue980 places the composed nested cursor on the hardware screen",
     REQUIRE(tui.set_focus(nullptr));
     REQUIRE(tui.render());
     REQUIRE(tui.stop());
-}
-
-TEST_CASE("Tui stop moves focused dock cursor below the bottom dock", "[tui][terminal][issue832][spec]") {
-    class FocusableDockedExitComponent final : public cch::tui::Component, public cch::tui::Focusable {
-    public:
-        [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
-            return cch::tui::RenderResult{
-                    .lines = {"one", "two"},
-                    .viewport_height = 3,
-                    .dock_lines = {"editor", "footer"},
-            };
-        }
-
-        void invalidate() override {}
-
-        void set_focused(bool focused) override { focused_ = focused; }
-        [[nodiscard]] bool focused() const override { return focused_; }
-
-        [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
-            return cch::tui::CursorPosition{.column = 6, .row = 0};
-        }
-
-    private:
-        bool focused_{false};
-    };
-
-    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 5});
-    cch::tui::Tui tui(terminal);
-    auto component = std::make_unique<FocusableDockedExitComponent>();
-    auto* component_ptr = component.get();
-    REQUIRE(tui.add_child(std::move(component)));
-    REQUIRE(tui.set_focus(component_ptr));
-    REQUIRE(tui.start());
-    REQUIRE(tui.render());
-    REQUIRE(tui.stop());
-
-    CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 4});
-    CHECK(terminal.screen()[2].find("editor") == std::string::npos);
-    CHECK(terminal.screen()[3].find("footer") == std::string::npos);
 }

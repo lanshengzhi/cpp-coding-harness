@@ -538,8 +538,8 @@ std::optional<std::size_t> escape_sequence_length(std::string_view pending, bool
 // --- Out-of-band terminal response grammars ---
 //
 // The response parsers below are the deep-module consolidation of the
-// pre-unification sidecar consumers: the CPR answer (ProcessTerminal's
-// parse_cursor_position_response, ADR 0041), the cell-size answer
+// pre-unification sidecar consumers: the CPR answer (accepted and ignored,
+// since #983 removed the startup cursor-position probe), the cell-size answer
 // (TerminalImage's consume_cell_size_response grammar), keyboard-protocol
 // negotiation (KeyboardProtocol's parse_response; pi 83114817
 // packages/tui/src/terminal.ts), and the appearance reports (pi 83114817

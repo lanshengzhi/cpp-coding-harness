@@ -322,24 +322,10 @@ TEST_CASE("Process Terminal pinned dock keeps editor fixed at bottom when histor
     // Wait for the prompt and assistant response to settle
     REQUIRE(drain_pty_until_all(pty->master.get(), output, {"fake-model"}));
 
-    // Verify DECSTBM scroll margins were set for the viewport (rows 1..17 on a 24-row screen with 7 dock rows)
-    CHECK(output.find("\x1b[1;17r") != std::string::npos);
-
-    // Verify viewport scrolling occurred within margin bottom (row 17)
-    CHECK(output.find("\x1b[1;17r") != std::string::npos);
-    // Viewport scroll margins set and active
-
-    // Verify the dock lines were written to the reserved physical bottom rows (18..24)
-    // Dock row 0 (status spacer): row 18
-    // Dock row 1 (status line): row 19
-    // Dock row 2 (editor top border): row 20
-    // Dock row 3 (editor content): row 21
-    // Dock row 4 (editor bottom border): row 22
-    // Dock row 5 (footer pwd): row 23
-    // Dock row 6 (footer stats): row 24
-    CHECK(output.find("\x1b[20;") != std::string::npos);
-    CHECK(output.find("\x1b[21;") != std::string::npos);
-    CHECK(output.find("\x1b[24;") != std::string::npos);
+    // Issue 983: Native regular composition uses relative line-flow without dock partitions or DECSTBM margins
+    CHECK(output.find("\x1b[1;17r") == std::string::npos);
+    CHECK(output.find("\x1b[6n") == std::string::npos);
+    CHECK(output.find("fake-model") != std::string::npos);
 
     constexpr char kExit = '\x04';
     REQUIRE(::write(pty->master.get(), &kExit, 1) == 1);
@@ -405,8 +391,9 @@ TEST_CASE("Process Terminal resize recalculates viewport height and anchors dock
     auto output = cch::tests::read_available(pty->master.get());
     REQUIRE(drain_pty_until_all(pty->master.get(), output, {"fake-model"}));
 
-    // Initial 24 rows: viewport 17 rows (margins 1..17)
-    CHECK(output.find("\x1b[1;17r") != std::string::npos);
+    // Issue 983: Native regular composition emits no DECSTBM scroll margins
+    CHECK(output.find("\x1b[1;17r") == std::string::npos);
+    CHECK(output.find("\x1b[6n") == std::string::npos);
 
     // Resize terminal from 24 to 32 rows
     winsize dimensions{
@@ -420,23 +407,19 @@ TEST_CASE("Process Terminal resize recalculates viewport height and anchors dock
     // Send SIGWINCH so terminal absorbs the resize
     ::kill(::getpid(), SIGWINCH);
 
-    // Wait for resize to take effect and new scroll margins / dock rows to be emitted
-    // Viewport height becomes 32 - 7 = 25 rows -> margin \x1b[1;25r
-    // Dock lines move to bottom rows 26..32
+    // Issue 983: resize triggers full clear-screen redraw without DECSTBM margins
+    const auto before_resize = output.size();
     bool matched = cch::tests::wait_until(
             [&] {
                 output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50)));
-                return output.find("\x1b[1;25r") != std::string::npos && output.find("\x1b[32;") != std::string::npos;
+                return output.find("fake-model", before_resize) != std::string::npos &&
+                       output.find("\x1b[2J\x1b[H\x1b[3J", before_resize) != std::string::npos;
             },
             std::chrono::seconds(2));
     UNSCOPED_INFO("Resize test output:\n" << output);
     REQUIRE(matched);
 
-    CHECK(output.find("\x1b[1;25r") != std::string::npos);
-    // Editor top border at row 28 (1-based: 25 + 2 + 1 = 28)
-    CHECK(output.find("\x1b[28;") != std::string::npos);
-    // Footer bottom line at row 32
-    CHECK(output.find("\x1b[32;") != std::string::npos);
+    CHECK(output.find("\x1b[1;25r") == std::string::npos);
 
     constexpr char kExit = '\x04';
     REQUIRE(::write(pty->master.get(), &kExit, 1) == 1);
@@ -611,8 +594,7 @@ TEST_CASE("Process Terminal slash autocomplete under a shrink resize keeps the e
     const bool footer_redocked = cch::tests::wait_until(
             [&] {
                 output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50)));
-                return output.find("fake-model", before_resize) != std::string::npos &&
-                       output.find("\x1b[6;", before_resize) != std::string::npos;
+                return output.find("fake-model", before_resize) != std::string::npos;
             },
             std::chrono::seconds(10));
     UNSCOPED_INFO("Slash resize test output:\n" << output.substr(before_resize));
@@ -727,8 +709,7 @@ TEST_CASE("Process Terminal replacement dialog slash input under a shrink resize
     const bool footer_redocked = cch::tests::wait_until(
             [&] {
                 output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50)));
-                return output.find("fake-model", before_resize) != std::string::npos &&
-                       output.find("\x1b[6;", before_resize) != std::string::npos;
+                return output.find("fake-model", before_resize) != std::string::npos;
             },
             std::chrono::seconds(10));
     UNSCOPED_INFO("Dialog resize test output:\n" << output.substr(before_resize));

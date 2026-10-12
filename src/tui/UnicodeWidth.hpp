@@ -56,6 +56,8 @@ enum class TerminalTokenKind {
     Hyperlink,
     Newline,
     CursorMove,
+    CarriageReturn,
+    ClearLine,
 };
 
 enum class TokenizeMode {
@@ -94,7 +96,7 @@ struct VisibleWidthMeasurement {
 [[nodiscard]] inline support::Expected<std::size_t> token_width(const std::vector<TerminalToken>& tokens) {
     std::size_t width = 0;
     for (const auto& token : tokens) {
-        if (token.kind == TerminalTokenKind::Newline) {
+        if (token.kind == TerminalTokenKind::Newline || token.kind == TerminalTokenKind::CarriageReturn) {
             return std::unexpected(invalid_terminal_text("Rendered terminal line contains a newline"));
         }
         width += token.width;

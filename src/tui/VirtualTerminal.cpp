@@ -216,16 +216,54 @@ void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
             }
             continue;
         }
-        if (token.kind == detail::TerminalTokenKind::CursorMove) {
-            std::size_t count = 1;
-            const auto sub = std::string_view(token.text).substr(2, token.text.size() - 3);
-            if (!sub.empty()) {
-                (void)std::from_chars(sub.data(), sub.data() + sub.size(), count);
+        if (token.kind == detail::TerminalTokenKind::CarriageReturn) {
+            impl.cursor.column = 0;
+            continue;
+        }
+        if (token.kind == detail::TerminalTokenKind::ClearLine) {
+            if (token.text.find("2J") != std::string::npos) {
+                impl.cells.assign(impl.dimensions.rows, std::vector<VirtualTerminalCell>(impl.dimensions.columns));
+                impl.scrollback_cells.clear();
+                impl.viewport_top = 0;
+                impl.scroll_origin = 0;
+                impl.cursor = {};
+            } else if (token.text.find("3J") != std::string::npos) {
+                // Clear-scrollback only: this model keeps scrollback cells with
+                // the screen, so a bare 3J drops the history and keeps the screen.
+                impl.scrollback_cells.clear();
+            } else if (impl.cursor.row < impl.cells.size()) {
+                impl.cells[impl.cursor.row].assign(impl.dimensions.columns,
+                        VirtualTerminalCell{.grapheme = " ", .continuation = false, .style = {}});
             }
-            if (token.text.ends_with('B')) {
-                impl.cursor.row = std::min(impl.cursor.row + count, impl.dimensions.rows - 1);
-            } else if (token.text.ends_with('A')) {
-                impl.cursor.row = impl.cursor.row > count ? impl.cursor.row - count : 0;
+            continue;
+        }
+        if (token.kind == detail::TerminalTokenKind::CursorMove) {
+            if (token.text.ends_with('H')) {
+                std::size_t row = 1;
+                std::size_t col = 1;
+                const auto sub = std::string_view(token.text).substr(2, token.text.size() - 3);
+                const auto semi = sub.find(';');
+                if (semi != std::string_view::npos) {
+                    (void)std::from_chars(sub.data(), sub.data() + semi, row);
+                    (void)std::from_chars(sub.data() + semi + 1, sub.data() + sub.size(), col);
+                } else if (!sub.empty()) {
+                    (void)std::from_chars(sub.data(), sub.data() + sub.size(), row);
+                }
+                impl.cursor.row = row > 0 ? std::min(row - 1, impl.dimensions.rows - 1) : 0;
+                impl.cursor.column = col > 0 ? std::min(col - 1, impl.dimensions.columns) : 0;
+            } else {
+                std::size_t count = 1;
+                const auto sub = std::string_view(token.text).substr(2, token.text.size() - 3);
+                if (!sub.empty()) {
+                    (void)std::from_chars(sub.data(), sub.data() + sub.size(), count);
+                }
+                if (token.text.ends_with('B')) {
+                    impl.cursor.row = std::min(impl.cursor.row + count, impl.dimensions.rows - 1);
+                } else if (token.text.ends_with('A')) {
+                    impl.cursor.row = impl.cursor.row > count ? impl.cursor.row - count : 0;
+                } else if (token.text.ends_with('G')) {
+                    impl.cursor.column = count > 0 ? std::min(count - 1, impl.dimensions.columns) : 0;
+                }
             }
             continue;
         }
@@ -461,7 +499,12 @@ support::ExpectedVoid VirtualTerminal::write(std::string_view output) {
             available = impl_->dimensions.columns;
             continue;
         }
-        if (token.kind == detail::TerminalTokenKind::CursorMove) {
+        if (token.kind == detail::TerminalTokenKind::CarriageReturn) {
+            line_width = 0;
+            available = impl_->dimensions.columns;
+            continue;
+        }
+        if (token.kind == detail::TerminalTokenKind::CursorMove || token.kind == detail::TerminalTokenKind::ClearLine) {
             line_width = 0;
             available = impl_->dimensions.columns;
             continue;

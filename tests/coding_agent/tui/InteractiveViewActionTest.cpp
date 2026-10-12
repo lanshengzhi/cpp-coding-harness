@@ -148,8 +148,7 @@ struct ViewFixture {
 
     explicit ViewFixture(bool user_bash_available = false,
             std::unique_ptr<cch::tui::AutocompleteProvider> provider = nullptr,
-            std::vector<tui::KeybindingOverride> extra_overrides = {},
-            tui::VirtualTerminal* terminal = nullptr)
+            std::vector<tui::KeybindingOverride> extra_overrides = {})
         : keybindings(test_keybinding_slot(std::move(extra_overrides))), theme(test_theme()) {
         coding_agent::tui::InteractiveViewOptions options;
         options.keybindings = keybindings;
@@ -173,7 +172,6 @@ struct ViewFixture {
         options.hide_thinking_block = false;
         options.output_pad = 0;
         options.user_bash_available = user_bash_available;
-        options.terminal = terminal;
         options.autocomplete_provider = std::move(provider);
         options.theme = &theme;
         view = std::make_unique<coding_agent::tui::InteractiveView>(
@@ -420,29 +418,29 @@ TEST_CASE("InteractiveView passes terminal rows separately from its dock editor 
     REQUIRE(rendered);
 
     std::size_t content_rows = 0;
-    for (const auto& line : rendered->dock_lines) {
+    for (const auto& line : rendered->lines) {
         if (line.find("line ") != std::string::npos) ++content_rows;
     }
     CHECK(content_rows == 12);
-    CHECK(rendered->dock_lines.size() == 18);
+    CHECK(rendered->dock_lines.empty());
 
     auto cursor = view.cursor_location();
     REQUIRE(cursor);
-    CHECK(cursor->row == 14);
+    CHECK(cursor->row == 16);
     static_cast<void>(view.handle_input(key("pageUp")));
     CHECK(view.editor_text().starts_with("line 0\nline 1"));
     auto paged = view.render(80);
     REQUIRE(paged);
     cursor = view.cursor_location();
     REQUIRE(cursor);
-    CHECK(cursor->row == 3);
+    CHECK(cursor->row == 5);
 
     static_cast<void>(view.handle_input(key("pageDown")));
     paged = view.render(80);
     REQUIRE(paged);
     cursor = view.cursor_location();
     REQUIRE(cursor);
-    CHECK(cursor->row == 14);
+    CHECK(cursor->row == 16);
     CHECK(view.editor_text().ends_with("line 29"));
 
     agent::AgentInputQueues pending;
@@ -454,11 +452,11 @@ TEST_CASE("InteractiveView passes terminal rows separately from its dock editor 
     const auto constrained = view.render(80);
     REQUIRE(constrained);
     std::size_t constrained_content_rows = 0;
-    for (const auto& line : constrained->dock_lines) {
+    for (const auto& line : constrained->lines) {
         if (line.find("line ") != std::string::npos) ++constrained_content_rows;
     }
     CHECK(constrained_content_rows == 6);
-    CHECK(constrained->dock_lines.size() == 38);
+    CHECK(constrained->dock_lines.empty());
 }
 
 TEST_CASE("the coalescible invalidate request stays separate from the action seam",
@@ -533,26 +531,21 @@ TEST_CASE("autocomplete cancellation consumes the escape event before Interrupt 
     CHECK(std::holds_alternative<coding_agent::tui::InterruptAction>(fixture.actions[0]));
 }
 
-TEST_CASE("InteractiveView local editor input bypasses full-view invalidation",
-        "[coding_agent][tui][view_actions][dock][issue605][spec]") {
-    tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
-    REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
-            [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
-
-    ViewFixture fixture(false, nullptr, {}, &terminal);
+TEST_CASE("InteractiveView editor input triggers full view invalidation in relative rendering",
+        "[coding_agent][tui][view_actions][issue983][spec]") {
+    // Regular relative rendering has no local-echo shortcut to skip the full
+    // view: the view no longer injects a terminal into the editor, so every
+    // editor change invalidates the composed lines unconditionally.
+    ViewFixture fixture;
     auto& view = *fixture.view;
     view.set_focused(true);
     REQUIRE(view.render(80));
 
     fixture.type("h");
-    CHECK(fixture.invalidations == 0);
-    CHECK(std::any_of(terminal.screen().begin(), terminal.screen().end(), [](const auto& line) {
-        return line.starts_with("h");
-    }));
+    CHECK(fixture.invalidations == 1);
 
     static_cast<void>(view.handle_input(key("left")));
-    CHECK(fixture.invalidations == 0);
-    CHECK(terminal.cursor().column == 0);
+    CHECK(fixture.invalidations == 2);
 }
 
 TEST_CASE("an interrupt key overlapping cancellation and insertion keeps application-first precedence",
