@@ -37,7 +37,6 @@ struct RenderResult {
     std::vector<std::string> lines{};
     std::vector<InlineImageRenderRegion> images{};
     std::optional<std::size_t> viewport_height{std::nullopt};
-    std::vector<std::string> dock_lines{};
     /// Cursor position in the composed line buffer, populated by overlay composition.
     std::optional<CursorPosition> cursor{std::nullopt};
 };

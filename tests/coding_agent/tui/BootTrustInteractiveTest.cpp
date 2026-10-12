@@ -642,10 +642,10 @@ TEST_CASE("boot with a failing theme keeps the main screen and the dark fallback
     CHECK(run.terminal.viewport_top() > 0);
     // The controller applied the settings theme, failed, and fell back with
     // pi's verbatim message (rendered as an Error chat diagnostic), which
-    // stays visible on screen with the fixed dock.
+    // stays visible on screen above the fixed editor and footer rows.
     CHECK(screen.find("Failed to load theme \"broken\"") != std::string::npos);
     CHECK(screen.find("Fell back to dark theme.") != std::string::npos);
-    // The boot completes: the interactive dock (footer status line with the
+    // The boot completes: the interactive UI (footer status line with the
     // active model) renders below the bounded loaded-resources block and stays
     // fixed on screen (the #425 bound kept the footer/editor on screen).
     CHECK(screen.find("fake-model") != std::string::npos);

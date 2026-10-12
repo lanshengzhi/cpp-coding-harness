@@ -188,13 +188,9 @@ struct ViewFixture {
     }
 };
 
-/// The autocomplete menu belongs to the dock partition (#599): scan the
-/// composed transcript and dock lines for the slash-menu row.
+/// Find the slash-menu row in the single composed renderer buffer.
 [[nodiscard]] bool menu_row_in(const cch::tui::RenderResult& rendered) {
     for (const auto& line : rendered.lines) {
-        if (cch::tui::strip_terminal_sequences(line).starts_with("→ help")) return true;
-    }
-    for (const auto& line : rendered.dock_lines) {
         if (cch::tui::strip_terminal_sequences(line).starts_with("→ help")) return true;
     }
     return false;
@@ -403,7 +399,7 @@ TEST_CASE("editor cursor navigation requests a Native TUI repaint", "[coding_age
     CHECK(back_at_end->column == at_end->column);
 }
 
-TEST_CASE("InteractiveView passes terminal rows separately from its dock editor budget",
+TEST_CASE("InteractiveView passes terminal rows separately from its editor budget",
         "[coding_agent][tui][editor][issue969][spec]") {
     ViewFixture fixture;
     auto& view = *fixture.view;
@@ -422,7 +418,6 @@ TEST_CASE("InteractiveView passes terminal rows separately from its dock editor 
         if (line.find("line ") != std::string::npos) ++content_rows;
     }
     CHECK(content_rows == 12);
-    CHECK(rendered->dock_lines.empty());
 
     auto cursor = view.cursor_location();
     REQUIRE(cursor);
@@ -456,7 +451,6 @@ TEST_CASE("InteractiveView passes terminal rows separately from its dock editor 
         if (line.find("line ") != std::string::npos) ++constrained_content_rows;
     }
     CHECK(constrained_content_rows == 6);
-    CHECK(constrained->dock_lines.empty());
 }
 
 TEST_CASE("the coalescible invalidate request stays separate from the action seam",

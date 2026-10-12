@@ -297,7 +297,7 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(
         return {};
     case SlashCommandId::Quit:
         if (view_ != nullptr) {
-            local_dock_dirty_.store(true, std::memory_order_release);
+            prompt_presentation_dirty_.store(true, std::memory_order_release);
             tui_.invalidate();
             tui_.request_render(true);
         }

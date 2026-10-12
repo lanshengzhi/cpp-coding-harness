@@ -282,8 +282,7 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
 
     // Header (keybinding hints), the loaded-resources block, pending-
     // messages, status, and footer render first so the editor and
-    // autocomplete capacities account for their fixed rows (pi's dock
-    // below the chat).
+    // autocomplete capacities account for their fixed rows below the chat.
     std::vector<std::string> header_lines;
     if (auto header = header_.render(width); !header) {
         return std::unexpected(header.error());
@@ -372,20 +371,18 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
             pending_lines.push_back(std::move(rendered->lines.front()));
         }
     }
-    // The dock (pending + status + editor + footer) and a minimum chat
-    // slice stay visible on every terminal; the loaded-resources block
-    // yields the space it needs. pi's transcript scroll keeps the dock
-    // fixed while the loaded-resources content scrolls above the chat, so
+    // Pending messages, status, editor, footer, and a minimum chat slice
+    // stay visible on every terminal; the loaded-resources block yields the
+    // space they need. pi's transcript scroll keeps these rows fixed while
+    // the loaded-resources content scrolls above the chat, so
     // a huge startup diagnostic (e.g. an invalid `--theme` document's
     // full missing-color-token list, #425) must not push the footer and
     // editor off a small screen and freeze the boot view.
-    constexpr std::size_t kMinDockEditorRows = 3;
+    constexpr std::size_t kMinEditorRows = 3;
     constexpr std::size_t kMinChatRows = 3;
-    const auto dock_budget = pending_lines.size() + status_lines.size() +
-        kMinDockEditorRows + footer_lines.size();
-    const auto top_budget = available_rows_ > dock_budget + kMinChatRows
-        ? available_rows_ - dock_budget - kMinChatRows
-        : 0;
+    const auto fixed_budget = pending_lines.size() + status_lines.size() + kMinEditorRows + footer_lines.size();
+    const auto top_budget =
+            available_rows_ > fixed_budget + kMinChatRows ? available_rows_ - fixed_budget - kMinChatRows : 0;
     const auto resources_budget =
         top_budget > header_lines.size() ? top_budget - header_lines.size() : 0;
     if (resources_lines.size() > resources_budget) {
@@ -405,13 +402,12 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
             editor_lines = std::move(replaced->lines);
         }
         // Height-bound the swap-in dialog (#607): pending/status/footer keep
-        // their dock rows and the minimum chat slice stays visible, so an
-        // oversized dialog is cropped from the top. Its input and selection
-        // rows remain at the physical bottom instead of growing past the
-        // terminal's addressable dock rows.
-        const auto dock_rest_rows = pending_lines.size() + status_lines.size() + footer_lines.size();
+        // their rows and the minimum chat slice stays visible, so an oversized
+        // dialog is cropped from the top. Its input and selection rows remain
+        // at the physical bottom instead of growing past the terminal height.
+        const auto fixed_rest_rows = pending_lines.size() + status_lines.size() + footer_lines.size();
         const auto replacement_budget =
-                available_rows_ > dock_rest_rows + kMinChatRows ? available_rows_ - dock_rest_rows - kMinChatRows : 1;
+                available_rows_ > fixed_rest_rows + kMinChatRows ? available_rows_ - fixed_rest_rows - kMinChatRows : 1;
         if (editor_lines.size() > replacement_budget) {
             editor_lines.erase(editor_lines.begin(), editor_lines.end() - replacement_budget);
         }
@@ -443,9 +439,9 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         }
     }
     // The full conversation passes through to the terminal's native
-    // scrollback (pi TuiMainScreen): only the dock (pending/status/
-    // editor/autocomplete/footer) stays fixed on screen, and earlier chat
-    // lines scroll away into the terminal's scroll history as the
+    // scrollback (pi TuiMainScreen): pending/status/editor/autocomplete/
+    // footer stay fixed on screen, and earlier chat lines scroll away into
+    // the terminal's scroll history as the
     // conversation grows past one screen. Inline images keep their
     // absolute buffer rows so they scroll with the content that produced
     // them (fork-B image-follows-content).
@@ -479,7 +475,6 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
             std::make_move_iterator(status_lines.end()));
 
     editor_row_offset_ = transcript_result.lines.size();
-    editor_.set_dock_offset(editor_row_offset_);
 
     transcript_result.lines.insert(transcript_result.lines.end(),
             std::make_move_iterator(editor_lines.begin()),
@@ -631,7 +626,7 @@ cch::tui::InputAdmissionOutcome InteractiveView::handle_input(const cch::tui::In
     // navigation has no change notification, but it still changes the visible
     // fake/hardware cursor and must schedule the same repaint as pi.
     if (outcome == cch::tui::InputAdmissionOutcome::Consumed && before_text == editor_.text() &&
-            before_cursor != editor_.cursor() && !editor_.has_local_echo()) {
+            before_cursor != editor_.cursor()) {
         invoke_invalidate();
     }
     return outcome;

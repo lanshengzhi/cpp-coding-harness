@@ -1,5 +1,5 @@
 // E2E `/mcp` slash wiring (#884): drive the Native TUI against the live MCP
-// manager assembled from a persisted mcp.json and the scripted local echo
+// manager assembled from a persisted mcp.json and the scripted test harness
 // server. No live provider credentials or network access.
 
 #include "coding_agent/AgentSession.hpp"

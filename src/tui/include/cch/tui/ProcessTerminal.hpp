@@ -58,7 +58,6 @@ public:
     [[nodiscard]] support::ExpectedVoid set_cursor_visible(bool visible) override;
     [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t top_row, std::size_t bottom_row) override;
     [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override;
-    [[nodiscard]] support::ExpectedVoid set_dock_cursor(std::size_t dock_row, std::size_t column) override;
     [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override;
     [[nodiscard]] support::ExpectedVoid end_synchronized_update() override;
     [[nodiscard]] support::ExpectedVoid set_title(std::string_view title) override;

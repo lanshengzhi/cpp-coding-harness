@@ -476,8 +476,7 @@ TEST_CASE("Process Terminal restores raw paste cursor and pending render modes",
     CHECK(restoration.find("\x1b[?2004l") != std::string::npos);
 }
 
-TEST_CASE("Process Terminal configures DECSTBM margins dock cursor and restores on stop",
-        "[tui][terminal][dock][issue598][spec]") {
+TEST_CASE("Process Terminal configures DECSTBM margins and restores them on stop", "[tui][terminal][issue598][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
 
@@ -501,33 +500,24 @@ TEST_CASE("Process Terminal configures DECSTBM margins dock cursor and restores 
     REQUIRE_FALSE(invalid2);
     CHECK(invalid2.error().message == "Process Terminal scroll margins are invalid");
 
-    // 2. Set scroll margins: 0..19 (viewport 20 rows, dock rows 20..23)
+    // 2. Set scroll margins: 0..19 (viewport 20 rows).
     REQUIRE(terminal.set_scroll_margins(0, 19));
     auto output = cch::tests::read_available(pty->master.get());
     CHECK(output.find("\x1b[1;20r") != std::string::npos);
 
-    // 3. Set dock cursor: dock_row 0, column 5 -> absolute row 20 + 0 = 20 (1-based: 21)
-    REQUIRE(terminal.set_dock_cursor(0, 5));
-    output = cch::tests::read_available(pty->master.get());
-    CHECK(output.find("\x1b[21;6H") != std::string::npos);
-
-    // Dock out of bounds
-    auto out_dock = terminal.set_dock_cursor(4, 0); // dock height is 4, dock_row 4 is row 24 >= 24
-    REQUIRE_FALSE(out_dock);
-
-    // 4. Viewport scrolling when margins are active:
+    // 3. Viewport scrolling when margins are active:
     // With 20 viewport rows (0..19), addressing row 20 (past viewport) scrolls at margin bottom
     REQUIRE(terminal.set_cursor({.column = 0, .row = 20}));
     output = cch::tests::read_available(pty->master.get());
     // Cursor moved to margin bottom row 20 (1-based), emitted \n, then positioned cursor
     CHECK(output.find("\x1b[20;1H\n") != std::string::npos);
 
-    // 5. Reset scroll margins
+    // 4. Reset scroll margins
     REQUIRE(terminal.reset_scroll_margins());
     output = cch::tests::read_available(pty->master.get());
     CHECK(output.find("\x1b[1;24r") != std::string::npos);
 
-    // 6. Set margins again and verify stop() restores them
+    // 5. Set margins again and verify stop() restores them
     REQUIRE(terminal.set_scroll_margins(0, 19));
     (void)cch::tests::read_available(pty->master.get());
     REQUIRE(terminal.stop());
@@ -535,8 +525,7 @@ TEST_CASE("Process Terminal configures DECSTBM margins dock cursor and restores 
     CHECK(output.find("\x1b[r") != std::string::npos);
 }
 
-TEST_CASE("Process Terminal one-row scroll margins park the dock below the transcript row",
-        "[tui][terminal][dock][issue611][spec]") {
+TEST_CASE("Process Terminal accepts one-row scroll margins", "[tui][terminal][issue611][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
 
@@ -548,16 +537,10 @@ TEST_CASE("Process Terminal one-row scroll margins park the dock below the trans
             [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
 
-    // A one-row viewport is a one-row scroll region: DECSTBM accepts the
-    // equal top and bottom, and the dock cursor starts below the transcript
-    // row instead of overwriting it (#611).
+    // DECSTBM accepts equal top and bottom for a one-row scroll region (#611).
     REQUIRE(terminal.set_scroll_margins(0, 0));
     auto output = cch::tests::read_available(pty->master.get());
     CHECK(output.find("\x1b[1;1r") != std::string::npos);
-
-    REQUIRE(terminal.set_dock_cursor(0, 5));
-    output = cch::tests::read_available(pty->master.get());
-    CHECK(output.find("\x1b[2;6H") != std::string::npos);
 
     REQUIRE(terminal.stop());
 }

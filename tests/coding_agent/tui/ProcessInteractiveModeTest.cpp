@@ -262,8 +262,8 @@ TEST_CASE("Process Terminal runs the private Native TUI composition and restores
     REQUIRE(::tcgetattr(pty->slave.get(), &restored) == 0);
     CHECK(cch::tests::same_terminal_state(restored, original));
 }
-TEST_CASE("Process Terminal pinned dock keeps editor fixed at bottom when history exceeds 50+ lines",
-        "[coding_agent][tui][terminal][dock][issue599][spec]") {
+TEST_CASE("Process Terminal keeps the editor fixed at the bottom when history exceeds 50+ lines",
+        "[coding_agent][tui][terminal][issue599][spec]") {
     auto pty = cch::tests::open_pseudo_terminal(80, 24);
     REQUIRE(pty);
     termios original{};
@@ -338,8 +338,8 @@ TEST_CASE("Process Terminal pinned dock keeps editor fixed at bottom when histor
     CHECK(*run_result);
 }
 
-TEST_CASE("Process Terminal resize recalculates viewport height and anchors dock at new bottom",
-        "[coding_agent][tui][terminal][dock][resize][issue599][spec]") {
+TEST_CASE("Process Terminal resize recalculates viewport height and keeps the editor at the new bottom",
+        "[coding_agent][tui][terminal][issue599][spec]") {
     auto pty = cch::tests::open_pseudo_terminal(80, 24);
     REQUIRE(pty);
     termios original{};
@@ -522,9 +522,9 @@ TEST_CASE("Process Terminal preserves keypresses while streaming output and rest
     CHECK(cch::tests::same_terminal_state(restored, original));
 }
 
-TEST_CASE("Process Terminal slash autocomplete under a shrink resize keeps the editor and footer docked and the "
+TEST_CASE("Process Terminal slash autocomplete under a shrink resize keeps the editor and footer visible and the "
           "session running",
-        "[coding_agent][tui][terminal][dock][resize][issue599][issue607][spec]") {
+        "[coding_agent][tui][terminal][resize][issue599][issue607][spec]") {
     auto pty = cch::tests::open_pseudo_terminal(80, 24);
     REQUIRE(pty);
     termios original{};
@@ -578,9 +578,8 @@ TEST_CASE("Process Terminal slash autocomplete under a shrink resize keeps the e
     REQUIRE(::write(pty->master.get(), "/", 1) == 1);
     REQUIRE(drain_pty_until_all(pty->master.get(), output, {"→ "}));
 
-    // Shrink below the open dock's height. The editor/menu and footer remain
-    // live at the physical bottom instead of turning a dock address error
-    // into InteractiveEngine::request_exit().
+    // Shrink below the open menu's composed height. The editor/menu and
+    // footer remain live at the physical bottom and the run stays alive.
     const auto before_resize = output.size();
     winsize dimensions{
             .ws_row = 6,
@@ -591,14 +590,14 @@ TEST_CASE("Process Terminal slash autocomplete under a shrink resize keeps the e
     REQUIRE(::ioctl(pty->master.get(), TIOCSWINSZ, &dimensions) == 0);
     ::kill(::getpid(), SIGWINCH);
 
-    const bool footer_redocked = cch::tests::wait_until(
+    const bool footer_visible = cch::tests::wait_until(
             [&] {
                 output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50)));
                 return output.find("fake-model", before_resize) != std::string::npos;
             },
             std::chrono::seconds(10));
     UNSCOPED_INFO("Slash resize test output:\n" << output.substr(before_resize));
-    CHECK(footer_redocked);
+    CHECK(footer_visible);
     CHECK(terminal.modes().started);
 
     // Close the menu, erase '/', then exit through the empty-editor Ctrl+D.
@@ -622,9 +621,9 @@ TEST_CASE("Process Terminal slash autocomplete under a shrink resize keeps the e
     CHECK(*run_result);
 }
 
-TEST_CASE("Process Terminal replacement dialog slash input under a shrink resize keeps the footer docked and the "
+TEST_CASE("Process Terminal replacement dialog slash input under a shrink resize keeps the footer visible and the "
           "session running",
-        "[coding_agent][tui][terminal][dock][resize][issue599][issue607][spec]") {
+        "[coding_agent][tui][terminal][resize][issue599][issue607][spec]") {
     auto pty = cch::tests::open_pseudo_terminal(80, 24);
     REQUIRE(pty);
     termios original{};
@@ -706,14 +705,14 @@ TEST_CASE("Process Terminal replacement dialog slash input under a shrink resize
     REQUIRE(::ioctl(pty->master.get(), TIOCSWINSZ, &dimensions) == 0);
     ::kill(::getpid(), SIGWINCH);
 
-    const bool footer_redocked = cch::tests::wait_until(
+    const bool footer_visible = cch::tests::wait_until(
             [&] {
                 output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50)));
                 return output.find("fake-model", before_resize) != std::string::npos;
             },
             std::chrono::seconds(10));
     UNSCOPED_INFO("Dialog resize test output:\n" << output.substr(before_resize));
-    CHECK(footer_redocked);
+    CHECK(footer_visible);
     CHECK(terminal.modes().started);
     // The dialog owns Escape and Ctrl+D while it is open, so the run coroutine
     // cannot be asked to exit from here; stop the PTY out-of-band after the

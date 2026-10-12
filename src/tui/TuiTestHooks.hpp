@@ -11,7 +11,7 @@ class MainScreen;
 namespace cch::tui::detail::testing {
 
 /// Return the number of frame-level line preparations performed by the last
-/// Tui render (composed buffer rows plus dock rows).
+/// Tui render (composed buffer rows).
 ///
 /// This private hook exists only for the frame preparation regression test: a
 /// Preview Frame that changes nothing must prepare no rows, and a one-row view

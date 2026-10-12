@@ -330,7 +330,6 @@ public:
     [[nodiscard]] support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override { return {}; }
-    [[nodiscard]] support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override { return {}; }
     [[nodiscard]] support::ExpectedVoid end_synchronized_update() override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_title(std::string_view) override { return {}; }
@@ -339,6 +338,141 @@ public:
         return {};
     }
 };
+
+struct TerminalEvent {
+    enum class Kind {
+        FrameBegin,
+        FrameEnd,
+        Write,
+        Cursor,
+        ClearScreen,
+        CursorVisibility,
+        Control,
+    };
+
+    Kind kind;
+    std::string payload;
+};
+
+/// True when a write payload carries at least one printable glyph outside
+/// terminal escape sequences: only the composed presentation rows do.
+[[nodiscard]] bool has_visible_text(std::string_view payload) {
+    std::size_t index = 0;
+    while (index < payload.size()) {
+        if (payload[index] == '\x1b') {
+            ++index;
+            if (index < payload.size() && payload[index] == '[') {
+                ++index;
+                while (index < payload.size() && (payload[index] < 0x40 || payload[index] > 0x7e)) {
+                    ++index;
+                }
+                if (index < payload.size()) ++index;
+            }
+            continue;
+        }
+        const auto character = static_cast<unsigned char>(payload[index]);
+        // Whitespace is not composed content: `stop()` writes a single space to
+        // cancel a pending wrap (frozen `beforeTerminalStop`) and that write is
+        // legitimately outside the frame.
+        if (character > 0x20 && character != 0x7f) return true;
+        ++index;
+    }
+    return false;
+}
+
+/// Count `needle` across every write payload in the event range.
+[[nodiscard]] std::size_t count_written(
+        const std::vector<TerminalEvent>& events, std::size_t begin, std::size_t end, std::string_view needle) {
+    std::size_t count = 0;
+    for (std::size_t index = begin; index < end && index < events.size(); ++index) {
+        if (events[index].kind != TerminalEvent::Kind::Write) continue;
+        const auto& payload = events[index].payload;
+        for (auto position = payload.find(needle); position != std::string::npos;
+                position = payload.find(needle, position + needle.size())) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+class RecordingTerminal final : public tui::Terminal {
+public:
+    [[nodiscard]] support::ExpectedVoid start(
+            tui::TerminalInputSink input_sink, tui::TerminalResizeSink resize_sink) override {
+        return inner_.start(
+                [this, input_sink = std::move(input_sink)](std::string input) mutable -> support::ExpectedVoid {
+                    if (input_sink) return input_sink(std::move(input));
+                    return {};
+                },
+                std::move(resize_sink));
+    }
+    [[nodiscard]] support::ExpectedVoid stop() override { return inner_.stop(); }
+    [[nodiscard]] tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
+    [[nodiscard]] tui::TerminalCapabilities capabilities() const override { return {.synchronized_output = true}; }
+    [[nodiscard]] tui::TerminalModeState modes() const override { return inner_.modes(); }
+    [[nodiscard]] support::ExpectedVoid clear_screen() override {
+        events.push_back({.kind = TerminalEvent::Kind::ClearScreen, .payload = "clear_screen"});
+        return inner_.clear_screen();
+    }
+    [[nodiscard]] support::ExpectedVoid write(std::string_view output) override {
+        events.push_back({.kind = TerminalEvent::Kind::Write, .payload = std::string(output)});
+        return inner_.write(output);
+    }
+    [[nodiscard]] support::ExpectedVoid set_cursor(tui::CursorPosition position) override {
+        events.push_back({.kind = TerminalEvent::Kind::Cursor, .payload = "set_cursor"});
+        return inner_.set_cursor(position);
+    }
+    [[nodiscard]] support::ExpectedVoid set_cursor_visible(bool visible) override {
+        events.push_back({.kind = TerminalEvent::Kind::CursorVisibility, .payload = "set_cursor_visible"});
+        return inner_.set_cursor_visible(visible);
+    }
+    [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t top, std::size_t bottom) override {
+        events.push_back({.kind = TerminalEvent::Kind::Control, .payload = "set_scroll_margins"});
+        return inner_.set_scroll_margins(top, bottom);
+    }
+    [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override {
+        events.push_back({.kind = TerminalEvent::Kind::Control, .payload = "reset_scroll_margins"});
+        return inner_.reset_scroll_margins();
+    }
+    [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override {
+        events.push_back({.kind = TerminalEvent::Kind::FrameBegin, .payload = {}});
+        return inner_.begin_synchronized_update();
+    }
+    [[nodiscard]] support::ExpectedVoid end_synchronized_update() override {
+        events.push_back({.kind = TerminalEvent::Kind::FrameEnd, .payload = {}});
+        return inner_.end_synchronized_update();
+    }
+    [[nodiscard]] support::ExpectedVoid set_title(std::string_view title) override { return inner_.set_title(title); }
+    [[nodiscard]] support::ExpectedVoid apply_cell_pixel_dimensions(tui::CellPixelDimensions pixels) override {
+        return inner_.apply_cell_pixel_dimensions(pixels);
+    }
+    [[nodiscard]] support::ExpectedVoid set_progress(bool active) override { return inner_.set_progress(active); }
+    [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds max_ms = tui::kDrainInputMaxMs,
+            std::chrono::milliseconds idle_ms = tui::kDrainInputIdleMs) override {
+        return inner_.drain_input(max_ms, idle_ms);
+    }
+    [[nodiscard]] support::ExpectedVoid inject_input(std::string input) {
+        return inner_.inject_input(std::move(input));
+    }
+    [[nodiscard]] support::ExpectedVoid flush_input() { return inner_.flush_input(); }
+    [[nodiscard]] const std::vector<std::string>& screen() const { return inner_.screen(); }
+
+    std::vector<TerminalEvent> events;
+
+private:
+    tui::VirtualTerminal inner_{{.columns = 80, .rows = 24}};
+};
+
+/// The recorded terminal delegates screen state to its VirtualTerminal, so
+/// the composed rows are the same lines the other Native tests assert on.
+[[nodiscard]] std::string visible_screen(const RecordingTerminal& terminal) {
+    std::string text;
+    for (const auto& line : terminal.screen()) {
+        text.append(line);
+        text.push_back('\n');
+    }
+    return text;
+}
 
 class TransientRenderBackpressureTerminal final : public tui::Terminal {
 public:
@@ -363,7 +497,6 @@ public:
     [[nodiscard]] support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override { return {}; }
-    [[nodiscard]] support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override { return {}; }
     [[nodiscard]] support::ExpectedVoid end_synchronized_update() override {
         ++render_end_calls;
@@ -424,7 +557,6 @@ public:
     }
     [[nodiscard]] support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::ExpectedVoid reset_scroll_margins() override { return {}; }
-    [[nodiscard]] support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] support::ExpectedVoid begin_synchronized_update() override { return {}; }
     [[nodiscard]] support::ExpectedVoid end_synchronized_update() override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_title(std::string_view) override { return {}; }
@@ -1463,7 +1595,7 @@ TEST_CASE("Native TUI keeps tail image sidecars visible while the old transcript
     CHECK(scrollback_text.find("escape interrupt") != std::string::npos);
     CHECK(scrollback_text.find("old transcript line 0") != std::string::npos);
     CHECK(scrollback_text.find("old transcript line 29") != std::string::npos);
-    // The newest tail message stays visible with the fixed dock.
+    // The newest tail message stays visible above the fixed editor and footer.
     CHECK(screen.find("tail before") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
@@ -2374,11 +2506,10 @@ TEST_CASE("Native TUI retries a transient render backpressure failure", "[coding
 
     // The second frame is rejected with Busy. The retry timer must keep the
     // interactive run alive and submit the same pending presentation again.
-    // A full-frame-producing action is required here: under the pinned-dock
-    // projection plain editor input is echoed locally in the dock and no
-    // longer triggers a TUI frame (#597), so toggle tool output instead.
+    // Typing is presented through the same renderer, so its frame exercises
+    // the Busy retry path while preserving the pending editor text.
     terminal.fail_on_render_end = 2;
-    REQUIRE(terminal.inject("\x0f"));
+    REQUIRE(terminal.inject("x"));
     REQUIRE(pump_until(io, [&] { return terminal.render_end_calls >= 3; }, std::chrono::milliseconds{1000}));
     CHECK_FALSE(run_result.has_value());
 
@@ -2386,7 +2517,7 @@ TEST_CASE("Native TUI retries a transient render backpressure failure", "[coding
     // failures rather than being mislabeled as startup failures.
     terminal.fail_on_render_end = 4;
     terminal.fail_with_process_error = true;
-    REQUIRE(terminal.inject("\x0f"));
+    REQUIRE(terminal.inject("y"));
     REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
     REQUIRE_FALSE(*run_result);
     CHECK(run_result->error().message == "Native TUI render failed");
@@ -2487,6 +2618,128 @@ TEST_CASE("Native TUI reports both post-acquisition startup and restoration fail
     CHECK(run_result->error().detail.find("sk-restoration-secret") == std::string::npos);
     CHECK(run_result->error().detail.find("[REDACTED]") != std::string::npos);
     CHECK_FALSE(created->session->is_open());
+}
+
+TEST_CASE("Native TUI paints typing, submit, and interrupt through complete renderer frames",
+        "[coding_agent][tui][issue987][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto client = std::make_shared<AbortAwareInteractiveChatProvider>();
+    auto* client_pointer = client.get();
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, client)));
+    REQUIRE(created);
+
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    RecordingTerminal terminal;
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(
+                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    REQUIRE(terminal.modes().started);
+
+    // Every content-bearing write must sit between a FrameBegin and its
+    // matching FrameEnd; writes outside a frame are the renderer's own
+    // terminal-control sequences (cursor positioning, clearing) and never
+    // carry composed text. The removed local-echo path wrote editor rows
+    // straight to the terminal, so it would show up here as out-of-frame
+    // content. Returns the number of in-frame content writes observed.
+    const auto check_frame_atomicity = [&](std::size_t begin, std::size_t end) {
+        bool in_frame = false;
+        std::size_t content_writes = 0;
+        for (std::size_t index = begin; index < end && index < terminal.events.size(); ++index) {
+            const auto& event = terminal.events[index];
+            if (event.kind == TerminalEvent::Kind::FrameBegin) {
+                REQUIRE_FALSE(in_frame);
+                in_frame = true;
+            } else if (event.kind == TerminalEvent::Kind::FrameEnd) {
+                REQUIRE(in_frame);
+                in_frame = false;
+            } else if (event.kind == TerminalEvent::Kind::Write) {
+                if (in_frame) {
+                    if (has_visible_text(event.payload)) ++content_writes;
+                } else {
+                    CHECK_FALSE(has_visible_text(event.payload));
+                }
+            } else if (event.kind == TerminalEvent::Kind::Cursor || event.kind == TerminalEvent::Kind::ClearScreen) {
+                // Absolute positioning and clearing belong to the renderer's
+                // own frame; the title-bar/menu path no longer addresses the
+                // screen directly.
+                CHECK(in_frame);
+            }
+        }
+        CHECK_FALSE(in_frame);
+        return content_writes;
+    };
+
+    // The opening frame paints the whole composed presentation, footer
+    // included, through its own writes.
+    std::optional<std::size_t> first_frame_end;
+    for (std::size_t index = 0; index < terminal.events.size(); ++index) {
+        if (terminal.events[index].kind == TerminalEvent::Kind::FrameEnd) {
+            first_frame_end = index + 1;
+            break;
+        }
+    }
+    REQUIRE(first_frame_end);
+    CHECK(count_written(terminal.events, 0, *first_frame_end, "fake-model") == 1);
+
+    // Typing "/" grows the editor box: the selected autocomplete row arrives
+    // in a frame write, not through a side channel.
+    const auto menu_begin = terminal.events.size();
+    REQUIRE(terminal.inject_input("/"));
+    drain_ready(io);
+    CHECK(count_written(terminal.events, menu_begin, terminal.events.size(), "\xe2\x86\x92 ") >= 1);
+
+    // Clear the menu invocation, then type the prompt: exactly one copy of
+    // the typed text reaches the terminal, and only inside a renderer frame.
+    REQUIRE(terminal.inject_input("\x03"));
+    drain_ready(io);
+    const auto typed_begin = terminal.events.size();
+    REQUIRE(terminal.inject_input("hello"));
+    drain_ready(io);
+    const auto typed_end = terminal.events.size();
+    CHECK(terminal.screen().size() == 24);
+    CHECK(count_text(visible_screen(terminal), "hello") == 1);
+    CHECK(count_written(terminal.events, typed_begin, typed_end, "hello") == 1);
+    CHECK(check_frame_atomicity(typed_begin, typed_end) > 0);
+
+    // Submitting replaces the editor copy with the committed transcript row:
+    // the cumulative log holds exactly two copies, one per presentation.
+    const auto submit_begin = terminal.events.size();
+    REQUIRE(terminal.inject_input("\r"));
+    drain_ready(io);
+    REQUIRE(client_pointer->started);
+    CHECK(created->session->is_busy());
+    CHECK(count_written(terminal.events, submit_begin, terminal.events.size(), "hello") == 1);
+    CHECK(count_written(terminal.events, typed_begin, terminal.events.size(), "hello") == 2);
+    CHECK(count_written(terminal.events, submit_begin, terminal.events.size(), "partial assistant output") > 0);
+    CHECK(check_frame_atomicity(submit_begin, terminal.events.size()) > 0);
+
+    // Interrupting rewrites only the aborted rows: the committed text is not
+    // repainted and never duplicated.
+    const auto interrupt_begin = terminal.events.size();
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    CHECK_FALSE(created->session->is_busy());
+    CHECK(count_text(visible_screen(terminal), "prompt aborted") == 1);
+    CHECK(count_written(terminal.events, interrupt_begin, terminal.events.size(), "hello") == 0);
+    CHECK(count_written(terminal.events, typed_begin, terminal.events.size(), "hello") == 2);
+    CHECK(check_frame_atomicity(interrupt_begin, terminal.events.size()) > 0);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+    CHECK_FALSE(terminal.modes().started);
+    CHECK(check_frame_atomicity(0, terminal.events.size()) > 0);
 }
 
 TEST_CASE("Native TUI submits two fresh prompts and replaces streamed assistant state",
@@ -4279,7 +4532,7 @@ TEST_CASE("Native TUI starts regular rendering on a dirty screen at physical row
 
         // The Native composition rendered on the same screen: the editor and
         // footer flowed below the inherited cursor rather than into a reserved
-        // dock partition.
+        // bottom region.
         const auto screen = visible_screen(terminal);
         CHECK(screen.find("─") != std::string::npos);
 

@@ -84,7 +84,6 @@ public:
     }
     [[nodiscard]] cch::support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid reset_scroll_margins() override { return {}; }
-    [[nodiscard]] cch::support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid end_synchronized_update() override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }
@@ -124,7 +123,6 @@ public:
     [[nodiscard]] cch::support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid reset_scroll_margins() override { return {}; }
-    [[nodiscard]] cch::support::ExpectedVoid set_dock_cursor(std::size_t, std::size_t) override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
     [[nodiscard]] cch::support::ExpectedVoid end_synchronized_update() override {
         if (fail_next_end) {
@@ -148,9 +146,6 @@ private:
     cch::tui::TerminalModeState modes_;
 };
 
-/// A component that renders no transcript lines and a dock taller than the
-/// terminal: the replacement-dialog overflow shape behind the #607
-/// slash-exit (an unbounded dialog's dock lines outgrow the addressable
 class MutableLinesComponent final : public cch::tui::Component {
 public:
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {

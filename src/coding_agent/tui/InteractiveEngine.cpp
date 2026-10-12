@@ -191,7 +191,7 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         mcp_flows_->refresh_completion();
         rebuild_autocomplete_provider();
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
-        local_dock_dirty_.store(true, std::memory_order_release);
+        prompt_presentation_dirty_.store(true, std::memory_order_release);
         tui_.request_render();
         if (run.initial_prompt()) {
             submit(*run.initial_prompt(),
@@ -207,7 +207,7 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         // snapshot.
         startup_diagnostics_ = std::move(diagnostics);
         if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
-        local_dock_dirty_.store(true, std::memory_order_release);
+        prompt_presentation_dirty_.store(true, std::memory_order_release);
         tui_.request_render();
         initial_prompt_ = run.initial_prompt();
         initial_prompt_options_ = run.initial_prompt_options();
@@ -307,7 +307,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
     if (auto focused = tui_.set_focus(view_); !focused) {
         co_return std::unexpected(focused.error());
     }
-    local_dock_dirty_.store(true, std::memory_order_release);
+    prompt_presentation_dirty_.store(true, std::memory_order_release);
     tui_.request_render();
     if (initial_prompt_) {
         submit(std::move(*initial_prompt_),
@@ -620,18 +620,18 @@ support::ExpectedVoid InteractiveEngine::fail_start(const support::Error& error)
 
 void InteractiveEngine::post_invalidate() {
     if (!running_) return;
-    local_dock_dirty_.store(true, std::memory_order_release);
+    prompt_presentation_dirty_.store(true, std::memory_order_release);
     const auto weak = weak_from_this();
     boost::asio::post(executor_, [weak] {
         if (const auto self = weak.lock(); self && self->running_) {
-            self->local_dock_dirty_.store(true, std::memory_order_release);
+            self->prompt_presentation_dirty_.store(true, std::memory_order_release);
             self->tui_.invalidate();
         }
     });
 }
 
 void InteractiveEngine::invalidate_frame() {
-    local_dock_dirty_.store(true, std::memory_order_release);
+    prompt_presentation_dirty_.store(true, std::memory_order_release);
     tui_.invalidate();
 }
 
@@ -745,7 +745,7 @@ support::Expected<bool> InteractiveEngine::prepare_frame() {
 void InteractiveEngine::complete_frame(const support::ExpectedVoid& result) {
     if (!result) {
         if (result.error().code == support::ErrorCode::Busy) {
-            local_dock_dirty_.store(true, std::memory_order_release);
+            prompt_presentation_dirty_.store(true, std::memory_order_release);
             return;
         }
         completion_result_ = std::unexpected(presentation_error(
@@ -759,7 +759,7 @@ void InteractiveEngine::complete_frame(const support::ExpectedVoid& result) {
 
     first_frame_rendered_ = true;
     ++render_count_;
-    local_dock_dirty_.store(false, std::memory_order_release);
+    prompt_presentation_dirty_.store(false, std::memory_order_release);
     if (prepared_counted_frame_ && session_ui_ != nullptr) {
         session_ui_->clear_pending_counted_frame();
     }
@@ -779,10 +779,10 @@ void InteractiveEngine::signal_exit() {
     if (view_ != nullptr && session_ != nullptr && session_ui_ != nullptr) {
         (void)session_ui_->drain_composed_snapshot();
         if (session_ui_->pending_counted_frame() && session_ui_->reconcile_snapshot(session_ui_->composed_snapshot())) {
-            local_dock_dirty_.store(true, std::memory_order_release);
+            prompt_presentation_dirty_.store(true, std::memory_order_release);
         }
     }
-    if (local_dock_dirty_.load(std::memory_order_acquire)) tui_.request_render(true);
+    if (prompt_presentation_dirty_.load(std::memory_order_acquire)) tui_.request_render(true);
     (void)exit_wait_.cancel();
 }
 

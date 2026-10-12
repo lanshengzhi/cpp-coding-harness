@@ -743,9 +743,6 @@ public:
         return inner_.set_scroll_margins(top_row, bottom_row);
     }
     cch::support::ExpectedVoid reset_scroll_margins() override { return inner_.reset_scroll_margins(); }
-    cch::support::ExpectedVoid set_dock_cursor(std::size_t dock_row, std::size_t column) override {
-        return inner_.set_dock_cursor(dock_row, column);
-    }
     cch::support::ExpectedVoid begin_synchronized_update() override { return inner_.begin_synchronized_update(); }
     cch::support::ExpectedVoid end_synchronized_update() override { return inner_.end_synchronized_update(); }
     cch::support::ExpectedVoid set_title(std::string_view title) override { return inner_.set_title(title); }

@@ -1,5 +1,4 @@
 #include <cch/tui/Editor.hpp>
-#include <cch/tui/Terminal.hpp>
 #include <cch/tui/Utils.hpp>
 #include "tui/CompletionContext.hpp"
 #include "tui/EditorCompletionSession.hpp"
@@ -143,8 +142,6 @@ struct Editor::Impl {
     std::size_t layout_padding{0};
     std::size_t scroll_offset{0};
     std::optional<std::size_t> preferred_visual_col_;
-    std::size_t last_echo_line_count{0};
-    std::size_t last_echo_width{0};
     enum class JumpDirection { Forward, Backward };
     std::optional<JumpDirection> jump_direction;
     std::optional<support::Error> callback_error;
@@ -259,18 +256,7 @@ struct Editor::Impl {
             *render_request_sink = nullptr;
         }
     }
-    void request_render() {
-        if (options.terminal) {
-            wake_autocomplete();
-            if (callback_error) {
-                notify_render_request();
-                return;
-            }
-            echo_local(true);
-            return;
-        }
-        notify_render_request();
-    }
+    void request_render() { notify_render_request(); }
 
     void record_failure(support::Error error) {
         if (!callback_error) callback_error = std::move(error);
@@ -430,13 +416,7 @@ struct Editor::Impl {
                 request_view);
         if (action == detail::EditorCompletionMenuAction::MoveUp ||
                 action == detail::EditorCompletionMenuAction::MoveDown) {
-            if (previous_selected != autocomplete_menu.selected_index) {
-                if (options.terminal) {
-                    echo_local();
-                } else {
-                    request_render();
-                }
-            }
+            if (previous_selected != autocomplete_menu.selected_index) request_render();
         }
     }
 
@@ -502,7 +482,6 @@ struct Editor::Impl {
         buffer.push_undo();
         apply_completion_result(application.result, application.prefix);
         if (application.notify) notify_change();
-        echo_local();
     }
 
     void insert_character(std::string_view text) {
@@ -516,7 +495,6 @@ struct Editor::Impl {
         }
         notify_change();
         maybe_trigger_autocomplete(last_codepoint);
-        echo_local();
     }
 
     void insert_text(std::string text, bool record_undo, bool update_autocomplete = true) {
@@ -531,7 +509,6 @@ struct Editor::Impl {
         }
         notify_change();
         if (update_autocomplete) maybe_trigger_autocomplete(last_codepoint);
-        echo_local();
     }
 
     void erase_at_cursor(bool backward) {
@@ -547,7 +524,6 @@ struct Editor::Impl {
         }
         notify_change();
         update_or_retrigger_after_erase();
-        echo_local();
     }
 
     void move_left() {
@@ -580,7 +556,6 @@ struct Editor::Impl {
             buffer.kill_to_line_start();
         }
         notify_change();
-        echo_local();
     }
 
     void delete_word(bool forward) {
@@ -595,21 +570,18 @@ struct Editor::Impl {
             return;
         }
         notify_change();
-        echo_local();
     }
 
     void yank() {
         exit_history_browsing();
         buffer.yank();
         notify_change();
-        echo_local();
     }
 
     void yank_pop() {
         exit_history_browsing();
         buffer.yank_pop();
         notify_change();
-        echo_local();
     }
 
     void undo_once() {
@@ -617,7 +589,6 @@ struct Editor::Impl {
         buffer.undo();
         cancel_autocomplete(true);
         notify_change();
-        echo_local();
     }
 
     void add_to_history(std::string text) {
@@ -674,7 +645,6 @@ struct Editor::Impl {
         }
         scroll_offset = 0;
         notify_change();
-        echo_local();
     }
 
     void navigate_history(int direction) {
@@ -698,7 +668,6 @@ struct Editor::Impl {
                 buffer = std::move(draft->buffer);
                 scroll_offset = 0;
                 notify_change();
-                echo_local();
             } else {
                 set_text_internal("", false);
             }
@@ -716,7 +685,6 @@ struct Editor::Impl {
         cancel_autocomplete(true);
         scroll_offset = 0;
         notify_change();
-        echo_local();
         if (!on_submit) return;
         if (auto submitted = on_submit(result); !submitted) {
             // An explicit submit-sink failure is a bounded callback
@@ -733,7 +701,6 @@ struct Editor::Impl {
         buffer.insert_text("\n", false);
         cancel_autocomplete(true);
         notify_change();
-        echo_local();
     }
 
     void paste(std::string text) {
@@ -741,7 +708,6 @@ struct Editor::Impl {
         buffer.insert_paste(std::move(text));
         notify_change();
         cancel_autocomplete(true);
-        echo_local();
     }
 
     [[nodiscard]] std::vector<VisualLine> visual_lines(std::size_t width) const {
@@ -775,96 +741,7 @@ struct Editor::Impl {
         buffer.jump_to(target, direction == JumpDirection::Forward);
     }
 
-    void echo_local(bool include_autocomplete = true) {
-        if (!options.terminal) return;
-        // The dock spans the terminal width, so the live dimensions are the
-        // echo width. Never reuse the stale layout_width after a resize: a
-        // narrowed terminal would reject the over-wide write and latch a
-        // permanent render failure (#597).
-        const auto width = options.terminal->dimensions().columns;
-        if (width == 0) return;
 
-        const auto record_terminal_failure = [this](support::Error error) {
-            record_failure(std::move(error));
-            notify_render_request();
-        };
-        const auto record_dock_position_failure = [this](support::Error error) {
-            if (error.code == support::ErrorCode::Validation &&
-                    error.message.ends_with("dock cursor position is outside its dimensions")) {
-                notify_render_request();
-                return;
-            }
-            record_failure(std::move(error));
-            notify_render_request();
-        };
-
-        auto layout_res = detail::EditorLayout::compute(detail::EditorLayoutOptions{
-                .document = &buffer.document(),
-                .cursor = buffer.cursor(),
-                .width = width,
-                .padding_x = options.padding_x,
-                .autocomplete_max_visible = options.autocomplete_max_visible,
-                .max_visible_lines = policy_max_visible_lines(),
-                .available_height = available_height,
-                .scroll_offset = scroll_offset,
-                .theme = &theme,
-                .autocomplete_menu = &autocomplete_menu,
-                .include_autocomplete = include_autocomplete,
-                .top_border_override = options.top_border_override ? &options.top_border_override : nullptr,
-        });
-        if (!layout_res) {
-            record_terminal_failure(layout_res.error());
-            return;
-        }
-
-        layout_width = layout_res->layout_width;
-        layout_padding = layout_res->padding_width;
-        scroll_offset = layout_res->scroll_offset;
-
-        const auto& lines = layout_res->lines;
-        const auto clear_width = std::max(width, last_echo_width);
-        for (std::size_t i = 0; i < lines.size(); ++i) {
-            if (auto positioned = options.terminal->set_dock_cursor(options.dock_offset + i, 0); !positioned) {
-                record_dock_position_failure(positioned.error());
-                return;
-            }
-            if (auto written = options.terminal->write(lines[i]); !written) {
-                record_terminal_failure(written.error());
-                return;
-            }
-            if (last_echo_width > width) {
-                if (auto cleared = options.terminal->write(std::string(last_echo_width - width, ' ')); !cleared) {
-                    record_terminal_failure(cleared.error());
-                    return;
-                }
-            }
-        }
-        for (std::size_t i = lines.size(); i < last_echo_line_count; ++i) {
-            if (auto positioned = options.terminal->set_dock_cursor(options.dock_offset + i, 0); !positioned) {
-                record_dock_position_failure(positioned.error());
-                return;
-            }
-            if (auto cleared = options.terminal->write(std::string(clear_width, ' ')); !cleared) {
-                record_terminal_failure(cleared.error());
-                return;
-            }
-        }
-        last_echo_line_count = lines.size();
-        last_echo_width = width;
-
-        if (layout_res->cursor_position) {
-            if (auto positioned = options.terminal->set_dock_cursor(
-                        options.dock_offset + layout_res->cursor_position->row, layout_res->cursor_position->column);
-                    !positioned) {
-                record_dock_position_failure(positioned.error());
-            }
-        }
-    }
-
-    void echo_cursor() {
-        if (!options.terminal) return;
-        echo_local();
-    }
 };
 
 Editor::Editor(EditorOptions options, EditorChangeSink on_change, EditorSubmitSink on_submit)
@@ -947,7 +824,6 @@ void Editor::set_text(std::string text) {
     impl.buffer.set_text(std::move(text));
     impl.cancel_autocomplete(true);
     impl.notify_change();
-    impl.echo_local();
 }
 
 void Editor::insert_text_at_cursor(std::string text) {
@@ -1068,10 +944,6 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
     impl.layout_padding = layout_res->padding_width;
     impl.scroll_offset = layout_res->scroll_offset;
 
-    if (impl.options.terminal) {
-        impl.last_echo_line_count = layout_res->lines.size();
-        impl.last_echo_width = width;
-    }
     return RenderResult{.lines = std::move(layout_res->lines)};
 }
 
@@ -1102,7 +974,6 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
         if (const auto text = printable_text(*event)) {
             impl.jump_to(*text, *impl.jump_direction);
             impl.jump_direction.reset();
-            impl.echo_cursor();
             return InputAdmissionOutcome::Consumed;
         }
         impl.jump_direction.reset();
@@ -1191,32 +1062,26 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
     }
     if (action == "tui.editor.cursorLineStart") {
         impl.move_to_line_start();
-        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorLineEnd") {
         impl.move_to_line_end();
-        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorLeft") {
         impl.move_left();
-        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorRight") {
         impl.move_right();
-        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorWordLeft") {
         impl.move_word(false);
-        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorWordRight") {
         impl.move_word(true);
-        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorUp") {
@@ -1229,7 +1094,6 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
         } else {
             impl.move_vertical(-1);
         }
-        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.cursorDown") {
@@ -1240,21 +1104,18 @@ InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
         } else {
             impl.move_vertical(1);
         }
-        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.pageUp") {
         for (std::size_t index = 0; index < impl.page_size(); ++index) {
             impl.move_vertical(-1);
         }
-        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.editor.pageDown") {
         for (std::size_t index = 0; index < impl.page_size(); ++index) {
             impl.move_vertical(1);
         }
-        impl.echo_cursor();
         return InputAdmissionOutcome::Consumed;
     }
     if (action == "tui.input.newLine") {
@@ -1320,33 +1181,4 @@ void Editor::set_terminal_rows(std::size_t rows) {
     impl.terminal_rows = rows;
 }
 
-void Editor::set_terminal(Terminal* terminal) {
-    auto operation = impl_->serialized_operation(impl_);
-    auto& impl = operation.impl;
-    impl.options.terminal = terminal;
-}
-
-Terminal* Editor::terminal() const {
-    auto operation = impl_->serialized_operation(impl_);
-    auto& impl = operation.impl;
-    return impl.options.terminal;
-}
-
-void Editor::set_dock_offset(std::size_t offset) {
-    auto operation = impl_->serialized_operation(impl_);
-    auto& impl = operation.impl;
-    impl.options.dock_offset = offset;
-}
-
-std::size_t Editor::dock_offset() const {
-    auto operation = impl_->serialized_operation(impl_);
-    auto& impl = operation.impl;
-    return impl.options.dock_offset;
-}
-
-bool Editor::has_local_echo() const {
-    auto operation = impl_->serialized_operation(impl_);
-    auto& impl = operation.impl;
-    return impl.options.terminal != nullptr;
-}
 } // namespace cch::tui

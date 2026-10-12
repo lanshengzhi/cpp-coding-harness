@@ -94,7 +94,7 @@ struct TerminalImageHandle {
     bool operator==(const TerminalImageHandle&) const = default;
 };
 
-/// Borrowed image data consumed synchronously by Terminal::place_image().
+/// Borrowed image data consumed synchronously while composing a frame.
 struct TerminalImage {
     std::string_view encoded_data{};
     std::string_view mime_type{};
@@ -165,10 +165,6 @@ public:
 
     /// Resets scroll margins to full-screen scrolling.
     [[nodiscard]] virtual support::ExpectedVoid reset_scroll_margins() = 0;
-
-    /// Direct cursor positioning in the reserved bottom dock region (dock_row is 0-based relative
-    /// to the dock starting row, i.e., margin_bottom + 1 when margins are active).
-    [[nodiscard]] virtual support::ExpectedVoid set_dock_cursor(std::size_t dock_row, std::size_t column) = 0;
 
     /// Begin a synchronized update region. Intermediate writes are not displayed
     /// until end_synchronized_update(). Terminals that do not support this

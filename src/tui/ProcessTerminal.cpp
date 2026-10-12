@@ -1480,8 +1480,7 @@ support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
 support::ExpectedVoid ProcessTerminal::set_scroll_margins(std::size_t top_row, std::size_t bottom_row) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-    // An equal top and bottom is a valid one-row scroll region; the dock
-    // cursor arithmetic depends on it for a one-row viewport (#611).
+    // An equal top and bottom is a valid one-row scroll region (#611).
     if (bottom_row >= impl_->dimensions.rows || top_row > bottom_row) {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "Process Terminal scroll margins are invalid"));
@@ -1515,31 +1514,6 @@ support::ExpectedVoid ProcessTerminal::reset_scroll_margins() {
     return result;
 }
 
-support::ExpectedVoid ProcessTerminal::set_dock_cursor(std::size_t dock_row, std::size_t column) {
-    std::lock_guard lock(impl_->mutex);
-    if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-    const auto dock_start = impl_->margins_active ? (impl_->margin_bottom + 1) : 0;
-    const auto screen_row = dock_start + dock_row;
-    if (screen_row >= impl_->dimensions.rows || column > impl_->dimensions.columns) {
-        return std::unexpected(support::make_error(support::ErrorCode::Validation,
-                "Process Terminal dock cursor position is outside its dimensions",
-                std::format("dock_row={}, column={}, screen_row={}, rows={}, columns={}, margins_active={}, "
-                            "margin_bottom={}",
-                        dock_row,
-                        column,
-                        screen_row,
-                        impl_->dimensions.rows,
-                        impl_->dimensions.columns,
-                        impl_->margins_active,
-                        impl_->margin_bottom)));
-    }
-    auto result = enqueue_output(*impl_, std::format("\x1b[{};{}H", screen_row + 1, column + 1));
-    if (result) {
-        impl_->cursor.row = screen_row;
-        impl_->cursor.column = column;
-    }
-    return result;
-}
 support::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());

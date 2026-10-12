@@ -570,7 +570,7 @@ private:
     /// pi `lastEscapeTime`: the double-escape window base (500 ms, empty
     /// editor, `doubleEscapeAction` default "tree"). Executor-confined.
     std::chrono::steady_clock::time_point last_escape_time_{};
-    std::atomic<bool> local_dock_dirty_{false};
+    std::atomic<bool> prompt_presentation_dirty_{false};
     std::size_t render_count_{0};
     bool first_frame_rendered_{false};
     bool prepared_counted_frame_{false};
