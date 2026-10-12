@@ -1,20 +1,19 @@
 #include "ClipboardPaste.hpp"
 
 #include "coding_agent/ImageInput.hpp"
+#include "coding_agent/tui/ClipboardProcess.hpp"
 #include "support/UniqueFd.hpp"
 
 #include <cch/support/Error.hpp>
 #include <cch/tui/NativeClipboard.hpp>
 #include "support/AsyncResultBridge.hpp"
 
-#include <array>
 #include <cerrno>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <format>
 #include <optional>
-#include <random>
 #include <span>
 #include <string>
 #include <string_view>
@@ -25,22 +24,6 @@
 
 namespace cch::coding_agent::tui {
 namespace {
-
-[[nodiscard]] std::string clipboard_uuid() {
-    std::random_device random;
-    std::array<std::uint8_t, 16> bytes{};
-    for (auto& byte : bytes)
-        byte = static_cast<std::uint8_t>(random());
-    bytes[6] = static_cast<std::uint8_t>((bytes[6] & 0x0fU) | 0x40U);
-    bytes[8] = static_cast<std::uint8_t>((bytes[8] & 0x3fU) | 0x80U);
-
-    std::string value;
-    for (std::size_t index = 0; index < bytes.size(); ++index) {
-        if (index == 4 || index == 6 || index == 8 || index == 10) value.push_back('-');
-        value += std::format("{:02x}", bytes[index]);
-    }
-    return value;
-}
 
 [[nodiscard]] support::Expected<std::filesystem::path> write_clipboard_image(
         std::span<const std::uint8_t> bytes, std::string_view extension) {
@@ -53,7 +36,7 @@ namespace {
 
     for (std::size_t attempt = 0; attempt < 16; ++attempt) {
         std::filesystem::path path;
-        path = temp_directory / std::format("pi-clipboard-{}{}", clipboard_uuid(), extension);
+        path = temp_directory / std::format("pi-clipboard-{}{}", make_clipboard_unique_token(), extension);
         support::UniqueFd fd(::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600));
         if (!fd) {
             if (errno == EEXIST) continue;

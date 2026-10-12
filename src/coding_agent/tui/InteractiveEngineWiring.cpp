@@ -271,7 +271,7 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
     };
     hooks.copy_to_clipboard = [weak](std::string text) {
         const auto self = weak.lock();
-        return self != nullptr && self->write_clipboard_text_sink(text);
+        return self != nullptr && self->write_clipboard_text_sink(text).copied;
     };
     hooks.dequeue_pending_input = [weak] {
         if (const auto self = weak.lock()) self->dequeue_pending_input(false);

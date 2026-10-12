@@ -126,6 +126,16 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     }
 
     native_clipboard_ = run.take_native_clipboard();
+    // The composition host observed the clipboard environment and assembled it
+    // into the run's copy policy; this engine owns the terminal the copy's OSC 52
+    // sequence is written through, so it installs that one route on both copies
+    // of the policy: the run's own (the host sink that performs `/copy` in the
+    // CLI assembly, and any custom sink that delegates to it) and this engine's
+    // fallback (used when no run assembled a sink at all).
+    run.attach_clipboard_osc52_writer([this](std::string_view bytes) { (void)terminal_.write(bytes); });
+    if (!clipboard_write_options_.write_osc52) {
+        clipboard_write_options_.write_osc52 = [this](std::string_view bytes) { (void)terminal_.write(bytes); };
+    }
     stop_source_ = std::stop_source{};
     model_fallback_message_ = run.model_fallback_message();
     action_sink_ = run.make_action_sink();

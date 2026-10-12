@@ -1,6 +1,5 @@
 #include "McpManagerView.hpp"
 
-#include "coding_agent/tui/ClipboardWrite.hpp"
 #include "coding_agent/tui/DynamicBorder.hpp"
 #include "coding_agent/tui/KeybindingHints.hpp"
 
@@ -600,9 +599,11 @@ struct McpManagerView::Impl {
         if (on_copy) {
             on_copy(url);
             copied = true;
-        } else {
-            copied = write_clipboard_text(url);
         }
+        // Without the composition's copy hook this view has no clipboard policy
+        // to apply: the observed environment and the terminal the OSC 52
+        // sequence belongs to are both host capabilities (McpManagerFlow installs
+        // the hook and routes it through the host's closed clipboard action).
         copy_hint = copied ? theme.foreground(ThemeToken::Success, "Copied URL to clipboard")
                            : theme.foreground(ThemeToken::Error, "Could not copy the URL");
     }

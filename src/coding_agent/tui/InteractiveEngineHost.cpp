@@ -45,12 +45,24 @@ namespace {
     std::string result = "\"";
     for (const char character : value) {
         switch (character) {
-        case '\\': result += "\\\\"; break;
-        case '"': result += "\\\""; break;
-        case '\n': result += "\\n"; break;
-        case '\r': result += "\\r"; break;
-        case '\t': result += "\\t"; break;
-        default: result.push_back(character); break;
+        case '\\':
+            result += "\\\\";
+            break;
+        case '"':
+            result += "\\\"";
+            break;
+        case '\n':
+            result += "\\n";
+            break;
+        case '\r':
+            result += "\\r";
+            break;
+        case '\t':
+            result += "\\t";
+            break;
+        default:
+            result.push_back(character);
+            break;
         }
     }
     result.push_back('"');
@@ -93,8 +105,11 @@ void InteractiveEngine::handle_copy_last_message() {
         show_error("No agent messages to copy yet.");
         return;
     }
-    if (!write_clipboard_text_sink(*text)) {
-        show_error("Failed to copy to clipboard");
+    // pi `handleCopyCommand`: the failure message is the clipboard error's own
+    // text (`Clipboard unavailable: ...`), shown through the chat diagnostic.
+    const auto result = write_clipboard_text_sink(*text);
+    if (!result.copied) {
+        show_error(result.error);
         return;
     }
     show_status("Copied last agent message to clipboard");
@@ -104,8 +119,7 @@ void InteractiveEngine::handle_name_command(std::string name) {
     if (name.empty()) {
         const auto current = session_->session_name();
         if (current && !current->empty()) {
-            view_->append_frontend_message(
-                std::format("Session name: {}", *current));
+            view_->append_frontend_message(std::format("Session name: {}", *current));
         } else {
             view_->append_warning("Usage: /name <name>");
         }
@@ -121,12 +135,9 @@ void InteractiveEngine::handle_name_command(std::string name) {
         // pi `showWarning("Session name was normalized from
         // ${JSON.stringify(name)} to ${JSON.stringify(sessionName)}")`.
         view_->append_warning(std::format(
-            "Session name was normalized from {} to {}",
-            json_quote_string(name),
-            json_quote_string(**stored)));
+                "Session name was normalized from {} to {}", json_quote_string(name), json_quote_string(**stored)));
     }
-    view_->append_frontend_message(
-        std::format("Session name set: {}", stored->value_or(name)));
+    view_->append_frontend_message(std::format("Session name set: {}", stored->value_or(name)));
     invalidate_frame();
 }
 
@@ -135,33 +146,34 @@ void InteractiveEngine::handle_session_command() {
     invalidate_frame();
 }
 
-bool InteractiveEngine::write_clipboard_text_sink(std::string text) {
-    auto result = deliver_action(
-        action_generation_,
-        TuiActionVariant{WriteClipboardAction{std::move(text)}});
+ClipboardCopyResult InteractiveEngine::write_clipboard_text_sink(std::string text) {
+    auto result = deliver_action(action_generation_, TuiActionVariant{WriteClipboardAction{std::move(text)}});
     if (!result) {
-        return false;
+        return ClipboardCopyResult{.copied = false, .error = result.error().message};
     }
-    const auto* wrote = std::get_if<bool>(&*result);
-    return wrote != nullptr && *wrote;
+    const auto* outcome = std::get_if<ClipboardCopyResult>(&*result);
+    if (outcome == nullptr) {
+        // A host that answers the copy action without a result did not perform
+        // the operation: pi's message for "no clipboard route" is the one the
+        // caller shows.
+        return ClipboardCopyResult{.copied = false, .error = "Clipboard unavailable"};
+    }
+    return *outcome;
 }
 
 runtime::AgentSessionCreationRequest InteractiveEngine::make_session_request(
-    std::filesystem::path workspace,
-    SessionTarget target) const {
+        std::filesystem::path workspace, SessionTarget target) const {
     runtime::AgentSessionCreationRequest request;
     request.provide_user_shell = true;
     // pi `projectTrustByCwd`: the CLI override wins; otherwise the boot
     // decision applies to the boot workspace (a session-only trust
     // choice leaves no store entry and must survive in-session
     // replacement).
-    request.project_trust_override =
-        session_facts_.project_trust_override.has_value()
-            ? session_facts_.project_trust_override
-            : (resolved_boot_trust_ &&
-                      resolved_boot_trust_->first == workspace
-                  ? std::optional<bool>{resolved_boot_trust_->second}
-                  : std::nullopt);
+    request.project_trust_override = session_facts_.project_trust_override.has_value()
+                                             ? session_facts_.project_trust_override
+                                             : (resolved_boot_trust_ && resolved_boot_trust_->first == workspace
+                                                               ? std::optional<bool>{resolved_boot_trust_->second}
+                                                               : std::nullopt);
     request.session_facts = session_facts_;
     request.workspace = std::move(workspace);
     request.session_target = std::move(target);
@@ -171,19 +183,14 @@ runtime::AgentSessionCreationRequest InteractiveEngine::make_session_request(
 /// The error a host without the asynchronous replacement capability returns
 /// to a Session replacement flow.
 support::Error InteractiveEngine::session_replacement_unavailable_error() {
-    return support::make_error(
-        support::ErrorCode::Unknown,
-        "Session switching is not available in this host");
+    return support::make_error(support::ErrorCode::Unknown, "Session switching is not available in this host");
 }
 
 support::Expected<TuiActionResultVariant> InteractiveEngine::deliver_action(
-    std::size_t captured_generation,
-    TuiActionVariant action) {
+        std::size_t captured_generation, TuiActionVariant action) {
     if (captured_generation != action_generation_) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Cancelled,
-            "Native TUI action rejected",
-            "retired session generation"));
+                support::ErrorCode::Cancelled, "Native TUI action rejected", "retired session generation"));
     }
     if (action_sink_) {
         // The action is stamped with the generation that admitted it so
@@ -193,22 +200,21 @@ support::Expected<TuiActionResultVariant> InteractiveEngine::deliver_action(
     // Null host: TUI-local platform defaults for environment operations;
     // diagnostics and reporting are silent; replacement is unavailable.
     return std::visit(
-        [](auto&& payload) -> support::Expected<TuiActionResultVariant> {
-            using T = std::decay_t<decltype(payload)>;
-            if constexpr (std::is_same_v<T, OpenBrowserAction>) {
-                open_browser(std::move(payload.url));
-                return TuiActionResultVariant{std::monostate{}};
-            } else if constexpr (std::is_same_v<T, WriteClipboardAction>) {
-                return TuiActionResultVariant{
-                    write_clipboard_text(payload.text)};
-            } else if constexpr (std::is_same_v<T, SuspendProcessAction>) {
-                (void)::kill(0, SIGTSTP);
-                return TuiActionResultVariant{std::monostate{}};
-            } else {
-                return TuiActionResultVariant{std::monostate{}};
-            }
-        },
-        std::move(action));
+            [this](auto&& payload) -> support::Expected<TuiActionResultVariant> {
+                using T = std::decay_t<decltype(payload)>;
+                if constexpr (std::is_same_v<T, OpenBrowserAction>) {
+                    open_browser(std::move(payload.url));
+                    return TuiActionResultVariant{std::monostate{}};
+                } else if constexpr (std::is_same_v<T, WriteClipboardAction>) {
+                    return TuiActionResultVariant{write_clipboard_text(payload.text, clipboard_write_options_)};
+                } else if constexpr (std::is_same_v<T, SuspendProcessAction>) {
+                    (void)::kill(0, SIGTSTP);
+                    return TuiActionResultVariant{std::monostate{}};
+                } else {
+                    return TuiActionResultVariant{std::monostate{}};
+                }
+            },
+            std::move(action));
 }
 
 boost::asio::awaitable<support::Expected<coding_agent::CreateAgentSessionResult>>
@@ -230,8 +236,7 @@ InteractiveEngine::request_session_replacement_async(
     co_return created;
 }
 
-support::ExpectedVoid InteractiveEngine::replace_session(
-    std::unique_ptr<AgentSession> next) {
+support::ExpectedVoid InteractiveEngine::replace_session(std::unique_ptr<AgentSession> next) {
     retire_current_session();
     // The retired Session's in-flight prompt and User Bash can no longer
     // gate or render as the current Session: invalidate their interrupt
@@ -262,9 +267,8 @@ support::ExpectedVoid InteractiveEngine::replace_session(
     // settling; drop any whose Close already finalised (Closed with no
     // in-flight work), so retention is bounded by real quiescence rather
     // than growing with every replacement (ADR 0040).
-    std::erase_if(retired_sessions_, [](const std::unique_ptr<AgentSession>& retired) {
-        return !retired->is_open() && !retired->is_busy();
-    });
+    std::erase_if(retired_sessions_,
+            [](const std::unique_ptr<AgentSession>& retired) { return !retired->is_open() && !retired->is_busy(); });
     if (owned_session_) retired_sessions_.push_back(std::move(owned_session_));
     owned_session_ = std::move(next);
     session_ = owned_session_.get();
@@ -284,14 +288,11 @@ support::ExpectedVoid InteractiveEngine::replace_session(
     return {};
 }
 
-support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(
-    const SlashCommandInvocation& invocation) {
+support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(const SlashCommandInvocation& invocation) {
     switch (invocation.command) {
     case SlashCommandId::Clear:
         if (session_ == nullptr) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Session,
-                "No active session for /clear"));
+            return std::unexpected(support::make_error(support::ErrorCode::Session, "No active session for /clear"));
         }
         session_flows_->open_new();
         return {};
@@ -305,17 +306,13 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(
         return {};
     case SlashCommandId::Copy:
         if (session_ == nullptr) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Session,
-                "No active session for /copy"));
+            return std::unexpected(support::make_error(support::ErrorCode::Session, "No active session for /copy"));
         }
         handle_copy_last_message();
         return {};
     case SlashCommandId::Session:
         if (session_ == nullptr) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Session,
-                "No active session for /session"));
+            return std::unexpected(support::make_error(support::ErrorCode::Session, "No active session for /session"));
         }
         handle_session_command();
         return {};
@@ -330,9 +327,7 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(
         return {};
     case SlashCommandId::Name:
         if (session_ == nullptr) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Session,
-                "No active session for /name"));
+            return std::unexpected(support::make_error(support::ErrorCode::Session, "No active session for /name"));
         }
         handle_name_command(invocation.argument);
         return {};
@@ -371,13 +366,10 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(
     case SlashCommandId::Compact:
     case SlashCommandId::Trust:
     case SlashCommandId::Mcp:
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Command is not an immediate slash command"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Command is not an immediate slash command"));
     }
-    return std::unexpected(support::make_error(
-        support::ErrorCode::Validation,
-        "Unknown immediate slash command"));
+    return std::unexpected(support::make_error(support::ErrorCode::Validation, "Unknown immediate slash command"));
 }
 
 void InteractiveEngine::dispatch_modal_slash_command(SlashCommandInvocation invocation) {
@@ -460,8 +452,7 @@ void InteractiveEngine::dispatch_modal_slash_command(SlashCommandInvocation invo
     case SlashCommandId::Help:
     case SlashCommandId::Name:
     case SlashCommandId::Export:
-        show_error(
-            "Immediate slash command was routed as a modal command");
+        show_error("Immediate slash command was routed as a modal command");
         return;
     }
 }
@@ -470,8 +461,7 @@ void InteractiveEngine::dequeue_pending_input(bool announce) {
     if (!running_ || view_ == nullptr || !session_->is_open()) return;
     const auto snapshot = session_->snapshot();
     std::vector<std::string> restored;
-    if (auto collected = queued_editor_texts(snapshot.agent_state.input_queues);
-        !collected) {
+    if (auto collected = queued_editor_texts(snapshot.agent_state.input_queues); !collected) {
         view_->append_diagnostic(collected.error().message);
         invalidate_frame();
         return;
@@ -485,9 +475,8 @@ void InteractiveEngine::dequeue_pending_input(bool announce) {
         return;
     }
     if (auto cleared = session_->clear_input_queues(); !cleared) {
-        view_->append_diagnostic(bounded_redacted_presentation(std::format(
-            "Unable to restore queued input: {}",
-            combined_error_text(cleared.error()))));
+        view_->append_diagnostic(bounded_redacted_presentation(
+                std::format("Unable to restore queued input: {}", combined_error_text(cleared.error()))));
         session_ui_->sync_pending_input();
         invalidate_frame();
         return;
@@ -495,9 +484,7 @@ void InteractiveEngine::dequeue_pending_input(bool announce) {
     view_->restore_queued_text(restored);
     if (announce) {
         view_->append_frontend_message(std::format(
-            "Restored {} queued message{} to editor",
-            restored.size(),
-            restored.size() == 1 ? "" : "s"));
+                "Restored {} queued message{} to editor", restored.size(), restored.size() == 1 ? "" : "s"));
     }
     session_ui_->sync_pending_input();
     invalidate_frame();

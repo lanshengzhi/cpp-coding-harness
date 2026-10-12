@@ -103,24 +103,23 @@ void InteractiveEngine::dispatch(ClipboardPasteAction) {
     clipboard_read_active_ = true;
     const auto self = shared_from_this();
     const auto stop_token = stop_source_.get_token();
-    auto bridged = support::detail::make_async_result_on(
-            executor_, [self, stop_token]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
+    // An admitted flow, not a detached read: Close requests this engine's stop
+    // token (so an in-flight helper is killed and reaped) and then waits for the
+    // flow counter to settle before terminal restoration.
+    spawn_flow(
+            [self, stop_token]() -> boost::asio::awaitable<void> {
                 auto content = co_await read_clipboard_insert_content(*self->native_clipboard_, stop_token);
+                self->clipboard_read_active_ = false;
                 if (content && !content->empty() && self->running_ && self->view_ != nullptr) {
                     self->view_->insert_editor_text(std::move(*content));
                     self->invalidate_frame();
                 }
-                co_return support::ExpectedVoid{};
-            });
-    std::move(bridged).start([weak = weak_from_this()](support::ExpectedVoid result) noexcept {
-        const auto engine = weak.lock();
-        if (!engine) return;
-        engine->clipboard_read_active_ = false;
-        // Baseline clipboard failures are intentionally silent; the
-        // private bridge already mapped a launch failure to the same
-        // generic outcome.
-        (void)result;
-    });
+                co_return;
+            },
+            // Baseline clipboard failures are intentionally silent: the read
+            // reports them through its result, never through the chat
+            // diagnostic this label would append.
+            "Clipboard paste failed");
 }
 
 void InteractiveEngine::dispatch(DequeueAction) { dequeue_pending_input(true); }

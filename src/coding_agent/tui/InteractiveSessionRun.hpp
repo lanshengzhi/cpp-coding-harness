@@ -1,5 +1,6 @@
 #pragma once
 
+#include "coding_agent/tui/ClipboardWrite.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/AgentSession.hpp"
@@ -100,6 +101,12 @@ public:
     [[nodiscard]] const std::optional<std::string>& model_fallback_message() const noexcept;
     [[nodiscard]] bool has_native_clipboard() const noexcept;
     [[nodiscard]] std::unique_ptr<cch::tui::NativeClipboard> take_native_clipboard() noexcept;
+    /// Install the OSC 52 terminal route into the copy policy the run carries,
+    /// so the copy its own host sink performs writes through the terminal that
+    /// owns the copy. Called by the engine, which owns that terminal; a route
+    /// that is already installed is kept. The engine's standalone fallback
+    /// installs the same route on its own policy when no host sink exists.
+    void attach_clipboard_osc52_writer(ClipboardOsc52Writer writer) noexcept;
     [[nodiscard]] const SessionIntentVariant& session_intent() const noexcept;
     [[nodiscard]] SessionIntentVariant take_session_intent() noexcept;
     [[nodiscard]] bool creation_failure_reported() const noexcept;
@@ -107,7 +114,7 @@ public:
     // ── Owned host effects (closed action seam dispatch) ────────────────
 
     void open_browser(std::string url) const;
-    [[nodiscard]] bool write_clipboard_text(const std::string& text) const;
+    [[nodiscard]] ClipboardCopyResult write_clipboard_text(const std::string& text) const;
     void suspend_process() const;
     [[nodiscard]] AsyncSessionReplacementSink make_async_session_replacement_sink() const;
     void report_boot_diagnostics(
@@ -131,6 +138,7 @@ private:
         PromptOptions initial_prompt_options{};
         std::optional<std::string> model_fallback_message{std::nullopt};
         std::unique_ptr<cch::tui::NativeClipboard> native_clipboard{nullptr};
+        ClipboardWriteOptions clipboard_write_options{};
         SessionIntentVariant session_intent{BindExistingSession{nullptr}};
 
         std::shared_ptr<harness::RuntimeRoot> runtime_root{nullptr};
@@ -170,6 +178,7 @@ public:
     InteractiveSessionRunBuilder& with_model_fallback_message(std::optional<std::string> message) noexcept;
     InteractiveSessionRunBuilder& with_native_clipboard(
             std::unique_ptr<cch::tui::NativeClipboard> native_clipboard) noexcept;
+    InteractiveSessionRunBuilder& with_clipboard_write_options(ClipboardWriteOptions options) noexcept;
     InteractiveSessionRunBuilder& with_runtime_root(std::shared_ptr<harness::RuntimeRoot> runtime_root) noexcept;
     InteractiveSessionRunBuilder& with_project_resource_filesystems(ProjectResourceFileSystems filesystems) noexcept;
     InteractiveSessionRunBuilder& with_shared_runtime(

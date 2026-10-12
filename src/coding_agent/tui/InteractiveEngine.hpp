@@ -24,6 +24,7 @@
 
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
+#include "coding_agent/tui/ClipboardWrite.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/InteractiveStartup.hpp"
@@ -373,8 +374,9 @@ private:
     //    closed action delivery (InteractiveEngineHost.cpp) ───────────────
 
     /// The configured clipboard writer (pi `copyToClipboard` platform-tools
-    /// path; tests inject a recorder).
-    [[nodiscard]] bool write_clipboard_text_sink(std::string text);
+    /// path; tests inject a recorder). Returns pi's copy outcome, so the caller
+    /// shows the environment's own failure message.
+    [[nodiscard]] ClipboardCopyResult write_clipboard_text_sink(std::string text);
 
     /// Build one in-session session creation request from the CLI-owned facts
     /// (pi `createRuntime` re-resolves the CLI options against the target
@@ -505,6 +507,11 @@ private:
     std::shared_ptr<SessionUiBinding> session_ui_;
     std::unique_ptr<ThemeController> theme_controller_;
     std::unique_ptr<cch::tui::NativeClipboard> native_clipboard_;
+    /// The copy policy the engine's standalone fallback uses when no host sink
+    /// exists (no run state was assembled, so no environment was observed) plus
+    /// the OSC 52 terminal route this engine installs; the copy path never reads
+    /// the process environment.
+    ClipboardWriteOptions clipboard_write_options_{};
     /// One move-only sink carrying closed application-level actions to the
     /// composition host (ADR 0040); null applies TUI-local platform defaults
     /// for the environment operations.

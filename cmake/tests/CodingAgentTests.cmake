@@ -164,6 +164,9 @@ include_guard(GLOBAL)
         tests/support/ModelRuntimeTestSupport.cpp
         tests/coding_agent/tui/BootTrustInteractiveTest.cpp
         tests/coding_agent/tui/ChatContainerStatusTest.cpp
+        tests/coding_agent/tui/ClipboardInteractiveTest.cpp
+        tests/coding_agent/tui/ClipboardProcessTest.cpp
+        tests/coding_agent/tui/ClipboardWriteTest.cpp
         tests/coding_agent/tui/FooterStatusInteractiveTest.cpp
         tests/coding_agent/tui/FooterTest.cpp
         tests/coding_agent/tui/InteractiveBootE2ETest.cpp

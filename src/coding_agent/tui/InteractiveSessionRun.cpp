@@ -94,6 +94,12 @@ std::unique_ptr<cch::tui::NativeClipboard> InteractiveSessionRun::take_native_cl
     return std::move(state_->native_clipboard);
 }
 
+void InteractiveSessionRun::attach_clipboard_osc52_writer(ClipboardOsc52Writer writer) noexcept {
+    if (!state_) return;
+    if (state_->clipboard_write_options.write_osc52) return;
+    state_->clipboard_write_options.write_osc52 = std::move(writer);
+}
+
 const SessionIntentVariant& InteractiveSessionRun::session_intent() const noexcept {
     static const SessionIntentVariant kEmptyIntent{BindExistingSession{nullptr}};
     return state_ ? state_->session_intent : kEmptyIntent;
@@ -110,8 +116,12 @@ bool InteractiveSessionRun::creation_failure_reported() const noexcept {
 
 void InteractiveSessionRun::open_browser(std::string url) const { coding_agent::tui::open_browser(std::move(url)); }
 
-bool InteractiveSessionRun::write_clipboard_text(const std::string& text) const {
-    return coding_agent::tui::write_clipboard_text(text);
+ClipboardCopyResult InteractiveSessionRun::write_clipboard_text(const std::string& text) const {
+    if (!state_) {
+        ClipboardWriteOptions no_injected_policy{};
+        return coding_agent::tui::write_clipboard_text(text, no_injected_policy);
+    }
+    return coding_agent::tui::write_clipboard_text(text, state_->clipboard_write_options);
 }
 
 void InteractiveSessionRun::suspend_process() const { (void)::kill(0, SIGTSTP); }
@@ -294,6 +304,12 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_model_fallback_
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_native_clipboard(
         std::unique_ptr<cch::tui::NativeClipboard> native_clipboard) noexcept {
     state_->native_clipboard = std::move(native_clipboard);
+    return *this;
+}
+
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_clipboard_write_options(
+        ClipboardWriteOptions options) noexcept {
+    state_->clipboard_write_options = std::move(options);
     return *this;
 }
 

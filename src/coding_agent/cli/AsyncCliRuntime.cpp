@@ -16,6 +16,7 @@
 #include "agent/harness/RuntimeRoot.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/OpenBrowser.hpp"
+#include "coding_agent/cli/InteractiveTuiRun.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
 #include "coding_agent/tui/TerminationSignals.hpp"
@@ -195,22 +196,17 @@ void print_session_diagnostics(
             shared_runtime = std::move(*created);
         }
     }
-    auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-                       .with_session_facts(config.session_facts)
-                       .with_agent_config_directory(coding_agent::agent_config_dir())
-                       .with_initial_prompt(initial.initial_message.empty()
-                                                    ? std::nullopt
-                                                    : std::optional<std::string>{std::move(initial.initial_message)})
-                       .with_initial_prompt_options(coding_agent::PromptOptions{
-                               .expand_prompt_templates = true,
-                               .images = std::move(initial.initial_images),
-                       })
-                       .with_defer_boot(std::move(request))
-                       .with_runtime_root(runtime_root)
-                       .with_shared_runtime(shared_runtime)
-                       .with_model_runtime_cli_fake(model_runtime_cli_fake)
-                       .with_error_stream(&streams.error)
-                       .build();
+    // The composition boundary observes the clipboard environment once, here,
+    // and injects it into the run (#993): the copy policy and the paste reader
+    // both work from that observation, never from the process environment.
+    auto run = assemble_interactive_session_run(std::move(initial),
+            config,
+            runtime_root,
+            shared_runtime,
+            model_runtime_cli_fake,
+            streams.error,
+            coding_agent::tui::DeferBoot{std::move(request)},
+            InteractiveClipboardInjection{.environment = coding_agent::tui::clipboard_environment_from_process()});
 
     auto future = boost::asio::co_spawn(
             *io, coding_agent::tui::run_interactive_mode(terminal, std::move(run)), boost::asio::use_future);

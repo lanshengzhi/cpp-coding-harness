@@ -54,6 +54,11 @@ struct ActionSinkRecorder {
         std::vector<ReplaceSessionRecord> replace_sessions;
         std::vector<ReportBootDiagnosticsAction> boot_diagnostics;
         std::vector<ReportBootCreationFailureAction> boot_creation_failure;
+        /// The outcome every recorded `WriteClipboardAction` answers with, so a
+        /// test can drive the engine's success/failure rendering. The
+        /// composition's own copy policy is exercised through the CLI assembly
+        /// fixture instead of this sink.
+        ClipboardCopyResult clipboard_copy_result{.copied = true, .error = {}};
         /// Asynchronous replacement creator used by tests migrated to the
         /// Session Assembly adapter. The generation and stop token are
         /// retained at this seam so cancellation and supersession remain
@@ -95,7 +100,7 @@ struct ActionSinkRecorder {
                         return TuiActionResultVariant{std::monostate{}};
                     } else if constexpr (std::is_same_v<T, WriteClipboardAction>) {
                         shared->write_clipboard.push_back(std::move(payload));
-                        return TuiActionResultVariant{true};
+                        return TuiActionResultVariant{shared->clipboard_copy_result};
                     } else if constexpr (std::is_same_v<T, SuspendProcessAction>) {
                         shared->suspend_process.push_back(std::move(payload));
                         return TuiActionResultVariant{std::monostate{}};

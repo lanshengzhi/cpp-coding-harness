@@ -112,6 +112,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/BashExecutionComponent.cpp
         src/coding_agent/tui/ChatContainer.cpp
         src/coding_agent/tui/ClipboardPaste.cpp
+        src/coding_agent/tui/ClipboardProcess.cpp
         src/coding_agent/tui/ClipboardWrite.cpp
         src/coding_agent/tui/DiffRenderer.cpp
         src/coding_agent/tui/EditorAutocomplete.cpp
@@ -128,6 +129,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/InteractiveView.cpp
         src/coding_agent/tui/KeybindingHints.cpp
         src/coding_agent/tui/KeybindingsManager.cpp
+        src/coding_agent/tui/LinuxClipboard.cpp
         src/coding_agent/tui/LoadedResources.cpp
         src/coding_agent/tui/LoginDialog.cpp
         src/coding_agent/tui/LoginPresentation.cpp
@@ -202,6 +204,7 @@ cch_parity_declare_target(
         src/coding_agent/cli/CliParse.cpp
         src/coding_agent/cli/FrontendSelection.cpp
         src/coding_agent/cli/InitialPrompt.cpp
+        src/coding_agent/cli/InteractiveTuiRun.cpp
         src/coding_agent/cli/ListModels.cpp
         src/coding_agent/cli/McpCommand.cpp
         src/coding_agent/cli/PrintMode.cpp

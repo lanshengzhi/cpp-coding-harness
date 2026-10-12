@@ -2,6 +2,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
+#include "coding_agent/tui/ClipboardWrite.hpp"
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/NativeClipboard.hpp>
 #include <cch/support/Error.hpp>
@@ -46,7 +47,8 @@ struct OpenBrowserAction {
 };
 
 /// Write text to the system clipboard (pi `copyToClipboard` platform-tools
-/// path). The host returns whether a clipboard tool ran successfully.
+/// path). The host returns pi's copy outcome: success, or the
+/// `Clipboard unavailable: ...` message the caller shows verbatim.
 struct WriteClipboardAction {
     std::string text;
 };
@@ -81,8 +83,8 @@ using TuiActionVariant = std::variant<OpenBrowserAction,
 
 /// The result the host returns for one dispatched action. Fire-and-forget
 /// operations return `std::monostate`; `WriteClipboardAction` returns the
-/// clipboard-tool success.
-using TuiActionResultVariant = std::variant<std::monostate, bool>;
+/// clipboard copy outcome.
+using TuiActionResultVariant = std::variant<std::monostate, ClipboardCopyResult>;
 
 /// Move-only sink carrying closed Native TUI actions to the composition host.
 /// The host dispatches on `TuiActionVariant` and returns the matching
