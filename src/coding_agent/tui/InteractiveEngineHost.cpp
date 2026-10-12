@@ -281,6 +281,9 @@ support::ExpectedVoid InteractiveEngine::replace_session(std::unique_ptr<AgentSe
         return std::unexpected(subscribed.error());
     }
     extension_ui_host_.refresh();
+    // pi resetExtensionUI clears the custom editor and re-runs the extension
+    // registrations; the fresh context may install another one.
+    apply_extension_editor();
     // The new session's resources replace the loaded-resources block
     // (pi `showLoadedResources` after `renderCurrentSessionState`). The
     // theme re-registration gap (replacement drops the created session's

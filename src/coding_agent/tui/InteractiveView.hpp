@@ -182,6 +182,10 @@ struct InteractiveViewOptions {
     std::unique_ptr<cch::tui::AutocompleteProvider> autocomplete_provider;
     std::unique_ptr<cch::tui::AutocompleteDebounceTimer> autocomplete_debounce_timer;
     cch::tui::EditorRenderRequestSink render_request;
+    /// Builds one autocomplete provider instance per editor, so the built-in
+    /// editor and an installed custom editor never share unique ownership
+    /// (pi hands one shared provider object to both).
+    std::move_only_function<std::unique_ptr<cch::tui::AutocompleteProvider>()> autocomplete_provider_factory;
     /// Must outlive the view: controller-owned live theme.
     const LiveTheme* theme{nullptr};
 };
@@ -252,6 +256,16 @@ public:
     void set_editor_replacement(std::shared_ptr<cch::tui::Component> component);
     void restore_editor();
 
+    /// Install or clear the active extension prompt editor (pi
+    /// `setCustomEditorComponent`). Installing transfers the current text and
+    /// focus onto the new editor and wires the same submit/change callbacks;
+    /// clearing restores the built-in editor with the custom editor's current
+    /// text and focus. Optional editor operations stay capability-gated, so a
+    /// custom editor without history/insert/expanded-text/configuration
+    /// support follows the frozen pi fallback instead of requiring
+    /// inheritance from `Editor`.
+    void set_custom_editor(std::shared_ptr<cch::tui::EditorComponent> editor);
+
     void append_user_bash_diagnostic(std::string text);
     void restore_submitted_text(const std::string& text);
     void clear_pending_bash(const EditorInterruptRequest& request);
@@ -317,6 +331,56 @@ private:
     /// keeps the bashMode token, otherwise the thinking-level token).
     [[nodiscard]] cch::tui::TextStyleHook status_border_style();
 
+    /// The prompt editor input currently routes through: the installed
+    /// extension editor when present, otherwise the built-in editor.
+    [[nodiscard]] cch::tui::EditorComponent& active_editor() noexcept {
+        if (custom_editor_ != nullptr) return *custom_editor_;
+        return editor_;
+    }
+    [[nodiscard]] const cch::tui::EditorComponent& active_editor() const noexcept {
+        if (custom_editor_ != nullptr) return *custom_editor_;
+        return editor_;
+    }
+
+    /// The active editor's text with editor markers expanded; a custom editor
+    /// without the expanded-text capability falls back to its raw text (pi
+    /// `getExpandedText?.() ?? getText()`).
+    [[nodiscard]] std::string active_expanded_text() const;
+
+    /// Record an admitted prompt in the active editor's history when the
+    /// editor supports it (pi `addToHistory?.`).
+    void add_active_history(std::string text);
+
+    /// Replace the active editor's whole text (pi `editor.setText`).
+    void set_active_text(std::string text);
+
+    /// The prompt submit/change sinks, shared by the built-in editor and every
+    /// installed custom editor so admission behavior stays identical.
+    [[nodiscard]] cch::tui::EditorChangeSink make_editor_change_sink();
+    [[nodiscard]] cch::tui::EditorSubmitSink make_editor_submit_sink();
+
+    /// The theme token the active editor's border currently resolves to (pi
+    /// `updateEditorBorderColor`: Bash mode keeps the bashMode token,
+    /// otherwise the thinking-level token).
+    [[nodiscard]] ThemeToken current_border_token() const;
+
+    /// Copy the default editor's appearance and autocomplete configuration
+    /// onto the installed custom editor, capability-gated exactly like pi
+    /// `setCustomEditorComponent` (`borderColor !== undefined`,
+    /// `setPaddingX !== undefined`, `setAutocompleteMaxVisible !== undefined`,
+    /// `setAutocompleteProvider`). Options apply once at install; only the
+    /// border hook follows a later token change.
+    void apply_editor_options();
+
+    /// pi `updateEditorBorderColor`: rewrite the custom editor's border hook
+    /// when the thinking-level / Bash-mode token changed, and leave it
+    /// untouched otherwise.
+    void refresh_custom_editor_border();
+
+    /// Hand the custom editor a provider built by the engine's factory (pi
+    /// `newEditor.setAutocompleteProvider(this.autocompleteProvider)`).
+    void apply_custom_editor_autocomplete();
+
     std::shared_ptr<SharedKeybindings> keybindings_;
     InvalidateSink on_invalidate_;
     ViewActionSink action_sink_;
@@ -338,6 +402,14 @@ private:
     Footer footer_;
     const LiveTheme* theme_; // must outlive the view: controller-owned live theme.
     cch::tui::Editor editor_;
+    /// Installed extension prompt editor (pi `this.editor` when a custom
+    /// editor is active); null routes the prompt through `editor_`.
+    std::shared_ptr<cch::tui::EditorComponent> custom_editor_;
+    /// Builds one provider instance per editor (see the option declaration).
+    std::move_only_function<std::unique_ptr<cch::tui::AutocompleteProvider>()> autocomplete_provider_factory_;
+    /// Border token last applied to the custom editor; a change re-applies the
+    /// hook, an unchanged token leaves it untouched.
+    std::optional<ThemeToken> presented_border_token_;
     std::size_t editor_revision_{0};
     // The status container's active indicator (pi's statusContainer child);
     // null renders the two-row IdleStatus.

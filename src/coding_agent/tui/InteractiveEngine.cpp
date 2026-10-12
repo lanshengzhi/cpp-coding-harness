@@ -505,6 +505,13 @@ std::unique_ptr<InteractiveView> InteractiveEngine::make_interactive_view(std::w
     options.output_pad = output_pad_;
     options.user_bash_available = view_user_shell_available();
     options.autocomplete_provider = build_autocomplete_provider();
+    // An installed custom editor owns its own provider instance: the provider
+    // contract is unique-owned, so the view builds a fresh one per editor
+    // (pi hands one shared provider object to both).
+    options.autocomplete_provider_factory = [weak]() -> std::unique_ptr<cch::tui::AutocompleteProvider> {
+        if (const auto self = weak.lock()) return self->build_autocomplete_provider();
+        return nullptr;
+    };
     options.autocomplete_debounce_timer = std::make_unique<AsioAutocompleteDebounceTimer>(executor_);
     options.render_request = [weak]() -> support::ExpectedVoid {
         if (const auto self = weak.lock()) self->post_invalidate();
@@ -595,6 +602,10 @@ void InteractiveEngine::initialize_view(const InteractiveStartupDiagnostics& dia
     for (const auto& diagnostic : diagnostics.themes) {
         append_once(diagnostic.message, [this](std::string value) { view_->append_warning(std::move(value)); });
     }
+    // The registration context already ran (bind/refresh); installing its
+    // custom editor here is the first moment the view exists with the bound
+    // session, matching pi's ordering after `init()`.
+    apply_extension_editor();
 }
 
 ProjectResourceFileSystems InteractiveEngine::project_resource_filesystems_for(const std::filesystem::path& workspace) {
@@ -738,6 +749,22 @@ void InteractiveEngine::replace_prompt_slot(std::shared_ptr<cch::tui::Component>
     if (view_ == nullptr) return;
     view_->set_editor_replacement(std::move(component));
     invalidate_frame();
+}
+
+void InteractiveEngine::apply_extension_editor() {
+    if (view_ == nullptr) return;
+    if (!extension_ui_host_.has_editor_component()) {
+        view_->set_custom_editor(nullptr);
+        return;
+    }
+    // pi setCustomEditorComponent: the factory receives the live TUI, the
+    // editor theme (pi `getEditorTheme()`), and the shared keybindings
+    // manager. The view then transfers text/focus and wires the admission
+    // callbacks onto the returned capability-only editor.
+    cch::tui::EditorTheme editor_theme;
+    editor_theme.border = theme_controller_->live_theme().foreground_hook(ThemeToken::BorderMuted);
+    editor_theme.select_list = theme_controller_->live_theme().select_list_theme();
+    view_->set_custom_editor(extension_ui_host_.make_editor(std::move(editor_theme), keybindings_));
 }
 
 void InteractiveEngine::restore_prompt_slot() {

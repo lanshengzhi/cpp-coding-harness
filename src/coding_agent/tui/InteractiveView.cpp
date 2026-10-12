@@ -29,8 +29,7 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
       user_bash_available_(options.user_bash_available),
       header_(*options.theme, keybindings_, options.user_bash_available, options.clipboard_paste_available),
       resources_(*options.theme), chat_(*options.theme, keybindings_), footer_(*options.theme), theme_(options.theme),
-      editor_(
-              cch::tui::EditorOptions{
+      editor_(cch::tui::EditorOptions{
                       .keybindings = keybindings_->get(),
                       .keybinding_context = keybindings_->context(),
                       .autocomplete_debounce_timer = std::move(options.autocomplete_debounce_timer),
@@ -51,28 +50,11 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
                           return render_embedded_status_border(width, hidden_line_count);
                       },
               },
-              [this](std::string text) -> support::ExpectedVoid {
-                  if (!text.empty()) ++editor_revision_;
-                  presented_bash_mode_ = user_bash_editor_mode(editor_.expanded_text(), user_bash_available_);
-                  invoke_invalidate();
-                  return {};
-              },
-              [this](std::string text) -> support::ExpectedVoid {
-                  editor_.add_to_history(text);
-                  emit_action(
-                          SubmitAction{
-                                  .request =
-                                          EditorSubmissionRequest{
-                                                  .text = std::move(text),
-                                                  .editor_revision = editor_revision_,
-                                          },
-                                  .submission = InputSubmission::Ordinary,
-                          },
-                          "Native TUI submit action failed");
-                  return {};
-              }) {
+              make_editor_change_sink(),
+              make_editor_submit_sink()) {
     chat_.set_hide_thinking_block(options.hide_thinking_block);
     chat_.set_output_pad(options.output_pad);
+    autocomplete_provider_factory_ = std::move(options.autocomplete_provider_factory);
     editor_.set_autocomplete_provider(std::move(options.autocomplete_provider));
 }
 
@@ -86,7 +68,10 @@ void InteractiveView::apply_render_settings(bool hide_thinking_block, std::size_
 }
 
 void InteractiveView::set_autocomplete_provider(std::unique_ptr<cch::tui::AutocompleteProvider> provider) {
+    // pi setupAutocompleteProvider: the default editor takes the new provider
+    // and, when a custom editor is active, that editor receives its own.
     editor_.set_autocomplete_provider(std::move(provider));
+    apply_custom_editor_autocomplete();
 }
 
 void InteractiveView::set_keybindings(std::shared_ptr<const cch::tui::KeybindingRegistry> registry,
@@ -177,7 +162,9 @@ support::Expected<std::optional<std::string>> InteractiveView::render_embedded_s
     // editor-slot replacement (pi's non-opted custom editors) keeps the
     // standalone status container. The default border fallback (pi
     // super.renderTopBorder) stays inside the border composition (nullopt).
-    if (status_indicator_ == nullptr || editor_replacement_ != nullptr) return std::nullopt;
+    if (status_indicator_ == nullptr || editor_replacement_ != nullptr || custom_editor_ != nullptr) {
+        return std::nullopt;
+    }
     auto border_style = status_border_style();
     return embedded_status_top_border(*status_indicator_, border_style, width, hidden_line_count);
 }
@@ -186,21 +173,129 @@ cch::tui::TextStyleHook InteractiveView::status_border_style() {
     // pi updateEditorBorderColor: bash mode keeps the bashMode token,
     // otherwise the thinking-level border token (the same hook the editor
     // border renders with).
-    return theme_->foreground_hook(unsubmitted_bash_mode()
-                                           ? ThemeToken::BashMode
-                                           : thinking_border_token_for(current_footer_data_.thinking_level));
+    return theme_->foreground_hook(current_border_token());
+}
+
+ThemeToken InteractiveView::current_border_token() const {
+    return unsubmitted_bash_mode() ? ThemeToken::BashMode
+                                   : thinking_border_token_for(current_footer_data_.thinking_level);
 }
 
 void InteractiveView::set_editor_replacement(std::shared_ptr<cch::tui::Component> component) {
     editor_replacement_ = std::move(component);
     if (editor_replacement_) {
         if (auto* focusable = dynamic_cast<cch::tui::Focusable*>(editor_replacement_.get())) {
-            focusable->set_focused(editor_.focused());
+            focusable->set_focused(active_editor().focused());
         }
     }
 }
 
 void InteractiveView::restore_editor() { editor_replacement_.reset(); }
+
+void InteractiveView::set_custom_editor(std::shared_ptr<cch::tui::EditorComponent> editor) {
+    if (editor == nullptr) {
+        // pi restore path: the default editor takes over the custom editor's
+        // current text and focus, so restoring never loses an in-progress
+        // prompt. A second restore is a no-op.
+        if (custom_editor_ == nullptr) return;
+        auto text = custom_editor_->text();
+        const bool focused = custom_editor_->focused();
+        custom_editor_.reset();
+        presented_border_token_.reset();
+        editor_.set_text(std::move(text));
+        editor_.set_focused(focused);
+        invoke_invalidate();
+        return;
+    }
+    auto text = active_editor().text();
+    const bool focused = active_editor().focused();
+    // pi setCustomEditorComponent: the custom editor receives the default
+    // editor's submit/change callbacks and current text. The built-in editor
+    // keeps its own callbacks for the restore path; only the active editor
+    // receives input, so a replaced editor never admits a second submission.
+    editor->set_on_change(make_editor_change_sink());
+    editor->set_on_submit(make_editor_submit_sink());
+    custom_editor_ = std::move(editor);
+    custom_editor_->set_text(std::move(text));
+    custom_editor_->set_focused(focused);
+    apply_editor_options();
+    invoke_invalidate();
+}
+
+cch::tui::EditorChangeSink InteractiveView::make_editor_change_sink() {
+    return [this](std::string text) -> support::ExpectedVoid {
+        if (!text.empty()) ++editor_revision_;
+        presented_bash_mode_ = user_bash_editor_mode(active_expanded_text(), user_bash_available_);
+        refresh_custom_editor_border();
+        invoke_invalidate();
+        return {};
+    };
+}
+
+cch::tui::EditorSubmitSink InteractiveView::make_editor_submit_sink() {
+    return [this](std::string text) -> support::ExpectedVoid {
+        add_active_history(text);
+        emit_action(
+                SubmitAction{
+                        .request =
+                                EditorSubmissionRequest{
+                                        .text = std::move(text),
+                                        .editor_revision = editor_revision_,
+                                },
+                        .submission = InputSubmission::Ordinary,
+                },
+                "Native TUI submit action failed");
+        return {};
+    };
+}
+
+std::string InteractiveView::active_expanded_text() const {
+    const auto& editor = active_editor();
+    if (const auto* expanded = dynamic_cast<const cch::tui::EditorExpandedTextSupport*>(&editor)) {
+        return expanded->expanded_text();
+    }
+    return editor.text();
+}
+
+void InteractiveView::add_active_history(std::string text) {
+    if (auto* history = dynamic_cast<cch::tui::EditorHistorySupport*>(&active_editor())) {
+        history->add_to_history(std::move(text));
+    }
+}
+
+void InteractiveView::set_active_text(std::string text) { active_editor().set_text(std::move(text)); }
+
+void InteractiveView::apply_editor_options() {
+    if (custom_editor_ == nullptr) return;
+    if (auto* border = dynamic_cast<cch::tui::EditorBorderStyleSupport*>(custom_editor_.get())) {
+        presented_border_token_ = current_border_token();
+        border->set_border_style(status_border_style());
+    }
+    if (auto* padding = dynamic_cast<cch::tui::EditorPaddingSupport*>(custom_editor_.get())) {
+        padding->set_padding_x(editor_.padding_x());
+    }
+    if (auto* limit = dynamic_cast<cch::tui::EditorAutocompleteMaxVisibleSupport*>(custom_editor_.get())) {
+        limit->set_autocomplete_max_visible(editor_.autocomplete_max_visible());
+    }
+    apply_custom_editor_autocomplete();
+}
+
+void InteractiveView::refresh_custom_editor_border() {
+    if (custom_editor_ == nullptr) return;
+    const auto token = current_border_token();
+    if (presented_border_token_ == token) return;
+    if (auto* border = dynamic_cast<cch::tui::EditorBorderStyleSupport*>(custom_editor_.get())) {
+        presented_border_token_ = token;
+        border->set_border_style(status_border_style());
+    }
+}
+
+void InteractiveView::apply_custom_editor_autocomplete() {
+    if (custom_editor_ == nullptr || !autocomplete_provider_factory_) return;
+    if (auto* autocomplete = dynamic_cast<cch::tui::EditorAutocompleteSupport*>(custom_editor_.get())) {
+        autocomplete->set_autocomplete_provider(autocomplete_provider_factory_());
+    }
+}
 
 void InteractiveView::append_user_bash_diagnostic(std::string text) {
     chat_.append_user_bash_diagnostic(std::move(text));
@@ -210,21 +305,25 @@ void InteractiveView::restore_submitted_text(const std::string& text) { restore_
 
 void InteractiveView::clear_pending_bash(const EditorInterruptRequest& request) {
     if (editor_revision_ == request.editor_revision) {
-        editor_.set_text({});
+        set_active_text({});
         return;
     }
-    editor_.set_text(editor_text_after_interrupt(
-        request.pending_bash_text,
-        editor_.expanded_text()));
+    set_active_text(editor_text_after_interrupt(request.pending_bash_text, active_expanded_text()));
 }
 
-void InteractiveView::insert_editor_text(std::string text) { editor_.insert_text_at_cursor(std::move(text)); }
+void InteractiveView::insert_editor_text(std::string text) {
+    // pi `insertTextAtCursor?.`: an editor without the capability ignores the
+    // insertion instead of requiring inheritance from Editor.
+    if (auto* insert = dynamic_cast<cch::tui::EditorInsertSupport*>(&active_editor())) {
+        insert->insert_text_at_cursor(std::move(text));
+    }
+}
 
-std::string InteractiveView::editor_text() const { return editor_.text(); }
+std::string InteractiveView::editor_text() const { return active_editor().text(); }
 
-std::string InteractiveView::editor_expanded_text() const { return editor_.expanded_text(); }
+std::string InteractiveView::editor_expanded_text() const { return active_expanded_text(); }
 
-void InteractiveView::set_editor_text(std::string text) { editor_.set_text(std::move(text)); }
+void InteractiveView::set_editor_text(std::string text) { set_active_text(std::move(text)); }
 
 void InteractiveView::restore_queued_text(const std::vector<std::string>& messages) { restore_editor_text(messages); }
 
@@ -309,7 +408,7 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
     if (footer_data_source_) {
         current_footer_data_ = footer_data_source_();
     }
-    if (status_indicator_ != nullptr && editor_replacement_ == nullptr) {
+    if (status_indicator_ != nullptr && editor_replacement_ == nullptr && custom_editor_ == nullptr) {
         // Embedded: the spinner renders in the editor border (the sink at
         // editor render); the standalone block stays empty.
     } else if (status_indicator_ != nullptr) {
@@ -411,6 +510,19 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         if (editor_lines.size() > replacement_budget) {
             editor_lines.erase(editor_lines.begin(), editor_lines.end() - replacement_budget);
         }
+    } else if (custom_editor_ != nullptr) {
+        // pi updateEditorBorderColor: the custom editor's border follows the
+        // live thinking-level / Bash-mode token, and the hook is rewritten
+        // only when that token changes.
+        refresh_custom_editor_border();
+        // pi's custom editor renders in the editor slot with its own borders
+        // and autocomplete rows; the built-in editor's dynamic theme hook and
+        // embedded status border stay with the built-in editor.
+        if (auto rendered = custom_editor_->render(width); !rendered) {
+            return std::unexpected(rendered.error());
+        } else {
+            editor_lines = std::move(rendered->lines);
+        }
     } else {
         editor_.set_available_height(available_rows_ > fixed_rows ? available_rows_ - fixed_rows : 0);
         // The editor enters Bash mode as soon as the trimmed input begins
@@ -488,6 +600,7 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
 
 void InteractiveView::invalidate() {
     editor_.invalidate();
+    if (custom_editor_) custom_editor_->invalidate();
     if (editor_replacement_) editor_replacement_->invalidate();
 }
 
@@ -508,13 +621,13 @@ cch::tui::InputAdmissionOutcome InteractiveView::handle_input(const cch::tui::In
         // shared slot, ADR 0035); `replace` is serialized on the
         // event loop.
         const auto& keys = keybindings_->registry();
-        if (keys.matches(*key, "app.exit") && editor_.expanded_text().empty()) {
+        if (keys.matches(*key, "app.exit") && active_expanded_text().empty()) {
             emit_action(ExitAction{}, "Native TUI exit action failed");
             return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.interrupt")) {
             if (keys.matches(*key, "tui.select.cancel")) {
-                if (editor_.handle_input(input) == cch::tui::InputAdmissionOutcome::Consumed) {
+                if (active_editor().handle_input(input) == cch::tui::InputAdmissionOutcome::Consumed) {
                     return cch::tui::InputAdmissionOutcome::Consumed;
                 }
             }
@@ -523,14 +636,14 @@ cch::tui::InputAdmissionOutcome InteractiveView::handle_input(const cch::tui::In
             // decision; it receives Bash mode as it existed at key-press
             // time.
             emit_action(
-                InterruptAction{
-                    EditorInterruptRequest{
-                        .pending_bash_text = editor_.expanded_text(),
-                        .editor_revision = editor_revision_,
-                        .pending_bash = unsubmitted_bash_mode(),
+                    InterruptAction{
+                            EditorInterruptRequest{
+                                    .pending_bash_text = active_expanded_text(),
+                                    .editor_revision = editor_revision_,
+                                    .pending_bash = unsubmitted_bash_mode(),
+                            },
                     },
-                },
-                "Native TUI interrupt action failed");
+                    "Native TUI interrupt action failed");
             return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.message.followUp")) {
@@ -547,7 +660,7 @@ cch::tui::InputAdmissionOutcome InteractiveView::handle_input(const cch::tui::In
         }
         if (keys.matches(*key, "app.clear")) {
             // Toolkit-only editor state: no application action is emitted.
-            editor_.set_text({});
+            set_active_text({});
             return cch::tui::InputAdmissionOutcome::Consumed;
         }
         if (keys.matches(*key, "app.suspend")) {
@@ -619,6 +732,12 @@ cch::tui::InputAdmissionOutcome InteractiveView::handle_input(const cch::tui::In
             return cch::tui::InputAdmissionOutcome::Consumed;
         }
     }
+    if (custom_editor_ != nullptr) {
+        // A custom editor owns its input handling; the app-level bindings
+        // above stay with the view (the C++ counterpart of pi's default
+        // editor action handlers), and repaints flow through the change sink.
+        return custom_editor_->handle_input(input);
+    }
     const auto before_cursor = editor_.cursor();
     const auto before_text = editor_.text();
     const auto outcome = editor_.handle_input(input);
@@ -639,7 +758,7 @@ void InteractiveView::set_focused(bool focused) {
             return;
         }
     }
-    editor_.set_focused(focused);
+    active_editor().set_focused(focused);
 }
 
 bool InteractiveView::focused() const {
@@ -648,7 +767,7 @@ bool InteractiveView::focused() const {
             return focusable->focused();
         }
     }
-    return editor_.focused();
+    return active_editor().focused();
 }
 
 std::optional<cch::tui::CursorPosition> InteractiveView::cursor_location() const {
@@ -658,7 +777,10 @@ std::optional<cch::tui::CursorPosition> InteractiveView::cursor_location() const
             cursor = focusable->cursor_location();
         }
     } else {
-        cursor = editor_.cursor_location();
+        // The editor capability inherits `cursor_location()` from both
+        // Component and Focusable; the Focusable contract is the IME
+        // positioning surface the view consumes.
+        cursor = static_cast<const cch::tui::Focusable&>(active_editor()).cursor_location();
     }
     if (cursor) {
         // Return the true buffer-relative row; Tui::render() clamps it to
@@ -673,6 +795,9 @@ std::optional<cch::tui::CursorPosition> InteractiveView::cursor_location() const
 void InteractiveView::set_available_height(std::size_t rows) {
     available_rows_ = std::max<std::size_t>(1, rows);
     editor_.set_terminal_rows(available_rows_);
+    if (auto* viewport = dynamic_cast<cch::tui::ViewportAware*>(custom_editor_.get())) {
+        viewport->set_available_height(available_rows_);
+    }
 }
 
 void InteractiveView::record_callback_error(
@@ -697,13 +822,13 @@ void InteractiveView::invoke_invalidate() {
 }
 
 void InteractiveView::invoke_follow_up() {
-    auto text = trim_editor_submission(editor_.expanded_text());
+    auto text = trim_editor_submission(active_expanded_text());
     if (text.empty()) return;
     // pi handleFollowUp: the accepted text enters editor history before
     // the editor clears and the follow-up admission is posted, matching
     // the Enter path where the editor records the submission itself.
-    editor_.add_to_history(text);
-    editor_.set_text({});
+    add_active_history(text);
+    set_active_text({});
     emit_action(
         SubmitAction{
             .request = EditorSubmissionRequest{
@@ -722,16 +847,16 @@ void InteractiveView::restore_editor_text(const std::vector<std::string>& messag
         if (!restored.empty()) restored += "\n\n";
         restored += message;
     }
-    auto current = editor_.expanded_text();
+    auto current = active_expanded_text();
     if (!current.empty()) {
         if (!restored.empty()) restored += "\n\n";
         restored += current;
     }
-    editor_.set_text(std::move(restored));
+    set_active_text(std::move(restored));
 }
 
 bool InteractiveView::unsubmitted_bash_mode() const {
-    return user_bash_editor_mode(editor_.expanded_text(), user_bash_available_);
+    return user_bash_editor_mode(active_expanded_text(), user_bash_available_);
 }
 
 } // namespace cch::coding_agent::tui

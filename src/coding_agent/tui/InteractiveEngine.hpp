@@ -330,6 +330,13 @@ private:
     /// the editor slot.
     void replace_prompt_slot(std::shared_ptr<cch::tui::Component> component) override;
     void restore_prompt_slot() override;
+
+    /// pi `setCustomEditorComponent`: install the registration context's
+    /// custom prompt editor into the view, or restore the built-in editor
+    /// when the current context registered none. Runs whenever the extension
+    /// registrations refresh (start, deferred boot bind, session
+    /// replacement).
+    void apply_extension_editor();
     /// pi `showStatus`: one dim status line in the chat.
     void show_status(std::string text) override;
     /// pi `showError`: one `Error: <text>` chat line.
