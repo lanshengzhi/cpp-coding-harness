@@ -9,6 +9,7 @@
 #include <exception>
 #include <format>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -43,6 +44,17 @@ struct VirtualTerminal::Impl {
     /// (possibly seeded) cursor row instead of querying it (ADR 0041). The
     /// screen row of buffer row b is `scroll_origin + b - viewport_top`.
     std::size_t scroll_origin{0};
+    struct SavedScreen {
+        std::vector<std::vector<VirtualTerminalCell>> cells;
+        std::vector<std::vector<VirtualTerminalCell>> scrollback_cells;
+        std::size_t viewport_top{0};
+        std::size_t scroll_origin{0};
+        CursorPosition cursor;
+        std::vector<VirtualTerminalImage> images;
+        detail::AnsiStyleState style;
+        std::uint64_t next_image_handle{1};
+    };
+    std::optional<SavedScreen> saved_main_screen;
     std::size_t sync_depth{0};
     std::uint64_t next_image_handle{1};
 
@@ -134,8 +146,10 @@ void scroll_up(T& impl, std::size_t count) {
     if (top >= bottom || bottom >= impl.dimensions.rows) return;
     const auto region_height = bottom - top + 1;
 
-    for (std::size_t i = 0; i < count && i < region_height; ++i) {
-        impl.scrollback_cells.push_back(std::move(impl.cells[top + i]));
+    if (!impl.modes.alternate_screen) {
+        for (std::size_t i = 0; i < count && i < region_height; ++i) {
+            impl.scrollback_cells.push_back(std::move(impl.cells[top + i]));
+        }
     }
     for (std::size_t r = top; r + count <= bottom; ++r) {
         impl.cells[r] = std::move(impl.cells[r + count]);
@@ -394,7 +408,7 @@ void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
             impl.style.process_ansi(token.text);
             continue;
         }
-        if (token.width > 0 && impl.cursor.column >= impl.dimensions.columns) {
+        if (token.width > 0 && impl.cursor.column >= impl.dimensions.columns && impl.modes.autowrap) {
             // Deferred wrap (DECAWM): the cursor parked one past the last
             // column wraps to the next row before this grapheme paints,
             // scrolling when it sits on the bottom row.
@@ -419,6 +433,9 @@ void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
         }
         if (impl.cursor.row < impl.cells.size()) {
             auto& row = impl.cells[impl.cursor.row];
+            if (!impl.modes.autowrap && impl.cursor.column >= impl.dimensions.columns) {
+                impl.cursor.column = impl.dimensions.columns - 1;
+            }
             if (token.width == 0) {
                 if (impl.cursor.column > 0) {
                     auto owner = impl.cursor.column - 1;
@@ -445,6 +462,7 @@ void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
             }
         }
         impl.cursor.column += token.width;
+        if (!impl.modes.autowrap) impl.cursor.column = std::min(impl.cursor.column, impl.dimensions.columns);
     }
 }
 
@@ -722,6 +740,66 @@ support::ExpectedVoid VirtualTerminal::reset_scroll_margins() {
 support::ExpectedVoid VirtualTerminal::set_cursor_visible(bool visible) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     impl_->modes.cursor_visible = visible;
+    return {};
+}
+
+support::ExpectedVoid VirtualTerminal::set_alternate_screen(bool enabled) {
+    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (impl_->modes.alternate_screen == enabled) return {};
+    if (enabled) {
+        // DECSET 1049: save the main buffer and cursor, then show a cleared
+        // alternate buffer with no scrollback. The model keeps the saved
+        // buffer beside the active cells so leaving the mode restores it.
+        Impl::SavedScreen saved;
+        saved.cells = std::move(impl_->cells);
+        saved.scrollback_cells = std::move(impl_->scrollback_cells);
+        saved.viewport_top = impl_->viewport_top;
+        saved.scroll_origin = impl_->scroll_origin;
+        saved.cursor = impl_->cursor;
+        saved.images = std::move(impl_->images);
+        saved.style = impl_->style;
+        saved.next_image_handle = impl_->next_image_handle;
+        impl_->saved_main_screen = std::move(saved);
+        impl_->cells.assign(impl_->dimensions.rows, std::vector<VirtualTerminalCell>(impl_->dimensions.columns));
+        impl_->scrollback_cells.clear();
+        impl_->viewport_top = 0;
+        impl_->scroll_origin = 0;
+        impl_->cursor = {};
+        impl_->images.clear();
+        impl_->style = {};
+        impl_->modes.alternate_screen = true;
+        impl_->output.push_back("\x1b[?1049h");
+        refresh_screen(*impl_);
+        return {};
+    }
+
+    if (impl_->saved_main_screen) {
+        auto saved = std::move(*impl_->saved_main_screen);
+        impl_->saved_main_screen.reset();
+        impl_->cells = std::move(saved.cells);
+        impl_->scrollback_cells = std::move(saved.scrollback_cells);
+        impl_->viewport_top = saved.viewport_top;
+        impl_->scroll_origin = saved.scroll_origin;
+        impl_->cursor = saved.cursor;
+        impl_->images = std::move(saved.images);
+        impl_->style = saved.style;
+        impl_->next_image_handle = saved.next_image_handle;
+        // A resize while the alternate buffer was active must not leak into
+        // the restored main buffer: normalize the saved cells to the current
+        // dimensions.
+        resize_cells(*impl_, impl_->dimensions);
+    }
+    impl_->modes.alternate_screen = false;
+    impl_->output.push_back("\x1b[?1049l");
+    refresh_screen(*impl_);
+    return {};
+}
+
+support::ExpectedVoid VirtualTerminal::set_autowrap(bool enabled) {
+    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (impl_->modes.autowrap == enabled) return {};
+    impl_->modes.autowrap = enabled;
+    impl_->output.push_back(enabled ? "\x1b[?7h" : "\x1b[?7l");
     return {};
 }
 

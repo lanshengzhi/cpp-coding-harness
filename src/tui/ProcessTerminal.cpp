@@ -52,6 +52,10 @@ constexpr std::string_view kBracketedPasteEnable = "\x1b[?2004h";
 constexpr std::string_view kBracketedPasteDisable = "\x1b[?2004l";
 constexpr std::string_view kCursorShow = "\x1b[?25h";
 constexpr std::string_view kCursorHide = "\x1b[?25l";
+constexpr std::string_view kEnterAlternateScreen = "\x1b[?1049h";
+constexpr std::string_view kExitAlternateScreen = "\x1b[?1049l";
+constexpr std::string_view kDisableAutowrap = "\x1b[?7l";
+constexpr std::string_view kEnableAutowrap = "\x1b[?7h";
 // pi's resize full-redraw clears screen, homes, and clears scrollback
 // (packages/tui/src/terminal.ts clearScreen: `\x1b[2J\x1b[H\x1b[3J`).
 constexpr std::string_view kClearScreen = "\x1b[2J\x1b[H\x1b[3J";
@@ -1039,6 +1043,16 @@ template <typename T> [[nodiscard]] support::ExpectedVoid restore_terminal_modes
         if (ended) impl.synchronized_update_depth = 0;
         retain_error(first_error, std::move(ended));
     }
+    if (impl.modes.alternate_screen) {
+        auto restored = write_all(impl.options.output_fd, kExitAlternateScreen);
+        if (restored) impl.modes.alternate_screen = false;
+        retain_error(first_error, std::move(restored));
+    }
+    if (!impl.modes.autowrap) {
+        auto enabled = write_all(impl.options.output_fd, kEnableAutowrap);
+        if (enabled) impl.modes.autowrap = true;
+        retain_error(first_error, std::move(enabled));
+    }
     if (!impl.modes.cursor_visible) {
         auto shown = write_all(impl.options.output_fd, kCursorShow);
         if (shown) impl.modes.cursor_visible = true;
@@ -1520,6 +1534,24 @@ support::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
     if (impl_->modes.cursor_visible == visible) return {};
     auto result = enqueue_output(*impl_, visible ? kCursorShow : kCursorHide);
     if (result) impl_->modes.cursor_visible = visible;
+    return result;
+}
+
+support::ExpectedVoid ProcessTerminal::set_alternate_screen(bool enabled) {
+    std::lock_guard lock(impl_->mutex);
+    if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
+    if (impl_->modes.alternate_screen == enabled) return {};
+    auto result = enqueue_output(*impl_, enabled ? kEnterAlternateScreen : kExitAlternateScreen);
+    if (result) impl_->modes.alternate_screen = enabled;
+    return result;
+}
+
+support::ExpectedVoid ProcessTerminal::set_autowrap(bool enabled) {
+    std::lock_guard lock(impl_->mutex);
+    if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
+    if (impl_->modes.autowrap == enabled) return {};
+    auto result = enqueue_output(*impl_, enabled ? kEnableAutowrap : kDisableAutowrap);
+    if (result) impl_->modes.autowrap = enabled;
     return result;
 }
 

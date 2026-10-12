@@ -2,20 +2,12 @@
 
 #include <cch/tui/ITui.hpp>
 #include <cch/tui/TerminalResponses.hpp>
+#include <cch/tui/TuiHost.hpp>
 
-#include <array>
-#include <chrono>
-#include <condition_variable>
 #include <cstddef>
-#include <cstdint>
-#include <deque>
-#include <future>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <string>
-#include <thread>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -38,7 +30,6 @@ struct TuiMainScreenRenderState {
 };
 
 namespace detail {
-class TerminalStreamDecoder;
 class OverlayCompositor;
 class RenderPipeline;
 } // namespace detail
@@ -53,7 +44,7 @@ namespace detail::testing {
 
 /// Regular-mode root implementation. `Tui` remains an alias for source
 /// compatibility while consumers use the shared ITui contract.
-class MainScreen final : public ITui {
+class MainScreen final : public ITui, public detail::TuiHost {
 public:
     explicit MainScreen(Terminal& terminal);
     MainScreen(MainScreen&&) = delete;
@@ -125,29 +116,8 @@ private:
     friend class OverlayHandle;
     friend std::size_t detail::testing::frame_prepare_call_count(const MainScreen& tui) noexcept;
 
-    class ChildOperation final {
-    public:
-        explicit ChildOperation(MainScreen& owner) noexcept : owner_(owner) { ++owner_.child_operation_depth_; }
-        ~ChildOperation() { owner_.finish_child_operation(); }
-
-        ChildOperation(const ChildOperation&) = delete;
-        ChildOperation& operator=(const ChildOperation&) = delete;
-
-    private:
-        MainScreen& owner_;
-    };
-
     struct RenderScheduleState;
-    enum class OverlayFocusRestoreStatus { Inactive, Eligible, Blocked };
-    struct OverlayFocusRestoreState {
-        OverlayFocusRestoreStatus status{OverlayFocusRestoreStatus::Inactive};
-        Overlay* overlay{nullptr};
-        Component* blocked_by{nullptr};
-        bool resume_to_overlay{true};
-        Component* resume_target{nullptr};
-    };
 
-    void finish_child_operation() noexcept;
     [[nodiscard]] support::ExpectedVoid render_now();
     [[nodiscard]] support::ExpectedVoid render_frame();
     void schedule_render();
@@ -172,37 +142,6 @@ private:
     [[nodiscard]] Focusable* find_focusable_target();
     [[nodiscard]] std::optional<CursorPosition> resolve_cursor_location() const;
 
-    struct QueryState {
-        std::uint64_t id{0};
-        std::mutex mutex;
-        std::condition_variable cv;
-        std::optional<RgbColor> foreground;
-        std::optional<RgbColor> background;
-        std::array<std::optional<RgbColor>, 16> palette{};
-        std::unordered_set<std::string> replied;
-        std::promise<TerminalColors> promise;
-        TerminalColorsCallback on_complete;
-        TerminalColorsCallback on_late_reply;
-        bool promise_resolved{false};
-        bool completed{false};
-        bool cancelled{false};
-        std::chrono::steady_clock::time_point deadline;
-
-        /// Result projection: a palette is reported only when every ANSI
-        /// color 0-15 replied.
-        [[nodiscard]] static TerminalColors build_terminal_colors(const QueryState& query);
-    };
-
-    /// Resolve a timed-out color query from its own state only. Static so the
-    /// detached timer thread never needs the MainScreen that issued it.
-    static void handle_color_query_timeout(const std::shared_ptr<QueryState>& query);
-    bool consume_terminal_color_response(const OscColorResponse& response);
-    bool consume_terminal_device_attributes();
-    void dispatch_color_scheme_report(TerminalColorScheme scheme);
-    void apply_terminal_responses(const std::vector<detail::TerminalResponseVariant>& responses);
-    void apply_cell_size_responses(const std::vector<detail::TerminalResponseVariant>& responses);
-
-    Terminal& terminal_; // must outlive this MainScreen.
     std::shared_ptr<RenderScheduleState> render_schedule_state_;
     std::shared_ptr<detail::OverlayHandleContext> overlay_handle_context_;
     TuiScheduler* scheduler_{nullptr}; // must outlive every scheduled render.
@@ -211,31 +150,14 @@ private:
     std::optional<std::chrono::steady_clock::time_point> last_render_at_;
     std::size_t render_generation_{0};
     bool render_scheduled_{false};
-    std::unique_ptr<detail::TerminalStreamDecoder> stream_decoder_;
     std::unique_ptr<detail::OverlayCompositor> compositor_;
     std::unique_ptr<detail::RenderPipeline> render_pipeline_;
-    std::shared_ptr<RawInputListenerChain> raw_listeners_;
-    std::vector<std::unique_ptr<Component>> children_;
-    std::vector<std::unique_ptr<Component>> retired_children_;
     std::vector<std::size_t> rendered_child_rows_;
     bool rendered_children_valid_{false};
-    std::size_t child_operation_depth_{0};
-    Component* focused_{nullptr}; // Null or aliases an element owned by children_ or the compositor's overlays.
     bool clear_on_shrink_{false};
     bool started_{false};
     bool stopping_{false};
     bool pending_render_{false};
-    std::size_t focus_order_counter_{0};
-    OverlayFocusRestoreState overlay_focus_restore_;
-
-    bool color_scheme_notifications_enabled_{false};
-    std::mutex scheme_listeners_mutex_;
-    std::vector<std::pair<TerminalColorSchemeListenerId, TerminalColorSchemeListener>> scheme_listeners_;
-    TerminalColorSchemeListenerId next_scheme_listener_id_{1};
-
-    std::mutex color_queries_mutex_;
-    std::deque<std::shared_ptr<QueryState>> pending_color_queries_;
-    std::uint64_t next_query_id_{1};
 };
 
 using Tui = MainScreen;

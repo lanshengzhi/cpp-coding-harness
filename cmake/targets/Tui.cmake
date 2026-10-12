@@ -7,6 +7,7 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_tui
     SOURCES
+        src/tui/AltScreen.cpp
         src/tui/Autocomplete.cpp
         src/tui/NativeClipboard.cpp
         src/tui/CancellableLoader.cpp
@@ -44,6 +45,7 @@ cch_parity_declare_target(
         src/tui/TextBuffer.cpp
         src/tui/TruncatedText.cpp
         src/tui/Tui.cpp
+        src/tui/TuiHost.cpp
         src/tui/UnicodeWidth.cpp
         src/tui/Utils.cpp
         src/tui/VirtualTerminal.cpp

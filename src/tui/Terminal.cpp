@@ -10,6 +10,12 @@ namespace cch::tui {
 
 support::ExpectedVoid Terminal::apply_cell_pixel_dimensions(CellPixelDimensions) { return {}; }
 
+support::ExpectedVoid Terminal::set_alternate_screen(bool enabled) {
+    return write(enabled ? "\x1b[?1049h" : "\x1b[?1049l");
+}
+
+support::ExpectedVoid Terminal::set_autowrap(bool enabled) { return write(enabled ? "\x1b[?7h" : "\x1b[?7l"); }
+
 support::ExpectedVoid Terminal::move_cursor_down(std::size_t rows) {
     if (rows == 0) return {};
 

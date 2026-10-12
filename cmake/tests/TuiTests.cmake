@@ -31,6 +31,7 @@ include_guard(GLOBAL)
     # TUI
     add_executable(cch_tests_tui
         tests/Catch2Main.cpp
+        tests/tui/AltScreenTest.cpp
         tests/tui/AutocompleteTest.cpp
         tests/tui/AutocompleteContextTest.cpp
         tests/tui/AutocompleteRankingTest.cpp

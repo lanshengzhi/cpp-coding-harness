@@ -70,6 +70,8 @@ struct TerminalModeState {
     bool raw_input{false};
     bool bracketed_paste{false};
     bool cursor_visible{true};
+    bool alternate_screen{false};
+    bool autowrap{true};
 
     bool operator==(const TerminalModeState&) const = default;
 };
@@ -130,12 +132,13 @@ constexpr auto kDrainInputIdleMs = std::chrono::milliseconds(50);
 /// The mode disables that return a started terminal to its pre-start state
 /// without consulting terminal state: bracketed paste off, stacked Kitty
 /// keyboard protocol pop, modifyOtherKeys off, a closed synchronized update,
-/// scroll margins reset, cursor visible, and progress cleared. `Terminal::stop()`
+/// the alternate screen buffer exited, autowrap enabled, scroll margins
+/// reset, cursor visible, and progress cleared. `Terminal::stop()`
 /// is the exact restore; this is the emergency restore a process takes when the
 /// terminal object cannot be reached (pi `emergencyTerminalExit`), so every mode
 /// Process Terminal enables while started has its disable here.
 constexpr std::string_view kTerminalEmergencyRestoreSequence =
-        "\x1b[?2004l\x1b[<u\x1b[>4;0m\x1b[?2026l\x1b[r\x1b[?25h\x1b]9;4;0;\x07";
+        "\x1b[?2004l\x1b[<u\x1b[>4;0m\x1b[?2026l\x1b[?1049l\x1b[?7h\x1b[r\x1b[?25h\x1b]9;4;0;\x07";
 
 class Terminal {
 public:
@@ -158,6 +161,10 @@ public:
     /// clamps at the active scrolling region; zero rows is a no-op.
     [[nodiscard]] support::ExpectedVoid move_cursor_down(std::size_t rows);
     [[nodiscard]] virtual support::ExpectedVoid set_cursor_visible(bool visible) = 0;
+    /// Enter or leave the terminal's alternate screen buffer (DEC private mode 1049).
+    [[nodiscard]] virtual support::ExpectedVoid set_alternate_screen(bool enabled);
+    /// Enable or disable automatic line wrapping (DEC private mode 7).
+    [[nodiscard]] virtual support::ExpectedVoid set_autowrap(bool enabled);
 
     /// Configures the scrollable viewport margins (rows [top_row, bottom_row], 0-based inclusive).
     /// Content above top_row or below bottom_row is preserved during viewport scrolling.
