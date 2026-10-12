@@ -23,6 +23,20 @@ namespace cch::tui {
 
 class MainScreen;
 
+/// The portable differential-render state for a regular main-screen TUI.
+/// Renderer-local raw rows and terminal admission watermarks are intentionally
+/// excluded; restored state gets a fresh watermark and therefore rewrites any
+/// changed frame content from the imported committed baseline.
+struct TuiMainScreenRenderState {
+    std::vector<std::string> previous_lines{};
+    std::size_t previous_width{0};
+    std::size_t previous_height{0};
+    std::size_t cursor_row{0};
+    std::size_t hardware_cursor_row{0};
+    std::size_t max_lines_rendered{0};
+    std::size_t previous_viewport_top{0};
+};
+
 namespace detail {
 class TerminalStreamDecoder;
 class OverlayCompositor;
@@ -58,7 +72,10 @@ public:
     void clear_children() override;
 
     [[nodiscard]] support::ExpectedVoid start() override;
-    [[nodiscard]] support::ExpectedVoid stop() override;
+    [[nodiscard]] support::ExpectedVoid stop(TuiStopOptions options = {}) override;
+    [[nodiscard]] TuiMainScreenRenderState capture_render_state() const;
+    [[nodiscard]] support::ExpectedVoid restore_render_state(TuiMainScreenRenderState state);
+    void reset_render_state() noexcept;
     [[nodiscard]] support::ExpectedVoid render() override;
     /// Clear the physical screen and reset differential-render state so the
     /// next render repaints its complete current presentation.

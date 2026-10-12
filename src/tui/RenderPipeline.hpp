@@ -10,8 +10,10 @@
 // never exported.
 
 #include <cch/tui/Component.hpp>
+#include <cch/tui/ITui.hpp>
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/TerminalImage.hpp>
+#include <cch/tui/Tui.hpp>
 
 #include <cch/support/Error.hpp>
 
@@ -41,7 +43,10 @@ public:
         return previous_dimensions_.value_or(TerminalDimensions{});
     }
     [[nodiscard]] std::size_t admitted_prefix(TerminalDimensions dimensions) const noexcept;
-    [[nodiscard]] support::ExpectedVoid stop(std::optional<CursorPosition> stop_cursor);
+    [[nodiscard]] support::ExpectedVoid stop(std::optional<CursorPosition> stop_cursor, TuiStopOptions options);
+    [[nodiscard]] TuiMainScreenRenderState capture_render_state() const;
+    [[nodiscard]] support::ExpectedVoid restore_render_state(TuiMainScreenRenderState state);
+    void reset_render_state() noexcept;
     [[nodiscard]] support::ExpectedVoid clear_screen();
     [[nodiscard]] support::ExpectedVoid render(RenderResult materialized,
             TerminalDimensions dimensions,
@@ -74,6 +79,7 @@ private:
     /// Composed rows before frame-level preparation, used to reuse finalized rows.
     std::vector<std::string> previous_raw_lines_;
     std::size_t frame_prepare_call_count_{0};
+    std::size_t cursor_row_{0};
     std::size_t hardware_cursor_row_{0};
     std::size_t max_lines_rendered_{0};
     std::size_t previous_viewport_top_{0};
@@ -83,6 +89,7 @@ private:
     AdmittedFrame admitted_{};
     std::vector<std::uint32_t> previous_kitty_image_ids_;
     std::unordered_map<std::uint64_t, ImagePlacementState> image_placements_;
+    bool restored_state_pending_start_{false};
 
     void position_hardware_cursor(const std::optional<CursorPosition>& cursor_pos, std::size_t total_lines);
 };

@@ -12,8 +12,15 @@
 
 #include <functional>
 #include <memory>
+#include <utility>
 
 namespace cch::tui {
+
+/// Options for restoring terminal state when a TUI stops.
+struct TuiStopOptions {
+    /// Leave the current screen content and cursor position in place for another TUI to take over.
+    bool preserve_screen{false};
+};
 
 using TuiRenderPrepareSink = std::move_only_function<support::Expected<bool>()>;
 using TuiRenderCompleteSink = std::move_only_function<void(const support::ExpectedVoid&)>;
@@ -36,7 +43,7 @@ public:
     [[nodiscard]] virtual Component* focus() const noexcept = 0;
 
     [[nodiscard]] virtual support::ExpectedVoid start() = 0;
-    [[nodiscard]] virtual support::ExpectedVoid stop() = 0;
+    [[nodiscard]] virtual support::ExpectedVoid stop(TuiStopOptions options = {}) = 0;
     [[nodiscard]] virtual support::ExpectedVoid render() = 0;
     [[nodiscard]] virtual support::ExpectedVoid clear_screen() = 0;
     virtual void request_render(bool force = false) = 0;

@@ -906,12 +906,12 @@ TEST_CASE("Tui coalesces repeated replaceable invalidations into one render requ
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("Tui stop flows the cursor below the composed buffer for the shell prompt", "[tui][issue476][spec]") {
+TEST_CASE(
+        "Tui stop flows the cursor below the composed buffer for the shell prompt", "[tui][issue476][issue985][spec]") {
     // pi TuiMainScreen::beforeTerminalStop: write " ", move one row past the
     // last buffer line, then CRLF, so the shell prompt resumes below the
-    // transcript instead of overwriting its last line. Under the anchored
-    // absolute flow (ADR 0041) the movement is one absolute set_cursor that
-    // flows and scrolls through the terminal mapping.
+    // transcript instead of overwriting its last line. The leading space
+    // cancels deferred wrap before the relative row movement.
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 5});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one", 0, 0)));
@@ -920,15 +920,16 @@ TEST_CASE("Tui stop flows the cursor below the composed buffer for the shell pro
     REQUIRE(tui.render());
     REQUIRE(tui.stop());
 
-    // The transcript is a two-line buffer: the set_cursor lands one row past
-    // it (row 2) and the CRLF completes that line, leaving the cursor at
-    // column 0 one row below the transcript.
-    CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 3});
+    // The two full-width rows leave deferred wrap pending. The leading space
+    // consumes it, the relative movement reaches row 3, and CRLF advances to
+    // row 4 for the shell prompt.
+    CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 4});
     CHECK(terminal.modes().cursor_visible);
     CHECK_FALSE(terminal.modes().started);
 }
 
-TEST_CASE("Tui stop scrolls the exit flow through the terminal scrollback on a full screen", "[tui][issue476][spec]") {
+TEST_CASE("Tui stop scrolls the exit flow through the terminal scrollback on a full screen",
+        "[tui][issue476][issue985][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
     cch::tui::Tui tui(terminal);
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one", 0, 0)));
@@ -942,15 +943,124 @@ TEST_CASE("Tui stop scrolls the exit flow through the terminal scrollback on a f
 
     REQUIRE(tui.stop());
 
-    // In relative line flow, exit flows below the composed buffer with CRLF.
+    // The leading space consumes the last line's deferred wrap. Cursor
+    // movement and CRLF then advance scrollback below the retained frame.
     const std::vector<std::string> expected_scrollback{
             "one     ",
             "two     ",
+            "three   ",
     };
     CHECK(terminal.scrollback() == expected_scrollback);
-    CHECK(terminal.screen()[1].find("our") != std::string::npos);
+    CHECK(terminal.screen()[0].starts_with("four"));
     CHECK(terminal.cursor() == cch::tui::CursorPosition{.column = 0, .row = 2});
     CHECK(terminal.modes().cursor_visible);
+}
+
+TEST_CASE("issue985 transfers wrapped and overflowed render state into a differential restart",
+        "[tui][render][issue985][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
+    cch::tui::Tui original(terminal);
+    auto original_text = std::make_unique<cch::tui::Text>("one\ntwo\nthree\nfour", 0, 0);
+    REQUIRE(original.add_child(std::move(original_text)));
+    REQUIRE(original.start());
+    REQUIRE(original.render());
+    REQUIRE(terminal.viewport_top() == 1);
+
+    const auto state = original.capture_render_state();
+    REQUIRE(state.previous_lines.size() == 4);
+    CHECK(state.previous_width == 8);
+    CHECK(state.previous_height == 3);
+    CHECK(state.hardware_cursor_row == 3);
+    REQUIRE(original.stop({.preserve_screen = true}));
+
+    cch::tui::Tui replacement(terminal);
+    auto replacement_text = std::make_unique<cch::tui::Text>("one\ntwo\nthree\nchanged", 0, 0);
+    auto* replacement_text_pointer = replacement_text.get();
+    REQUIRE(replacement.add_child(std::move(replacement_text)));
+    REQUIRE(replacement.restore_render_state(state));
+    REQUIRE(replacement.start());
+    REQUIRE(replacement.render());
+
+    CHECK(replacement_text_pointer->text() == "one\ntwo\nthree\nchanged");
+    CHECK(terminal.screen().back().find("changed") != std::string::npos);
+    CHECK(terminal.viewport_top() == 1);
+    REQUIRE(replacement.stop({.preserve_screen = true}));
+}
+
+TEST_CASE("issue985 preserve-screen stop retains the frame and cursor while restoring modes",
+        "[tui][terminal][issue985][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 4});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("keep", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    const auto screen_before = terminal.screen();
+    const auto cursor_before = terminal.cursor();
+    const auto output_size = terminal.output().size();
+
+    REQUIRE(tui.stop({.preserve_screen = true}));
+
+    CHECK(terminal.screen() == screen_before);
+    CHECK(terminal.cursor() == cursor_before);
+    CHECK(terminal.output().size() == output_size);
+    CHECK_FALSE(terminal.modes().started);
+    CHECK(terminal.modes().cursor_visible);
+}
+
+TEST_CASE("issue985 ordinary stop writes the shell handoff after retained content", "[tui][terminal][issue985][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 4});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("leave", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    REQUIRE(tui.stop());
+
+    REQUIRE_FALSE(terminal.output().empty());
+    CHECK(terminal.output().back().starts_with(" "));
+    CHECK(terminal.output().back().ends_with("\n"));
+    CHECK(terminal.output().back().find("\x1b[1B") != std::string::npos);
+    CHECK_FALSE(terminal.modes().started);
+    CHECK(terminal.modes().cursor_visible);
+}
+
+TEST_CASE("issue985 clear-screen stop emits no extra cursor flow", "[tui][terminal][issue985][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 4});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("cleared", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(tui.clear_screen());
+    const auto output_size = terminal.output().size();
+
+    REQUIRE(tui.stop());
+
+    CHECK(terminal.output().size() == output_size);
+    CHECK(terminal.screen() == std::vector<std::string>(4));
+}
+
+TEST_CASE("issue985 invalid restored state fails cleanly and can be retried", "[tui][render][issue985][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 4});
+    cch::tui::Tui tui(terminal);
+    auto invalid = cch::tui::TuiMainScreenRenderState{
+            .previous_lines = {"one", "two"},
+            .previous_width = 8,
+            .previous_height = 4,
+            .cursor_row = 3,
+            .hardware_cursor_row = 1,
+            .max_lines_rendered = 2,
+            .previous_viewport_top = 0,
+    };
+    const auto failed = tui.restore_render_state(invalid);
+    REQUIRE_FALSE(failed);
+    CHECK(failed.error().code == cch::support::ErrorCode::Validation);
+    CHECK(tui.capture_render_state().previous_lines.empty());
+
+    cch::tui::TuiMainScreenRenderState valid;
+    REQUIRE(tui.restore_render_state(valid));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(tui.stop({.preserve_screen = true}));
 }
 
 TEST_CASE("issue980 places the composed nested cursor on the hardware screen",

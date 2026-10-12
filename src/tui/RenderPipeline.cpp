@@ -1,6 +1,7 @@
 #include "RenderPipeline.hpp"
 
 #include <cch/tui/TerminalImage.hpp>
+#include <cch/tui/Tui.hpp>
 
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
@@ -27,17 +28,17 @@ namespace cch::tui::detail {
 
 RenderPipeline::RenderPipeline(Terminal& terminal) : terminal_(terminal) {}
 
-void RenderPipeline::start(TerminalDimensions) noexcept {
-    first_render_ = true;
-    hardware_cursor_row_ = 0;
-    max_lines_rendered_ = 0;
-    previous_viewport_top_ = 0;
-    previous_lines_.clear();
-    previous_raw_lines_.clear();
-    previous_dimensions_.reset();
-    previous_kitty_image_ids_.clear();
-    image_placements_.clear();
+void RenderPipeline::start(TerminalDimensions dimensions) noexcept {
+    if (!restored_state_pending_start_) {
+        reset_render_state();
+        previous_dimensions_ = dimensions;
+        return;
+    }
+
+    first_render_ = previous_lines_.empty();
+    if (!previous_dimensions_) previous_dimensions_ = dimensions;
     admitted_ = {};
+    restored_state_pending_start_ = false;
 }
 
 std::size_t RenderPipeline::admitted_prefix(TerminalDimensions dimensions) const noexcept {
@@ -53,37 +54,112 @@ void RenderPipeline::note_prepared_line() noexcept { ++frame_prepare_call_count_
 
 std::size_t RenderPipeline::frame_prepare_call_count() const noexcept { return frame_prepare_call_count_; }
 
-support::ExpectedVoid RenderPipeline::stop(std::optional<CursorPosition>) {
-    const auto delete_seq = delete_kitty_images(previous_kitty_image_ids_);
-    if (!delete_seq.empty()) {
-        (void)terminal_.write(delete_seq);
-    }
+support::ExpectedVoid RenderPipeline::stop(std::optional<CursorPosition>, TuiStopOptions options) {
+    support::ExpectedVoid image_result;
     support::ExpectedVoid exit_result;
-    if (!previous_lines_.empty()) {
-        std::string buffer;
-        const auto target_row = previous_lines_.size();
-        const auto line_diff =
-                static_cast<std::ptrdiff_t>(target_row) - static_cast<std::ptrdiff_t>(hardware_cursor_row_);
-        if (line_diff > 0) {
-            buffer += std::format("\x1b[{}B", line_diff);
-        } else if (line_diff < 0) {
-            buffer += std::format("\x1b[{}A", -line_diff);
+    if (!options.preserve_screen) {
+        const auto delete_seq = delete_kitty_images(previous_kitty_image_ids_);
+        if (!delete_seq.empty()) {
+            if (auto deleted = terminal_.write(delete_seq); !deleted) {
+                image_result = std::unexpected(deleted.error());
+            }
         }
-        buffer += "\r\n";
-        exit_result = terminal_.write(buffer);
+        if (!previous_lines_.empty()) {
+            std::string buffer{" "};
+            const auto target_row = previous_lines_.size();
+            const auto line_diff =
+                    static_cast<std::ptrdiff_t>(target_row) - static_cast<std::ptrdiff_t>(hardware_cursor_row_);
+            if (line_diff > 0) {
+                buffer += std::format("\x1b[{}B", line_diff);
+            } else if (line_diff < 0) {
+                buffer += std::format("\x1b[{}A", -line_diff);
+            }
+            buffer += "\r\n";
+            exit_result = terminal_.write(buffer);
+        }
     }
 
     previous_kitty_image_ids_.clear();
     image_placements_.clear();
+    previous_kitty_image_ids_.clear();
+    image_placements_.clear();
+    reset_render_state();
+    if (!image_result) return std::unexpected(image_result.error());
+    return exit_result;
+}
+
+TuiMainScreenRenderState RenderPipeline::capture_render_state() const {
+    TuiMainScreenRenderState state;
+    state.previous_lines = previous_lines_;
+    if (previous_dimensions_) {
+        state.previous_width = previous_dimensions_->columns;
+        state.previous_height = previous_dimensions_->rows;
+    }
+    state.cursor_row = cursor_row_;
+    state.hardware_cursor_row = hardware_cursor_row_;
+    state.max_lines_rendered = max_lines_rendered_;
+    state.previous_viewport_top = previous_viewport_top_;
+    return state;
+}
+
+support::ExpectedVoid RenderPipeline::restore_render_state(TuiMainScreenRenderState state) {
+    const bool lines_empty = state.previous_lines.empty();
+    const bool width_uninitialized = state.previous_width == 0;
+    const bool height_uninitialized = state.previous_height == 0;
+    const bool valid_dimensions = width_uninitialized == height_uninitialized;
+    const bool valid_content =
+            lines_empty
+                    ? (state.cursor_row == 0 && state.hardware_cursor_row == 0 && state.max_lines_rendered == 0 &&
+                              state.previous_viewport_top == 0)
+                    : (!width_uninitialized && state.previous_width > 0 && state.previous_height > 0 &&
+                              state.cursor_row < state.previous_lines.size() &&
+                              state.hardware_cursor_row <= state.previous_viewport_top + state.previous_height - 1 &&
+                              state.max_lines_rendered >= state.previous_lines.size() &&
+                              state.previous_viewport_top <= state.previous_lines.size());
+    if (!valid_dimensions || !valid_content) {
+        reset_render_state();
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Main-screen render state is inconsistent"));
+    }
+
+    for (auto& line : state.previous_lines) {
+        if (is_image_line(line)) line.clear();
+    }
+    previous_lines_ = std::move(state.previous_lines);
+    previous_raw_lines_.clear();
+    if (width_uninitialized) {
+        previous_dimensions_.reset();
+    } else {
+        previous_dimensions_ = TerminalDimensions{
+                .columns = state.previous_width,
+                .rows = state.previous_height,
+        };
+    }
+    cursor_row_ = state.cursor_row;
+    hardware_cursor_row_ = state.hardware_cursor_row;
+    max_lines_rendered_ = state.max_lines_rendered;
+    previous_viewport_top_ = state.previous_viewport_top;
+    previous_kitty_image_ids_.clear();
+    image_placements_.clear();
+    first_render_ = lines_empty;
+    admitted_ = {};
+    restored_state_pending_start_ = true;
+    return {};
+}
+
+void RenderPipeline::reset_render_state() noexcept {
     first_render_ = true;
     previous_lines_.clear();
     previous_raw_lines_.clear();
-    previous_dimensions_.reset();
-    previous_viewport_top_ = 0;
+    cursor_row_ = 0;
     hardware_cursor_row_ = 0;
     max_lines_rendered_ = 0;
+    previous_viewport_top_ = 0;
+    previous_dimensions_.reset();
     admitted_ = {};
-    return exit_result;
+    previous_kitty_image_ids_.clear();
+    image_placements_.clear();
+    restored_state_pending_start_ = false;
 }
 
 support::ExpectedVoid RenderPipeline::clear_screen() {
@@ -94,16 +170,7 @@ support::ExpectedVoid RenderPipeline::clear_screen() {
     if (auto cleared = terminal_.clear_screen(); !cleared) {
         return std::unexpected(cleared.error());
     }
-    previous_kitty_image_ids_.clear();
-    image_placements_.clear();
-    previous_lines_.clear();
-    previous_raw_lines_.clear();
-    previous_viewport_top_ = 0;
-    hardware_cursor_row_ = 0;
-    max_lines_rendered_ = 0;
-    previous_dimensions_.reset();
-    admitted_ = {};
-    first_render_ = true;
+    reset_render_state();
     return {};
 }
 
@@ -133,6 +200,7 @@ void RenderPipeline::position_hardware_cursor(
     } else {
         hardware_cursor_row_ = target_row;
     }
+    cursor_row_ = total_lines == 0 ? 0 : total_lines - 1;
 }
 
 support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
@@ -159,7 +227,8 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     const auto initial_dimensions = previous_dimensions_;
     const auto initial_max_lines = max_lines_rendered_;
     const auto initial_viewport_top = previous_viewport_top_;
-    const auto initial_cursor_row = hardware_cursor_row_;
+    const auto initial_cursor_row = cursor_row_;
+    const auto initial_hardware_cursor_row = hardware_cursor_row_;
     const auto initial_kitty_ids = previous_kitty_image_ids_;
 
     const auto rollback = [&] {
@@ -169,7 +238,8 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
         previous_dimensions_ = initial_dimensions;
         max_lines_rendered_ = initial_max_lines;
         previous_viewport_top_ = initial_viewport_top;
-        hardware_cursor_row_ = initial_cursor_row;
+        cursor_row_ = initial_cursor_row;
+        hardware_cursor_row_ = initial_hardware_cursor_row;
         previous_kitty_image_ids_ = initial_kitty_ids;
         image_placements_ = initial_image_placements;
     };
@@ -291,6 +361,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
                 }
                 previous_lines_ = std::move(new_lines);
                 previous_raw_lines_ = std::move(next_raw_lines);
+                cursor_row_ = admitted_watermark > 0 ? admitted_watermark - 1 : 0;
                 hardware_cursor_row_ = admitted_watermark > 0 ? admitted_watermark - 1 : 0;
                 max_lines_rendered_ = std::max(max_lines_rendered_, admitted_watermark);
                 const auto buffer_length = std::max(height, admitted_watermark);
@@ -396,6 +467,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
                 return std::unexpected(end_result.error());
             }
         }
+        cursor_row_ = new_lines.empty() ? 0 : new_lines.size() - 1;
         hardware_cursor_row_ = new_lines.empty() ? 0 : new_lines.size() - 1;
         if (clear) {
             max_lines_rendered_ = new_lines.size();
@@ -536,8 +608,10 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
                     return finish(std::unexpected(end_result.error()));
                 }
             }
+            cursor_row_ = target_row;
             hardware_cursor_row_ = target_row;
         }
+        cursor_row_ = new_lines.empty() ? 0 : new_lines.size() - 1;
         position_hardware_cursor(cursor_location, new_lines.size());
         previous_kitty_image_ids_ = collect_kitty_image_ids(new_lines);
         previous_lines_ = std::move(new_lines);
@@ -652,6 +726,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
         }
     }
 
+    cursor_row_ = new_lines.empty() ? 0 : new_lines.size() - 1;
     hardware_cursor_row_ = final_cursor_row;
     max_lines_rendered_ = std::max(max_lines_rendered_, new_lines.size());
     previous_viewport_top_ =

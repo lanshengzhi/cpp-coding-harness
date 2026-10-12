@@ -361,7 +361,7 @@ TEST_CASE("VirtualTerminal reset_scroll_margins restores full-screen scrolling",
 }
 
 TEST_CASE("VirtualTerminal starts regular TUI rendering using relative line flow without DSR or clearing scrollback",
-        "[tui][terminal][issue983][spec]") {
+        "[tui][terminal][issue983][issue985][spec]") {
     tui::VirtualTerminal terminal({.columns = 40, .rows = 10});
     REQUIRE(terminal.seed_shell_content(
             {"user@box:~$ ls", "file1.txt  file2.txt", "user@box:~$ echo hi"}, {.column = 0, .row = 3}));
@@ -380,20 +380,20 @@ TEST_CASE("VirtualTerminal starts regular TUI rendering using relative line flow
     CHECK(screen[4].starts_with("initial line 2"));
     CHECK(terminal.scrollback().empty());
 
-    // Stop flows cursor below rendered lines. Frozen pi-v1.0.4 observation
-    // (TuiMainScreen.beforeTerminalStop: space, line diff move, then "\r\n"):
-    // seeded content rows 3-4 raise the cursor to row 6, not row 5.
+    // Stop cancels deferred wrap with a space, then moves below the frame.
+    // The two rendered rows start at shell row 3, so CRLF leaves the cursor 3
+    // rows below its pre-stop position.
     REQUIRE(tui.stop());
-    CHECK(terminal.cursor().row == 6);
+    CHECK(terminal.cursor().row == 7);
 }
 
 TEST_CASE("Tui starts regular rendering on dirty screens at physical rows 1 and 4 without CPR",
-        "[tui][terminal][issue983][spec]") {
+        "[tui][terminal][issue983][issue985][spec]") {
     // Frozen pi TuiMainScreen flows rendered lines relative to whatever shell
     // cursor it inherits: content above the cursor stays untouched, the frame
     // starts at the cursor row, and stop() leaves the cursor below the frame
     // (space, line-diff move, CRLF). No CPR reply is available to any case.
-    const auto render_from = [](std::size_t seed_row) {
+    const auto render_from = [](std::size_t seed_row, std::size_t expected_stop_row) {
         tui::VirtualTerminal terminal({.columns = 24, .rows = 8});
         std::vector<std::string> shell_lines;
         for (std::size_t row = 0; row < seed_row; ++row)
@@ -421,9 +421,9 @@ TEST_CASE("Tui starts regular rendering on dirty screens at physical rows 1 and 
         }
 
         REQUIRE(tui.stop());
-        CHECK(terminal.cursor().row == seed_row + 3);
+        CHECK(terminal.cursor().row == expected_stop_row);
     };
 
-    render_from(1);
-    render_from(4);
+    render_from(1, 5);
+    render_from(4, 7);
 }

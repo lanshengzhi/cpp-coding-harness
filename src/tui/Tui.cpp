@@ -422,11 +422,13 @@ support::ExpectedVoid MainScreen::start() {
                 });
             !result) {
         started_ = false;
+        render_pipeline_->reset_render_state();
         return std::unexpected(result.error());
     }
 
     if (auto result = terminal_.set_cursor_visible(false); !result) {
         started_ = false;
+        render_pipeline_->reset_render_state();
         if (auto stopped = terminal_.stop(); !stopped) {
             return std::unexpected(startup_rollback_error(result.error(), stopped.error()));
         }
@@ -443,7 +445,7 @@ support::ExpectedVoid MainScreen::start() {
     return {};
 }
 
-support::ExpectedVoid MainScreen::stop() {
+support::ExpectedVoid MainScreen::stop(TuiStopOptions options) {
     if (!started_ || stopping_) return {};
 
     cancel_scheduled_render();
@@ -478,7 +480,7 @@ support::ExpectedVoid MainScreen::stop() {
         q->cv.notify_all();
     }
 
-    const auto exit_result = render_pipeline_->stop(stop_cursor);
+    const auto exit_result = render_pipeline_->stop(stop_cursor, options);
     const auto cursor_result = terminal_.set_cursor_visible(true);
     stream_decoder_->reset();
     pending_render_ = false;
@@ -502,6 +504,18 @@ support::ExpectedVoid MainScreen::clear_screen() {
     }
     return {};
 }
+
+TuiMainScreenRenderState MainScreen::capture_render_state() const { return render_pipeline_->capture_render_state(); }
+
+support::ExpectedVoid MainScreen::restore_render_state(TuiMainScreenRenderState state) {
+    if (started_) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Cannot restore render state while the TUI is running"));
+    }
+    return render_pipeline_->restore_render_state(std::move(state));
+}
+
+void MainScreen::reset_render_state() noexcept { render_pipeline_->reset_render_state(); }
 
 support::ExpectedVoid MainScreen::render() { return render_now(); }
 
