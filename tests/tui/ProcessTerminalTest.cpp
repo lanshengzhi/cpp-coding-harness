@@ -2086,11 +2086,17 @@ TEST_CASE("Process Terminal restart drops the stale input decoder fragment", "[t
     // replay the held fragment as phantom input (its negotiation deadline is
     // already in the past, so the readiness timer flushes it immediately on
     // the next start), and stale bytes would corrupt the next session's
-    // key decoding.
+    // key decoding. Wait until the fragment has actually reached the decoder:
+    // bytes still sitting in the descriptor are new input for the next
+    // session, and the stale fragment would combine with the typed bytes into
+    // a complete response instead of the dangling fragment this test pins.
+    REQUIRE(cch::tests::wait_until(
+            [&] { return cch::tui::detail::testing::input_holds_fragment(terminal); }, std::chrono::seconds(2)));
     const std::size_t before_restart = [&] {
         std::lock_guard lock(events_mutex);
         return inputs.size();
     }();
+
     REQUIRE(terminal.stop());
     REQUIRE(terminal.start(input_sink, resize_sink));
     // Fresh-session bytes prove the new session's input path is live; the

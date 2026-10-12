@@ -1723,4 +1723,14 @@ support::ExpectedVoid ProcessTerminal::drain_input(
     return {};
 }
 
+namespace detail::testing {
+
+bool input_holds_fragment(const ProcessTerminal& terminal) noexcept {
+    std::lock_guard lock(terminal.impl_->mutex);
+    return terminal.impl_->input_state.stdin_buffer.holds_fragment() ||
+           terminal.impl_->input_state.decoder.holds_fragment();
+}
+
+} // namespace detail::testing
+
 } // namespace cch::tui

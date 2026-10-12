@@ -19,6 +19,19 @@ struct ProcessTerminalOptions {
     std::any executor{};
 };
 
+class ProcessTerminal;
+
+namespace detail::testing {
+
+/// Whether the terminal is holding an incomplete input sequence fragment in
+/// either input stage. Test-only seam: the restart regression (#613) must know
+/// the stale fragment has been read before the session is stopped, otherwise
+/// the bytes are still in the descriptor and the next session reads them as
+/// fresh input.
+[[nodiscard]] bool input_holds_fragment(const ProcessTerminal& terminal) noexcept;
+
+} // namespace detail::testing
+
 /// Linux terminal adapter for the reusable TUI package.
 /// Input and resize sinks run on the event loop when an executor is configured,
 /// or via non-blocking polling. The adapter must not be destroyed from a sink.
@@ -62,6 +75,8 @@ public:
             std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
 
 private:
+    friend bool detail::testing::input_holds_fragment(const ProcessTerminal& terminal) noexcept;
+
     struct Impl;
     std::shared_ptr<Impl> impl_;
 };
