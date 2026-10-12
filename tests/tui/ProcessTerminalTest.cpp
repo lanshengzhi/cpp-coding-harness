@@ -225,9 +225,11 @@ private:
     return admitted;
 }
 
-[[nodiscard]] bool answer_appearance_query(int descriptor, std::string_view response) {
-    constexpr std::string_view kColorSchemeQuery = "\x1b[?996n";
-    constexpr std::string_view kBackgroundQuery = "\x1b]11;?\x07";
+[[nodiscard]] bool answer_keyboard_protocol_query(int descriptor) {
+    // The keyboard-protocol query (`\x1b[?u\x1b[c`) is written after raw
+    // input mode is acquired but while the startup probes still run, so a
+    // writer that waits for it can type inside the probe window.
+    constexpr std::string_view kKeyboardProtocolQuery = "\x1b[?u";
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
     std::string output;
     std::array<char, 4096> buffer{};
@@ -239,31 +241,7 @@ private:
         const auto count = ::read(descriptor, buffer.data(), buffer.size());
         if (count <= 0) return false;
         output.append(buffer.data(), static_cast<std::size_t>(count));
-        if (output.find(kColorSchemeQuery) == std::string::npos || output.find(kBackgroundQuery) == std::string::npos) {
-            continue;
-        }
-        return ::write(descriptor, response.data(), response.size()) == static_cast<ssize_t>(response.size());
-    }
-    return false;
-}
-
-[[nodiscard]] bool answer_cursor_position_query(int descriptor, std::string_view response) {
-    constexpr std::string_view kCursorPositionQuery = "\x1b[6n";
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
-    std::string output;
-    std::array<char, 4096> buffer{};
-    while (std::chrono::steady_clock::now() < deadline) {
-        pollfd item{.fd = descriptor, .events = POLLIN, .revents = 0};
-        const auto ready = ::poll(&item, 1, 10);
-        if (ready < 0) return false;
-        if (ready == 0 || (item.revents & POLLIN) == 0) continue;
-        const auto count = ::read(descriptor, buffer.data(), buffer.size());
-        if (count <= 0) return false;
-        output.append(buffer.data(), static_cast<std::size_t>(count));
-        if (output.find(kCursorPositionQuery) == std::string::npos) {
-            continue;
-        }
-        return ::write(descriptor, response.data(), response.size()) == static_cast<ssize_t>(response.size());
+        if (output.find(kKeyboardProtocolQuery) != std::string::npos) return true;
     }
     return false;
 }
@@ -1005,8 +983,8 @@ TEST_CASE("Process Terminal exposes env-derived color and appearance before star
 
     // pi `getCapabilities()` (packages/tui terminal-image.ts) is synchronous
     // and feeds `initTheme` before the TUI is constructed, so the env-derived
-    // observations are available ahead of `start()`; `start()` re-detects and
-    // may refine the appearance with probe responses.
+    // observations are available ahead of `start()`; `start()` re-detects the
+    // same environment and never probes the terminal for them (#990).
     color_terminal_environment.set("24BIT");
     foreground_background_environment.set("15;0");
     cch::tui::ProcessTerminal terminal(
@@ -1092,149 +1070,71 @@ TEST_CASE("Process Terminal reports conservative color and appearance observatio
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal probes color scheme and OSC background without consuming user input",
-        "[tui][terminal][theme][issue55][spec]") {
-    struct ProbeCase {
-        std::string response;
-        cch::tui::TerminalAppearance expected{cch::tui::TerminalAppearance::Unknown};
-        bool expects_input{false};
-    };
-    const std::array cases{
-            ProbeCase{
-                    .response = "\x1b]11;#000000\x07\x1b[?997;2ntyped",
-                    .expected = cch::tui::TerminalAppearance::Light,
-                    .expects_input = true,
-            },
-            ProbeCase{
-                    .response = "\x1b]11;#000000\x07",
-                    .expected = cch::tui::TerminalAppearance::Dark,
-            },
-            ProbeCase{
-                    .response = "\x1b]11;#ffffffffffff\x1b\\",
-                    .expected = cch::tui::TerminalAppearance::Light,
-            },
-            ProbeCase{
-                    .response = "\x1b]11;rgba:f/0/0/f\x07",
-                    .expected = cch::tui::TerminalAppearance::Dark,
-            },
-            ProbeCase{
-                    .response = "\x1b[?997;1n\x1b]11;rgb:ffff/ffff/ffff\x07",
-                    .expected = cch::tui::TerminalAppearance::Dark,
-            },
-    };
-    ScopedEnvironmentVariable foreground_background_environment("COLORFGBG");
-    foreground_background_environment.set("0;15");
-
-    for (const auto& probe_case : cases) {
-        auto pty = cch::tests::open_pseudo_terminal();
-        REQUIRE(pty);
-        std::atomic<bool> answered{false};
-        std::atomic<bool> delivered_input{false};
-        std::string delivered_text;
-        std::jthread responder([&] { answered = answer_appearance_query(pty->master.get(), probe_case.response); });
-        cch::tui::ProcessTerminal terminal(
-                {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
-
-        REQUIRE(terminal.start(
-                [&](std::string input) -> cch::support::ExpectedVoid {
-                    // StdinBuffer delivers framed keys separately (#951), so
-                    // assert retained text across callbacks, not read chunking.
-                    delivered_text += input;
-                    if (delivered_text.find("typed") != std::string::npos) delivered_input = true;
-                    return {};
-                },
-                [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
-        responder.join();
-        REQUIRE(answered.load());
-        CHECK(terminal.capabilities().appearance == probe_case.expected);
-        if (probe_case.expects_input) {
-            CHECK(cch::tests::wait_until([&] { return delivered_input.load(); }));
-        } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            CHECK_FALSE(delivered_input.load());
-        }
-        REQUIRE(terminal.stop());
-    }
-}
-
-TEST_CASE("Process Terminal consumes malformed fragmented and late appearance replies",
-        "[tui][terminal][theme][issue55][spec]") {
+TEST_CASE("Process Terminal forwards color and scheme replies to the input sink",
+        "[tui][terminal][theme][issue990][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ScopedEnvironmentVariable foreground_background_environment("COLORFGBG");
-    foreground_background_environment.set("15;0");
-    std::mutex input_mutex;
+    foreground_background_environment.set("0;15");
+
+    std::mutex events_mutex;
     std::string delivered;
     cch::tui::ProcessTerminal terminal(
             {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
     REQUIRE(terminal.start(
             [&](std::string input) -> cch::support::ExpectedVoid {
-                std::lock_guard lock(input_mutex);
+                std::lock_guard lock(events_mutex);
                 delivered += input;
                 return {};
             },
             [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
     (void)cch::tests::read_available(pty->master.get());
-    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
 
-    constexpr std::string_view kMalformedStart = "\x1b]11;not-a-color";
-    constexpr std::string_view kMalformedEnd = "\x07typed\x1b[?997;9n";
-    REQUIRE(::write(pty->master.get(), kMalformedStart.data(), kMalformedStart.size()) ==
-            static_cast<ssize_t>(kMalformedStart.size()));
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    REQUIRE(::write(pty->master.get(), kMalformedEnd.data(), kMalformedEnd.size()) ==
-            static_cast<ssize_t>(kMalformedEnd.size()));
+    // #990 moved color reporting to the TUI root: the terminal edge forwards
+    // every OSC color reply and scheme report byte-for-byte so the started
+    // TUI's own decoder consumes them, and the env-derived appearance stands.
+    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Light);
+
+    const std::string replies = std::string("\x1b]11;rgb:ffff/ffff/ffff\x07") + "\x1b[?997;2n\x1b]10;#010203\x07q";
+    REQUIRE(::write(pty->master.get(), replies.data(), replies.size()) == static_cast<ssize_t>(replies.size()));
     REQUIRE(cch::tests::wait_until([&] {
-        std::lock_guard lock(input_mutex);
-        return delivered.find("typed") != std::string::npos;
+        std::lock_guard lock(events_mutex);
+        return delivered.find('q') != std::string::npos;
     }));
     {
-        std::lock_guard lock(input_mutex);
-        CHECK(delivered.find("not-a-color") == std::string::npos);
-        CHECK(delivered.find("997") == std::string::npos);
+        std::lock_guard lock(events_mutex);
+        CHECK(delivered == replies);
     }
-    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
-
-    constexpr std::string_view kLateStart = "\x1b[?997;";
-    constexpr std::string_view kLateEnd = "2nlate";
-    REQUIRE(::write(pty->master.get(), kLateStart.data(), kLateStart.size()) ==
-            static_cast<ssize_t>(kLateStart.size()));
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    REQUIRE(::write(pty->master.get(), kLateEnd.data(), kLateEnd.size()) == static_cast<ssize_t>(kLateEnd.size()));
-    REQUIRE(cch::tests::wait_until([&] {
-        std::lock_guard lock(input_mutex);
-        return delivered.find("late") != std::string::npos;
-    }));
-    REQUIRE(cch::tests::wait_until(
-            [&] { return terminal.capabilities().appearance == cch::tui::TerminalAppearance::Light; }));
-    {
-        std::lock_guard lock(input_mutex);
-        CHECK(delivered.find("997") == std::string::npos);
-    }
-
-    constexpr std::string_view kUnterminated = "\x1b]11;unterminated";
-    REQUIRE(::write(pty->master.get(), kUnterminated.data(), kUnterminated.size()) ==
-            static_cast<ssize_t>(kUnterminated.size()));
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    constexpr std::string_view kAfterUnterminated = "after-unterminated";
-    REQUIRE(::write(pty->master.get(), kAfterUnterminated.data(), kAfterUnterminated.size()) ==
-            static_cast<ssize_t>(kAfterUnterminated.size()));
-    REQUIRE(cch::tests::wait_until([&] {
-        std::lock_guard lock(input_mutex);
-        return delivered.find(kAfterUnterminated) != std::string::npos;
-    }));
-    {
-        std::lock_guard lock(input_mutex);
-        CHECK(delivered.find("11;unterminated") == std::string::npos);
-    }
-
-    constexpr char kEscape = '\x1b';
-    REQUIRE(::write(pty->master.get(), &kEscape, 1) == 1);
-    REQUIRE(cch::tests::wait_until([&] {
-        std::lock_guard lock(input_mutex);
-        return delivered.find(kEscape) != std::string::npos;
-    }));
+    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Light);
     REQUIRE(terminal.stop());
+}
+
+TEST_CASE("Tui consumes terminal color replies before typed input dispatch", "[tui][terminal][theme][issue990][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    ScopedEnvironmentVariable foreground_background_environment("COLORFGBG");
+    foreground_background_environment.set("0;15");
+    cch::tests::ImageEnvironmentGuard environment;
+
+    // #990 moved appearance authority to the TUI root: the terminal edge
+    // demuxes nothing, so the Tui's own decoder consumes the color reports
+    // (no component input) while the terminal's env-derived appearance stands.
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<KeyCapturingComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+    (void)cch::tests::read_available(pty->master.get());
+
+    const std::string reports =
+            std::string("\x1b]11;not-a-color\x07") + "\x1b[?997;1n\x1b]10;#010203\x07\x1b]4;0;rgb:00/00/00\x07typed";
+    REQUIRE(::write(pty->master.get(), reports.data(), reports.size()) == static_cast<ssize_t>(reports.size()));
+    REQUIRE(cch::tests::wait_until(
+            [&] { return component_pointer->keys == std::vector<std::string>{"t", "y", "p", "e", "d"}; }));
+    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Light);
+    REQUIRE(tui.stop());
 }
 
 TEST_CASE("Process Terminal writes OSC 0 window titles", "[tui][terminal][issue378][spec]") {
@@ -1560,41 +1460,47 @@ TEST_CASE("Process Terminal forwards CSI 16 t cell-size responses for the raw-in
     REQUIRE(terminal.stop());
 }
 
-TEST_CASE("Process Terminal keeps color and keyboard-negotiation replies out of the listener stage",
-        "[tui][terminal][issue952][spec]") {
+TEST_CASE("Process Terminal hands appearance and keyboard replies to the Tui root",
+        "[tui][terminal][issue952][issue990][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     ImageEnvironmentGuard environment;
     environment.set("TERM_PROGRAM", "ghostty");
-    std::mutex events_mutex;
-    std::vector<std::string> inputs;
+    environment.set("COLORFGBG", "15;0");
 
     cch::tui::ProcessTerminal terminal(
             {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
-    REQUIRE(terminal.start(
-            [&](std::string input) -> cch::support::ExpectedVoid {
-                std::lock_guard lock(events_mutex);
-                if (!input.empty()) inputs.push_back(std::move(input));
-                return {};
-            },
-            [&](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<KeyCapturingComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    std::vector<std::string> listener_stage;
+    const auto listener = tui.add_raw_input_listener([&](std::string_view text) {
+        listener_stage.emplace_back(text);
+        return cch::tui::RawInputListenerResult::pass();
+    });
+    REQUIRE(tui.start());
     (void)cch::tests::read_available(pty->master.get());
 
-    // The color-scheme report and the Kitty negotiation answer are consumed at
-    // their own stages and never reach the host's raw-input listener stage,
-    // unlike the cell-size reply.
-    const std::string stream = "\x1b[?997;1n\x1b[?1u\x1b[6;20;10t";
+    // #990 moved the color-scheme report and the DA1 sentinel from the
+    // terminal edge to the Tui root: the root consumes both before typed
+    // dispatch, so the host's raw-input listener stage and the focused
+    // component never see them. Only the cell-size reply keeps its frozen
+    // downstream stage after raw listeners, and a real keystroke appended
+    // after the replies proves the demux ran in order.
+    const std::string stream = "\x1b[?997;1n\x1b[?1;2c\x1b[?1u\x1b[6;20;10ta";
     REQUIRE(::write(pty->master.get(), stream.data(), stream.size()) == static_cast<ssize_t>(stream.size()));
+    REQUIRE(cch::tests::wait_until([&] { return component_pointer->keys == std::vector<std::string>{"a"}; }));
+    CHECK(listener_stage == std::vector<std::string>{"\x1b[6;20;10t", "a"});
     REQUIRE(cch::tests::wait_until([&] {
-        std::lock_guard lock(events_mutex);
-        return !inputs.empty();
+        const auto capabilities = terminal.capabilities();
+        return capabilities.cell_pixels && *capabilities.cell_pixels == cch::tui::CellPixelDimensions{10, 20};
     }));
-    {
-        std::lock_guard lock(events_mutex);
-        CHECK(inputs.front() == "\x1b[6;20;10t");
-        CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
-    }
-    REQUIRE(terminal.stop());
+    // The Tui root owns live appearance now (#990): reporting it at the
+    // terminal edge is a later ticket, and the env-derived appearance stands.
+    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Unknown);
+    CHECK(listener.active());
+    REQUIRE(tui.stop());
 }
 
 TEST_CASE("Process Terminal places and removes images with pi-exact protocol bytes",
@@ -2124,10 +2030,11 @@ TEST_CASE(
     // Keystrokes typed after raw mode is acquired but while the startup
     // capability probes are pending are preserved as startup input; they
     // must reach the focused component, not be dropped by the Tui started
-    // guard (#610). The writer gates on the probe queries (post-TCSAFLUSH)
-    // and answers the appearance probe, then types during the probes.
+    // guard (#610). The writer gates on the keyboard-negotiation query
+    // (post-TCSAFLUSH, inside the startup probes) and types while later
+    // startup steps are still running.
     std::thread typist([&] {
-        REQUIRE(answer_appearance_query(pty->master.get(), "\x1b[?997;1n"));
+        REQUIRE(answer_keyboard_protocol_query(pty->master.get()));
         REQUIRE(::write(pty->master.get(), "hi", 2) == 2);
     });
 
@@ -2138,51 +2045,15 @@ TEST_CASE(
     auto* component_pointer = component.get();
     REQUIRE(tui.add_child(std::move(component)));
 
-    // The startup input is forwarded synchronously inside start(), so the
-    // keystrokes must already be dispatched when it returns.
+    // The startup input is forwarded inside start(); a byte held as a
+    // response-shaped fragment resolves at the 50 ms sequence window, so the
+    // keystrokes must all arrive without being dropped by the Tui started
+    // guard (#610).
     REQUIRE(tui.start());
     typist.join();
-    CHECK(component_pointer->keys == std::vector<std::string>{"h", "i"});
+    REQUIRE(cch::tests::wait_until(
+            [&] { return component_pointer->keys == std::vector<std::string>{"h", "i"}; }, std::chrono::seconds(2)));
     REQUIRE(tui.stop());
-}
-
-TEST_CASE("Process Terminal keeps the startup color scheme over a late background reply",
-        "[tui][terminal][issue613][spec]") {
-    auto pty = cch::tests::open_pseudo_terminal();
-    REQUIRE(pty);
-    cch::tests::ImageEnvironmentGuard environment;
-
-    // The color-scheme report arrives while the appearance probe is polling,
-    // so the startup probe establishes the appearance guard.
-    std::thread responder([&] { REQUIRE(answer_appearance_query(pty->master.get(), "\x1b[?997;1n")); });
-
-    std::mutex events_mutex;
-    std::vector<std::string> inputs;
-    cch::tui::ProcessTerminal terminal(
-            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
-    REQUIRE(terminal.start(
-            [&](std::string input) -> cch::support::ExpectedVoid {
-                std::lock_guard lock(events_mutex);
-                inputs.push_back(std::move(input));
-                return {};
-            },
-            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
-    responder.join();
-    (void)cch::tests::read_available(pty->master.get());
-    REQUIRE(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
-
-    // A late in-session background reply must not override the startup
-    // color-scheme report. Appending an in-band byte proves the decoder
-    // processed the reply (in-order demux) before the byte reaches the sink.
-    const std::string late_reply = std::string("\x1b]11;rgb:ffff/ffff/ffff\x07q");
-    REQUIRE(::write(pty->master.get(), late_reply.data(), late_reply.size()) ==
-            static_cast<ssize_t>(late_reply.size()));
-    REQUIRE(cch::tests::wait_until([&] {
-        std::lock_guard lock(events_mutex);
-        return !inputs.empty() && inputs.back() == "q";
-    }));
-    CHECK(terminal.capabilities().appearance == cch::tui::TerminalAppearance::Dark);
-    REQUIRE(terminal.stop());
 }
 
 TEST_CASE("Process Terminal restart drops the stale input decoder fragment", "[tui][terminal][issue613][spec]") {
@@ -2203,7 +2074,7 @@ TEST_CASE("Process Terminal restart drops the stale input decoder fragment", "[t
     // polling, so it deterministically sits in the first session's
     // InputState decoder after start() returns.
     std::thread fragment_writer([&] {
-        REQUIRE(answer_appearance_query(pty->master.get(), "\x1b[?997;1n"));
+        REQUIRE(answer_keyboard_protocol_query(pty->master.get()));
         REQUIRE(::write(pty->master.get(), "\x1b[1;", 4) == 4);
     });
     cch::tui::ProcessTerminal terminal(

@@ -60,8 +60,6 @@ constexpr std::string_view kEndSynchronizedUpdate = "\x1b[?2026l";
 constexpr std::string_view kKeyboardProtocolPush = "\x1b[>7u";
 constexpr std::string_view kKeyboardProtocolQuery = "\x1b[?u\x1b[c";
 constexpr std::string_view kKeyboardProtocolPop = "\x1b[<u";
-constexpr std::string_view kColorSchemeQuery = "\x1b[?996n";
-constexpr std::string_view kBackgroundColorQuery = "\x1b]11;?\x07";
 // pi `TuiMainScreen` relative line-flow and scrollback flow:
 // No startup DSR query (`\x1b[6n`) is sent during regular TUI startup or rendering.
 constexpr std::string_view kModifyOtherKeysEnable = "\x1b[>4;2m";
@@ -69,10 +67,6 @@ constexpr std::string_view kModifyOtherKeysDisable = "\x1b[>4;0m";
 constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
 constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0;\x07";
 constexpr auto kProgressKeepalive = std::chrono::milliseconds(1000);
-/// Startup appearance probe window (the color-scheme and OSC 11 background
-/// queries run before asynchronous I/O starts; pi probes synchronously at
-/// startup).
-constexpr auto kAppearanceProbeTimeout = std::chrono::milliseconds(100);
 /// The readiness timer re-reads TIOCGWINSZ at least this often so resizes are
 /// detected even without SIGWINCH delivery.
 /// This is a low-rate watchdog timer, not input polling.
@@ -242,72 +236,10 @@ struct EnvironmentRgb {
     return background ? appearance_for_index(*background) : TerminalAppearance::Unknown;
 }
 
-/// phases: one stream decoder accumulates the pre-I/O byte stream, so responses
-/// split across reads reassemble in the decoder's single fragment
-/// buffer and every other byte is preserved verbatim for the input sink.
-struct StartupProbe {
-    detail::TerminalStreamDecoder decoder;
-    std::optional<TerminalAppearance> color_scheme{std::nullopt};
-    std::optional<TerminalAppearance> background{std::nullopt};
-    std::string forwarded_input;
-};
-
-void collect_probe_responses(StartupProbe& probe, const std::vector<detail::TerminalResponseVariant>& responses) {
-    for (const auto& response : responses) {
-        // Cursor-position reports are no longer requested at startup (#983):
-        // regular rendering flows relative to the inherited shell cursor. A
-        // late report is consumed here so it never reaches the input sink.
-        if (std::get_if<CursorPosition>(&response) != nullptr) continue;
-        if (const auto* scheme = std::get_if<detail::ColorSchemeResponse>(&response)) {
-            if (scheme->kind == detail::ColorSchemeResponseKind::ColorScheme) {
-                probe.color_scheme = scheme->appearance;
-            } else {
-                probe.background = scheme->appearance;
-            }
-            continue;
-        }
-        // Cell-size and keyboard negotiation answers cannot arrive before
-        // their queries are sent (both follow the probes below): any such
-        // response here is unsolicited and ignored.
-    }
-}
-
-/// Poll the input descriptor until the timeout passes, feeding every chunk
-/// through the probe's decoder (pi's synchronous startup probes). The
-/// appearance probe always runs out its full window.
-void poll_startup_probe(StartupProbe& probe, int descriptor, std::chrono::milliseconds timeout) {
-    constexpr std::size_t kProbeReadChunkBytes{4096};
-    const auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (true) {
-        const auto remaining =
-                std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
-        if (remaining.count() <= 0) return;
-        pollfd item{.fd = descriptor, .events = POLLIN, .revents = 0};
-        const auto ready = ::poll(&item, 1, static_cast<int>(remaining.count()));
-        if (ready < 0) {
-            if (errno == EINTR) continue;
-            return;
-        }
-        if (ready == 0) return;
-        if ((item.revents & POLLIN) == 0) return;
-        std::array<char, kProbeReadChunkBytes> buffer{};
-        const auto count = ::read(descriptor, buffer.data(), buffer.size());
-        if (count < 0) {
-            if (errno == EINTR) continue;
-            return;
-        }
-        if (count == 0) return;
-        auto decoded = probe.decoder.feed(std::string_view(buffer.data(), static_cast<std::size_t>(count)));
-        probe.forwarded_input += decoded.forwarded_input;
-        collect_probe_responses(probe, decoded.responses);
-    }
-}
-
 } // namespace
 struct InputState {
     StdinBuffer stdin_buffer{StdinBufferOptions{}};
     detail::TerminalStreamDecoder decoder;
-    bool color_scheme_reported{false};
     bool needs_input_flush{false};
     /// Escape window, resolved once per session from pi's `resolveEscapeTimeoutMs`.
     std::chrono::milliseconds escape_fragment_timeout{detail::kEscapeFragmentTimeout};
@@ -328,7 +260,6 @@ struct ProcessTerminal::Impl {
     std::shared_ptr<TerminalInputSink> input_sink;
     std::shared_ptr<TerminalResizeSink> resize_sink;
     std::string startup_input;
-    bool startup_color_scheme_reported{false};
     std::optional<boost::asio::posix::stream_descriptor> input_stream;
     std::optional<boost::asio::posix::stream_descriptor> output_stream;
     std::optional<boost::asio::steady_timer> keepalive_timer;
@@ -462,8 +393,7 @@ template <typename T> void record_worker_error(T& impl, support::Error error) {
 }
 
 template <typename T>
-void apply_terminal_responses(
-        T& impl, InputState& state, const std::vector<detail::TerminalResponseVariant>& responses);
+void apply_terminal_responses(T& impl, const std::vector<detail::TerminalResponseVariant>& responses);
 
 template <typename T> void invoke_input(T& impl, std::string input) {
     std::shared_ptr<TerminalInputSink> sink;
@@ -483,7 +413,7 @@ template <typename T> void invoke_input(T& impl, std::string input) {
 template <typename T> void process_framed_input(T& impl, std::string sequence) {
     if (sequence.empty()) return;
     auto decoded = impl.input_state.decoder.feed(sequence);
-    apply_terminal_responses(impl, impl.input_state, decoded.responses);
+    apply_terminal_responses(impl, decoded.responses);
     if (!decoded.forwarded_input.empty()) {
         invoke_input(impl, std::move(decoded.forwarded_input));
         impl.input_state.needs_input_flush = true;
@@ -764,14 +694,14 @@ template <typename T> void apply_cell_size_response(T& impl, const CellPixelDime
 }
 
 template <typename T>
-void apply_terminal_responses(
-        T& impl, InputState& state, const std::vector<detail::TerminalResponseVariant>& responses) {
+void apply_terminal_responses(T& impl, const std::vector<detail::TerminalResponseVariant>& responses) {
     for (const auto& response : responses) {
         // A cell-size reply is deliberately not applied here (#952): the reply
         // is forwarded verbatim so the host's raw-input listener stage observes
         // it first, and Terminal::apply_cell_pixel_dimensions is the downstream
-        // consumer. Color and keyboard-negotiation answers keep this stage,
-        // where frozen pi consumes them.
+        // consumer. Keyboard-negotiation answers keep this stage, where frozen
+        // pi consumes them; color and scheme answers belong to the TUI root
+        // (#990).
         if (const auto* keyboard = std::get_if<detail::KeyboardProtocolResponse>(&response)) {
             apply_keyboard_response(impl, *keyboard);
             continue;
@@ -781,16 +711,6 @@ void apply_terminal_responses(
             // startup no longer probes the cursor position, so consume and
             // ignore the unsolicited report.
             continue;
-        }
-        const auto* appearance = std::get_if<detail::ColorSchemeResponse>(&response);
-        if (appearance == nullptr) continue;
-        if (appearance->kind == detail::ColorSchemeResponseKind::ColorScheme) {
-            std::lock_guard lock(impl.mutex);
-            impl.capabilities.appearance = appearance->appearance;
-            state.color_scheme_reported = true;
-        } else if (!state.color_scheme_reported) {
-            std::lock_guard lock(impl.mutex);
-            impl.capabilities.appearance = appearance->appearance;
         }
     }
 }
@@ -952,7 +872,7 @@ template <typename T> void arm_readiness_timer_locked(T& impl) {
                 impl.input_state.negotiation_deadline = std::chrono::steady_clock::time_point::max();
             }
         }
-        apply_terminal_responses(impl, impl.input_state, responses);
+        apply_terminal_responses(impl, responses);
         if (!forwarded_input.empty()) invoke_input(impl, std::move(forwarded_input));
         if (needs_input_flush) invoke_input(impl, {});
         std::lock_guard lock(impl.mutex);
@@ -1127,11 +1047,9 @@ template <typename T> void abandon_startup(T& impl) {
     impl.resize_sink.reset();
     release_unstarted_async_io(impl);
     impl.input_state.decoder.reset();
-    impl.input_state.color_scheme_reported = false;
     impl.input_state.needs_input_flush = false;
     impl.input_state.negotiation_deadline = std::chrono::steady_clock::time_point::max();
     impl.startup_input.clear();
-    impl.startup_color_scheme_reported = false;
     impl.output_queue.clear();
     impl.output_queued_bytes = 0;
     impl.output_draining = false;
@@ -1147,9 +1065,9 @@ ProcessTerminal::ProcessTerminal(ProcessTerminalOptions options) : impl_(std::ma
     // and feeds `initTheme` ahead of TUI construction, so the env-derived
     // color depth and appearance must already be observable here: the
     // interactive engine builds its ThemeController from `capabilities()`
-    // before `start()`. `start()` re-detects both and refines the appearance
-    // with probe responses; the probe-backed capabilities (inline images,
-    // hyperlinks, synchronized output) remain start-time only.
+    // before `start()`. The live scheme and OSC color queries belong to the
+    // TUI root (#990); `start()` detects the probe-backed capabilities
+    // (inline images, hyperlinks, synchronized output) only.
     impl_->capabilities.color = detect_color_capability();
     impl_->capabilities.appearance = detect_terminal_appearance();
     impl_->self = impl_;
@@ -1183,15 +1101,13 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
     auto dimensions = read_dimensions(impl_->options.output_fd);
     if (!dimensions) return std::unexpected(dimensions.error());
     impl_->startup_input.clear();
-    impl_->startup_color_scheme_reported = false;
-    const auto environment_appearance = detect_terminal_appearance();
     const auto detected_images = detect_image_capabilities();
     impl_->capabilities = TerminalCapabilities{
             .synchronized_output = supports_synchronized_output(),
             .inline_images = detected_images.images,
             .hyperlinks = detected_images.hyperlinks,
             .color = detect_color_capability(),
-            .appearance = environment_appearance,
+            .appearance = detect_terminal_appearance(),
     };
     // One startup-failure path: roll back acquired terminal state and combine
     // the acquisition error with any incomplete rollback (issue #462). The
@@ -1223,18 +1139,6 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
     }
     impl_->modes.bracketed_paste = true;
 
-    auto appearance_query = attempt_write_all(
-            impl_->options.output_fd, std::string(kColorSchemeQuery) + std::string(kBackgroundColorQuery));
-    if (!appearance_query.result) {
-        return fail_startup(appearance_query.result.error());
-    }
-    StartupProbe probe;
-    poll_startup_probe(probe, impl_->options.input_fd, kAppearanceProbeTimeout);
-    impl_->capabilities.appearance = probe.color_scheme.value_or(probe.background.value_or(environment_appearance));
-    auto flushed_probe = probe.decoder.flush();
-    probe.forwarded_input += std::move(flushed_probe.forwarded_input);
-    impl_->startup_color_scheme_reported = probe.color_scheme.has_value();
-    impl_->startup_input = std::move(probe.forwarded_input);
     impl_->scroll_origin = 0;
     impl_->viewport_top = 0;
     impl_->cursor = {};
@@ -1302,10 +1206,13 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
     impl_->startup_input.clear();
     lock.unlock();
     // A restart must not inherit the previous session's decoder fragment,
-    // negotiation deadline, or flush flag (#613); the startup probe's
-    // color-scheme reply stays authoritative over late background replies.
+    // negotiation deadline, or flush flag (#613).
     impl_->input_state = InputState{};
-    impl_->input_state.color_scheme_reported = impl_->startup_color_scheme_reported;
+    // The started TUI root owns color and scheme reporting (#990): this edge
+    // forwards OSC color replies and `CSI ? 997 n` reports verbatim so the
+    // TUI's own decoder consumes them before typed input dispatch, while
+    // keyboard negotiation still resolves at this stage.
+    impl_->input_state.decoder.set_demux_appearance(false);
     impl_->input_state.escape_fragment_timeout =
             detail::resolve_escape_fragment_timeout(environment("PI_TUI_ESC_TIMEOUT"),
                     !environment("SSH_CONNECTION").empty() || !environment("SSH_TTY").empty());

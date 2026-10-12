@@ -29,20 +29,30 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
             std::format("startup: {}; restoration: {}", describe_error(startup), describe_error(rollback)));
 }
 
-/// The downstream consumer of the replies that survive the raw-input listener
-/// stage. Decoded responses are applied in order to the terminal instance.
-void apply_late_replies(Terminal& terminal, const std::vector<detail::TerminalResponseVariant>& responses) {
-    for (const auto& response : responses) {
-        const auto* cell_size = std::get_if<detail::CellSizeResponse>(&response);
-        if (cell_size == nullptr) continue;
-        (void)terminal.apply_cell_pixel_dimensions(CellPixelDimensions{
-                .width = cell_size->width_px,
-                .height = cell_size->height_px,
-        });
-    }
-}
-
 } // namespace
+
+TerminalColors MainScreen::QueryState::build_terminal_colors(const QueryState& query) {
+    TerminalColors result;
+    result.foreground = query.foreground;
+    result.background = query.background;
+
+    bool all_palette_entries_replied = true;
+    for (const auto& entry : query.palette) {
+        if (!entry.has_value()) {
+            all_palette_entries_replied = false;
+            break;
+        }
+    }
+    if (all_palette_entries_replied) {
+        std::vector<RgbColor> palette;
+        palette.reserve(query.palette.size());
+        for (const auto& entry : query.palette) {
+            palette.push_back(*entry);
+        }
+        result.palette = std::move(palette);
+    }
+    return result;
+}
 
 namespace detail {
 
@@ -425,6 +435,9 @@ support::ExpectedVoid MainScreen::start() {
 
     render_pipeline_->start(terminal_.dimensions());
     pending_render_ = false;
+    if (color_scheme_notifications_enabled_) {
+        (void)terminal_.write("\x1b[?2031h");
+    }
     if (scheduler_ != nullptr) last_render_at_.reset();
     request_render();
     return {};
@@ -442,6 +455,28 @@ support::ExpectedVoid MainScreen::stop() {
     const auto stop_cursor = resolve_cursor_location();
     apply_focus(nullptr);
     overlay_focus_restore_ = {};
+
+    if (color_scheme_notifications_enabled_) {
+        (void)terminal_.write("\x1b[?2031l");
+    }
+
+    std::deque<std::shared_ptr<QueryState>> queries_to_cancel;
+    {
+        std::lock_guard lock(color_queries_mutex_);
+        queries_to_cancel = std::move(pending_color_queries_);
+        pending_color_queries_.clear();
+    }
+    for (const auto& q : queries_to_cancel) {
+        std::lock_guard lock(q->mutex);
+        q->cancelled = true;
+        q->on_complete = nullptr;
+        q->on_late_reply = nullptr;
+        if (!q->promise_resolved) {
+            q->promise_resolved = true;
+            q->promise.set_value(TerminalColors{});
+        }
+        q->cv.notify_all();
+    }
 
     const auto exit_result = render_pipeline_->stop(stop_cursor);
     const auto cursor_result = terminal_.set_cursor_visible(true);
@@ -710,27 +745,44 @@ void MainScreen::handle_input(std::string input) {
     if (!started_) return;
     stream_decoder_->set_kitty_protocol_active(terminal_.capabilities().keyboard_protocol == KeyboardProtocol::Kitty);
     if (input.empty()) {
-        // ProcessTerminal applies out-of-band responses before delivering the
-        // same bytes here; late response fragments are dropped by its flush.
-        for (const auto& event : stream_decoder_->flush().events)
+        auto flushed = stream_decoder_->flush();
+        apply_terminal_responses(flushed.responses);
+        apply_cell_size_responses(flushed.responses);
+        for (const auto& event : flushed.events)
             dispatch_input(event);
         return;
     }
 
     // Frozen raw-input listener stage (pi tui.ts handleInput inputListeners):
-    // listeners observe the raw bytes in registration order and may consume
-    // them or replace them for the rest of the chain. Consumption - and a
-    // surviving empty text - stop typed dispatch without reaching the
-    // downstream reply consumer either.
-    const auto dispatched = raw_listeners_->dispatch(input);
-    if (dispatched.consumed || dispatched.input.empty()) return;
-
-    for (std::size_t offset = 0; offset < dispatched.input.size(); offset += kInputDecodeChunkBytes) {
-        const auto chunk = std::string_view(dispatched.input).substr(offset, kInputDecodeChunkBytes);
+    // listeners observe input in registration order and may consume it or
+    // replace it for the rest of the chain. The decoder runs first so
+    // response-only bytes (color, scheme, keyboard negotiation) never reach
+    // the chain; the cell-size reply is the one response deliberately kept in
+    // the forwarded bytes and applied after the chain.
+    for (std::size_t offset = 0; offset < input.size(); offset += kInputDecodeChunkBytes) {
+        const auto chunk = std::string_view(input).substr(offset, kInputDecodeChunkBytes);
         auto decoded = stream_decoder_->feed(chunk);
-        apply_late_replies(terminal_, decoded.responses);
-        for (const auto& event : decoded.events)
-            dispatch_input(event);
+        apply_terminal_responses(decoded.responses);
+
+        if (decoded.forwarded_input.empty()) continue;
+
+        const auto dispatched = raw_listeners_->dispatch(decoded.forwarded_input);
+        if (dispatched.consumed || dispatched.input.empty()) continue;
+
+        if (dispatched.input == decoded.forwarded_input) {
+            apply_cell_size_responses(decoded.responses);
+            for (const auto& event : decoded.events)
+                dispatch_input(event);
+        } else {
+            for (std::size_t roffset = 0; roffset < dispatched.input.size(); roffset += kInputDecodeChunkBytes) {
+                const auto rchunk = std::string_view(dispatched.input).substr(roffset, kInputDecodeChunkBytes);
+                auto rdecoded = stream_decoder_->feed(rchunk);
+                apply_terminal_responses(rdecoded.responses);
+                apply_cell_size_responses(rdecoded.responses);
+                for (const auto& event : rdecoded.events)
+                    dispatch_input(event);
+            }
+        }
     }
 }
 
@@ -933,6 +985,233 @@ std::optional<CursorPosition> MainScreen::resolve_cursor_location() const {
     auto* focusable = dynamic_cast<Focusable*>(focused_);
     if (focusable == nullptr || !focusable->focused()) return std::nullopt;
     return focusable->cursor_location();
+}
+
+TerminalColorSchemeListenerHandle MainScreen::on_terminal_color_scheme_change(TerminalColorSchemeListener listener) {
+    const auto id = next_scheme_listener_id_++;
+    {
+        std::lock_guard lock(scheme_listeners_mutex_);
+        scheme_listeners_.emplace_back(id, std::move(listener));
+    }
+    return TerminalColorSchemeListenerHandle([this, id] {
+        std::lock_guard lock(scheme_listeners_mutex_);
+        std::erase_if(scheme_listeners_, [id](const auto& pair) { return pair.first == id; });
+    });
+}
+
+void MainScreen::set_terminal_color_scheme_notifications(bool enabled) {
+    if (color_scheme_notifications_enabled_ == enabled) return;
+    color_scheme_notifications_enabled_ = enabled;
+    if (started_ && !stopping_) {
+        (void)terminal_.write(enabled ? "\x1b[?2031h" : "\x1b[?2031l");
+    }
+}
+
+void MainScreen::dispatch_color_scheme_report(TerminalColorScheme scheme) {
+    std::vector<TerminalColorSchemeListener> callbacks;
+    {
+        std::lock_guard lock(scheme_listeners_mutex_);
+        callbacks.reserve(scheme_listeners_.size());
+        for (const auto& [_, listener] : scheme_listeners_) {
+            callbacks.push_back(listener);
+        }
+    }
+    for (const auto& cb : callbacks) {
+        if (cb) cb(scheme);
+    }
+}
+
+std::future<TerminalColors> MainScreen::query_terminal_colors(TerminalColorsQueryOptions options) {
+    auto query = std::make_shared<QueryState>();
+    query->id = next_query_id_++;
+    query->on_complete = std::move(options.on_complete);
+    query->on_late_reply = std::move(options.on_late_reply);
+    query->deadline = std::chrono::steady_clock::now() + options.timeout;
+    auto future = query->promise.get_future();
+
+    {
+        std::lock_guard lock(color_queries_mutex_);
+        pending_color_queries_.push_back(query);
+    }
+
+    // The timer runs as a detached thread holding the query state shared_ptr:
+    // the query outlives the caller, and the timer must not be joined from
+    // inside itself when it is the last owner. The thread holds no MainScreen
+    // reference, so a stopped or destroyed root cannot be reached through it:
+    // stop() cancels and notifies under the query mutex, and the timeout path
+    // is static and re-checks the query flags under the same mutex.
+    std::thread([query] {
+        std::unique_lock lock(query->mutex);
+        query->cv.wait_until(lock, query->deadline, [&] { return query->completed || query->cancelled; });
+        if (query->completed || query->cancelled) return;
+        lock.unlock();
+        handle_color_query_timeout(query);
+    }).detach();
+
+    (void)terminal_.write(build_terminal_color_query());
+    return future;
+}
+
+void MainScreen::handle_color_query_timeout(const std::shared_ptr<QueryState>& query) {
+    TerminalColors partial;
+    TerminalColorsCallback on_complete_cb;
+    {
+        std::unique_lock lock(query->mutex);
+        if (query->completed || query->cancelled || query->promise_resolved) return;
+        query->promise_resolved = true;
+        partial = QueryState::build_terminal_colors(*query);
+        on_complete_cb = std::move(query->on_complete);
+        query->promise.set_value(partial);
+    }
+    if (on_complete_cb) {
+        on_complete_cb(partial);
+    }
+}
+
+bool MainScreen::consume_terminal_color_response(const OscColorResponse& response) {
+    std::shared_ptr<QueryState> query;
+    {
+        std::lock_guard lock(color_queries_mutex_);
+        if (pending_color_queries_.empty()) return false;
+        query = pending_color_queries_.front();
+    }
+
+    TerminalColors current_result;
+    bool should_notify_late = false;
+    bool should_complete = false;
+    TerminalColorsCallback on_complete_cb;
+
+    {
+        std::lock_guard lock(query->mutex);
+        if (query->completed || query->cancelled) return true;
+
+        const auto key = response.target.key();
+        if (query->replied.contains(key)) {
+            return true;
+        }
+        query->replied.insert(key);
+
+        if (response.target.kind == OscColorTargetKind::Foreground) {
+            query->foreground = response.rgb;
+        } else if (response.target.kind == OscColorTargetKind::Background) {
+            query->background = response.rgb;
+        } else if (response.target.palette_index < 16) {
+            query->palette[response.target.palette_index] = response.rgb;
+        }
+
+        if (query->replied.size() == 18) {
+            should_complete = true;
+            query->completed = true;
+            query->cv.notify_all();
+        }
+
+        current_result = QueryState::build_terminal_colors(*query);
+
+        if (should_complete) {
+            if (!query->promise_resolved) {
+                query->promise_resolved = true;
+                query->promise.set_value(current_result);
+                on_complete_cb = std::move(query->on_complete);
+            } else if (query->on_late_reply) {
+                should_notify_late = true;
+            }
+        } else if (query->promise_resolved && query->on_late_reply) {
+            should_notify_late = true;
+        }
+    }
+
+    if (on_complete_cb) {
+        on_complete_cb(current_result);
+    }
+    if (should_notify_late) {
+        std::lock_guard lock(query->mutex);
+        if (query->on_late_reply) {
+            query->on_late_reply(current_result);
+        }
+    }
+
+    if (should_complete) {
+        std::lock_guard lock(color_queries_mutex_);
+        if (!pending_color_queries_.empty() && pending_color_queries_.front() == query) {
+            pending_color_queries_.pop_front();
+        }
+    }
+
+    return true;
+}
+
+bool MainScreen::consume_terminal_device_attributes() {
+    std::shared_ptr<QueryState> query;
+    {
+        std::lock_guard lock(color_queries_mutex_);
+        if (pending_color_queries_.empty()) return false;
+        query = pending_color_queries_.front();
+        pending_color_queries_.pop_front();
+    }
+
+    TerminalColors result;
+    bool should_notify_late = false;
+    TerminalColorsCallback on_complete_cb;
+
+    {
+        std::lock_guard lock(query->mutex);
+        if (query->completed || query->cancelled) return true;
+        query->completed = true;
+        query->cv.notify_all();
+        result = QueryState::build_terminal_colors(*query);
+
+        if (!query->promise_resolved) {
+            query->promise_resolved = true;
+            query->promise.set_value(result);
+            on_complete_cb = std::move(query->on_complete);
+        } else if (query->on_late_reply) {
+            should_notify_late = true;
+        }
+    }
+
+    if (on_complete_cb) {
+        on_complete_cb(result);
+    }
+    if (should_notify_late) {
+        std::lock_guard lock(query->mutex);
+        if (query->on_late_reply) {
+            query->on_late_reply(result);
+        }
+    }
+
+    return true;
+}
+
+void MainScreen::apply_terminal_responses(const std::vector<detail::TerminalResponseVariant>& responses) {
+    for (const auto& response : responses) {
+        if (const auto* scheme = std::get_if<detail::ColorSchemeResponse>(&response)) {
+            if (scheme->kind == detail::ColorSchemeResponseKind::ColorScheme) {
+                dispatch_color_scheme_report(scheme->appearance == TerminalAppearance::Light
+                                                     ? TerminalColorScheme::Light
+                                                     : TerminalColorScheme::Dark);
+            } else if (scheme->color_response) {
+                consume_terminal_color_response(*scheme->color_response);
+            }
+            continue;
+        }
+        if (const auto* keyboard = std::get_if<detail::KeyboardProtocolResponse>(&response)) {
+            if (keyboard->kind == detail::KeyboardProtocolResponseKind::DeviceAttributes) {
+                consume_terminal_device_attributes();
+            }
+            continue;
+        }
+    }
+}
+
+void MainScreen::apply_cell_size_responses(const std::vector<detail::TerminalResponseVariant>& responses) {
+    for (const auto& response : responses) {
+        if (const auto* cell_size = std::get_if<detail::CellSizeResponse>(&response)) {
+            (void)terminal_.apply_cell_pixel_dimensions(CellPixelDimensions{
+                    .width = cell_size->width_px,
+                    .height = cell_size->height_px,
+            });
+        }
+    }
 }
 
 namespace detail::testing {

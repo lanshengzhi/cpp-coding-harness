@@ -38,6 +38,7 @@ cch_parity_declare_target(
         src/tui/TerminalImageHelpers.cpp
         src/tui/TerminalImageState.cpp
         src/tui/Terminal.cpp
+        src/tui/TerminalColors.cpp
         src/tui/Text.cpp
         src/tui/TextBuffer.cpp
         src/tui/TruncatedText.cpp

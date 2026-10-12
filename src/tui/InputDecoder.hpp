@@ -2,7 +2,9 @@
 
 #include <cch/tui/Keys.hpp>
 #include <cch/tui/Terminal.hpp>
+#include <cch/tui/TerminalColors.hpp>
 #include <cch/tui/TerminalImage.hpp>
+#include <cch/tui/TerminalResponses.hpp>
 
 #include <chrono>
 #include <string>
@@ -25,45 +27,6 @@ inline constexpr std::chrono::milliseconds kSequenceFragmentTimeout{50};
 /// configured value is a positive millisecond count; pi accepts any finite
 /// positive `Number`, so a fractional count truncates to whole milliseconds.
 [[nodiscard]] std::chrono::milliseconds resolve_escape_fragment_timeout(std::string_view configured, bool over_ssh);
-
-/// Kitty keyboard-protocol negotiation answers (behavioral baseline: pi
-/// 83114817 packages/tui/src/terminal.ts
-/// parseKeyboardProtocolNegotiationSequence): the `CSI ? flags u` flags
-/// report and the `CSI ? ... c` device-attributes sentinel that triggers the
-/// modifyOtherKeys fallback.
-enum class KeyboardProtocolResponseKind {
-    KittyFlags,
-    DeviceAttributes,
-};
-
-struct KeyboardProtocolResponse {
-    KeyboardProtocolResponseKind kind{KeyboardProtocolResponseKind::DeviceAttributes};
-    unsigned int flags{0};
-};
-
-/// Terminal appearance answers (behavioral baseline: pi 83114817
-/// packages/tui/src/terminal-colors.ts parseTerminalColorSchemeReport and
-/// parseOsc11BackgroundColor): the `CSI ? 997 ; 1|2 n` color-scheme report
-/// and the OSC 11 background-color report.
-enum class ColorSchemeResponseKind {
-    ColorScheme,
-    Background,
-};
-
-struct ColorSchemeResponse {
-    ColorSchemeResponseKind kind{ColorSchemeResponseKind::ColorScheme};
-    TerminalAppearance appearance{TerminalAppearance::Unknown};
-};
-
-/// Out-of-band terminal control responses demuxed from the raw input stream:
-/// the CPR answer to the startup DSR query (`ESC [ rows ; cols R`, ADR 0041),
-/// the `ESC [ 6 ; h ; w t` cell-size answer, keyboard-protocol negotiation,
-/// and color-scheme/background appearance reports.
-using TerminalResponseVariant = std::variant<
-    CursorPosition,
-    CellSizeResponse,
-    KeyboardProtocolResponse,
-    ColorSchemeResponse>;
 
 /// One value-batched decoder result (CODING_STANDARDS.md §3.3, §4 data
 /// contracts): `responses` holds the demuxed out-of-band terminal control
@@ -94,6 +57,8 @@ public:
     [[nodiscard]] StreamDecodeResult feed(std::string_view input);
     [[nodiscard]] StreamDecodeResult flush();
     void reset();
+    void set_demux_appearance(bool enable) noexcept { demux_appearance_ = enable; }
+    [[nodiscard]] bool demux_appearance() const noexcept { return demux_appearance_; }
     void set_kitty_protocol_active(bool active) noexcept { kitty_protocol_active_ = active; }
     [[nodiscard]] bool kitty_protocol_active() const noexcept { return kitty_protocol_active_; }
 
@@ -125,6 +90,7 @@ private:
     std::string paste_end_candidate_;
     std::size_t paste_original_bytes_{0};
     std::size_t paste_lines_{1};
+    bool demux_appearance_{true};
     bool kitty_protocol_active_{false};
 };
 

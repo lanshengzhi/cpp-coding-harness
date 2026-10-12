@@ -518,6 +518,9 @@ std::optional<std::size_t> escape_sequence_length(std::string_view pending, bool
     if (kind == ']') {
         const auto bell = pending.find('\x07', 2);
         const auto terminator = pending.find("\x1b\\", 2);
+        if (bell != std::string_view::npos && terminator != std::string_view::npos) {
+            return std::min(bell + 1, terminator + 2);
+        }
         if (bell != std::string_view::npos) return bell + 1;
         if (terminator != std::string_view::npos) return terminator + 2;
         return std::nullopt;
@@ -548,7 +551,6 @@ std::optional<std::size_t> escape_sequence_length(std::string_view pending, bool
 // these run.
 
 constexpr std::string_view kColorSchemeResponsePrefix{"\x1b[?997;"};
-constexpr std::string_view kOscBackgroundResponsePrefix{"\x1b]11;"};
 constexpr std::string_view kCellSizeResponsePrefix{"\x1b[6;"};
 
 /// Parse a complete CPR response (`ESC [ rows ; cols R`, 1-based) into a
@@ -630,88 +632,15 @@ constexpr std::string_view kCellSizeResponsePrefix{"\x1b[6;"};
     };
 }
 
-struct EnvironmentRgb {
-    int red{0};
-    int green{0};
-    int blue{0};
-};
-
-[[nodiscard]] double linear_channel(int channel) {
-    const auto value = static_cast<double>(channel) / 255.0;
+[[nodiscard]] double linear_channel(double channel) {
+    const auto value = channel / 255.0;
     return value <= 0.03928 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
 }
 
-[[nodiscard]] TerminalAppearance appearance_for_rgb(const EnvironmentRgb& rgb) {
+[[nodiscard]] TerminalAppearance appearance_for_rgb(const RgbColor& rgb) {
     const auto luminance = 0.2126 * linear_channel(rgb.red) +
         0.7152 * linear_channel(rgb.green) + 0.0722 * linear_channel(rgb.blue);
     return luminance >= 0.5 ? TerminalAppearance::Light : TerminalAppearance::Dark;
-}
-
-[[nodiscard]] std::optional<int> parse_osc_hex_channel(std::string_view channel) {
-    if (channel.empty() || channel.size() > 8) return std::nullopt;
-    std::uint64_t value = 0;
-    std::uint64_t maximum = 0;
-    for (const auto character : channel) {
-        int digit = 0;
-        if (character >= '0' && character <= '9') {
-            digit = character - '0';
-        } else if (character >= 'a' && character <= 'f') {
-            digit = 10 + character - 'a';
-        } else if (character >= 'A' && character <= 'F') {
-            digit = 10 + character - 'A';
-        } else {
-            return std::nullopt;
-        }
-        value = value * 16 + static_cast<std::uint64_t>(digit);
-        maximum = maximum * 16 + 15;
-    }
-    if (maximum == 0) return std::nullopt;
-    return static_cast<int>(std::round(static_cast<double>(value) / static_cast<double>(maximum) * 255.0));
-}
-
-[[nodiscard]] std::optional<EnvironmentRgb> parse_osc_background(std::string_view value) {
-    const auto first = value.find_first_not_of(" \t\r\n");
-    if (first == std::string_view::npos) return std::nullopt;
-    const auto last = value.find_last_not_of(" \t\r\n");
-    value = value.substr(first, last - first + 1);
-    if (value.starts_with('#')) {
-        value.remove_prefix(1);
-        if (value.size() != 6 && value.size() != 12) return std::nullopt;
-        const auto channel_width = value.size() / 3;
-        const auto red = parse_osc_hex_channel(value.substr(0, channel_width));
-        const auto green = parse_osc_hex_channel(value.substr(channel_width, channel_width));
-        const auto blue = parse_osc_hex_channel(value.substr(channel_width * 2, channel_width));
-        if (!red || !green || !blue) return std::nullopt;
-        return EnvironmentRgb{.red = *red, .green = *green, .blue = *blue};
-    }
-
-    auto lower = std::string(value.substr(0, std::min<std::size_t>(5, value.size())));
-    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char character) {
-        return static_cast<char>(std::tolower(character));
-    });
-    if (lower.starts_with("rgba:")) {
-        value.remove_prefix(5);
-    } else if (lower.starts_with("rgb:")) {
-        value.remove_prefix(4);
-    } else {
-        return std::nullopt;
-    }
-    const auto first_separator = value.find('/');
-    if (first_separator == std::string_view::npos) return std::nullopt;
-    const auto second_separator = value.find('/', first_separator + 1);
-    if (second_separator == std::string_view::npos) return std::nullopt;
-    const auto third_separator = value.find('/', second_separator + 1);
-    const auto red = parse_osc_hex_channel(value.substr(0, first_separator));
-    const auto green = parse_osc_hex_channel(value.substr(
-        first_separator + 1,
-        second_separator - first_separator - 1));
-    const auto blue = parse_osc_hex_channel(value.substr(
-        second_separator + 1,
-        third_separator == std::string_view::npos
-            ? std::string_view::npos
-            : third_separator - second_separator - 1));
-    if (!red || !green || !blue) return std::nullopt;
-    return EnvironmentRgb{.red = *red, .green = *green, .blue = *blue};
 }
 
 /// How one complete escape sequence classifies in the demux: an out-of-band
@@ -742,23 +671,31 @@ struct ResponseScan {
         }
         return scan;
     }
-    // OSC 11 background-color report (pi terminal-colors.ts
-    // parseOsc11BackgroundColor): consumed even when the body is malformed.
-    if (sequence.starts_with(kOscBackgroundResponsePrefix)) {
+    // OSC color reports: OSC 10 (foreground), OSC 11 (background), OSC 4 (palette).
+    // Consumed even when the color value is unparseable (counts as a reply).
+    if (auto osc = parse_osc_color_response(sequence)) {
         ResponseScan scan{.response = std::nullopt, .consumed = true};
-        auto body = sequence.substr(kOscBackgroundResponsePrefix.size());
-        if (body.ends_with('\x07')) {
-            body.remove_suffix(1);
-        } else if (body.ends_with("\x1b\\")) {
-            body.remove_suffix(2);
+        ColorSchemeResponseKind kind = ColorSchemeResponseKind::Background;
+        TerminalAppearance appearance = TerminalAppearance::Unknown;
+        if (osc->target.kind == OscColorTargetKind::Foreground) {
+            kind = ColorSchemeResponseKind::Foreground;
+        } else if (osc->target.kind == OscColorTargetKind::Background) {
+            kind = ColorSchemeResponseKind::Background;
+            if (osc->rgb.has_value()) {
+                appearance = appearance_for_rgb(*osc->rgb);
+            }
+        } else if (osc->target.kind == OscColorTargetKind::Palette) {
+            kind = ColorSchemeResponseKind::Palette;
         }
-        if (const auto rgb = parse_osc_background(body)) {
-            scan.response = ColorSchemeResponse{
-                .kind = ColorSchemeResponseKind::Background,
-                .appearance = appearance_for_rgb(*rgb),
-            };
-        }
+        scan.response = ColorSchemeResponse{
+                .kind = kind,
+                .appearance = appearance,
+                .color_response = std::move(osc),
+        };
         return scan;
+    }
+    if (sequence.starts_with("\x1b]10;") || sequence.starts_with("\x1b]11;") || sequence.starts_with("\x1b]4;")) {
+        return ResponseScan{.response = std::nullopt, .consumed = true};
     }
     // Cell size, CPR, and keyboard negotiation emit only on a fully valid
     // parse; a malformed lookalike stays ordinary in-band input.
@@ -779,8 +716,8 @@ struct ResponseScan {
 /// pre-unification appearance sidecar dropped them at its 150 ms deadline)
 /// instead of leaking into the user key stream.
 [[nodiscard]] bool is_appearance_response_fragment(std::string_view pending) {
-    return pending.starts_with(kColorSchemeResponsePrefix) ||
-        pending.starts_with(kOscBackgroundResponsePrefix);
+    return pending.starts_with(kColorSchemeResponsePrefix) || pending.starts_with("\x1b]10;") ||
+           pending.starts_with("\x1b]11;") || pending.starts_with("\x1b]4;");
 }
 
 [[nodiscard]] bool is_mouse_control_sequence(std::string_view sequence) {
@@ -868,7 +805,7 @@ StreamDecodeResult TerminalStreamDecoder::flush() {
         return result;
     }
     if (!pending_.empty()) {
-        if (!is_appearance_response_fragment(pending_)) {
+        if (!demux_appearance_ || !is_appearance_response_fragment(pending_)) {
             // The fragment window ended: event consumers get the best-effort
             // key decode (a lone ESC resolves to the escape key, pi's
             // fragment timeout) and byte-level consumers get the fragment
@@ -955,7 +892,17 @@ void TerminalStreamDecoder::drain(StreamDecodeResult& result, bool end_of_feed) 
                     // host instead of being consumed here. Color,
                     // keyboard-negotiation and CPR answers keep their own
                     // stages and never reach the listener chain.
-                    if (std::holds_alternative<CellSizeResponse>(*scan.response)) result.forwarded_input += sequence;
+                    if (std::holds_alternative<CellSizeResponse>(*scan.response)) {
+                        result.forwarded_input += sequence;
+                    } else if (!demux_appearance_ &&
+                               (std::holds_alternative<ColorSchemeResponse>(*scan.response) ||
+                                       (std::holds_alternative<KeyboardProtocolResponse>(*scan.response) &&
+                                               std::get<KeyboardProtocolResponse>(*scan.response).kind ==
+                                                       KeyboardProtocolResponseKind::DeviceAttributes))) {
+                        result.forwarded_input += sequence;
+                    }
+                } else if (!demux_appearance_) {
+                    result.forwarded_input += sequence;
                 }
                 continue;
             }

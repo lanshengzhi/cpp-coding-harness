@@ -5,6 +5,7 @@
 #include <cch/tui/OverlayHandle.hpp>
 #include <cch/tui/RawInputListener.hpp>
 #include <cch/tui/Terminal.hpp>
+#include <cch/tui/TerminalColors.hpp>
 #include <cch/tui/TuiScheduler.hpp>
 
 #include <cch/support/Error.hpp>
@@ -47,6 +48,22 @@ public:
 
     [[nodiscard]] virtual RawInputListenerHandle add_raw_input_listener(RawInputListener listener) = 0;
     [[nodiscard]] virtual support::ExpectedVoid remove_raw_input_listener(RawInputListenerId id) = 0;
+
+    /// Registers a listener for live terminal color-scheme notifications (CSI ? 997 ; 1|2 n).
+    [[nodiscard]] virtual TerminalColorSchemeListenerHandle on_terminal_color_scheme_change(
+            TerminalColorSchemeListener listener) = 0;
+
+    /// Enables or disables live terminal color-scheme notifications (DECSET/DECRST 2031).
+    /// Writes \x1b[?2031h / \x1b[?2031l to the terminal.
+    virtual void set_terminal_color_scheme_notifications(bool enabled) = 0;
+
+    /// Queries foreground, background, and palette colors from the terminal via OSC 10/11/4 and DA1.
+    [[nodiscard]] virtual std::future<TerminalColors> query_terminal_colors(TerminalColorsQueryOptions options) = 0;
+
+    /// Convenience overload querying terminal colors with a default timeout and no callbacks.
+    [[nodiscard]] std::future<TerminalColors> query_terminal_colors(std::chrono::milliseconds timeout) {
+        return query_terminal_colors(TerminalColorsQueryOptions{.timeout = timeout});
+    }
 
     [[nodiscard]] virtual support::Expected<OverlayHandle> show_overlay(std::unique_ptr<Overlay> overlay) = 0;
     [[nodiscard]] virtual support::Expected<std::reference_wrapper<Overlay>> add_overlay(

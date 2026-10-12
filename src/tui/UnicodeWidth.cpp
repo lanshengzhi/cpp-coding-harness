@@ -84,14 +84,31 @@ namespace {
     }
 
     const auto kind = text[position + 1];
+    // Device-attributes queries and replies (`ESC [ c`, `ESC [ ? <params> c`)
+    // are terminal-control traffic the TUI emits (#990 DA1 sentinel) and
+    // consumes; they carry no width.
+    if (kind == '[' && position + 2 < text.size() && text[position + 2] == 'c') {
+        return AnsiCode{
+                .code = std::string(text.substr(position, 3)),
+                .length = 3,
+        };
+    }
     if (kind == '[') {
         std::size_t cursor = position + 2;
         if (cursor < text.size() && text[cursor] == '?') {
             ++cursor;
-            while (cursor < text.size() && text[cursor] >= '0' && text[cursor] <= '9') {
+            while (cursor < text.size() && (text[cursor] == ';' || (text[cursor] >= '0' && text[cursor] <= '9'))) {
                 ++cursor;
             }
             if (cursor < text.size() && (text[cursor] == 'h' || text[cursor] == 'l')) {
+                return AnsiCode{
+                        .code = std::string(text.substr(position, cursor + 1 - position)),
+                        .length = cursor + 1 - position,
+                };
+            }
+            // `ESC [ ? <params> c` (device attributes) is a zero-width control
+            // reply consumed by the stream decoder (#990).
+            if (cursor < text.size() && text[cursor] == 'c') {
                 return AnsiCode{
                         .code = std::string(text.substr(position, cursor + 1 - position)),
                         .length = cursor + 1 - position,
@@ -169,9 +186,13 @@ namespace {
         // zones (`133;A`/`133;B`/`133;C`, pi's coding-agent user/assistant
         // message wrappers) are accepted as zero-width control tokens so
         // message lines can carry them through the differential renderer.
+        // OSC color reports and queries (10 foreground, 11 background,
+        // 4 palette) are the terminal-color traffic the TUI emits and
+        // consumes (#990); they carry no width either.
         const auto is_hyperlink = body.starts_with("8;") && body.find(';', 2) != std::string_view::npos;
         const auto is_osc133 = (body == "133;A" || body == "133;B" || body == "133;C");
-        if (!is_hyperlink && !is_osc133) {
+        const auto is_color_report = body.starts_with("10;") || body.starts_with("11;") || body.starts_with("4;");
+        if (!is_hyperlink && !is_osc133 && !is_color_report) {
             return std::unexpected(invalid_terminal_text("Only OSC 8 hyperlinks and OSC 133 zones are supported"));
         }
         return AnsiCode{

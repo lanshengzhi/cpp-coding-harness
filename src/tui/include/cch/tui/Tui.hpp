@@ -1,12 +1,22 @@
 #pragma once
 
 #include <cch/tui/ITui.hpp>
+#include <cch/tui/TerminalResponses.hpp>
 
+#include <array>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
+#include <cstdint>
+#include <deque>
+#include <future>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace cch::tui {
@@ -70,6 +80,11 @@ public:
     /// Remove a raw-input listener registration. Removing during a dispatch
     /// takes effect for the rest of that dispatch and every later input.
     [[nodiscard]] support::ExpectedVoid remove_raw_input_listener(RawInputListenerId id) override;
+
+    [[nodiscard]] TerminalColorSchemeListenerHandle on_terminal_color_scheme_change(
+            TerminalColorSchemeListener listener) override;
+    void set_terminal_color_scheme_notifications(bool enabled) override;
+    [[nodiscard]] std::future<TerminalColors> query_terminal_colors(TerminalColorsQueryOptions options) override;
 
     /// Add an overlay. Overlays are rendered on top of base children
     /// and support position strategies, stacking, and focus isolation.
@@ -138,6 +153,36 @@ private:
     [[nodiscard]] Focusable* find_focusable_target();
     [[nodiscard]] std::optional<CursorPosition> resolve_cursor_location() const;
 
+    struct QueryState {
+        std::uint64_t id{0};
+        std::mutex mutex;
+        std::condition_variable cv;
+        std::optional<RgbColor> foreground;
+        std::optional<RgbColor> background;
+        std::array<std::optional<RgbColor>, 16> palette{};
+        std::unordered_set<std::string> replied;
+        std::promise<TerminalColors> promise;
+        TerminalColorsCallback on_complete;
+        TerminalColorsCallback on_late_reply;
+        bool promise_resolved{false};
+        bool completed{false};
+        bool cancelled{false};
+        std::chrono::steady_clock::time_point deadline;
+
+        /// Result projection: a palette is reported only when every ANSI
+        /// color 0-15 replied.
+        [[nodiscard]] static TerminalColors build_terminal_colors(const QueryState& query);
+    };
+
+    /// Resolve a timed-out color query from its own state only. Static so the
+    /// detached timer thread never needs the MainScreen that issued it.
+    static void handle_color_query_timeout(const std::shared_ptr<QueryState>& query);
+    bool consume_terminal_color_response(const OscColorResponse& response);
+    bool consume_terminal_device_attributes();
+    void dispatch_color_scheme_report(TerminalColorScheme scheme);
+    void apply_terminal_responses(const std::vector<detail::TerminalResponseVariant>& responses);
+    void apply_cell_size_responses(const std::vector<detail::TerminalResponseVariant>& responses);
+
     Terminal& terminal_; // must outlive this MainScreen.
     std::shared_ptr<RenderScheduleState> render_schedule_state_;
     std::shared_ptr<detail::OverlayHandleContext> overlay_handle_context_;
@@ -162,6 +207,15 @@ private:
     bool pending_render_{false};
     std::size_t focus_order_counter_{0};
     OverlayFocusRestoreState overlay_focus_restore_;
+
+    bool color_scheme_notifications_enabled_{false};
+    std::mutex scheme_listeners_mutex_;
+    std::vector<std::pair<TerminalColorSchemeListenerId, TerminalColorSchemeListener>> scheme_listeners_;
+    TerminalColorSchemeListenerId next_scheme_listener_id_{1};
+
+    std::mutex color_queries_mutex_;
+    std::deque<std::shared_ptr<QueryState>> pending_color_queries_;
+    std::uint64_t next_query_id_{1};
 };
 
 using Tui = MainScreen;

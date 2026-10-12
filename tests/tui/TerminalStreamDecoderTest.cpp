@@ -208,11 +208,19 @@ TEST_CASE("stream decoder demuxes color scheme and background appearance reports
     CHECK(terminated->appearance == tui::TerminalAppearance::Dark);
 }
 
-TEST_CASE("stream decoder drops malformed appearance responses instead of forwarding them", "[tui][decoder][spec]") {
+TEST_CASE("stream decoder consumes malformed appearance responses instead of forwarding them", "[tui][decoder][spec]") {
     tui::detail::TerminalStreamDecoder decoder;
 
+    // A well-formed OSC 11 reply with an unparseable color still counts as a
+    // target reply (#990): the bytes are consumed and reported as a
+    // background response with no parsed RGB.
     const auto malformed = decoder.feed("\x1b]11;not-a-color\x07typed");
-    CHECK(malformed.responses.empty());
+    REQUIRE(malformed.responses.size() == 1);
+    const auto* background = std::get_if<tui::detail::ColorSchemeResponse>(&malformed.responses.front());
+    REQUIRE(background != nullptr);
+    CHECK(background->kind == tui::detail::ColorSchemeResponseKind::Background);
+    REQUIRE(background->color_response.has_value());
+    CHECK_FALSE(background->color_response->rgb.has_value());
     CHECK(malformed.forwarded_input == "typed");
 
     const auto unknown_value = decoder.feed("\x1b[?997;9n");
