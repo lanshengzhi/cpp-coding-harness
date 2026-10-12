@@ -34,6 +34,67 @@ struct EditorCursor {
 using EditorChangeSink = std::move_only_function<support::ExpectedVoid(std::string)>;
 using EditorSubmitSink = std::move_only_function<support::ExpectedVoid(std::string)>;
 
+/// Required editor behavior for a replaceable prompt editor. Optional editor
+/// operations are exposed by independent capability facets below.
+class EditorComponent : public Component, public InputHandler, public Focusable {
+public:
+    ~EditorComponent() override = default;
+
+    [[nodiscard]] virtual std::string text() const = 0;
+    virtual void set_text(std::string text) = 0;
+    virtual void set_on_change(EditorChangeSink sink) = 0;
+    virtual void set_on_submit(EditorSubmitSink sink) = 0;
+};
+
+/// Optional support for recording submitted prompts in editor history.
+class EditorHistorySupport {
+public:
+    virtual ~EditorHistorySupport() = default;
+    virtual void add_to_history(std::string text) = 0;
+};
+
+/// Optional support for inserting text at the editor's current cursor.
+class EditorInsertSupport {
+public:
+    virtual ~EditorInsertSupport() = default;
+    virtual void insert_text_at_cursor(std::string text) = 0;
+};
+
+/// Optional support for reading text with editor markers expanded.
+class EditorExpandedTextSupport {
+public:
+    virtual ~EditorExpandedTextSupport() = default;
+    [[nodiscard]] virtual std::string expanded_text() const = 0;
+};
+
+/// Optional support for installing an asynchronous autocomplete provider.
+class EditorAutocompleteSupport {
+public:
+    virtual ~EditorAutocompleteSupport() = default;
+    virtual void set_autocomplete_provider(std::unique_ptr<AutocompleteProvider> provider) = 0;
+};
+
+/// Optional support for changing the editor's border styling.
+class EditorBorderStyleSupport {
+public:
+    virtual ~EditorBorderStyleSupport() = default;
+    virtual void set_border_style(TextStyleHook style) = 0;
+};
+
+/// Optional support for changing horizontal editor padding.
+class EditorPaddingSupport {
+public:
+    virtual ~EditorPaddingSupport() = default;
+    virtual void set_padding_x(std::size_t padding) = 0;
+};
+
+/// Optional support for changing the maximum visible autocomplete rows.
+class EditorAutocompleteMaxVisibleSupport {
+public:
+    virtual ~EditorAutocompleteMaxVisibleSupport() = default;
+    virtual void set_autocomplete_max_visible(std::size_t max_visible) = 0;
+};
+
 /// App-layer top border replacement (pi `CustomEditor.renderTopBorder`, the
 /// embedWorkingStatus seam): invoked with the render width and the hidden
 /// scroll line count whenever the editor renders a top border. A string
@@ -85,7 +146,15 @@ struct EditorTheme {
 /// Public methods and callbacks run on the serialized execution domain.
 /// Caller-provided sinks (change/submit/render-request) must not
 /// re-enter the editor.
-class Editor final : public Component, public InputHandler, public Focusable, public ViewportAware {
+class Editor final : public EditorComponent,
+                     public EditorHistorySupport,
+                     public EditorInsertSupport,
+                     public EditorExpandedTextSupport,
+                     public EditorAutocompleteSupport,
+                     public EditorBorderStyleSupport,
+                     public EditorPaddingSupport,
+                     public EditorAutocompleteMaxVisibleSupport,
+                     public ViewportAware {
 public:
     explicit Editor(
         EditorOptions options = {},
@@ -98,22 +167,25 @@ public:
     Editor(const Editor&) = delete;
     Editor& operator=(const Editor&) = delete;
 
-    [[nodiscard]] std::string text() const;
-    [[nodiscard]] std::string expanded_text() const;
+    [[nodiscard]] std::string text() const override;
+    [[nodiscard]] std::string expanded_text() const override;
     [[nodiscard]] std::vector<std::string> lines() const;
     [[nodiscard]] EditorCursor cursor() const;
-    void set_text(std::string text);
-    void insert_text_at_cursor(std::string text);
+    void set_text(std::string text) override;
+    void insert_text_at_cursor(std::string text) override;
     /// Record a host-admitted prompt for cursor-boundary up/down recall (pi addToHistory).
-    void add_to_history(std::string text);
+    void add_to_history(std::string text) override;
+    void set_on_change(EditorChangeSink sink) override;
+    void set_on_submit(EditorSubmitSink sink) override;
+    void set_border_style(TextStyleHook style) override;
     void set_submit_disabled(bool disabled);
     [[nodiscard]] bool submit_disabled() const;
     void set_theme(EditorTheme theme);
-    void set_padding_x(std::size_t padding);
+    void set_padding_x(std::size_t padding) override;
     [[nodiscard]] std::size_t padding_x() const;
-    void set_autocomplete_max_visible(std::size_t max_visible);
+    void set_autocomplete_max_visible(std::size_t max_visible) override;
     [[nodiscard]] std::size_t autocomplete_max_visible() const;
-    void set_autocomplete_provider(std::unique_ptr<AutocompleteProvider> provider);
+    void set_autocomplete_provider(std::unique_ptr<AutocompleteProvider> provider) override;
     /// Swap the live keybinding table (pi's shared KeybindingsManager reload
     /// shape over the immutable registry, ADR 0035): subsequent input matches
     /// the new registry. Confined to the app layer's `/reload` re-catalog.

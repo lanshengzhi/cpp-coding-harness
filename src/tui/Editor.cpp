@@ -796,6 +796,22 @@ std::string Editor::text() const {
     return impl.text();
 }
 
+void Editor::set_on_change(EditorChangeSink sink) {
+    auto operation = impl_->serialized_operation(impl_);
+    operation.impl.on_change = std::move(sink);
+}
+
+void Editor::set_on_submit(EditorSubmitSink sink) {
+    auto operation = impl_->serialized_operation(impl_);
+    operation.impl.on_submit = std::move(sink);
+}
+
+void Editor::set_border_style(TextStyleHook style) {
+    auto operation = impl_->serialized_operation(impl_);
+    operation.impl.theme.border = std::move(style);
+    invalidate();
+}
+
 std::string Editor::expanded_text() const {
     auto operation = impl_->serialized_operation(impl_);
     auto& impl = operation.impl;

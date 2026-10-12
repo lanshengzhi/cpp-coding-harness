@@ -49,7 +49,120 @@ bool menu_rendered(cch::tui::Editor& editor, std::size_t width = 80) {
     }
     return nullptr;
 }
+
+class MinimalExtensionEditor : public cch::tui::EditorComponent {
+public:
+    [[nodiscard]] std::string text() const override { return text_; }
+    void set_text(std::string text) override { text_ = std::move(text); }
+    void set_on_change(cch::tui::EditorChangeSink sink) override { on_change_ = std::move(sink); }
+    void set_on_submit(cch::tui::EditorSubmitSink sink) override { on_submit_ = std::move(sink); }
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{.lines = {text_}};
+    }
+    void invalidate() override {}
+    [[nodiscard]] cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant&) override {
+        return cch::tui::InputAdmissionOutcome::Consumed;
+    }
+    void set_focused(bool focused) override { focused_ = focused; }
+    [[nodiscard]] bool focused() const override { return focused_; }
+    void change(std::string text) {
+        text_ = text;
+        if (on_change_) static_cast<void>(on_change_(std::move(text)));
+    }
+    void submit(std::string text) {
+        if (on_submit_) static_cast<void>(on_submit_(std::move(text)));
+    }
+
+private:
+    std::string text_;
+    cch::tui::EditorChangeSink on_change_;
+    cch::tui::EditorSubmitSink on_submit_;
+    bool focused_{false};
+};
+
+class HistoryExtensionEditor final : public MinimalExtensionEditor, public cch::tui::EditorHistorySupport {
+public:
+    void add_to_history(std::string text) override { history_.push_back(std::move(text)); }
+
+private:
+    std::vector<std::string> history_;
+};
 } // namespace
+
+TEST_CASE("Editor component keeps optional operations independently discoverable", "[tui][editor][issue1014]") {
+    MinimalExtensionEditor minimal;
+    std::vector<std::string> changes;
+    std::vector<std::string> submissions;
+    minimal.set_on_change([&changes](std::string text) -> cch::support::ExpectedVoid {
+        changes.push_back(std::move(text));
+        return {};
+    });
+    minimal.set_on_submit([&submissions](std::string text) -> cch::support::ExpectedVoid {
+        submissions.push_back(std::move(text));
+        return {};
+    });
+    minimal.change("draft");
+    minimal.submit("sent");
+    minimal.set_focused(true);
+    CHECK(minimal.text() == "draft");
+    CHECK(minimal.focused());
+    CHECK(minimal.render(80)->lines == std::vector<std::string>{"draft"});
+    CHECK(changes == std::vector<std::string>{"draft"});
+    CHECK(submissions == std::vector<std::string>{"sent"});
+    cch::tui::EditorComponent* minimal_capability = &minimal;
+    CHECK(dynamic_cast<cch::tui::EditorHistorySupport*>(minimal_capability) == nullptr);
+    CHECK(dynamic_cast<cch::tui::EditorInsertSupport*>(minimal_capability) == nullptr);
+    CHECK(dynamic_cast<cch::tui::EditorExpandedTextSupport*>(minimal_capability) == nullptr);
+    CHECK(dynamic_cast<cch::tui::EditorAutocompleteSupport*>(minimal_capability) == nullptr);
+    CHECK(dynamic_cast<cch::tui::EditorBorderStyleSupport*>(minimal_capability) == nullptr);
+    CHECK(dynamic_cast<cch::tui::EditorPaddingSupport*>(minimal_capability) == nullptr);
+    CHECK(dynamic_cast<cch::tui::EditorAutocompleteMaxVisibleSupport*>(minimal_capability) == nullptr);
+
+    HistoryExtensionEditor history_editor;
+    cch::tui::EditorComponent* history_capability = &history_editor;
+    auto* history_support = dynamic_cast<cch::tui::EditorHistorySupport*>(history_capability);
+    REQUIRE(history_support != nullptr);
+    history_support->add_to_history("previous prompt");
+    CHECK(dynamic_cast<cch::tui::EditorInsertSupport*>(history_capability) == nullptr);
+
+    cch::tui::Editor editor;
+    cch::tui::EditorComponent* concrete_capability = &editor;
+    CHECK(dynamic_cast<cch::tui::EditorHistorySupport*>(concrete_capability) != nullptr);
+    CHECK(dynamic_cast<cch::tui::EditorInsertSupport*>(concrete_capability) != nullptr);
+    CHECK(dynamic_cast<cch::tui::EditorExpandedTextSupport*>(concrete_capability) != nullptr);
+    CHECK(dynamic_cast<cch::tui::EditorAutocompleteSupport*>(concrete_capability) != nullptr);
+    CHECK(dynamic_cast<cch::tui::EditorBorderStyleSupport*>(concrete_capability) != nullptr);
+    CHECK(dynamic_cast<cch::tui::EditorPaddingSupport*>(concrete_capability) != nullptr);
+    CHECK(dynamic_cast<cch::tui::EditorAutocompleteMaxVisibleSupport*>(concrete_capability) != nullptr);
+}
+
+TEST_CASE("Editor component callbacks and optional border style are configurable through capabilities",
+        "[tui][editor][issue1014]") {
+    std::vector<std::string> changes;
+    std::vector<std::string> submissions;
+    cch::tui::Editor editor;
+    cch::tui::EditorComponent& capability = editor;
+    capability.set_on_change([&changes](std::string text) -> cch::support::ExpectedVoid {
+        changes.push_back(std::move(text));
+        return {};
+    });
+    capability.set_on_submit([&submissions](std::string text) -> cch::support::ExpectedVoid {
+        submissions.push_back(std::move(text));
+        return {};
+    });
+    type(editor, "prompt");
+    key(editor, "enter");
+    CHECK(changes == std::vector<std::string>{"prompt", ""});
+    CHECK(submissions == std::vector<std::string>{"prompt"});
+
+    auto* border = dynamic_cast<cch::tui::EditorBorderStyleSupport*>(&capability);
+    REQUIRE(border != nullptr);
+    border->set_border_style([](std::string text) { return "\x1b[31m" + text + "\x1b[0m"; });
+    const auto rendered = capability.render(10);
+    REQUIRE(rendered.has_value());
+    CHECK(rendered->lines.front().starts_with("\x1b[31m"));
+    CHECK(cch::tui::visible_width(rendered->lines.front()) == 10);
+}
 
 TEST_CASE("Editor edits Unicode text through semantic cursor and deletion operations",
         "[tui][editor][issue48][issue57][spec]") {
@@ -1976,14 +2089,14 @@ TEST_CASE("Editor applies a unique forced completion without opening the menu",
     auto provider = std::make_unique<HeldAutocompleteProvider>();
     auto* provider_ptr = provider.get();
     provider_ptr->response = cch::tui::AutocompleteSuggestions{
-        .items = {{.value = "src/", .label = "src/", .description = {}}},
-        .prefix = "",
+            .items = {{.value = "src/", .label = "src/", .description = {}}},
+            .prefix = "",
     };
     cch::tui::Editor editor;
     editor.set_autocomplete_provider(std::move(provider));
 
     type(editor, "ab");
-    key(editor, "tab");  // force: exactly one item applies immediately
+    key(editor, "tab"); // force: exactly one item applies immediately
     CHECK(editor.text() == "absrc/");
     CHECK_FALSE(menu_rendered(editor));
     CHECK(provider_ptr->requests.back().force);
@@ -2009,12 +2122,12 @@ TEST_CASE("Editor select.confirm applies and falls through to submit for slash c
     provider_ptr->response = slash_suggestions();
     std::vector<std::string> submitted;
     cch::tui::Editor editor(
-        {},
-        [](std::string) -> cch::support::ExpectedVoid { return {}; },
-        [&submitted](std::string text) -> cch::support::ExpectedVoid {
-            submitted.push_back(std::move(text));
-            return {};
-        });
+            {},
+            [](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [&submitted](std::string text) -> cch::support::ExpectedVoid {
+                submitted.push_back(std::move(text));
+                return {};
+            });
     editor.set_autocomplete_provider(std::move(provider));
 
     type(editor, "/");
