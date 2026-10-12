@@ -26,14 +26,14 @@ namespace cch::tui::detail {
 
 RenderPipeline::RenderPipeline(Terminal& terminal) : terminal_(terminal) {}
 
-void RenderPipeline::start(TerminalDimensions dimensions) noexcept {
+void RenderPipeline::start(TerminalDimensions) noexcept {
     first_render_ = true;
     hardware_cursor_row_ = 0;
     max_lines_rendered_ = 0;
     previous_viewport_top_ = 0;
     previous_lines_.clear();
     previous_raw_lines_.clear();
-    previous_dimensions_ = dimensions;
+    previous_dimensions_.reset();
 }
 
 void RenderPipeline::begin_frame() noexcept { frame_prepare_call_count_ = 0; }
@@ -63,7 +63,7 @@ support::ExpectedVoid RenderPipeline::stop(std::optional<CursorPosition>) {
     first_render_ = true;
     previous_lines_.clear();
     previous_raw_lines_.clear();
-    previous_dimensions_ = {};
+    previous_dimensions_.reset();
     previous_viewport_top_ = 0;
     hardware_cursor_row_ = 0;
     max_lines_rendered_ = 0;
@@ -83,7 +83,7 @@ support::ExpectedVoid RenderPipeline::clear_screen() {
     previous_viewport_top_ = 0;
     hardware_cursor_row_ = 0;
     max_lines_rendered_ = 0;
-    previous_dimensions_ = {};
+    previous_dimensions_.reset();
     first_render_ = true;
     return {};
 }
@@ -117,6 +117,8 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
         TerminalDimensions dimensions,
         TerminalCapabilities capabilities,
         bool compose_overlays,
+        bool has_overlay_entries,
+        bool clear_on_shrink,
         std::optional<CursorPosition> cursor_location) {
     auto& new_lines = materialized.lines;
     auto desired_images = std::move(materialized.images);
@@ -142,16 +144,28 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     };
 
     const bool supports_sync = capabilities.synchronized_output;
-    if (supports_sync) {
-        if (auto begin_result = terminal_.begin_synchronized_update(); !begin_result) {
-            return std::unexpected(begin_result.error());
-        }
-    }
 
     const auto height = dimensions.rows;
-    const auto width_changed = dimensions.columns != previous_dimensions_.columns;
-    const auto height_changed = dimensions.rows != previous_dimensions_.rows;
+    const auto width = dimensions.columns;
+    const bool width_changed = previous_dimensions_.has_value() && previous_dimensions_->columns != width;
+    const bool height_changed = previous_dimensions_.has_value() && previous_dimensions_->rows != height;
     const auto first_render = first_render_;
+
+    const std::size_t previous_buffer_length =
+            previous_dimensions_.has_value() ? previous_viewport_top_ + previous_dimensions_->rows : height;
+    std::size_t prev_viewport_top = height_changed
+                                            ? (previous_buffer_length >= height ? previous_buffer_length - height : 0)
+                                            : previous_viewport_top_;
+    std::size_t viewport_top = prev_viewport_top;
+    std::size_t hardware_cursor_row = hardware_cursor_row_;
+
+    const auto compute_line_diff = [&](std::size_t target_row) -> std::ptrdiff_t {
+        const auto current_screen_row =
+                static_cast<std::ptrdiff_t>(hardware_cursor_row) - static_cast<std::ptrdiff_t>(prev_viewport_top);
+        const auto target_screen_row =
+                static_cast<std::ptrdiff_t>(target_row) - static_cast<std::ptrdiff_t>(viewport_top);
+        return target_screen_row - current_screen_row;
+    };
 
     const auto pad_and_reset_rows = [&](std::vector<std::string>& lines) {
         for (auto& line : lines) {
@@ -193,25 +207,43 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     }
 
     auto full_render = [&](bool clear) -> support::ExpectedVoid {
+        if (supports_sync) {
+            if (auto begin_result = terminal_.begin_synchronized_update(); !begin_result) {
+                rollback();
+                return std::unexpected(begin_result.error());
+            }
+        }
         if (clear) {
             if (auto removed = remove_active_images(); !removed) {
+                if (supports_sync) (void)terminal_.end_synchronized_update();
                 rollback();
                 return std::unexpected(removed.error());
             }
             if (auto cleared = terminal_.clear_screen(); !cleared) {
+                if (supports_sync) (void)terminal_.end_synchronized_update();
                 rollback();
                 return std::unexpected(cleared.error());
             }
             hardware_cursor_row_ = 0;
             previous_viewport_top_ = 0;
+            hardware_cursor_row = 0;
+            prev_viewport_top = 0;
+            viewport_top = 0;
         }
         for (std::size_t i = 0; i < new_lines.size(); ++i) {
             std::string line_to_write;
             if (i > 0) line_to_write += "\r\n";
             line_to_write += new_lines[i];
             if (auto result = terminal_.write(line_to_write); !result) {
+                if (supports_sync) (void)terminal_.end_synchronized_update();
                 rollback();
                 return std::unexpected(result.error());
+            }
+        }
+        if (supports_sync) {
+            if (auto end_result = terminal_.end_synchronized_update(); !end_result) {
+                rollback();
+                return std::unexpected(end_result.error());
             }
         }
         hardware_cursor_row_ = new_lines.empty() ? 0 : new_lines.size() - 1;
@@ -231,42 +263,43 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
         return {};
     };
 
-    const auto render_finish = [&]() -> support::ExpectedVoid {
-        if (supports_sync) {
-            if (auto end_result = terminal_.end_synchronized_update(); !end_result) {
-                rollback();
-                return std::unexpected(end_result.error());
-            }
+    const auto update_images = [&]() -> support::ExpectedVoid {
+        if (auto stale_result = remove_stale_images(desired_images); !stale_result) {
+            rollback();
+            return stale_result;
+        }
+        if (auto place_result = place_images(desired_images); !place_result) {
+            rollback();
+            return place_result;
         }
         return {};
     };
 
-    if (first_render && !width_changed && !height_changed) {
+    // 1. First render
+    if ((first_render || previous_lines_.empty()) && !width_changed && !height_changed) {
         if (auto result = full_render(false); !result) return result;
-        if (auto stale_result = remove_stale_images(desired_images); !stale_result) {
-            rollback();
-            return stale_result;
-        }
-        if (auto place_result = place_images(desired_images); !place_result) {
-            rollback();
-            return place_result;
-        }
-        return render_finish();
+        return update_images();
     }
 
-    if (width_changed || height_changed) {
+    // 2. Width changed
+    if (width_changed) {
         if (auto result = full_render(true); !result) return result;
-        if (auto stale_result = remove_stale_images(desired_images); !stale_result) {
-            rollback();
-            return stale_result;
-        }
-        if (auto place_result = place_images(desired_images); !place_result) {
-            rollback();
-            return place_result;
-        }
-        return render_finish();
+        return update_images();
     }
 
+    // 3. Height changed
+    if (height_changed) {
+        if (auto result = full_render(true); !result) return result;
+        return update_images();
+    }
+
+    // 4. clearOnShrink
+    if (clear_on_shrink && new_lines.size() < max_lines_rendered_ && !has_overlay_entries) {
+        if (auto result = full_render(true); !result) return result;
+        return update_images();
+    }
+
+    // 5. Compute diff
     std::ptrdiff_t first_changed = -1;
     std::ptrdiff_t last_changed = -1;
     const auto max_lines = std::max(new_lines.size(), previous_lines_.size());
@@ -286,60 +319,35 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     const bool append_start =
             appended_lines && first_changed == static_cast<std::ptrdiff_t>(previous_lines_.size()) && first_changed > 0;
 
+    // 6. No changes - only reposition hardware cursor (no synchronized output)
     if (first_changed == -1) {
         position_hardware_cursor(cursor_location, new_lines.size());
+        previous_viewport_top_ = prev_viewport_top;
         previous_dimensions_ = dimensions;
-        if (auto stale_result = remove_stale_images(desired_images); !stale_result) {
-            rollback();
-            return stale_result;
-        }
-        if (auto place_result = place_images(desired_images); !place_result) {
-            rollback();
-            return place_result;
-        }
-        return render_finish();
+        return update_images();
     }
 
+    // 7. All changes are in deleted lines
     if (first_changed >= static_cast<std::ptrdiff_t>(new_lines.size())) {
         if (previous_lines_.size() > new_lines.size()) {
             const std::size_t target_row = new_lines.empty() ? 0 : new_lines.size() - 1;
-            if (target_row < previous_viewport_top_) {
+            if (target_row < prev_viewport_top) {
                 if (auto result = full_render(true); !result) return result;
-                if (auto stale_result = remove_stale_images(desired_images); !stale_result) {
-                    rollback();
-                    return stale_result;
-                }
-                if (auto place_result = place_images(desired_images); !place_result) {
-                    rollback();
-                    return place_result;
-                }
-                return render_finish();
+                return update_images();
+            }
+            const auto line_diff = compute_line_diff(target_row);
+            const auto extra_lines = previous_lines_.size() - new_lines.size();
+            if (extra_lines > height) {
+                if (auto result = full_render(true); !result) return result;
+                return update_images();
             }
             std::string buffer;
-            const auto current_screen_row = static_cast<std::ptrdiff_t>(hardware_cursor_row_) -
-                                            static_cast<std::ptrdiff_t>(previous_viewport_top_);
-            const auto target_screen_row =
-                    static_cast<std::ptrdiff_t>(target_row) - static_cast<std::ptrdiff_t>(previous_viewport_top_);
-            const auto line_diff = target_screen_row - current_screen_row;
             if (line_diff > 0) {
                 buffer += std::format("\x1b[{}B", line_diff);
             } else if (line_diff < 0) {
                 buffer += std::format("\x1b[{}A", -line_diff);
             }
             buffer += "\r";
-            const auto extra_lines = previous_lines_.size() - new_lines.size();
-            if (extra_lines > height) {
-                if (auto result = full_render(true); !result) return result;
-                if (auto stale_result = remove_stale_images(desired_images); !stale_result) {
-                    rollback();
-                    return stale_result;
-                }
-                if (auto place_result = place_images(desired_images); !place_result) {
-                    rollback();
-                    return place_result;
-                }
-                return render_finish();
-            }
             const std::size_t clear_start_offset = new_lines.empty() ? 0 : 1;
             if (extra_lines > 0 && clear_start_offset > 0) {
                 buffer += std::format("\x1b[{}B", clear_start_offset);
@@ -352,9 +360,22 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
             if (move_back > 0) {
                 buffer += std::format("\x1b[{}A", move_back);
             }
+            if (supports_sync) {
+                if (auto begin_result = terminal_.begin_synchronized_update(); !begin_result) {
+                    rollback();
+                    return std::unexpected(begin_result.error());
+                }
+            }
             if (auto result = terminal_.write(buffer); !result) {
+                if (supports_sync) (void)terminal_.end_synchronized_update();
                 rollback();
                 return std::unexpected(result.error());
+            }
+            if (supports_sync) {
+                if (auto end_result = terminal_.end_synchronized_update(); !end_result) {
+                    rollback();
+                    return std::unexpected(end_result.error());
+                }
             }
             hardware_cursor_row_ = target_row;
         }
@@ -362,33 +383,24 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
         previous_lines_ = std::move(new_lines);
         previous_raw_lines_ = std::move(next_raw_lines);
         previous_dimensions_ = dimensions;
-        if (auto stale_result = remove_stale_images(desired_images); !stale_result) {
-            rollback();
-            return stale_result;
-        }
-        if (auto place_result = place_images(desired_images); !place_result) {
-            rollback();
-            return place_result;
-        }
-        return render_finish();
+        previous_viewport_top_ = prev_viewport_top;
+        return update_images();
     }
 
-    if (first_changed < static_cast<std::ptrdiff_t>(previous_viewport_top_)) {
+    // 8. firstChanged < prevViewportTop
+    if (first_changed < static_cast<std::ptrdiff_t>(prev_viewport_top)) {
         if (auto result = full_render(true); !result) return result;
-        if (auto stale_result = remove_stale_images(desired_images); !stale_result) {
-            rollback();
-            return stale_result;
-        }
-        if (auto place_result = place_images(desired_images); !place_result) {
-            rollback();
-            return place_result;
-        }
-        return render_finish();
+        return update_images();
     }
 
-    std::size_t prev_viewport_top = previous_viewport_top_;
-    std::size_t viewport_top = prev_viewport_top;
-    std::size_t hardware_cursor_row = hardware_cursor_row_;
+    // 9. Differential write
+    if (supports_sync) {
+        if (auto begin_result = terminal_.begin_synchronized_update(); !begin_result) {
+            rollback();
+            return std::unexpected(begin_result.error());
+        }
+    }
+
     const std::size_t prev_viewport_bottom = prev_viewport_top + height - 1;
     const std::size_t move_target_row =
             append_start ? static_cast<std::size_t>(first_changed - 1) : static_cast<std::size_t>(first_changed);
@@ -396,25 +408,22 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     std::string buffer;
 
     if (move_target_row > prev_viewport_bottom) {
-        const std::size_t current_screen_row = std::min(
-                height - 1, hardware_cursor_row > prev_viewport_top ? hardware_cursor_row - prev_viewport_top : 0);
+        const std::size_t current_screen_row = std::min(height - 1,
+                hardware_cursor_row >= prev_viewport_top ? hardware_cursor_row - prev_viewport_top : std::size_t{0});
         const std::size_t move_to_bottom = height - 1 - current_screen_row;
         if (move_to_bottom > 0) {
             buffer += std::format("\x1b[{}B", move_to_bottom);
         }
         const std::size_t scroll = move_target_row - prev_viewport_bottom;
-        for (std::size_t s = 0; s < scroll; ++s)
+        for (std::size_t s = 0; s < scroll; ++s) {
             buffer += "\r\n";
+        }
         prev_viewport_top += scroll;
         viewport_top += scroll;
         hardware_cursor_row = move_target_row;
     }
 
-    const auto current_screen_row =
-            static_cast<std::ptrdiff_t>(hardware_cursor_row) - static_cast<std::ptrdiff_t>(prev_viewport_top);
-    const auto target_screen_row =
-            static_cast<std::ptrdiff_t>(move_target_row) - static_cast<std::ptrdiff_t>(viewport_top);
-    const auto line_diff = target_screen_row - current_screen_row;
+    const auto line_diff = compute_line_diff(move_target_row);
     if (line_diff > 0) {
         buffer += std::format("\x1b[{}B", line_diff);
     } else if (line_diff < 0) {
@@ -445,8 +454,16 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     }
 
     if (auto result = terminal_.write(buffer); !result) {
+        if (supports_sync) (void)terminal_.end_synchronized_update();
         rollback();
         return std::unexpected(result.error());
+    }
+
+    if (supports_sync) {
+        if (auto end_result = terminal_.end_synchronized_update(); !end_result) {
+            rollback();
+            return std::unexpected(end_result.error());
+        }
     }
 
     hardware_cursor_row_ = final_cursor_row;
@@ -458,15 +475,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     previous_lines_ = std::move(new_lines);
     previous_raw_lines_ = std::move(next_raw_lines);
     previous_dimensions_ = dimensions;
-    if (auto stale_result = remove_stale_images(desired_images); !stale_result) {
-        rollback();
-        return stale_result;
-    }
-    if (auto place_result = place_images(desired_images); !place_result) {
-        rollback();
-        return place_result;
-    }
-    return render_finish();
+    return update_images();
 }
 
 support::ExpectedVoid RenderPipeline::remove_active_images() {
@@ -476,22 +485,6 @@ support::ExpectedVoid RenderPipeline::remove_active_images() {
             return std::unexpected(removed.error());
         }
         active_images_.pop_back();
-    }
-    return {};
-}
-
-support::ExpectedVoid RenderPipeline::remove_images_intersecting(const CellRegion& region) {
-    std::size_t index = 0;
-    while (index < active_images_.size()) {
-        const auto& image = active_images_[index];
-        if (!detail::cell_regions_intersect(image.region, region)) {
-            ++index;
-            continue;
-        }
-        if (auto removed = terminal_.remove_image(image.handle, image.region); !removed) {
-            return std::unexpected(removed.error());
-        }
-        active_images_.erase(active_images_.begin() + static_cast<std::ptrdiff_t>(index));
     }
     return {};
 }

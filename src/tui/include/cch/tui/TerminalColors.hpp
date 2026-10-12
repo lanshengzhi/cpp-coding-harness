@@ -94,9 +94,12 @@ struct OscColorTarget {
 
     [[nodiscard]] std::string key() const {
         switch (kind) {
-            case OscColorTargetKind::Foreground: return "foreground";
-            case OscColorTargetKind::Background: return "background";
-            case OscColorTargetKind::Palette: return std::to_string(palette_index);
+        case OscColorTargetKind::Foreground:
+            return "foreground";
+        case OscColorTargetKind::Background:
+            return "background";
+        case OscColorTargetKind::Palette:
+            return std::to_string(palette_index);
         }
         return {};
     }

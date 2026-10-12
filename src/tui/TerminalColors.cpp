@@ -46,12 +46,12 @@ std::optional<int> parse_osc_hex_channel(std::string_view channel) {
 }
 
 std::optional<RgbColor> parse_osc_color_value(std::string_view raw_value) {
-    while (!raw_value.empty() && (raw_value.front() == ' ' || raw_value.front() == '\t' ||
-                                  raw_value.front() == '\r' || raw_value.front() == '\n')) {
+    while (!raw_value.empty() && (raw_value.front() == ' ' || raw_value.front() == '\t' || raw_value.front() == '\r' ||
+                                         raw_value.front() == '\n')) {
         raw_value.remove_prefix(1);
     }
-    while (!raw_value.empty() && (raw_value.back() == ' ' || raw_value.back() == '\t' ||
-                                  raw_value.back() == '\r' || raw_value.back() == '\n')) {
+    while (!raw_value.empty() && (raw_value.back() == ' ' || raw_value.back() == '\t' || raw_value.back() == '\r' ||
+                                         raw_value.back() == '\n')) {
         raw_value.remove_suffix(1);
     }
     if (raw_value.empty()) return std::nullopt;
@@ -64,9 +64,9 @@ std::optional<RgbColor> parse_osc_color_value(std::string_view raw_value) {
             const auto b = parse_osc_hex_channel(hex.substr(4, 2));
             if (!r || !g || !b) return std::nullopt;
             return RgbColor{
-                .red = static_cast<double>(*r),
-                .green = static_cast<double>(*g),
-                .blue = static_cast<double>(*b),
+                    .red = static_cast<double>(*r),
+                    .green = static_cast<double>(*g),
+                    .blue = static_cast<double>(*b),
             };
         }
         if (hex.size() == 12) {
@@ -75,9 +75,9 @@ std::optional<RgbColor> parse_osc_color_value(std::string_view raw_value) {
             const auto b = parse_osc_hex_channel(hex.substr(8, 4));
             if (!r || !g || !b) return std::nullopt;
             return RgbColor{
-                .red = static_cast<double>(*r),
-                .green = static_cast<double>(*g),
-                .blue = static_cast<double>(*b),
+                    .red = static_cast<double>(*r),
+                    .green = static_cast<double>(*g),
+                    .blue = static_cast<double>(*b),
             };
         }
         return std::nullopt;
@@ -108,9 +108,9 @@ std::optional<RgbColor> parse_osc_color_value(std::string_view raw_value) {
     const auto b = parse_osc_hex_channel(blue_part);
     if (!r || !g || !b) return std::nullopt;
     return RgbColor{
-        .red = static_cast<double>(*r),
-        .green = static_cast<double>(*g),
-        .blue = static_cast<double>(*b),
+            .red = static_cast<double>(*r),
+            .green = static_cast<double>(*g),
+            .blue = static_cast<double>(*b),
     };
 }
 
@@ -156,8 +156,8 @@ std::optional<OscColorResponse> parse_osc_color_response(std::string_view data) 
     }
 
     return OscColorResponse{
-        .target = target,
-        .rgb = parse_osc_color_value(raw_value),
+            .target = target,
+            .rgb = parse_osc_color_value(raw_value),
     };
 }
 

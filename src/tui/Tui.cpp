@@ -550,6 +550,7 @@ support::ExpectedVoid MainScreen::render_frame() {
     // compositing leaves the composed rows untouched and preparation can follow
     // the differential state, so only changed rows are prepared (#711).
     const bool compose_overlays = compositor_->has_visible_overlays(dimensions);
+    const bool has_overlay_entries = compositor_->has_overlay_entries();
     render_pipeline_->begin_frame();
     auto rendered = render_children(dimensions, compose_overlays);
     if (!rendered) return std::unexpected(rendered.error());
@@ -563,8 +564,13 @@ support::ExpectedVoid MainScreen::render_frame() {
     }
     const auto cursor_location = materialized.cursor ? materialized.cursor : resolve_cursor_location();
     materialized.cursor.reset();
-    auto result = render_pipeline_->render(
-            std::move(materialized), dimensions, capabilities, compose_overlays, cursor_location);
+    auto result = render_pipeline_->render(std::move(materialized),
+            dimensions,
+            capabilities,
+            compose_overlays,
+            has_overlay_entries,
+            clear_on_shrink_,
+            cursor_location);
     return result;
 }
 

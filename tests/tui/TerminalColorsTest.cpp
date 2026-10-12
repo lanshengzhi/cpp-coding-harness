@@ -66,8 +66,7 @@ TEST_CASE("OSC color values parse every supported form", "[tui][theme][issue990]
     CHECK_FALSE(tui::parse_osc_color_value("rgb:ff/00").has_value());
 }
 
-TEST_CASE("OSC color responses demux foreground, background, and palette targets",
-        "[tui][theme][issue990][spec]") {
+TEST_CASE("OSC color responses demux foreground, background, and palette targets", "[tui][theme][issue990][spec]") {
     const auto foreground = tui::parse_osc_color_response("\x1b]10;#010203\x07");
     REQUIRE(foreground.has_value());
     CHECK(foreground->target.kind == tui::OscColorTargetKind::Foreground);
@@ -107,8 +106,7 @@ TEST_CASE("OSC color responses demux foreground, background, and palette targets
     CHECK_FALSE(tui::parse_osc_color_response("\x1b]4;#010203\x07").has_value());
 }
 
-TEST_CASE("terminal color scheme reports parse single and concatenated reports",
-        "[tui][theme][issue990][spec]") {
+TEST_CASE("terminal color scheme reports parse single and concatenated reports", "[tui][theme][issue990][spec]") {
     CHECK(tui::parse_terminal_color_scheme_report("\x1b[?997;1n") == tui::TerminalColorScheme::Dark);
     CHECK(tui::parse_terminal_color_scheme_report("\x1b[?997;2n") == tui::TerminalColorScheme::Light);
     // Concatenated reports keep the last valid value.
@@ -176,7 +174,8 @@ public:
 
     [[nodiscard]] std::string written() const {
         std::string all;
-        for (const auto& chunk : terminal_.output()) all += chunk;
+        for (const auto& chunk : terminal_.output())
+            all += chunk;
         return all;
     }
 
@@ -190,7 +189,8 @@ private:
 TEST_CASE("query completes when every color target replies", "[tui][theme][issue990][spec]") {
     ColorQueryHost host;
     CHECK(host.written().empty());
-    auto future = host.tui().query_terminal_colors(tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
+    auto future = host.tui().query_terminal_colors(
+            tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
     // The exact single request burst pi emits: OSC 10, OSC 11, OSC 4;0..15, DA1.
     CHECK(host.written() == tui::build_terminal_color_query());
 
@@ -198,8 +198,7 @@ TEST_CASE("query completes when every color target replies", "[tui][theme][issue
     REQUIRE(host.type("\x1b]10;#010203\x07"));
     REQUIRE(host.type("\x1b]11;#040506\x07"));
     for (int index = 0; index < 16; ++index) {
-        REQUIRE(host.type("\x1b]4;" + std::to_string(index) + ";#0" + std::to_string(index % 10) +
-                          "0000\x07"));
+        REQUIRE(host.type("\x1b]4;" + std::to_string(index) + ";#0" + std::to_string(index % 10) + "0000\x07"));
     }
 
     REQUIRE(future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready);
@@ -218,7 +217,8 @@ TEST_CASE("query completes when every color target replies", "[tui][theme][issue
 
 TEST_CASE("a DA1 reply completes a query that ignored the color requests", "[tui][theme][issue990][spec]") {
     ColorQueryHost host;
-    auto future = host.tui().query_terminal_colors(tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
+    auto future = host.tui().query_terminal_colors(
+            tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
 
     // Terminals that do not answer OSC color queries still answer DA1, which
     // is the end-of-replies sentinel.
@@ -234,7 +234,8 @@ TEST_CASE("a DA1 reply completes a query that ignored the color requests", "[tui
 
 TEST_CASE("a partial palette is never exposed", "[tui][theme][issue990][spec]") {
     ColorQueryHost host;
-    auto future = host.tui().query_terminal_colors(tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
+    auto future = host.tui().query_terminal_colors(
+            tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
 
     REQUIRE(host.type("\x1b]4;0;#010203\x07\x1b]4;1;#040506\x07\x1b[?1;2c"));
     REQUIRE(future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready);
@@ -244,7 +245,8 @@ TEST_CASE("a partial palette is never exposed", "[tui][theme][issue990][spec]") 
 
 TEST_CASE("duplicate replies do not resolve a query early", "[tui][theme][issue990][spec]") {
     ColorQueryHost host;
-    auto future = host.tui().query_terminal_colors(tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
+    auto future = host.tui().query_terminal_colors(
+            tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
 
     // Eighteen replies of the background target only: every duplicate is
     // counted once, so the query stays pending.
@@ -260,8 +262,8 @@ TEST_CASE("duplicate replies do not resolve a query early", "[tui][theme][issue9
     CHECK_FALSE(colors.palette.has_value());
 }
 
-TEST_CASE("a timed-out query resolves partial results and later replies advance state",
-        "[tui][theme][issue990][spec]") {
+TEST_CASE(
+        "a timed-out query resolves partial results and later replies advance state", "[tui][theme][issue990][spec]") {
     ColorQueryHost host;
     std::atomic<int> complete_calls{0};
     std::atomic<int> late_calls{0};
@@ -269,14 +271,16 @@ TEST_CASE("a timed-out query resolves partial results and later replies advance 
 
     auto future = host.tui().query_terminal_colors(tui::TerminalColorsQueryOptions{
             .timeout = std::chrono::milliseconds(30),
-            .on_complete = [&](tui::TerminalColors colors) {
-                ++complete_calls;
-                CHECK_FALSE(colors.background.has_value());
-            },
-            .on_late_reply = [&](tui::TerminalColors colors) {
-                ++late_calls;
-                late_colors = colors;
-            },
+            .on_complete =
+                    [&](tui::TerminalColors colors) {
+                        ++complete_calls;
+                        CHECK_FALSE(colors.background.has_value());
+                    },
+            .on_late_reply =
+                    [&](tui::TerminalColors colors) {
+                        ++late_calls;
+                        late_colors = colors;
+                    },
     });
 
     // One reply before the deadline: the timeout resolves the partial result.
@@ -325,8 +329,7 @@ TEST_CASE("stopping the Tui cancels pending query callbacks", "[tui][theme][issu
     REQUIRE(tui.stop());
 }
 
-TEST_CASE("scheme notifications toggle mode 2031 while running and on start/stop",
-        "[tui][theme][issue990][spec]") {
+TEST_CASE("scheme notifications toggle mode 2031 while running and on start/stop", "[tui][theme][issue990][spec]") {
     tui::VirtualTerminal terminal({.columns = 40, .rows = 6});
     tui::Tui tui(terminal);
 
@@ -335,7 +338,8 @@ TEST_CASE("scheme notifications toggle mode 2031 while running and on start/stop
     REQUIRE(tui.start());
     const auto started_output = [&] {
         std::string all;
-        for (const auto& chunk : terminal.output()) all += chunk;
+        for (const auto& chunk : terminal.output())
+            all += chunk;
         return all;
     }();
     CHECK(started_output.find("\x1b[?2031h") != std::string::npos);
@@ -369,17 +373,16 @@ TEST_CASE("scheme notifications toggle mode 2031 while running and on start/stop
 TEST_CASE("scheme listeners fire per report and unsubscribe by handle", "[tui][theme][issue990][spec]") {
     ColorQueryHost host;
     std::vector<tui::TerminalColorScheme> observed;
-    auto handle = host.tui().on_terminal_color_scheme_change([&](tui::TerminalColorScheme scheme) {
-        observed.push_back(scheme);
-    });
+    auto handle = host.tui().on_terminal_color_scheme_change(
+            [&](tui::TerminalColorScheme scheme) { observed.push_back(scheme); });
     CHECK(handle.active());
 
     // Concatenated reports each fire the listener.
     REQUIRE(host.type("\x1b[?997;1n\x1b[?997;2n"));
     REQUIRE(observed == std::vector<tui::TerminalColorScheme>{
-                               tui::TerminalColorScheme::Dark,
-                               tui::TerminalColorScheme::Light,
-                           });
+                                tui::TerminalColorScheme::Dark,
+                                tui::TerminalColorScheme::Light,
+                        });
 
     handle.reset();
     CHECK_FALSE(handle.active());
@@ -388,7 +391,8 @@ TEST_CASE("scheme listeners fire per report and unsubscribe by handle", "[tui][t
 
     // Reports never reach a component's typed input, and typing mixed with a
     // report and color replies still resolves the pending query.
-    auto future = host.tui().query_terminal_colors(tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
+    auto future = host.tui().query_terminal_colors(
+            tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
     REQUIRE(host.type("abc\x1b[?997;2n\x1b]11;#040506\x07\x1b[?1;2c"));
     REQUIRE(future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready);
     const auto colors = future.get();
@@ -398,8 +402,7 @@ TEST_CASE("scheme listeners fire per report and unsubscribe by handle", "[tui][t
     CHECK(observed.size() == 2);
 }
 
-TEST_CASE("color and scheme replies never reach a component's typed input",
-        "[tui][theme][issue990][spec]") {
+TEST_CASE("color and scheme replies never reach a component's typed input", "[tui][theme][issue990][spec]") {
     ColorQueryHost host;
     auto component = std::make_unique<KeyRecordingComponent>();
     auto* component_ptr = component.get();
@@ -410,7 +413,8 @@ TEST_CASE("color and scheme replies never reach a component's typed input",
     // replies, and the DA1 sentinel that ends the reply burst.
     auto future = host.tui().query_terminal_colors(
             tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds(5000)});
-    REQUIRE(host.type("ab\x1b]10;#010203\x07\x1b[?997;1n" "c\x1b]11;#040506\x07\x1b[?1;2c"));
+    REQUIRE(host.type("ab\x1b]10;#010203\x07\x1b[?997;1n"
+                      "c\x1b]11;#040506\x07\x1b[?1;2c"));
 
     REQUIRE(future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready);
     // The component saw exactly the typed letters: no reply bytes and no

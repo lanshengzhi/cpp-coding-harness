@@ -51,10 +51,7 @@ struct ColorSchemeResponse {
 /// the CPR answer to the startup DSR query (`ESC [ rows ; cols R`, ADR 0041),
 /// the `ESC [ 6 ; h ; w t` cell-size answer, keyboard-protocol negotiation,
 /// and color-scheme/color reports.
-using TerminalResponseVariant = std::variant<
-        CursorPosition,
-        CellSizeResponse,
-        KeyboardProtocolResponse,
-        ColorSchemeResponse>;
+using TerminalResponseVariant =
+        std::variant<CursorPosition, CellSizeResponse, KeyboardProtocolResponse, ColorSchemeResponse>;
 
 } // namespace cch::tui::detail

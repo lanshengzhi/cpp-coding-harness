@@ -42,6 +42,8 @@ public:
     virtual void request_render(bool force = false) = 0;
     virtual void request_immediate_render() = 0;
     virtual void invalidate() = 0;
+    virtual void set_clear_on_shrink(bool enabled) noexcept = 0;
+    [[nodiscard]] virtual bool clear_on_shrink() const noexcept = 0;
     virtual void set_scheduler(TuiScheduler* scheduler) = 0;
     virtual void set_render_prepare_sink(TuiRenderPrepareSink sink) = 0;
     virtual void set_render_complete_sink(TuiRenderCompleteSink sink) = 0;

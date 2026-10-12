@@ -68,6 +68,8 @@ public:
     void request_render(bool force = false) override;
     void request_immediate_render() override;
     void invalidate() override;
+    void set_clear_on_shrink(bool enabled) noexcept override { clear_on_shrink_ = enabled; }
+    [[nodiscard]] bool clear_on_shrink() const noexcept override { return clear_on_shrink_; }
     void set_scheduler(TuiScheduler* scheduler) override;
     void set_render_prepare_sink(TuiRenderPrepareSink sink) override;
     void set_render_complete_sink(TuiRenderCompleteSink sink) override;
@@ -202,6 +204,7 @@ private:
     bool rendered_children_valid_{false};
     std::size_t child_operation_depth_{0};
     Component* focused_{nullptr}; // Null or aliases an element owned by children_ or the compositor's overlays.
+    bool clear_on_shrink_{false};
     bool started_{false};
     bool stopping_{false};
     bool pending_render_{false};

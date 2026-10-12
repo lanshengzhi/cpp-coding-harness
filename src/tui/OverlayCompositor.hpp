@@ -78,6 +78,9 @@ public:
     /// composed rows, so the buffer must stay in its prepared form.
     [[nodiscard]] bool has_visible_overlays(TerminalDimensions dimensions) const;
 
+    /// Whether any overlay entry exists (visible or hidden). Used to gate clearOnShrink.
+    [[nodiscard]] bool has_overlay_entries() const noexcept { return !overlays_.empty(); }
+
     // --- Input ---
 
     /// Legacy compositor probe retained for standalone routing tests.

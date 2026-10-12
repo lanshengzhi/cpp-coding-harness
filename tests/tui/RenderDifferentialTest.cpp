@@ -12,6 +12,7 @@
 #include <charconv>
 #include <format>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -487,6 +488,204 @@ TEST_CASE("A Preview Frame that changes nothing prepares no composed rows", "[tu
     CHECK(terminal.screen() == first_screen);
 }
 
+TEST_CASE("A spinner update rewrites only its row and keeps the frozen viewport", "[tui][render][issue984][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 4});
+    cch::tui::Tui tui(terminal);
+
+    auto text = std::make_unique<FixedTextComponent>(session_rows(6));
+    auto* text_ptr = text.get();
+    REQUIRE(tui.add_child(std::move(text)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // Six lines on a four-row viewport scrolled the first two into the
+    // terminal's history; the viewport holds buffer rows 2..5.
+    const std::vector<std::string> frozen_scrollback{"row-0000", "row-0001"};
+    CHECK(terminal.scrollback() == frozen_scrollback);
+    const std::vector<std::string> frozen_viewport{"row-0002", "row-0003", "row-0004", "row-0005"};
+    CHECK(terminal.screen() == frozen_viewport);
+    (void)terminal.check_clear_screen_called();
+
+    // A spinner tick on the last visible row (pi firstChanged == viewportTop
+    // + 3) diffs in place: the frozen history and the rows above the change
+    // are never rewritten, and no full redraw is requested.
+    auto lines = session_rows(6);
+    lines.back() = "row-spin";
+    text_ptr->set_lines(std::move(lines));
+    const auto writes_before = terminal.output().size();
+    REQUIRE(tui.render());
+    CHECK_FALSE(terminal.check_clear_screen_called());
+    CHECK(terminal.scrollback() == frozen_scrollback);
+    const std::vector<std::string> spun_viewport{"row-0002", "row-0003", "row-0004", "row-spin"};
+    CHECK(terminal.screen() == spun_viewport);
+
+    // The frame is one synchronized differential write: begin, the changed
+    // row with its line-flow move, end. Exactly one row is rewritten, and the
+    // single erase covers only that row.
+    const auto diff = std::span(terminal.output()).subspan(writes_before);
+    REQUIRE(diff.size() == 3);
+    CHECK(diff[0] == "\x1b[?2026h");
+    CHECK(diff[1].find("row-spin") != std::string::npos);
+    CHECK(diff[1].find("row-0004") == std::string::npos);
+    CHECK(diff[1].find("\x1b[2K") != std::string::npos);
+    CHECK(diff[1].find("\x1b[2K", diff[1].find("\x1b[2K") + 1) == std::string::npos);
+    CHECK(diff[2] == "\x1b[?2026l");
+    // The change sits on the last viewport row, so no scrolling was needed and
+    // the cursor stays on that row.
+    CHECK(diff[1].find("\r\n") == std::string::npos);
+    CHECK(terminal.cursor().row == 3);
+}
+
+TEST_CASE("clearOnShrink clears the screen when content shrinks below the working area",
+        "[tui][render][issue984][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 4});
+    cch::tui::Tui tui(terminal);
+    tui.set_clear_on_shrink(true);
+
+    auto text = std::make_unique<FixedTextComponent>(session_rows(6));
+    auto* text_ptr = text.get();
+    REQUIRE(tui.add_child(std::move(text)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    (void)terminal.check_clear_screen_called();
+
+    // Two lines are below the highest line count ever rendered (pi
+    // clearOnShrink: newLines.length < maxLinesRendered), so pi re-renders
+    // from a clean screen clearing viewport and scrollback together.
+    text_ptr->set_lines({"row-0000", "row-0001"});
+    REQUIRE(tui.render());
+    CHECK(terminal.check_clear_screen_called());
+    CHECK(terminal.check_clear_scrollback_called());
+
+    const std::vector<std::string> expected_viewport{"row-0000", "row-0001", "", ""};
+    CHECK(terminal.screen() == expected_viewport);
+    CHECK(terminal.scrollback().empty());
+    // fullRender recomputes the viewport top from the cleared buffer.
+    CHECK(terminal.viewport_top() == 0);
+    CHECK(terminal.cursor().row == 1);
+}
+
+TEST_CASE("An active overlay inhibits clearOnShrink and diffs the shrink in place", "[tui][render][issue984][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 5, .rows = 4});
+    cch::tui::Tui tui(terminal);
+    tui.set_clear_on_shrink(true);
+
+    auto text = std::make_unique<FixedTextComponent>(std::vector<std::string>{"row-0", "row-1", "row-2", "row-3"});
+    auto* text_ptr = text.get();
+    REQUIRE(tui.add_child(std::move(text)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // Four 5-column rows fill the 4-row viewport exactly, so no history is
+    // scrolled out.
+    REQUIRE(terminal.viewport_top() == 0);
+
+    cch::tui::OverlayOptions options;
+    options.width = 1.0;
+    options.col = 0.0;
+    options.row = 0.0;
+    auto overlay = std::make_unique<cch::tui::Overlay>(options);
+    REQUIRE(overlay->add_child(std::make_unique<FixedTextComponent>(std::vector<std::string>{"*"})));
+    REQUIRE(tui.add_overlay(std::move(overlay)));
+    REQUIRE(tui.render());
+    // The 1x1 overlay's `*` paints over the top-left cell of the visible
+    // viewport; the base rows underneath are untouched.
+    REQUIRE(terminal.screen().front() == "*ow-0");
+    (void)terminal.check_clear_screen_called();
+
+    // (pi clearOnShrink and !hasOverlayEntries): the overlay needs the padded
+    // viewport, so the same shrink diffs in place instead of clearing.
+    text_ptr->set_lines({"row-0", "row-1"});
+    REQUIRE(tui.render());
+    CHECK_FALSE(terminal.check_clear_screen_called());
+    CHECK_FALSE(terminal.check_clear_scrollback_called());
+    const std::vector<std::string> expected_viewport{"*ow-0", "row-1", "     ", "     "};
+    CHECK(terminal.screen() == expected_viewport);
+}
+
+TEST_CASE("A rewrap after overflow reflows from a clean screen and re-anchors the viewport",
+        "[tui][render][issue984][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 3});
+    cch::tui::Tui tui(terminal);
+
+    // Nine 8-column rows wrap into 18 lines at 4 columns.
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>(std::string(8 * 9, 'x'), 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(terminal.scrollback().size() == 15);
+    REQUIRE(terminal.viewport_top() == 15);
+
+    // Widening to 8 columns undoes every wrap: nine rows remain, so pi still
+    // clears and re-anchors the viewport at buffer row 6 (9 - 3 visible rows).
+    REQUIRE(terminal.inject_resize({.columns = 8, .rows = 3}));
+    (void)terminal.check_clear_screen_called();
+    REQUIRE(tui.render());
+    CHECK(terminal.check_clear_screen_called());
+    CHECK(terminal.check_clear_scrollback_called());
+    REQUIRE(terminal.screen().size() == 3);
+    CHECK(terminal.viewport_top() == 6);
+    CHECK(terminal.screen().back() == std::string(8, 'x'));
+
+    // fullRender recomputes the top from the reflowed buffer instead of keeping
+    // the pre-resize top of 15.
+    CHECK(terminal.cursor().row == 2);
+}
+
+TEST_CASE(
+        "A height shrink re-anchors the viewport top to the previous buffer length", "[tui][render][issue984][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 5});
+    cch::tui::Tui tui(terminal);
+
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>(std::string(8 * 8, 'y'), 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // Eight rows on a five-row viewport scrolled three into the history.
+    REQUIRE(terminal.viewport_top() == 3);
+    REQUIRE(terminal.inject_resize({.columns = 8, .rows = 3}));
+    (void)terminal.check_clear_screen_called();
+
+    // pi recomputes prevViewportTop from the previous buffer length (8 rows on
+    // a now-3-row viewport) instead of reusing the stale top of 3.
+    REQUIRE(tui.render());
+    CHECK(terminal.check_clear_screen_called());
+    CHECK(terminal.check_clear_scrollback_called());
+    REQUIRE(terminal.screen().size() == 3);
+    CHECK(terminal.viewport_top() == 5);
+    CHECK(terminal.screen().back() == std::string(8, 'y'));
+    CHECK(terminal.cursor().row == 2);
+}
+
+TEST_CASE(
+        "Growing past the viewport scrolls with CRLF and re-anchors the buffer top", "[tui][render][issue984][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 6, .rows = 4});
+    cch::tui::Tui tui(terminal);
+
+    auto text = std::make_unique<FixedTextComponent>(std::vector<std::string>{"aaa", "bbb", "ccc", "ddd"});
+    auto* text_ptr = text.get();
+    REQUIRE(tui.add_child(std::move(text)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // Four rows exactly fill the viewport, so the buffer top is still row 0.
+    REQUIRE(terminal.viewport_top() == 0);
+    REQUIRE(terminal.scrollback().empty());
+
+    // Two more rows push the buffer past the viewport: pi appends with a plain
+    // CRLF scroll instead of a full redraw, so the scrolled-off rows land in
+    // scrollback and the tracked buffer top advances by the scrolled amount.
+    text_ptr->set_lines({"aaa", "bbb", "ccc", "ddd", "eee", "fff"});
+    REQUIRE(tui.render());
+
+    CHECK_FALSE(terminal.check_clear_screen_called());
+    CHECK_FALSE(terminal.check_clear_scrollback_called());
+    const std::vector<std::string> expected_scrollback{"aaa   ", "bbb   "};
+    CHECK(terminal.scrollback() == expected_scrollback);
+    CHECK(terminal.viewport_top() == 2);
+    const std::vector<std::string> expected_screen{"ccc   ", "ddd   ", "eee   ", "fff   "};
+    CHECK(terminal.screen() == expected_screen);
+}
+
 TEST_CASE("A one-row view change prepares only the changed composed row", "[tui][render][issue711][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 8});
     cch::tui::Tui tui(terminal);
@@ -505,4 +704,3 @@ TEST_CASE("A one-row view change prepares only the changed composed row", "[tui]
     CHECK(cch::tui::detail::testing::frame_prepare_call_count(tui) == 1);
     CHECK(terminal.screen().front() == "one       ");
 }
-

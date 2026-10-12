@@ -36,7 +36,7 @@ public:
     /// The dimensions of the last committed frame: the geometry basis the
     /// compositor's overlay dispatch and focus queries read between frames.
     [[nodiscard]] TerminalDimensions committed_dimensions() const noexcept {
-        return previous_dimensions_;
+        return previous_dimensions_.value_or(TerminalDimensions{});
     }
     [[nodiscard]] support::ExpectedVoid stop(std::optional<CursorPosition> stop_cursor);
     [[nodiscard]] support::ExpectedVoid clear_screen();
@@ -44,6 +44,8 @@ public:
             TerminalDimensions dimensions,
             TerminalCapabilities capabilities,
             bool compose_overlays,
+            bool has_overlay_entries,
+            bool clear_on_shrink,
             std::optional<CursorPosition> cursor_location);
 
 private:
@@ -55,7 +57,6 @@ private:
     };
 
     [[nodiscard]] support::ExpectedVoid remove_active_images();
-    [[nodiscard]] support::ExpectedVoid remove_images_intersecting(const CellRegion& region);
     [[nodiscard]] support::ExpectedVoid remove_stale_images(
             const std::vector<InlineImageRenderRegion>& desired_images);
     [[nodiscard]] support::ExpectedVoid place_images(const std::vector<InlineImageRenderRegion>& desired_images);
@@ -69,9 +70,9 @@ private:
     std::size_t hardware_cursor_row_{0};
     std::size_t max_lines_rendered_{0};
     std::size_t previous_viewport_top_{0};
-    /// The last committed frame's dimensions: set at start, committed with a
+    /// The last committed frame's dimensions: reset at start, committed with a
     /// successful render, and reset by clear_screen.
-    TerminalDimensions previous_dimensions_{};
+    std::optional<TerminalDimensions> previous_dimensions_{};
     std::vector<ActiveImage> active_images_;
 
     void position_hardware_cursor(const std::optional<CursorPosition>& cursor_pos, std::size_t total_lines);
