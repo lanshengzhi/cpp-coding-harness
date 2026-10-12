@@ -244,8 +244,8 @@ TEST_CASE("Clipboard copy in a remote session reaches the client clipboard throu
         const auto result = terminal.copy("hello", environment);
         CHECK(result.copied);
         REQUIRE(terminal.sequences().size() == 1);
-        CHECK(bin.invocations() == std::vector<std::string>{"xclip -selection clipboard hello",
-                                                   "xsel --clipboard --input hello"});
+        CHECK(bin.invocations() ==
+                std::vector<std::string>{"xclip -selection clipboard hello", "xsel --clipboard --input hello"});
     }
 
     SECTION("a non-Linux remote session never runs a Linux helper") {
@@ -300,8 +300,8 @@ TEST_CASE("WSL copy prefers OSC 52 under Windows Terminal and otherwise round-tr
         CHECK(result.copied);
         CHECK(result.error.empty());
         REQUIRE(terminal.sequences().size() == 1);
-        CHECK(bin.invocations() == std::vector<std::string>{"xclip -selection clipboard " + text,
-                                                   "xsel --clipboard --input " + text});
+        CHECK(bin.invocations() ==
+                std::vector<std::string>{"xclip -selection clipboard " + text, "xsel --clipboard --input " + text});
     }
 
     SECTION("without Windows Terminal PowerShell reads the UTF-8 temporary file") {
@@ -318,9 +318,9 @@ TEST_CASE("WSL copy prefers OSC 52 under Windows Terminal and otherwise round-tr
         CHECK(bin.invocations()[1] == "xsel --clipboard --input " + text);
         CHECK(bin.invocations()[2].starts_with("wslpath -w "));
         CHECK(bin.invocations()[3] == "powershell.exe -NoProfile -Command " +
-                        std::format("Set-Clipboard -Value ([System.IO.File]::ReadAllText('{}', "
-                                    "[System.Text.Encoding]::UTF8))",
-                                expected_windows_path));
+                                              std::format("Set-Clipboard -Value ([System.IO.File]::ReadAllText('{}', "
+                                                          "[System.Text.Encoding]::UTF8))",
+                                                      expected_windows_path));
         // pi writes the text as UTF-8 into a 0600 temporary file and always
         // removes it, whichever way the round trip ended.
         CHECK(read_file(saved_copy) == text);

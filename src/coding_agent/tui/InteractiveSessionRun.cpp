@@ -150,6 +150,11 @@ AsyncSessionReplacementSink InteractiveSessionRun::make_async_session_replacemen
     };
 }
 
+ExtensionUiRegistrationFactory InteractiveSessionRun::take_extension_ui_registration_factory() noexcept {
+    if (!state_ || !state_->extension_ui_registration_factory) return nullptr;
+    return std::exchange(state_->extension_ui_registration_factory, std::nullopt).value();
+}
+
 void InteractiveSessionRun::report_boot_diagnostics(
         const std::vector<coding_agent::SessionDiagnostic>& diagnostics, bool rendered_in_tui) const {
     if (rendered_in_tui || !state_ || !state_->error_stream) return;
@@ -355,6 +360,12 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_action_sink(Tui
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_async_session_replacement_sink(
         AsyncSessionReplacementSink sink) noexcept {
     state_->custom_async_session_replacement_sink = std::move(sink);
+    return *this;
+}
+
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_extension_ui_registration_factory(
+        ExtensionUiRegistrationFactory factory) noexcept {
+    state_->extension_ui_registration_factory.emplace(std::move(factory));
     return *this;
 }
 

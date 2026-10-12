@@ -110,8 +110,8 @@ TEST_CASE("Clipboard writer receives the payload on stdin and is never waited on
     FakeClipboardBin bin;
     bin.install({.name = "wl-copy", .reads_stdin = true});
 
-    const auto result = run_clipboard_command_blocking(
-            command_request(bin, "wl-copy", std::string{"payload with\nnewline"}));
+    const auto result =
+            run_clipboard_command_blocking(command_request(bin, "wl-copy", std::string{"payload with\nnewline"}));
     CHECK(result.exit_code == 0);
     REQUIRE(bin.invocations().size() == 1);
     CHECK(bin.invocations()[0] == "wl-copy payload with\nnewline");
@@ -140,8 +140,8 @@ TEST_CASE("Clipboard readers wait for stdio close exactly like pi's close event"
     bin.install_script("xclip", "(sleep 30 &)\nprintf 'partial'\n");
 
     const auto start = Clock::now();
-    const auto result = run_clipboard_command_blocking(
-            command_request(bin, "xclip", std::nullopt, std::chrono::milliseconds{200}));
+    const auto result =
+            run_clipboard_command_blocking(command_request(bin, "xclip", std::nullopt, std::chrono::milliseconds{200}));
     CHECK(result.timed_out);
     CHECK_FALSE(result.exit_code.has_value());
     CHECK(result.output.empty());
@@ -154,8 +154,8 @@ TEST_CASE("Clipboard helper timeout kills and reaps the helper instead of blocki
     bin.install({.name = "xclip", .delay_seconds = 30});
 
     const auto start = Clock::now();
-    const auto result = run_clipboard_command_blocking(
-            command_request(bin, "xclip", std::nullopt, std::chrono::milliseconds{100}));
+    const auto result =
+            run_clipboard_command_blocking(command_request(bin, "xclip", std::nullopt, std::chrono::milliseconds{100}));
     CHECK(result.timed_out);
     CHECK_FALSE(result.exit_code.has_value());
     CHECK(result.output.empty());
@@ -163,13 +163,12 @@ TEST_CASE("Clipboard helper timeout kills and reaps the helper instead of blocki
     CHECK(bin.invocations().size() == 1);
 }
 
-TEST_CASE("Clipboard helper output bound aborts an oversized read",
-        "[coding_agent][tui][clipboard][issue993][spec]") {
+TEST_CASE("Clipboard helper output bound aborts an oversized read", "[coding_agent][tui][clipboard][issue993][spec]") {
     FakeClipboardBin bin;
     bin.install({.name = "xclip", .output = std::string(4096, 'a')});
 
-    const auto result = run_clipboard_command_blocking(
-            command_request(bin, "xclip", std::nullopt, kClipboardCommandTimeout, 1024));
+    const auto result =
+            run_clipboard_command_blocking(command_request(bin, "xclip", std::nullopt, kClipboardCommandTimeout, 1024));
     CHECK(result.output_overflow);
     CHECK_FALSE(result.exit_code.has_value());
     CHECK(result.output.empty());
@@ -320,8 +319,7 @@ TEST_CASE("OSC 52 encoding pins pi's sequence, its UTF-8 bytes, and its size bou
     CHECK_FALSE(encode_clipboard_osc52(std::string(90000, 'a')).has_value());
 }
 
-TEST_CASE("Clipboard temporary tokens are unique UUID-shaped names",
-        "[coding_agent][tui][clipboard][issue993][spec]") {
+TEST_CASE("Clipboard temporary tokens are unique UUID-shaped names", "[coding_agent][tui][clipboard][issue993][spec]") {
     const auto first = make_clipboard_unique_token();
     const auto second = make_clipboard_unique_token();
 

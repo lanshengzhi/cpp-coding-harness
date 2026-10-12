@@ -237,6 +237,7 @@ InteractiveEngine::request_session_replacement_async(
 }
 
 support::ExpectedVoid InteractiveEngine::replace_session(std::unique_ptr<AgentSession> next) {
+    extension_ui_host_.reset();
     retire_current_session();
     // The retired Session's in-flight prompt and User Bash can no longer
     // gate or render as the current Session: invalidate their interrupt
@@ -276,8 +277,10 @@ support::ExpectedVoid InteractiveEngine::replace_session(std::unique_ptr<AgentSe
     mcp_flows_->refresh_completion();
     auto subscribed = session_ui_->bind(*session_);
     if (!subscribed) {
+        extension_ui_host_.dispose();
         return std::unexpected(subscribed.error());
     }
+    extension_ui_host_.refresh();
     // The new session's resources replace the loaded-resources block
     // (pi `showLoadedResources` after `renderCurrentSessionState`). The
     // theme re-registration gap (replacement drops the created session's

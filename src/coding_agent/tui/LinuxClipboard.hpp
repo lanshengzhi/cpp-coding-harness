@@ -32,7 +32,6 @@ namespace cch::coding_agent::tui {
 /// reader must outlive its pending reads (the composition owns it for the run's
 /// lifetime).
 [[nodiscard]] std::unique_ptr<cch::tui::NativeClipboard> make_linux_clipboard_reader(
-        ClipboardEnvironment environment,
-        std::unique_ptr<cch::tui::NativeClipboard> native_fallback = nullptr);
+        ClipboardEnvironment environment, std::unique_ptr<cch::tui::NativeClipboard> native_fallback = nullptr);
 
 } // namespace cch::coding_agent::tui

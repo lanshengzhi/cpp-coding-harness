@@ -200,8 +200,7 @@ public:
         REQUIRE(*created);
         runtime_driver.emplace(runtime);
         terminal_double.emplace(terminal);
-        boost::asio::co_spawn(
-                io,
+        boost::asio::co_spawn(io,
                 cch::coding_agent::tui::run_interactive_mode(*terminal_double,
                         cch::cli::assemble_interactive_session_run(cch::cli::InitialMessageResult{},
                                 cch::cli::CliConfig{},
@@ -294,8 +293,7 @@ TEST_CASE("Native TUI /copy reports the X11 helper failure instead of fabricatin
     // Both X11 helpers were tried, and neither OSC 52 nor a success was invented
     // for a desktop session with a display (#9618).
     CHECK(session.bin.invocations() ==
-            std::vector<std::string>{"xclip -selection clipboard fake: hello",
-                    "xsel --clipboard --input fake: hello"});
+            std::vector<std::string>{"xclip -selection clipboard fake: hello", "xsel --clipboard --input fake: hello"});
     CHECK(session.terminal_double->sequences().empty());
 
     session.exit_session();
@@ -355,14 +353,13 @@ TEST_CASE("Native TUI paste tells an empty helper result apart from a failed hel
 
     SECTION("failing helpers fall through to the platform helper") {
         session.type("XY\x16");
-        REQUIRE(tests::pump_until(
-                session.io, [&] { return stub->text_read_count == 1; }, std::chrono::seconds{5}));
+        REQUIRE(tests::pump_until(session.io, [&] { return stub->text_read_count == 1; }, std::chrono::seconds{5}));
         session.submit();
         REQUIRE(session.wait_for_screen("fake: XYfrom native helper", std::chrono::seconds{10}));
 
         CHECK(session.user_message_text(1) == "XYfrom native helper");
-        CHECK(session.bin.invocations() == std::vector<std::string>{"xclip -selection clipboard -out",
-                                                     "xsel --clipboard --output"});
+        CHECK(session.bin.invocations() ==
+                std::vector<std::string>{"xclip -selection clipboard -out", "xsel --clipboard --output"});
     }
 
     SECTION("a successful empty helper result is an empty read, not a fallback") {
@@ -420,13 +417,11 @@ TEST_CASE("Native TUI Close cancels the in-flight clipboard helper read",
 
     // Paste starts a helper that will not finish on its own.
     session.type("\x16");
-    REQUIRE(tests::pump_until(
-            session.io, [&] { return !session.bin.invocations().empty(); }, std::chrono::seconds{5}));
+    REQUIRE(tests::pump_until(session.io, [&] { return !session.bin.invocations().empty(); }, std::chrono::seconds{5}));
 
     const auto close_start = Clock::now();
     REQUIRE(session.terminal.inject_input("\x04"));
-    REQUIRE(tests::pump_until(
-            session.io, [&] { return session.run_result.has_value(); }, std::chrono::seconds{8}));
+    REQUIRE(tests::pump_until(session.io, [&] { return session.run_result.has_value(); }, std::chrono::seconds{8}));
     const auto close_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - close_start);
 
     CHECK(*session.run_result);

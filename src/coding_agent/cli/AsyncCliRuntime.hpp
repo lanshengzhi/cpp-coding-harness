@@ -3,6 +3,7 @@
 #include "coding_agent/cli/CliConfig.hpp"
 #include "coding_agent/cli/FrontendSelection.hpp"
 #include "coding_agent/cli/SessionFamily.hpp"
+#include "coding_agent/tui/ExtensionUiHost.hpp"
 
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/support/Error.hpp>
@@ -33,6 +34,7 @@ struct CliRuntimeOptions {
     /// real ProcessTerminal host; the in-process CLI fixture injects a
     /// scripted picker so the test process's terminal is never touched.
     ResumePickerSink resume_picker{};
+    coding_agent::tui::ExtensionUiRegistrationFactory extension_ui_registration_factory{};
 };
 
 [[nodiscard]] int run_async_cli(const CliConfig& config,
@@ -41,7 +43,8 @@ struct CliRuntimeOptions {
         FrontendEnvironment environment,
         std::shared_ptr<coding_agent::ModelRuntime> model_runtime = {},
         bool model_runtime_cli_fake = false,
-        ResumePickerSink resume_picker = {});
+        ResumePickerSink resume_picker = {},
+        coding_agent::tui::ExtensionUiRegistrationFactory extension_ui_registration_factory = nullptr);
 
 /// The CLI entry chain (bootstrap parse -> help/version -> frontend selection
 /// -> runtime), shared by main() and the in-process CLI test seam.

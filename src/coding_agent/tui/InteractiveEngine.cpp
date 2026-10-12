@@ -140,6 +140,7 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     model_fallback_message_ = run.model_fallback_message();
     action_sink_ = run.make_action_sink();
     async_session_replacement_sink_ = run.make_async_session_replacement_sink();
+    extension_ui_registration_factory_ = run.take_extension_ui_registration_factory();
     session_facts_ = run.session_facts();
 
     InteractiveStartupDiagnostics diagnostics;
@@ -190,6 +191,7 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     if (auto started = tui_.start(); !started) return fail_start(started.error());
     tui_started_ = true;
     running_ = true;
+    extension_ui_host_.bind(tui_, std::move(extension_ui_registration_factory_));
 
     // pi main.ts `ensurePngTranscoder` right after `ui.start()`: a Kitty
     // terminal only places non-PNG images once the host conversion capability
@@ -272,6 +274,8 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         // Stop the TUI so the terminal is restored before the host
         // reports the error; the session never bound.
         running_ = false;
+        extension_ui_host_.dispose();
+        retire_current_session();
         if (tui_started_) {
             (void)tui_.stop();
             tui_started_ = false;
@@ -316,15 +320,18 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
     mcp_flows_->refresh_completion();
     rebuild_autocomplete_provider();
     if (auto subscribed = session_ui_->bind(*session_); !subscribed) {
-        co_return std::unexpected(subscribed.error());
+        auto failed = fail_start(subscribed.error());
+        co_return std::unexpected(failed.error());
     }
+    extension_ui_host_.refresh();
     initialize_view(startup_diagnostics_);
     if (auto warning = co_await append_project_trust_warning_if_needed(); !warning) {
         auto failed = fail_start(warning.error());
         co_return std::unexpected(failed.error());
     }
     if (auto focused = tui_.set_focus(view_); !focused) {
-        co_return std::unexpected(focused.error());
+        auto failed = fail_start(focused.error());
+        co_return std::unexpected(failed.error());
     }
     prompt_presentation_dirty_.store(true, std::memory_order_release);
     tui_.request_render();
@@ -339,6 +346,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
 
 boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     stop_source_.request_stop();
+    extension_ui_host_.dispose();
     tui_.set_render_prepare_sink(nullptr);
     tui_.set_render_complete_sink(nullptr);
     // Cancel extracted modal/session flows before terminal restoration;
@@ -633,6 +641,7 @@ boost::asio::awaitable<support::Expected<bool>> InteractiveEngine::append_projec
 
 support::ExpectedVoid InteractiveEngine::fail_start(const support::Error& error) {
     running_ = false;
+    extension_ui_host_.dispose();
     if (session_ != nullptr) {
         session_->close();
     }

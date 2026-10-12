@@ -25,6 +25,7 @@
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
 #include "coding_agent/tui/ClipboardWrite.hpp"
+#include "coding_agent/tui/ExtensionUiHost.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/InteractiveStartup.hpp"
@@ -517,6 +518,8 @@ private:
     /// for the environment operations.
     TuiActionSink action_sink_{nullptr};
     AsyncSessionReplacementSink async_session_replacement_sink_{nullptr};
+    ExtensionUiHost extension_ui_host_;
+    ExtensionUiRegistrationFactory extension_ui_registration_factory_{nullptr};
     std::optional<std::string> model_fallback_message_;
     /// CLI-owned facts reused for in-session session replacement requests.
     runtime::InteractiveSessionFacts session_facts_;

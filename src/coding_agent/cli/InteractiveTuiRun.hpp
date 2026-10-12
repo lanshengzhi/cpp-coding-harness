@@ -13,6 +13,7 @@
 #include "coding_agent/cli/CliConfig.hpp"
 #include "coding_agent/cli/InitialPrompt.hpp"
 #include "coding_agent/tui/ClipboardProcess.hpp"
+#include "coding_agent/tui/ExtensionUiHost.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 
 #include <cch/tui/NativeClipboard.hpp>
@@ -44,14 +45,14 @@ struct InteractiveClipboardInjection {
 /// Assemble the one Interactive Session Run the Native TUI boots: the
 /// CLI-owned facts, run intent, host effects, and the clipboard reader and copy
 /// policy the injection names.
-[[nodiscard]] coding_agent::tui::InteractiveSessionRun assemble_interactive_session_run(
-        InitialMessageResult initial,
+[[nodiscard]] coding_agent::tui::InteractiveSessionRun assemble_interactive_session_run(InitialMessageResult initial,
         const CliConfig& config,
         std::shared_ptr<harness::RuntimeRoot> runtime_root,
         std::shared_ptr<coding_agent::ModelRuntime> shared_runtime,
         bool model_runtime_cli_fake,
         std::ostream& error_stream,
         coding_agent::tui::SessionIntentVariant session_intent,
-        InteractiveClipboardInjection clipboard = {});
+        InteractiveClipboardInjection clipboard = {},
+        coding_agent::tui::ExtensionUiRegistrationFactory extension_ui_registration_factory = nullptr);
 
 } // namespace cch::cli

@@ -116,6 +116,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/ClipboardWrite.cpp
         src/coding_agent/tui/DiffRenderer.cpp
         src/coding_agent/tui/EditorAutocomplete.cpp
+        src/coding_agent/tui/ExtensionUiHost.cpp
         src/coding_agent/tui/ExternalEditor.cpp
         src/coding_agent/tui/Footer.cpp
         src/coding_agent/tui/FooterDataProvider.cpp

@@ -36,8 +36,7 @@ namespace {
 
 /// The standard base64 alphabet (pi `Buffer.from(text).toString("base64")`).
 [[nodiscard]] std::string base64_encode(std::string_view text) {
-    static constexpr std::string_view kAlphabet =
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    static constexpr std::string_view kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string encoded;
     encoded.reserve(((text.size() + 2) / 3) * 4);
     std::size_t index = 0;
@@ -92,8 +91,7 @@ namespace {
 /// Resolve one helper against the injected `PATH`-shaped search path (pi's
 /// `spawn` uses the process `PATH`; injection keeps the lookup deterministic in
 /// tests). Absolute and relative command names are used as written.
-[[nodiscard]] std::optional<std::string> resolve_executable(
-        std::string_view search_path, const std::string& command) {
+[[nodiscard]] std::optional<std::string> resolve_executable(std::string_view search_path, const std::string& command) {
     if (command.empty()) return std::nullopt;
     if (command.find('/') != std::string::npos) {
         if (::access(command.c_str(), X_OK) == 0) return command;
@@ -185,21 +183,11 @@ struct ForkedCommand {
 
     ForkedCommand() = default;
     ForkedCommand(ForkedCommand&& other) noexcept
-        : pid(std::exchange(other.pid, -1)),
-          stdin_fd(std::move(other.stdin_fd)),
-          stdout_fd(std::move(other.stdout_fd)),
-          input(other.input),
-          written(other.written),
-          stdin_closed(other.stdin_closed),
-          stdout_closed(other.stdout_closed),
-          overflow(other.overflow),
-          timed_out(other.timed_out),
-          cancelled(other.cancelled),
-          output(std::move(other.output)),
-          output_limit(other.output_limit),
-          deadline(other.deadline),
-          exit_code(other.exit_code),
-          reaped(std::exchange(other.reaped, true)) {}
+        : pid(std::exchange(other.pid, -1)), stdin_fd(std::move(other.stdin_fd)), stdout_fd(std::move(other.stdout_fd)),
+          input(other.input), written(other.written), stdin_closed(other.stdin_closed),
+          stdout_closed(other.stdout_closed), overflow(other.overflow), timed_out(other.timed_out),
+          cancelled(other.cancelled), output(std::move(other.output)), output_limit(other.output_limit),
+          deadline(other.deadline), exit_code(other.exit_code), reaped(std::exchange(other.reaped, true)) {}
     ForkedCommand& operator=(ForkedCommand&& other) noexcept {
         if (this != &other) {
             reap_now();

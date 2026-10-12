@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coding_agent/tui/ClipboardWrite.hpp"
+#include "coding_agent/tui/ExtensionUiHost.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/AgentSession.hpp"
@@ -117,6 +118,7 @@ public:
     [[nodiscard]] ClipboardCopyResult write_clipboard_text(const std::string& text) const;
     void suspend_process() const;
     [[nodiscard]] AsyncSessionReplacementSink make_async_session_replacement_sink() const;
+    [[nodiscard]] ExtensionUiRegistrationFactory take_extension_ui_registration_factory() noexcept;
     void report_boot_diagnostics(
             const std::vector<coding_agent::SessionDiagnostic>& diagnostics, bool rendered_in_tui) const;
     void report_boot_creation_failure(const support::Error& error) const;
@@ -149,6 +151,7 @@ private:
         bool is_resume_target{false};
         std::atomic<bool> creation_failure_reported{false};
         std::optional<AsyncSessionReplacementSink> custom_async_session_replacement_sink{std::nullopt};
+        std::optional<ExtensionUiRegistrationFactory> extension_ui_registration_factory{std::nullopt};
         std::optional<TuiActionSink> custom_action_sink{std::nullopt};
     };
 
@@ -188,6 +191,8 @@ public:
     InteractiveSessionRunBuilder& with_is_resume_target(bool is_resume_target) noexcept;
     InteractiveSessionRunBuilder& with_action_sink(TuiActionSink sink) noexcept;
     InteractiveSessionRunBuilder& with_async_session_replacement_sink(AsyncSessionReplacementSink sink) noexcept;
+    InteractiveSessionRunBuilder& with_extension_ui_registration_factory(
+            ExtensionUiRegistrationFactory factory) noexcept;
 
     [[nodiscard]] InteractiveSessionRun build();
 

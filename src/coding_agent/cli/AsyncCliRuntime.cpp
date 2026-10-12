@@ -166,7 +166,8 @@ void print_session_diagnostics(
         std::shared_ptr<coding_agent::ModelRuntime> model_runtime,
         bool model_runtime_cli_fake,
         CliStreams streams,
-        coding_agent::runtime::AgentSessionCreationRequest request) {
+        coding_agent::runtime::AgentSessionCreationRequest request,
+        coding_agent::tui::ExtensionUiRegistrationFactory extension_ui_registration_factory) {
     auto io = std::make_shared<boost::asio::io_context>();
     const cch::tui::ProcessTerminalOptions terminal_options{.executor = io->get_executor()};
     // pi interactive-mode `registerSignalHandlers`: SIGTERM/SIGHUP restore the
@@ -206,7 +207,8 @@ void print_session_diagnostics(
             model_runtime_cli_fake,
             streams.error,
             coding_agent::tui::DeferBoot{std::move(request)},
-            InteractiveClipboardInjection{.environment = coding_agent::tui::clipboard_environment_from_process()});
+            InteractiveClipboardInjection{.environment = coding_agent::tui::clipboard_environment_from_process()},
+            std::move(extension_ui_registration_factory));
 
     auto future = boost::asio::co_spawn(
             *io, coding_agent::tui::run_interactive_mode(terminal, std::move(run)), boost::asio::use_future);
@@ -244,7 +246,8 @@ void print_session_diagnostics(
         FrontendEnvironment environment,
         std::shared_ptr<coding_agent::ModelRuntime> model_runtime,
         bool model_runtime_cli_fake,
-        ResumePickerSink resume_picker) {
+        ResumePickerSink resume_picker,
+        coding_agent::tui::ExtensionUiRegistrationFactory extension_ui_registration_factory) {
     // pi main.ts boot order: the session-family flag guards run before any
     // session machinery, the cross-project fork prompt happens during session
     // selection (before piped stdin is read), and the `--name` guard follows
@@ -453,7 +456,8 @@ void print_session_diagnostics(
                 std::move(model_runtime),
                 model_runtime_cli_fake,
                 streams,
-                std::move(request));
+                std::move(request),
+                std::move(extension_ui_registration_factory));
     }
 
     auto created = create_session();
@@ -562,7 +566,8 @@ void print_session_diagnostics(
                 environment,
                 std::move(options.model_runtime),
                 options.model_runtime_cli_fake,
-                std::move(options.resume_picker));
+                std::move(options.resume_picker),
+                std::move(options.extension_ui_registration_factory));
     }
 }
 
