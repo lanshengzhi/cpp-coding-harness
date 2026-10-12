@@ -155,6 +155,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/ThinkingSelector.cpp
         src/coding_agent/tui/Theme.cpp
         src/coding_agent/tui/ThemeController.cpp
+        src/coding_agent/tui/theme_color_math.cpp
         src/coding_agent/tui/ToolExecutionComponent.cpp
         src/coding_agent/tui/tool_renderers/BashRenderer.cpp
         src/coding_agent/tui/tool_renderers/EditRenderer.cpp

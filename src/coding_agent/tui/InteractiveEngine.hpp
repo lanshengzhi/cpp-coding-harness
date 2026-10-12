@@ -477,10 +477,9 @@ private:
     /// under, retained for the `/reload` re-catalog.
     std::filesystem::path agent_config_directory_;
     /// Two-scope settings manager (global scope only; the project scope stays
-    /// untrusted in the Native TUI). The theme committer and the
-    /// scoped-models selector persist through it. Declared before
-    /// `theme_controller_` so the controller's committer reference stays
-    /// valid through destruction.
+    /// untrusted in the Native TUI). The scoped-models selector persists
+    /// through it. Declared before `theme_controller_` so the controller's
+    /// settings-provider reference stays valid through destruction.
     std::optional<coding_agent::SettingsManager> settings_manager_{std::nullopt};
     /// pi `hideThinkingBlock` / `outputPad` render settings, loaded once at
     /// boot from the merged settings and mutated by `app.thinking.toggle` and

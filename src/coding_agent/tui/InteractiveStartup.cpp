@@ -115,20 +115,15 @@ std::unique_ptr<ThemeController> make_interactive_theme_controller(const std::fi
         cch::tui::ITui& root,
         InteractiveThemeHooks hooks) {
     return std::make_unique<ThemeController>(
-        agent_config_directory.empty()
-            ? std::filesystem::path{}
-            : agent_config_directory / "themes",
-        /* registered */ std::vector<RegisteredTheme>{},
-        [manager = &settings_manager]() {
-            return manager->global_settings().theme;
-        },
-        [manager = &settings_manager](std::string_view name) {
-            return manager->set_theme(coding_agent::SettingsScope::Global, name);
-        },
-        color_capability,
-        root,
-        std::move(hooks.show_error),
-        std::move(hooks.on_changed));
+            agent_config_directory.empty() ? std::filesystem::path{} : agent_config_directory / "themes",
+            /* registered */ std::vector<RegisteredTheme>{},
+            [manager = &settings_manager]() { return manager->global_settings().theme; },
+            color_capability,
+            root,
+            std::move(hooks.show_error),
+            std::move(hooks.on_changed),
+            std::move(hooks.on_terminal_colors),
+            std::move(hooks.on_terminal_color_scheme));
 }
 
 } // namespace cch::coding_agent::tui
