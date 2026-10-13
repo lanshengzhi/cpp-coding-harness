@@ -335,8 +335,21 @@ private:
     /// custom prompt editor into the view, or restore the built-in editor
     /// when the current context registered none. Runs whenever the extension
     /// registrations refresh (start, deferred boot bind, session
-    /// replacement).
+    /// replacement, `/reload`).
     void apply_extension_editor();
+    /// pi `resetExtensionUI` (`beforeSessionInvalidate`): dispose the current
+    /// registration context while the terminal stays live, then restore the
+    /// prompt editor with the in-progress text. The fresh context, when one is
+    /// installed afterwards, registers through `refresh_extension_ui`.
+    void reset_extension_ui();
+    /// Dispose the current context, run the fresh registration factory and
+    /// install its editor (pi `beforeSessionInvalidate` -> `resetExtensionUI`
+    /// followed by the replacement session's `session_start` registrations).
+    void refresh_extension_ui();
+    /// pi `dispose()` -> `beforeSessionInvalidate` -> `resetExtensionUI`: the
+    /// registrations are settled and the built-in prompt editor restored
+    /// before the terminal is stopped or the session is replaced.
+    void dispose_extension_ui();
     /// pi `showStatus`: one dim status line in the chat.
     void show_status(std::string text) override;
     /// pi `showError`: one `Error: <text>` chat line.

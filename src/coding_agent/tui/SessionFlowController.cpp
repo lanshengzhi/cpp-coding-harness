@@ -754,6 +754,12 @@ boost::asio::awaitable<void> SessionFlowController::handle_reload() {
         co_return;
     }
 
+    // pi `handleReloadCommand`: both refusal guards precede
+    // `resetExtensionUI`, which disposes the current registration context and
+    // restores the default editor with the in-progress prompt before the
+    // reload's box replaces the prompt slot.
+    if (hooks_.reset_extension_ui != nullptr) hooks_.reset_extension_ui();
+
     presenter_->replace_prompt_slot(make_reload_box(hooks_.live_theme()));
     auto result = co_await session->reload(stop_source_.get_token());
     if (closed_ || captured_generation != action_generation()) co_return;

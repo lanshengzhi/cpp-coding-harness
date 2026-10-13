@@ -1,3 +1,4 @@
+#include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/cli/InteractiveTuiRun.hpp"
 #include "coding_agent/tui/ExtensionUiHost.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
@@ -12,6 +13,8 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
+#include <cch/ai/Message.hpp>
+#include <cch/ai/StreamEvent.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Keys.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
@@ -22,10 +25,17 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
 #include <algorithm>
+#include <chrono>
+#include <expected>
 #include <format>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -99,11 +109,15 @@ struct ListenerLifetime {
 }
 
 [[nodiscard]] support::AsyncResult<coding_agent::CreateAgentSessionResult> create_session_async(
-        tests::RuntimeFixture& runtime, const tests::TempWorkspace& workspace, bool provide_user_shell = false) {
+        tests::RuntimeFixture& runtime,
+        const tests::TempWorkspace& workspace,
+        bool provide_user_shell = false,
+        std::shared_ptr<tests::ScriptedProvider> provider = nullptr) {
     tests::ModelsSessionOptions options;
     options.session_target = coding_agent::InMemorySessionTarget{};
     options.workspace = workspace.path();
-    options.models = tests::models_from_provider(tests::make_scripted_fake_provider());
+    options.models = provider != nullptr ? tests::models_from_provider(std::move(provider))
+                                         : tests::models_from_provider(tests::make_scripted_fake_provider());
     auto models = options.models;
     coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
     request.execution_runtime_target = runtime.make_target();
@@ -134,8 +148,8 @@ public:
     std::unique_ptr<tests::RuntimeLoopDriver> runtime_driver;
     std::optional<BootSessionCompletion> boot_completion;
 
-    InteractiveFixture(bool provide_user_shell = false) {
-        auto session = runtime.run(create_session_async(runtime, workspace, provide_user_shell));
+    InteractiveFixture(bool provide_user_shell = false, std::shared_ptr<tests::ScriptedProvider> provider = nullptr) {
+        auto session = runtime.run(create_session_async(runtime, workspace, provide_user_shell, std::move(provider)));
         REQUIRE(session);
         created.emplace(std::move(*session));
         runtime_driver = std::make_unique<tests::RuntimeLoopDriver>(runtime);
@@ -663,4 +677,385 @@ TEST_CASE("deferred boot installs the extension editor with the draft typed befo
             fixture.io, [&] { return visible_screen(fixture.terminal).find("fake: draftmore") != std::string::npos; }));
     CHECK(*submissions == std::vector<std::string>{"draftmore"});
     fixture.close();
+}
+
+namespace {
+
+/// Streams one assistant turn that stays in flight until `release()`: the
+/// real prompt submission stays active while a lifecycle case drives `/reload`,
+/// a session replacement or quit through the product input path.
+class GatedPromptProvider final : public tests::ScriptedProvider {
+public:
+    GatedPromptProvider() : ScriptedProvider("sdk-host") {}
+
+    [[nodiscard]] ai::ModelStream stream(
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
+        return ai::detail::make_model_stream(
+                [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink sink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    auto partial = ai::assistant_text_message("");
+                    partial.content.clear();
+                    partial.provider = "fake";
+                    partial.api = "gated-fake";
+                    partial.model = model.id;
+                    if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    partial.content.emplace_back(ai::text_content("gated partial"));
+                    if (auto emitted = sink(ai::TextStartEvent{0, partial}); !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    if (auto emitted = sink(ai::TextDeltaEvent{0, "gated partial", partial}); !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    const auto executor = co_await boost::asio::this_coro::executor;
+                    gate_.emplace(executor);
+                    gate_->expires_at(std::chrono::steady_clock::time_point::max());
+                    started = true;
+                    boost::system::error_code error;
+                    co_await gate_->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                    // The gate timer is bound to the run's executor; release it
+                    // before that io_context dies so the host-owned provider
+                    // graph can outlive the run (ASan, #473/#640).
+                    gate_.reset();
+                    std::get<ai::TextContent>(partial.content[0]).text = "gated complete";
+                    if (auto emitted = sink(ai::TextEndEvent{0, "gated complete", partial}); !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    if (auto emitted = sink(ai::AssistantDoneEvent{ai::AssistantStopReason::Stop, partial}); !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    co_return partial;
+                });
+    }
+
+    void release() {
+        if (gate_) (void)gate_->cancel();
+    }
+
+    bool started{false};
+
+private:
+    std::optional<boost::asio::steady_timer> gate_;
+};
+
+/// Release observation for one extension editor instance (the ListenerLifetime
+/// pattern applied to the prompt editor): the instance must be released while
+/// the terminal is still live, not left to view teardown.
+struct EditorReleaseLog {
+    tui::VirtualTerminal* terminal{nullptr}; // borrowed from the interactive fixture.
+    std::vector<std::pair<std::size_t, bool>> releases;
+};
+
+/// Marker-rendering custom editor of the lifecycle cases: the render marker
+/// carries its registration generation, so a superseded instance is
+/// distinguishable on screen from the fresh one.
+class LifecyclePromptEditor final : public PromptTrackingEditor {
+public:
+    LifecyclePromptEditor(std::shared_ptr<std::vector<std::string>> submissions,
+            std::size_t registration,
+            bool clear_on_submit,
+            std::shared_ptr<EditorReleaseLog> release_log)
+        : PromptTrackingEditor(std::move(submissions), clear_on_submit), registration_(registration),
+          release_log_(std::move(release_log)) {}
+
+    ~LifecyclePromptEditor() override {
+        if (release_log_ != nullptr && release_log_->terminal != nullptr) {
+            release_log_->releases.emplace_back(registration_, release_log_->terminal->modes().started);
+        }
+    }
+
+    LifecyclePromptEditor(const LifecyclePromptEditor&) = delete;
+    LifecyclePromptEditor& operator=(const LifecyclePromptEditor&) = delete;
+    LifecyclePromptEditor(LifecyclePromptEditor&&) = delete;
+    LifecyclePromptEditor& operator=(LifecyclePromptEditor&&) = delete;
+
+    [[nodiscard]] support::Expected<tui::RenderResult> render(std::size_t) override {
+        return tui::RenderResult{.lines = {std::format("ext-{}:{}", registration_, text())}};
+    }
+
+private:
+    std::size_t registration_{0};
+    std::shared_ptr<EditorReleaseLog> release_log_;
+};
+
+/// The linked registration context of the lifecycle cases: it records its
+/// generation, registers the ordered listener pair (#1013 shape) and, when
+/// `install_editor` admits the generation, installs a marker-rendering editor
+/// through the real prompt path (pi `session_start` -> `setEditorComponent`).
+struct LifecycleFactoryOptions {
+    std::shared_ptr<ListenerState> state;
+    std::shared_ptr<std::vector<std::weak_ptr<tui::EditorComponent>>> editors =
+            std::make_shared<std::vector<std::weak_ptr<tui::EditorComponent>>>();
+    std::shared_ptr<std::vector<std::string>> submissions = std::make_shared<std::vector<std::string>>();
+    std::shared_ptr<EditorReleaseLog> release_log;
+    /// Registrations whose context installs a custom editor.
+    std::function<bool(std::size_t)> install_editor{[](std::size_t) { return false; }};
+    /// pi editors keep the submitted text unless the extension clears it; the
+    /// reload cases keep a submitted command in the prompt so the reset has an
+    /// in-progress prompt to carry onto the restored editor.
+    bool clear_on_submit{false};
+};
+
+[[nodiscard]] coding_agent::tui::ExtensionUiRegistrationFactory make_lifecycle_factory(
+        LifecycleFactoryOptions options) {
+    return [options = std::move(options)](coding_agent::tui::ExtensionUiHost& host) {
+        const auto registration = ++options.state->registrations;
+        auto lifetime = std::make_shared<ListenerLifetime>();
+        lifetime->state = options.state;
+        options.state->listener_lifetimes.emplace_back(lifetime);
+        host.on_terminal_input([state = options.state, registration, lifetime](std::string_view input) {
+            state->calls.emplace_back(registration, std::string{input});
+            return tui::RawInputListenerResult::pass();
+        });
+        host.on_terminal_input([state = options.state, registration, lifetime](std::string_view input) {
+            state->second_listener_inputs.push_back(std::format("{}={}", registration, input));
+            return tui::RawInputListenerResult::pass();
+        });
+        if (!options.install_editor(registration)) return;
+        host.set_editor_component([registration,
+                                          editors = options.editors,
+                                          submissions = options.submissions,
+                                          release_log = options.release_log,
+                                          clear_on_submit = options.clear_on_submit](tui::ITui&,
+                                          tui::EditorTheme,
+                                          std::shared_ptr<coding_agent::tui::SharedKeybindings>)
+                                          -> std::shared_ptr<tui::EditorComponent> {
+            auto editor =
+                    std::make_shared<LifecyclePromptEditor>(submissions, registration, clear_on_submit, release_log);
+            editors->emplace_back(editor);
+            return editor;
+        });
+    };
+}
+
+[[nodiscard]] std::size_t registration_calls(const std::shared_ptr<ListenerState>& state, std::size_t registration) {
+    return static_cast<std::size_t>(std::count_if(state->calls.begin(),
+            state->calls.end(),
+            [registration](const auto& call) { return call.first == registration; }));
+}
+
+/// Every listener observation from `first_index` on must belong to
+/// `registration`: a superseded listener pair would record its own generation,
+/// so this fails when a disposed context stays in the input chain.
+void check_listener_observations_belong_to(
+        const std::shared_ptr<ListenerState>& state, std::size_t first_index, std::size_t registration) {
+    REQUIRE(state->second_listener_inputs.size() > first_index);
+    for (std::size_t index = first_index; index < state->second_listener_inputs.size(); ++index) {
+        CHECK(state->second_listener_inputs[index].starts_with(std::format("{}=", registration)));
+    }
+}
+
+} // namespace
+
+TEST_CASE("reload disposes the extension context and restores the default editor with the carried text",
+        "[coding_agent][tui][extension_ui][issue1015][spec]") {
+    InteractiveFixture fixture;
+    LifecycleFactoryOptions options;
+    options.state = std::make_shared<ListenerState>();
+    // Only the first registration installs an editor: the fresh context
+    // registers none, which is pi `resetExtensionUI` ->
+    // `setCustomEditorComponent(undefined)` reaching the restored editor.
+    options.install_editor = [](std::size_t registration) { return registration == 1; };
+    fixture.start(make_lifecycle_factory(options));
+
+    // The custom editor keeps "/reload" across submit, so the reset runs with
+    // an in-progress prompt that the restore must carry onto the default
+    // editor (pi `handleReloadCommand` resets before `session.reload`).
+    fixture.type("/reload\r");
+    REQUIRE(tests::pump_until(fixture.io,
+            [&] { return visible_screen(fixture.terminal).find("Reloaded keybindings") != std::string::npos; }));
+    tests::drain_ready(fixture.io);
+
+    CHECK(options.state->registrations == 2);
+    REQUIRE(options.editors->size() == 1);
+    CHECK(options.editors->front().expired());
+    REQUIRE(options.state->listener_lifetimes.size() == 2);
+    CHECK(options.state->listener_lifetimes[0].expired());
+    CHECK_FALSE(options.state->listener_lifetimes[1].expired());
+    auto screen = visible_screen(fixture.terminal);
+    CHECK(screen.find("ext-1:") == std::string::npos);
+    CHECK(screen.find("/reload") != std::string::npos);
+
+    // Only the fresh registration observes later input, and the restored
+    // default editor is the one that admits the next prompt.
+    const auto stale_calls = registration_calls(options.state, 1);
+    const auto listener_records = options.state->second_listener_inputs.size();
+    fixture.type("after\r");
+    REQUIRE(tests::pump_until(fixture.io,
+            [&] { return visible_screen(fixture.terminal).find("fake: /reloadafter") != std::string::npos; }));
+    CHECK(registration_calls(options.state, 1) == stale_calls);
+    check_listener_observations_belong_to(options.state, listener_records, 2);
+    CHECK(*options.submissions == std::vector<std::string>{"/reload"});
+    // Clear the carried prompt text (pi keeps it) so the exit binding reaches
+    // the app.
+    fixture.type(std::string(std::string_view{"/reloadafter"}.size(), '\x7f'));
+    fixture.close();
+}
+
+TEST_CASE("reload installs exactly one fresh editor and releases the superseded instance",
+        "[coding_agent][tui][extension_ui][issue1015][spec]") {
+    InteractiveFixture fixture;
+    LifecycleFactoryOptions options;
+    options.state = std::make_shared<ListenerState>();
+    options.install_editor = [](std::size_t) { return true; };
+    fixture.start(make_lifecycle_factory(options));
+
+    fixture.type("/reload\r");
+    REQUIRE(tests::pump_until(fixture.io,
+            [&] { return visible_screen(fixture.terminal).find("Reloaded keybindings") != std::string::npos; }));
+    tests::drain_ready(fixture.io);
+
+    CHECK(options.state->registrations == 2);
+    REQUIRE(options.editors->size() == 2);
+    CHECK(options.editors->at(0).expired());
+    CHECK_FALSE(options.editors->at(1).expired());
+    const auto screen = visible_screen(fixture.terminal);
+    CHECK(screen.find("ext-1:") == std::string::npos);
+    CHECK(screen.find("ext-2:/reload") != std::string::npos);
+
+    // One registration pair observes the next input, the fresh one, and the
+    // fresh custom editor is the one that admits the prompt.
+    const auto stale_calls = registration_calls(options.state, 1);
+    const auto listener_records = options.state->second_listener_inputs.size();
+    fixture.type("after\r");
+    REQUIRE(tests::pump_until(fixture.io,
+            [&] { return visible_screen(fixture.terminal).find("fake: /reloadafter") != std::string::npos; }));
+    CHECK(registration_calls(options.state, 1) == stale_calls);
+    check_listener_observations_belong_to(options.state, listener_records, 2);
+    CHECK(*options.submissions == (std::vector<std::string>{"/reload", "/reloadafter"}));
+    fixture.type(std::string(std::string_view{"/reloadafter"}.size(), '\x7f'));
+    fixture.close();
+}
+
+TEST_CASE("reload during an in-flight prompt submission is refused and keeps the registration live",
+        "[coding_agent][tui][extension_ui][issue1015][spec]") {
+    auto provider = std::make_shared<GatedPromptProvider>();
+    InteractiveFixture fixture(/*provide_user_shell=*/false, provider);
+    LifecycleFactoryOptions options;
+    options.state = std::make_shared<ListenerState>();
+    options.install_editor = [](std::size_t) { return true; };
+    options.clear_on_submit = true;
+    fixture.start(make_lifecycle_factory(options));
+
+    fixture.type("stream\r");
+    REQUIRE(tests::pump_until(fixture.io, [&] { return provider->started; }));
+
+    fixture.type("/reload\r");
+    tests::drain_ready(fixture.io);
+
+    const auto screen = visible_screen(fixture.terminal);
+    CHECK(screen.find("Wait for the current response to finish before reloading.") != std::string::npos);
+    CHECK(screen.find("Reloaded keybindings, skills, prompts, themes, and context files") == std::string::npos);
+    CHECK(options.state->registrations == 1);
+    REQUIRE(options.state->listener_lifetimes.size() == 1);
+    CHECK_FALSE(options.state->listener_lifetimes[0].expired());
+    CHECK(screen.find("ext-1:") != std::string::npos);
+
+    // The live registration still observes input.
+    const auto calls_before = registration_calls(options.state, 1);
+    fixture.type("probe");
+    CHECK(registration_calls(options.state, 1) > calls_before);
+    fixture.type(std::string(std::string_view{"probe"}.size(), '\x7f'));
+
+    provider->release();
+    tests::drain_ready(fixture.io);
+    fixture.close();
+    CHECK(options.state->listener_lifetimes[0].expired());
+}
+
+TEST_CASE("session replacement during an in-flight submission settles the old registration",
+        "[coding_agent][tui][extension_ui][issue1015][spec]") {
+    auto provider = std::make_shared<GatedPromptProvider>();
+    InteractiveFixture fixture(/*provide_user_shell=*/false, provider);
+    LifecycleFactoryOptions options;
+    options.state = std::make_shared<ListenerState>();
+    options.install_editor = [](std::size_t) { return true; };
+    options.clear_on_submit = true;
+    fixture.start_with_replacement(make_lifecycle_factory(options));
+
+    fixture.type("stream\r");
+    REQUIRE(tests::pump_until(fixture.io, [&] { return provider->started; }));
+
+    fixture.type("/new\r");
+    REQUIRE(tests::pump_until(fixture.io,
+            [&] { return visible_screen(fixture.terminal).find("New session started") != std::string::npos; }));
+    tests::drain_ready(fixture.io);
+    const auto stale_calls = registration_calls(options.state, 1);
+
+    // The replacement settled the streaming turn's registration: the old
+    // listeners and the old editor instance were released while the retired
+    // turn kept completing.
+    CHECK(options.state->registrations == 2);
+    REQUIRE(options.state->listener_lifetimes.size() == 2);
+    CHECK(options.state->listener_lifetimes[0].expired());
+    CHECK_FALSE(options.state->listener_lifetimes[1].expired());
+    REQUIRE(options.editors->size() == 2);
+    CHECK(options.editors->at(0).expired());
+    CHECK_FALSE(options.editors->at(1).expired());
+
+    provider->release();
+    tests::drain_ready(fixture.io);
+    CHECK(registration_calls(options.state, 1) == stale_calls);
+    CHECK(options.state->listener_lifetimes[0].expired());
+
+    // The fresh registration serves the new session's prompt path.
+    const auto listener_records = options.state->second_listener_inputs.size();
+    fixture.type("after\r");
+    REQUIRE(tests::pump_until(
+            fixture.io, [&] { return visible_screen(fixture.terminal).find("fake: after") != std::string::npos; }));
+    check_listener_observations_belong_to(options.state, listener_records, 2);
+    CHECK(options.state->calls.back().first == 2);
+    // The fresh registration's editor is the active one: the replaced editor
+    // instance is no longer the admission path.
+    CHECK(options.submissions->back() == "after");
+    fixture.close();
+}
+
+TEST_CASE("interactive close releases the extension editor before terminal shutdown",
+        "[coding_agent][tui][extension_ui][issue1015][spec]") {
+    InteractiveFixture fixture;
+    LifecycleFactoryOptions options;
+    options.state = std::make_shared<ListenerState>();
+    options.install_editor = [](std::size_t) { return true; };
+    options.release_log = std::make_shared<EditorReleaseLog>();
+    options.release_log->terminal = &fixture.terminal;
+    fixture.start(make_lifecycle_factory(options));
+    REQUIRE(options.editors->size() == 1);
+    CHECK_FALSE(options.editors->front().expired());
+
+    fixture.close();
+
+    // pi teardown disposes the extension UI (`beforeSessionInvalidate` ->
+    // `resetExtensionUI`) while the run still owns the terminal; a release at
+    // view teardown happens after the terminal stopped.
+    REQUIRE_FALSE(options.release_log->releases.empty());
+    CHECK((options.release_log->releases.front() == std::pair<std::size_t, bool>{1, true}));
+    CHECK(options.editors->front().expired());
+    REQUIRE(options.state->listener_lifetimes.size() == 1);
+    CHECK(options.state->listener_lifetimes[0].expired());
+    CHECK_FALSE(fixture.terminal.modes().started);
+}
+
+TEST_CASE("deferred boot failure settles the extension registration before terminal restoration",
+        "[coding_agent][tui][extension_ui][issue1015][spec]") {
+    InteractiveFixture fixture;
+    LifecycleFactoryOptions options;
+    options.state = std::make_shared<ListenerState>();
+    options.install_editor = [](std::size_t) { return true; };
+    fixture.start_deferred(make_lifecycle_factory(options));
+    REQUIRE(options.state->registrations == 1);
+    REQUIRE(options.state->listener_lifetimes.size() == 1);
+    CHECK_FALSE(options.state->listener_lifetimes[0].expired());
+    REQUIRE(fixture.boot_completion.has_value());
+
+    std::move (*fixture.boot_completion)(std::expected<BootSessionResult, support::Error>{
+            std::unexpected(support::make_error(support::ErrorCode::Unknown, "boot session creation failed"))});
+    fixture.boot_completion.reset();
+    REQUIRE(tests::pump_until(fixture.io, [&] { return fixture.result.has_value(); }));
+
+    CHECK_FALSE(*fixture.result);
+    CHECK(options.state->listener_lifetimes[0].expired());
+    CHECK_FALSE(fixture.terminal.modes().started);
 }

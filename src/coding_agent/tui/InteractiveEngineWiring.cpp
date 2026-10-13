@@ -279,6 +279,9 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
     hooks.rebuild_chat = [weak] {
         if (const auto self = weak.lock()) self->rebuild_chat();
     };
+    hooks.reset_extension_ui = [weak] {
+        if (const auto self = weak.lock()) self->reset_extension_ui();
+    };
     hooks.apply_reload_result = [weak](AgentSessionReloadResult result) -> support::ExpectedVoid {
         const auto self = weak.lock();
         if (!self) {
@@ -286,6 +289,11 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
                 support::ErrorCode::Cancelled,
                 "Session flow host is no longer active"));
         }
+        // pi `handleReloadCommand`: the reload's `session_start` registrations
+        // land inside `session.reload()`, before the keybinding/theme/settings
+        // rebuild that follows it, so the fresh context's editor receives the
+        // rebuilt autocomplete provider below.
+        self->refresh_extension_ui();
         if (auto rebind = self->re_catalog_keybindings(); !rebind) {
             return std::unexpected(rebind.error());
         }

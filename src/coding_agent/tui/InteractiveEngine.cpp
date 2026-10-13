@@ -274,7 +274,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         // Stop the TUI so the terminal is restored before the host
         // reports the error; the session never bound.
         running_ = false;
-        extension_ui_host_.dispose();
+        dispose_extension_ui();
         retire_current_session();
         if (tui_started_) {
             (void)tui_.stop();
@@ -323,6 +323,8 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         auto failed = fail_start(subscribed.error());
         co_return std::unexpected(failed.error());
     }
+    // `initialize_view` installs this context's editor right after the view
+    // composition it belongs to, so the host refresh stays bare here.
     extension_ui_host_.refresh();
     initialize_view(startup_diagnostics_);
     if (auto warning = co_await append_project_trust_warning_if_needed(); !warning) {
@@ -346,7 +348,10 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
 
 boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     stop_source_.request_stop();
-    extension_ui_host_.dispose();
+    // pi `AgentSessionRuntime.dispose()`: the extension registration context
+    // is settled (`beforeSessionInvalidate` -> `resetExtensionUI`) while the
+    // terminal is still owned by the run.
+    dispose_extension_ui();
     tui_.set_render_prepare_sink(nullptr);
     tui_.set_render_complete_sink(nullptr);
     // Cancel extracted modal/session flows before terminal restoration;
@@ -652,7 +657,7 @@ boost::asio::awaitable<support::Expected<bool>> InteractiveEngine::append_projec
 
 support::ExpectedVoid InteractiveEngine::fail_start(const support::Error& error) {
     running_ = false;
-    extension_ui_host_.dispose();
+    dispose_extension_ui();
     if (session_ != nullptr) {
         session_->close();
     }
@@ -765,6 +770,24 @@ void InteractiveEngine::apply_extension_editor() {
     editor_theme.border = theme_controller_->live_theme().foreground_hook(ThemeToken::BorderMuted);
     editor_theme.select_list = theme_controller_->live_theme().select_list_theme();
     view_->set_custom_editor(extension_ui_host_.make_editor(std::move(editor_theme), keybindings_));
+}
+
+void InteractiveEngine::reset_extension_ui() {
+    extension_ui_host_.reset();
+    // pi `resetExtensionUI` tail: `setCustomEditorComponent(undefined)`
+    // restores the default editor with the outgoing editor's text, so the
+    // reset never loses an in-progress prompt.
+    apply_extension_editor();
+}
+
+void InteractiveEngine::refresh_extension_ui() {
+    extension_ui_host_.refresh();
+    apply_extension_editor();
+}
+
+void InteractiveEngine::dispose_extension_ui() {
+    extension_ui_host_.dispose();
+    apply_extension_editor();
 }
 
 void InteractiveEngine::restore_prompt_slot() {

@@ -237,8 +237,12 @@ InteractiveEngine::request_session_replacement_async(
 }
 
 support::ExpectedVoid InteractiveEngine::replace_session(std::unique_ptr<AgentSession> next) {
-    extension_ui_host_.reset();
+    // pi `teardownCurrent` ordering: the outgoing session's abort/shutdown
+    // settles before `beforeSessionInvalidate` disposes the extension
+    // registration context, and the replacement's fresh registrations only
+    // run after that reset.
     retire_current_session();
+    reset_extension_ui();
     // The retired Session's in-flight prompt and User Bash can no longer
     // gate or render as the current Session: invalidate their interrupt
     // generations and clear the active-work facts, the working indicator,
@@ -277,13 +281,13 @@ support::ExpectedVoid InteractiveEngine::replace_session(std::unique_ptr<AgentSe
     mcp_flows_->refresh_completion();
     auto subscribed = session_ui_->bind(*session_);
     if (!subscribed) {
-        extension_ui_host_.dispose();
+        dispose_extension_ui();
         return std::unexpected(subscribed.error());
     }
-    extension_ui_host_.refresh();
-    // pi resetExtensionUI clears the custom editor and re-runs the extension
-    // registrations; the fresh context may install another one.
-    apply_extension_editor();
+    // pi rebind: the replacement session's `session_start` registrations run
+    // after `resetExtensionUI` restored the default editor, and its fresh
+    // context may install another custom editor.
+    refresh_extension_ui();
     // The new session's resources replace the loaded-resources block
     // (pi `showLoadedResources` after `renderCurrentSessionState`). The
     // theme re-registration gap (replacement drops the created session's

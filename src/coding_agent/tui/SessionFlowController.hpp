@@ -88,7 +88,13 @@ struct SessionFlowHostHooks {
     /// Restore queued Agent input before tree navigation aborts a busy turn.
     std::move_only_function<void()> dequeue_pending_input{nullptr};
     std::move_only_function<void()> rebuild_chat{nullptr};
-    /// Apply one successful `/reload` result: re-catalog keybindings,
+    /// pi `handleReloadCommand` head: dispose the current extension
+    /// registration context and restore the prompt editor before the reload
+    /// runs. The reload's fresh registrations land through
+    /// `apply_reload_result`.
+    std::move_only_function<void()> reset_extension_ui{nullptr};
+    /// Apply one successful `/reload` result: run the fresh extension
+    /// registrations, re-catalog keybindings,
     /// re-register themes, re-apply settings, rebuild autocomplete, refresh
     /// loaded resources, and surface the models.json diagnostic.
     std::move_only_function<support::ExpectedVoid(AgentSessionReloadResult)> apply_reload_result{nullptr};
