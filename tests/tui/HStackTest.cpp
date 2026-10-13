@@ -177,9 +177,10 @@ namespace {
 }
 
 /// The painted rows as visible text, pi's own `visibleLines` convention
-/// (`test/layout.test.ts:11-13`): the shared splice leaves the same segment
-/// resets pi's `compositeTuiLine` does, a composed row is padded to the frame
-/// width, and neither is part of what the terminal shows.
+/// (`test/layout.test.ts:11-13`): the shared splice closes and reopens only
+/// the style state it tracks (see `LineCompositor.hpp`), a composed row is
+/// padded to the frame width, and neither is part of what the terminal
+/// shows.
 [[nodiscard]] std::vector<std::string> visible_lines(const std::vector<std::string>& lines) {
     std::vector<std::string> result;
     result.reserve(lines.size());
@@ -392,7 +393,7 @@ TEST_CASE("HStack validates its attachments and rejects a zero width", "[tui][hs
 }
 
 TEST_CASE("a constrained frame composes sibling columns instead of overwriting them", "[tui][hstack][issue999]") {
-    // pi `test/layout.test.ts:147-158` ("composes horizontal children at
+    // pi `test/layout.test.ts:148-159` ("composes horizontal children at
     // allocated widths") is the independent expectation for the composed row;
     // the tree pins both allocations.
     cch::tui::HStack root;
@@ -413,7 +414,7 @@ TEST_CASE("a constrained frame composes sibling columns instead of overwriting t
 }
 
 TEST_CASE("a constrained frame skips zero-width horizontal children", "[tui][hstack][issue999]") {
-    // pi `test/layout.test.ts:160-171` ("does not paint zero-width horizontal
+    // pi `test/layout.test.ts:161-172` ("does not paint zero-width horizontal
     // children"): the width-0 entry is never rendered, so its component cannot
     // mark a row.
     cch::tui::HStack root;

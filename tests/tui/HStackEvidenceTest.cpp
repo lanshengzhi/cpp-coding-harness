@@ -140,9 +140,10 @@ struct BoxTree {
 }
 
 /// The painted rows as visible text, pi's own `visibleLines` convention
-/// (`test/layout.test.ts:11-13`): the shared splice leaves the same segment
-/// resets pi's `compositeTuiLine` does, a composed row is padded to the frame
-/// width, and neither is part of what the terminal shows.
+/// (`test/layout.test.ts:11-13`): the shared splice closes and reopens only
+/// the style state it tracks (see `LineCompositor.hpp`), a composed row is
+/// padded to the frame width, and neither is part of what the terminal
+/// shows.
 [[nodiscard]] std::vector<std::string> visible_lines(const std::vector<std::string>& lines) {
     std::vector<std::string> result;
     result.reserve(lines.size());

@@ -66,7 +66,7 @@ constrained `VStack`. Every case records observations a plausible implementation
 direction only: the align runs separate the cross-axis offset from the column allocation and record
 the width each entry was rendered at, so a numeric basis that is measured anyway, an entry that is
 rendered at its allocated width a second time, or a zero-width entry that is rendered at all fails;
-the unequal frames separate proportional give-back from an equal split and pin both the composed row
+the unequal frames pin the sequential take-back, minimum saturation and the composed row
 and the recursive box tree, so an overwritten row fails where a spliced one passes; the auto-basis
 case separates a measurement at the frame width from a natural-width one; the nested frame separates
 an allocation-driven crop from a slice and a live mutation from a rebuild; and the in-`VStack` case
