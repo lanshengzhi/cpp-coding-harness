@@ -440,7 +440,24 @@ void AltScreen::request_immediate_render() {
     });
 }
 
-void AltScreen::invalidate() { request_render(); }
+void AltScreen::invalidate() {
+    ChildOperation operation(*this);
+    // pi `TuiBase.invalidate` (`tui.ts:911-913`) walks `getMountedRoots`
+    // (`tui-alt-screen.ts:329-333`): while a layout root is installed it is the
+    // only mounted root, otherwise the mounted roots are the children.
+    if (layout_root_) {
+        layout_root_->invalidate();
+    } else {
+        std::vector<Component*> children;
+        children.reserve(children_.size());
+        for (const auto& child : children_)
+            children.push_back(child.get());
+        for (auto* child : children) {
+            if (owns(child)) child->invalidate();
+        }
+    }
+    request_render();
+}
 
 void AltScreen::set_clear_on_shrink(bool enabled) noexcept { clear_on_shrink_ = enabled; }
 

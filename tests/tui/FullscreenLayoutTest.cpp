@@ -1,9 +1,10 @@
 // Fullscreen constrained layout composition through AltScreen::set_layout_root
-// (issue #998).
+// (issues #998, #999).
 //
 // Frozen contract: pi v1.0.4 at 7c10bd4337495ee613f2224843ecdf349b80d1df —
 // `packages/tui/src/tui-alt-screen.ts:318-334` (`setLayoutRoot`,
-// `getMountedRoots`) and the product composition in
+// `getMountedRoots`), `packages/tui/src/tui.ts:911-913` (`TuiBase.invalidate`)
+// and the product composition in
 // `packages/coding-agent/src/modes/interactive/chat-viewport.ts:31-44`.
 
 #include <cch/tui/AltScreen.hpp>
@@ -33,9 +34,10 @@ public:
         return cch::tui::RenderResult{.lines = lines_};
     }
 
-    void invalidate() override {}
+    void invalidate() override { ++invalidate_count; }
 
     std::size_t rendered_width{0};
+    std::size_t invalidate_count{0};
 
 private:
     std::vector<std::string> lines_;
@@ -223,4 +225,28 @@ TEST_CASE("fullscreen layout root falls back to the sequential children composit
     REQUIRE(tui.render());
     CHECK(terminal.screen() == std::vector<std::string>{"child ", "      ", "      "});
     REQUIRE(tui.stop());
+}
+
+TEST_CASE("fullscreen invalidate reaches the mounted layout root instead of the children", "[tui][layout][issue999]") {
+    // pi `TuiBase.invalidate` (`tui.ts:911-913`) invalidates every mounted root,
+    // and the layout root replaces the children as the set of mounted roots
+    // (`tui-alt-screen.ts:318-334`); removing it restores them.
+    cch::tui::VirtualTerminal terminal({.columns = 6, .rows = 2});
+    cch::tui::AltScreen tui(terminal);
+
+    auto root = std::make_unique<FrameChild>(std::vector<std::string>{"stack"});
+    auto* root_child = root.get();
+    auto child = std::make_unique<FrameChild>(std::vector<std::string>{"child"});
+    auto* mounted_child = child.get();
+    REQUIRE(tui.add_child(std::move(child)));
+
+    tui.set_layout_root(std::move(root));
+    tui.invalidate();
+    CHECK(root_child->invalidate_count == 1);
+    CHECK(mounted_child->invalidate_count == 0);
+
+    tui.set_layout_root(nullptr);
+    tui.invalidate();
+    CHECK(root_child->invalidate_count == 1);
+    CHECK(mounted_child->invalidate_count == 1);
 }
