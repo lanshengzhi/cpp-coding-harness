@@ -118,9 +118,9 @@ export async function captureScrollbar(piCheckout: string) {
 			scrollbarThumbStyle,
 			scrollbarHideDelayMs: 10,
 		});
-		/// Which rows carry the track colour, the thumb colour, and the reset
-		/// prefix pi re-emits with the background it preserved under an overlay
-		/// glyph (pi `test/layout.test.ts:266-269`).
+		/// Which rows carry track and thumb colours, and where the preserved
+		/// content background precedes the expanded active thumb (pi
+		/// `test/layout.test.ts:217-232`).
 		const styles = (lines: readonly string[]) => ({
 			track: lines.map((line) => line.includes(trackColor)),
 			thumb: lines.map((line) => line.includes(thumbColor)),
@@ -158,9 +158,8 @@ export async function captureScrollbar(piCheckout: string) {
 		const fittingAfter = phaseOf(fitting, 6, 4);
 		const alwaysFitting = new ScrollView(new Text("1\n2", 0, 0), { scrollbar: "always", scrollbarThumbStyle });
 		const alwaysFittingPhase = phaseOf(alwaysFitting, 6, 4);
-		// An `always` bar has reserved its column, so it must not re-emit the
-		// content background after its own reset prefix (pi
-		// `test/layout.test.ts:263-269`).
+		// A reserved column remains visible even for fitting content; the child
+		// lays out one column narrower (pi `test/layout.test.ts:269-286`).
 		const alwaysOverflowing = new ScrollView(content, {
 			scrollbar: "always",
 			scrollbarTrackStyle,

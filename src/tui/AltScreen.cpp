@@ -873,12 +873,15 @@ void AltScreen::update_scrollbar_hover(std::ptrdiff_t x, std::ptrdiff_t y) {
 
 void AltScreen::set_scrollbar_hover(ScrollView* scroll_view) {
     if (scroll_view != nullptr && !owns(scroll_view)) scroll_view = nullptr;
-    if (scroll_view == scrollbar_hover_) return;
-    // A hovered viewport may already have left the tree, and a removed C++
-    // component is destroyed rather than kept alive: deactivating it could be a
-    // write after free. Dropping the hover reference is enough.
-    if (scrollbar_hover_ != nullptr && owns(scrollbar_hover_)) scrollbar_hover_->set_scrollbar_active(false);
+    if (scroll_view == scrollbar_hover_ && !scrollbar_hover_lifetime_.expired()) return;
+    // `owns()` distinguishes live-tree targets from detached targets but does
+    // not distinguish a detached, still-live viewport from a destroyed one.
+    // The weak token lets us deactivate the former without dereferencing the
+    // latter (pi keeps both JavaScript objects alive).
+    if (scrollbar_hover_ != nullptr && !scrollbar_hover_lifetime_.expired())
+        scrollbar_hover_->set_scrollbar_active(false);
     scrollbar_hover_ = scroll_view;
+    scrollbar_hover_lifetime_ = scroll_view != nullptr ? scroll_view->lifetime_token() : std::weak_ptr<void>{};
     if (scrollbar_hover_ != nullptr) scrollbar_hover_->set_scrollbar_active(true);
 }
 

@@ -14,6 +14,8 @@
 
 namespace cch::tui {
 
+class AltScreen;
+
 namespace detail {
 /// The engine's allocation and painting pass (defined in `tui/Layout.cpp`); it
 /// reads this viewport's node data and reports the frame it allocated.
@@ -87,7 +89,8 @@ struct ScrollViewOptions {
 /// The viewport owns its single child; the frame engine allocates the child
 /// unbounded, reports the content and viewport heights through `update_layout`,
 /// and paints the visible window. On its own (`render(width)`) the viewport only
-/// forwards the child's output, so a standalone render is the whole content.
+/// forwards the child's output, padding it back to `width` when `always` reserves
+/// a column; intrinsic stack measurement therefore includes that reserved cell.
 ///
 /// The frozen scroll algebra is preserved exactly: the scroll top clamps to
 /// `[0, content_height - viewport_height]`, `scroll_by` returns the lines it
@@ -158,8 +161,10 @@ public:
     [[nodiscard]] bool contains(const Component* target) const override;
 
 private:
+    friend class AltScreen;
     friend class detail::LayoutBuilder;
 
+    [[nodiscard]] std::weak_ptr<void> lifetime_token() const noexcept;
     [[nodiscard]] std::size_t max_scroll_top() const noexcept;
     void request_render();
     /// Reveal the transient bar and (re)arm the hide timer (pi
@@ -178,6 +183,8 @@ private:
     std::function<std::string(std::string_view)> scrollbar_thumb_style_{};
     std::chrono::milliseconds scrollbar_hide_delay_{1000};
     std::shared_ptr<ScrollbarHideTimer> scrollbar_hide_timer_{};
+    /// Expires with this viewport so roots can safely track non-owning hover.
+    std::shared_ptr<void> lifetime_token_{std::make_shared<int>(0)};
     /// Whether `scrollbar_hide_timer_` holds a pending hide (pi's timer handle).
     bool scrollbar_hide_armed_{false};
     bool transient_scrollbar_visible_{false};

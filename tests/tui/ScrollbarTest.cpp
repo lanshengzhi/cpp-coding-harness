@@ -14,6 +14,7 @@
 // and `packages/tui/test/tui-alt-screen.test.ts:140-200,440-500`.
 
 #include <cch/tui/AltScreen.hpp>
+#include <cch/tui/HStack.hpp>
 #include <cch/tui/ScrollView.hpp>
 #include <cch/tui/Stack.hpp>
 #include <cch/tui/Text.hpp>
@@ -135,6 +136,27 @@ TEST_CASE("a scrollbar defaults to hidden and neither draws nor reserves a colum
     CHECK(visible_lines(*frame) == std::vector<std::string>{"abcde", "abcde", "abcde", "abcde"});
     CHECK(frame->root.children.front().rect.width == 6);
     CHECK(cch::tui::detail::get_scrollbar_geometry(frame->root) == std::nullopt);
+}
+
+TEST_CASE("a reserved ScrollView pads intrinsic render width for stack allocation",
+        "[tui][scroll-view][scrollbar][issue1001][spec]") {
+    // pi `scroll-view.ts:215-219`: an `always` viewport wraps its child at
+    // width-1, then restores the reserved cell in direct render. Here that
+    // padding changes the natural width from 9 to 10. At width 13, the HStack
+    // must shrink the sibling by two cells; without padding it would shrink it
+    // by one.
+    auto scroll = std::make_unique<cch::tui::ScrollView>(
+            std::make_unique<LabeledChild>(std::vector<std::string>{"123456789"}),
+            cch::tui::ScrollViewOptions{.scrollbar = cch::tui::ScrollbarMode::Always});
+    auto sibling = std::make_unique<LabeledChild>(std::vector<std::string>{"12345"});
+    auto* sibling_pointer = sibling.get();
+    cch::tui::HStack stack;
+    REQUIRE(stack.add_child(std::move(scroll), cch::tui::StackEntryOptions{.shrink = 0}));
+    REQUIRE(stack.add_child(std::move(sibling), cch::tui::StackEntryOptions{.shrink = 1, .min_size = 1}));
+
+    const auto rendered = stack.render(13);
+    REQUIRE(rendered);
+    CHECK(sibling_pointer->rendered_width == 3);
 }
 
 TEST_CASE("always reserves its column before the child wraps and paints the track",
@@ -581,9 +603,10 @@ TEST_CASE("AltScreen follows the scrollbar hover across motion, wheel, focus, an
 
 TEST_CASE("a viewport removed from the live tree stops being a scrollbar hover target",
         "[tui][scroll-view][scrollbar][issue1001][spec]") {
-    // pi keeps removed scroll views alive; a C++ viewport is destroyed with its
-    // container, so a cached frame can name freed memory. The hover resolves
-    // against the live tree, which makes such a frame harmless.
+    // pi keeps removed scroll views reachable, while C++ removal transfers
+    // ownership to the caller and can leave a cached frame naming a viewport
+    // that is no longer in the live tree. This regression keeps the detached
+    // viewport alive to verify the hover path clears it on the next report.
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 4});
     cch::tui::AltScreen tui(terminal);
     auto stack = std::make_unique<cch::tui::VStack>();
@@ -600,11 +623,11 @@ TEST_CASE("a viewport removed from the live tree stops being a scrollbar hover t
     REQUIRE(tui.render());
 
     // Hover the first viewport, then detach it while the root still holds the
-    // hover: a cached frame names the detached viewport, and the next report
-    // must resolve the hover against the live tree instead of re-activating it.
+    // hover: a cached frame still names the detached but live viewport. The
+    // next report must clear its active state and resolve the hover against the
+    // live tree instead of re-activating it.
     REQUIRE(terminal.inject_input("\x1b[<35;8;1M"));
     REQUIRE(first_pointer->is_scrollbar_active());
-    first_pointer->set_scrollbar_active(false);
     auto removed = stack_pointer->remove_child(first_pointer);
     REQUIRE(removed != nullptr);
     REQUIRE(terminal.inject_input("\x1b[<35;8;1M"));

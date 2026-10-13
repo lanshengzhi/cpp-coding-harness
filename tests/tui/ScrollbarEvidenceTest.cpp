@@ -399,8 +399,8 @@ TEST_CASE("the transient scrollbar follows the frozen timeline and overlay splic
     REQUIRE(frame);
     check_phase(phase_of(always_fitting, *frame), phase_of(frozen.at("alwaysFitting")));
 
-    // A reserved bar re-emits its reset prefix after the content background it
-    // does not have to preserve (pi `test/layout.test.ts:263-269`).
+    // pi `test/layout.test.ts:269-286`: the `alwaysFitting` bar remains visible
+    // despite fitting content, and `alwaysOverflowing` reserves and paints it.
     cch::tui::ScrollView always_overflowing(std::make_unique<cch::tui::Text>(content, 0, 0, background_hook),
             cch::tui::ScrollViewOptions{.scrollbar = cch::tui::ScrollbarMode::Always,
                     .scrollbar_track_style = track_style,

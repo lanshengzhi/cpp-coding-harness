@@ -134,6 +134,8 @@ bool ScrollView::is_scrollbar_visible() const noexcept {
 
 bool ScrollView::is_scrollbar_active() const noexcept { return scrollbar_active_; }
 
+std::weak_ptr<void> ScrollView::lifetime_token() const noexcept { return lifetime_token_; }
+
 std::size_t ScrollView::content_width(std::size_t width) const noexcept {
     return scrollbar_ == ScrollbarMode::Always && width > 1 ? width - 1 : width;
 }
@@ -278,8 +280,16 @@ void ScrollView::update_layout(
 support::Expected<RenderResult> ScrollView::render(std::size_t width) {
     // The viewport's own render is the child at the width the scrollbar leaves
     // (`content_width`), before the frame engine reserves the column and paints
-    // the bar (pi `ScrollView.render`).
-    return child_->render(content_width(width));
+    // the bar (pi `scroll-view.ts:215-219`). When the bar reserves a column the
+    // child renders one column narrower than the supplied width, so pi pads
+    // every line back to the supplied width; a nested stack measuring this
+    // viewport (auto basis) otherwise sees a column less than pi does.
+    auto rendered = child_->render(content_width(width));
+    if (!rendered) return rendered;
+    if (content_width(width) != width)
+        for (auto& line : rendered->lines)
+            line += ' ';
+    return rendered;
 }
 
 void ScrollView::invalidate() { child_->invalidate(); }

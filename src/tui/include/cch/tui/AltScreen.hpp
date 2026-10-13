@@ -237,6 +237,7 @@ private:
     /// The viewport whose scrollbar the pointer is on (pi `scrollbarHover`); a
     /// hovered bar keeps its transient reveal and draws the active thumb.
     ScrollView* scrollbar_hover_{nullptr};
+    std::weak_ptr<void> scrollbar_hover_lifetime_{};
     // Fullscreen layout authority (#998): when set, every frame is one
     // constrained composition of this component instead of a flow of children.
     std::unique_ptr<Component> layout_root_;
