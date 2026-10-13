@@ -16,6 +16,7 @@ import { captureInputScenarios } from "./input-scenarios.mts";
 import { captureStackLayout } from "./stack-layout-scenarios.mts";
 import { captureScrollView } from "./scroll-view-scenarios.mts";
 import { captureMouse } from "./mouse-scenarios.mts";
+import { captureScrollbar } from "./scrollbar-scenarios.mts";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), "..");
@@ -843,6 +844,11 @@ const stackLayoutArtifact = envelope(stackLayoutObservation.sourceEndpoints, sta
 const scrollViewObservation = await captureScrollView(pi);
 const scrollViewArtifact = envelope(scrollViewObservation.sourceEndpoints, scrollViewObservation.scenarios);
 
+// Observe scrollbar presentation: modes, the transient timeline, thumb
+// geometry and the alternate-screen hover (#1001).
+const scrollbarObservation = await captureScrollbar(pi);
+const scrollbarArtifact = envelope(scrollbarObservation.sourceEndpoints, scrollbarObservation.scenarios);
+
 // Observe normalized mouse routing: the cached-frame hit test, the capture and
 // host-focus rules, wheel consumption and the regular screen's terminal-owned
 // mouse behavior (#1002).
@@ -867,6 +873,7 @@ const artifacts = [
 	["layout.json", "stack-layout", stackLayoutArtifact],
 	["scroll-view.json", "scroll-view", scrollViewArtifact],
 	["mouse.json", "mouse", mouseArtifact],
+	["scrollbar.json", "scrollbar", scrollbarArtifact],
 ] as const;
 const records = artifacts.map(([file, family, artifact]) => {
 	const bytes = Buffer.from(JSON.stringify(artifact, null, 2) + "\n");
@@ -893,6 +900,10 @@ const manifest = {
 			{
 				path: "capture/scroll-view-scenarios.mts",
 				sha256: sha256(readFileSync(path.join(root, "capture/scroll-view-scenarios.mts"))),
+			},
+			{
+				path: "capture/scrollbar-scenarios.mts",
+				sha256: sha256(readFileSync(path.join(root, "capture/scrollbar-scenarios.mts"))),
 			},
 			{
 				path: "capture/mouse-scenarios.mts",

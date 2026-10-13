@@ -91,6 +91,23 @@ mounted behind across scroll, append, `scrollToBottom`, `scrollToTop` and resize
 `capture/scroll-view-scenarios.mts` executes the frozen components directly; its source digest is
 recorded alongside the main generator digest.
 
+For #1001, the named runner re-captured all 15 current families at the same frozen revision and
+added `scrollbar.json`. Its five scenarios are read through pi's own `ScrollView`,
+`renderLayoutFrame` and a real `TuiAltScreen` over `VirtualTerminal`, so a silently different
+reservation, transient lifetime, thumb proportion or hover fails the replay:
+`scrollbar-modes-and-reservation` distinguishes the three modes and pins the reserved content
+column, the child width and the re-wrapped frame of a runtime mode change;
+`scrollbar-transient-timeline` distinguishes a hidden first frame from the revealed, hovered,
+timer-expired, scrolled-to-end and scrolled-to-start frames, and pins the track/thumb colour rows,
+the preserved-background re-emit, the followed window and the fitting cases;
+`scrollbar-geometry-edges` pins the 19/10/4/2 thumb proportions of a twenty-row track, the
+empty-content `Infinity` branch, a one-row track and a single-column viewport;
+`scrollbar-overlay-preserves-background` distinguishes the background an overlay glyph keeps from
+the border foreground it drops; and `scrollbar-alt-screen-hover` distinguishes a wheel over the
+track, a motion that keeps the hover, a motion that leaves it to the hide timer, a focus loss and
+`stop()` from each other. `capture/scrollbar-scenarios.mts` executes the frozen components
+directly; its source digest is recorded alongside the main generator digest.
+
 For #1002, the named runner re-captured all 14 current families at the same frozen revision and
 added `mouse.json`. Its five scenarios are read through pi's own `MouseRegion`, `Container`, `Box`,
 `TuiAltScreen` and `dispatchMouseEvent`, so a silently different hit path, coordinate transform,
