@@ -1,5 +1,6 @@
 #include <cch/tui/AltScreen.hpp>
 
+#include "tui/Layout.hpp"
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
@@ -15,7 +16,7 @@ namespace {
 
 [[nodiscard]] support::Error alt_overlay_unavailable() {
     return support::make_error(
-            support::ErrorCode::Validation, "Alternate-screen overlays are not available on this root yet (#998)");
+            support::ErrorCode::Validation, "Alternate-screen overlays are not available on this root yet");
 }
 
 } // namespace
@@ -32,10 +33,25 @@ AltScreen::~AltScreen() {
 
 bool AltScreen::owns(const Component* component) const {
     if (component == nullptr) return false;
+    if (layout_root_) return layout_root_->contains(component);
     for (const auto& child : children_) {
         if (child && child->contains(component)) return true;
     }
     return false;
+}
+
+void AltScreen::set_layout_root(std::unique_ptr<Component> root) {
+    ChildOperation operation(*this);
+    // Focus that lives in the outgoing tree keeps the tree alive until the
+    // operation ends, then falls back to a mounted target.
+    const bool was_focused = focused_ != nullptr && layout_root_ && layout_root_->contains(focused_);
+    if (was_focused) retired_children_.push_back(std::move(layout_root_));
+    layout_root_ = std::move(root);
+    if (was_focused) {
+        apply_focus(nullptr);
+        fallback_focus();
+    }
+    request_render();
 }
 
 support::Expected<std::reference_wrapper<Component>> AltScreen::add_child(std::unique_ptr<Component> component) {
@@ -257,7 +273,17 @@ support::ExpectedVoid AltScreen::render_frame() {
 
     std::vector<std::string> lines;
     std::optional<CursorPosition> cursor;
-    if (auto rendered = render_children(dimensions, lines, cursor); !rendered) {
+    if (layout_root_) {
+        // One constrained composition of the whole viewport: the layout root is
+        // allocated the exact terminal size and the frame it produces is the
+        // frame, not a flow of child lines. `set_available_height` is not
+        // pushed into layout children; their allocation is the bound.
+        auto frame = detail::LayoutEngine::render(*layout_root_, dimensions.columns, dimensions.rows);
+        if (!frame) return std::unexpected(frame.error());
+        // Frame image placements are not emitted by this root yet (#1012).
+        lines = std::move(frame->lines);
+        cursor = frame->cursor;
+    } else if (auto rendered = render_children(dimensions, lines, cursor); !rendered) {
         return std::unexpected(rendered.error());
     }
     return render_viewport(lines, cursor, dimensions);

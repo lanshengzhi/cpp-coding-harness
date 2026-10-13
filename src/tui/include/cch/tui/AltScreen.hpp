@@ -33,8 +33,8 @@ struct TuiAltScreenRenderState {
 /// main buffer returns, whether it is called normally or after a failed
 /// start; `TuiStopOptions::preserve_screen` does not apply to this root.
 ///
-/// Overlays are not implemented on this root yet (#998/#999): every overlay
-/// entry point fails validation until the deferred overlay chain lands.
+/// Overlays are not implemented on this root yet: every overlay entry point
+/// fails validation until the deferred overlay chain lands.
 class AltScreen final : public ITui, public detail::TuiHost {
 public:
     explicit AltScreen(Terminal& terminal);
@@ -50,6 +50,13 @@ public:
             std::unique_ptr<Component> component) override;
     [[nodiscard]] support::ExpectedVoid remove_child(Component* component) override;
     void clear_children() override;
+
+    /// Install the component that fills the viewport as the root of a
+    /// constrained layout (pi `TuiAltScreen.setLayoutRoot`). While one is
+    /// installed it is this root's only mounted component: `owns()` and every
+    /// frame follow it, and the child composition is ignored. Passing null
+    /// restores the sequential composition of the attached children.
+    void set_layout_root(std::unique_ptr<Component> root);
 
     [[nodiscard]] support::ExpectedVoid set_focus(Component* component) override;
     [[nodiscard]] Component* focus() const noexcept override { return focused_; }
@@ -117,6 +124,9 @@ private:
     void execute_scheduled_render(std::size_t generation);
 
     std::shared_ptr<RenderScheduleState> render_schedule_state_;
+    // Fullscreen layout authority (#998): when set, every frame is one
+    // constrained composition of this component instead of a flow of children.
+    std::unique_ptr<Component> layout_root_;
     TuiScheduler* scheduler_{nullptr};
     TuiRenderPrepareSink render_prepare_sink_;
     TuiRenderCompleteSink render_complete_sink_;

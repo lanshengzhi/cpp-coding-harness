@@ -39,6 +39,7 @@ include_guard(GLOBAL)
         tests/tui/ColorUtilsTest.cpp
         tests/tui/EditorTest.cpp
         tests/tui/EditorLayoutTest.cpp
+        tests/tui/FullscreenLayoutTest.cpp
         tests/tui/FuzzyTest.cpp
         tests/tui/ImageTest.cpp
         tests/tui/ITuiTest.cpp
