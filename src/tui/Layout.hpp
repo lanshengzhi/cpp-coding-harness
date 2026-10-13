@@ -9,6 +9,13 @@
 #include <string>
 #include <vector>
 
+namespace cch::tui {
+
+class HStack;
+class VStack;
+
+} // namespace cch::tui
+
 namespace cch::tui::detail {
 
 /// Cells of one allocated box (pi `LayoutRect`).
@@ -48,10 +55,10 @@ struct LayoutFrame {
 /// The constrained layout authority (pi `renderLayoutFrame`): allocate a
 /// component tree into an exact `width` x `height` cell frame and compose it.
 ///
-/// A vertical stack node is laid out through its entries; every other
-/// component is a leaf whose output is rendered at the frame width, cropped to
-/// its allocated rect, and translated into the frame. Non-positive dimensions
-/// clamp to one cell, matching the frozen viewport.
+/// A stack node (vertical or horizontal) is laid out through its entries; every
+/// other component is a leaf whose output is rendered at the frame width,
+/// cropped to its allocated rect, and translated into the frame. Non-positive
+/// dimensions clamp to one cell, matching the frozen viewport.
 class LayoutEngine {
 public:
     [[nodiscard]] static support::Expected<LayoutFrame> render(Component& root, std::size_t width, std::size_t height);

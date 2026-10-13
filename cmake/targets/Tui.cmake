@@ -17,6 +17,7 @@ cch_parity_declare_target(
         src/tui/EditorCompletionSession.cpp
         src/tui/EditorLayout.cpp
         src/tui/Fuzzy.cpp
+        src/tui/HStack.cpp
         src/tui/Image.cpp
         src/tui/ImageDimensions.cpp
         src/tui/ImageGeometry.cpp

@@ -1,9 +1,12 @@
 #include "tui/Layout.hpp"
 
+#include "tui/LineCompositor.hpp"
 #include "tui/RenderUtils.hpp"
 #include "tui/StackLayout.hpp"
 #include "tui/UnicodeWidth.hpp"
 
+#include <cch/tui/HStack.hpp>
+#include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/VStack.hpp>
 #include <cch/support/Error.hpp>
 
@@ -54,6 +57,12 @@ private:
             LayoutContext& context, Component& component, std::size_t width);
     [[nodiscard]] static support::Expected<std::size_t> measure_height(
             LayoutContext& context, Component& component, std::size_t width);
+    [[nodiscard]] static support::Expected<std::size_t> measure_width(
+            LayoutContext& context, Component& component, std::size_t width);
+    /// Passive views over a stack's live entries, in stack order (pi
+    /// `LAYOUT_NODE.entries`).
+    [[nodiscard]] static std::vector<StackEntry> stack_entry_views(const VStack& stack);
+    [[nodiscard]] static std::vector<StackEntry> stack_entry_views(const HStack& stack);
     [[nodiscard]] static support::Expected<LayoutBox> layout_component(LayoutContext& context,
             Component& component,
             std::ptrdiff_t x,
@@ -83,6 +92,32 @@ support::Expected<std::size_t> LayoutBuilder::measure_height(
     return rendered->get().lines.size();
 }
 
+support::Expected<std::size_t> LayoutBuilder::measure_width(
+        LayoutContext& context, Component& component, std::size_t width) {
+    auto rendered = render_cached(context, component, width);
+    if (!rendered) return std::unexpected(rendered.error());
+    std::size_t measured = 0;
+    for (const auto& line : rendered->get().lines)
+        measured = std::max(measured, measure_visible_width(line).width);
+    return measured;
+}
+
+std::vector<StackEntry> LayoutBuilder::stack_entry_views(const VStack& stack) {
+    std::vector<StackEntry> entries;
+    entries.reserve(stack.entries_.size());
+    for (const auto& entry : stack.entries_)
+        entries.push_back(StackEntry{.component = entry.component.get(), .options = &entry.options});
+    return entries;
+}
+
+std::vector<StackEntry> LayoutBuilder::stack_entry_views(const HStack& stack) {
+    std::vector<StackEntry> entries;
+    entries.reserve(stack.entries_.size());
+    for (const auto& entry : stack.entries_)
+        entries.push_back(StackEntry{.component = entry.component.get(), .options = &entry.options});
+    return entries;
+}
+
 support::Expected<LayoutBox> LayoutBuilder::layout_component(LayoutContext& context,
         Component& component,
         std::ptrdiff_t x,
@@ -91,8 +126,9 @@ support::Expected<LayoutBox> LayoutBuilder::layout_component(LayoutContext& cont
         std::optional<std::size_t> height,
         const LayoutRect& clip) {
     const auto safe_width = std::max<std::size_t>(1, width);
-    const auto* stack = dynamic_cast<const VStack*>(&component);
-    if (stack == nullptr) {
+    const auto* vstack = dynamic_cast<const VStack*>(&component);
+    const auto* hstack = dynamic_cast<const HStack*>(&component);
+    if (vstack == nullptr && hstack == nullptr) {
         // Leaf: a component without a layout node owns the lines it renders
         // (pi `layout.ts` leaf branch).
         auto rendered = render_cached(context, component, safe_width);
@@ -114,15 +150,83 @@ support::Expected<LayoutBox> LayoutBuilder::layout_component(LayoutContext& cont
                 .line_offset = line_offset};
     }
 
+    if (hstack != nullptr) {
+        // Horizontal stack node (pi `layout.ts` hstack branch): the frame width
+        // is the main axis, so widths are allocated against it, every child's
+        // height is measured at its own allocated width, and `align` places the
+        // child on the cross axis.
+        const auto entries = stack_entry_views(*hstack);
+        const auto visible = visible_stack_entries(entries, context.viewport);
+
+        std::vector<std::size_t> intrinsic_widths;
+        intrinsic_widths.reserve(visible.size());
+        for (const auto& entry : visible) {
+            if (entry.options->basis) {
+                intrinsic_widths.push_back(*entry.options->basis);
+                continue;
+            }
+            auto measured = measure_width(context, *entry.component, safe_width);
+            if (!measured) return std::unexpected(measured.error());
+            intrinsic_widths.push_back(*measured);
+        }
+        const auto widths = allocate_stack_sizes(visible, intrinsic_widths, safe_width, hstack->gap_);
+
+        std::vector<std::size_t> intrinsic_heights;
+        intrinsic_heights.reserve(visible.size());
+        for (std::size_t index = 0; index < visible.size(); ++index) {
+            auto measured = measure_height(context, *visible[index].component, std::max<std::size_t>(1, widths[index]));
+            if (!measured) return std::unexpected(measured.error());
+            intrinsic_heights.push_back(*measured);
+        }
+        std::size_t tallest = 0;
+        for (const auto child_height : intrinsic_heights)
+            tallest = std::max(tallest, child_height);
+        const auto rect = LayoutRect{.x = x, .y = y, .width = safe_width, .height = height ? *height : tallest};
+        LayoutBox box{.component = &component,
+                .rect = rect,
+                .clip = intersect(clip, rect),
+                .children = {},
+                .leaf = false,
+                .line_offset = 0};
+        box.children.reserve(visible.size());
+        auto child_x = x;
+        for (std::size_t index = 0; index < visible.size(); ++index) {
+            const auto natural_height = intrinsic_heights[index];
+            const auto child_height =
+                    hstack->align_ == StackAlign::Stretch ? rect.height : std::min(rect.height, natural_height);
+            auto child_y = y;
+            if (hstack->align_ == StackAlign::Center)
+                child_y += static_cast<std::ptrdiff_t>((rect.height - child_height) / 2);
+            else if (hstack->align_ == StackAlign::End)
+                child_y += static_cast<std::ptrdiff_t>(rect.height - child_height);
+
+            const auto child_width = widths[index];
+            if (child_width == 0) {
+                // A zero-width entry is laid out as an empty box without
+                // rendering its component, exactly as pi skips it.
+                box.children.push_back(LayoutBox{.component = visible[index].component,
+                        .rect = LayoutRect{.x = child_x, .y = child_y, .width = 0, .height = child_height},
+                        .clip = LayoutRect{.x = child_x, .y = child_y, .width = 0, .height = 0},
+                        .children = {},
+                        .leaf = false,
+                        .line_offset = 0});
+            } else {
+                auto child = layout_component(
+                        context, *visible[index].component, child_x, child_y, child_width, child_height, box.clip);
+                if (!child) return std::unexpected(child.error());
+                box.children.push_back(std::move(*child));
+            }
+            child_x += static_cast<std::ptrdiff_t>(child_width + hstack->gap_);
+        }
+        return box;
+    }
+
     // Vertical stack node (pi `layout.ts` vstack branch): the frame width is the
     // cross axis, `allocate_stack_sizes` gives every visible entry its share of
     // the main axis, and children are placed in entry order.
-    std::vector<StackEntry> entries;
-    entries.reserve(stack->entries_.size());
-    for (const auto& entry : stack->entries_)
-        entries.push_back(StackEntry{.component = entry.component.get(), .options = &entry.options});
+    const auto entries = stack_entry_views(*vstack);
     const auto visible = visible_stack_entries(entries, context.viewport);
-    const auto gap_total = visible.empty() ? std::size_t{0} : (visible.size() - 1) * stack->gap_;
+    const auto gap_total = visible.empty() ? std::size_t{0} : (visible.size() - 1) * vstack->gap_;
 
     std::vector<std::size_t> intrinsic_heights;
     intrinsic_heights.reserve(visible.size());
@@ -135,7 +239,7 @@ support::Expected<LayoutBox> LayoutBuilder::layout_component(LayoutContext& cont
         if (!measured) return std::unexpected(measured.error());
         intrinsic_heights.push_back(*measured);
     }
-    const auto sizes = allocate_stack_sizes(visible, intrinsic_heights, height, stack->gap_);
+    const auto sizes = allocate_stack_sizes(visible, intrinsic_heights, height, vstack->gap_);
     auto natural_height = gap_total;
     for (const auto size : sizes)
         natural_height += size;
@@ -153,7 +257,7 @@ support::Expected<LayoutBox> LayoutBuilder::layout_component(LayoutContext& cont
                 layout_component(context, *visible[index].component, x, child_y, safe_width, sizes[index], box.clip);
         if (!child) return std::unexpected(child.error());
         box.children.push_back(std::move(*child));
-        child_y += static_cast<std::ptrdiff_t>(sizes[index] + stack->gap_);
+        child_y += static_cast<std::ptrdiff_t>(sizes[index] + vstack->gap_);
     }
     return box;
 }
@@ -166,8 +270,10 @@ support::ExpectedVoid LayoutBuilder::paint_box(LayoutContext& context, const Lay
         const auto& lines = rendered->get().lines;
         // pi `layout.ts` `paintBox`: rows come from the box's rect and clip, the
         // source row is shifted by the cursor crop, and the row is written
-        // directly when the box owns the whole width (a partial-width row needs
-        // horizontal composition, which is #999).
+        // directly only when the box owns the whole frame width and no earlier
+        // box painted it. Any other box covers part of a row a sibling may
+        // already hold, so its columns are spliced into the composed row
+        // (pi `compositeTuiLine`).
         const auto first_row = std::max<std::ptrdiff_t>({box.rect.y, box.clip.y, 0});
         const auto last_row = std::min<std::ptrdiff_t>({box.rect.y + static_cast<std::ptrdiff_t>(box.rect.height),
                 box.clip.y + static_cast<std::ptrdiff_t>(box.clip.height),
@@ -175,14 +281,24 @@ support::ExpectedVoid LayoutBuilder::paint_box(LayoutContext& context, const Lay
         for (auto row = first_row; row < last_row; ++row) {
             const auto source_index = static_cast<std::size_t>(row - box.rect.y) + box.line_offset;
             if (source_index >= lines.size()) continue;
-            auto prepared = prepare_rendered_line(lines[source_index], context.viewport.width);
+            // The leaf rendered at its allocated width, so that width is the
+            // bound its own lines must respect.
+            auto prepared = prepare_rendered_line(lines[source_index], box.rect.width);
             if (!prepared) return std::unexpected(prepared.error());
             const auto target = static_cast<std::size_t>(row);
-            if (box.rect.x != 0 || box.rect.width < context.viewport.width || !frame.lines[target].empty()) {
-                return std::unexpected(support::make_error(support::ErrorCode::Validation,
-                        "TUI constrained layout cannot compose a row that is not the box's own full width (#999)"));
+            const auto owns_row = box.rect.x == 0 && box.rect.width >= context.viewport.width &&
+                                  prepared->width <= context.viewport.width;
+            if (owns_row && (is_image_line(prepared->text) || frame.lines[target].empty())) {
+                frame.lines[target] = std::move(prepared->text);
+                continue;
             }
-            frame.lines[target] = std::move(prepared->text);
+            auto composed = detail::replace_line_region(frame.lines[target],
+                    prepared->text,
+                    static_cast<std::size_t>(box.rect.x),
+                    box.rect.width,
+                    context.viewport.width);
+            if (!composed) return std::unexpected(composed.error());
+            frame.lines[target] = std::move(*composed);
         }
         if (!frame.cursor) {
             // The first leaf in paint order with a cursor row inside its painted
@@ -209,7 +325,8 @@ support::ExpectedVoid LayoutBuilder::paint_box(LayoutContext& context, const Lay
             const auto rows = static_cast<std::ptrdiff_t>(image.region.rows);
             const auto columns = static_cast<std::ptrdiff_t>(image.region.columns);
             if (row < first_row || row + rows > last_row) continue;
-            if (column < box.clip.x || column + columns > static_cast<std::ptrdiff_t>(context.viewport.width)) continue;
+            if (column < box.clip.x || column + columns > static_cast<std::ptrdiff_t>(box.clip.x + box.clip.width))
+                continue;
             image.region.row = static_cast<std::size_t>(row);
             image.region.column = static_cast<std::size_t>(column);
             frame.images.push_back(std::move(image));

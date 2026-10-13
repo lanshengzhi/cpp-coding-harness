@@ -1,5 +1,7 @@
 #include "tui/OverlayCompositor.hpp"
 
+#include "tui/LineCompositor.hpp"
+
 #include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/Utils.hpp>
 
@@ -144,19 +146,21 @@ void append_trailing_columns(ComposedRow& row, const std::vector<TerminalToken>&
     if (suffix_started) row.append_style_codes(style.get_line_end_reset());
 }
 
+} // namespace
+
 /// Splice `replacement` over the base row's columns `[column, column +
 /// columns)`, leaving a row exactly `total_width` columns wide.
 ///
 /// The base row and the replacement are each tokenized once and walked once;
 /// the three regions are emitted straight into the result. Re-deriving the
 /// splice from the three finished strings instead would re-parse the base row
-/// twice more and the assembled row once more per spliced row.
-[[nodiscard]] support::Expected<std::string> replace_line_region(
-    std::string_view line,
-    std::string_view replacement,
-    std::size_t column,
-    std::size_t columns,
-    std::size_t total_width) {
+/// twice more and the assembled row once more per spliced row. Shared with the
+/// constrained layout frame through `tui/LineCompositor.hpp`.
+support::Expected<std::string> replace_line_region(std::string_view line,
+        std::string_view replacement,
+        std::size_t column,
+        std::size_t columns,
+        std::size_t total_width) {
     auto line_tokens = tokenize_terminal_output(line);
     if (!line_tokens) return std::unexpected(line_tokens.error());
     auto replacement_tokens = tokenize_terminal_output(replacement);
@@ -179,8 +183,6 @@ void append_trailing_columns(ComposedRow& row, const std::vector<TerminalToken>&
     row.append_spaces(total_width - row.width);
     return std::move(row.text);
 }
-
-} // namespace
 
 support::Expected<std::reference_wrapper<Overlay>> OverlayCompositor::add_overlay(std::unique_ptr<Overlay> overlay,
         Component* pre_focus,
