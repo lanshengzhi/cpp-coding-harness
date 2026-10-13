@@ -415,12 +415,13 @@ TEST_CASE("constrained VStack honors the responsive visibility predicate", "[tui
     CHECK(short_frame->lines == std::vector<std::string>{"head", "foot", "", ""});
 }
 
-TEST_CASE("constrained VStack translates and clips image placements", "[tui][layout][issue998]") {
-    // Frozen `layout.ts` places a leaf's images inside the leaf's allocated
-    // rect. C++ carries images as sidecars instead of kitty image lines, so a
-    // placement is kept only when the whole region fits the box's clip and the
-    // frame; clipped placements keep their reserved rows empty (#1012 owns
-    // source-crop geometry).
+TEST_CASE("constrained VStack translates and clips image placements", "[tui][layout][issue998][issue1000]") {
+    // Frozen `layout.ts:314-328` places a leaf's images inside the leaf's
+    // allocated rect and crops an image line the box's clip cuts at its bottom
+    // (`cropKittyImageLine` with `hiddenRows = 0`). C++ carries images as
+    // sidecars instead of kitty image lines, so the visible rows become the
+    // placement's destination region and the source rows it must not draw are
+    // the `source_row_offset` (#1000; #1012 owns the protocol crop).
     cch::tui::VStack stack;
     REQUIRE(stack.add_child(std::make_unique<LabeledChild>(std::vector<std::string>{"h"})));
     REQUIRE(stack.add_child(std::make_unique<ImageChild>(std::vector<std::string>{"c", "", "", "c"}, reserved_image()),
@@ -440,9 +441,14 @@ TEST_CASE("constrained VStack translates and clips image placements", "[tui][lay
     auto short_frame = render_frame(stack, 8, 4);
     REQUIRE(short_frame);
     CHECK(child_heights(short_frame->root) == std::vector<std::size_t>{1, 2, 1});
-    CHECK(short_frame->images.empty());
+    REQUIRE(short_frame->images.size() == 1);
+    CHECK(short_frame->images.front().region.row == 2);
+    CHECK(short_frame->images.front().region.rows == 1);
+    CHECK(short_frame->images.front().source_row_offset == 0);
     CHECK(short_frame->lines == std::vector<std::string>{"h", "c", "", "f"});
 
+    // A placement wider than the viewport is still not part of the frame: the
+    // horizontal rule is unchanged (#1012 owns horizontal cropping).
     auto narrow = render_frame(stack, 1, 6);
     REQUIRE(narrow);
     CHECK(narrow->images.empty());

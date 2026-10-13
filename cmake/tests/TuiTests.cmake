@@ -63,6 +63,8 @@ tests/tui/KeysKittyTextTest.cpp
         tests/tui/RawInputListenerTest.cpp
         tests/tui/RenderDifferentialTest.cpp
         tests/tui/ScreenStateGoldenTest.cpp
+        tests/tui/ScrollViewEvidenceTest.cpp
+        tests/tui/ScrollViewTest.cpp
         tests/tui/SelectListTest.cpp
         tests/tui/SettingsListTest.cpp
         tests/tui/StackLayoutEvidenceTest.cpp

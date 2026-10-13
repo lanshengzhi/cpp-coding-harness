@@ -173,7 +173,13 @@ TEST_CASE(
     CHECK(terminal.scrollback().empty());
 }
 
-TEST_CASE("AltScreen clips content to the viewport and repaints across resizes", "[tui][alt-screen][issue997][spec]") {
+TEST_CASE("AltScreen shows the end of overflowing content and repaints across resizes",
+        "[tui][alt-screen][issue997][issue1000][spec]") {
+    // Children mounted without a layout root are one document behind the
+    // implicit follow-end viewport, so overflow shows the document's end and a
+    // resize re-clamps that window (pi `tui-alt-screen.ts:262-270`,
+    // `test/tui-alt-screen.test.ts:63-90`). #1000 replaced the earlier
+    // top-clipped flow for this root.
     cch::tui::VirtualTerminal terminal({.columns = 6, .rows = 3});
     cch::tui::AltScreen tui(terminal);
     auto text = std::make_unique<cch::tui::Text>("one\ntwo\nthree\nfour\nfive", 0, 0);
@@ -182,14 +188,16 @@ TEST_CASE("AltScreen clips content to the viewport and repaints across resizes",
     REQUIRE(tui.start());
     REQUIRE(tui.render());
     REQUIRE(terminal.screen().size() == 3);
-    CHECK(terminal.screen()[2] == "three ");
+    CHECK(terminal.screen()[0] == "three ");
+    CHECK(terminal.screen()[2] == "five  ");
     // Overflowing content is clipped at the viewport, never appended below it.
     CHECK(terminal.scrollback().empty());
 
     REQUIRE(terminal.inject_resize(cch::tui::TerminalDimensions{.columns = 6, .rows = 2}));
     REQUIRE(tui.render());
     REQUIRE(terminal.screen().size() == 2);
-    CHECK(terminal.screen()[1] == "two   ");
+    CHECK(terminal.screen()[0] == "four  ");
+    CHECK(terminal.screen()[1] == "five  ");
 
     text_pointer->set_text("one\ntwo\nthree\nfour");
     REQUIRE(terminal.inject_resize(cch::tui::TerminalDimensions{.columns = 6, .rows = 4}));
@@ -224,18 +232,25 @@ TEST_CASE("AltScreen clears on shrink only when requested and after a render-sta
     CHECK(terminal.check_clear_screen_called());
 }
 
-TEST_CASE("AltScreen composes and clamps the child cursor to the viewport", "[tui][alt-screen][issue997][spec]") {
+TEST_CASE("AltScreen clamps the child cursor column and hides a row the frame does not paint",
+        "[tui][alt-screen][issue997][issue1000][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
     cch::tui::AltScreen tui(terminal);
     auto child = std::make_unique<AltChild>(std::vector<std::string>{"row"});
     auto* child_pointer = child.get();
-    child_pointer->set_cursor(cch::tui::CursorPosition{.column = 20, .row = 9});
+    child_pointer->set_cursor(cch::tui::CursorPosition{.column = 20, .row = 0});
     REQUIRE(tui.add_child(std::move(child)));
     REQUIRE(tui.start());
     REQUIRE(tui.render());
     CHECK(terminal.modes().cursor_visible);
     CHECK(terminal.cursor().column == 8);
-    CHECK(terminal.cursor().row == 2);
+    CHECK(terminal.cursor().row == 0);
+
+    // #1000 routes the cursor through the frame, so a row the composed document
+    // does not paint carries no cursor: it is not clamped into the viewport.
+    child_pointer->set_cursor(cch::tui::CursorPosition{.column = 1, .row = 9});
+    REQUIRE(tui.render());
+    CHECK_FALSE(terminal.modes().cursor_visible);
 
     child_pointer->set_cursor(std::nullopt);
     REQUIRE(tui.render());
