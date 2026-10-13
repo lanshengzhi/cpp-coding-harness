@@ -4,6 +4,7 @@
 #include <cch/tui/Utils.hpp>
 
 #include "support/ImageEnvironmentGuard.hpp"
+#include "support/TempWorkspace.hpp"
 #include "support/UniqueFd.hpp"
 #include "support/PseudoTerminal.hpp"
 
@@ -26,7 +27,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <format>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -223,6 +227,11 @@ private:
     REQUIRE(saw_busy);
     REQUIRE_FALSE(admitted.empty());
     return admitted;
+}
+
+[[nodiscard]] std::string read_text_file(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
 [[nodiscard]] bool answer_keyboard_protocol_query(int descriptor) {
@@ -2203,4 +2212,85 @@ TEST_CASE(
     CHECK(received.find("\x1b]9;4;0;\x07") != std::string::npos);
 
     REQUIRE(terminal.stop());
+}
+
+TEST_CASE("PI_TUI_WRITE_LOG appends committed writes and stops at stop()",
+        "[tui][terminal][diagnostics][issue1016][spec]") {
+    cch::tests::ImageEnvironmentGuard environment;
+    cch::tests::TempWorkspace workspace;
+    ScopedEnvironmentVariable write_log_environment("PI_TUI_WRITE_LOG");
+
+    // An unset variable disables the diagnostic log entirely.
+    write_log_environment.unset();
+    cch::tui::ProcessTerminal disabled({});
+    CHECK(disabled.write_log_path().empty());
+
+    const auto log_path = workspace.path() / "tui-write.log";
+    write_log_environment.set(log_path.string());
+
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    // A literal path is used as configured, not joined with a timestamp.
+    REQUIRE(terminal.write_log_path() == log_path.string());
+
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    // Drop the startup probe bytes so the drain below compares the log against
+    // exactly the writes this test issued.
+    (void)cch::tests::read_available(pty->master.get());
+
+    REQUIRE(terminal.write("alpha"));
+    REQUIRE(terminal.write("beta"));
+
+    // The log holds what the terminal admitted, in write order.
+    const std::string_view written_payload = "alphabeta";
+    REQUIRE(read_text_file(log_path) == written_payload);
+
+    // The PTY received exactly the same bytes, so the diagnostic stream matches
+    // the stream the terminal accepted.
+    std::string received;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (received.size() < written_payload.size() && std::chrono::steady_clock::now() < deadline) {
+        received += cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50));
+    }
+    CHECK(received == written_payload);
+
+    REQUIRE(terminal.stop());
+
+    // stop() deactivates the diagnostic: a write is refused, and nothing more
+    // reaches the log.
+    const auto after_stop = terminal.write("after-stop");
+    REQUIRE_FALSE(after_stop);
+    CHECK(after_stop.error().code == cch::support::ErrorCode::Validation);
+    CHECK(read_text_file(log_path) == written_payload);
+}
+
+TEST_CASE("PI_TUI_WRITE_LOG resolves an existing directory to a timestamped per-process log",
+        "[tui][terminal][diagnostics][issue1016][spec]") {
+    cch::tests::ImageEnvironmentGuard environment;
+    cch::tests::TempWorkspace workspace;
+    ScopedEnvironmentVariable write_log_environment("PI_TUI_WRITE_LOG");
+    write_log_environment.set(workspace.path().string());
+
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+
+    // pi `tui-<YYYY-MM-DD_HH-MM-SS>-<pid>.log` inside the configured directory.
+    const std::filesystem::path resolved(terminal.write_log_path());
+    CHECK(resolved.parent_path() == workspace.path());
+    const auto file_name = resolved.filename().string();
+    CHECK(file_name.starts_with("tui-"));
+    CHECK(file_name.ends_with(std::format("-{}.log", ::getpid())));
+
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    (void)cch::tests::read_available(pty->master.get());
+    REQUIRE(terminal.write("session-log"));
+    REQUIRE(terminal.stop());
+
+    CHECK(read_text_file(resolved) == "session-log");
 }

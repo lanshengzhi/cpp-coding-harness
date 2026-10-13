@@ -14,6 +14,7 @@
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/Tui.hpp>
+#include <cch/tui/TuiDiagnostics.hpp>
 
 #include <cch/support/Error.hpp>
 
@@ -21,6 +22,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -37,6 +39,11 @@ public:
     void begin_frame() noexcept;
     void note_prepared_line() noexcept;
     [[nodiscard]] std::size_t frame_prepare_call_count() const noexcept;
+    /// Full redraws this pipeline attempted (pi `fullRender`/`fullRedrawCount`),
+    /// including a first render and a redraw that backpressure refused.
+    [[nodiscard]] std::size_t full_redraws() const noexcept { return full_redraws_; }
+    /// Terminal write accounting of the most recent frame.
+    [[nodiscard]] TuiWriteAccounting write_accounting() const noexcept { return write_accounting_; }
     /// The dimensions of the last committed frame: the geometry basis the
     /// compositor's overlay dispatch and focus queries read between frames.
     [[nodiscard]] TerminalDimensions committed_dimensions() const noexcept {
@@ -90,7 +97,12 @@ private:
     std::vector<std::uint32_t> previous_kitty_image_ids_;
     std::unordered_map<std::uint64_t, ImagePlacementState> image_placements_;
     bool restored_state_pending_start_{false};
+    std::size_t full_redraws_{0};
+    TuiWriteAccounting write_accounting_{};
 
+    /// Issue one frame write and account for its admission: a refused write is
+    /// attempted but not committed.
+    [[nodiscard]] support::ExpectedVoid write_frame(std::string_view output);
     void position_hardware_cursor(const std::optional<CursorPosition>& cursor_pos, std::size_t total_lines);
 };
 

@@ -376,3 +376,64 @@ TEST_CASE("AltScreen render-state transfer keeps the no-baseline and reset cases
     // A construction-time baseline is not restorable while running.
     CHECK_FALSE(tui.restore_render_state(captured));
 }
+
+TEST_CASE("AltScreen counts viewport repaints, writes, and the debug hook through the shared contract",
+        "[tui][alt-screen][diagnostics][issue1016][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 6, .rows = 3});
+    cch::tui::AltScreen tui(terminal);
+    auto child = std::make_unique<AltChild>(std::vector<std::string>{"one", "two", "three"});
+    auto* child_pointer = child.get();
+    REQUIRE(tui.add_child(std::move(child)));
+
+    std::size_t hook_calls = 0;
+    tui.set_on_debug([&hook_calls] { ++hook_calls; });
+
+    REQUIRE(tui.start());
+    CHECK(tui.focus() == child_pointer);
+    CHECK(tui.full_redraws() == 0);
+    CHECK(tui.write_accounting() == cch::tui::TuiWriteAccounting{});
+
+    // The first frame has no baseline: it repaints all three viewport rows, one
+    // write per row, and counts one full-redraw attempt.
+    REQUIRE(tui.render());
+    CHECK(tui.full_redraws() == 1);
+    CHECK(tui.write_accounting().attempted_writes == 3);
+    CHECK(tui.write_accounting().committed_writes == 3);
+    CHECK(tui.write_accounting().committed_bytes > 0);
+
+    // A single changed row takes the differential path: one write, no attempt.
+    child_pointer->set_lines({"one", "two", "four"});
+    REQUIRE(tui.render());
+    CHECK(tui.full_redraws() == 1);
+    CHECK(tui.write_accounting().attempted_writes == 1);
+    CHECK(tui.write_accounting().committed_writes == 1);
+
+    // The reset sentinel is the clearing full-redraw path.
+    tui.reset_render_state();
+    REQUIRE(tui.render());
+    CHECK(terminal.check_clear_screen_called());
+    CHECK(tui.full_redraws() == 2);
+    CHECK(tui.write_accounting().attempted_writes == 3);
+    CHECK(tui.write_accounting().committed_writes == 3);
+
+    // The debug chord is consumed by the hook before the focused child sees it.
+    const auto received_before = child_pointer->received;
+    REQUIRE(terminal.inject_input("\x1b[68;6u"));
+    CHECK(hook_calls == 1);
+    CHECK(child_pointer->received == received_before);
+    REQUIRE(terminal.inject_input("x"));
+    CHECK(child_pointer->received == received_before + 1);
+
+    // A restart repaints from a fresh baseline under the same lifetime counter,
+    // and the hook survives stop/start (pi keeps `onDebug`).
+    REQUIRE(tui.stop());
+    REQUIRE(tui.start());
+    CHECK(tui.full_redraws() == 2);
+    REQUIRE(tui.render());
+    CHECK(tui.full_redraws() == 3);
+    CHECK(tui.write_accounting().attempted_writes == 3);
+    REQUIRE(terminal.inject_input("\x1b[68;6u"));
+    CHECK(hook_calls == 2);
+
+    REQUIRE(tui.stop());
+}

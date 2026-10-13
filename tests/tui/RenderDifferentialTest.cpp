@@ -885,3 +885,84 @@ TEST_CASE("RenderPipeline cleared screen frame recovery under Busy", "[tui][rend
     REQUIRE(terminal.written_chunks.size() == 1);
     CHECK(terminal.written_chunks[0].find("Y") != std::string::npos);
 }
+
+TEST_CASE("Main-screen accounting separates attempted from committed frame writes under Busy",
+        "[tui][render][diagnostics][issue1016][spec]") {
+    MockFaultyTerminal terminal(cch::tui::VirtualTerminalOptions{.columns = 4, .rows = 3});
+    cch::tui::Tui tui(terminal);
+    auto text = std::make_unique<cch::tui::Text>("ab\ncd", 0, 0);
+    REQUIRE(tui.add_child(std::move(text)));
+    REQUIRE(tui.start());
+
+    CHECK(tui.full_redraws() == 0);
+    CHECK(tui.write_accounting() == cch::tui::TuiWriteAccounting{});
+
+    // Frame 1: the first render is one full-redraw attempt written row by row,
+    // and every row is admitted.
+    REQUIRE(tui.render());
+    CHECK(tui.full_redraws() == 1);
+    REQUIRE(terminal.written_chunks.size() == 2);
+    CHECK(tui.write_accounting().attempted_writes == 2);
+    CHECK(tui.write_accounting().committed_writes == 2);
+    CHECK(tui.write_accounting().committed_bytes ==
+            terminal.written_chunks[0].size() + terminal.written_chunks[1].size());
+
+    // Frame 2: the cleared baseline forces another full redraw, and its first
+    // row write is refused with Busy. The attempt is counted, nothing commits.
+    REQUIRE(tui.clear_screen());
+    terminal.fail_on_write_index = terminal.write_count + 1;
+    terminal.fail_code = cch::support::ErrorCode::Busy;
+    const auto refused = tui.render();
+    REQUIRE_FALSE(refused);
+    CHECK(refused.error().code == cch::support::ErrorCode::Busy);
+    CHECK(tui.full_redraws() == 2);
+    CHECK(tui.write_accounting().attempted_writes == 1);
+    CHECK(tui.write_accounting().committed_writes == 0);
+    CHECK(tui.write_accounting().committed_bytes == 0);
+    REQUIRE(terminal.written_chunks.size() == 2);
+
+    // Frame 3: the retry is its own attempt and commits both rows exactly once.
+    terminal.fail_on_write_index = std::numeric_limits<std::size_t>::max();
+    REQUIRE(tui.render());
+    CHECK(tui.full_redraws() == 3);
+    REQUIRE(terminal.written_chunks.size() == 4);
+    CHECK(tui.write_accounting().attempted_writes == 2);
+    CHECK(tui.write_accounting().committed_writes == 2);
+    CHECK(tui.write_accounting().committed_bytes ==
+            terminal.written_chunks[2].size() + terminal.written_chunks[3].size());
+    CHECK(terminal.written_chunks[2].find("ab") != std::string::npos);
+    CHECK(terminal.written_chunks[3].find("cd") != std::string::npos);
+}
+
+TEST_CASE("Main-screen accounting windows per frame and keeps the redraw count across a restart",
+        "[tui][render][diagnostics][issue1016][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 3});
+    cch::tui::Tui tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("ab\ncd", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(tui.full_redraws() == 1);
+    const auto first_frame = tui.write_accounting();
+    CHECK(first_frame.attempted_writes == 2);
+
+    REQUIRE(tui.stop());
+    REQUIRE(tui.start());
+
+    // pi's `fullRedrawCount` is a lifetime total: start() does not reset it.
+    CHECK(tui.full_redraws() == 1);
+
+    REQUIRE(tui.render());
+    CHECK(tui.full_redraws() == 2);
+    // The accounting window is the last frame, not an accumulated total: the
+    // restarted frame commits the same two rows once.
+    CHECK(tui.write_accounting() == first_frame);
+    CHECK(tui.write_accounting().attempted_writes == 2);
+    CHECK(tui.write_accounting().committed_writes == 2);
+
+    // A frame that changes nothing attempts no redraw and commits no write.
+    REQUIRE(tui.render());
+    CHECK(tui.full_redraws() == 2);
+    CHECK(tui.write_accounting() == cch::tui::TuiWriteAccounting{});
+
+    REQUIRE(tui.stop());
+}

@@ -310,6 +310,11 @@ support::ExpectedVoid AltScreen::render_viewport(
                                                             (dimensions.columns < previous_dimensions_->columns ||
                                                                     dimensions.rows < previous_dimensions_->rows));
 
+    // Accounting windows one frame, and the repaint attempt is counted where pi
+    // decides it (tui-alt-screen.ts:1724-1725), before any row is written.
+    write_accounting_ = {};
+    if (full_repaint) ++full_redraws_;
+
     std::optional<CursorPosition> resolved;
     if (cursor) {
         resolved = CursorPosition{
@@ -331,10 +336,13 @@ support::ExpectedVoid AltScreen::render_viewport(
         // Absolute row placement with an explicit line erase: the viewport is
         // not a flow, so a shorter row must not leave the previous tail behind.
         auto output = std::format("\x1b[{};1H\x1b[2K{}", row + 1, desired);
+        ++write_accounting_.attempted_writes;
         if (auto written = terminal_.write(output); !written) {
             (void)terminal_.end_synchronized_update();
             return std::unexpected(written.error());
         }
+        ++write_accounting_.committed_writes;
+        write_accounting_.committed_bytes += output.size();
     }
 
     const bool show_cursor = resolved.has_value();

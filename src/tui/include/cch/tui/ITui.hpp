@@ -6,10 +6,12 @@
 #include <cch/tui/RawInputListener.hpp>
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/TerminalColors.hpp>
+#include <cch/tui/TuiDiagnostics.hpp>
 #include <cch/tui/TuiScheduler.hpp>
 
 #include <cch/support/Error.hpp>
 
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -54,6 +56,16 @@ public:
     virtual void set_scheduler(TuiScheduler* scheduler) = 0;
     virtual void set_render_prepare_sink(TuiRenderPrepareSink sink) = 0;
     virtual void set_render_complete_sink(TuiRenderCompleteSink sink) = 0;
+
+    /// Registers the debug-key callback (pi `TuiBase.onDebug`). The key is
+    /// matched after the raw-input listener stage and before focus reconciliation,
+    /// and is consumed while a callback is set. The callback survives stop/start.
+    virtual void set_on_debug(TuiDebugHook hook) = 0;
+    /// Full-redraw attempts over this root's lifetime (pi `TuiBase.fullRedraws`).
+    /// The count advances when a full redraw is attempted, not only when it commits.
+    [[nodiscard]] virtual std::size_t full_redraws() const noexcept = 0;
+    /// Terminal write accounting of the most recent frame; zero before the first frame.
+    [[nodiscard]] virtual TuiWriteAccounting write_accounting() const noexcept = 0;
 
     [[nodiscard]] virtual RawInputListenerHandle add_raw_input_listener(RawInputListener listener) = 0;
     [[nodiscard]] virtual support::ExpectedVoid remove_raw_input_listener(RawInputListenerId id) = 0;

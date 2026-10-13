@@ -42,14 +42,30 @@ support::ExpectedVoid TuiHost::remove_raw_input_listener(RawInputListenerId id) 
     return {};
 }
 
+void TuiHost::set_debug_hook(TuiDebugHook hook) { debug_hook_ = std::move(hook); }
+
+bool TuiHost::invoke_debug_hook(const InputEventVariant& event) {
+    const auto* key = std::get_if<KeyEvent>(&event);
+    if (debug_hook_ == nullptr || key == nullptr || !matches_key(*key, kTuiDebugKey)) return false;
+    debug_hook_();
+    return true;
+}
+
 void TuiHost::handle_input(std::string input, const std::function<void(const InputEventVariant&)>& dispatch) {
     stream_decoder_->set_kitty_protocol_active(terminal_.capabilities().keyboard_protocol == KeyboardProtocol::Kitty);
+    // Frozen global debug-key stage (pi tui.ts:1074-1078): it runs after the
+    // raw-input listener chain, and a matched chord consumes the event instead
+    // of forwarding it to focus reconciliation or the focused component.
+    const auto handle_event = [&](const InputEventVariant& event) {
+        if (invoke_debug_hook(event)) return;
+        dispatch(event);
+    };
     if (input.empty()) {
         auto flushed = stream_decoder_->flush();
         apply_terminal_responses(flushed.responses);
         apply_cell_size_responses(flushed.responses);
         for (const auto& event : flushed.events)
-            dispatch(event);
+            handle_event(event);
         return;
     }
 
@@ -72,7 +88,7 @@ void TuiHost::handle_input(std::string input, const std::function<void(const Inp
         if (dispatched.input == decoded.forwarded_input) {
             apply_cell_size_responses(decoded.responses);
             for (const auto& event : decoded.events)
-                dispatch(event);
+                handle_event(event);
         } else {
             for (std::size_t roffset = 0; roffset < dispatched.input.size(); roffset += kInputDecodeChunkBytes) {
                 const auto rchunk = std::string_view(dispatched.input).substr(roffset, kInputDecodeChunkBytes);
@@ -80,7 +96,7 @@ void TuiHost::handle_input(std::string input, const std::function<void(const Inp
                 apply_terminal_responses(rdecoded.responses);
                 apply_cell_size_responses(rdecoded.responses);
                 for (const auto& event : rdecoded.events)
-                    dispatch(event);
+                    handle_event(event);
             }
         }
     }

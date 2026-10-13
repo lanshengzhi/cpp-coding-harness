@@ -66,6 +66,9 @@ public:
     void set_scheduler(TuiScheduler* scheduler) override;
     void set_render_prepare_sink(TuiRenderPrepareSink sink) override;
     void set_render_complete_sink(TuiRenderCompleteSink sink) override;
+    void set_on_debug(TuiDebugHook hook) override { detail::TuiHost::set_debug_hook(std::move(hook)); }
+    [[nodiscard]] std::size_t full_redraws() const noexcept override { return full_redraws_; }
+    [[nodiscard]] TuiWriteAccounting write_accounting() const noexcept override { return write_accounting_; }
 
     [[nodiscard]] RawInputListenerHandle add_raw_input_listener(RawInputListener listener) override;
     [[nodiscard]] support::ExpectedVoid remove_raw_input_listener(RawInputListenerId id) override;
@@ -136,6 +139,8 @@ private:
     std::vector<std::string> previous_lines_;
     std::optional<CursorPosition> cursor_;
     bool cursor_visible_{false};
+    std::size_t full_redraws_{0};
+    TuiWriteAccounting write_accounting_{};
 };
 
 } // namespace cch::tui

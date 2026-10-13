@@ -10,10 +10,12 @@
 // can share it, but `detail` and not part of the stable Owner Interface.
 
 #include <cch/tui/Component.hpp>
+#include <cch/tui/Keys.hpp>
 #include <cch/tui/RawInputListener.hpp>
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/TerminalColors.hpp>
 #include <cch/tui/TerminalResponses.hpp>
+#include <cch/tui/TuiDiagnostics.hpp>
 
 #include <cch/support/Error.hpp>
 
@@ -73,6 +75,11 @@ public:
     /// dispatch surviving typed events. A listener may consume the fragment
     /// or rewrite it (an empty rewrite drops the rest of the fragment).
     void handle_input(std::string input, const std::function<void(const InputEventVariant&)>& dispatch);
+    /// Register the debug-key callback (pi `TuiBase.onDebug`). It runs for the
+    /// `shift+ctrl+d` key after the raw-input listener chain and before the root
+    /// dispatches the event, so the key never reaches the focused component
+    /// while a callback is set. The callback is not cleared by stop().
+    void set_debug_hook(TuiDebugHook hook);
     /// Drop any pending decoder state (an incomplete escape sequence).
     void reset_decoder() noexcept;
 
@@ -138,6 +145,8 @@ protected:
     void dispatch_color_scheme_report(TerminalColorScheme scheme);
     void apply_terminal_responses(const std::vector<TerminalResponseVariant>& responses);
     void apply_cell_size_responses(const std::vector<TerminalResponseVariant>& responses);
+    /// Return true when the debug hook consumed the event.
+    [[nodiscard]] bool invoke_debug_hook(const InputEventVariant& event);
 
     Terminal& terminal_; // must outlive this host.
     std::vector<std::unique_ptr<Component>> children_;
@@ -154,6 +163,7 @@ protected:
     std::deque<std::shared_ptr<QueryState>> pending_color_queries_;
     std::uint64_t next_query_id_{1};
     std::shared_ptr<RawInputListenerChain> raw_listeners_;
+    TuiDebugHook debug_hook_;
     std::unique_ptr<TerminalStreamDecoder> stream_decoder_; // incomplete type; destroyed out of line.
 };
 

@@ -6,6 +6,7 @@
 
 #include <any>
 #include <memory>
+#include <string>
 
 namespace cch::tui {
 
@@ -70,6 +71,13 @@ public:
     [[nodiscard]] support::ExpectedVoid set_progress(bool active) override;
     [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds max_ms = kDrainInputMaxMs,
             std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
+
+    /// The diagnostic write-log path resolved from `PI_TUI_WRITE_LOG` at
+    /// construction (pi `ProcessTerminal.writeLogPath`): empty disables logging,
+    /// an existing directory selects `<dir>/tui-<timestamp>-<pid>.log`, and
+    /// anything else is used as the literal file path. Every committed write is
+    /// appended to that file; log failures are ignored.
+    [[nodiscard]] const std::string& write_log_path() const noexcept;
 
 private:
     friend bool detail::testing::input_holds_fragment(const ProcessTerminal& terminal) noexcept;

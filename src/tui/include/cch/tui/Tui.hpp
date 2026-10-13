@@ -81,6 +81,9 @@ public:
     void set_scheduler(TuiScheduler* scheduler) override;
     void set_render_prepare_sink(TuiRenderPrepareSink sink) override;
     void set_render_complete_sink(TuiRenderCompleteSink sink) override;
+    void set_on_debug(TuiDebugHook hook) override { detail::TuiHost::set_debug_hook(std::move(hook)); }
+    [[nodiscard]] std::size_t full_redraws() const noexcept override;
+    [[nodiscard]] TuiWriteAccounting write_accounting() const noexcept override;
 
     /// Register an ordered raw-input listener that observes every raw input
     /// fragment before typed dispatch (pi `addInputListener`). The returned

@@ -1086,3 +1086,84 @@ TEST_CASE("issue980 places the composed nested cursor on the hardware screen",
     REQUIRE(tui.render());
     REQUIRE(tui.stop());
 }
+
+TEST_CASE("Debug key invokes the debug hook before the focused component sees the key",
+        "[tui][diagnostics][issue1016][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableInputComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+
+    std::size_t hook_calls = 0;
+    tui.set_on_debug([&hook_calls] { ++hook_calls; });
+
+    // Kitty CSI-u shift+ctrl+d is consumed by the hook, so focus reconciliation
+    // and the focused component never observe it.
+    REQUIRE(terminal.inject_input("\x1b[68;6u"));
+    CHECK(hook_calls == 1);
+    CHECK(component_pointer->received_input.empty());
+
+    // The printable modifyOtherKeys spelling of the same chord behaves the same.
+    REQUIRE(terminal.inject_input("\x1b[27;6;100~"));
+    CHECK(hook_calls == 2);
+    CHECK(component_pointer->received_input.empty());
+
+    // Without the modifier the key is ordinary input for the focused component.
+    REQUIRE(terminal.inject_input("d"));
+    CHECK(hook_calls == 2);
+    REQUIRE(component_pointer->received_input.size() == 1);
+    CHECK(std::get<cch::tui::KeyEvent>(component_pointer->received_input[0]).key == "d");
+
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("Debug hook runs after the raw-input listener stage and survives a restart",
+        "[tui][diagnostics][issue1016][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 4, .rows = 1});
+    cch::tui::Tui tui(terminal);
+    auto component = std::make_unique<FocusableInputComponent>();
+    auto* component_pointer = component.get();
+    REQUIRE(tui.add_child(std::move(component)));
+
+    std::size_t hook_calls = 0;
+    tui.set_on_debug([&hook_calls] { ++hook_calls; });
+
+    // A raw-input listener observes and consumes the fragment first: the hook is
+    // downstream of the listener chain.
+    auto consumer =
+            tui.add_raw_input_listener([](std::string_view) { return cch::tui::RawInputListenerResult::consume(); });
+
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+    REQUIRE(terminal.inject_input("\x1b[68;6u"));
+    CHECK(hook_calls == 0);
+    CHECK(component_pointer->received_input.empty());
+
+    // With the key surviving the chain the hook consumes it instead.
+    consumer.reset();
+    REQUIRE(terminal.inject_input("\x1b[68;6u"));
+    CHECK(hook_calls == 1);
+
+    // A stopped root delivers no input at all, and the registered hook is not
+    // cleared by stop() (pi keeps `onDebug` across a terminal restart).
+    REQUIRE(tui.stop());
+    REQUIRE(terminal.inject_input("\x1b[68;6u"));
+    CHECK(hook_calls == 1);
+
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(component_pointer));
+    REQUIRE(terminal.inject_input("\x1b[68;6u"));
+    CHECK(hook_calls == 2);
+    CHECK(component_pointer->received_input.empty());
+
+    // Clearing the hook forwards the chord to the focused component again.
+    tui.set_on_debug(nullptr);
+    REQUIRE(terminal.inject_input("\x1b[68;6u"));
+    CHECK(hook_calls == 2);
+    CHECK(component_pointer->received_input.size() == 1);
+
+    REQUIRE(tui.stop());
+}

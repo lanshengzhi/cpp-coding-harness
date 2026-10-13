@@ -194,13 +194,23 @@ void RenderPipeline::position_hardware_cursor(
     buffer += std::format("\x1b[{}G", target_col + 1);
 
     if (!buffer.empty()) {
-        if (auto result = terminal_.write(buffer); result) {
+        if (auto result = write_frame(buffer); result) {
             hardware_cursor_row_ = target_row;
         }
     } else {
         hardware_cursor_row_ = target_row;
     }
     cursor_row_ = total_lines == 0 ? 0 : total_lines - 1;
+}
+
+support::ExpectedVoid RenderPipeline::write_frame(std::string_view output) {
+    ++write_accounting_.attempted_writes;
+    auto result = terminal_.write(output);
+    if (result) {
+        ++write_accounting_.committed_writes;
+        write_accounting_.committed_bytes += output.size();
+    }
+    return result;
 }
 
 support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
@@ -210,6 +220,10 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
         bool has_overlay_entries,
         bool clear_on_shrink,
         std::optional<CursorPosition> cursor_location) {
+    // Accounting windows one frame: pi builds one bounded writer per render
+    // (`BoundedTerminalWriter`, tui-main-screen.ts:18) whose committed
+    // character count starts at zero, so a retry reports its own attempts.
+    write_accounting_ = {};
     const auto initial_image_placements = image_placements_;
     compose_images(materialized.lines, materialized.images, capabilities.inline_images);
     if (capabilities.inline_images == InlineImageProtocol::None) {
@@ -387,6 +401,9 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     };
 
     auto full_render = [&](bool clear) -> support::ExpectedVoid {
+        // Frozen `fullRender` counts the attempt before it writes anything
+        // (tui-main-screen.ts:277), so a refused frame still counts.
+        ++full_redraws_;
         // Frozen `fullRender` opens the synchronized-output block before it
         // clears: the delete/clear bytes are part of the same atomic update.
         const bool resumable = clear && admitted_.cleared && admitted_prefix(dimensions) != 0;
@@ -399,7 +416,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
         if (clear && !resumable) {
             const auto delete_seq = delete_kitty_images(previous_kitty_image_ids_);
             if (!delete_seq.empty()) {
-                if (auto del_res = terminal_.write(delete_seq); !del_res) {
+                if (auto del_res = write_frame(delete_seq); !del_res) {
                     if (supports_sync) (void)terminal_.end_synchronized_update();
                     rollback();
                     return std::unexpected(del_res.error());
@@ -440,7 +457,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
                 line_to_write += std::format("\x1b[{}A", image_reserved_rows - 1);
                 line_to_write += line;
                 line_to_write += std::format("\x1b[{}B", image_reserved_rows - 1);
-                if (auto result = terminal_.write(line_to_write); !result) {
+                if (auto result = write_frame(line_to_write); !result) {
                     // The reserved-row group is one write: a refusal leaves the
                     // whole group unadmitted, so the retry rewrites it.
                     note_backpressure(result.error(), i);
@@ -453,7 +470,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
                 continue;
             }
             line_to_write += line;
-            if (auto result = terminal_.write(line_to_write); !result) {
+            if (auto result = write_frame(line_to_write); !result) {
                 note_backpressure(result.error(), i);
                 if (supports_sync) (void)terminal_.end_synchronized_update();
                 return std::unexpected(result.error());
@@ -597,7 +614,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
                     return finish(std::unexpected(begin_result.error()));
                 }
             }
-            if (auto result = terminal_.write(buffer); !result) {
+            if (auto result = write_frame(buffer); !result) {
                 if (supports_sync) (void)terminal_.end_synchronized_update();
                 rollback();
                 return finish(std::unexpected(result.error()));
@@ -713,7 +730,7 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
         buffer += std::format("\x1b[{}A", extra_lines);
     }
 
-    if (auto result = terminal_.write(buffer); !result) {
+    if (auto result = write_frame(buffer); !result) {
         if (supports_sync) (void)terminal_.end_synchronized_update();
         rollback();
         return finish(std::unexpected(result.error()));

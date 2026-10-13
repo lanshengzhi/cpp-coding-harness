@@ -684,6 +684,14 @@ void MainScreen::set_render_prepare_sink(TuiRenderPrepareSink sink) { render_pre
 
 void MainScreen::set_render_complete_sink(TuiRenderCompleteSink sink) { render_complete_sink_ = std::move(sink); }
 
+std::size_t MainScreen::full_redraws() const noexcept {
+    return render_pipeline_ != nullptr ? render_pipeline_->full_redraws() : 0;
+}
+
+TuiWriteAccounting MainScreen::write_accounting() const noexcept {
+    return render_pipeline_ != nullptr ? render_pipeline_->write_accounting() : TuiWriteAccounting{};
+}
+
 void MainScreen::schedule_render() {
     if (!started_ || stopping_ || scheduler_ == nullptr || render_scheduled_) return;
     auto delay = std::chrono::steady_clock::duration::zero();

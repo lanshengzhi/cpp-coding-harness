@@ -19,10 +19,13 @@
 #include <chrono>
 #include <cmath>
 #include <cctype>
-#include <deque>
 #include <cstdlib>
+#include <ctime>
+#include <deque>
 #include <exception>
+#include <filesystem>
 #include <format>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -154,6 +157,29 @@ struct WriteAttempt {
     return value == nullptr ? std::string_view{} : std::string_view{value};
 }
 
+/// Resolve the `PI_TUI_WRITE_LOG` diagnostic target once, at construction (pi
+/// `ProcessTerminal.writeLogPath`): empty disables the log, an existing
+/// directory receives a timestamped per-process file, and anything else is the
+/// literal file path. A path that cannot be inspected is used as-is, the way
+/// pi's failed `statSync` probe falls through to the configured value.
+[[nodiscard]] std::string resolve_write_log_path() {
+    const auto configured = std::string(environment("PI_TUI_WRITE_LOG"));
+    if (configured.empty()) return {};
+    std::error_code error;
+    if (!std::filesystem::is_directory(configured, error) || error) return configured;
+    const auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::tm local{};
+    (void)localtime_r(&now, &local);
+    const auto timestamp = std::format("{:04d}-{:02d}-{:02d}_{:02d}-{:02d}-{:02d}",
+            local.tm_year + 1900,
+            local.tm_mon + 1,
+            local.tm_mday,
+            local.tm_hour,
+            local.tm_min,
+            local.tm_sec);
+    return (std::filesystem::path(configured) / std::format("tui-{}-{}.log", timestamp, ::getpid())).string();
+}
+
 [[nodiscard]] bool supports_synchronized_output() {
     // DEC 2026 is a private mode; terminals without support safely ignore it.
     // Follow pi's conservative default so unknown TERM values still avoid frame flicker.
@@ -277,6 +303,8 @@ struct ProcessTerminal::Impl {
     explicit Impl(ProcessTerminalOptions configured_options) : options(configured_options) {}
 
     ProcessTerminalOptions options;
+    /// Resolved once at construction (pi ProcessTerminal.writeLogPath).
+    std::string write_log_path;
     std::weak_ptr<Impl> self;
     mutable std::mutex mutex;
     TerminalDimensions dimensions;
@@ -363,6 +391,17 @@ template <typename T> [[nodiscard]] support::ExpectedVoid require_started(const 
     if (impl.modes.started) return {};
     return std::unexpected(support::make_error(
             support::ErrorCode::Validation, "Process Terminal must be started before terminal operations"));
+}
+
+/// Append admitted output to the `PI_TUI_WRITE_LOG` diagnostic file
+/// (pi `ProcessTerminal.write`, packages/tui/src/terminal.ts:479-481). Only
+/// bytes the terminal admitted are logged, and a logging failure is swallowed:
+/// the log is a diagnostic, never a write path.
+template <typename T> void append_write_log(const T& impl, std::string_view output) {
+    if (impl.write_log_path.empty() || output.empty()) return;
+    std::ofstream log(impl.write_log_path, std::ios::binary | std::ios::app);
+    if (!log) return;
+    log.write(output.data(), static_cast<std::streamsize>(output.size()));
 }
 
 [[nodiscard]] support::Expected<TerminalDimensions> read_dimensions(int descriptor) {
@@ -1153,10 +1192,13 @@ ProcessTerminal::ProcessTerminal(ProcessTerminalOptions options) : impl_(std::ma
     // (inline images, hyperlinks, synchronized output) only.
     impl_->capabilities.color = detect_color_capability();
     impl_->capabilities.appearance = detect_terminal_appearance();
+    impl_->write_log_path = resolve_write_log_path();
     impl_->self = impl_;
 }
 
 ProcessTerminal::~ProcessTerminal() { (void)stop(); }
+
+const std::string& ProcessTerminal::write_log_path() const noexcept { return impl_->write_log_path; }
 support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, TerminalResizeSink resize_sink) {
     std::unique_lock<std::mutex> lock(impl_->mutex);
     if (impl_->modes.started) {
@@ -1415,7 +1457,9 @@ support::ExpectedVoid ProcessTerminal::clear_screen() {
 support::ExpectedVoid ProcessTerminal::write(std::string_view output) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
-    return enqueue_output(*impl_, output);
+    auto result = enqueue_output(*impl_, output);
+    if (result) append_write_log(*impl_, output);
+    return result;
 }
 
 support::ExpectedVoid ProcessTerminal::set_cursor(CursorPosition position) {
