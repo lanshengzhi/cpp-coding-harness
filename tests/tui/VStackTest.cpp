@@ -416,7 +416,7 @@ TEST_CASE("constrained VStack honors the responsive visibility predicate", "[tui
 }
 
 TEST_CASE("constrained VStack translates and clips image placements", "[tui][layout][issue998][issue1000]") {
-    // Frozen `layout.ts:314-328` places a leaf's images inside the leaf's
+    // Frozen `layout.ts:340-344` places a leaf's images inside the leaf's
     // allocated rect and crops an image line the box's clip cuts at its bottom
     // (`cropKittyImageLine` with `hiddenRows = 0`). C++ carries images as
     // sidecars instead of kitty image lines, so the visible rows become the

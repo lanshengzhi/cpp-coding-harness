@@ -470,7 +470,7 @@ TEST_CASE("Scrolled image placements keep clipped destination rows and the hidde
         "[tui][scroll-view][issue1000]") {
     // A placement whose top rows scrolled above the window keeps its visible
     // part at the window's first row and reports the hidden source rows
-    // (pi `layout.ts:352-368` writes the cropped line at `box.rect.y`).
+    // (pi `layout.ts:359-373` writes the cropped line at `box.rect.y`).
     {
         cch::tui::ScrollView view(std::make_unique<ImageChild>(numbered_lines(6), reserved_image(2, 2, 2)),
                 cch::tui::ScrollViewOptions{.follow_end = true});
