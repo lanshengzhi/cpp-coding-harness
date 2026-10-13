@@ -2,7 +2,7 @@
   "schema": "pike/tui-evidence/1",
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-11T10:35:55.164Z",
+  "capturedAt": "2026-10-13T17:03:25.288Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -28,7 +28,7 @@
   },
   "generator": {
     "path": "capture/capture-named-tui.mts",
-    "sha256": "40810678e2ac2fc5f81bcaf9d36e1383898d0e43baf301a4d2c3eb1c04f55a98",
+    "sha256": "0f6c697e15414518e5460d5df514065c25847d4804c9431149af5826171e3897",
     "sources": [
       {
         "path": "capture/select-list-scenarios.mts",
@@ -37,6 +37,10 @@
       {
         "path": "capture/editor-operations.mts",
         "sha256": "256e5924d8ebd4dc4dd906c467b1432a0e1d9764236001fa20d0363457a26e6f"
+      },
+      {
+        "path": "capture/stack-layout-scenarios.mts",
+        "sha256": "5c7d5dd40b1e689cd4e42b5d7e6f9dac9c07d2673f96cab09359700b15e5d7ea"
       }
     ]
   },
@@ -45,7 +49,7 @@
       "path": "input.json",
       "family": "input",
       "bytes": 3937,
-      "sha256": "2778c66830946c9db726557556d040506154f5aad3213834d6ba6936276b70b8",
+      "sha256": "583adebd53b6009353127738f084ed53c997a8cea86b0468de2eef3325745aa3",
       "sourceEndpoints": [
         "packages/tui/src/keys.ts:parseKey,isKeyRepeat,isKeyRelease",
         "packages/tui/src/components/input.ts:handleInput,getValue,onSubmit",
@@ -58,7 +62,7 @@
       "path": "component.json",
       "family": "component",
       "bytes": 1239,
-      "sha256": "8f862a6874a8e51f820a812ae04d5d15cb40cacef2ee156b761ad3f354a6a8d6",
+      "sha256": "fdc84f110a4f92fce52cd72d03edcb2c543df0b31866b42868e1a67e81eda870",
       "sourceEndpoints": [
         "packages/tui/src/components/text.ts:render,setText"
       ]
@@ -67,7 +71,7 @@
       "path": "screen-state.json",
       "family": "screen-state",
       "bytes": 376823,
-      "sha256": "8177bda1febe83ffef3fdb767547205b3ddb48d55539376693c0ddd7e339a7a8",
+      "sha256": "d1c070a9aa368bc1893a75260009a39f2909cf9a5fab9b51c5866932f9e501a3",
       "sourceEndpoints": [
         "packages/tui/src/tui-main-screen.ts:TuiMainScreen.renderNow",
         "packages/tui/src/tui.ts:setFocus,CURSOR_MARKER",
@@ -88,7 +92,7 @@
       "path": "capability-ledger.json",
       "family": "capability-ledger",
       "bytes": 13980,
-      "sha256": "c7dcd0c7f2eb38dfd11472a3caa9f0f3fffaf5eb38c1077cde4b69d370580f57",
+      "sha256": "2def761d232014affb3b888b0b496c2e4b283b0229e027aa0cfead4bcdffe9d2",
       "sourceEndpoints": [
         "packages/tui/src/index.ts:export-surface"
       ]
@@ -97,7 +101,7 @@
       "path": "utils-width.json",
       "family": "utils-width",
       "bytes": 3110,
-      "sha256": "b782f56af0368f60ee875edfe07fd718b100eb17f26470149ea454a163c6a9fd",
+      "sha256": "1721d67a1ae89f6bd4f3ebd237f4a43cbed54dee2febf705bf20679a8d729b8f",
       "sourceEndpoints": [
         "packages/tui/src/utils.ts:visibleWidth",
         "packages/tui/src/components/text.ts:render",
@@ -108,7 +112,7 @@
       "path": "keys-kitty-text.json",
       "family": "keys-kitty-text",
       "bytes": 2466,
-      "sha256": "a611180be222847a54f4aee747fed1998aae900ac75fcb397606c2d094ee167d",
+      "sha256": "a848b80ee4aeed92c84aebb32c8979a065575be1a8fcb071ce93ed1981b35814",
       "sourceEndpoints": [
         "packages/tui/src/keys.ts:parseKey,decodeKittyPrintable",
         "packages/tui/src/components/input.ts:handleInput,getValue"
@@ -118,7 +122,7 @@
       "path": "utils-ansi.json",
       "family": "utils-ansi",
       "bytes": 10150,
-      "sha256": "4464d2ae9793603853a51572a0abf57cc68614ba77ee729dd3591cb19149fbfd",
+      "sha256": "b29d95f95c3b585c1d9e47ebef57687687264d304445dd832741c0add7616488",
       "sourceEndpoints": [
         "packages/tui/src/utils.ts:wrapTextWithAnsi",
         "packages/tui/src/utils.ts:sliceByColumn",
@@ -130,7 +134,7 @@
       "path": "fuzzy.json",
       "family": "fuzzy",
       "bytes": 8095,
-      "sha256": "88eb7e0f179c74ab678a69d43c2d47f9b3d89f96362cbedb1709c3c68b66449e",
+      "sha256": "70574d97976bad1698a933b8955275afb90fb4415ebd61d8dca522f65670c808",
       "sourceEndpoints": [
         "packages/tui/src/fuzzy.ts:fuzzyMatch,fuzzyFilter"
       ]
@@ -139,7 +143,7 @@
       "path": "latex.json",
       "family": "latex",
       "bytes": 14183,
-      "sha256": "dc64ef538717a12d5c58a14df06574414e06f951ff4cf551cfe6e6fe0346e308",
+      "sha256": "069b0d960eed027f5ad20934997053816451d5b86c447eff07547fdd01e51292",
       "sourceEndpoints": [
         "packages/tui/src/latex.ts:renderLatex,RenderLatexOptions"
       ]
@@ -148,7 +152,7 @@
       "path": "autocomplete.json",
       "family": "autocomplete",
       "bytes": 71393,
-      "sha256": "46147494e1f5d28b680bd7808048df6ed466852145ecf40259e6f5218e2dd46e",
+      "sha256": "e2dd015fff28969aa1c187e1ebebb2f88ed3c41bdd8605490a4064deade52812",
       "sourceEndpoints": [
         "packages/tui/src/utils.ts:autocompleteSeparatorRegex,autocompleteBoundaryRegex",
         "packages/tui/src/autocomplete.ts:CombinedAutocompleteProvider.getSuggestions,extractPathPrefix,extractAtPrefix,applyCompletion,shouldTriggerFileCompletion"
@@ -158,12 +162,24 @@
       "path": "editor-autocomplete.json",
       "family": "editor-autocomplete",
       "bytes": 5887,
-      "sha256": "f765510f4bc37fba9b77d7ed2dbf34bf05efbe54b15ff5e870459d7e44b33e9e",
+      "sha256": "71e7812fdd6c8ea2a5dcd6db2f1d106ceae9cd4b3cccbac19b578cb53ed1cd79",
       "sourceEndpoints": [
         "packages/tui/src/components/editor.ts:Editor.insertCharacter,handleTabCompletion,setAutocompleteProvider",
         "packages/tui/src/autocomplete.ts:AutocompleteProvider.getSuggestions",
         "packages/tui/src/components/editor.ts:Editor",
         "packages/tui/test/virtual-terminal.ts:VirtualTerminal"
+      ]
+    },
+    {
+      "path": "layout.json",
+      "family": "stack-layout",
+      "bytes": 12333,
+      "sha256": "686a352e57d82110329e4626e94b2c24eb3167567819470ba1e5807241941462",
+      "sourceEndpoints": [
+        "packages/tui/src/components/stack.ts:allocateStackSizes,visibleStackEntries,Stack.addChild,StackEntryOptions",
+        "packages/tui/src/components/v-stack.ts:VStack.render",
+        "packages/tui/src/layout.ts:renderLayoutFrame,layoutComponent,LayoutBox",
+        "packages/tui/src/tui.ts:TuiBase.extractCursorPosition,compositeTuiLine,CURSOR_MARKER"
       ]
     }
   ]

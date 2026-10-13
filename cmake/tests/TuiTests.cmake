@@ -63,6 +63,7 @@ tests/tui/KeysKittyTextTest.cpp
         tests/tui/ScreenStateGoldenTest.cpp
         tests/tui/SelectListTest.cpp
         tests/tui/SettingsListTest.cpp
+        tests/tui/StackLayoutEvidenceTest.cpp
         tests/tui/TerminalColorsTest.cpp
         tests/tui/TerminalImageTest.cpp
         tests/tui/TerminalStreamDecoderTest.cpp

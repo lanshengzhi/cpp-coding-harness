@@ -13,6 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { captureSelectList } from "./select-list-scenarios.mts";
 import { captureEditorOperations } from "./editor-operations.mts";
 import { captureInputScenarios } from "./input-scenarios.mts";
+import { captureStackLayout } from "./stack-layout-scenarios.mts";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), "..");
@@ -830,6 +831,11 @@ const editorTriggerArtifact = envelope([
 	expected: { cases: editorTriggerObservation },
 }]);
 
+// Observe viewport stack layout: allocation, unbounded composition, leaf crop
+// and cursor translation inside a constrained frame (#998).
+const stackLayoutObservation = await captureStackLayout(pi);
+const stackLayoutArtifact = envelope(stackLayoutObservation.sourceEndpoints, stackLayoutObservation.scenarios);
+
 // No output is touched before source guards and all observations complete.
 const bundle = path.join(root, selected.bundle);
 mkdirSync(bundle, { recursive: true });
@@ -845,6 +851,7 @@ const artifacts = [
 	["latex.json", "latex", latexArtifact],
 	["autocomplete.json", "autocomplete", completionArtifact],
 	["editor-autocomplete.json", "editor-autocomplete", editorTriggerArtifact],
+	["layout.json", "stack-layout", stackLayoutArtifact],
 ] as const;
 const records = artifacts.map(([file, family, artifact]) => {
 	const bytes = Buffer.from(JSON.stringify(artifact, null, 2) + "\n");
@@ -863,6 +870,10 @@ const manifest = {
 			{
 				path: "capture/editor-operations.mts",
 				sha256: sha256(readFileSync(path.join(root, "capture/editor-operations.mts"))),
+			},
+			{
+				path: "capture/stack-layout-scenarios.mts",
+				sha256: sha256(readFileSync(path.join(root, "capture/stack-layout-scenarios.mts"))),
 			},
 		],
 	},
