@@ -906,7 +906,14 @@ void TerminalStreamDecoder::drain(StreamDecodeResult& result, bool end_of_feed) 
                 }
                 continue;
             }
-            if (is_mouse_control_sequence(sequence)) continue;
+            if (is_mouse_control_sequence(sequence)) {
+                // A mouse report is in-band input for the byte-level stage even
+                // though it decodes to no key event (pi StdinBuffer emits the
+                // complete frame to the data handler, `stdin-buffer.ts`), so it
+                // is reported separately instead of being dropped.
+                result.mouse_frames.push_back(sequence);
+                continue;
+            }
         }
         result.forwarded_input += sequence;
         if (auto key = parse_raw_sequence(sequence, kitty_protocol_active_)) {

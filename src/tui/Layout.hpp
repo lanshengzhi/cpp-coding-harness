@@ -79,6 +79,14 @@ public:
             Component& root, std::size_t width, std::size_t height, std::function<void()> request_render = {});
 };
 
+/// The visual hit path of a frame cell, deepest first (pi `getLayoutBoxesAt`):
+/// every box whose inherited clip contains the cell, ordered as pi orders the
+/// candidates for pointer targeting. A caller offers a normalized mouse event
+/// to the first box whose component has a mouse capability and resolves the
+/// local coordinates from that box's rect (pi `TuiAltScreen.dispatchMouseToLayout`).
+[[nodiscard]] std::vector<const LayoutBox*> layout_boxes_at(
+        const LayoutFrame& frame, std::ptrdiff_t x, std::ptrdiff_t y);
+
 /// The scroll viewports whose rect contains a frame cell, deepest first (pi
 /// `getScrollViewsAt`). A caller offers a scroll delta to the first viewport and
 /// passes what it does not consume outward, stopping at

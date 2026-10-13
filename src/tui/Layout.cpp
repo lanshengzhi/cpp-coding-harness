@@ -86,6 +86,17 @@ void collect_scroll_views(const LayoutBox& box,
         collect_scroll_views(child, x, y, depth + 1, found);
 }
 
+void collect_boxes_at(const LayoutBox& box,
+        std::ptrdiff_t x,
+        std::ptrdiff_t y,
+        std::size_t depth,
+        std::vector<std::pair<const LayoutBox*, std::size_t>>& found) {
+    if (!contains_point(box.clip, x, y)) return;
+    found.emplace_back(&box, depth);
+    for (const auto& child : box.children)
+        collect_boxes_at(child, x, y, depth + 1, found);
+}
+
 } // namespace
 
 /// The layout engine's implementation: allocation and painting, with the stack
@@ -448,6 +459,21 @@ support::Expected<LayoutFrame> LayoutBuilder::build(
 support::Expected<LayoutFrame> LayoutEngine::render(
         Component& root, std::size_t width, std::size_t height, std::function<void()> request_render) {
     return LayoutBuilder::build(root, width, height, std::move(request_render));
+}
+
+std::vector<const LayoutBox*> layout_boxes_at(const LayoutFrame& frame, std::ptrdiff_t x, std::ptrdiff_t y) {
+    std::vector<std::pair<const LayoutBox*, std::size_t>> found;
+    collect_boxes_at(frame.root, x, y, 0, found);
+    // Every box of the frozen frame carries `layer: 0` (pi `layout.ts:132-234`),
+    // so the visual hit path is the depth-descending order of pi
+    // `getLayoutBoxesAt`.
+    std::stable_sort(
+            found.begin(), found.end(), [](const auto& left, const auto& right) { return left.second > right.second; });
+    std::vector<const LayoutBox*> boxes;
+    boxes.reserve(found.size());
+    for (const auto& entry : found)
+        boxes.push_back(entry.first);
+    return boxes;
 }
 
 std::vector<ScrollView*> scroll_views_at(const LayoutFrame& frame, std::ptrdiff_t x, std::ptrdiff_t y) {

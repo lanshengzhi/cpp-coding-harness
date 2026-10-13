@@ -40,6 +40,12 @@ struct StreamDecodeResult {
     std::vector<TerminalResponseVariant> responses;
     std::vector<InputEventVariant> events;
     std::string forwarded_input;
+    /// Complete mouse reports (SGR and legacy X10). They are not key events, so
+    /// they stay out of `events`, and their payload bytes stay out of
+    /// `forwarded_input` (#949: a legacy payload must never leak into the
+    /// character stream). The host offers each report to the raw-input listener
+    /// chain, which is where a root consumes the ones it routes.
+    std::vector<std::string> mouse_frames;
 };
 
 /// Deep stream decoder for the terminal input edge: one fragment buffer

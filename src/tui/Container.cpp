@@ -1,5 +1,6 @@
 #include <cch/tui/Container.hpp>
 
+#include "tui/MouseRouting.hpp"
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
@@ -107,6 +108,18 @@ bool Container::contains(const Component* target) const {
         if (child && child->contains(target)) return true;
     }
     return false;
+}
+
+std::optional<MouseDispatchResult> Container::handle_mouse_forwarded(const MouseEvent& event) {
+    // pi re-renders the children to measure them when the cached mouse layout
+    // was built for another width (`tui.ts:375-376`). The frame is the geometry
+    // authority here, so a hit test uses the last composition and never renders.
+    if (!render_valid_ || rendered_child_rows_.size() != children_.size()) return std::nullopt;
+    return detail::dispatch_mouse_to_cached_rows(
+            event,
+            children_.size(),
+            [this](std::size_t index) -> Component& { return *children_[index]; },
+            [this](std::size_t index) { return rendered_child_rows_[index]; });
 }
 
 Box::Box(std::size_t padding_x, std::size_t padding_y, BackgroundHook background_hook)
@@ -262,6 +275,35 @@ bool Box::contains(const Component* target) const {
         if (child && child->contains(target)) return true;
     }
     return false;
+}
+
+std::optional<MouseDispatchResult> Box::handle_mouse_forwarded(const MouseEvent& event) {
+    if (!render_valid_ || rendered_child_rows_.size() != children_.size()) return std::nullopt;
+
+    // The padded content area of the last composition: `render` falls back to a
+    // single content column when the padding does not fit (pi
+    // `components/box.ts:76-78`).
+    const auto padding_x = rendered_padding_fits_ ? padding_x_ : std::size_t{0};
+    const auto content_width =
+            rendered_padding_fits_ && cached_width_ > padding_x * 2 ? cached_width_ - padding_x * 2 : std::size_t{1};
+    const auto content_y = event.y - static_cast<std::ptrdiff_t>(padding_y_);
+    const auto content_x = event.x - static_cast<std::ptrdiff_t>(padding_x);
+    if (content_y < 0 || content_x < 0 || static_cast<std::size_t>(content_x) >= content_width) return std::nullopt;
+
+    std::ptrdiff_t child_y = 0;
+    for (std::size_t index = 0; index < children_.size(); ++index) {
+        const auto child_height = rendered_child_rows_[index];
+        if (content_y >= child_y && content_y < child_y + static_cast<std::ptrdiff_t>(child_height)) {
+            auto child_event = event;
+            child_event.x = content_x;
+            child_event.y = content_y - child_y;
+            child_event.width = content_width;
+            child_event.height = child_height;
+            return dispatch_mouse_event(*children_[index], child_event);
+        }
+        child_y += static_cast<std::ptrdiff_t>(child_height);
+    }
+    return std::nullopt;
 }
 
 Spacer::Spacer(std::size_t lines) : lines_(lines) {}

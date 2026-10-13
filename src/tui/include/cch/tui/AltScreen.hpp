@@ -1,17 +1,26 @@
 #pragma once
 
 #include <cch/tui/ITui.hpp>
+#include <cch/tui/Mouse.hpp>
+#include <cch/tui/RawInputListener.hpp>
 #include <cch/tui/ScrollView.hpp>
 #include <cch/tui/TuiHost.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace cch::tui {
+
+namespace detail {
+struct LayoutFrame;
+struct MousePacket;
+} // namespace detail
 
 /// Absolute-viewport render state of an alternate-screen root, for transfer
 /// between roots (#985 shape). `width == 0` means no baseline was captured;
@@ -36,6 +45,13 @@ struct TuiAltScreenRenderState {
 ///
 /// Overlays are not implemented on this root yet: every overlay entry point
 /// fails validation until the deferred overlay chain lands.
+///
+/// Pointer routing is this root's own stage (pi `TuiAltScreen.handleViewportInput`):
+/// complete mouse reports are normalized into `MouseEvent` values, dispatched to
+/// the component the last rendered frame placed under the pointer, and otherwise
+/// offered to the frame's viewports. The frame itself is the cached geometry the
+/// hit test runs against, so no hit test renders; keyboard focus, capture and
+/// render decisions follow the component's `MouseEventResult`.
 ///
 /// Without a layout root the attached children are one implicitly scrolled
 /// document (`implicitDocument` + `implicitScrollView`, pi
@@ -132,6 +148,38 @@ private:
     /// Compose the attached children into one document result, pushing the
     /// frame's rows into any viewport-aware child first.
     [[nodiscard]] support::Expected<RenderResult> render_implicit_document(std::size_t width);
+    /// Offer a mouse event to the implicitly composed document: the row ranges
+    /// of its last composition decide which mounted child owns the event (pi
+    /// `implicitDocument.handleMouse`, `tui-alt-screen.ts:260-267`).
+    [[nodiscard]] std::optional<MouseDispatchResult> dispatch_mouse_to_implicit_document(const MouseEvent& event);
+    /// The alternate-screen input stage (pi `handleViewportInput`): focus reports
+    /// and mouse reports are consumed here, everything else passes unchanged.
+    [[nodiscard]] bool handle_viewport_input(std::string_view data);
+    /// Route a pointer report to the gesture captured or started by an earlier
+    /// press, or return false when no live gesture owns it.
+    bool handle_gesture_mouse_report(const detail::MousePacket& packet, const MouseEvent& event);
+    void handle_mouse_report(const detail::MousePacket& packet);
+    void handle_wheel_report(const detail::MousePacket& packet);
+    [[nodiscard]] std::optional<MouseDispatchResult> dispatch_mouse_to_layout(const MouseEvent& event);
+    [[nodiscard]] std::optional<MouseDispatchResult> dispatch_mouse_to_target(
+            const MouseEvent& event, const MouseDispatchTarget& target);
+    [[nodiscard]] bool apply_mouse_dispatch_result(const MouseEvent& event, const MouseDispatchResult& result);
+    /// The click count of a click at `x`/`y` on `target`: consecutive clicks on
+    /// the same component and cell within the double-click interval count up and
+    /// wrap after a triple click (pi `getComponentClickCount`).
+    [[nodiscard]] std::size_t next_component_click_count(
+            const MouseDispatchTarget& target, std::ptrdiff_t x, std::ptrdiff_t y);
+    /// Offer a wheel delta to the viewports under the pointer, then to the
+    /// primary viewport (pi `routeWheel`).
+    void route_wheel(const MouseEvent& event, std::ptrdiff_t delta);
+    /// Drop the cached frame geometry and document rows because the composition
+    /// they name has changed (a removed component may already be destroyed).
+    void invalidate_composition_cache() noexcept;
+    void clear_mouse_gesture() noexcept;
+    [[nodiscard]] MouseEvent create_mouse_event(const detail::MousePacket& packet,
+            MouseEventType type,
+            std::optional<std::ptrdiff_t> wheel_delta = std::nullopt,
+            std::optional<std::size_t> click_count = std::nullopt) const;
     /// The primary viewport of the last frame, or the implicit viewport before
     /// the first frame and when no installed root declares one (pi
     /// `getPrimaryScrollView`).
@@ -152,6 +200,32 @@ private:
     void execute_scheduled_render(std::size_t generation);
 
     std::shared_ptr<RenderScheduleState> render_schedule_state_;
+    /// One click sequence of the pointer (pi `lastComponentClick`): the number a
+    /// repeated click on the same component and cell reports.
+    struct MouseClick {
+        std::chrono::steady_clock::time_point at{};
+        std::size_t count{1};
+        const Component* component{nullptr};
+        std::ptrdiff_t x{0};
+        std::ptrdiff_t y{0};
+    };
+    /// The frame stage: reports reach it through the raw-input listener chain
+    /// (pi `addInputListener` in the constructor).
+    RawInputListenerHandle mouse_listener_;
+    /// The last rendered frame, the geometry every hit test runs against (pi
+    /// `currentLayout`); the rows are painted away, the boxes stay.
+    std::unique_ptr<detail::LayoutFrame> cached_frame_;
+    /// Rendered row count per mounted child of the implicit document, in mount
+    /// order (pi `implicitDocument.mouseLayout.children`).
+    std::vector<std::pair<Component*, std::size_t>> implicit_document_rows_;
+    // Pointer gesture state (pi `mouseCapture`, `mousePressTarget`,
+    // `mousePressPoint`, `mousePressMoved`): a capture keeps drag and release
+    // events with the component a press landed on, even outside its bounds.
+    std::optional<MouseDispatchTarget> mouse_capture_{};
+    std::optional<MouseDispatchTarget> mouse_press_target_{};
+    std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> mouse_press_point_{};
+    bool mouse_press_moved_{false};
+    std::optional<MouseClick> last_mouse_click_{};
     // Fullscreen layout authority (#998): when set, every frame is one
     // constrained composition of this component instead of a flow of children.
     std::unique_ptr<Component> layout_root_;

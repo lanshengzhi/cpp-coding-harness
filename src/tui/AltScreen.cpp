@@ -1,6 +1,7 @@
 #include <cch/tui/AltScreen.hpp>
 
 #include "tui/Layout.hpp"
+#include "tui/MouseRouting.hpp"
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 
@@ -8,11 +9,38 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <format>
 #include <utility>
 
 namespace cch::tui {
 namespace {
+
+// Terminal reports the alternate-screen root reacts to (pi
+// `tui-alt-screen.ts:67-71`).
+constexpr std::string_view kFocusIn = "\x1b[I";
+constexpr std::string_view kFocusOut = "\x1b[O";
+// Any-motion tracking reports hover and drag without the caller asking for it.
+// A multiplexer lags on every forwarded movement, so it gets button-motion
+// tracking instead; both keep clicks, wheel reports and drags (pi
+// `tui-alt-screen.ts:363-378`).
+constexpr std::string_view kEnableMouseAllMotion = "\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1004h\x1b[?1006h";
+constexpr std::string_view kEnableMouseButtonMotion = "\x1b[?1000h\x1b[?1002h\x1b[?1004h\x1b[?1006h";
+constexpr std::string_view kDisableMouse = "\x1b[?1006l\x1b[?1004l\x1b[?1003l\x1b[?1002l\x1b[?1000l";
+// Consecutive clicks on one component and cell within this window count up (pi
+// `DOUBLE_CLICK_INTERVAL_MS`).
+constexpr auto kComponentDoubleClickInterval = std::chrono::milliseconds{500};
+
+/// Whether every pointer movement reaches the terminal: never inside the
+/// multiplexers pi reduces to button-motion tracking.
+[[nodiscard]] bool mouse_all_motion_enabled() {
+    if (std::getenv("TMUX") != nullptr || std::getenv("ZELLIJ") != nullptr || std::getenv("STY") != nullptr)
+        return false;
+    const auto* term = std::getenv("TERM");
+    if (term == nullptr) return true;
+    const std::string_view value{term};
+    return !value.starts_with("tmux") && !value.starts_with("screen");
+}
 
 [[nodiscard]] support::Error alt_overlay_unavailable() {
     return support::make_error(
@@ -27,7 +55,7 @@ namespace {
 /// the frame engine owns clipping and scrolling. `cursor_location` reports the
 /// composed cursor at the document row it was rendered at, which is the row the
 /// engine translates into the frame.
-class AltScreen::ImplicitDocument final : public Component {
+class AltScreen::ImplicitDocument final : public Component, public MouseHandler {
 public:
     explicit ImplicitDocument(AltScreen& owner) : owner_(owner) {}
 
@@ -50,6 +78,10 @@ public:
 
     [[nodiscard]] bool contains(const Component* target) const override { return owner_.owns(target); }
 
+    [[nodiscard]] std::optional<MouseDispatchResult> handle_mouse_forwarded(const MouseEvent& event) override {
+        return owner_.dispatch_mouse_to_implicit_document(event);
+    }
+
 private:
     AltScreen& owner_;
     std::optional<CursorPosition> cursor_{};
@@ -60,6 +92,12 @@ AltScreen::AltScreen(Terminal& terminal)
     render_schedule_state_->owner = this;
     implicit_scroll_view_ = std::make_unique<ScrollView>(
             std::make_unique<ImplicitDocument>(*this), ScrollViewOptions{.follow_end = true, .primary = true});
+    // pi registers the viewport input stage with the instance
+    // (`tui-alt-screen.ts:281`), so mouse reports are consumed before any
+    // listener registered afterwards observes them.
+    mouse_listener_ = add_raw_input_listener([this](std::string_view data) {
+        return handle_viewport_input(data) ? RawInputListenerResult::consume() : RawInputListenerResult::pass();
+    });
 }
 
 AltScreen::~AltScreen() {
@@ -85,6 +123,7 @@ void AltScreen::set_layout_root(std::unique_ptr<Component> root) {
     layout_root_ = std::move(root);
     // The recorded primary viewport belongs to the tree that was just replaced.
     layout_primary_scroll_view_ = nullptr;
+    invalidate_composition_cache();
     if (was_focused) {
         apply_focus(nullptr);
         fallback_focus();
@@ -95,6 +134,7 @@ void AltScreen::set_layout_root(std::unique_ptr<Component> root) {
 support::Expected<std::reference_wrapper<Component>> AltScreen::add_child(std::unique_ptr<Component> component) {
     auto attached = detail::attach_child(children_, std::move(component), "");
     if (!attached) return std::unexpected(attached.error());
+    invalidate_composition_cache();
     request_render();
     return *attached;
 }
@@ -115,6 +155,7 @@ support::ExpectedVoid AltScreen::remove_child(Component* component) {
     const bool was_focused = focused_ == component;
     retired_children_.push_back(std::move(*found));
     children_.erase(found);
+    invalidate_composition_cache();
     if (was_focused) {
         apply_focus(nullptr);
         fallback_focus();
@@ -129,6 +170,7 @@ void AltScreen::clear_children() {
     for (auto& child : children_)
         retired_children_.push_back(std::move(child));
     children_.clear();
+    invalidate_composition_cache();
     if (was_focused) apply_focus(nullptr);
     request_render();
 }
@@ -233,6 +275,11 @@ support::ExpectedVoid AltScreen::start() {
     if (color_scheme_notifications_enabled_) {
         (void)terminal_.write("\x1b[?2031h");
     }
+    // The fullscreen root owns pointer reporting for its lifetime: SGR reports
+    // arrive with the coordinates and button bits the router decodes, and focus
+    // reporting is what lets the terminal tell this root that a gesture left the
+    // window (pi `tui-alt-screen.ts:363-378`).
+    (void)terminal_.write(mouse_all_motion_enabled() ? kEnableMouseAllMotion : kEnableMouseButtonMotion);
     request_render();
     return {};
 }
@@ -249,10 +296,16 @@ support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
     started_ = false;
     apply_focus(nullptr);
     overlay_focus_restore_ = {};
+    // A gesture never survives the session that captured it.
+    clear_mouse_gesture();
+    last_mouse_click_.reset();
 
     if (color_scheme_notifications_enabled_) {
         (void)terminal_.write("\x1b[?2031l");
     }
+    // Give pointer reporting back to the terminal before the alternate buffer
+    // is left (pi `beforeTerminalStop`).
+    (void)terminal_.write(kDisableMouse);
 
     cancel_color_queries();
 
@@ -319,9 +372,13 @@ support::ExpectedVoid AltScreen::render_frame() {
     auto frame = detail::LayoutEngine::render(root, dimensions.columns, dimensions.rows, [this] { request_render(); });
     if (!frame) return std::unexpected(frame.error());
     layout_primary_scroll_view_ = frame->primary_scroll_view;
+    // The frame outlives the paint: it is the geometry every later hit test runs
+    // against, so a pointer event never renders to find out where a component is
+    // (pi `currentLayout`).
+    cached_frame_ = std::make_unique<detail::LayoutFrame>(std::move(*frame));
     // Frame image placements are not emitted by this root yet (#1012).
-    lines = std::move(frame->lines);
-    cursor = frame->cursor;
+    lines = std::move(cached_frame_->lines);
+    cursor = cached_frame_->cursor;
     return render_viewport(lines, cursor, dimensions);
 }
 
@@ -333,6 +390,11 @@ support::Expected<RenderResult> AltScreen::render_implicit_document(std::size_t 
     children.reserve(children_.size());
     for (const auto& child : children_)
         children.push_back(child.get());
+    // The row each child occupies decides which child owns a pointer event, so
+    // the composition that produced the last frame is the one a hit test reads
+    // (pi `implicitDocument.mouseLayout`, `tui-alt-screen.ts:260-267`).
+    std::vector<std::pair<Component*, std::size_t>> document_rows;
+    document_rows.reserve(children.size());
     for (auto* child : children) {
         if (!owns(child)) continue;
         if (auto* viewport_aware = dynamic_cast<ViewportAware*>(child)) {
@@ -344,6 +406,7 @@ support::Expected<RenderResult> AltScreen::render_implicit_document(std::size_t 
         if (!owns(child)) continue;
         const auto child_row_offset = row_offset;
         row_offset += rendered->lines.size();
+        document_rows.emplace_back(child, rendered->lines.size());
         for (auto& image : rendered->images) {
             image.region.row += child_row_offset;
             output.images.push_back(std::move(image));
@@ -356,6 +419,7 @@ support::Expected<RenderResult> AltScreen::render_implicit_document(std::size_t 
             }
         }
     }
+    implicit_document_rows_ = std::move(document_rows);
 
     if (!output.cursor) {
         auto* focusable = dynamic_cast<Focusable*>(focused_);
@@ -582,6 +646,206 @@ void AltScreen::handle_resize(TerminalDimensions dimensions) {
     (void)dimensions;
     if (!started_) return;
     request_render();
+}
+
+bool AltScreen::handle_viewport_input(std::string_view data) {
+    if (data == kFocusOut) {
+        // The terminal reports that the window lost focus: a press that left the
+        // terminal must not stay captured, and the next click sequence starts
+        // over (pi `tui-alt-screen.ts:673-694`).
+        clear_mouse_gesture();
+        last_mouse_click_.reset();
+        return true;
+    }
+    if (data == kFocusIn) return true;
+
+    if (const auto packet = detail::parse_mouse_packet(data)) {
+        if (packet->kind == detail::MousePacket::Kind::Wheel) {
+            handle_wheel_report(*packet);
+        } else {
+            handle_mouse_report(*packet);
+        }
+        return true;
+    }
+    // A fragment that can only be a mouse report never becomes typed input, even
+    // when its payload is malformed (pi `isMouseSequence`).
+    return detail::is_mouse_sequence(data);
+}
+
+MouseEvent AltScreen::create_mouse_event(const detail::MousePacket& packet,
+        MouseEventType type,
+        std::optional<std::ptrdiff_t> wheel_delta,
+        std::optional<std::size_t> click_count) const {
+    const auto dimensions = terminal_.dimensions();
+    return detail::create_mouse_event(packet, type, dimensions.columns, dimensions.rows, wheel_delta, click_count);
+}
+
+void AltScreen::handle_wheel_report(const detail::MousePacket& packet) {
+    // One wheel notch is one logical line here: the frozen default of
+    // `wheelScrollLines`. The accelerator, its configuration and the Alt
+    // multiplier belong to #1004 (pi `tui-alt-screen.ts:697-716`).
+    constexpr std::ptrdiff_t kWheelLines = 1;
+    const auto delta = packet.direction * kWheelLines;
+    const auto event = create_mouse_event(packet, MouseEventType::Wheel, delta);
+    if (auto result = dispatch_mouse_to_layout(event)) {
+        if (apply_mouse_dispatch_result(event, *result)) request_render();
+        return;
+    }
+    route_wheel(event, delta);
+}
+
+void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
+    const auto type = detail::pointer_event_type(packet);
+    const auto event = create_mouse_event(packet, type);
+
+    if (handle_gesture_mouse_report(packet, event)) return;
+
+    if (auto result = dispatch_mouse_to_layout(event)) {
+        const bool render = apply_mouse_dispatch_result(event, *result);
+        if (type == MouseEventType::Press) {
+            mouse_press_target_ = result->target;
+            mouse_press_point_ = std::pair{packet.x, packet.y};
+            mouse_press_moved_ = false;
+        }
+        if (render) request_render();
+        return;
+    }
+
+    // A pointer report no component claims is where the frozen root starts a
+    // text selection, a scrollbar drag or an on-screen control interaction
+    // (`handleSelectionMouseEvent`, `handleScrollbarMouseEvent`). Those
+    // consumers are #1015, #1005 and #1003; until one lands the report is
+    // consumed without an effect rather than leaking into typed input.
+}
+
+bool AltScreen::handle_gesture_mouse_report(const detail::MousePacket& packet, const MouseEvent& event) {
+    if (!mouse_capture_ && !mouse_press_target_) return false;
+    // The gesture belongs to a component that may have left the tree since the
+    // press, and a removed C++ component is already destroyed. pi keeps the JS
+    // object alive and only documents the focus consequence (`tui.ts:82-86`);
+    // here the gesture ends instead of reaching freed memory.
+    const auto target = mouse_capture_ ? *mouse_capture_ : *mouse_press_target_;
+    if (target.component == nullptr || !owns(target.component)) {
+        clear_mouse_gesture();
+        return false;
+    }
+
+    // A captured target keeps receiving the gesture, wherever the pointer is.
+    if (mouse_press_point_ && (packet.x != mouse_press_point_->first || packet.y != mouse_press_point_->second)) {
+        mouse_press_moved_ = true;
+        last_mouse_click_.reset();
+    }
+    bool render = false;
+    if (auto result = dispatch_mouse_to_target(event, target)) {
+        render = apply_mouse_dispatch_result(event, *result);
+    }
+    if (packet.release) {
+        // A release on the press cell without movement is a click, and
+        // consecutive clicks count up (pi `handleMouseEvent`).
+        if (!mouse_press_moved_ && mouse_press_point_ && mouse_press_point_->first == packet.x &&
+                mouse_press_point_->second == packet.y) {
+            const auto click = create_mouse_event(packet,
+                    MouseEventType::Click,
+                    std::nullopt,
+                    next_component_click_count(target, packet.x, packet.y));
+            if (auto result = dispatch_mouse_to_target(click, target)) {
+                render = apply_mouse_dispatch_result(click, *result) || render;
+            }
+        }
+        clear_mouse_gesture();
+    }
+    if (render) request_render();
+    return true;
+}
+
+std::optional<MouseDispatchResult> AltScreen::dispatch_mouse_to_layout(const MouseEvent& event) {
+    if (!cached_frame_) return std::nullopt;
+    std::vector<const Component*> visited;
+    for (const auto* box : detail::layout_boxes_at(*cached_frame_, event.screen_x, event.screen_y)) {
+        if (box->component == nullptr) continue;
+        if (std::find(visited.begin(), visited.end(), box->component) != visited.end()) continue;
+        visited.push_back(box->component);
+        auto target_event = event;
+        target_event.x = event.screen_x - box->rect.x;
+        target_event.y = event.screen_y - box->rect.y;
+        target_event.width = box->rect.width;
+        target_event.height = box->rect.height;
+        if (auto result = dispatch_mouse_event(*box->component, target_event)) return result;
+    }
+    return std::nullopt;
+}
+
+std::optional<MouseDispatchResult> AltScreen::dispatch_mouse_to_implicit_document(const MouseEvent& event) {
+    // pi `implicitDocument.handleMouse` maps the composed rows the document had
+    // in the last frame back to the child that occupied them.
+    return detail::dispatch_mouse_to_cached_rows(
+            event,
+            implicit_document_rows_.size(),
+            [this](std::size_t index) -> Component& { return *implicit_document_rows_[index].first; },
+            [this](std::size_t index) { return implicit_document_rows_[index].second; });
+}
+
+std::optional<MouseDispatchResult> AltScreen::dispatch_mouse_to_target(
+        const MouseEvent& event, const MouseDispatchTarget& target) {
+    if (target.component == nullptr) return std::nullopt;
+    return dispatch_mouse_event(*target.component, retarget_mouse_event(event, target));
+}
+
+bool AltScreen::apply_mouse_dispatch_result(const MouseEvent& event, const MouseDispatchResult& result) {
+    auto* focus_target = result.focus_target != nullptr ? result.focus_target : result.target.component;
+    const bool can_focus = focus_target != nullptr && owns(focus_target);
+    const bool focus_changed = result.focus && can_focus && focused_ != focus_target;
+    if (result.focus && can_focus) apply_focus(focus_target);
+    if (result.capture) mouse_capture_ = result.target;
+    // Move and release default to no render; press, click, drag and wheel default
+    // to one, and a handler that answered `render` overrides both (pi
+    // `tui-alt-screen.ts:847-856`).
+    return result.render.value_or(focus_changed || mouse_event_renders_by_default(event.type));
+}
+
+std::size_t AltScreen::next_component_click_count(
+        const MouseDispatchTarget& target, std::ptrdiff_t x, std::ptrdiff_t y) {
+    const auto now = std::chrono::steady_clock::now();
+    const auto previous = last_mouse_click_;
+    const auto count = previous && now - previous->at <= kComponentDoubleClickInterval &&
+                                       previous->component == target.component && previous->x == x && previous->y == y
+                               ? (previous->count % 3) + 1
+                               : std::size_t{1};
+    last_mouse_click_ = MouseClick{.at = now, .count = count, .component = target.component, .x = x, .y = y};
+    return count;
+}
+
+void AltScreen::route_wheel(const MouseEvent& event, std::ptrdiff_t delta) {
+    auto remaining = delta;
+    std::vector<ScrollView*> seen;
+    const auto viewports =
+            cached_frame_ ? detail::scroll_views_at(*cached_frame_, event.x, event.y) : std::vector<ScrollView*>{};
+    for (auto* viewport : viewports) {
+        if (viewport == nullptr) continue;
+        seen.push_back(viewport);
+        remaining = viewport->scroll_by(remaining);
+        if (remaining == 0 || viewport->overscroll() == ScrollOverscroll::Contain) break;
+    }
+    auto& primary = primary_scroll_view();
+    if (remaining != 0 && std::find(seen.begin(), seen.end(), &primary) == seen.end()) {
+        (void)primary.scroll_by(remaining);
+    }
+    request_render();
+}
+
+void AltScreen::invalidate_composition_cache() noexcept {
+    // The frame boxes and the document rows name components by pointer, and a
+    // composition that changed may have destroyed one: a hit test needs the next
+    // frame, never a stale name.
+    cached_frame_.reset();
+    implicit_document_rows_.clear();
+}
+
+void AltScreen::clear_mouse_gesture() noexcept {
+    mouse_capture_.reset();
+    mouse_press_target_.reset();
+    mouse_press_point_.reset();
+    mouse_press_moved_ = false;
 }
 
 RawInputListenerHandle AltScreen::add_raw_input_listener(RawInputListener listener) {

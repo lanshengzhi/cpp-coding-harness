@@ -64,6 +64,9 @@ void TuiHost::handle_input(std::string input, const std::function<void(const Inp
         auto flushed = stream_decoder_->flush();
         apply_terminal_responses(flushed.responses);
         apply_cell_size_responses(flushed.responses);
+        for (auto& frame : flushed.mouse_frames) {
+            (void)raw_listeners_->dispatch(frame);
+        }
         for (const auto& event : flushed.events)
             handle_event(event);
         return;
@@ -79,6 +82,16 @@ void TuiHost::handle_input(std::string input, const std::function<void(const Inp
         const auto chunk = std::string_view(input).substr(offset, kInputDecodeChunkBytes);
         auto decoded = stream_decoder_->feed(chunk);
         apply_terminal_responses(decoded.responses);
+
+        // Complete mouse reports are input for the byte-level stage even though
+        // they decode to no typed event, so they run through the same listener
+        // chain as the key bytes (pi StdinBuffer hands the frame to the data
+        // handler, which reaches the input listeners). A report keeps its own
+        // fragment: a listener that consumes it stops the chain for that report,
+        // and a listener rewrite is ignored because a report is not text.
+        for (auto& frame : decoded.mouse_frames) {
+            (void)raw_listeners_->dispatch(frame);
+        }
 
         if (decoded.forwarded_input.empty()) continue;
 

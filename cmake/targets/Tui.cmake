@@ -30,6 +30,9 @@ cch_parity_declare_target(
         src/tui/Layout.cpp
         src/tui/Loader.cpp
         src/tui/Markdown.cpp
+        src/tui/Mouse.cpp
+        src/tui/MouseRegion.cpp
+        src/tui/MouseRouting.cpp
         src/tui/Overlay.cpp
         src/tui/OverlayCompositor.cpp
         src/tui/ProcessTerminal.cpp

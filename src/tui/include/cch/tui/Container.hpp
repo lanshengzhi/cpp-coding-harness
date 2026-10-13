@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/tui/Component.hpp>
+#include <cch/tui/Mouse.hpp>
 
 #include <cch/support/Error.hpp>
 
@@ -22,7 +23,7 @@ namespace detail::testing {
 } // namespace detail::testing
 
 /// A container that composes child components without padding or background.
-class Container final : public Component {
+class Container final : public Component, public MouseHandler {
 public:
     Container() = default;
     Container(Container&&) noexcept;
@@ -43,6 +44,10 @@ public:
     void invalidate() override;
     [[nodiscard]] std::optional<CursorPosition> cursor_location() const override;
     [[nodiscard]] bool contains(const Component* target) const override;
+    /// Route an event to the child whose cached composition rows contain it
+    /// (pi `tui.ts:372-396`). The rows come from the last `render`, so hitting a
+    /// nested child never renders during the hit test.
+    [[nodiscard]] std::optional<MouseDispatchResult> handle_mouse_forwarded(const MouseEvent& event) override;
 
 private:
     std::vector<std::unique_ptr<Component>> children_;
@@ -51,7 +56,7 @@ private:
 };
 
 /// A Container with padding and an optional background hook.
-class Box final : public Component {
+class Box final : public Component, public MouseHandler {
 public:
     explicit Box(std::size_t padding_x = 1, std::size_t padding_y = 1, BackgroundHook background_hook = {});
     Box(Box&&) noexcept;
@@ -73,6 +78,9 @@ public:
     void invalidate() override;
     [[nodiscard]] std::optional<CursorPosition> cursor_location() const override;
     [[nodiscard]] bool contains(const Component* target) const override;
+    /// Route an event through this box's padding to the child whose cached
+    /// composition rows contain it (pi `components/box.ts:75-96`).
+    [[nodiscard]] std::optional<MouseDispatchResult> handle_mouse_forwarded(const MouseEvent& event) override;
 
 private:
     friend std::size_t detail::testing::box_tokenize_terminal_output_call_count(const Box& box) noexcept;
