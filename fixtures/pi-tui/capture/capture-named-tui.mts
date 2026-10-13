@@ -15,6 +15,7 @@ import { captureEditorOperations } from "./editor-operations.mts";
 import { captureInputScenarios } from "./input-scenarios.mts";
 import { captureStackLayout } from "./stack-layout-scenarios.mts";
 import { captureScrollView } from "./scroll-view-scenarios.mts";
+import { captureMouse } from "./mouse-scenarios.mts";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), "..");
@@ -842,6 +843,12 @@ const stackLayoutArtifact = envelope(stackLayoutObservation.sourceEndpoints, sta
 const scrollViewObservation = await captureScrollView(pi);
 const scrollViewArtifact = envelope(scrollViewObservation.sourceEndpoints, scrollViewObservation.scenarios);
 
+// Observe normalized mouse routing: the cached-frame hit test, the capture and
+// host-focus rules, wheel consumption and the regular screen's terminal-owned
+// mouse behavior (#1002).
+const mouseObservation = await captureMouse(pi);
+const mouseArtifact = envelope(mouseObservation.sourceEndpoints, mouseObservation.scenarios);
+
 // No output is touched before source guards and all observations complete.
 const bundle = path.join(root, selected.bundle);
 mkdirSync(bundle, { recursive: true });
@@ -859,6 +866,7 @@ const artifacts = [
 	["editor-autocomplete.json", "editor-autocomplete", editorTriggerArtifact],
 	["layout.json", "stack-layout", stackLayoutArtifact],
 	["scroll-view.json", "scroll-view", scrollViewArtifact],
+	["mouse.json", "mouse", mouseArtifact],
 ] as const;
 const records = artifacts.map(([file, family, artifact]) => {
 	const bytes = Buffer.from(JSON.stringify(artifact, null, 2) + "\n");
@@ -885,6 +893,10 @@ const manifest = {
 			{
 				path: "capture/scroll-view-scenarios.mts",
 				sha256: sha256(readFileSync(path.join(root, "capture/scroll-view-scenarios.mts"))),
+			},
+			{
+				path: "capture/mouse-scenarios.mts",
+				sha256: sha256(readFileSync(path.join(root, "capture/mouse-scenarios.mts"))),
 			},
 		],
 	},

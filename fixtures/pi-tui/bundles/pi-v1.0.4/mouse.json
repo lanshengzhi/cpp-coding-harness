@@ -1,0 +1,534 @@
+{
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-13T20:39:44.153Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/tui.ts:dispatchMouseEvent,retargetMouseEvent,Container.handleMouse",
+    "packages/tui/src/layout.ts:getLayoutBoxesAt,renderLayoutFrame",
+    "packages/tui/src/components/mouse-region.ts:MouseRegion.handleMouse",
+    "packages/tui/src/components/box.ts:Box.handleMouse",
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleMouseEvent,TuiAltScreen.dispatchMouseToLayout,TuiAltScreen.applyMouseDispatchResult,TuiAltScreen.getComponentClickCount,TuiAltScreen.parseWheelEvent",
+    "packages/tui/src/tui-main-screen.ts:TuiMainScreen",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,VirtualTerminal.getViewport"
+  ],
+  "scenarios": [
+    {
+      "name": "cached-frame-hit-test",
+      "dimensions": {
+        "columns": 10,
+        "rows": 6
+      },
+      "inputs": {
+        "tree": {
+          "box": {
+            "paddingX": 1,
+            "paddingY": 1
+          },
+          "children": [
+            "alpha: aa\\nbb",
+            "beta: cc"
+          ]
+        },
+        "probes": [
+          {
+            "x": 0,
+            "y": 0,
+            "cell": "padding-top-left"
+          },
+          {
+            "x": 1,
+            "y": 1,
+            "cell": "alpha-row-0"
+          },
+          {
+            "x": 1,
+            "y": 2,
+            "cell": "alpha-row-1"
+          },
+          {
+            "x": 1,
+            "y": 3,
+            "cell": "beta-row-0"
+          },
+          {
+            "x": 9,
+            "y": 0,
+            "cell": "outside"
+          }
+        ],
+        "retarget": {
+          "event": {
+            "type": "drag",
+            "button": 32,
+            "x": 4,
+            "y": 3
+          },
+          "cell": {
+            "x": 1,
+            "y": 2
+          }
+        }
+      },
+      "expected": {
+        "lines": [
+          "",
+          " aa",
+          " bb",
+          " cc",
+          "",
+          ""
+        ],
+        "renderedBeforeProbes": {
+          "alpha": 1,
+          "beta": 1,
+          "inner": 1,
+          "padded": 1
+        },
+        "renderedAfterProbes": {
+          "alpha": 1,
+          "beta": 1,
+          "inner": 1,
+          "padded": 1
+        },
+        "cells": [
+          {
+            "x": 0,
+            "y": 0,
+            "cell": "padding-top-left",
+            "boxes": [
+              {
+                "component": "padded",
+                "rect": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 10,
+                  "height": 6
+                }
+              }
+            ],
+            "dispatchedTo": [
+              "padded"
+            ],
+            "result": null
+          },
+          {
+            "x": 1,
+            "y": 1,
+            "cell": "alpha-row-0",
+            "boxes": [
+              {
+                "component": "padded",
+                "rect": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 10,
+                  "height": 6
+                }
+              }
+            ],
+            "dispatchedTo": [
+              "padded"
+            ],
+            "result": {
+              "handled": true,
+              "capture": true,
+              "focus": true,
+              "render": null,
+              "target": "alpha",
+              "focusTarget": "alpha",
+              "local": {
+                "x": 1,
+                "y": 1
+              },
+              "size": {
+                "width": 8,
+                "height": 2
+              }
+            }
+          },
+          {
+            "x": 1,
+            "y": 2,
+            "cell": "alpha-row-1",
+            "boxes": [
+              {
+                "component": "padded",
+                "rect": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 10,
+                  "height": 6
+                }
+              }
+            ],
+            "dispatchedTo": [
+              "padded"
+            ],
+            "result": {
+              "handled": true,
+              "capture": true,
+              "focus": true,
+              "render": null,
+              "target": "alpha",
+              "focusTarget": "alpha",
+              "local": {
+                "x": 1,
+                "y": 1
+              },
+              "size": {
+                "width": 8,
+                "height": 2
+              }
+            }
+          },
+          {
+            "x": 1,
+            "y": 3,
+            "cell": "beta-row-0",
+            "boxes": [
+              {
+                "component": "padded",
+                "rect": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 10,
+                  "height": 6
+                }
+              }
+            ],
+            "dispatchedTo": [
+              "padded"
+            ],
+            "result": null
+          },
+          {
+            "x": 9,
+            "y": 0,
+            "cell": "outside",
+            "boxes": [
+              {
+                "component": "padded",
+                "rect": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 10,
+                  "height": 6
+                }
+              }
+            ],
+            "dispatchedTo": [
+              "padded"
+            ],
+            "result": null
+          }
+        ],
+        "observations": [
+          {
+            "region": "alpha",
+            "type": "press",
+            "button": "left",
+            "x": 0,
+            "y": 0,
+            "screenX": 1,
+            "screenY": 1,
+            "width": 8,
+            "height": 2,
+            "shift": false,
+            "alt": false,
+            "ctrl": false
+          },
+          {
+            "region": "alpha",
+            "type": "press",
+            "button": "left",
+            "x": 0,
+            "y": 1,
+            "screenX": 1,
+            "screenY": 2,
+            "width": 8,
+            "height": 2,
+            "shift": false,
+            "alt": false,
+            "ctrl": false
+          },
+          {
+            "region": "beta",
+            "type": "press",
+            "button": "left",
+            "x": 0,
+            "y": 0,
+            "screenX": 1,
+            "screenY": 3,
+            "width": 8,
+            "height": 1,
+            "shift": false,
+            "alt": false,
+            "ctrl": false
+          }
+        ],
+        "retarget": {
+          "target": "padded",
+          "local": {
+            "x": 4,
+            "y": 3
+          },
+          "size": {
+            "width": 10,
+            "height": 6
+          }
+        }
+      }
+    },
+    {
+      "name": "capture-drag-and-host-focus",
+      "dimensions": {
+        "columns": 20,
+        "rows": 2
+      },
+      "inputs": {
+        "reports": [
+          "\u001b[<0;1;1M",
+          "\u001b[<32;5;2M",
+          "\u001b[<0;5;2m"
+        ],
+        "host": {
+          "reports": [
+            "\u001b[<0;1;1M"
+          ],
+          "hostHandlesInput": true
+        }
+      },
+      "expected": {
+        "gesture": {
+          "events": [
+            {
+              "type": "press",
+              "x": 0,
+              "y": 0,
+              "screenX": 0,
+              "screenY": 0,
+              "width": 20,
+              "height": 1
+            },
+            {
+              "type": "drag",
+              "x": 4,
+              "y": 1,
+              "screenX": 4,
+              "screenY": 1,
+              "width": 20,
+              "height": 1
+            },
+            {
+              "type": "release",
+              "x": 4,
+              "y": 1,
+              "screenX": 4,
+              "screenY": 1,
+              "width": 20,
+              "height": 1
+            }
+          ],
+          "focused": "control",
+          "viewport": [
+            "control",
+            ""
+          ]
+        },
+        "hostFocus": {
+          "focused": "host"
+        }
+      }
+    },
+    {
+      "name": "wheel-consumed-and-unconsumed",
+      "dimensions": {
+        "columns": 20,
+        "rows": 3
+      },
+      "inputs": {
+        "documentLines": 8,
+        "consumedReport": "\u001b[<64;1;1M",
+        "unconsumedReports": [
+          "\u001b[<64;1;1M",
+          "\u001b[<65;1;1M"
+        ]
+      },
+      "expected": {
+        "consumedTop": 5,
+        "consumedReport": {
+          "wheelEvents": 1,
+          "wheelDelta": -1,
+          "viewportTop": 5,
+          "viewport": [
+            "line 6",
+            "line 7",
+            "line 8"
+          ]
+        },
+        "phases": [
+          {
+            "action": "initial",
+            "viewportTop": 5,
+            "viewport": [
+              "line 6",
+              "line 7",
+              "line 8"
+            ]
+          },
+          {
+            "action": "wheel-up",
+            "viewportTop": 4,
+            "viewport": [
+              "line 5",
+              "line 6",
+              "line 7"
+            ]
+          },
+          {
+            "action": "wheel-down",
+            "viewportTop": 5,
+            "viewport": [
+              "line 6",
+              "line 7",
+              "line 8"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "motion-and-click-counts",
+      "dimensions": {
+        "columns": 20,
+        "rows": 2
+      },
+      "inputs": {
+        "motionReport": "\u001b[<35;1;1M",
+        "clickReports": [
+          "\u001b[<0;1;1M",
+          "\u001b[<0;1;1m"
+        ],
+        "repeat": 3,
+        "moveBetweenReports": [
+          "\u001b[<32;4;1M",
+          "\u001b[<0;1;1M",
+          "\u001b[<0;1;1m"
+        ]
+      },
+      "expected": {
+        "motion": {
+          "rendered": 1,
+          "writes": 2
+        },
+        "afterMotion": {
+          "rendered": 1,
+          "writes": 2
+        },
+        "events": [
+          {
+            "type": "move",
+            "x": 0,
+            "y": 0
+          },
+          {
+            "type": "press",
+            "x": 0,
+            "y": 0
+          },
+          {
+            "type": "click",
+            "x": 0,
+            "y": 0,
+            "clickCount": 1
+          },
+          {
+            "type": "press",
+            "x": 0,
+            "y": 0
+          },
+          {
+            "type": "click",
+            "x": 0,
+            "y": 0,
+            "clickCount": 2
+          },
+          {
+            "type": "press",
+            "x": 0,
+            "y": 0
+          },
+          {
+            "type": "click",
+            "x": 0,
+            "y": 0,
+            "clickCount": 3
+          },
+          {
+            "type": "press",
+            "x": 0,
+            "y": 0
+          },
+          {
+            "type": "click",
+            "x": 0,
+            "y": 0,
+            "clickCount": 1
+          }
+        ],
+        "counts": [
+          1,
+          2,
+          3
+        ],
+        "afterMove": [
+          1,
+          2,
+          3,
+          1
+        ]
+      }
+    },
+    {
+      "name": "regular-screen-keeps-terminal-mouse",
+      "dimensions": {
+        "columns": 20,
+        "rows": 3
+      },
+      "inputs": {
+        "reports": "\u001b[<0;1;1M\u001b[<0;1;1m",
+        "typed": "x"
+      },
+      "expected": {
+        "regular": {
+          "enabledMouse": 0,
+          "value": "x",
+          "containsReport": false
+        }
+      }
+    }
+  ]
+}

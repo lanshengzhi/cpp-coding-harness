@@ -91,6 +91,23 @@ mounted behind across scroll, append, `scrollToBottom`, `scrollToTop` and resize
 `capture/scroll-view-scenarios.mts` executes the frozen components directly; its source digest is
 recorded alongside the main generator digest.
 
+For #1002, the named runner re-captured all 14 current families at the same frozen revision and
+added `mouse.json`. Its five scenarios are read through pi's own `MouseRegion`, `Container`, `Box`,
+`TuiAltScreen` and `dispatchMouseEvent`, so a silently different hit path, coordinate transform,
+capture lifetime, click count or wheel ownership fails the replay: `cached-frame-hit-test`
+distinguishes a press routed to the deepest nested region from one that stops at the padding box,
+and pins every candidate box's rect, the dispatch order, the resolved target, its local
+coordinates, its size, its focus target and its render request together with the render counts
+before and after the probes; `capture-drag-and-host-focus` distinguishes a captured drag and
+release outside the component's bounds from one that stops at them, and a delegating host that
+keeps focus from a plain region that takes it; `wheel-consumed-and-unconsumed` distinguishes a
+consumed wheel report that leaves the viewport from an unconsumed one that moves it and back;
+`motion-and-click-counts` distinguishes handled motion that writes no frame from one that
+repaints, and the wrapping click counter from a constant one; and
+`regular-screen-keeps-terminal-mouse` distinguishes a main screen that enables no mouse reporting
+and turns no packet into text from one that does. `capture/mouse-scenarios.mts` executes the
+frozen components directly; its source digest is recorded alongside the main generator digest.
+
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
 widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key
