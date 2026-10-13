@@ -14,6 +14,7 @@ import { captureSelectList } from "./select-list-scenarios.mts";
 import { captureEditorOperations } from "./editor-operations.mts";
 import { captureInputScenarios } from "./input-scenarios.mts";
 import { captureStackLayout } from "./stack-layout-scenarios.mts";
+import { captureScrollView } from "./scroll-view-scenarios.mts";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), "..");
@@ -836,6 +837,11 @@ const editorTriggerArtifact = envelope([
 const stackLayoutObservation = await captureStackLayout(pi);
 const stackLayoutArtifact = envelope(stackLayoutObservation.sourceEndpoints, stackLayoutObservation.scenarios);
 
+// Observe scroll viewports: follow-end transitions, unused delta, nested
+// viewports, placement crops and the implicit alternate-screen viewport (#1000).
+const scrollViewObservation = await captureScrollView(pi);
+const scrollViewArtifact = envelope(scrollViewObservation.sourceEndpoints, scrollViewObservation.scenarios);
+
 // No output is touched before source guards and all observations complete.
 const bundle = path.join(root, selected.bundle);
 mkdirSync(bundle, { recursive: true });
@@ -852,6 +858,7 @@ const artifacts = [
 	["autocomplete.json", "autocomplete", completionArtifact],
 	["editor-autocomplete.json", "editor-autocomplete", editorTriggerArtifact],
 	["layout.json", "stack-layout", stackLayoutArtifact],
+	["scroll-view.json", "scroll-view", scrollViewArtifact],
 ] as const;
 const records = artifacts.map(([file, family, artifact]) => {
 	const bytes = Buffer.from(JSON.stringify(artifact, null, 2) + "\n");
@@ -874,6 +881,10 @@ const manifest = {
 			{
 				path: "capture/stack-layout-scenarios.mts",
 				sha256: sha256(readFileSync(path.join(root, "capture/stack-layout-scenarios.mts"))),
+			},
+			{
+				path: "capture/scroll-view-scenarios.mts",
+				sha256: sha256(readFileSync(path.join(root, "capture/scroll-view-scenarios.mts"))),
 			},
 		],
 	},

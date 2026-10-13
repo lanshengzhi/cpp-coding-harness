@@ -1,0 +1,414 @@
+{
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-13T18:04:36.478Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo,ScrollView.scrollBy,ScrollView.updateLayout,ScrollView.scrollToStart,ScrollView.scrollToEnd",
+    "packages/tui/src/layout.ts:renderLayoutFrame,getScrollViewsAt,cropKittyImageLine",
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.getPrimaryScrollView,TuiAltScreen.viewportTop,TuiAltScreen.scrollBy,TuiAltScreen.scrollToTop,TuiAltScreen.scrollToBottom,TuiAltScreen.doRender",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.resize"
+  ],
+  "scenarios": [
+    {
+      "name": "follow-transitions",
+      "dimensions": {
+        "columns": 10,
+        "rows": 3
+      },
+      "inputs": {
+        "contentLines": 6,
+        "options": {
+          "follow": "end",
+          "primary": true
+        },
+        "requests": [
+          null,
+          -2,
+          -3,
+          10
+        ]
+      },
+      "expected": {
+        "window": {
+          "height": 3,
+          "contentHeight": 6,
+          "imageRows": 6
+        },
+        "steps": [
+          {
+            "action": "initial",
+            "remaining": null,
+            "scrollTop": 3,
+            "followingEnd": true,
+            "viewportHeight": 3,
+            "lines": [
+              "4",
+              "5",
+              "6"
+            ]
+          },
+          {
+            "action": "scroll-by-minus-2",
+            "remaining": 0,
+            "scrollTop": 1,
+            "followingEnd": false,
+            "viewportHeight": 3,
+            "lines": [
+              "2",
+              "3",
+              "4"
+            ]
+          },
+          {
+            "action": "scroll-by-minus-3",
+            "remaining": -2,
+            "scrollTop": 0,
+            "followingEnd": false,
+            "viewportHeight": 3,
+            "lines": [
+              "1",
+              "2",
+              "3"
+            ]
+          },
+          {
+            "action": "scroll-by-plus-10",
+            "remaining": 7,
+            "scrollTop": 3,
+            "followingEnd": true,
+            "viewportHeight": 3,
+            "lines": [
+              "4",
+              "5",
+              "6"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "follow-append",
+      "dimensions": {
+        "columns": 6,
+        "rows": 3
+      },
+      "inputs": {
+        "contentLines": 4,
+        "appendedLines": 5,
+        "options": {
+          "follow": "end"
+        }
+      },
+      "expected": {
+        "window": {
+          "height": 3,
+          "contentHeight": 4,
+          "imageRows": 4
+        },
+        "before": {
+          "scrollTop": 1,
+          "followingEnd": true,
+          "viewportHeight": 3,
+          "lines": [
+            "2",
+            "3",
+            "4"
+          ]
+        },
+        "after": {
+          "scrollTop": 2,
+          "followingEnd": true,
+          "viewportHeight": 3,
+          "lines": [
+            "3",
+            "4",
+            "5"
+          ]
+        }
+      }
+    },
+    {
+      "name": "nested-scroll",
+      "dimensions": {
+        "columns": 10,
+        "rows": 2
+      },
+      "inputs": {
+        "inner": {
+          "contentLines": 6,
+          "viewportRows": 2
+        },
+        "outer": {
+          "innerBasis": 2,
+          "tail": "tail"
+        },
+        "probeDimensions": {
+          "columns": 10,
+          "rows": 3
+        },
+        "probes": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 2
+          },
+          {
+            "x": 10,
+            "y": 0
+          }
+        ]
+      },
+      "expected": {
+        "window": {
+          "height": 2,
+          "contentHeight": 3,
+          "imageRows": 3
+        },
+        "before": {
+          "innerViewportHeight": 2,
+          "innerScrollTop": 0,
+          "outerScrollTop": 0,
+          "outerViewportHeight": 2,
+          "lines": [
+            "1",
+            "2"
+          ]
+        },
+        "after": {
+          "outerScrollTop": 1,
+          "remaining": 9,
+          "lines": [
+            "2",
+            "tail"
+          ]
+        },
+        "viewportsAt": [
+          {
+            "x": 0,
+            "y": 0,
+            "depthFirst": [
+              "inner",
+              "outer"
+            ]
+          },
+          {
+            "x": 0,
+            "y": 2,
+            "depthFirst": [
+              "outer"
+            ]
+          },
+          {
+            "x": 10,
+            "y": 0,
+            "depthFirst": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "scroll-image-crop",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "placement": {
+          "columns": 2,
+          "rows": 3,
+          "widthPx": 100,
+          "heightPx": 100
+        },
+        "lowerBoundary": {
+          "transcriptLines": 5,
+          "dock": "dock",
+          "viewportRows": 3
+        },
+        "scrolled": {
+          "transcriptLines": 5,
+          "viewportRows": 3,
+          "follow": "end"
+        }
+      },
+      "expected": {
+        "lower": {
+          "scrollTop": 0,
+          "viewportHeight": 3,
+          "placementRow": 2,
+          "cropRow": 2,
+          "placedRows": 3,
+          "crop": {
+            "y": 0,
+            "h": 34,
+            "r": 1,
+            "registered": {
+              "columns": 2,
+              "rows": 3,
+              "widthPx": 100,
+              "heightPx": 100
+            }
+          }
+        },
+        "upper": {
+          "scrollTop": 2,
+          "viewportHeight": 3,
+          "placementRow": 0,
+          "cropRow": 0,
+          "placedRows": 3,
+          "crop": {
+            "y": 66,
+            "h": 34,
+            "r": 1,
+            "registered": {
+              "columns": 2,
+              "rows": 3,
+              "widthPx": 100,
+              "heightPx": 100
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "alt-screen-implicit-follow",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "documentLines": 10,
+        "appendedLines": 12,
+        "manualDelta": -4,
+        "resizes": [
+          {
+            "columns": 20,
+            "rows": 2
+          },
+          {
+            "columns": 20,
+            "rows": 20
+          }
+        ]
+      },
+      "expected": {
+        "phases": [
+          {
+            "action": "initial",
+            "viewport": [
+              "7",
+              "8",
+              "9",
+              "10"
+            ],
+            "viewportTop": 6,
+            "isFollowingOutput": true
+          },
+          {
+            "action": "scroll-by-minus-4",
+            "viewport": [
+              "3",
+              "4",
+              "5",
+              "6"
+            ],
+            "viewportTop": 2,
+            "isFollowingOutput": false
+          },
+          {
+            "action": "appended",
+            "viewport": [
+              "3",
+              "4",
+              "5",
+              "6"
+            ],
+            "viewportTop": 2,
+            "isFollowingOutput": false
+          },
+          {
+            "action": "scroll-to-bottom",
+            "viewport": [
+              "9",
+              "10",
+              "11",
+              "12"
+            ],
+            "viewportTop": 8,
+            "isFollowingOutput": true
+          },
+          {
+            "action": "resize-to-2-rows",
+            "viewport": [
+              "11",
+              "12"
+            ],
+            "viewportTop": 10,
+            "isFollowingOutput": true
+          },
+          {
+            "action": "scroll-to-top",
+            "viewport": [
+              "1",
+              "2"
+            ],
+            "viewportTop": 0,
+            "isFollowingOutput": false
+          },
+          {
+            "action": "resize-to-20-rows",
+            "viewport": [
+              "1",
+              "2",
+              "3",
+              "4",
+              "5",
+              "6",
+              "7",
+              "8",
+              "9",
+              "10",
+              "11",
+              "12",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "viewportTop": 0,
+            "isFollowingOutput": true
+          }
+        ]
+      }
+    }
+  ]
+}
