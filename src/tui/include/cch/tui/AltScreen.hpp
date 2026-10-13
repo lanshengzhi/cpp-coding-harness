@@ -172,6 +172,14 @@ private:
     /// Offer a wheel delta to the viewports under the pointer, then to the
     /// primary viewport (pi `routeWheel`).
     void route_wheel(const MouseEvent& event, std::ptrdiff_t delta);
+    /// Move the scrollbar hover to the viewport under a frame cell, or clear it
+    /// (pi `updateScrollbarHover`).
+    void update_scrollbar_hover(std::ptrdiff_t x, std::ptrdiff_t y);
+    /// Give pointer presence to one viewport (pi `setScrollbarHover`): the
+    /// previous bar leaves active, the next one enters it. A viewport the root
+    /// no longer owns — a stale frame can name one — is treated as no hover.
+    void set_scrollbar_hover(ScrollView* scroll_view);
+    void stop_scrollbar_hover();
     /// Drop the cached frame geometry and document rows because the composition
     /// they name has changed (a removed component may already be destroyed).
     void invalidate_composition_cache() noexcept;
@@ -226,6 +234,9 @@ private:
     std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> mouse_press_point_{};
     bool mouse_press_moved_{false};
     std::optional<MouseClick> last_mouse_click_{};
+    /// The viewport whose scrollbar the pointer is on (pi `scrollbarHover`); a
+    /// hovered bar keeps its transient reveal and draws the active thumb.
+    ScrollView* scrollbar_hover_{nullptr};
     // Fullscreen layout authority (#998): when set, every frame is one
     // constrained composition of this component instead of a flow of children.
     std::unique_ptr<Component> layout_root_;

@@ -8,11 +8,14 @@
 #include <cch/tui/HStack.hpp>
 #include <cch/tui/ScrollView.hpp>
 #include <cch/tui/TerminalImage.hpp>
+#include <cch/tui/Utils.hpp>
 #include <cch/tui/VStack.hpp>
 #include <cch/support/Error.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
+#include <format>
 #include <functional>
 #include <optional>
 #include <string>
@@ -95,6 +98,137 @@ void collect_boxes_at(const LayoutBox& box,
     found.emplace_back(&box, depth);
     for (const auto& child : box.children)
         collect_boxes_at(child, x, y, depth + 1, found);
+}
+
+/// The box a viewport was allocated (pi `getScrollbarTargetAt` pairs every
+/// `getScrollViewsAt` candidate with its own box).
+[[nodiscard]] const LayoutBox* find_scroll_box(const LayoutBox& box, const ScrollView* viewport) {
+    if (box.scroll_view == viewport) return &box;
+    for (const auto& child : box.children) {
+        if (const auto* found = find_scroll_box(child, viewport); found != nullptr) return found;
+    }
+    return nullptr;
+}
+
+/// The cell range one grapheme covers (pi `getGraphemeCellRange`): the cell
+/// columns a column sits in, or nothing when the line has no grapheme there.
+struct GraphemeCellRange {
+    std::ptrdiff_t start{0};
+    std::ptrdiff_t end{0};
+};
+
+[[nodiscard]] std::optional<GraphemeCellRange> get_grapheme_cell_range(std::string_view line, std::ptrdiff_t column) {
+    auto tokens = tokenize_terminal_output(line);
+    if (!tokens) return std::nullopt;
+    auto current = std::ptrdiff_t{0};
+    for (const auto& token : *tokens) {
+        if (token.kind != TerminalTokenKind::Grapheme) continue;
+        const auto width = static_cast<std::ptrdiff_t>(token.width);
+        if (width > 0 && column >= current && column < current + width) {
+            return GraphemeCellRange{.start = current, .end = current + width};
+        }
+        current += width;
+    }
+    return std::nullopt;
+}
+
+/// The active background of a line prefix (pi `getActiveBackgroundAnsi`): the
+/// last background SGR the prefix set, re-emitted on its own so a replaced cell
+/// keeps the colour an overlay scrollbar must not erase.
+[[nodiscard]] std::string active_background_ansi(std::string_view prefix) {
+    AnsiStyleState style;
+    std::size_t index = 0;
+    while (index < prefix.size()) {
+        const auto code = extract_ansi_code(prefix, index);
+        if (!code) break;
+        style.process_ansi(code->code);
+        index += code->length;
+    }
+    return style.bg_color.empty() ? std::string{} : std::format("\x1b[{}m", style.bg_color);
+}
+
+/// Splice one scrollbar glyph into a painted row (pi `replaceScrollbarCell`):
+/// the whole grapheme the column sits in is replaced, the cell keeps the target
+/// background when the bar floats over the content, and the row is re-sliced
+/// through the column so the surrounding styles survive.
+[[nodiscard]] support::Expected<std::string> replace_scrollbar_cell(std::string_view line,
+        std::ptrdiff_t column,
+        std::size_t total_width,
+        std::string_view replacement,
+        bool preserve_target_background) {
+    if (is_image_line(line)) return std::string{line};
+
+    const auto range = get_grapheme_cell_range(line, column);
+    const auto start = range ? range->start : column;
+    const auto end = range ? range->end : column + 1;
+    auto before = slice_by_column(line, 0, static_cast<std::size_t>(start), true);
+    if (!before) return std::unexpected(before.error());
+    auto target = slice_by_column(line, static_cast<std::size_t>(start), static_cast<std::size_t>(end - start), true);
+    if (!target) return std::unexpected(target.error());
+    const auto trailing = static_cast<std::ptrdiff_t>(total_width) - end;
+    auto after = slice_by_column(
+            line, static_cast<std::size_t>(end), static_cast<std::size_t>(std::max<std::ptrdiff_t>(0, trailing)), true);
+    if (!after) return std::unexpected(after.error());
+
+    std::string target_prefix;
+    std::size_t index = 0;
+    while (index < target->size()) {
+        const auto code = extract_ansi_code(*target, index);
+        if (!code) break;
+        target_prefix += code->code;
+        index += code->length;
+    }
+    const auto before_width = static_cast<std::ptrdiff_t>(measure_visible_width(*before).width);
+    const auto before_padding =
+            std::string(static_cast<std::size_t>(std::max<std::ptrdiff_t>(0, start - before_width)), ' ');
+    const auto cell_padding_before =
+            std::string(static_cast<std::size_t>(std::max<std::ptrdiff_t>(0, column - start)), ' ');
+    const auto cell_padding_after =
+            std::string(static_cast<std::size_t>(std::max<std::ptrdiff_t>(0, end - column - 1)), ' ');
+    std::string target_style = std::format("\x1b[0m{}", kOsc8LinkClose);
+    if (preserve_target_background) target_style += active_background_ansi(target_prefix);
+
+    std::string result;
+    result.reserve(before->size() + target_style.size() + replacement.size() + after->size());
+    result += *before;
+    result += before_padding;
+    result += target_style;
+    result += cell_padding_before;
+    result += replacement;
+    result += cell_padding_after;
+    result += *after;
+    return result;
+}
+
+/// Paint a viewport's scrollbar column (pi `paintScrollbar`): the track covers
+/// the viewport rect, the thumb's proportional slice of it is drawn with the
+/// expanded glyph while a pointer is on the bar, and only an `always` bar has
+/// reserved the column it overwrites.
+[[nodiscard]] support::ExpectedVoid paint_scrollbar(const LayoutBox& box, LayoutFrame& frame) {
+    const auto geometry = get_scrollbar_geometry(box);
+    if (!geometry) return {};
+    auto* scroll = box.scroll_view;
+    for (std::size_t offset = 0; offset < geometry->track_height; ++offset) {
+        const auto row = geometry->track_top + static_cast<std::ptrdiff_t>(offset);
+        const auto track_last = box.clip.y + static_cast<std::ptrdiff_t>(box.clip.height);
+        if (row < box.clip.y || row >= track_last || row < 0 ||
+                row >= static_cast<std::ptrdiff_t>(frame.lines.size())) {
+            continue;
+        }
+        const auto thumb_last = geometry->thumb_top + static_cast<std::ptrdiff_t>(geometry->thumb_height);
+        const auto is_thumb = row >= geometry->thumb_top && row < thumb_last;
+        const auto replacement =
+                is_thumb ? scroll->scrollbar_thumb_style(scroll->is_scrollbar_active() ? "\u2588" : "\u2503")
+                         : scroll->scrollbar_track_style("\u2502");
+        auto replaced = replace_scrollbar_cell(frame.lines[static_cast<std::size_t>(row)],
+                geometry->column,
+                frame.width,
+                replacement,
+                scroll->scrollbar() != ScrollbarMode::Always);
+        if (!replaced) return std::unexpected(replaced.error());
+        frame.lines[static_cast<std::size_t>(row)] = std::move(*replaced);
+    }
+    return {};
 }
 
 } // namespace
@@ -183,15 +317,18 @@ support::Expected<LayoutBox> LayoutBuilder::layout_component(LayoutContext& cont
     if (auto* scroll = dynamic_cast<ScrollView*>(&component); scroll != nullptr) {
         // Scroll node (pi `layout.ts` scroll branch): the child is laid out
         // against the viewport's incoming clip at the previous scroll position
-        // with no height bound, so its whole content is measured. The viewport
-        // then learns the heights it allocated, and the child is shifted by the
-        // distance the settled scroll position moved it.
+        // with no height bound, so its whole content is measured. An `always`
+        // scrollbar reserves its last column before the child wraps, so the
+        // reservation changes the content height the viewport then learns. The
+        // viewport then learns the heights it allocated, and the child is
+        // shifted by the distance the settled scroll position moved it.
         const auto previous_scroll_top = scroll->scroll_top();
+        const auto content_width = scroll->content_width(safe_width);
         auto child = layout_component(context,
                 *scroll->child_,
                 x,
                 y - static_cast<std::ptrdiff_t>(previous_scroll_top),
-                safe_width,
+                content_width,
                 std::nullopt,
                 clip);
         if (!child) return std::unexpected(child.error());
@@ -430,6 +567,11 @@ support::ExpectedVoid LayoutBuilder::paint_box(LayoutContext& context, const Lay
     for (const auto& child : box.children) {
         if (auto painted = paint_box(context, child, frame); !painted) return painted;
     }
+    // The scrollbar is the viewport's own last paint (pi `paintBox`), so a
+    // floating bar overwrites the content column it shares.
+    if (box.scroll_view != nullptr) {
+        if (auto painted = paint_scrollbar(box, frame); !painted) return painted;
+    }
     return {};
 }
 
@@ -486,6 +628,46 @@ std::vector<ScrollView*> scroll_views_at(const LayoutFrame& frame, std::ptrdiff_
     for (const auto& entry : found)
         viewports.push_back(entry.first);
     return viewports;
+}
+
+std::optional<ScrollbarGeometry> get_scrollbar_geometry(const LayoutBox& box, bool include_hidden_auto) {
+    if (box.scroll_view == nullptr || box.rect.width == 0 || box.rect.height == 0) return std::nullopt;
+
+    const auto content_height = box.children.empty() ? std::size_t{0} : box.children.front().rect.height;
+    const auto track_height = box.rect.height;
+    const auto can_reveal_hidden_auto =
+            include_hidden_auto && box.scroll_view->scrollbar() == ScrollbarMode::Auto && content_height > track_height;
+    if (!box.scroll_view->is_scrollbar_visible() && !can_reveal_hidden_auto) return std::nullopt;
+
+    const auto min_thumb_height = std::min<std::size_t>(2, track_height);
+    // pi rounds `trackHeight * trackHeight / contentHeight`; empty content is
+    // its `Infinity` branch, where the thumb covers the whole track.
+    const auto proportional = content_height == 0
+                                      ? track_height
+                                      : static_cast<std::size_t>(std::llround(static_cast<double>(track_height) *
+                                                                              static_cast<double>(track_height) /
+                                                                              static_cast<double>(content_height)));
+    const auto thumb_height = std::max(min_thumb_height, std::min(track_height, proportional));
+    const auto max_scroll_top = content_height > track_height ? content_height - track_height : std::size_t{0};
+    const auto max_thumb_top = track_height - thumb_height;
+    const auto thumb_offset =
+            max_scroll_top == 0 ? std::size_t{0}
+                                : static_cast<std::size_t>(std::llround(
+                                          static_cast<double>(box.scroll_view->scroll_top()) /
+                                          static_cast<double>(max_scroll_top) * static_cast<double>(max_thumb_top)));
+    const auto column = box.rect.x + static_cast<std::ptrdiff_t>(box.rect.width) - 1;
+    if (column < box.clip.x || column >= box.clip.x + static_cast<std::ptrdiff_t>(box.clip.width)) return std::nullopt;
+
+    return ScrollbarGeometry{.column = column,
+            .track_top = box.rect.y,
+            .track_height = track_height,
+            .thumb_top = box.rect.y + static_cast<std::ptrdiff_t>(thumb_offset),
+            .thumb_height = thumb_height,
+            .max_scroll_top = max_scroll_top};
+}
+
+const LayoutBox* get_scroll_view_box(const LayoutFrame& frame, const ScrollView* viewport) {
+    return find_scroll_box(frame.root, viewport);
 }
 
 } // namespace cch::tui::detail

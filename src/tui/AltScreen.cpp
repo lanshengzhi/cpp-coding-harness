@@ -116,6 +116,9 @@ bool AltScreen::owns(const Component* component) const {
 
 void AltScreen::set_layout_root(std::unique_ptr<Component> root) {
     ChildOperation operation(*this);
+    // The hovered viewport may live in the outgoing tree; the pointer would
+    // dangle once the root is destroyed.
+    stop_scrollbar_hover();
     // Focus that lives in the outgoing tree keeps the tree alive until the
     // operation ends, then falls back to a mounted target.
     const bool was_focused = focused_ != nullptr && layout_root_ && layout_root_->contains(focused_);
@@ -153,6 +156,7 @@ support::ExpectedVoid AltScreen::remove_child(Component* component) {
     }
 
     const bool was_focused = focused_ == component;
+    if (scrollbar_hover_ != nullptr && component->contains(scrollbar_hover_)) stop_scrollbar_hover();
     retired_children_.push_back(std::move(*found));
     children_.erase(found);
     invalidate_composition_cache();
@@ -167,6 +171,9 @@ support::ExpectedVoid AltScreen::remove_child(Component* component) {
 void AltScreen::clear_children() {
     ChildOperation operation(*this);
     const bool was_focused = focused_ != nullptr && owns(focused_);
+    // With no layout root the attached children are the whole tree, so every
+    // hovered viewport is leaving with them.
+    if (layout_root_ == nullptr) stop_scrollbar_hover();
     for (auto& child : children_)
         retired_children_.push_back(std::move(child));
     children_.clear();
@@ -217,6 +224,8 @@ support::ExpectedVoid AltScreen::start() {
     if (started_) return {};
 
     started_ = true;
+    // No pointer survives the session boundary (pi `beforeTerminalStart`).
+    stop_scrollbar_hover();
     if (focused_ == nullptr) fallback_focus();
     if (auto result = terminal_.start(
                 [this](std::string input) -> support::ExpectedVoid {
@@ -296,9 +305,11 @@ support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
     started_ = false;
     apply_focus(nullptr);
     overlay_focus_restore_ = {};
-    // A gesture never survives the session that captured it.
+    // A gesture never survives the session that captured it, and neither does
+    // the scrollbar hover (pi `beforeTerminalStop`).
     clear_mouse_gesture();
     last_mouse_click_.reset();
+    stop_scrollbar_hover();
 
     if (color_scheme_notifications_enabled_) {
         (void)terminal_.write("\x1b[?2031l");
@@ -651,10 +662,12 @@ void AltScreen::handle_resize(TerminalDimensions dimensions) {
 bool AltScreen::handle_viewport_input(std::string_view data) {
     if (data == kFocusOut) {
         // The terminal reports that the window lost focus: a press that left the
-        // terminal must not stay captured, and the next click sequence starts
-        // over (pi `tui-alt-screen.ts:673-694`).
+        // terminal must not stay captured, the next click sequence starts over,
+        // and a hovered scrollbar is no longer under a pointer (pi
+        // `tui-alt-screen.ts:673-694`).
         clear_mouse_gesture();
         last_mouse_click_.reset();
+        stop_scrollbar_hover();
         return true;
     }
     if (data == kFocusIn) return true;
@@ -699,6 +712,10 @@ void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
     const auto event = create_mouse_event(packet, type);
 
     if (handle_gesture_mouse_report(packet, event)) return;
+
+    // A report no gesture owns moves the scrollbar hover before any component
+    // sees it (pi `handleMouseEvent`).
+    update_scrollbar_hover(packet.x, packet.y);
 
     if (auto result = dispatch_mouse_to_layout(event)) {
         const bool render = apply_mouse_dispatch_result(event, *result);
@@ -830,8 +847,42 @@ void AltScreen::route_wheel(const MouseEvent& event, std::ptrdiff_t delta) {
     if (remaining != 0 && std::find(seen.begin(), seen.end(), &primary) == seen.end()) {
         (void)primary.scroll_by(remaining);
     }
+    // A wheel moves the pointer without a motion report, so the hover follows
+    // the wheel cell (pi `routeWheel`).
+    update_scrollbar_hover(event.x, event.y);
     request_render();
 }
+
+void AltScreen::update_scrollbar_hover(std::ptrdiff_t x, std::ptrdiff_t y) {
+    ScrollView* next = nullptr;
+    if (cached_frame_) {
+        for (auto* viewport : detail::scroll_views_at(*cached_frame_, x, y)) {
+            if (viewport == nullptr || !owns(viewport)) continue;
+            const auto* box = detail::get_scroll_view_box(*cached_frame_, viewport);
+            if (box == nullptr) continue;
+            const auto geometry = detail::get_scrollbar_geometry(*box, true);
+            if (!geometry) continue;
+            const auto track_last = geometry->track_top + static_cast<std::ptrdiff_t>(geometry->track_height);
+            if (x != geometry->column || y < geometry->track_top || y >= track_last) continue;
+            next = viewport;
+            break;
+        }
+    }
+    set_scrollbar_hover(next);
+}
+
+void AltScreen::set_scrollbar_hover(ScrollView* scroll_view) {
+    if (scroll_view != nullptr && !owns(scroll_view)) scroll_view = nullptr;
+    if (scroll_view == scrollbar_hover_) return;
+    // A hovered viewport may already have left the tree, and a removed C++
+    // component is destroyed rather than kept alive: deactivating it could be a
+    // write after free. Dropping the hover reference is enough.
+    if (scrollbar_hover_ != nullptr && owns(scrollbar_hover_)) scrollbar_hover_->set_scrollbar_active(false);
+    scrollbar_hover_ = scroll_view;
+    if (scrollbar_hover_ != nullptr) scrollbar_hover_->set_scrollbar_active(true);
+}
+
+void AltScreen::stop_scrollbar_hover() { set_scrollbar_hover(nullptr); }
 
 void AltScreen::invalidate_composition_cache() noexcept {
     // The frame boxes and the document rows name components by pointer, and a

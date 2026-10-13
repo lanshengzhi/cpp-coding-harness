@@ -93,6 +93,29 @@ public:
 /// `ScrollOverscroll::Contain` (pi `TuiAltScreen.routeWheel`).
 [[nodiscard]] std::vector<ScrollView*> scroll_views_at(const LayoutFrame& frame, std::ptrdiff_t x, std::ptrdiff_t y);
 
+/// The painted geometry of a viewport's scrollbar column (pi
+/// `ScrollbarGeometry`): the frame column it occupies, the rows the track
+/// covers, and the thumb's position and size inside it.
+struct ScrollbarGeometry {
+    std::ptrdiff_t column{0};
+    std::ptrdiff_t track_top{0};
+    std::size_t track_height{0};
+    std::ptrdiff_t thumb_top{0};
+    std::size_t thumb_height{0};
+    std::size_t max_scroll_top{0};
+};
+
+/// The scrollbar geometry a painted box presents, or nothing when the box is
+/// not a viewport, has no cells, or shows no bar (pi `getScrollbarGeometry`).
+/// `include_hidden_auto` measures the track a hidden `auto` bar would reveal
+/// under the pointer, which is what a hover hit test needs.
+[[nodiscard]] std::optional<ScrollbarGeometry> get_scrollbar_geometry(
+        const LayoutBox& box, bool include_hidden_auto = false);
+
+/// The box a viewport was allocated in a frame (pi `getScrollViewBox`), which
+/// pairs a `scroll_views_at` candidate with the geometry it presents.
+[[nodiscard]] const LayoutBox* get_scroll_view_box(const LayoutFrame& frame, const ScrollView* viewport);
+
 /// Implementation of the engine's allocation and painting pass, defined in
 /// `tui/Layout.cpp`. It is the seam through which the engine reads a stack
 /// node's entries and options (pi `LAYOUT_NODE`).
