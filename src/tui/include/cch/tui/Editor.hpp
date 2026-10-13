@@ -40,6 +40,12 @@ class EditorComponent : public Component, public InputHandler, public Focusable 
 public:
     ~EditorComponent() override = default;
 
+    // Both Component and Focusable declare `cursor_location()`; the Focusable
+    // contract is the IME positioning surface consumers of an editor-capability
+    // reference read through, so an unqualified call must resolve here instead
+    // of erroring as ambiguous.
+    using Focusable::cursor_location;
+
     [[nodiscard]] virtual std::string text() const = 0;
     virtual void set_text(std::string text) = 0;
     virtual void set_on_change(EditorChangeSink sink) = 0;

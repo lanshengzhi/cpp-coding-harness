@@ -107,6 +107,10 @@ TEST_CASE("Editor component keeps optional operations independently discoverable
     CHECK(minimal.text() == "draft");
     CHECK(minimal.focused());
     CHECK(minimal.render(80)->lines == std::vector<std::string>{"draft"});
+    // The capability reference exposes the Focusable IME cursor contract
+    // without a qualifying cast (both Component and Focusable declare one).
+    const cch::tui::EditorComponent& component = minimal;
+    CHECK(component.cursor_location() == std::nullopt);
     CHECK(changes == std::vector<std::string>{"draft"});
     CHECK(submissions == std::vector<std::string>{"sent"});
     cch::tui::EditorComponent* minimal_capability = &minimal;
