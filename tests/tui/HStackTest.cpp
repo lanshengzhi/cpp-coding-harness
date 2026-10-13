@@ -177,7 +177,7 @@ namespace {
 }
 
 /// The painted rows as visible text, pi's own `visibleLines` convention
-/// (`test/layout.test.ts:10-12`): the shared splice leaves the same segment
+/// (`test/layout.test.ts:11-13`): the shared splice leaves the same segment
 /// resets pi's `compositeTuiLine` does, a composed row is padded to the frame
 /// width, and neither is part of what the terminal shows.
 [[nodiscard]] std::vector<std::string> visible_lines(const std::vector<std::string>& lines) {
@@ -231,7 +231,7 @@ TEST_CASE("HStack composes every entry at its allocated columns", "[tui][hstack]
 }
 
 TEST_CASE("HStack carries align across the composed rows", "[tui][hstack][issue999]") {
-    // Frozen `h-stack.ts:29-35`: a centered or end-aligned entry is offset by
+    // Frozen `h-stack.ts:32-34`: a centered or end-aligned entry is offset by
     // its own line count against the tallest entry, without moving the column
     // allocation.
     const auto stack_of = [](cch::tui::StackAlign align) {
@@ -261,7 +261,7 @@ TEST_CASE("HStack carries align across the composed rows", "[tui][hstack][issue9
 }
 
 TEST_CASE("HStack grows and clamps entries exactly as the frozen pi stack does", "[tui][hstack][issue999]") {
-    // Frozen `stack.ts:93-153`: `grow` fills the difference up to `maxSize`,
+    // Frozen `stack.ts:89-153`: `grow` fills the difference up to `maxSize`,
     // `shrink * max(1, size)` takes it back saturating at `minSize`, and a
     // measured width above `maxSize` is clamped before growth.
     cch::tui::HStack grow({.gap = 1});

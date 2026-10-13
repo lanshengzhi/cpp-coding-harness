@@ -5,7 +5,7 @@ import path from "node:path";
 ///
 /// Every value below comes from pi's own modules: `VStack` for the unbounded
 /// stack composition, `renderLayoutFrame` for a constrained frame, pi's own
-/// `visibleLines` convention (`test/layout.test.ts:10-12`: strip terminal
+/// `visibleLines` convention (`test/layout.test.ts:11-13`: strip terminal
 /// sequences and trailing padding) for what the terminal shows, and the
 /// bottom-up cursor extraction of `TuiBase.extractCursorPosition`
 /// (`src/tui.ts:1442-1460`). The C++ replay reads the artifact through
@@ -199,7 +199,7 @@ export async function captureStackLayout(piCheckout: string) {
 		});
 	}
 
-	// A responsive entry (`stack.ts:14` `visible`) is evaluated against the
+	// A responsive entry (`stack.ts:10` `visible`) is evaluated against the
 	// frame viewport, and a carried cross-axis `align` does not change the
 	// vertical allocation.
 	{
@@ -281,7 +281,7 @@ export async function captureStackLayout(piCheckout: string) {
 	}
 
 	// Horizontal stack (`h-stack.ts:5-43`, the `layout.ts` hstack node
-	// `layout.ts:198-247`): the requested width is the main axis, so widths are
+	// `layout.ts:200-244`): the requested width is the main axis, so widths are
 	// allocated against it, every nonzero allocation renders the child again at
 	// exactly that width (`widths[index] === 0 ? [] : render(widths[index])`), and
 	// the shared rows are composed left to right with `compositeTuiLine`
@@ -324,8 +324,9 @@ export async function captureStackLayout(piCheckout: string) {
 			};
 		}
 
-		// Grow (`stack.ts:114-134`) fills the flexible entry up to `maxSize`, and a
-		// zero-width entry consumes its `gap` column without being rendered.
+		// Grow (`stack.ts:95-133`, the grow pass of `distribute`) fills the flexible
+		// entry up to `maxSize`, and a zero-width entry consumes its `gap` column
+		// without being rendered.
 		const growChildren = [probe(["a"]), probe(["bb"]), probe([""])];
 		const grow = new HStack(
 			[
@@ -336,7 +337,7 @@ export async function captureStackLayout(piCheckout: string) {
 			{ gap: 1 },
 		);
 
-		// `clampSize` (`stack.ts:93-98`) keeps the initial allocation inside
+		// `clampSize` (`stack.ts:89-92`) keeps the initial allocation inside
 		// `[minSize, maxSize]` before growth is distributed.
 		const clampChildren = [probe(["a"]), probe(["bb"])];
 		const clamps = new HStack(
@@ -377,8 +378,9 @@ export async function captureStackLayout(piCheckout: string) {
 	}
 
 	// Constrained horizontal allocation: unnoticed `basis` entries shrink by
-	// `shrink * max(1, size)` weight (`stack.ts:135-153`) against the frame width
-	// minus gaps, an absent basis is measured at the frame width
+	// `shrink * max(1, size)` weight (`stack.ts:95-133` `distribute`, driven by
+	// `allocateStackSizes`, `stack.ts:135-153`) against the frame width minus
+	// gaps, an absent basis is measured at the frame width
 	// (`layout.ts:200-202`), and every child height is measured at its own
 	// allocated width (`layout.ts:204-206`). The whole laid-out tree is observed
 	// recursively, because an HStack child of a `VStack` root allocates its own
@@ -497,7 +499,7 @@ export async function captureStackLayout(piCheckout: string) {
 	}
 
 	// A nested horizontal stack: the responsive predicate sees the frame
-	// viewport (`stack.ts:14`), the `VStack` child is measured at its allocated
+	// viewport (`stack.ts:10`), the `VStack` child is measured at its allocated
 	// width, and the leaf crop keeps the cursor row (`layout.ts:117-123`). The
 	// same component tree is re-framed after mutation, so the mutation is
 	// observed rather than rebuilt.

@@ -443,7 +443,7 @@ void AltScreen::request_immediate_render() {
 void AltScreen::invalidate() {
     ChildOperation operation(*this);
     // pi `TuiBase.invalidate` (`tui.ts:911-913`) walks `getMountedRoots`
-    // (`tui-alt-screen.ts:329-333`): while a layout root is installed it is the
+    // (`tui-alt-screen.ts:332-334`): while a layout root is installed it is the
     // only mounted root, otherwise the mounted roots are the children.
     if (layout_root_) {
         layout_root_->invalidate();
