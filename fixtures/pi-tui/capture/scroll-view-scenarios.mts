@@ -147,6 +147,54 @@ export async function captureScrollView(piCheckout: string) {
 		});
 	}
 
+	// An absolute `scrollTo` with `disableFollow` holds the window at the last
+	// row without resuming follow (pi `scroll-view.ts:127-146`, the
+	// `followSuppressedAtEnd` field), so rows appended after it leave the window
+	// where it was and only a plain scroll that reaches the end follows again.
+	// The frozen `test/layout.test.ts` cases scroll by delta and never
+	// distinguish the suppression from a followed end.
+	{
+		const text = new Text(numberedText(6), 0, 0);
+		const view = new ScrollView(text, { follow: "end" });
+		const first = frameOf(view, 10, 3);
+		const observe = () => {
+			const frame = frameOf(view, 10, 3);
+			return {
+				scrollTop: view.scrollTop,
+				followingEnd: view.isFollowingEnd,
+				viewportHeight: view.viewportHeight,
+				contentHeight: frame.window?.contentHeight ?? 0,
+				lines: frame.lines,
+			};
+		};
+		const phases: any[] = [{ action: "initial", ...observe() }];
+		const actions = [
+			{ action: "scroll-to-1-with-disable-follow", target: 1, disableFollow: true },
+			{ action: "scroll-to-last-row-with-disable-follow", target: 3, disableFollow: true },
+		];
+		for (const step of actions) {
+			view.scrollTo(step.target, { disableFollow: step.disableFollow });
+			phases.push({ action: step.action, ...observe() });
+		}
+		text.setText(numberedText(8));
+		phases.push({ action: "appended-while-suppressed", ...observe() });
+		const restoring = { action: "scroll-to-last-row", target: 5, disableFollow: false };
+		view.scrollTo(restoring.target);
+		phases.push({ action: restoring.action, ...observe() });
+		scenarios.push({
+			name: "scroll-to-disable-follow",
+			dimensions: { columns: 10, rows: 3 },
+			inputs: {
+				contentLines: 6,
+				appendedLines: 8,
+				options: { follow: "end" },
+				actions: [{ action: "initial", target: null, disableFollow: false }, ...actions,
+					{ action: "appended-while-suppressed", target: null, disableFollow: false }, restoring],
+			},
+			expected: { window: first.window, phases },
+		});
+	}
+
 	// Nested viewports (pi `test/layout.test.ts:346-353`): the inner viewport is
 	// allocated its stack basis, an outer delta the inner cannot consume is what
 	// the enclosing viewport receives, and `getScrollViewsAt`
@@ -195,7 +243,7 @@ export async function captureScrollView(piCheckout: string) {
 	}
 
 	// A viewport crops an image placement at the window's edges (pi
-	// `layout.ts:314-328` for the lower boundary, `layout.ts:352-368` for the
+	// `layout.ts:340-344` for the lower boundary, `layout.ts:359-373` for the
 	// scrolled one) and keeps the rows it still shows.
 	{
 		const imageId = 124;

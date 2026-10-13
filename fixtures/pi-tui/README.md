@@ -23,6 +23,7 @@ The initial independently captured cases are:
 | `fuzzy.json` | `fuzzyMatch` scores/matches and `fuzzyFilter` rankings over non-ASCII, combining, supplementary, final-sigma and no-break-space queries and texts, each row recording both UTF-16 and UTF-8 lengths of the text | `PiTuiDifferentialTest` drives `fuzzy_match`/`fuzzy_filter`; `FuzzyTest` pins the retained original-UTF-8 offset helper that pi does not export |
 | `latex.json` | Frozen `renderLatex` inline grammar (symbols, nested groups, fractions including `frac 1/2`, roots, accents, inline scripts, operators), its `undefined` failure value, and the `display` option | `LatexTest` replays every row through `cch_tui::render_latex` and compares complete values |
 | `layout.json` | Constrained-frame allocation and painting: `VStack` grow/shrink/min/max/gap allocation, an auto-basis dock measured through nested minimum sizes, a leaf cropped upward to keep its `CURSOR_MARKER` row, a responsive `visible` entry under two cross-axis alignments, the transcript/editor/menu/footer dock driven through growth, menu appearance, over-constraint and shrink, and the horizontal layout: `HStack` align/grow/shrink/clamp allocation composed into shared rows, unequal-column frames, an auto-basis entry measured at the frame width, a nested `VStack`-in-`HStack` frame re-framed through inner growth, removal and re-add, and an `HStack` grown inside a constrained `VStack` | `StackLayoutEvidenceTest` and `HStackEvidenceTest` replay every frame through `cch_tui::detail::LayoutEngine` and compare child offsets, heights, `lineOffset`, painted rows and cursor |
+| `scroll-view.json` | Scroll algebra and composition: follow-end transitions with the unused delta of every `scrollBy`, appended rows moving a followed window, an absolute `scrollTo` with `disableFollow` at the last row that keeps its position while rows are appended, nested viewport measurement with the `getScrollViewsAt` depth order, placement crop rows and hidden source rows, and the implicit alternate-screen viewport across scroll, append, jump and resize | `ScrollViewEvidenceTest` replays every scenario through the public `cch_tui::ScrollView`, `LayoutEngine` and `AltScreen` seams over `VirtualTerminal` and compares scroll position, follow state, viewport and content heights, painted rows and image placements |
 
 `latex.json` was appended to the existing bundle rather than re-captured with all of it, so it keeps the envelope `capturedAt` and records its own wall clock plus the pinned published build digest under `recapture`. The other five families are unchanged.
 
@@ -72,6 +73,23 @@ an allocation-driven crop from a slice and a live mutation from a rebuild; and t
 separates an `HStack` allocating the width it was given from one allocating the root width.
 `capture/stack-layout-scenarios.mts` executes the frozen components directly; its digest is recorded
 in the manifest.
+
+For #1000, the named runner re-captured all 13 current families at the same frozen revision and
+added `scroll-view.json`. Its six scenarios are read through pi's own `ScrollView`,
+`renderLayoutFrame`, `getScrollViewsAt`, `cropKittyImageLine` and a real `TuiAltScreen` over pi's
+`VirtualTerminal`, so a silently different scroll position, follow state, unused delta, viewport
+order or cropped row fails the replay: `follow-transitions` distinguishes a followed end from a
+scrolled-away one and pins the unconsumed lines of each step, `follow-append` distinguishes a window
+that moves with appended rows from one that keeps its position, `scroll-to-disable-follow`
+distinguishes an absolute `scrollTo` at the last row with `disableFollow` from the same target
+without it (the window stays while rows are appended, and a plain scroll to the end follows again),
+`nested-scroll` distinguishes the inner viewport's own measurement and delta ownership from the
+enclosing one's, `scroll-image-crop` pins the destination rows and hidden source rows of a placement
+cut by a stack row and by a scrolled window (#1012 owns the protocol crop), and
+`alt-screen-implicit-follow` distinguishes the implicit follow-end viewport a rootless child is
+mounted behind across scroll, append, `scrollToBottom`, `scrollToTop` and resize.
+`capture/scroll-view-scenarios.mts` executes the frozen components directly; its source digest is
+recorded alongside the main generator digest.
 
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at

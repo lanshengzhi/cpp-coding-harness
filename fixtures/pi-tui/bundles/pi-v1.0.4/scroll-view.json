@@ -1,7 +1,7 @@
 {
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-13T18:04:36.478Z",
+  "capturedAt": "2026-10-13T19:04:40.141Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -148,6 +148,116 @@
             "5"
           ]
         }
+      }
+    },
+    {
+      "name": "scroll-to-disable-follow",
+      "dimensions": {
+        "columns": 10,
+        "rows": 3
+      },
+      "inputs": {
+        "contentLines": 6,
+        "appendedLines": 8,
+        "options": {
+          "follow": "end"
+        },
+        "actions": [
+          {
+            "action": "initial",
+            "target": null,
+            "disableFollow": false
+          },
+          {
+            "action": "scroll-to-1-with-disable-follow",
+            "target": 1,
+            "disableFollow": true
+          },
+          {
+            "action": "scroll-to-last-row-with-disable-follow",
+            "target": 3,
+            "disableFollow": true
+          },
+          {
+            "action": "appended-while-suppressed",
+            "target": null,
+            "disableFollow": false
+          },
+          {
+            "action": "scroll-to-last-row",
+            "target": 5,
+            "disableFollow": false
+          }
+        ]
+      },
+      "expected": {
+        "window": {
+          "height": 3,
+          "contentHeight": 6,
+          "imageRows": 6
+        },
+        "phases": [
+          {
+            "action": "initial",
+            "scrollTop": 3,
+            "followingEnd": true,
+            "viewportHeight": 3,
+            "contentHeight": 6,
+            "lines": [
+              "4",
+              "5",
+              "6"
+            ]
+          },
+          {
+            "action": "scroll-to-1-with-disable-follow",
+            "scrollTop": 1,
+            "followingEnd": false,
+            "viewportHeight": 3,
+            "contentHeight": 6,
+            "lines": [
+              "2",
+              "3",
+              "4"
+            ]
+          },
+          {
+            "action": "scroll-to-last-row-with-disable-follow",
+            "scrollTop": 3,
+            "followingEnd": false,
+            "viewportHeight": 3,
+            "contentHeight": 6,
+            "lines": [
+              "4",
+              "5",
+              "6"
+            ]
+          },
+          {
+            "action": "appended-while-suppressed",
+            "scrollTop": 3,
+            "followingEnd": false,
+            "viewportHeight": 3,
+            "contentHeight": 8,
+            "lines": [
+              "4",
+              "5",
+              "6"
+            ]
+          },
+          {
+            "action": "scroll-to-last-row",
+            "scrollTop": 5,
+            "followingEnd": true,
+            "viewportHeight": 3,
+            "contentHeight": 8,
+            "lines": [
+              "6",
+              "7",
+              "8"
+            ]
+          }
+        ]
       }
     },
     {

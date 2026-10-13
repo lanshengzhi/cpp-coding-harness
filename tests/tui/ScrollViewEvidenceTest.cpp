@@ -180,6 +180,44 @@ TEST_CASE("appended rows move a followed viewport as the frozen pi frame does",
     CHECK(drawn_lines(*frame) == string_lines(frozen.at("after").at("lines")));
 }
 
+TEST_CASE("an absolute scroll with disableFollow holds the last row until follow is restored",
+        "[tui][scroll-view][issue1000][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    const auto& scenario = scenario_of(*bundle, "scroll-to-disable-follow");
+    const auto& frozen = scenario.at("expected");
+    const auto& inputs = scenario.at("inputs");
+    const auto& actions = inputs.at("actions").get_array();
+
+    auto text = std::make_unique<cch::tui::Text>(
+            numbered_text(static_cast<std::size_t>(int_of(inputs.at("contentLines")))), 0, 0);
+    auto* text_pointer = text.get();
+    cch::tui::ScrollView view(std::move(text), cch::tui::ScrollViewOptions{.follow_end = true});
+
+    std::size_t index = 0;
+    for (const auto& phase : frozen.at("phases").get_array()) {
+        REQUIRE(index < actions.size());
+        const auto& action = actions[index];
+        const auto name = action.at("action").get_string();
+        CHECK(name == phase.at("action").get_string());
+        if (name == "appended-while-suppressed") {
+            // The suppressed window keeps its rows while the content grows.
+            text_pointer->set_text(numbered_text(static_cast<std::size_t>(int_of(inputs.at("appendedLines")))));
+        } else if (!action.at("target").holds<JsonValue::null_t>()) {
+            view.scroll_to(int_of(action.at("target")), action.at("disableFollow").get_boolean());
+        }
+        const auto frame = cch::tui::detail::LayoutEngine::render(view, 10, 3);
+        REQUIRE(frame);
+        CHECK(view.scroll_top() == static_cast<std::size_t>(int_of(phase.at("scrollTop"))));
+        CHECK(view.following_end() == phase.at("followingEnd").get_boolean());
+        CHECK(view.viewport_height() == static_cast<std::size_t>(int_of(phase.at("viewportHeight"))));
+        CHECK(view.content_height() == static_cast<std::size_t>(int_of(phase.at("contentHeight"))));
+        CHECK(drawn_lines(*frame) == string_lines(phase.at("lines")));
+        ++index;
+    }
+    CHECK(index == actions.size());
+}
+
 TEST_CASE("nested viewport measurement, delta ownership and depth order match the frozen pi frame",
         "[tui][scroll-view][issue1000][compat-pi]") {
     const auto bundle = named_bundle();
