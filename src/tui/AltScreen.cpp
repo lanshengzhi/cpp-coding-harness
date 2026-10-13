@@ -21,9 +21,45 @@ namespace {
 
 } // namespace
 
+/// The mounted-children document behind the implicit viewport (pi
+/// `TuiAltScreen.implicitDocument`): the children compose in mount order, push
+/// the frame's rows into a viewport-aware child, and report one leaf result, so
+/// the frame engine owns clipping and scrolling. `cursor_location` reports the
+/// composed cursor at the document row it was rendered at, which is the row the
+/// engine translates into the frame.
+class AltScreen::ImplicitDocument final : public Component {
+public:
+    explicit ImplicitDocument(AltScreen& owner) : owner_(owner) {}
+
+    [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override {
+        auto rendered = owner_.render_implicit_document(width);
+        if (!rendered) {
+            cursor_.reset();
+            return rendered;
+        }
+        cursor_ = rendered->cursor;
+        return rendered;
+    }
+
+    void invalidate() override {
+        for (const auto& child : owner_.children_)
+            child->invalidate();
+    }
+
+    [[nodiscard]] std::optional<CursorPosition> cursor_location() const override { return cursor_; }
+
+    [[nodiscard]] bool contains(const Component* target) const override { return owner_.owns(target); }
+
+private:
+    AltScreen& owner_;
+    std::optional<CursorPosition> cursor_{};
+};
+
 AltScreen::AltScreen(Terminal& terminal)
     : detail::TuiHost(terminal), render_schedule_state_(std::make_shared<RenderScheduleState>()) {
     render_schedule_state_->owner = this;
+    implicit_scroll_view_ = std::make_unique<ScrollView>(
+            std::make_unique<ImplicitDocument>(*this), ScrollViewOptions{.follow_end = true, .primary = true});
 }
 
 AltScreen::~AltScreen() {
@@ -47,6 +83,8 @@ void AltScreen::set_layout_root(std::unique_ptr<Component> root) {
     const bool was_focused = focused_ != nullptr && layout_root_ && layout_root_->contains(focused_);
     if (was_focused) retired_children_.push_back(std::move(layout_root_));
     layout_root_ = std::move(root);
+    // The recorded primary viewport belongs to the tree that was just replaced.
+    layout_primary_scroll_view_ = nullptr;
     if (was_focused) {
         apply_focus(nullptr);
         fallback_focus();
@@ -273,24 +311,23 @@ support::ExpectedVoid AltScreen::render_frame() {
 
     std::vector<std::string> lines;
     std::optional<CursorPosition> cursor;
-    if (layout_root_) {
-        // One constrained composition of the whole viewport: the layout root is
-        // allocated the exact terminal size and the frame it produces is the
-        // frame, not a flow of child lines. `set_available_height` is not
-        // pushed into layout children; their allocation is the bound.
-        auto frame = detail::LayoutEngine::render(*layout_root_, dimensions.columns, dimensions.rows);
-        if (!frame) return std::unexpected(frame.error());
-        // Frame image placements are not emitted by this root yet (#1012).
-        lines = std::move(frame->lines);
-        cursor = frame->cursor;
-    } else if (auto rendered = render_children(dimensions, lines, cursor); !rendered) {
-        return std::unexpected(rendered.error());
-    }
+    // One constrained composition either way (pi `doRender`): an installed
+    // layout root fills the viewport, and the implicit viewport shows the
+    // mounted children as one document. `set_available_height` is not pushed
+    // into a layout child; its allocation is the bound.
+    Component& root = layout_root_ ? *layout_root_ : *implicit_scroll_view_;
+    auto frame = detail::LayoutEngine::render(root, dimensions.columns, dimensions.rows, [this] { request_render(); });
+    if (!frame) return std::unexpected(frame.error());
+    layout_primary_scroll_view_ = frame->primary_scroll_view;
+    // Frame image placements are not emitted by this root yet (#1012).
+    lines = std::move(frame->lines);
+    cursor = frame->cursor;
     return render_viewport(lines, cursor, dimensions);
 }
 
-support::ExpectedVoid AltScreen::render_children(
-        TerminalDimensions dimensions, std::vector<std::string>& lines, std::optional<CursorPosition>& cursor) {
+support::Expected<RenderResult> AltScreen::render_implicit_document(std::size_t width) {
+    const auto rows = terminal_.dimensions().rows;
+    RenderResult output;
     std::size_t row_offset = 0;
     std::vector<Component*> children;
     children.reserve(children_.size());
@@ -299,31 +336,62 @@ support::ExpectedVoid AltScreen::render_children(
     for (auto* child : children) {
         if (!owns(child)) continue;
         if (auto* viewport_aware = dynamic_cast<ViewportAware*>(child)) {
-            viewport_aware->set_available_height(dimensions.rows);
+            viewport_aware->set_available_height(rows);
         }
         if (!owns(child)) continue;
-        auto rendered = child->render(dimensions.columns);
+        auto rendered = child->render(width);
         if (!rendered) return std::unexpected(rendered.error());
         if (!owns(child)) continue;
         const auto child_row_offset = row_offset;
-        for (auto& line : rendered->lines) {
-            auto prepared = detail::prepare_rendered_line(line, dimensions.columns);
-            if (!prepared) return std::unexpected(prepared.error());
-            lines.push_back(std::move(prepared->text));
+        row_offset += rendered->lines.size();
+        for (auto& image : rendered->images) {
+            image.region.row += child_row_offset;
+            output.images.push_back(std::move(image));
         }
-        if (!cursor) {
+        for (auto& line : rendered->lines)
+            output.lines.push_back(std::move(line));
+        if (!output.cursor) {
             if (const auto location = child->cursor_location()) {
-                cursor = CursorPosition{.column = location->column, .row = child_row_offset + location->row};
+                output.cursor = CursorPosition{.column = location->column, .row = child_row_offset + location->row};
             }
         }
-        row_offset += rendered->lines.size();
     }
 
-    if (!cursor) {
+    if (!output.cursor) {
         auto* focusable = dynamic_cast<Focusable*>(focused_);
-        if (focusable != nullptr && focusable->focused()) cursor = focusable->cursor_location();
+        if (focusable != nullptr && focusable->focused()) output.cursor = focusable->cursor_location();
     }
-    return {};
+    return output;
+}
+
+ScrollView& AltScreen::primary_scroll_view() noexcept {
+    return layout_primary_scroll_view_ != nullptr ? *layout_primary_scroll_view_ : *implicit_scroll_view_;
+}
+
+const ScrollView& AltScreen::primary_scroll_view() const noexcept {
+    return layout_primary_scroll_view_ != nullptr ? *layout_primary_scroll_view_ : *implicit_scroll_view_;
+}
+
+std::size_t AltScreen::viewport_top() const { return primary_scroll_view().scroll_top(); }
+
+bool AltScreen::is_following_output() const { return primary_scroll_view().following_end(); }
+
+void AltScreen::scroll_by(std::ptrdiff_t lines) {
+    // The viewport's unconsumed lines have no cross-viewport consumer here:
+    // input routing hands a wheel delta to `detail::scroll_views_at` callers
+    // instead (pi `TuiAltScreen.scrollBy` also drops the remainder).
+    (void)primary_scroll_view().scroll_by(lines);
+    request_render();
+}
+
+void AltScreen::scroll_to_top() {
+    primary_scroll_view().scroll_to_start();
+    request_render();
+}
+
+void AltScreen::scroll_to_bottom() {
+    primary_scroll_view().scroll_to_end();
+    request_render();
 }
 
 support::ExpectedVoid AltScreen::render_viewport(

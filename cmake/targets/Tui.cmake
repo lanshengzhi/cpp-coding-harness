@@ -46,6 +46,7 @@ cch_parity_declare_target(
         src/tui/Text.cpp
         src/tui/TextBuffer.cpp
         src/tui/TruncatedText.cpp
+        src/tui/ScrollView.cpp
         src/tui/StackLayout.cpp
         src/tui/Tui.cpp
         src/tui/TuiHost.cpp

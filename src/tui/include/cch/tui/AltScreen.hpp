@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/tui/ITui.hpp>
+#include <cch/tui/ScrollView.hpp>
 #include <cch/tui/TuiHost.hpp>
 
 #include <cstddef>
@@ -35,6 +36,12 @@ struct TuiAltScreenRenderState {
 ///
 /// Overlays are not implemented on this root yet: every overlay entry point
 /// fails validation until the deferred overlay chain lands.
+///
+/// Without a layout root the attached children are one implicitly scrolled
+/// document (`implicitDocument` + `implicitScrollView`, pi
+/// `tui-alt-screen.ts:262-270`): the viewport shows the document's end while it
+/// follows appended rows, and `viewport_top`/`is_following_output` report where
+/// it settled.
 class AltScreen final : public ITui, public detail::TuiHost {
 public:
     explicit AltScreen(Terminal& terminal);
@@ -57,6 +64,16 @@ public:
     /// frame follow it, and the child composition is ignored. Passing null
     /// restores the sequential composition of the attached children.
     void set_layout_root(std::unique_ptr<Component> root);
+
+    /// pi `viewportTop`: the top row of the primary scroll viewport.
+    [[nodiscard]] std::size_t viewport_top() const;
+    /// pi `isFollowingOutput`: whether appended rows move the primary viewport.
+    [[nodiscard]] bool is_following_output() const;
+    /// Scroll the primary viewport by a row delta and request a frame
+    /// (pi `TuiAltScreen.scrollBy`).
+    void scroll_by(std::ptrdiff_t lines);
+    void scroll_to_top();
+    void scroll_to_bottom();
 
     [[nodiscard]] support::ExpectedVoid set_focus(Component* component) override;
     [[nodiscard]] Component* focus() const noexcept override { return focused_; }
@@ -106,11 +123,22 @@ private:
         AltScreen* owner{nullptr};
     };
 
+    /// The document behind the implicit viewport: the attached children
+    /// composed in mount order, which is what a frame without a layout root
+    /// shows (pi `TuiAltScreen.implicitDocument`, `tui-alt-screen.ts:262-267`).
+    class ImplicitDocument;
+
     [[nodiscard]] bool owns(const Component* component) const;
+    /// Compose the attached children into one document result, pushing the
+    /// frame's rows into any viewport-aware child first.
+    [[nodiscard]] support::Expected<RenderResult> render_implicit_document(std::size_t width);
+    /// The primary viewport of the last frame, or the implicit viewport before
+    /// the first frame and when no installed root declares one (pi
+    /// `getPrimaryScrollView`).
+    [[nodiscard]] ScrollView& primary_scroll_view() noexcept;
+    [[nodiscard]] const ScrollView& primary_scroll_view() const noexcept;
     [[nodiscard]] support::ExpectedVoid render_now();
     [[nodiscard]] support::ExpectedVoid render_frame();
-    [[nodiscard]] support::ExpectedVoid render_children(
-            TerminalDimensions dimensions, std::vector<std::string>& lines, std::optional<CursorPosition>& cursor);
     [[nodiscard]] support::ExpectedVoid render_viewport(
             const std::vector<std::string>& lines, std::optional<CursorPosition> cursor, TerminalDimensions dimensions);
     void dispatch_input(const InputEventVariant& event);
@@ -127,6 +155,11 @@ private:
     // Fullscreen layout authority (#998): when set, every frame is one
     // constrained composition of this component instead of a flow of children.
     std::unique_ptr<Component> layout_root_;
+    // The implicit viewport the attached children are shown through when no
+    // layout root is installed (pi `implicitScrollView`).
+    std::unique_ptr<ScrollView> implicit_scroll_view_;
+    // The primary viewport of the last frame (pi `currentLayout.primaryScrollView`).
+    ScrollView* layout_primary_scroll_view_{nullptr};
     TuiScheduler* scheduler_{nullptr};
     TuiRenderPrepareSink render_prepare_sink_;
     TuiRenderCompleteSink render_complete_sink_;

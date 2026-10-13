@@ -6,12 +6,14 @@
 #include "tui/UnicodeWidth.hpp"
 
 #include <cch/tui/HStack.hpp>
+#include <cch/tui/ScrollView.hpp>
 #include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/VStack.hpp>
 #include <cch/support/Error.hpp>
 
 #include <algorithm>
 #include <cstddef>
+#include <functional>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -42,7 +44,47 @@ using FrameRenderCache = std::unordered_map<const Component*, std::unordered_map
 struct LayoutContext {
     LayoutViewport viewport{};
     FrameRenderCache render_cache{};
+    /// Stored by every scroll viewport this frame allocates (pi
+    /// `LayoutContext.requestRender`).
+    std::function<void()> request_render{};
+    /// The first `primary` viewport, or the first viewport of the frame
+    /// (pi `LayoutContext.primaryScrollView`).
+    ScrollView* primary_scroll_view{nullptr};
 };
+
+/// Move a laid-out subtree by whole rows (pi `translateBox`): a scroll viewport
+/// lays its child out at the previous scroll position and then shifts it to the
+/// position the child's own `update_layout` settled on.
+void translate_box(LayoutBox& box, std::ptrdiff_t delta_y) {
+    box.rect.y += delta_y;
+    for (auto& child : box.children)
+        translate_box(child, delta_y);
+}
+
+/// Re-clip a laid-out subtree against an ancestor's clip (pi `updateClips`): a
+/// scroll viewport's child is laid out against the viewport's incoming clip and
+/// then clipped to the window, so the frame paints only the visible rows.
+void update_clips(LayoutBox& box, const LayoutRect& parent_clip) {
+    box.clip = intersect(parent_clip, box.rect);
+    for (auto& child : box.children)
+        update_clips(child, box.clip);
+}
+
+[[nodiscard]] bool contains_point(const LayoutRect& rect, std::ptrdiff_t x, std::ptrdiff_t y) {
+    return x >= rect.x && x < rect.x + static_cast<std::ptrdiff_t>(rect.width) && y >= rect.y &&
+           y < rect.y + static_cast<std::ptrdiff_t>(rect.height);
+}
+
+void collect_scroll_views(const LayoutBox& box,
+        std::ptrdiff_t x,
+        std::ptrdiff_t y,
+        std::size_t depth,
+        std::vector<std::pair<ScrollView*, std::size_t>>& found) {
+    if (!contains_point(box.clip, x, y)) return;
+    if (box.scroll_view != nullptr && contains_point(box.rect, x, y)) found.emplace_back(box.scroll_view, depth);
+    for (const auto& child : box.children)
+        collect_scroll_views(child, x, y, depth + 1, found);
+}
 
 } // namespace
 
@@ -50,7 +92,8 @@ struct LayoutContext {
 /// node internals the engine needs (pi `LAYOUT_NODE`). Defined here only.
 class LayoutBuilder {
 public:
-    [[nodiscard]] static support::Expected<LayoutFrame> build(Component& root, std::size_t width, std::size_t height);
+    [[nodiscard]] static support::Expected<LayoutFrame> build(
+            Component& root, std::size_t width, std::size_t height, std::function<void()> request_render);
 
 private:
     [[nodiscard]] static support::Expected<std::reference_wrapper<const RenderResult>> render_cached(
@@ -126,6 +169,41 @@ support::Expected<LayoutBox> LayoutBuilder::layout_component(LayoutContext& cont
         std::optional<std::size_t> height,
         const LayoutRect& clip) {
     const auto safe_width = std::max<std::size_t>(1, width);
+    if (auto* scroll = dynamic_cast<ScrollView*>(&component); scroll != nullptr) {
+        // Scroll node (pi `layout.ts` scroll branch): the child is laid out
+        // against the viewport's incoming clip at the previous scroll position
+        // with no height bound, so its whole content is measured. The viewport
+        // then learns the heights it allocated, and the child is shifted by the
+        // distance the settled scroll position moved it.
+        const auto previous_scroll_top = scroll->scroll_top();
+        auto child = layout_component(context,
+                *scroll->child_,
+                x,
+                y - static_cast<std::ptrdiff_t>(previous_scroll_top),
+                safe_width,
+                std::nullopt,
+                clip);
+        if (!child) return std::unexpected(child.error());
+        const auto content_height = child->rect.height;
+        const auto viewport_height = height ? *height : content_height;
+        scroll->update_layout(content_height, viewport_height, context.request_render);
+        translate_box(*child,
+                static_cast<std::ptrdiff_t>(previous_scroll_top) - static_cast<std::ptrdiff_t>(scroll->scroll_top()));
+        if (scroll->primary_ || context.primary_scroll_view == nullptr) context.primary_scroll_view = scroll;
+        const auto rect = LayoutRect{.x = x, .y = y, .width = safe_width, .height = viewport_height};
+        const auto child_clip = intersect(clip, rect);
+        LayoutBox box{.component = &component,
+                .rect = rect,
+                .clip = child_clip,
+                .children = {},
+                .leaf = false,
+                .line_offset = 0,
+                .scroll_view = scroll};
+        box.children.push_back(std::move(*child));
+        update_clips(box.children.front(), child_clip);
+        return box;
+    }
+
     const auto* vstack = dynamic_cast<const VStack*>(&component);
     const auto* hstack = dynamic_cast<const HStack*>(&component);
     if (vstack == nullptr && hstack == nullptr) {
@@ -301,34 +379,40 @@ support::ExpectedVoid LayoutBuilder::paint_box(LayoutContext& context, const Lay
             frame.lines[target] = std::move(*composed);
         }
         if (!frame.cursor) {
-            // The first leaf in paint order with a cursor row inside its painted
-            // rows owns the frame cursor; the existing toolkit convention
-            // (pi `extractCursorPosition` finds the marker it leaves behind).
+            // The first leaf in paint order whose painted rows carry a cursor row
+            // owns the frame cursor, and the row must be a painted one: pi
+            // `extractCursorPosition` (`tui.ts:1442`) can only find the marker a
+            // written line carries. Column clamping stays with the presenter
+            // (pi `tui-alt-screen.ts:1765` places the cursor at `min(width, col)`).
             if (const auto location = box.component->cursor_location()) {
                 const auto row = box.rect.y + static_cast<std::ptrdiff_t>(location->row) -
                                  static_cast<std::ptrdiff_t>(box.line_offset);
                 const auto column = box.rect.x + static_cast<std::ptrdiff_t>(location->column);
-                if (row >= first_row && row < last_row && column >= box.clip.x &&
-                        column < static_cast<std::ptrdiff_t>(context.viewport.width)) {
+                if (row >= first_row && row < last_row) {
                     frame.cursor = CursorPosition{
                             .column = static_cast<std::size_t>(column), .row = static_cast<std::size_t>(row)};
                 }
             }
         }
-        // Image placements are translated like the lines they reserve. A
-        // placement the painted rows or the frame cannot hold is dropped;
-        // #1012 owns crop, reuse, and deletion geometry.
+        // Image placements are translated like the lines they reserve. Rows
+        // the painted range cannot show are clipped away from the placement's
+        // destination and recorded as source rows the consumer must crop: a
+        // scrolled image keeps its visible part at the window edge, and a
+        // placement with no visible row is absent from the frame. The
+        // destination column rule and the protocol crop are #1012's.
         for (auto image : rendered->get().images) {
             const auto row = box.rect.y + static_cast<std::ptrdiff_t>(image.region.row) -
                              static_cast<std::ptrdiff_t>(box.line_offset);
             const auto column = box.rect.x + static_cast<std::ptrdiff_t>(image.region.column);
             const auto rows = static_cast<std::ptrdiff_t>(image.region.rows);
             const auto columns = static_cast<std::ptrdiff_t>(image.region.columns);
-            if (row < first_row || row + rows > last_row) continue;
-            if (column < box.clip.x || column + columns > static_cast<std::ptrdiff_t>(box.clip.x + box.clip.width))
-                continue;
-            image.region.row = static_cast<std::size_t>(row);
-            image.region.column = static_cast<std::size_t>(column);
+            if (column < box.clip.x || column + columns > static_cast<std::ptrdiff_t>(context.viewport.width)) continue;
+            const auto first_visible_row = std::max(row, first_row);
+            const auto last_visible_row = std::min(row + rows, last_row);
+            if (last_visible_row <= first_visible_row) continue;
+            image.source_row_offset += static_cast<std::size_t>(first_visible_row - row);
+            image.region.row = static_cast<std::size_t>(first_visible_row);
+            image.region.rows = static_cast<std::size_t>(last_visible_row - first_visible_row);
             frame.images.push_back(std::move(image));
         }
     }
@@ -338,10 +422,14 @@ support::ExpectedVoid LayoutBuilder::paint_box(LayoutContext& context, const Lay
     return {};
 }
 
-support::Expected<LayoutFrame> LayoutBuilder::build(Component& root, std::size_t width, std::size_t height) {
+support::Expected<LayoutFrame> LayoutBuilder::build(
+        Component& root, std::size_t width, std::size_t height, std::function<void()> request_render) {
     const auto safe_width = std::max<std::size_t>(1, width);
     const auto safe_height = std::max<std::size_t>(1, height);
-    LayoutContext context{.viewport = LayoutViewport{.width = safe_width, .height = safe_height}};
+    LayoutContext context{.viewport = LayoutViewport{.width = safe_width, .height = safe_height},
+            .render_cache = {},
+            .request_render = std::move(request_render),
+            .primary_scroll_view = nullptr};
     const auto bounds = LayoutRect{.x = 0, .y = 0, .width = safe_width, .height = safe_height};
     auto root_box = layout_component(context, root, 0, 0, safe_width, safe_height, bounds);
     if (!root_box) return std::unexpected(root_box.error());
@@ -351,13 +439,27 @@ support::Expected<LayoutFrame> LayoutBuilder::build(Component& root, std::size_t
             .height = safe_height,
             .lines = std::vector<std::string>(safe_height),
             .images = {},
-            .cursor = std::nullopt};
+            .cursor = std::nullopt,
+            .primary_scroll_view = context.primary_scroll_view};
     if (auto painted = paint_box(context, frame.root, frame); !painted) return std::unexpected(painted.error());
     return frame;
 }
 
-support::Expected<LayoutFrame> LayoutEngine::render(Component& root, std::size_t width, std::size_t height) {
-    return LayoutBuilder::build(root, width, height);
+support::Expected<LayoutFrame> LayoutEngine::render(
+        Component& root, std::size_t width, std::size_t height, std::function<void()> request_render) {
+    return LayoutBuilder::build(root, width, height, std::move(request_render));
+}
+
+std::vector<ScrollView*> scroll_views_at(const LayoutFrame& frame, std::ptrdiff_t x, std::ptrdiff_t y) {
+    std::vector<std::pair<ScrollView*, std::size_t>> found;
+    collect_scroll_views(frame.root, x, y, 0, found);
+    std::stable_sort(
+            found.begin(), found.end(), [](const auto& left, const auto& right) { return left.second > right.second; });
+    std::vector<ScrollView*> viewports;
+    viewports.reserve(found.size());
+    for (const auto& entry : found)
+        viewports.push_back(entry.first);
+    return viewports;
 }
 
 } // namespace cch::tui::detail

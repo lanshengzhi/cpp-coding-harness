@@ -28,7 +28,14 @@ struct InlineImageRenderRegion {
     std::optional<std::size_t> max_width{std::nullopt};
     std::optional<std::size_t> max_height{std::nullopt};
     std::string fallback_text{};
+    /// Destination region: the cells the image would occupy in the composed
+    /// output, already clipped to the rows an ancestor can paint.
     CellRegion region{};
+    /// Source rows the destination no longer shows. An ancestor that scrolls or
+    /// clips the top of a placement reports the hidden rows here (pi
+    /// `cropTop`), so a consumer crops this many cell rows off the top of the
+    /// source before rendering `region.rows` rows at `region.row`.
+    std::size_t source_row_offset{0};
     bool rows_reserved_in_lines{false};
 };
 
