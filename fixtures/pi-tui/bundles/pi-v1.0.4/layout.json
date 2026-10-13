@@ -1,7 +1,7 @@
 {
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-13T17:03:25.288Z",
+  "capturedAt": "2026-10-13T17:39:20.134Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -28,6 +28,7 @@
   "sourceEndpoints": [
     "packages/tui/src/components/stack.ts:allocateStackSizes,visibleStackEntries,Stack.addChild,StackEntryOptions",
     "packages/tui/src/components/v-stack.ts:VStack.render",
+    "packages/tui/src/components/h-stack.ts:HStack.render",
     "packages/tui/src/layout.ts:renderLayoutFrame,layoutComponent,LayoutBox",
     "packages/tui/src/tui.ts:TuiBase.extractCursorPosition,compositeTuiLine,CURSOR_MARKER"
   ],
@@ -599,6 +600,955 @@
             "e3",
             "footer-1",
             "footer-2"
+          ],
+          "cursor": null
+        }
+      }
+    },
+    {
+      "name": "hstack-unbounded",
+      "dimensions": {
+        "columns": 12,
+        "rows": 6
+      },
+      "inputs": {
+        "width": 12,
+        "aligns": [
+          "stretch",
+          "start",
+          "center",
+          "end"
+        ],
+        "entries": [
+          {
+            "lines": [
+              "left"
+            ],
+            "basis": 4,
+            "shrink": 0
+          },
+          {
+            "lines": [
+              "x",
+              "y",
+              "z"
+            ],
+            "basis": 2,
+            "grow": 1,
+            "shrink": 0
+          },
+          {
+            "lines": [
+              "hidden"
+            ],
+            "basis": 0,
+            "shrink": 0
+          },
+          {
+            "lines": [
+              "rt"
+            ],
+            "basis": 5,
+            "shrink": 1,
+            "minSize": 1
+          }
+        ],
+        "grow": {
+          "lines": [
+            "a",
+            "bb",
+            ""
+          ],
+          "entries": [
+            "basis:0,grow:1",
+            "basis:2,shrink:0",
+            "basis:0,shrink:0"
+          ],
+          "width": 10
+        },
+        "clamps": {
+          "lines": [
+            "a",
+            "bb"
+          ],
+          "entries": [
+            "basis:0,grow:1,minSize:3",
+            "maxSize:2,shrink:0"
+          ],
+          "width": 8
+        },
+        "zeroOnly": {
+          "lines": [
+            "z"
+          ],
+          "entries": [
+            "basis:0,shrink:0"
+          ],
+          "width": 5
+        }
+      },
+      "expected": {
+        "aligns": {
+          "stretch": {
+            "lines": [
+              "left x   rt",
+              "     y",
+              "     z"
+            ],
+            "renderedAt": [
+              [
+                12,
+                4
+              ],
+              [
+                12,
+                2
+              ],
+              [
+                12
+              ],
+              [
+                12,
+                3
+              ]
+            ]
+          },
+          "start": {
+            "lines": [
+              "left x   rt",
+              "     y",
+              "     z"
+            ],
+            "renderedAt": [
+              [
+                12,
+                4
+              ],
+              [
+                12,
+                2
+              ],
+              [
+                12
+              ],
+              [
+                12,
+                3
+              ]
+            ]
+          },
+          "center": {
+            "lines": [
+              "     x",
+              "left y   rt",
+              "     z"
+            ],
+            "renderedAt": [
+              [
+                12,
+                4
+              ],
+              [
+                12,
+                2
+              ],
+              [
+                12
+              ],
+              [
+                12,
+                3
+              ]
+            ]
+          },
+          "end": {
+            "lines": [
+              "     x",
+              "     y",
+              "left z   rt"
+            ],
+            "renderedAt": [
+              [
+                12,
+                4
+              ],
+              [
+                12,
+                2
+              ],
+              [
+                12
+              ],
+              [
+                12,
+                3
+              ]
+            ]
+          }
+        },
+        "grow": {
+          "lines": [
+            "a      bb"
+          ],
+          "renderedAt": [
+            [
+              10,
+              6
+            ],
+            [
+              10,
+              2
+            ],
+            [
+              10
+            ]
+          ]
+        },
+        "clamps": {
+          "lines": [
+            "a     bb"
+          ],
+          "renderedAt": [
+            [
+              8,
+              6
+            ],
+            [
+              8,
+              2
+            ]
+          ]
+        },
+        "zeroOnly": {
+          "lines": [],
+          "renderedAt": [
+            [
+              5
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "hstack-frame-unequal",
+      "dimensions": {
+        "columns": 12,
+        "rows": 1
+      },
+      "inputs": {
+        "entries": [
+          {
+            "lines": [
+              "lft"
+            ],
+            "basis": 6,
+            "shrink": 1,
+            "minSize": 1
+          },
+          {
+            "lines": [
+              "rgt"
+            ],
+            "basis": 6,
+            "shrink": 1,
+            "minSize": 1
+          }
+        ],
+        "gap": 1,
+        "widths": [
+          12,
+          8
+        ]
+      },
+      "expected": {
+        "wide": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 1,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 5,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              },
+              {
+                "x": 6,
+                "y": 0,
+                "width": 6,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "lft   rgt"
+          ],
+          "cursor": null,
+          "renderedAt": [
+            [
+              5
+            ],
+            [
+              6
+            ]
+          ]
+        },
+        "narrow": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 1,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 3,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              },
+              {
+                "x": 4,
+                "y": 0,
+                "width": 4,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "lft rgt"
+          ],
+          "cursor": null,
+          "renderedAt": [
+            [
+              3
+            ],
+            [
+              4
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "hstack-frame-align",
+      "dimensions": {
+        "columns": 8,
+        "rows": 4
+      },
+      "inputs": {
+        "entries": [
+          {
+            "lines": [
+              "a1"
+            ],
+            "basis": 4,
+            "shrink": 0
+          },
+          {
+            "lines": [
+              "b1",
+              "b2"
+            ],
+            "basis": 4,
+            "shrink": 0
+          }
+        ],
+        "aligns": [
+          "stretch",
+          "start",
+          "center",
+          "end"
+        ]
+      },
+      "expected": {
+        "stretch": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 4,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 4,
+                "height": 4,
+                "lineOffset": 0,
+                "children": []
+              },
+              {
+                "x": 4,
+                "y": 0,
+                "width": 4,
+                "height": 4,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "a1  b1",
+            "    b2",
+            "",
+            ""
+          ],
+          "cursor": null
+        },
+        "start": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 4,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 4,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              },
+              {
+                "x": 4,
+                "y": 0,
+                "width": 4,
+                "height": 2,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "a1  b1",
+            "    b2",
+            "",
+            ""
+          ],
+          "cursor": null
+        },
+        "center": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 4,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 1,
+                "width": 4,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              },
+              {
+                "x": 4,
+                "y": 1,
+                "width": 4,
+                "height": 2,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "",
+            "a1  b1",
+            "    b2",
+            ""
+          ],
+          "cursor": null
+        },
+        "end": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 4,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 3,
+                "width": 4,
+                "height": 1,
+                "lineOffset": 0,
+                "children": []
+              },
+              {
+                "x": 4,
+                "y": 2,
+                "width": 4,
+                "height": 2,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "",
+            "",
+            "    b1",
+            "a1  b2"
+          ],
+          "cursor": null
+        }
+      }
+    },
+    {
+      "name": "hstack-frame-auto-basis",
+      "dimensions": {
+        "columns": 6,
+        "rows": 1
+      },
+      "inputs": {
+        "entries": [
+          {
+            "render": "'x' repeated width times",
+            "basis": "auto"
+          },
+          {
+            "lines": [
+              "ab"
+            ],
+            "basis": "auto",
+            "shrink": 1
+          }
+        ],
+        "gap": 1
+      },
+      "expected": {
+        "tree": {
+          "x": 0,
+          "y": 0,
+          "width": 6,
+          "height": 1,
+          "lineOffset": 0,
+          "children": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 4,
+              "height": 1,
+              "lineOffset": 0,
+              "children": []
+            },
+            {
+              "x": 5,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "lineOffset": 0,
+              "children": []
+            }
+          ]
+        },
+        "lines": [
+          "xxxx a"
+        ],
+        "cursor": null,
+        "renderedAt": [
+          [
+            6,
+            4
+          ],
+          [
+            6,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "name": "hstack-nested",
+      "dimensions": {
+        "columns": 10,
+        "rows": 3
+      },
+      "inputs": {
+        "inner": {
+          "lines": [
+            "m1",
+            "m2"
+          ],
+          "cursorLine": 1,
+          "minSize": 2
+        },
+        "side": {
+          "lines": [
+            "s1"
+          ],
+          "basis": 3,
+          "shrink": 1,
+          "minSize": 3,
+          "visibleAboveWidth": 10
+        },
+        "mutations": [
+          "wide",
+          "narrow",
+          "grow-inner-lines",
+          "remove-side",
+          "add-auto-basis"
+        ]
+      },
+      "expected": {
+        "wide": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 3,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 5,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "x": 6,
+                "y": 0,
+                "width": 3,
+                "height": 3,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "m1    s1",
+            "m2",
+            ""
+          ],
+          "cursor": {
+            "row": 1,
+            "column": 2
+          }
+        },
+        "narrow": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 8,
+            "height": 3,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 5,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          "lines": [
+            "m1",
+            "m2",
+            ""
+          ],
+          "cursor": {
+            "row": 1,
+            "column": 2
+          }
+        },
+        "grown": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 3,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 5,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 3,
+                    "lineOffset": 1,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "x": 6,
+                "y": 0,
+                "width": 3,
+                "height": 3,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "m2    s1",
+            "m3",
+            "m4"
+          ],
+          "cursor": {
+            "row": 2,
+            "column": 2
+          }
+        },
+        "removed": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 3,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 5,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 3,
+                    "lineOffset": 1,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          "lines": [
+            "m2",
+            "m3",
+            "m4"
+          ],
+          "cursor": {
+            "row": 2,
+            "column": 2
+          }
+        },
+        "readded": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 3,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 5,
+                "height": 3,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 5,
+                    "height": 3,
+                    "lineOffset": 1,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "x": 6,
+                "y": 0,
+                "width": 2,
+                "height": 3,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "m2    s9",
+            "m3",
+            "m4"
+          ],
+          "cursor": {
+            "row": 2,
+            "column": 2
+          }
+        }
+      }
+    },
+    {
+      "name": "hstack-in-vstack",
+      "dimensions": {
+        "columns": 14,
+        "rows": 4
+      },
+      "inputs": {
+        "entries": [
+          {
+            "lines": [
+              "left",
+              "right"
+            ],
+            "basis": 6,
+            "shrink": 1,
+            "minSize": 1
+          },
+          {
+            "lines": [
+              "f1"
+            ],
+            "basis": 2,
+            "shrink": 0
+          }
+        ],
+        "widths": [
+          14,
+          10
+        ]
+      },
+      "expected": {
+        "wide": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 14,
+            "height": 4,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 14,
+                "height": 2,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 6,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  },
+                  {
+                    "x": 7,
+                    "y": 0,
+                    "width": 6,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "x": 0,
+                "y": 2,
+                "width": 14,
+                "height": 2,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "left   right",
+            "",
+            "f1",
+            ""
+          ],
+          "cursor": null
+        },
+        "narrow": {
+          "tree": {
+            "x": 0,
+            "y": 0,
+            "width": 10,
+            "height": 4,
+            "lineOffset": 0,
+            "children": [
+              {
+                "x": 0,
+                "y": 0,
+                "width": 10,
+                "height": 2,
+                "lineOffset": 0,
+                "children": [
+                  {
+                    "x": 0,
+                    "y": 0,
+                    "width": 4,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  },
+                  {
+                    "x": 5,
+                    "y": 0,
+                    "width": 5,
+                    "height": 2,
+                    "lineOffset": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "x": 0,
+                "y": 2,
+                "width": 10,
+                "height": 2,
+                "lineOffset": 0,
+                "children": []
+              }
+            ]
+          },
+          "lines": [
+            "left right",
+            "",
+            "f1",
+            ""
           ],
           "cursor": null
         }

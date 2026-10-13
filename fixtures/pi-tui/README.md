@@ -22,7 +22,7 @@ The initial independently captured cases are:
 | `capability-ledger.json` | Frozen `packages/tui/src/index.ts` export set (173) with ledger classifications and required cross-references | `TuiCapabilityLedgerTest` + docs ledger; offline verify requires the family |
 | `fuzzy.json` | `fuzzyMatch` scores/matches and `fuzzyFilter` rankings over non-ASCII, combining, supplementary, final-sigma and no-break-space queries and texts, each row recording both UTF-16 and UTF-8 lengths of the text | `PiTuiDifferentialTest` drives `fuzzy_match`/`fuzzy_filter`; `FuzzyTest` pins the retained original-UTF-8 offset helper that pi does not export |
 | `latex.json` | Frozen `renderLatex` inline grammar (symbols, nested groups, fractions including `frac 1/2`, roots, accents, inline scripts, operators), its `undefined` failure value, and the `display` option | `LatexTest` replays every row through `cch_tui::render_latex` and compares complete values |
-| `layout.json` | Constrained-frame allocation and painting: `VStack` grow/shrink/min/max/gap allocation, an auto-basis dock measured through nested minimum sizes, a leaf cropped upward to keep its `CURSOR_MARKER` row, a responsive `visible` entry under two cross-axis alignments, and the transcript/editor/menu/footer dock driven through growth, menu appearance, over-constraint and shrink | `StackLayoutEvidenceTest` replays every frame through `cch_tui::detail::LayoutEngine` and compares child offsets, heights, `lineOffset`, painted rows and cursor |
+| `layout.json` | Constrained-frame allocation and painting: `VStack` grow/shrink/min/max/gap allocation, an auto-basis dock measured through nested minimum sizes, a leaf cropped upward to keep its `CURSOR_MARKER` row, a responsive `visible` entry under two cross-axis alignments, the transcript/editor/menu/footer dock driven through growth, menu appearance, over-constraint and shrink, and the horizontal layout: `HStack` align/grow/shrink/clamp allocation composed into shared rows, unequal-column frames, an auto-basis entry measured at the frame width, a nested `VStack`-in-`HStack` frame re-framed through inner growth, removal and re-add, and an `HStack` grown inside a constrained `VStack` | `StackLayoutEvidenceTest` and `HStackEvidenceTest` replay every frame through `cch_tui::detail::LayoutEngine` and compare child offsets, heights, `lineOffset`, painted rows and cursor |
 
 `latex.json` was appended to the existing bundle rather than re-captured with all of it, so it keeps the envelope `capturedAt` and records its own wall clock plus the pinned published build digest under `recapture`. The other five families are unchanged.
 
@@ -56,6 +56,22 @@ distinguishes an upward crop from a top crop, and the dock frames distinguish a 
 an unmeasured one while requiring both footer rows in every frame (the live property of #831).
 `capture/stack-layout-scenarios.mts` executes the frozen component directly; its source digest is
 recorded alongside the main generator digest.
+
+For #999, the same runner re-captured every family and added six horizontal cases to `layout.json`:
+the standalone `HStack` align, grow, clamp and zero-only runs, the unequal-column frame at two
+widths, the four frame alignments, an auto-basis entry, a nested `VStack`-in-`HStack` frame re-framed
+after an inner line growth, a child removal and an auto-basis re-add, and an `HStack` grown inside a
+constrained `VStack`. Every case records observations a plausible implementation gets wrong in one
+direction only: the align runs separate the cross-axis offset from the column allocation and record
+the width each entry was rendered at, so a numeric basis that is measured anyway, an entry that is
+rendered at its allocated width a second time, or a zero-width entry that is rendered at all fails;
+the unequal frames separate proportional give-back from an equal split and pin both the composed row
+and the recursive box tree, so an overwritten row fails where a spliced one passes; the auto-basis
+case separates a measurement at the frame width from a natural-width one; the nested frame separates
+an allocation-driven crop from a slice and a live mutation from a rebuild; and the in-`VStack` case
+separates an `HStack` allocating the width it was given from one allocating the root width.
+`capture/stack-layout-scenarios.mts` executes the frozen components directly; its digest is recorded
+in the manifest.
 
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at

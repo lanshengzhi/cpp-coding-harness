@@ -14,6 +14,7 @@ export async function captureStackLayout(piCheckout: string) {
 	const packageRoot = path.join(piCheckout, "packages/tui");
 	const source = (relative: string) => pathToFileURL(path.join(packageRoot, relative)).href;
 	const { VStack } = await import(source("src/components/v-stack.ts"));
+	const { HStack } = await import(source("src/components/h-stack.ts"));
 	const { Text } = await import(source("src/components/text.ts"));
 	const { renderLayoutFrame } = await import(source("src/layout.ts"));
 	const { stripTerminalSequences, visibleWidth } = await import(source("src/utils.ts"));
@@ -279,9 +280,323 @@ export async function captureStackLayout(piCheckout: string) {
 		});
 	}
 
+	// Horizontal stack (`h-stack.ts:5-43`, the `layout.ts` hstack node
+	// `layout.ts:198-247`): the requested width is the main axis, so widths are
+	// allocated against it, every nonzero allocation renders the child again at
+	// exactly that width (`widths[index] === 0 ? [] : render(widths[index])`), and
+	// the shared rows are composed left to right with `compositeTuiLine`
+	// (`tui.ts:415-444`). Every child below is a probing leaf that clips its lines
+	// to the width it is rendered at — the C++ shape of `Text(text, 0, 0)` — and
+	// the widths it is actually rendered at are part of the observation, so an
+	// entry that is measured but never rendered, and a numeric basis that is never
+	// measured, are both visible.
+	{
+		const probe = (lines: string[]) => {
+			const widths: number[] = [];
+			const component = {
+				render: (width: number) => {
+					widths.push(width);
+					// A leaf that respects its width, like pi's `Text`: the C++ conversion
+					// rejects a component whose lines exceed the width it was rendered at,
+					// so an over-wide line would leave the observation unreplayable.
+					return lines.map((line) => line.slice(0, width));
+				},
+				invalidate: () => {},
+			};
+			return { component, widths };
+		};
+
+		const alignRuns: Record<string, unknown> = {};
+		for (const align of ["stretch", "start", "center", "end"] as const) {
+			const children = [probe(["left"]), probe(["x", "y", "z"]), probe(["hidden"]), probe(["rt"])];
+			const stack = new HStack(
+				[
+					{ component: children[0]!.component, basis: 4, shrink: 0 },
+					{ component: children[1]!.component, basis: 2, grow: 1, shrink: 0 },
+					{ component: children[2]!.component, basis: 0, shrink: 0 },
+					{ component: children[3]!.component, basis: 5, shrink: 1, minSize: 1 },
+				],
+				{ align, gap: 1 },
+			);
+			alignRuns[align] = {
+				lines: visibleLines(stack.render(12)),
+				renderedAt: children.map((child) => child.widths),
+			};
+		}
+
+		// Grow (`stack.ts:114-134`) fills the flexible entry up to `maxSize`, and a
+		// zero-width entry consumes its `gap` column without being rendered.
+		const growChildren = [probe(["a"]), probe(["bb"]), probe([""])];
+		const grow = new HStack(
+			[
+				{ component: growChildren[0]!.component, basis: 0, grow: 1, shrink: 0 },
+				{ component: growChildren[1]!.component, basis: 2, shrink: 0 },
+				{ component: growChildren[2]!.component, basis: 0, shrink: 0 },
+			],
+			{ gap: 1 },
+		);
+
+		// `clampSize` (`stack.ts:93-98`) keeps the initial allocation inside
+		// `[minSize, maxSize]` before growth is distributed.
+		const clampChildren = [probe(["a"]), probe(["bb"])];
+		const clamps = new HStack(
+			[
+				{ component: clampChildren[0]!.component, basis: 0, grow: 1, minSize: 3 },
+				{ component: clampChildren[1]!.component, maxSize: 2, shrink: 0 },
+			],
+			{},
+		);
+
+		// A single zero-width entry allocates nothing, so the stack has no rows.
+		const zeroOnlyChild = probe(["z"]);
+		const zeroOnly = new HStack([{ component: zeroOnlyChild.component, basis: 0, shrink: 0 }], {});
+
+		scenarios.push({
+			name: "hstack-unbounded",
+			dimensions: { columns: 12, rows: 6 },
+			inputs: {
+				width: 12,
+				aligns: ["stretch", "start", "center", "end"],
+				entries: [
+					{ lines: ["left"], basis: 4, shrink: 0 },
+					{ lines: ["x", "y", "z"], basis: 2, grow: 1, shrink: 0 },
+					{ lines: ["hidden"], basis: 0, shrink: 0 },
+					{ lines: ["rt"], basis: 5, shrink: 1, minSize: 1 },
+				],
+				grow: { lines: ["a", "bb", ""], entries: ["basis:0,grow:1", "basis:2,shrink:0", "basis:0,shrink:0"], width: 10 },
+				clamps: { lines: ["a", "bb"], entries: ["basis:0,grow:1,minSize:3", "maxSize:2,shrink:0"], width: 8 },
+				zeroOnly: { lines: ["z"], entries: ["basis:0,shrink:0"], width: 5 },
+			},
+			expected: {
+				aligns: alignRuns,
+				grow: { lines: visibleLines(grow.render(10)), renderedAt: growChildren.map((child) => child.widths) },
+				clamps: { lines: visibleLines(clamps.render(8)), renderedAt: clampChildren.map((child) => child.widths) },
+				zeroOnly: { lines: visibleLines(zeroOnly.render(5)), renderedAt: [zeroOnlyChild.widths] },
+			},
+		});
+	}
+
+	// Constrained horizontal allocation: unnoticed `basis` entries shrink by
+	// `shrink * max(1, size)` weight (`stack.ts:135-153`) against the frame width
+	// minus gaps, an absent basis is measured at the frame width
+	// (`layout.ts:200-202`), and every child height is measured at its own
+	// allocated width (`layout.ts:204-206`). The whole laid-out tree is observed
+	// recursively, because an HStack child of a `VStack` root allocates its own
+	// children.
+	{
+		const probe = (lines: string[]) => {
+			const widths: number[] = [];
+			const component = {
+				render: (width: number) => {
+					widths.push(width);
+					// A leaf that respects its width, like pi's `Text`: the C++ conversion
+					// rejects a component whose lines exceed the width it was rendered at,
+					// so an over-wide line would leave the observation unreplayable.
+					return lines.map((line) => line.slice(0, width));
+				},
+				invalidate: () => {},
+			};
+			return { component, widths };
+		};
+		const tree = (box: any): any => ({ ...rectOf(box), children: (box.children ?? []).map(tree) });
+		const frameTree = (root: any, columns: number, rows: number) => {
+			const painted = renderLayoutFrame(root, columns, rows, () => {});
+			const lines = painted.lines.slice();
+			const cursor = cursorOf(lines);
+			return { tree: tree(painted.root), lines: visibleLines(lines), cursor };
+		};
+
+		const unequalOf = (width: number) => {
+			const children = [probe(["lft"]), probe(["rgt"])];
+			const root = new HStack(
+				[
+					{ component: children[0]!.component, basis: 6, shrink: 1, minSize: 1 },
+					{ component: children[1]!.component, basis: 6, shrink: 1, minSize: 1 },
+				],
+				{ gap: 1 },
+			);
+			return {
+				...frameTree(root, width, 1),
+				renderedAt: children.map((child) => child.widths),
+			};
+		};
+
+		scenarios.push({
+			name: "hstack-frame-unequal",
+			dimensions: { columns: 12, rows: 1 },
+			inputs: {
+				entries: [
+					{ lines: ["lft"], basis: 6, shrink: 1, minSize: 1 },
+					{ lines: ["rgt"], basis: 6, shrink: 1, minSize: 1 },
+				],
+				gap: 1,
+				widths: [12, 8],
+			},
+			expected: { wide: unequalOf(12), narrow: unequalOf(8) },
+		});
+
+		const alignOf = (align: "stretch" | "start" | "center" | "end") => {
+			const root = new HStack(
+				[
+					{ component: markerLeaf(["a1"]), basis: 4, shrink: 0 },
+					{ component: markerLeaf(["b1", "b2"]), basis: 4, shrink: 0 },
+				],
+				{ align },
+			);
+			return frameTree(root, 8, 4);
+		};
+
+		scenarios.push({
+			name: "hstack-frame-align",
+			dimensions: { columns: 8, rows: 4 },
+			inputs: {
+				entries: [
+					{ lines: ["a1"], basis: 4, shrink: 0 },
+					{ lines: ["b1", "b2"], basis: 4, shrink: 0 },
+				],
+				aligns: ["stretch", "start", "center", "end"],
+			},
+			expected: {
+				stretch: alignOf("stretch"),
+				start: alignOf("start"),
+				center: alignOf("center"),
+				end: alignOf("end"),
+			},
+		});
+
+		const autoBasisChildren = [probe(["ab"])];
+		const widthChildWidths: number[] = [];
+		const autoBasis = new HStack(
+			[
+				{
+					component: {
+						render: (width: number) => {
+							widthChildWidths.push(width);
+							return ["x".repeat(width)];
+						},
+						invalidate: () => {},
+					},
+					basis: "auto",
+				},
+				{ component: autoBasisChildren[0]!.component, basis: "auto", shrink: 1 },
+			],
+			{ gap: 1 },
+		);
+		scenarios.push({
+			name: "hstack-frame-auto-basis",
+			dimensions: { columns: 6, rows: 1 },
+			inputs: {
+				entries: [{ render: "'x' repeated width times", basis: "auto" }, { lines: ["ab"], basis: "auto", shrink: 1 }],
+				gap: 1,
+			},
+			expected: {
+				...frameTree(autoBasis, 6, 1),
+				renderedAt: [widthChildWidths, autoBasisChildren[0]!.widths],
+			},
+		});
+	}
+
+	// A nested horizontal stack: the responsive predicate sees the frame
+	// viewport (`stack.ts:14`), the `VStack` child is measured at its allocated
+	// width, and the leaf crop keeps the cursor row (`layout.ts:117-123`). The
+	// same component tree is re-framed after mutation, so the mutation is
+	// observed rather than rebuilt.
+	{
+		let innerLines = ["m1", "m2"];
+		let innerCursor = 1;
+		const innerLeaf = {
+			render: (_width: number) =>
+				innerLines.map((line, index) => (index === innerCursor ? `${line}${CURSOR_MARKER}` : line)),
+			invalidate: () => {},
+			setLines: (lines: string[], cursor: number) => {
+				innerLines = lines;
+				innerCursor = cursor;
+			},
+		};
+		const sideLeaf = markerLeaf(["s1"]);
+		const inner = new VStack([{ component: innerLeaf, minSize: 2 }]);
+		const root = new HStack(
+			[
+				{ component: inner, basis: 5, shrink: 0 },
+				{
+					component: sideLeaf,
+					basis: 3,
+					shrink: 1,
+					minSize: 3,
+					visible: (viewport: { width: number }) => viewport.width >= 10,
+				},
+			],
+			{ gap: 1 },
+		);
+		const tree = (box: any): any => ({ ...rectOf(box), children: (box.children ?? []).map(tree) });
+		const frameTree = (columns: number, rows: number) => {
+			const painted = renderLayoutFrame(root, columns, rows, () => {});
+			const lines = painted.lines.slice();
+			const cursor = cursorOf(lines);
+			return { tree: tree(painted.root), lines: visibleLines(lines), cursor };
+		};
+
+		const wide = frameTree(10, 3);
+		const narrow = frameTree(8, 3);
+		innerLeaf.setLines(["m1", "m2", "m3", "m4"], 3);
+		const grown = frameTree(10, 3);
+		root.removeChild(sideLeaf);
+		const removed = frameTree(10, 3);
+		root.addChild(markerLeaf(["s9"]), { basis: "auto" });
+		const readded = frameTree(10, 3);
+
+		scenarios.push({
+			name: "hstack-nested",
+			dimensions: { columns: 10, rows: 3 },
+			inputs: {
+				inner: { lines: ["m1", "m2"], cursorLine: 1, minSize: 2 },
+				side: { lines: ["s1"], basis: 3, shrink: 1, minSize: 3, visibleAboveWidth: 10 },
+				mutations: ["wide", "narrow", "grow-inner-lines", "remove-side", "add-auto-basis"],
+			},
+			expected: { wide, narrow, grown, removed, readded },
+		});
+	}
+
+	// An HStack inside a VStack: the parent allocates the main axis, the child
+	// stack allocates the frame width it was given, and both compose into the same
+	// rows (the shape product panes use for side-by-side regions).
+	{
+		const inVStackOf = (columns: number) => {
+			const row = new HStack(
+				[
+					{ component: markerLeaf(["left"]), basis: 6, shrink: 1, minSize: 1 },
+					{ component: markerLeaf(["right"]), basis: 6, shrink: 1, minSize: 1 },
+				],
+				{ gap: 1 },
+			);
+			const root = new VStack([
+				{ component: row, basis: 0, grow: 1, shrink: 1, minSize: 1 },
+				{ component: markerLeaf(["f1"]), basis: 2, shrink: 0 },
+			]);
+			const painted = renderLayoutFrame(root, columns, 4, () => {});
+			const lines = painted.lines.slice();
+			const cursor = cursorOf(lines);
+			const tree = (box: any): any => ({ ...rectOf(box), children: (box.children ?? []).map(tree) });
+			return { tree: tree(painted.root), lines: visibleLines(lines), cursor };
+		};
+		scenarios.push({
+			name: "hstack-in-vstack",
+			dimensions: { columns: 14, rows: 4 },
+			inputs: {
+				entries: [
+					{ lines: ["left", "right"], basis: 6, shrink: 1, minSize: 1 },
+					{ lines: ["f1"], basis: 2, shrink: 0 },
+				],
+				widths: [14, 10],
+			},
+			expected: { wide: inVStackOf(14), narrow: inVStackOf(10) },
+		});
+	}
+
 	const sourceEndpoints = [
 		"packages/tui/src/components/stack.ts:allocateStackSizes,visibleStackEntries,Stack.addChild,StackEntryOptions",
 		"packages/tui/src/components/v-stack.ts:VStack.render",
+		"packages/tui/src/components/h-stack.ts:HStack.render",
 		"packages/tui/src/layout.ts:renderLayoutFrame,layoutComponent,LayoutBox",
 		"packages/tui/src/tui.ts:TuiBase.extractCursorPosition,compositeTuiLine,CURSOR_MARKER",
 	];
