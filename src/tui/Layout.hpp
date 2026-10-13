@@ -1,0 +1,65 @@
+#pragma once
+
+#include <cch/tui/Component.hpp>
+
+#include <cch/support/Error.hpp>
+
+#include <cstddef>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace cch::tui::detail {
+
+/// Cells of one allocated box (pi `LayoutRect`).
+struct LayoutRect {
+    std::ptrdiff_t x{0};
+    std::ptrdiff_t y{0};
+    std::size_t width{0};
+    std::size_t height{0};
+};
+
+/// One laid-out component (pi `LayoutBox`): its allocated rect, the clip it
+/// inherited from its ancestors, and its laid-out children.
+struct LayoutBox {
+    Component* component{nullptr};
+    LayoutRect rect{};
+    LayoutRect clip{};
+    std::vector<LayoutBox> children{};
+    /// Whether this box owns the lines it renders instead of laying out
+    /// children (pi `LayoutBox.lines !== undefined`).
+    bool leaf{false};
+    /// Rows dropped from the top of this leaf's output to keep its cursor row
+    /// visible inside `rect` (pi `lineOffset`).
+    std::size_t line_offset{0};
+};
+
+/// One layout frame (pi `LayoutFrame`): the box tree plus the composed rows,
+/// image placements, and cursor it produces.
+struct LayoutFrame {
+    LayoutBox root{};
+    std::size_t width{0};
+    std::size_t height{0};
+    std::vector<std::string> lines{};
+    std::vector<InlineImageRenderRegion> images{};
+    std::optional<CursorPosition> cursor{};
+};
+
+/// The constrained layout authority (pi `renderLayoutFrame`): allocate a
+/// component tree into an exact `width` x `height` cell frame and compose it.
+///
+/// A vertical stack node is laid out through its entries; every other
+/// component is a leaf whose output is rendered at the frame width, cropped to
+/// its allocated rect, and translated into the frame. Non-positive dimensions
+/// clamp to one cell, matching the frozen viewport.
+class LayoutEngine {
+public:
+    [[nodiscard]] static support::Expected<LayoutFrame> render(Component& root, std::size_t width, std::size_t height);
+};
+
+/// Implementation of the engine's allocation and painting pass, defined in
+/// `tui/Layout.cpp`. It is the seam through which the engine reads a stack
+/// node's entries and options (pi `LAYOUT_NODE`).
+class LayoutBuilder;
+
+} // namespace cch::tui::detail

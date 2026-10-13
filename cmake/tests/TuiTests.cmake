@@ -73,6 +73,7 @@ tests/tui/KeysKittyTextTest.cpp
         tests/tui/UnicodeWidthTest.cpp
         tests/tui/UtilsAnsiTest.cpp
         tests/tui/UtilsTest.cpp
+        tests/tui/VStackTest.cpp
         tests/tui/VirtualTerminalTest.cpp
 )
     target_include_directories(cch_tests_tui PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})

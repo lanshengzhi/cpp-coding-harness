@@ -26,6 +26,7 @@ cch_parity_declare_target(
         src/tui/Keybindings.cpp
         src/tui/Keys.cpp
         src/tui/Latex.cpp
+        src/tui/Layout.cpp
         src/tui/Loader.cpp
         src/tui/Markdown.cpp
         src/tui/Overlay.cpp
@@ -44,10 +45,12 @@ cch_parity_declare_target(
         src/tui/Text.cpp
         src/tui/TextBuffer.cpp
         src/tui/TruncatedText.cpp
+        src/tui/StackLayout.cpp
         src/tui/Tui.cpp
         src/tui/TuiHost.cpp
         src/tui/UnicodeWidth.cpp
         src/tui/Utils.cpp
+        src/tui/VStack.cpp
         src/tui/VirtualTerminal.cpp
         src/tui/WordNavigation.cpp
     DEPENDS
