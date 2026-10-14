@@ -15,6 +15,7 @@
 
 #include <cch/tui/AltScreen.hpp>
 #include <cch/tui/HStack.hpp>
+#include <cch/tui/MouseRegion.hpp>
 #include <cch/tui/ScrollView.hpp>
 #include <cch/tui/Stack.hpp>
 #include <cch/tui/Text.hpp>
@@ -600,6 +601,45 @@ TEST_CASE("AltScreen jumps on track clicks and drags the thumb across resize",
     REQUIRE(terminal.inject_input("\x1b[<0;10;1M"));
     CHECK(view_pointer->scroll_top() == 0);
     REQUIRE(terminal.inject_input("\x1b[<0;10;1m"));
+    CHECK(tui.stop());
+}
+
+TEST_CASE("a scrollbar press preserves the frozen component click sequence",
+        "[tui][scroll-view][scrollbar][issue1005][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 16, .rows = 3});
+    cch::tui::AltScreen tui(terminal);
+    auto left =
+            std::make_unique<cch::tui::ScrollView>(std::make_unique<LabeledChild>(std::vector<std::string>(20, "left")),
+                    cch::tui::ScrollViewOptions{.primary = true, .scrollbar = cch::tui::ScrollbarMode::Always});
+    std::vector<std::size_t> click_counts;
+    auto right = std::make_unique<cch::tui::MouseRegion>(
+            std::make_unique<LabeledChild>(std::vector<std::string>(3, "right")),
+            [&click_counts](const cch::tui::MouseEvent& event) -> std::optional<cch::tui::MouseEventResult> {
+                if (event.type == cch::tui::MouseEventType::Click) {
+                    click_counts.push_back(event.click_count.value_or(0));
+                }
+                return cch::tui::MouseEventResult{.handled = true};
+            });
+    auto layout = std::make_unique<cch::tui::HStack>();
+    REQUIRE(layout->add_child(std::move(left), cch::tui::StackEntryOptions{.basis = 0, .grow = 1, .shrink = 1}));
+    REQUIRE(layout->add_child(std::move(right), cch::tui::StackEntryOptions{.basis = 0, .grow = 1, .shrink = 1}));
+    tui.set_layout_root(std::move(layout));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    for (int index = 0; index < 2; ++index) {
+        REQUIRE(terminal.inject_input("\x1b[<0;13;1M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;13;1m"));
+    }
+    CHECK(click_counts == std::vector<std::size_t>{1, 2});
+
+    // The scrollbar owns this press/release, while pi's separate component
+    // click history remains available to the next MouseRegion click.
+    REQUIRE(terminal.inject_input("\x1b[<0;8;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;8;1m"));
+    REQUIRE(terminal.inject_input("\x1b[<0;13;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;13;1m"));
+    CHECK(click_counts == std::vector<std::size_t>{1, 2, 3});
     CHECK(tui.stop());
 }
 

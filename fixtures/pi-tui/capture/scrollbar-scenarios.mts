@@ -15,9 +15,12 @@ import path from "node:path";
 export async function captureScrollbar(piCheckout: string) {
 	const packageRoot = path.join(piCheckout, "packages/tui");
 	const source = (relative: string) => pathToFileURL(path.join(packageRoot, relative)).href;
+	const { HStack } = await import(source("src/components/h-stack.ts"));
+	const { MouseRegion } = await import(source("src/components/mouse-region.ts"));
 	const { ScrollView } = await import(source("src/components/scroll-view.ts"));
 	const { Text } = await import(source("src/components/text.ts"));
-	const { renderLayoutFrame } = await import(source("src/layout.ts"));
+	const { VStack } = await import(source("src/components/v-stack.ts"));
+	const { getScrollbarGeometry, renderLayoutFrame } = await import(source("src/layout.ts"));
 	const { stripTerminalSequences } = await import(source("src/utils.ts"));
 	const { TuiAltScreen } = await import(source("src/tui-alt-screen.ts"));
 	const { VirtualTerminal } = await import(source("test/virtual-terminal.ts"));
@@ -29,8 +32,8 @@ export async function captureScrollbar(piCheckout: string) {
 	/// The painted frame of a scroll-viewport root: what the terminal shows, the
 	/// viewport's allocated window, the width its child was laid out at, and the
 	/// height the child reported.
-	const frameOf = (root: any, columns: number, rows: number) => {
-		const painted = renderLayoutFrame(root, columns, rows, () => {});
+	const frameOf = (root: any, columns: number, rows: number, requestRender = () => {}) => {
+		const painted = renderLayoutFrame(root, columns, rows, requestRender);
 		const findScrollBox = (box: any): any => {
 			if (!box) return undefined;
 			if (box.scrollView) return box;
@@ -334,11 +337,138 @@ export async function captureScrollbar(piCheckout: string) {
 		});
 	}
 
+	// Frozen AltScreen pointer capture for #1005: click the track below and
+	// above the thumb, continue a captured drag beyond the viewport, resize
+	// during capture, then prove the following motion uses the new track geometry.
+	{
+		const terminal = new VirtualTerminal(10, 10);
+		const tui = new TuiAltScreen(terminal);
+		const transcript = new ScrollView(new Text(numberedText(50), 0, 0), {
+			primary: true,
+			scrollbar: "always",
+		});
+		tui.setLayoutRoot(transcript);
+		tui.start();
+		const observe = () => {
+			const frame = frameOf(transcript, terminal.columns, terminal.rows, () => tui.requestRender()).painted;
+			const geometry = getScrollbarGeometry(frame.root);
+			return {
+				viewport: terminal.getViewport().map((line: string) => line.trimEnd()),
+				scrollTop: transcript.scrollTop,
+				viewportHeight: transcript.viewportHeight,
+				geometry: geometry
+					? {
+							column: geometry.column,
+							trackTop: geometry.trackTop,
+							trackHeight: geometry.trackHeight,
+							thumbTop: geometry.thumbTop,
+							thumbHeight: geometry.thumbHeight,
+							maxScrollTop: geometry.maxScrollTop,
+						}
+					: null,
+			};
+		};
+		await terminal.waitForRender();
+		const actions: any[] = [
+			{ action: "track-click-below-thumb", data: "\x1b[<0;10;6M" },
+			{ action: "drag-outside-viewport", data: "\x1b[<32;10;12M" },
+			{ action: "release-after-outside-drag", data: "\x1b[<0;10;12m" },
+			{ action: "track-click-above-thumb", data: "\x1b[<0;10;1M" },
+			{ action: "drag-before-resize", data: "\x1b[<32;10;10M" },
+			{ action: "resize-during-drag", columns: 10, rows: 5 },
+			{ action: "drag-after-resize", data: "\x1b[<32;10;1M" },
+			{ action: "release-after-resize", data: "\x1b[<0;10;1m" },
+		];
+		const phases: any[] = [{ action: "initial", ...observe() }];
+		for (const step of actions) {
+			if (step.action === "resize-during-drag") {
+				terminal.resize(step.columns, step.rows);
+			} else {
+				terminal.sendInput(step.data);
+			}
+			await terminal.waitForRender();
+			phases.push({ action: step.action, ...observe() });
+		}
+		tui.stop();
+		scenarios.push({
+			name: "scrollbar-alt-screen-drag-and-track-click",
+			dimensions: { columns: 10, rows: 10 },
+			inputs: {
+				documentLines: 50,
+				options: { primary: true, scrollbar: "always" },
+				actions,
+			},
+			expected: { phases },
+		});
+	}
+
+	// While a scrollbar owns the pointer, motion over another layout target
+	// must neither dispatch to that target nor transfer scrollbar hover.
+	{
+		const terminal = new VirtualTerminal(12, 4);
+		const tui = new TuiAltScreen(terminal);
+		const left = new ScrollView(new Text(numberedText(12), 0, 0), {
+			primary: true,
+			scrollbar: "always",
+		});
+		let rightMouseEvents = 0;
+		const rightRegion = new MouseRegion(new Text(numberedText(4), 0, 0), () => {
+			rightMouseEvents++;
+			return { handled: true };
+		});
+		const layout = new HStack();
+		layout.addChild(left, { basis: 0, grow: 1, shrink: 1 });
+		layout.addChild(rightRegion, { basis: 0, grow: 1, shrink: 1 });
+		tui.setLayoutRoot(layout);
+		tui.start();
+		const observe = () => {
+			const frame = renderLayoutFrame(layout, terminal.columns, terminal.rows, () => {});
+			const geometries: any[] = [];
+			const visit = (box: any) => {
+				if (box.scrollView) geometries.push(getScrollbarGeometry(box));
+				for (const child of box.children ?? []) visit(child);
+			};
+			visit(frame.root);
+			return {
+				leftActive: left.isScrollbarActive,
+				rightMouseEvents,
+				scrollTop: left.scrollTop,
+				geometries,
+				painted: visibleLines(frame.lines),
+			};
+		};
+		await terminal.waitForRender();
+		const phases: any[] = [{ action: "initial", ...observe() }];
+		const actions = [
+			{ action: "press-left-scrollbar", data: "\x1b[<0;8;2M" },
+			{ action: "drag-over-right-scrollbar", data: "\x1b[<32;12;3M" },
+			{ action: "release-over-right-scrollbar", data: "\x1b[<0;12;3m" },
+		];
+		for (const action of actions) {
+			terminal.sendInput(action.data);
+			await terminal.waitForRender();
+			phases.push({ action: action.action, ...observe() });
+		}
+		tui.stop();
+		scenarios.push({
+			name: "scrollbar-alt-screen-drag-captures-layout-routing",
+			dimensions: { columns: 12, rows: 4 },
+			inputs: {
+				documentLines: 12,
+				layout: "two equal-width horizontal viewports",
+				actions,
+			},
+			expected: { phases },
+		});
+	}
+
 	const sourceEndpoints = [
 		"packages/tui/src/components/scroll-view.ts:ScrollView.getContentWidth,ScrollView.setScrollbar,ScrollView.setScrollbarActive,ScrollView.isScrollbarVisible,ScrollView.isScrollbarActive,ScrollView.scrollBy,ScrollView.scrollToEnd,ScrollView.scrollToStart",
-		"packages/tui/src/layout.ts:renderLayoutFrame",
-		"packages/tui/src/tui-alt-screen.ts:TuiAltScreen.getScrollbarTargetAt,TuiAltScreen.updateScrollbarHover,TuiAltScreen.stopScrollbarHover,TuiAltScreen.routeWheel",
-		"packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.sendInput,VirtualTerminal.waitForRender",
+		"packages/tui/src/layout.ts:renderLayoutFrame,getScrollbarGeometry",
+		"packages/tui/src/components/h-stack.ts:HStack.render",
+		"packages/tui/src/components/mouse-region.ts:MouseRegion.handleMouse",
+		"packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleMouseEvent,TuiAltScreen.handleScrollbarMouseEvent,TuiAltScreen.scrollScrollbarToPointer,TuiAltScreen.getScrollbarTargetAt,TuiAltScreen.updateScrollbarHover,TuiAltScreen.stopScrollbarHover,TuiAltScreen.routeWheel",
+		"packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.sendInput,VirtualTerminal.resize,VirtualTerminal.waitForRender",
 	];
 
 	return { sourceEndpoints, scenarios };

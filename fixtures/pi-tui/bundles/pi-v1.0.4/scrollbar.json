@@ -1,7 +1,7 @@
 {
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-13T23:21:44.952Z",
+  "capturedAt": "2026-10-14T01:39:13.309Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -27,9 +27,11 @@
   },
   "sourceEndpoints": [
     "packages/tui/src/components/scroll-view.ts:ScrollView.getContentWidth,ScrollView.setScrollbar,ScrollView.setScrollbarActive,ScrollView.isScrollbarVisible,ScrollView.isScrollbarActive,ScrollView.scrollBy,ScrollView.scrollToEnd,ScrollView.scrollToStart",
-    "packages/tui/src/layout.ts:renderLayoutFrame",
-    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.getScrollbarTargetAt,TuiAltScreen.updateScrollbarHover,TuiAltScreen.stopScrollbarHover,TuiAltScreen.routeWheel",
-    "packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.sendInput,VirtualTerminal.waitForRender"
+    "packages/tui/src/layout.ts:renderLayoutFrame,getScrollbarGeometry",
+    "packages/tui/src/components/h-stack.ts:HStack.render",
+    "packages/tui/src/components/mouse-region.ts:MouseRegion.handleMouse",
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleMouseEvent,TuiAltScreen.handleScrollbarMouseEvent,TuiAltScreen.scrollScrollbarToPointer,TuiAltScreen.getScrollbarTargetAt,TuiAltScreen.updateScrollbarHover,TuiAltScreen.stopScrollbarHover,TuiAltScreen.routeWheel",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.sendInput,VirtualTerminal.resize,VirtualTerminal.waitForRender"
   ],
   "scenarios": [
     {
@@ -662,6 +664,386 @@
             "isScrollbarActive": false,
             "scrollTop": 5,
             "viewportHeight": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "scrollbar-alt-screen-drag-and-track-click",
+      "dimensions": {
+        "columns": 10,
+        "rows": 10
+      },
+      "inputs": {
+        "documentLines": 50,
+        "options": {
+          "primary": true,
+          "scrollbar": "always"
+        },
+        "actions": [
+          {
+            "action": "track-click-below-thumb",
+            "data": "\u001b[<0;10;6M"
+          },
+          {
+            "action": "drag-outside-viewport",
+            "data": "\u001b[<32;10;12M"
+          },
+          {
+            "action": "release-after-outside-drag",
+            "data": "\u001b[<0;10;12m"
+          },
+          {
+            "action": "track-click-above-thumb",
+            "data": "\u001b[<0;10;1M"
+          },
+          {
+            "action": "drag-before-resize",
+            "data": "\u001b[<32;10;10M"
+          },
+          {
+            "action": "resize-during-drag",
+            "columns": 10,
+            "rows": 5
+          },
+          {
+            "action": "drag-after-resize",
+            "data": "\u001b[<32;10;1M"
+          },
+          {
+            "action": "release-after-resize",
+            "data": "\u001b[<0;10;1m"
+          }
+        ]
+      },
+      "expected": {
+        "phases": [
+          {
+            "action": "initial",
+            "viewport": [
+              "line 1   ┃",
+              "line 2   ┃",
+              "line 3   │",
+              "line 4   │",
+              "line 5   │",
+              "line 6   │",
+              "line 7   │",
+              "line 8   │",
+              "line 9   │",
+              "line 10  │"
+            ],
+            "scrollTop": 0,
+            "viewportHeight": 10,
+            "geometry": {
+              "column": 9,
+              "trackTop": 0,
+              "trackHeight": 10,
+              "thumbTop": 0,
+              "thumbHeight": 2,
+              "maxScrollTop": 40
+            }
+          },
+          {
+            "action": "track-click-below-thumb",
+            "viewport": [
+              "line 21  │",
+              "line 22  │",
+              "line 23  │",
+              "line 24  │",
+              "line 25  █",
+              "line 26  █",
+              "line 27  │",
+              "line 28  │",
+              "line 29  │",
+              "line 30  │"
+            ],
+            "scrollTop": 20,
+            "viewportHeight": 10,
+            "geometry": {
+              "column": 9,
+              "trackTop": 0,
+              "trackHeight": 10,
+              "thumbTop": 4,
+              "thumbHeight": 2,
+              "maxScrollTop": 40
+            }
+          },
+          {
+            "action": "drag-outside-viewport",
+            "viewport": [
+              "line 41  │",
+              "line 42  │",
+              "line 43  │",
+              "line 44  │",
+              "line 45  │",
+              "line 46  │",
+              "line 47  │",
+              "line 48  │",
+              "line 49  █",
+              "line 50  █"
+            ],
+            "scrollTop": 40,
+            "viewportHeight": 10,
+            "geometry": {
+              "column": 9,
+              "trackTop": 0,
+              "trackHeight": 10,
+              "thumbTop": 8,
+              "thumbHeight": 2,
+              "maxScrollTop": 40
+            }
+          },
+          {
+            "action": "release-after-outside-drag",
+            "viewport": [
+              "line 41  │",
+              "line 42  │",
+              "line 43  │",
+              "line 44  │",
+              "line 45  │",
+              "line 46  │",
+              "line 47  │",
+              "line 48  │",
+              "line 49  ┃",
+              "line 50  ┃"
+            ],
+            "scrollTop": 40,
+            "viewportHeight": 10,
+            "geometry": {
+              "column": 9,
+              "trackTop": 0,
+              "trackHeight": 10,
+              "thumbTop": 8,
+              "thumbHeight": 2,
+              "maxScrollTop": 40
+            }
+          },
+          {
+            "action": "track-click-above-thumb",
+            "viewport": [
+              "line 1   █",
+              "line 2   █",
+              "line 3   │",
+              "line 4   │",
+              "line 5   │",
+              "line 6   │",
+              "line 7   │",
+              "line 8   │",
+              "line 9   │",
+              "line 10  │"
+            ],
+            "scrollTop": 0,
+            "viewportHeight": 10,
+            "geometry": {
+              "column": 9,
+              "trackTop": 0,
+              "trackHeight": 10,
+              "thumbTop": 0,
+              "thumbHeight": 2,
+              "maxScrollTop": 40
+            }
+          },
+          {
+            "action": "drag-before-resize",
+            "viewport": [
+              "line 41  │",
+              "line 42  │",
+              "line 43  │",
+              "line 44  │",
+              "line 45  │",
+              "line 46  │",
+              "line 47  │",
+              "line 48  │",
+              "line 49  █",
+              "line 50  █"
+            ],
+            "scrollTop": 40,
+            "viewportHeight": 10,
+            "geometry": {
+              "column": 9,
+              "trackTop": 0,
+              "trackHeight": 10,
+              "thumbTop": 8,
+              "thumbHeight": 2,
+              "maxScrollTop": 40
+            }
+          },
+          {
+            "action": "resize-during-drag",
+            "viewport": [
+              "line 41  │",
+              "line 42  │",
+              "line 43  │",
+              "line 44  █",
+              "line 45  █"
+            ],
+            "scrollTop": 40,
+            "viewportHeight": 5,
+            "geometry": {
+              "column": 9,
+              "trackTop": 0,
+              "trackHeight": 5,
+              "thumbTop": 3,
+              "thumbHeight": 2,
+              "maxScrollTop": 45
+            }
+          },
+          {
+            "action": "drag-after-resize",
+            "viewport": [
+              "line 1   █",
+              "line 2   █",
+              "line 3   │",
+              "line 4   │",
+              "line 5   │"
+            ],
+            "scrollTop": 0,
+            "viewportHeight": 5,
+            "geometry": {
+              "column": 9,
+              "trackTop": 0,
+              "trackHeight": 5,
+              "thumbTop": 0,
+              "thumbHeight": 2,
+              "maxScrollTop": 45
+            }
+          },
+          {
+            "action": "release-after-resize",
+            "viewport": [
+              "line 1   █",
+              "line 2   █",
+              "line 3   │",
+              "line 4   │",
+              "line 5   │"
+            ],
+            "scrollTop": 0,
+            "viewportHeight": 5,
+            "geometry": {
+              "column": 9,
+              "trackTop": 0,
+              "trackHeight": 5,
+              "thumbTop": 0,
+              "thumbHeight": 2,
+              "maxScrollTop": 45
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "scrollbar-alt-screen-drag-captures-layout-routing",
+      "dimensions": {
+        "columns": 12,
+        "rows": 4
+      },
+      "inputs": {
+        "documentLines": 12,
+        "layout": "two equal-width horizontal viewports",
+        "actions": [
+          {
+            "action": "press-left-scrollbar",
+            "data": "\u001b[<0;8;2M"
+          },
+          {
+            "action": "drag-over-right-scrollbar",
+            "data": "\u001b[<32;12;3M"
+          },
+          {
+            "action": "release-over-right-scrollbar",
+            "data": "\u001b[<0;12;3m"
+          }
+        ]
+      },
+      "expected": {
+        "phases": [
+          {
+            "action": "initial",
+            "leftActive": false,
+            "rightMouseEvents": 0,
+            "scrollTop": 0,
+            "geometries": [
+              {
+                "column": 7,
+                "trackTop": 0,
+                "trackHeight": 4,
+                "thumbTop": 0,
+                "thumbHeight": 2,
+                "maxScrollTop": 8
+              }
+            ],
+            "painted": [
+              "line 1 ┃line",
+              "line 2 ┃1",
+              "line 3 │line",
+              "line 4 │2"
+            ]
+          },
+          {
+            "action": "press-left-scrollbar",
+            "leftActive": true,
+            "rightMouseEvents": 0,
+            "scrollTop": 0,
+            "geometries": [
+              {
+                "column": 7,
+                "trackTop": 0,
+                "trackHeight": 4,
+                "thumbTop": 0,
+                "thumbHeight": 2,
+                "maxScrollTop": 8
+              }
+            ],
+            "painted": [
+              "line 1 █line",
+              "line 2 █1",
+              "line 3 │line",
+              "line 4 │2"
+            ]
+          },
+          {
+            "action": "drag-over-right-scrollbar",
+            "leftActive": true,
+            "rightMouseEvents": 0,
+            "scrollTop": 4,
+            "geometries": [
+              {
+                "column": 7,
+                "trackTop": 0,
+                "trackHeight": 4,
+                "thumbTop": 1,
+                "thumbHeight": 2,
+                "maxScrollTop": 8
+              }
+            ],
+            "painted": [
+              "line 5 │line",
+              "line 6 █1",
+              "line 7 █line",
+              "line 8 │2"
+            ]
+          },
+          {
+            "action": "release-over-right-scrollbar",
+            "leftActive": false,
+            "rightMouseEvents": 0,
+            "scrollTop": 4,
+            "geometries": [
+              {
+                "column": 7,
+                "trackTop": 0,
+                "trackHeight": 4,
+                "thumbTop": 1,
+                "thumbHeight": 2,
+                "maxScrollTop": 8
+              }
+            ],
+            "painted": [
+              "line 5 │line",
+              "line 6 ┃1",
+              "line 7 ┃line",
+              "line 8 │2"
+            ]
           }
         ]
       }

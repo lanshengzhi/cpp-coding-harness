@@ -4,6 +4,8 @@
 // falls back to the historical `fixtures/pi-tui/*.json` root snapshots.
 
 #include <cch/tui/AltScreen.hpp>
+#include <cch/tui/HStack.hpp>
+#include <cch/tui/MouseRegion.hpp>
 #include <cch/tui/ScrollView.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Utils.hpp>
@@ -521,6 +523,124 @@ TEST_CASE("the overlay scrollbar keeps the frozen background splice",
     CHECK(row_flags(*frame, [&](std::string_view line) {
         return line.find("\x1b[0m\x1b]8;;\x07" + background) != std::string_view::npos;
     }) == booleans(frozen.at("preservedBackgroundReemit")));
+}
+
+TEST_CASE("the frozen track clicks and drag phases drive the alternate-screen scrollbar",
+        "[tui][scroll-view][scrollbar][issue1005][compat-pi]") {
+    const auto bundle = scrollbar_bundle();
+    REQUIRE(bundle);
+    const auto& scenario = scenario_of(*bundle, "scrollbar-alt-screen-drag-and-track-click");
+    const auto& phases = scenario.at("expected").at("phases").get_array();
+    const auto& actions = scenario.at("inputs").at("actions").get_array();
+    const auto& dimensions = scenario.at("dimensions");
+    auto columns = static_cast<std::size_t>(int_of(dimensions.at("columns")));
+    auto rows = static_cast<std::size_t>(int_of(dimensions.at("rows")));
+
+    cch::tui::VirtualTerminal terminal({.columns = columns, .rows = rows});
+    cch::tui::AltScreen tui(terminal);
+    auto view = std::make_unique<cch::tui::ScrollView>(
+            std::make_unique<cch::tui::Text>(
+                    numbered_text(static_cast<std::size_t>(int_of(scenario.at("inputs").at("documentLines")))), 0, 0),
+            cch::tui::ScrollViewOptions{.primary = scenario.at("inputs").at("options").at("primary").get_boolean(),
+                    .scrollbar = cch::tui::ScrollbarMode::Always});
+    auto* view_pointer = view.get();
+    tui.set_layout_root(std::move(view));
+    REQUIRE(tui.start());
+
+    for (std::size_t phase_index = 0; phase_index < phases.size(); ++phase_index) {
+        const auto& phase = phases[phase_index];
+        INFO("phase " << phase.at("action").get_string());
+        if (phase_index > 0) {
+            REQUIRE(phase_index - 1 < actions.size());
+            const auto& action = actions[phase_index - 1];
+            if (action.at("action").get_string() == "resize-during-drag") {
+                columns = static_cast<std::size_t>(int_of(action.at("columns")));
+                rows = static_cast<std::size_t>(int_of(action.at("rows")));
+                REQUIRE(terminal.inject_resize({.columns = columns, .rows = rows}));
+            } else {
+                REQUIRE(terminal.inject_input(action.at("data").get_string()));
+            }
+        }
+        REQUIRE(tui.render());
+        CHECK(screen_rows(terminal) == string_lines(phase.at("viewport")));
+        CHECK(view_pointer->scroll_top() == static_cast<std::size_t>(int_of(phase.at("scrollTop"))));
+        CHECK(view_pointer->viewport_height() == static_cast<std::size_t>(int_of(phase.at("viewportHeight"))));
+
+        auto frame = cch::tui::detail::LayoutEngine::render(*view_pointer, columns, rows);
+        REQUIRE(frame);
+        const auto geometry = cch::tui::detail::get_scrollbar_geometry(frame->root);
+        REQUIRE(geometry);
+        const auto& expected = phase.at("geometry");
+        CHECK(geometry->column == int_of(expected.at("column")));
+        CHECK(geometry->track_top == int_of(expected.at("trackTop")));
+        CHECK(geometry->track_height == static_cast<std::size_t>(int_of(expected.at("trackHeight"))));
+        CHECK(geometry->thumb_top == int_of(expected.at("thumbTop")));
+        CHECK(geometry->thumb_height == static_cast<std::size_t>(int_of(expected.at("thumbHeight"))));
+        CHECK(geometry->max_scroll_top == static_cast<std::size_t>(int_of(expected.at("maxScrollTop"))));
+    }
+    CHECK(tui.stop());
+}
+
+TEST_CASE("the frozen drag phases capture layout routing in the alternate screen",
+        "[tui][scroll-view][scrollbar][issue1005][compat-pi]") {
+    const auto bundle = scrollbar_bundle();
+    REQUIRE(bundle);
+    const auto& scenario = scenario_of(*bundle, "scrollbar-alt-screen-drag-captures-layout-routing");
+    const auto& frozen = scenario.at("expected");
+    const auto& dimensions = scenario.at("dimensions");
+    const auto columns = static_cast<std::size_t>(int_of(dimensions.at("columns")));
+    const auto rows = static_cast<std::size_t>(int_of(dimensions.at("rows")));
+
+    cch::tui::VirtualTerminal terminal({.columns = columns, .rows = rows});
+    cch::tui::AltScreen tui(terminal);
+    auto left = std::make_unique<cch::tui::ScrollView>(std::make_unique<cch::tui::Text>(numbered_text(12), 0, 0),
+            cch::tui::ScrollViewOptions{.primary = true, .scrollbar = cch::tui::ScrollbarMode::Always});
+    auto* left_pointer = left.get();
+    std::size_t right_mouse_events = 0;
+    auto right_region =
+            std::make_unique<cch::tui::MouseRegion>(std::make_unique<cch::tui::Text>(numbered_text(4), 0, 0),
+                    [&right_mouse_events](const cch::tui::MouseEvent&) {
+                        ++right_mouse_events;
+                        return std::optional<cch::tui::MouseEventResult>{cch::tui::MouseEventResult{.handled = true}};
+                    });
+    auto layout = std::make_unique<cch::tui::HStack>();
+    REQUIRE(layout->add_child(std::move(left), cch::tui::StackEntryOptions{.basis = 0, .grow = 1, .shrink = 1}));
+    REQUIRE(layout->add_child(
+            std::move(right_region), cch::tui::StackEntryOptions{.basis = 0, .grow = 1, .shrink = 1}));
+    tui.set_layout_root(std::move(layout));
+    REQUIRE(tui.start());
+
+    const auto& phases = frozen.at("phases").get_array();
+    const auto actions = scenario.at("inputs").at("actions").get_array();
+    for (std::size_t phase_index = 0; phase_index < phases.size(); ++phase_index) {
+        const auto& phase = phases[phase_index];
+        const auto action = phase.at("action").get_string();
+        INFO("phase " << action);
+        if (phase_index > 0) {
+            REQUIRE(phase_index - 1 < actions.size());
+            REQUIRE(terminal.inject_input(actions[phase_index - 1].at("data").get_string()));
+        }
+        REQUIRE(tui.render());
+        CHECK(screen_rows(terminal) == string_lines(phase.at("painted")));
+        CHECK(left_pointer->is_scrollbar_active() == phase.at("leftActive").get_boolean());
+        CHECK(left_pointer->scroll_top() == static_cast<std::size_t>(int_of(phase.at("scrollTop"))));
+        CHECK(right_mouse_events == static_cast<std::size_t>(int_of(phase.at("rightMouseEvents"))));
+
+        const auto expected_geometries = phase.at("geometries").get_array();
+        REQUIRE(expected_geometries.size() == 1);
+        auto frame = cch::tui::detail::LayoutEngine::render(*left_pointer, 8, rows);
+        REQUIRE(frame);
+        const auto geometry = cch::tui::detail::get_scrollbar_geometry(frame->root);
+        REQUIRE(geometry);
+        const auto& expected_geometry = expected_geometries.front();
+        CHECK(geometry->column == int_of(expected_geometry.at("column")));
+        CHECK(geometry->track_top == int_of(expected_geometry.at("trackTop")));
+        CHECK(geometry->track_height == static_cast<std::size_t>(int_of(expected_geometry.at("trackHeight"))));
+        CHECK(geometry->thumb_top == int_of(expected_geometry.at("thumbTop")));
+        CHECK(geometry->thumb_height == static_cast<std::size_t>(int_of(expected_geometry.at("thumbHeight"))));
+        CHECK(geometry->max_scroll_top == static_cast<std::size_t>(int_of(expected_geometry.at("maxScrollTop"))));
+    }
+    CHECK(tui.stop());
 }
 
 TEST_CASE("the frozen hover phases drive the alternate-screen scrollbar",

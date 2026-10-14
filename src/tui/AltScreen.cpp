@@ -933,7 +933,6 @@ bool AltScreen::handle_scrollbar_mouse_report(const detail::MousePacket& packet)
             continue;
         }
 
-        last_mouse_click_.reset();
         set_scrollbar_hover(scroll_view);
         const auto grab_offset =
                 packet.y >= geometry->thumb_top &&
