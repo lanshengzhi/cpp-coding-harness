@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <format>
 #include <utility>
@@ -45,6 +46,22 @@ constexpr auto kComponentDoubleClickInterval = std::chrono::milliseconds{500};
 [[nodiscard]] support::Error alt_overlay_unavailable() {
     return support::make_error(
             support::ErrorCode::Validation, "Alternate-screen overlays are not available on this root yet");
+}
+
+void scroll_scrollbar_to_pointer(ScrollView& scroll_view,
+        const detail::ScrollbarGeometry& geometry,
+        std::ptrdiff_t pointer_y,
+        std::ptrdiff_t grab_offset) {
+    const auto max_thumb_offset = geometry.track_height - geometry.thumb_height;
+    const auto requested_offset = pointer_y - geometry.track_top - grab_offset;
+    const auto thumb_offset =
+            std::clamp(requested_offset, std::ptrdiff_t{0}, static_cast<std::ptrdiff_t>(max_thumb_offset));
+    const auto scroll_top =
+            max_thumb_offset == 0 ? std::size_t{0}
+                                  : static_cast<std::size_t>(std::llround(
+                                            static_cast<double>(thumb_offset) / static_cast<double>(max_thumb_offset) *
+                                            static_cast<double>(geometry.max_scroll_top)));
+    scroll_view.scroll_to(static_cast<std::ptrdiff_t>(scroll_top));
 }
 
 } // namespace
@@ -119,8 +136,9 @@ bool AltScreen::owns(const Component* component) const {
 
 void AltScreen::set_layout_root(std::unique_ptr<Component> root) {
     ChildOperation operation(*this);
-    // The hovered viewport may live in the outgoing tree; the pointer would
+    // The active interaction may live in the outgoing tree; its pointer would
     // dangle once the root is destroyed.
+    stop_scrollbar_drag();
     stop_scrollbar_hover();
     // Focus that lives in the outgoing tree keeps the tree alive until the
     // operation ends, then falls back to a mounted target.
@@ -159,7 +177,12 @@ support::ExpectedVoid AltScreen::remove_child(Component* component) {
     }
 
     const bool was_focused = focused_ == component;
-    if (scrollbar_hover_ != nullptr && component->contains(scrollbar_hover_)) stop_scrollbar_hover();
+    if (scrollbar_drag_ != std::nullopt && component->contains(scrollbar_drag_->scroll_view)) {
+        stop_scrollbar_drag();
+        stop_scrollbar_hover();
+    } else if (scrollbar_hover_ != nullptr && component->contains(scrollbar_hover_)) {
+        stop_scrollbar_hover();
+    }
     retired_children_.push_back(std::move(*found));
     children_.erase(found);
     invalidate_composition_cache();
@@ -174,9 +197,12 @@ support::ExpectedVoid AltScreen::remove_child(Component* component) {
 void AltScreen::clear_children() {
     ChildOperation operation(*this);
     const bool was_focused = focused_ != nullptr && owns(focused_);
-    // With no layout root the attached children are the whole tree, so every
-    // hovered viewport is leaving with them.
-    if (layout_root_ == nullptr) stop_scrollbar_hover();
+    // Without a layout root, the attached children are the whole composition,
+    // so clearing them invalidates any viewport interaction with that document.
+    if (layout_root_ == nullptr) {
+        stop_scrollbar_drag();
+        stop_scrollbar_hover();
+    }
     for (auto& child : children_)
         retired_children_.push_back(std::move(child));
     children_.clear();
@@ -227,7 +253,8 @@ support::ExpectedVoid AltScreen::start() {
     if (started_) return {};
 
     started_ = true;
-    // No pointer survives the session boundary (pi `beforeTerminalStart`).
+    // No pointer interaction survives the session boundary (pi `beforeTerminalStart`).
+    stop_scrollbar_drag();
     stop_scrollbar_hover();
     if (focused_ == nullptr) fallback_focus();
     if (auto result = terminal_.start(
@@ -312,6 +339,7 @@ support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
     // the scrollbar hover (pi `beforeTerminalStop`).
     clear_mouse_gesture();
     last_mouse_click_.reset();
+    stop_scrollbar_drag();
     stop_scrollbar_hover();
 
     if (color_scheme_notifications_enabled_) {
@@ -386,10 +414,13 @@ support::ExpectedVoid AltScreen::render_frame() {
     auto frame = detail::LayoutEngine::render(root, dimensions.columns, dimensions.rows, [this] { request_render(); });
     if (!frame) return std::unexpected(frame.error());
     layout_primary_scroll_view_ = frame->primary_scroll_view;
+    // A mode change can hide the captured bar without another pointer report.
+    // Validate against the new frame before retaining the active drag.
+    cached_frame_ = std::make_unique<detail::LayoutFrame>(std::move(*frame));
+    validate_scrollbar_interaction(*cached_frame_);
     // The frame outlives the paint: it is the geometry every later hit test runs
     // against, so a pointer event never renders to find out where a component is
     // (pi `currentLayout`).
-    cached_frame_ = std::make_unique<detail::LayoutFrame>(std::move(*frame));
     // Frame image placements are not emitted by this root yet (#1012).
     lines = std::move(cached_frame_->lines);
     cursor = cached_frame_->cursor;
@@ -670,6 +701,7 @@ bool AltScreen::handle_viewport_input(std::string_view data) {
         // `tui-alt-screen.ts:673-694`).
         clear_mouse_gesture();
         last_mouse_click_.reset();
+        stop_scrollbar_drag();
         stop_scrollbar_hover();
         return true;
     }
@@ -718,7 +750,9 @@ void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
 
     // A report no gesture owns moves the scrollbar hover before any component
     // sees it (pi `handleMouseEvent`).
-    update_scrollbar_hover(packet.x, packet.y);
+    const bool scrollbar_handled = handle_scrollbar_mouse_report(packet);
+    if (!scrollbar_drag_) update_scrollbar_hover(packet.x, packet.y);
+    if (scrollbar_handled) return;
 
     if (auto result = dispatch_mouse_to_layout(event)) {
         const bool render = apply_mouse_dispatch_result(event, *result);
@@ -732,10 +766,9 @@ void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
     }
 
     // A pointer report no component claims is where the frozen root starts a
-    // text selection, a scrollbar drag or an on-screen control interaction
-    // (`handleSelectionMouseEvent`, `handleScrollbarMouseEvent`). Those
-    // consumers are #1015, #1005 and #1003; until one lands the report is
-    // consumed without an effect rather than leaking into typed input.
+    // text selection or an on-screen control interaction. Those consumers are
+    // #1015 and #1003; until one lands the report is consumed without an effect
+    // rather than leaking into typed input.
 }
 
 bool AltScreen::handle_gesture_mouse_report(const detail::MousePacket& packet, const MouseEvent& event) {
@@ -863,6 +896,75 @@ void AltScreen::route_wheel(const MouseEvent& event, std::ptrdiff_t delta) {
     // the wheel cell (pi `routeWheel`).
     update_scrollbar_hover(event.x, event.y);
     request_render();
+}
+
+bool AltScreen::handle_scrollbar_mouse_report(const detail::MousePacket& packet) {
+    if (scrollbar_drag_) {
+        if (scrollbar_drag_->lifetime.expired() || !owns(scrollbar_drag_->scroll_view)) {
+            stop_scrollbar_drag();
+            stop_scrollbar_hover();
+            return true;
+        }
+        if (packet.release) {
+            stop_scrollbar_drag();
+            return true;
+        }
+        const auto* box =
+                cached_frame_ ? detail::get_scroll_view_box(*cached_frame_, scrollbar_drag_->scroll_view) : nullptr;
+        const auto geometry = box ? detail::get_scrollbar_geometry(*box) : std::nullopt;
+        if (!geometry) {
+            stop_scrollbar_drag();
+            stop_scrollbar_hover();
+            return true;
+        }
+
+        scroll_scrollbar_to_pointer(*scrollbar_drag_->scroll_view, *geometry, packet.y, scrollbar_drag_->grab_offset);
+        return true;
+    }
+
+    if (packet.release || (packet.button & 32) != 0 || (packet.button & 3) != 0) return false;
+    if (!cached_frame_) return false;
+    for (auto* scroll_view : detail::scroll_views_at(*cached_frame_, packet.x, packet.y)) {
+        if (scroll_view == nullptr || !owns(scroll_view)) continue;
+        const auto* box = detail::get_scroll_view_box(*cached_frame_, scroll_view);
+        const auto geometry = box ? detail::get_scrollbar_geometry(*box) : std::nullopt;
+        if (!geometry || packet.x != geometry->column || packet.y < geometry->track_top ||
+                packet.y >= geometry->track_top + static_cast<std::ptrdiff_t>(geometry->track_height)) {
+            continue;
+        }
+
+        last_mouse_click_.reset();
+        set_scrollbar_hover(scroll_view);
+        const auto grab_offset =
+                packet.y >= geometry->thumb_top &&
+                                packet.y < geometry->thumb_top + static_cast<std::ptrdiff_t>(geometry->thumb_height)
+                        ? packet.y - geometry->thumb_top
+                        : static_cast<std::ptrdiff_t>(geometry->thumb_height / 2);
+        scrollbar_drag_ = ScrollbarDrag{
+                .scroll_view = scroll_view, .grab_offset = grab_offset, .lifetime = scroll_view->lifetime_token()};
+        if (packet.y < geometry->thumb_top ||
+                packet.y >= geometry->thumb_top + static_cast<std::ptrdiff_t>(geometry->thumb_height)) {
+            scroll_scrollbar_to_pointer(*scroll_view, *geometry, packet.y, grab_offset);
+        }
+        return true;
+    }
+    return false;
+}
+
+void AltScreen::stop_scrollbar_drag() noexcept { scrollbar_drag_.reset(); }
+
+void AltScreen::validate_scrollbar_interaction(const detail::LayoutFrame& frame) {
+    if (!scrollbar_drag_) return;
+    if (scrollbar_drag_->lifetime.expired() || !owns(scrollbar_drag_->scroll_view)) {
+        stop_scrollbar_drag();
+        stop_scrollbar_hover();
+        return;
+    }
+    const auto* box = detail::get_scroll_view_box(frame, scrollbar_drag_->scroll_view);
+    if (box == nullptr || !detail::get_scrollbar_geometry(*box)) {
+        stop_scrollbar_drag();
+        stop_scrollbar_hover();
+    }
 }
 
 void AltScreen::update_scrollbar_hover(std::ptrdiff_t x, std::ptrdiff_t y) {

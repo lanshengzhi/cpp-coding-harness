@@ -538,6 +538,148 @@ TEST_CASE("runtime mode changes re-wrap the child before the next layout",
     CHECK(frame->root.children.front().rect.width == 6);
 }
 
+TEST_CASE("AltScreen jumps on track clicks and drags the thumb across resize",
+        "[tui][scroll-view][scrollbar][issue1005][spec]") {
+    // pi `tui-alt-screen.ts:1082-1127` and
+    // `test/tui-alt-screen.test.ts:481-506`: an off-thumb press centers the
+    // grab point and jumps proportionally, then captured motion uses the latest
+    // track geometry even beyond the viewport.
+    cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 10});
+    cch::tui::AltScreen tui(terminal);
+    auto view =
+            std::make_unique<cch::tui::ScrollView>(std::make_unique<LabeledChild>(std::vector<std::string>(50, "line")),
+                    cch::tui::ScrollViewOptions{.scrollbar = cch::tui::ScrollbarMode::Always});
+    auto* view_pointer = view.get();
+    tui.set_layout_root(std::move(view));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    CHECK(view_pointer->scroll_top() == 0);
+
+    // The frozen 10x10, 50-line case clicks row 6 to scrollTop 20, then keeps
+    // dragging to row 10 at scrollTop 40.
+    REQUIRE(terminal.inject_input("\x1b[<0;10;6M"));
+    CHECK(view_pointer->scroll_top() == 20);
+    REQUIRE(tui.render());
+    auto frame = render_frame(*view_pointer, 10, 10);
+    REQUIRE(frame);
+    auto geometry = cch::tui::detail::get_scrollbar_geometry(frame->root);
+    REQUIRE(geometry);
+    CHECK(geometry->thumb_top == 4);
+    REQUIRE(terminal.inject_input("\x1b[<32;10;10M"));
+    CHECK(view_pointer->scroll_top() == 40);
+    REQUIRE(tui.render());
+    frame = render_frame(*view_pointer, 10, 10);
+    REQUIRE(frame);
+    geometry = cch::tui::detail::get_scrollbar_geometry(frame->root);
+    REQUIRE(geometry);
+    CHECK(geometry->thumb_top == 8);
+    REQUIRE(terminal.inject_input("\x1b[<0;10;10m"));
+
+    // Dragging the thumb past the viewport clamps at the end. After a resize,
+    // the same captured drag maps through the five-row track's new geometry.
+    REQUIRE(terminal.inject_input("\x1b[<0;10;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<32;10;12M"));
+    CHECK(view_pointer->scroll_top() == 40);
+    REQUIRE(terminal.inject_resize({.columns = 10, .rows = 5}));
+    REQUIRE(tui.render());
+    frame = render_frame(*view_pointer, 10, 5);
+    REQUIRE(frame);
+    geometry = cch::tui::detail::get_scrollbar_geometry(frame->root);
+    REQUIRE(geometry);
+    CHECK(geometry->track_height == 5);
+    CHECK(geometry->thumb_height == 2);
+    CHECK(geometry->max_scroll_top == 45);
+    REQUIRE(terminal.inject_input("\x1b[<32;10;1M"));
+    CHECK(view_pointer->scroll_top() == 0);
+    REQUIRE(terminal.inject_input("\x1b[<0;10;1m"));
+
+    // Track clicks above and below the thumb use the frozen centered-grab rule.
+    REQUIRE(terminal.inject_input("\x1b[<0;10;5M"));
+    CHECK(view_pointer->scroll_top() == 45);
+    REQUIRE(terminal.inject_input("\x1b[<0;10;5m"));
+    REQUIRE(terminal.inject_input("\x1b[<0;10;1M"));
+    CHECK(view_pointer->scroll_top() == 0);
+    REQUIRE(terminal.inject_input("\x1b[<0;10;1m"));
+    CHECK(tui.stop());
+}
+
+TEST_CASE("AltScreen keeps scrollbar dragging stable for a no-scroll viewport",
+        "[tui][scroll-view][scrollbar][issue1005][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
+    cch::tui::AltScreen tui(terminal);
+    auto view = std::make_unique<cch::tui::ScrollView>(
+            std::make_unique<LabeledChild>(std::vector<std::string>{"one", "two", "three"}),
+            cch::tui::ScrollViewOptions{.scrollbar = cch::tui::ScrollbarMode::Always});
+    auto* view_pointer = view.get();
+    tui.set_layout_root(std::move(view));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    REQUIRE(terminal.inject_input("\x1b[<0;10;3M"));
+    CHECK(view_pointer->scroll_top() == 0);
+    REQUIRE(terminal.inject_input("\x1b[<32;10;10M"));
+    CHECK(view_pointer->scroll_top() == 0);
+    REQUIRE(terminal.inject_input("\x1b[<0;10;10m"));
+    CHECK(tui.stop());
+}
+
+TEST_CASE("AltScreen cancels scrollbar drag on focus loss, hide, removal, and stop",
+        "[tui][scroll-view][scrollbar][issue1005][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 4});
+    cch::tui::AltScreen tui(terminal);
+    auto stack = std::make_unique<cch::tui::VStack>();
+    auto* stack_pointer = stack.get();
+    auto view = std::make_unique<cch::tui::ScrollView>(std::make_unique<LabeledChild>(styled_rows()),
+            cch::tui::ScrollViewOptions{.scrollbar = cch::tui::ScrollbarMode::Always});
+    auto* view_pointer = view.get();
+    REQUIRE(stack_pointer->add_child(
+            std::move(view), cch::tui::StackEntryOptions{.basis = 0, .grow = 1, .shrink = 1, .min_size = 1}));
+    tui.set_layout_root(std::move(stack));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // Focus-out cancels capture and hover before a later motion can scroll.
+    REQUIRE(terminal.inject_input("\x1b[<0;8;1M"));
+    REQUIRE(view_pointer->is_scrollbar_active());
+    REQUIRE(terminal.inject_input("\x1b[O"));
+    CHECK_FALSE(view_pointer->is_scrollbar_active());
+    REQUIRE(terminal.inject_input("\x1b[<32;2;4M"));
+    CHECK(view_pointer->scroll_top() == 0);
+
+    // Hiding the configured bar invalidates the active drag at the next frame.
+    REQUIRE(terminal.inject_input("\x1b[<0;8;1M"));
+    view_pointer->set_scrollbar(cch::tui::ScrollbarMode::Hidden);
+    REQUIRE(tui.render());
+    CHECK_FALSE(view_pointer->is_scrollbar_active());
+    REQUIRE(terminal.inject_input("\x1b[<32;8;4M"));
+    CHECK(view_pointer->scroll_top() == 0);
+
+    // Removing a still-live viewport must not leave it as a drag target.
+    view_pointer->set_scrollbar(cch::tui::ScrollbarMode::Always);
+    REQUIRE(tui.render());
+    REQUIRE(terminal.inject_input("\x1b[<0;8;1M"));
+    auto removed = stack_pointer->remove_child(view_pointer);
+    REQUIRE(removed != nullptr);
+    auto* removed_view = dynamic_cast<cch::tui::ScrollView*>(removed.get());
+    REQUIRE(removed_view != nullptr);
+    REQUIRE(terminal.inject_input("\x1b[<32;8;4M"));
+    CHECK(removed_view->scroll_top() == 0);
+    CHECK_FALSE(removed_view->is_scrollbar_active());
+
+    // A fresh drag is also discarded at the AltScreen session boundary.
+    REQUIRE(stack_pointer->add_child(
+            std::move(removed), cch::tui::StackEntryOptions{.basis = 0, .grow = 1, .shrink = 1, .min_size = 1}));
+    REQUIRE(tui.render());
+    REQUIRE(terminal.inject_input("\x1b[<0;8;1M"));
+    REQUIRE(view_pointer->is_scrollbar_active());
+    REQUIRE(tui.stop());
+    CHECK_FALSE(view_pointer->is_scrollbar_active());
+    REQUIRE(tui.start());
+    REQUIRE(terminal.inject_input("\x1b[<32;2;4M"));
+    CHECK(view_pointer->scroll_top() == 0);
+    CHECK(tui.stop());
+}
+
 TEST_CASE("AltScreen follows the scrollbar hover across motion, wheel, focus, and stop",
         "[tui][scroll-view][scrollbar][issue1001][spec]") {
     // pi `tui-alt-screen.ts:933-937,996,1037-1066`: a motion report moves the

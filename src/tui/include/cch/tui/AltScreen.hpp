@@ -159,6 +159,9 @@ private:
     /// press, or return false when no live gesture owns it.
     bool handle_gesture_mouse_report(const detail::MousePacket& packet, const MouseEvent& event);
     void handle_mouse_report(const detail::MousePacket& packet);
+    [[nodiscard]] bool handle_scrollbar_mouse_report(const detail::MousePacket& packet);
+    void stop_scrollbar_drag() noexcept;
+    void validate_scrollbar_interaction(const detail::LayoutFrame& frame);
     void handle_wheel_report(const detail::MousePacket& packet);
     [[nodiscard]] std::optional<MouseDispatchResult> dispatch_mouse_to_layout(const MouseEvent& event);
     [[nodiscard]] std::optional<MouseDispatchResult> dispatch_mouse_to_target(
@@ -234,6 +237,14 @@ private:
     std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> mouse_press_point_{};
     bool mouse_press_moved_{false};
     std::optional<MouseClick> last_mouse_click_{};
+    /// Captured scrollbar pointer interaction (pi `scrollbarDrag`). The weak
+    /// token prevents a detached or destroyed viewport from being dereferenced.
+    struct ScrollbarDrag {
+        ScrollView* scroll_view{nullptr};
+        std::ptrdiff_t grab_offset{0};
+        std::weak_ptr<void> lifetime{};
+    };
+    std::optional<ScrollbarDrag> scrollbar_drag_{};
     /// The viewport whose scrollbar the pointer is on (pi `scrollbarHover`); a
     /// hovered bar keeps its transient reveal and draws the active thumb.
     ScrollView* scrollbar_hover_{nullptr};
