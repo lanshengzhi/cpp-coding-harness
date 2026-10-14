@@ -1,7 +1,7 @@
 {
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-14T15:54:47.792Z",
+  "capturedAt": "2026-10-14T17:40:14.327Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -1416,6 +1416,197 @@
             "three four                   █",
             "five six                     │"
           ]
+        ]
+      }
+    },
+    {
+      "name": "multiclick-dictionary-script-runs",
+      "dimensions": {
+        "columns": 40,
+        "rows": 5
+      },
+      "inputs": {
+        "text": "日本語\nこんにちは\nสวัสดีครับ",
+        "steps": [
+          {
+            "action": "press",
+            "x": 2,
+            "y": 1,
+            "advanceMs": 600,
+            "target": "han run first"
+          },
+          {
+            "action": "release",
+            "x": 2,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 2,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "han run second"
+          },
+          {
+            "action": "release",
+            "x": 2,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 2,
+            "y": 2,
+            "advanceMs": 600,
+            "target": "hiragana run first"
+          },
+          {
+            "action": "release",
+            "x": 2,
+            "y": 2
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 2,
+            "y": 2,
+            "advanceMs": 150,
+            "target": "hiragana run second"
+          },
+          {
+            "action": "release",
+            "x": 2,
+            "y": 2
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 2,
+            "y": 3,
+            "advanceMs": 600,
+            "target": "thai first word first"
+          },
+          {
+            "action": "release",
+            "x": 2,
+            "y": 3
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 2,
+            "y": 3,
+            "advanceMs": 150,
+            "target": "thai first word second"
+          },
+          {
+            "action": "release",
+            "x": 2,
+            "y": 3
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 6,
+            "y": 3,
+            "advanceMs": 600,
+            "target": "thai second word first"
+          },
+          {
+            "action": "release",
+            "x": 6,
+            "y": 3
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 6,
+            "y": 3,
+            "advanceMs": 150,
+            "target": "thai second word second"
+          },
+          {
+            "action": "release",
+            "x": 6,
+            "y": 3
+          },
+          {
+            "action": "observe"
+          }
+        ]
+      },
+      "expected": {
+        "observations": [
+          {
+            "hasSelection": false,
+            "copied": []
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "日本語"
+            ]
+          },
+          {
+            "hasSelection": false,
+            "copied": [
+              "日本語"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "日本語",
+              "こんにちは"
+            ]
+          },
+          {
+            "hasSelection": false,
+            "copied": [
+              "日本語",
+              "こんにちは"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "日本語",
+              "こんにちは",
+              "สวัสดี"
+            ]
+          },
+          {
+            "hasSelection": false,
+            "copied": [
+              "日本語",
+              "こんにちは",
+              "สวัสดี"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "日本語",
+              "こんにちは",
+              "สวัสดี",
+              "ครับ"
+            ]
+          }
         ]
       }
     }

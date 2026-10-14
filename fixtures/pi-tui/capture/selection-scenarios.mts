@@ -6,12 +6,12 @@ import path from "node:path";
 /// C++ replay reads these values from the named bundle; no Pike output is used
 /// to construct the expectations.
 ///
-/// Word segments come from the host `Intl.Segmenter` with its ICU word-break
-/// dictionaries. The C++ side implements the rule-based classes this corpus
-/// exercises (letters, digits, `/` `-` `_` `.` `,` `:` `'`, spaces, Katakana
-/// runs, Hangul runs, and single dictionary-script characters between ASCII),
-/// so multi-character Han/Hiragana/Thai runs — whose ICU boundaries are
-/// text-specific — are deliberately not part of the corpus.
+/// Word segments come from pi's `Intl.Segmenter` (ICU word-break dictionaries
+/// and rules). The C++ side reuses the pinned vcpkg ICU breaker
+/// (`cch::tui::detail::segment_words`, UBRK_WORD), the same engine class, so
+/// the corpus covers both the rule-based classes (letters, digits, `/` `-` `_`
+/// `.` `,` `:` `'`, spaces, Katakana runs, Hangul runs) and the multi-character
+/// Han/Hiragana/Thai dictionary runs.
 export async function captureSelection(piCheckout: string) {
 	const packageRoot = path.join(piCheckout, "packages/tui");
 	const source = (relative: string) => pathToFileURL(path.join(packageRoot, relative)).href;
@@ -484,6 +484,10 @@ export async function captureSelection(piCheckout: string) {
 			{ action: "press", x: betaX, y: 1, advanceMs: 150, target: "beta again" },
 			{ action: "release", x: betaX, y: 1 },
 			{ action: "observe" },
+			// The exact 500 ms boundary (`now - at <= 500` counts up, 501 resets) is
+			// pinned by the deterministic-clock AltScreen unit test: this runner
+			// sleeps wall-clock time, whose overshoot cannot land exactly on the
+			// inclusive boundary, so a capture step here would record noise.
 			{ action: "press", x: alphaX, y: 1, advanceMs: 150, target: "alpha, a different word" },
 			{ action: "release", x: alphaX, y: 1 },
 			{ action: "observe" },
@@ -609,6 +613,51 @@ export async function captureSelection(piCheckout: string) {
 				steps,
 			},
 			expected: { observations, viewports },
+		});
+		tui.stop();
+	}
+
+	// Double-clicking inside a multi-character Han, Hiragana or Thai run selects
+	// the whole ICU word segment (`Intl.Segmenter`), not one character. The C++
+	// side reuses the pinned ICU breaker, the same engine class, so the replay
+	// compares whole-run copies against frozen pi.
+	{
+		const copied: string[] = [];
+		const { terminal, tui } = makeHost(40, 5, {
+			copySelection: async (text: string) => {
+				copied.push(text);
+				return true;
+			},
+		});
+		const text = "日本語\nこんにちは\nสวัสดีครับ";
+		tui.addChild(new Text(text, 0, 0));
+		tui.start();
+		await terminal.waitForRender();
+		const targets = [
+			{ row: 0, token: "日本語", label: "han run" },
+			{ row: 1, token: "こんにちは", label: "hiragana run" },
+			{ row: 2, token: "สวัสดี", label: "thai first word" },
+			{ row: 2, token: "ครับ", label: "thai second word" },
+		];
+		const steps: any[] = [];
+		for (const target of targets) {
+			const x = columnOf(terminal.getViewport()[target.row], target.token) + 2; // Interior cell of the run.
+			steps.push(
+				{ action: "press", x, y: target.row + 1, advanceMs: 600, target: `${target.label} first` },
+				{ action: "release", x, y: target.row + 1 },
+				{ action: "observe" },
+				{ action: "press", x, y: target.row + 1, advanceMs: 150, target: `${target.label} second` },
+				{ action: "release", x, y: target.row + 1 },
+				{ action: "observe" },
+			);
+		}
+		const observations: any[] = [];
+		await runSteps(terminal, tui, steps, copied, observations);
+		scenarios.push({
+			name: "multiclick-dictionary-script-runs",
+			dimensions: { columns: 40, rows: 5 },
+			inputs: { text, steps },
+			expected: { observations },
 		});
 		tui.stop();
 	}

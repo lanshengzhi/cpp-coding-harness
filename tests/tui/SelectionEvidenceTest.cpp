@@ -387,3 +387,12 @@ TEST_CASE("AltScreen multi-click selection replays the frozen scrollbar cancella
         "[tui][alt-screen][selection][issue1007][compat-pi]") {
     replay_multiclick_scenario("multiclick-scrollbar-cancels");
 }
+
+TEST_CASE("AltScreen multi-click selection replays the frozen dictionary-script word runs",
+        "[tui][alt-screen][selection][issue1007][compat-pi]") {
+    replay_multiclick_scenario("multiclick-dictionary-script-runs");
+}
+
+// The inclusive 500 ms / 501 ms interval boundary is pinned by the frozen
+// `multiclick-expiry-and-word-identity` scenario steps and the AltScreen unit
+// test on the same boundary.

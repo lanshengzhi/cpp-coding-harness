@@ -45,6 +45,31 @@ private:
     bool focused_{false};
 };
 
+/// A component that renders one word row, ignores presses (so the fullscreen
+/// root owns the selection gesture) and consumes clicks while recording the
+/// delivered click count (pi `clickCount: this.lastClick?.count ?? 1`).
+class SelectionClickProbe final : public cch::tui::Component, public cch::tui::MouseHandler {
+public:
+    SelectionClickProbe(std::string line, std::vector<std::size_t>& click_counts)
+        : line_(std::move(line)), click_counts_(click_counts) {}
+
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{.lines = std::vector<std::string>{line_}};
+    }
+
+    void invalidate() override {}
+
+    [[nodiscard]] std::optional<cch::tui::MouseEventResult> handle_mouse(const cch::tui::MouseEvent& event) override {
+        if (event.type != cch::tui::MouseEventType::Click) return std::nullopt;
+        click_counts_.push_back(event.click_count.value_or(0));
+        return cch::tui::MouseEventResult{.handled = true, .render = false};
+    }
+
+private:
+    std::string line_;
+    std::vector<std::size_t>& click_counts_;
+};
+
 /// A terminal double whose autowrap disable fails once, after the alternate
 /// buffer was already entered.
 class FailingAutowrapTerminal final : public cch::tui::Terminal {
@@ -556,6 +581,17 @@ TEST_CASE("AltScreen multi-click selection cycles word, line, and character gran
     CHECK_FALSE(copy());
     click(2, 150);
     CHECK(copy() == "one");
+
+    // The frozen interval boundary is inclusive: exactly 500 ms counts up to
+    // line granularity over the whole row, one millisecond past it resets the
+    // cycle (pi `<= DOUBLE_CLICK_INTERVAL_MS`).
+    click(2, 500);
+    CHECK(copy() == "one two");
+    click(2, 501);
+    CHECK_FALSE(copy());
+    click(2, 150);
+    CHECK(copy() == "one");
+
     click(7, 150);       // A different word starts a fresh cycle: its first press
     CHECK_FALSE(copy()); // selects nothing.
     click(7, 150);
@@ -608,6 +644,199 @@ TEST_CASE("AltScreen word selection chains joiner-adjacent segments and stops at
     // keeps the trailing letter out of the copied text.
     CHECK(double_click(13) == "中");
     CHECK(double_click(15) == "x");
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("AltScreen word selection copies whole dictionary-script runs like the frozen segmenter",
+        "[tui][alt-screen][selection][issue1007][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 40, .rows = 4});
+    std::vector<std::string> copied;
+    cch::tui::AltScreen tui(terminal,
+            cch::tui::AltScreenOptions{.copy_on_select = false,
+                    .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
+                        copied.emplace_back(text);
+                        return {};
+                    }});
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    // One line: 日本語 (cols 1-6), a space, こんにちは (8-17), a space, then
+    // สวัสดี (19-22) and ครับ (23-25) — the Thai combining graphemes are
+    // narrow (one cell each) in both pi's `visibleWidth` and the pinned width
+    // table, which the frozen `multiclick-dictionary-script-runs` evidence
+    // pins. pi segments words with `Intl.Segmenter` (ICU); the C++ side
+    // reuses the pinned ICU breaker, so multi-character Han, Hiragana and
+    // Thai runs copy whole like the frozen evidence instead of one character
+    // at a time.
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("日本語 こんにちは สวัสดีครับ", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    const auto double_click = [&](std::ptrdiff_t x) {
+        // First press of the pair: a plain character click.
+        now += std::chrono::milliseconds{600};
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1M"));
+        now += std::chrono::milliseconds{150};
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1m"));
+        // Second press within the frozen 500 ms interval: word granularity.
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1m"));
+        const auto result = tui.copy_active_selection_to_clipboard();
+        REQUIRE(result);
+        REQUIRE(*result);
+        return copied.back();
+    };
+
+    // Han run: columns 1-6. Hiragana run: columns 8-17.
+    CHECK(double_click(2) == "日本語");
+    CHECK(double_click(5) == "日本語");
+    CHECK(double_click(8) == "こんにちは");
+    CHECK(double_click(13) == "こんにちは");
+    // Thai runs: narrow graphemes, one dictionary word at a time like frozen pi.
+    CHECK(double_click(21) == "สวัสดี");
+    CHECK(double_click(24) == "ครับ");
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE(
+        "AltScreen zero-width graphemes occupy no selection columns", "[tui][alt-screen][selection][issue1007][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 3});
+    std::vector<std::string> copied;
+    cch::tui::AltScreen tui(terminal,
+            cch::tui::AltScreenOptions{.copy_on_select = false,
+                    .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
+                        copied.emplace_back(text);
+                        return {};
+                    }});
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    // U+200B ZERO WIDTH SPACE: pi gives it zero cells (`visibleWidth`), so the
+    // columns after it line up with the plain-text offsets.
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("中\xE2\x80\x8Bx", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    const auto double_click = [&](std::ptrdiff_t x) {
+        now += std::chrono::milliseconds{600};
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1m"));
+        now += std::chrono::milliseconds{150};
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1m"));
+        const auto result = tui.copy_active_selection_to_clipboard();
+        REQUIRE(result);
+        REQUIRE(*result);
+        return copied.back();
+    };
+
+    // Columns: 中 spans 1-2, the zero-width space owns none, x lands on 3.
+    CHECK(double_click(1) == "中");
+    CHECK(double_click(2) == "中");
+    // The click on the zero-width column selects the following letter, unlike
+    // the old width-1 clamp that swallowed it into an empty segment. The copy
+    // includes the zero-width grapheme exactly like pi's sliceWithWidth (a
+    // zero-width grapheme at the slice start satisfies `currentCol >= startCol`).
+    CHECK(double_click(3) == "\xE2\x80\x8Bx");
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE(
+        "AltScreen ignores an empty selection click clock override", "[tui][alt-screen][selection][issue1007][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 3});
+    std::vector<std::string> copied;
+    cch::tui::AltScreen tui(terminal,
+            cch::tui::AltScreenOptions{.copy_on_select = false,
+                    .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
+                        copied.emplace_back(text);
+                        return {};
+                    }});
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one two", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // An empty callable would be invoked on the next press (undefined
+    // behavior); the setter ignores it and the injected clock keeps driving.
+    tui.set_selection_click_clock(std::move_only_function<std::chrono::milliseconds()>{});
+    now += std::chrono::milliseconds{600};
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1m"));
+    now += std::chrono::milliseconds{150};
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1m"));
+    const auto result = tui.copy_active_selection_to_clipboard();
+    REQUIRE(result);
+    REQUIRE(*result);
+    CHECK(copied.back() == "one");
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("AltScreen line-granularity drags expand by whole lines across an empty row",
+        "[tui][alt-screen][selection][issue1007][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 5});
+    std::vector<std::string> copied;
+    cch::tui::AltScreen tui(terminal,
+            cch::tui::AltScreenOptions{.copy_on_select = false,
+                    .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
+                        copied.emplace_back(text);
+                        return {};
+                    }});
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("alpha\n\nomega", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    const auto copy = [&]() -> std::optional<std::string> {
+        const auto result = tui.copy_active_selection_to_clipboard();
+        if (!result || !*result) return std::nullopt;
+        return copied.back();
+    };
+
+    now += std::chrono::milliseconds{1000};
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1M")); // First press: no selection.
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1m"));
+    CHECK_FALSE(copy());
+    now += std::chrono::milliseconds{150};
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1M")); // Second press: the word.
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1m"));
+    CHECK(copy() == "alpha");
+    // Third press: line granularity over the whole source row, held for a drag.
+    // pi's line range is infallible (an empty row is a zero-width range), so
+    // dragging across the empty row expands by whole lines, not characters.
+    now += std::chrono::milliseconds{150};
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<32;2;2M")); // ... across the empty row ...
+    CHECK(copy() == "alpha\n");
+    REQUIRE(terminal.inject_input("\x1b[<32;2;3M")); // ... onto the last row.
+    CHECK(copy() == "alpha\n\nomega");
+    REQUIRE(terminal.inject_input("\x1b[<0;2;3m"));
+    CHECK(copy() == "alpha\n\nomega");
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("AltScreen selection release clicks report the multi-click count to components",
+        "[tui][alt-screen][selection][issue1007][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 3});
+    std::vector<std::size_t> click_counts;
+    auto probe = std::make_unique<SelectionClickProbe>("one two", click_counts);
+    cch::tui::AltScreen tui(terminal);
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    REQUIRE(tui.add_child(std::move(probe)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // The probe renders the word and consumes clicks, but never presses, so
+    // the fullscreen root owns the gesture and its multi-click bookkeeping.
+    // The release click only fires when the press lands on the range's first
+    // cell (pi compares the anchor with the release point), so click the 'o'.
+    now += std::chrono::milliseconds{600};
+    REQUIRE(terminal.inject_input("\x1b[<0;1;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;1;1m"));
+    now += std::chrono::milliseconds{150};
+    REQUIRE(terminal.inject_input("\x1b[<0;1;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;1;1m"));
+    // pi delivers `clickCount: this.lastClick?.count ?? 1` on the release
+    // click: the second release reports the recorded word-click count of 2.
+    CHECK(click_counts == std::vector<std::size_t>{1, 2});
     REQUIRE(tui.stop());
 }
 

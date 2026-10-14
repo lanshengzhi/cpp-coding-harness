@@ -310,8 +310,10 @@ private:
     /// the click lands on yields a range (pi returns undefined only past the
     /// last segment, so the press stays a character-granularity click).
     [[nodiscard]] std::optional<SelectionRange> word_selection_at(const SelectionPoint& point) const;
-    /// pi `getLineSelection`: the whole rendered source row.
-    [[nodiscard]] std::optional<SelectionRange> line_selection_at(const SelectionPoint& point) const;
+    /// pi `getLineSelection`: the whole rendered source row. Infallible: the
+    /// clamped source lookup yields "" outside the content, so the range is
+    /// zero-width there while granularity and the initial range still land.
+    [[nodiscard]] SelectionRange line_selection_at(const SelectionPoint& point) const;
     /// pi `getClickCount`: `(previous.count % 3) + 1` when the click lands on
     /// the same word on the same row and viewport within
     /// `kSelectionDoubleClickInterval`, else 1. The recorded word comes from

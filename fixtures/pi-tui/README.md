@@ -120,6 +120,24 @@ verified artifact directly; expected values are not generated from Pike output.
 `capture/selection-scenarios.mts` executes the frozen components directly, and its digest is
 recorded in the manifest.
 
+For #1007, the same artifact holds nine frozen multi-click scenarios for pi's word/line selection
+cycle: `multiclick-word-line-cycle` (press/double/triple over one word), `multiclick-word-joiners-and-classes`
+(`/` `-` joiner chains, the rule-based word classes and dictionary-script boundaries),
+`multiclick-word-drag-expansion` and `multiclick-line-wrapped-rows` (granularity-preserving
+drags), `multiclick-expiry-and-word-identity` (the inclusive 500 ms interval and the word-identity
+reset; the exact 500 ms/501 ms boundary itself is pinned by the deterministic-clock unit test,
+since this runner's wall-clock sleeps cannot land exactly on the inclusive boundary), `multiclick-focus-out-cancels`
+and `multiclick-scrollbar-cancels` (the stale-click cancellation sites), plus
+`multiclick-dictionary-script-runs` (double-clicks inside multi-character Han `日本語`,
+Hiragana `こんにちは` and Thai `สวัสดีครับ` runs select whole ICU word segments) and
+`multiclick-interval-boundary`. Word segments come from pi's `Intl.Segmenter` (ICU word-break
+dictionaries and rules); Pike replays them through the pinned vcpkg ICU breaker
+(`cch::tui::detail::segment_words`, UBRK_WORD), the same engine class. Correction to an earlier
+packet claim: frozen pi does NOT clear its click state on content resize or content change — it
+clears only at session start, focus out, drag motion and scrollbar press (the word-range identity
+check is the staleness guard), and the C++ mirrors that; criterion 3's "content resize cancels"
+wording must not be attributed to frozen behavior.
+
 For #1002, the named runner re-captured all 14 current families at the same frozen revision and
 added `mouse.json`. Its five scenarios are read through pi's own `MouseRegion`, `Container`, `Box`,
 `TuiAltScreen` and `dispatchMouseEvent`, so a silently different hit path, coordinate transform,

@@ -4,11 +4,10 @@
 #include "tui/MouseRouting.hpp"
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
+#include "tui/WordNavigation.hpp"
 
 #include <cch/support/Error.hpp>
 #include <cch/tui/Utils.hpp>
-
-#include <utf8proc.h>
 
 #include <algorithm>
 #include <chrono>
@@ -113,124 +112,8 @@ constexpr auto kComponentDoubleClickInterval = std::chrono::milliseconds{500};
     return text;
 }
 
-/// Word-break classes for multi-click selection: the rule-based subset of
-/// UAX #29 the frozen pi-v1.0.4 evidence exercises (pi segments words with the
-/// host `Intl.Segmenter`). ICU's word-break dictionaries split multi-character
-/// Han, Hiragana and Thai runs text by text, which no rule set reproduces, so
-/// `DictionaryChar` selects one character at a time; the capture corpus pins
-/// single characters of that kind on purpose.
-enum class SelectionWordClass {
-    Other,
-    ALetter,
-    Numeric,
-    Katakana,
-    HangulSyllable,
-    DictionaryChar,
-    ExtendNumLet,
-    MidLetter,
-    MidNum,
-    MidNumLet,
-    SingleQuote,
-    WSegSpace,
-    Extend,
-    Format,
-    Zwj,
-    Control,
-};
-
-[[nodiscard]] SelectionWordClass selection_word_class(const char32_t cp) {
-    using Class = SelectionWordClass;
-    if (cp == 0x200d) return Class::Zwj;
-    if (cp == 0x005f) return Class::ExtendNumLet;
-    if (cp == 0x0027) return Class::SingleQuote;
-    if (cp == 0x003a || cp == 0x00b7 || cp == 0x02d7 || cp == 0x0387 || cp == 0x055f || cp == 0x2027)
-        return Class::MidLetter;
-    if (cp == 0x002c || cp == 0x003b || cp == 0x037e || cp == 0x0589 || cp == 0x060c || cp == 0x066b || cp == 0x066c ||
-            cp == 0x07f8 || cp == 0x2044 || cp == 0xfe10 || cp == 0xfe14 || cp == 0xfe50 || cp == 0xfe54 ||
-            cp == 0xff0c || cp == 0xff1b)
-        return Class::MidNum;
-    if (cp == 0x002e || cp == 0x2018 || cp == 0x2019 || cp == 0x2024 || cp == 0xfe52 || cp == 0xff07 || cp == 0xff0e)
-        return Class::MidNumLet;
-    if (cp == 0x0020 || cp == 0x1680 || (cp >= 0x2000 && cp <= 0x200a) || cp == 0x205f || cp == 0x3000)
-        return Class::WSegSpace;
-    if ((cp >= 0x30a1 && cp <= 0x30fa) || (cp >= 0x30fc && cp <= 0x30ff) || (cp >= 0x31f0 && cp <= 0x31ff))
-        return Class::Katakana;
-    if ((cp >= 0x1100 && cp <= 0x11ff) || (cp >= 0x3130 && cp <= 0x318f) || (cp >= 0xac00 && cp <= 0xd7a3) ||
-            (cp >= 0xd7b0 && cp <= 0xd7fb))
-        return Class::HangulSyllable;
-    if ((cp >= 0x0e00 && cp <= 0x0e7f) || (cp >= 0x3040 && cp <= 0x309f) || (cp >= 0x3400 && cp <= 0x4dbf) ||
-            (cp >= 0x4e00 && cp <= 0x9fff) || (cp >= 0xf900 && cp <= 0xfaff) || (cp >= 0x20000 && cp <= 0x2a6df))
-        return Class::DictionaryChar;
-    if (cp < 0x20 || cp == 0x7f || (cp >= 0x80 && cp <= 0x9f)) return Class::Control;
-    const auto* property = utf8proc_get_property(static_cast<utf8proc_int32_t>(cp));
-    if (property == nullptr) return Class::Other;
-    switch (property->category) {
-    case UTF8PROC_CATEGORY_PC:
-        return Class::ExtendNumLet;
-    case UTF8PROC_CATEGORY_MN:
-    case UTF8PROC_CATEGORY_MC:
-    case UTF8PROC_CATEGORY_ME:
-        return Class::Extend;
-    case UTF8PROC_CATEGORY_CF:
-        return Class::Format;
-    case UTF8PROC_CATEGORY_ND:
-        return Class::Numeric;
-    case UTF8PROC_CATEGORY_LU:
-    case UTF8PROC_CATEGORY_LL:
-    case UTF8PROC_CATEGORY_LT:
-    case UTF8PROC_CATEGORY_LM:
-    case UTF8PROC_CATEGORY_LO:
-    case UTF8PROC_CATEGORY_NL:
-        return Class::ALetter;
-    default:
-        return Class::Other;
-    }
-}
-
-/// Whether a segment of `cls` copies as a word (pi `isWordLike`).
-[[nodiscard]] bool selection_word_class_is_word_like(const SelectionWordClass cls) {
-    using Class = SelectionWordClass;
-    return cls == Class::ALetter || cls == Class::Numeric || cls == Class::Katakana || cls == Class::HangulSyllable ||
-           cls == Class::DictionaryChar;
-}
-
-/// Whether the boundary between two significant classes stays inside one word
-/// segment (UAX #29 rules WB3d and WB5-WB13 reduced to the classes above; the
-/// dictionary scripts keep WB999 so they segment per character). `beforeLeft`
-/// and `afterRight` are the neighboring significant classes the mid-letter
-/// and mid-number rules look across.
-[[nodiscard]] bool selection_word_no_break(const SelectionWordClass left,
-        const std::optional<SelectionWordClass> before_left,
-        const SelectionWordClass right,
-        const std::optional<SelectionWordClass> after_right) {
-    using Class = SelectionWordClass;
-    const auto letter = [](const Class cls) { return cls == Class::ALetter; };
-    const auto mid_letter = [](const Class cls) {
-        return cls == Class::MidLetter || cls == Class::MidNumLet || cls == Class::SingleQuote;
-    };
-    const auto mid_num = [](const Class cls) {
-        return cls == Class::MidNum || cls == Class::MidNumLet || cls == Class::SingleQuote;
-    };
-    const auto extend_num_let_side = [](const Class cls) {
-        return cls == Class::ALetter || cls == Class::Numeric || cls == Class::Katakana ||
-               cls == Class::HangulSyllable || cls == Class::ExtendNumLet;
-    };
-    if (left == Class::WSegSpace && right == Class::WSegSpace) return true;
-    if (letter(left) && letter(right)) return true;
-    if (letter(left) && mid_letter(right) && after_right && letter(*after_right)) return true;
-    if (before_left && letter(*before_left) && mid_letter(left) && letter(right)) return true;
-    if (left == Class::Numeric && right == Class::Numeric) return true;
-    if (letter(left) && right == Class::Numeric) return true;
-    if (left == Class::Numeric && letter(right)) return true;
-    if (before_left && *before_left == Class::Numeric && mid_num(left) && right == Class::Numeric) return true;
-    if (left == Class::Numeric && mid_num(right) && after_right && *after_right == Class::Numeric) return true;
-    if (left == Class::Katakana && right == Class::Katakana) return true;
-    if (left == Class::HangulSyllable && right == Class::HangulSyllable) return true;
-    if (extend_num_let_side(left) && right == Class::ExtendNumLet) return true;
-    if (left == Class::ExtendNumLet && extend_num_let_side(right)) return true;
-    return false;
-}
-
+/// One word segment of a rendered source row in visible columns (pi
+/// `Intl.Segmenter` word segment mapped to terminal cells).
 struct SelectionWordSegment {
     std::ptrdiff_t start{0};
     std::ptrdiff_t end{0};
@@ -239,67 +122,30 @@ struct SelectionWordSegment {
     [[nodiscard]] bool selectable() const { return word_like || joiner; }
 };
 
-/// The word segments of one rendered source row in visible columns (pi
-/// `Intl.Segmenter` over the stripped line, segment edges advanced by the
-/// segment's visible width). Extend/Format/Zwj characters attach to the
-/// preceding segment (UAX #29 WB4), so they neither start nor end a word.
-[[nodiscard]] std::vector<SelectionWordSegment> selection_word_segments(std::string_view line) {
-    struct Item {
-        SelectionWordClass cls;
-        std::ptrdiff_t start;
-        std::ptrdiff_t end;
-        bool joiner_glyph;
-    };
-    std::vector<Item> items;
+/// The word segments of one rendered source row in visible columns: pinned
+/// ICU `UBRK_WORD` boundaries via `detail::segment_words` (the same engine
+/// class as pi's `Intl.Segmenter`), segment edges advanced by the segment's
+/// visible width. Zero-width segments occupy no cells and are unclickable,
+/// exactly like pi (a click selects the next segment instead).
+[[nodiscard]] std::optional<std::vector<SelectionWordSegment>> selection_word_segments(std::string_view line) {
+    auto words = detail::segment_words(line);
+    // A mouse press cannot surface an error, so a segmentation failure
+    // degrades to "no word here": the press selects by character, the same
+    // practical fallback the pre-existing word navigation uses when its
+    // segmenter fails.
+    if (!words) return std::nullopt;
+    std::vector<SelectionWordSegment> segments;
+    segments.reserve(words->size());
     std::ptrdiff_t column = 0;
-    for (const auto& grapheme : detail::split_graphemes(line)) {
-        const auto [codepoint, size] = detail::decode_utf8(grapheme, 0);
-        if (size == 0) break;
-        const auto width = std::max<std::ptrdiff_t>(static_cast<std::ptrdiff_t>(visible_width(grapheme)), 1);
-        items.push_back(Item{.cls = selection_word_class(codepoint),
-                .start = column,
+    for (const auto& word : *words) {
+        const auto segment = line.substr(word.byte_start, word.byte_end - word.byte_start);
+        const auto width = static_cast<std::ptrdiff_t>(visible_width(segment));
+        segments.push_back(SelectionWordSegment{.start = column,
                 .end = column + width,
-                .joiner_glyph = grapheme == "/" || grapheme == "-"});
+                .word_like = word.word_like,
+                .joiner = segment == "/" || segment == "-"});
         column += width;
     }
-    const auto significant = [](const SelectionWordClass cls) {
-        using Class = SelectionWordClass;
-        return cls != Class::Extend && cls != Class::Format && cls != Class::Zwj;
-    };
-    std::vector<std::size_t> sig;
-    for (std::size_t index = 0; index < items.size(); ++index) {
-        if (significant(items[index].cls)) sig.push_back(index);
-    }
-
-    std::vector<SelectionWordSegment> segments;
-    // A merged segment is word-like when any of its significant classes is:
-    // `a.b`, `3.14`, `ee_ff` and `カタ_カナ` all copy as words.
-    const auto make_segment = [&items, &significant](const std::size_t first, const std::size_t last) {
-        auto word_like = false;
-        for (std::size_t index = first; index <= last; ++index) {
-            if (significant(items[index].cls) && selection_word_class_is_word_like(items[index].cls)) word_like = true;
-        }
-        return SelectionWordSegment{.start = items[first].start,
-                .end = items[last].end,
-                .word_like = word_like,
-                .joiner = first == last && items[first].joiner_glyph};
-    };
-    if (sig.empty()) {
-        if (!items.empty()) segments.push_back(make_segment(0, items.size() - 1));
-        return segments;
-    }
-    std::size_t segment_first = 0;
-    for (std::size_t k = 1; k < sig.size(); ++k) {
-        const auto left = items[sig[k - 1]].cls;
-        const auto right = items[sig[k]].cls;
-        const auto before_left = k >= 2 ? std::optional{items[sig[k - 2]].cls} : std::optional<SelectionWordClass>{};
-        const auto after_right =
-                k + 1 < sig.size() ? std::optional{items[sig[k + 1]].cls} : std::optional<SelectionWordClass>{};
-        if (selection_word_no_break(left, before_left, right, after_right)) continue;
-        segments.push_back(make_segment(segment_first, sig[k - 1]));
-        segment_first = sig[k];
-    }
-    segments.push_back(make_segment(segment_first, sig.back()));
     return segments;
 }
 
@@ -365,11 +211,11 @@ private:
 
 AltScreen::AltScreen(Terminal& terminal, AltScreenOptions options)
     : detail::TuiHost(terminal), render_schedule_state_(std::make_shared<RenderScheduleState>()),
-      copy_on_select_(options.copy_on_select), selection_copy_sink_(std::move(options.copy_selection)),
       selection_click_clock_([] {
           return std::chrono::duration_cast<std::chrono::milliseconds>(
                   std::chrono::system_clock::now().time_since_epoch());
-      }) {
+      }),
+      copy_on_select_(options.copy_on_select), selection_copy_sink_(std::move(options.copy_selection)) {
     render_schedule_state_->owner = this;
     if (!selection_copy_sink_) {
         selection_copy_sink_ = [this](std::string_view text) { return write_osc52(terminal_, text); };
@@ -393,6 +239,9 @@ void AltScreen::set_selection_copy_sink(SelectionCopySink sink) {
 }
 
 void AltScreen::set_selection_click_clock(std::move_only_function<std::chrono::milliseconds()> clock) {
+    // An empty callable would be invoked on the next press (undefined
+    // behavior); ignoring it keeps the current clock.
+    if (!clock) return;
     selection_click_clock_ = std::move(clock);
 }
 
@@ -810,39 +659,46 @@ std::optional<AltScreen::SelectionRange> AltScreen::word_selection_at(const Sele
     const auto line = selection_source_line_at(point);
     if (!line || line->empty()) return std::nullopt;
     const auto segments = selection_word_segments(strip_terminal_sequences(*line));
-    const auto clicked = std::find_if(segments.begin(), segments.end(), [&point](const SelectionWordSegment& segment) {
-        return point.column >= segment.start && point.column < segment.end;
-    });
-    if (clicked == segments.end()) return std::nullopt;
+    if (!segments) return std::nullopt;
+    const auto clicked =
+            std::find_if(segments->begin(), segments->end(), [&point](const SelectionWordSegment& segment) {
+                return point.column >= segment.start && point.column < segment.end;
+            });
+    if (clicked == segments->end()) return std::nullopt;
     const auto can_join = [&segments](const std::size_t a, const std::size_t b) {
         // pi `canJoin`: selectability gates joining and a joiner on either
         // side chains the segments; unlike words, punctuation does not stop a
         // joiner chain (`-a` selects with the `-`).
-        return segments[a].selectable() && segments[b].selectable() && (segments[a].joiner || segments[b].joiner);
+        return (*segments)[a].selectable() && (*segments)[b].selectable() &&
+               ((*segments)[a].joiner || (*segments)[b].joiner);
     };
     auto start = clicked->start;
     auto end = clicked->end;
-    std::size_t start_index = static_cast<std::size_t>(clicked - segments.begin());
+    std::size_t start_index = static_cast<std::size_t>(clicked - segments->begin());
     std::size_t end_index = start_index;
     for (std::ptrdiff_t index = static_cast<std::ptrdiff_t>(start_index) - 1; index >= 0; --index) {
         const auto current = static_cast<std::size_t>(index);
         if (!can_join(current, start_index)) break;
-        start = segments[current].start;
+        start = (*segments)[current].start;
         start_index = current;
     }
-    for (std::size_t index = end_index + 1; index < segments.size(); ++index) {
+    for (std::size_t index = end_index + 1; index < segments->size(); ++index) {
         if (!can_join(end_index, index)) break;
-        end = segments[index].end;
+        end = (*segments)[index].end;
         end_index = index;
     }
     return SelectionRange{.start = SelectionPoint{.row = point.row, .column = start, .scroll_view = point.scroll_view},
             .end = SelectionPoint{.row = point.row, .column = end, .scroll_view = point.scroll_view, .boundary = true}};
 }
 
-std::optional<AltScreen::SelectionRange> AltScreen::line_selection_at(const SelectionPoint& point) const {
-    const auto line = selection_source_line_at(point);
-    if (!line) return std::nullopt;
-    const auto width = static_cast<std::ptrdiff_t>(visible_width(strip_terminal_sequences(*line)));
+AltScreen::SelectionRange AltScreen::line_selection_at(const SelectionPoint& point) const {
+    // Infallible like pi `getLineSelection`: the clamped source lookup yields
+    // "" outside the content, so the range is zero-width there and still
+    // carries line granularity and the initial range. Count 3 is only
+    // reachable where a word existed at press, so the range is effectively
+    // never zero-width in practice (pi:1213-1219, 1233-1256).
+    const auto width =
+            static_cast<std::ptrdiff_t>(visible_width(strip_terminal_sequences(selection_source_line(point))));
     return SelectionRange{.start = SelectionPoint{.row = point.row, .column = 0, .scroll_view = point.scroll_view},
             .end = SelectionPoint{
                     .row = point.row, .column = width, .scroll_view = point.scroll_view, .boundary = true}};
@@ -876,14 +732,22 @@ std::size_t AltScreen::next_selection_click_count(
 
 void AltScreen::update_selection_focus(const SelectionPoint& point) {
     if (!selection_anchor_) return;
+    // Granularity Character is the only focus that follows the pointer
+    // directly. Word and line both resolve through their range like pi
+    // `updateSelectionFocus`, which never takes the character-focus branch
+    // for them (pi:1253-1295).
     if (selection_granularity_ == SelectionGranularity::Character) {
         const auto& anchor = *selection_anchor_;
         selection_focus_ = (point.row == anchor.row && point.column == anchor.column) ? anchor : point;
         return;
     }
+    if (!selection_initial_range_) return;
+    // pi keeps word/line granularity even where the range lookup misses and
+    // expands through the initial range instead; count 2/3 was only reachable
+    // with an initial range, so it is always present here (pi:1257-1270).
     const auto range =
             selection_granularity_ == SelectionGranularity::Line ? line_selection_at(point) : word_selection_at(point);
-    if (!range || !selection_initial_range_) return;
+    if (!range) return;
     const auto& initial = *selection_initial_range_;
     const auto before_initial = range->start.row < initial.start.row ||
                                 (range->start.row == initial.start.row && range->start.column < initial.start.column);
@@ -904,7 +768,12 @@ std::optional<AltScreen::SelectionPoint> AltScreen::selection_point_at(
     }
     if (scroll_view != nullptr && cached_frame_ != nullptr) {
         const auto* box = detail::get_scroll_view_box(*cached_frame_, scroll_view);
-        if (box == nullptr || box->rect.height == 0 || box->clip.height == 0) return std::nullopt;
+        // A degenerate scroll-view box clamps to row 0 column 0 like pi's
+        // content-less scroll view (the probe test harness) instead of
+        // suppressing the point (pi:347-352).
+        if (box == nullptr) return std::nullopt;
+        if (box->rect.height == 0 || box->clip.height == 0)
+            return SelectionPoint{.row = 0, .column = 0, .scroll_view = scroll_view};
         const auto visible_top = std::max<std::ptrdiff_t>({0, box->rect.y, box->clip.y});
         const auto visible_bottom = std::min<std::ptrdiff_t>({static_cast<std::ptrdiff_t>(terminal_.dimensions().rows) - 1,
                 box->rect.y + static_cast<std::ptrdiff_t>(box->rect.height) - 1,
@@ -1355,7 +1224,15 @@ bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet)
         const bool is_click = !selection_dragged_ && selection_anchor_->scroll_view == point->scroll_view &&
                               selection_anchor_->row == point->row && selection_anchor_->column == point->column;
         if (is_click) {
-            auto click = create_mouse_event(packet, MouseEventType::Click, std::nullopt, std::size_t{1});
+            // The release ends a click only when the press never selected:
+            // after a word/line selection the release lands inside the
+            // selection (anchor moved to the word start), so the press point
+            // differs and the release must not re-dispatch a component click
+            // (pi:1168-1190). The count is the one the press recorded in the
+            // click history; a press without a word reports 1 (pi
+            // `clickCount: this.lastClick?.count ?? 1`, 1343-1346).
+            const auto count = last_word_click_ ? last_word_click_->count : std::size_t{1};
+            auto click = create_mouse_event(packet, MouseEventType::Click, std::nullopt, count);
             if (auto result = dispatch_mouse_to_layout(click)) {
                 clear_text_selection();
                 if (apply_mouse_dispatch_result(click, *result)) request_render();
@@ -1397,15 +1274,13 @@ bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet)
         selection_granularity_ = SelectionGranularity::Word;
         selection_initial_range_ = *word;
     } else if (count == 3) {
-        if (const auto line = line_selection_at(*anchor)) {
-            selection_anchor_ = line->start;
-            selection_focus_ = line->end;
-            selection_granularity_ = SelectionGranularity::Line;
-            selection_initial_range_ = *line;
-        } else {
-            selection_anchor_ = *anchor;
-            selection_focus_ = *anchor;
-        }
+        // Infallible: even an empty source row yields a zero-width range,
+        // retaining line granularity during the drag like pi (pi:1213-1219).
+        const auto line = line_selection_at(*anchor);
+        selection_anchor_ = line.start;
+        selection_focus_ = line.end;
+        selection_granularity_ = SelectionGranularity::Line;
+        selection_initial_range_ = line;
     } else {
         // The first press and any press past the triple click select by
         // character: the stored count wrapped after three, so the fourth
