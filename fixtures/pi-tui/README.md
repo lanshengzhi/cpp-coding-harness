@@ -108,6 +108,18 @@ track, a motion that keeps the hover, a motion that leaves it to the hide timer,
 `stop()` from each other. `capture/scrollbar-scenarios.mts` executes the frozen components
 directly; its source digest is recorded alongside the main generator digest.
 
+For #1006, the named runner re-captured all 16 current families at the same frozen revision and
+added `selection.json`. Its four scenarios execute pi's `TuiAltScreen`, `Text` and
+`VirtualTerminal`, and record the visible selection cells, exact copied text, copy-on-select
+invocations and lifecycle: `styled-cjk-wrapped-selection` selects across a wrapped styled row and
+a wide CJK grapheme; `selection-content-focus-and-clear-lifecycle` checks same-shape content
+updates, focus out/in and ordinary content clicks; `selection-copy-specific-failure` pins the
+injected failure outcome and its visible text; and `copy-on-select-default-and-empty-range` pins
+the default true setting and proves an empty click invokes no copy. The replay consumes this
+verified artifact directly; expected values are not generated from Pike output.
+`capture/selection-scenarios.mts` executes the frozen components directly, and its digest is
+recorded in the manifest.
+
 For #1002, the named runner re-captured all 14 current families at the same frozen revision and
 added `mouse.json`. Its five scenarios are read through pi's own `MouseRegion`, `Container`, `Box`,
 `TuiAltScreen` and `dispatchMouseEvent`, so a silently different hit path, coordinate transform,

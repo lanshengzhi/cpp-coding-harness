@@ -1,0 +1,253 @@
+{
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-14T03:22:23.543Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleSelectionMouseEvent,getActiveSelectionText,copySelectionToClipboard,copyTextToClipboard,hasActiveSelection,copyActiveSelectionToClipboard,setCopyOnSelect",
+    "packages/tui/src/components/text.ts:Text.render,setText",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,getViewport,waitForRender"
+  ],
+  "scenarios": [
+    {
+      "name": "styled-cjk-wrapped-selection",
+      "dimensions": {
+        "columns": 6,
+        "rows": 4
+      },
+      "inputs": {
+        "text": "\u001b[31mred界abc\u001b[0m",
+        "drag": [
+          {
+            "x": 2,
+            "y": 1
+          },
+          {
+            "x": 2,
+            "y": 2
+          }
+        ],
+        "copyOnSelect": false
+      },
+      "expected": {
+        "before": [
+          "red界",
+          "abc",
+          "",
+          ""
+        ],
+        "hasSelection": true,
+        "highlighted": true,
+        "styledCells": [
+          [
+            {
+              "text": "r",
+              "width": 1,
+              "inverse": false,
+              "foreground": 1
+            },
+            {
+              "text": "e",
+              "width": 1,
+              "inverse": true,
+              "foreground": 1
+            },
+            {
+              "text": "d",
+              "width": 1,
+              "inverse": true,
+              "foreground": 1
+            },
+            {
+              "text": "界",
+              "width": 2,
+              "inverse": true,
+              "foreground": 1
+            },
+            {
+              "text": "",
+              "width": 0,
+              "inverse": true,
+              "foreground": 1
+            },
+            {
+              "text": " ",
+              "width": 1,
+              "inverse": true,
+              "foreground": 1
+            }
+          ],
+          [
+            {
+              "text": "a",
+              "width": 1,
+              "inverse": true,
+              "foreground": 1
+            },
+            {
+              "text": "b",
+              "width": 1,
+              "inverse": true,
+              "foreground": 1
+            },
+            {
+              "text": "c",
+              "width": 1,
+              "inverse": false,
+              "foreground": 1
+            },
+            {
+              "text": " ",
+              "width": 1,
+              "inverse": false,
+              "foreground": -1
+            },
+            {
+              "text": " ",
+              "width": 1,
+              "inverse": false,
+              "foreground": -1
+            },
+            {
+              "text": " ",
+              "width": 1,
+              "inverse": false,
+              "foreground": -1
+            }
+          ]
+        ],
+        "copyResult": true,
+        "copied": [
+          "ed界\nab"
+        ],
+        "copyOnSelect": false
+      }
+    },
+    {
+      "name": "selection-content-focus-and-clear-lifecycle",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "initialText": "alpha\nbeta\ngamma\ndelta",
+        "drag": [
+          {
+            "x": 1,
+            "y": 1
+          },
+          {
+            "x": 4,
+            "y": 2
+          }
+        ],
+        "updatedText": "omega\nsigma\ngamma\ndelta",
+        "focus": [
+          "out",
+          "in"
+        ],
+        "contentClick": {
+          "x": 1,
+          "y": 3
+        },
+        "copyOnSelect": false
+      },
+      "expected": {
+        "emptyCopyResult": false,
+        "selected": true,
+        "firstCopyResult": true,
+        "afterContentChange": true,
+        "updatedCopyResult": true,
+        "afterFocusChange": true,
+        "afterContentClick": false,
+        "copied": [
+          "alpha\nbeta",
+          "omega\nsigm"
+        ]
+      }
+    },
+    {
+      "name": "selection-copy-specific-failure",
+      "dimensions": {
+        "columns": 80,
+        "rows": 4
+      },
+      "inputs": {
+        "text": "alpha beta",
+        "drag": [
+          {
+            "x": 1,
+            "y": 1
+          },
+          {
+            "x": 5,
+            "y": 1
+          }
+        ],
+        "copyOnSelect": false
+      },
+      "expected": {
+        "copyResult": false,
+        "copied": [
+          "alpha"
+        ],
+        "copyError": "Clipboard unavailable: install wl-clipboard",
+        "failureVisible": true
+      }
+    },
+    {
+      "name": "copy-on-select-default-and-empty-range",
+      "dimensions": {
+        "columns": 20,
+        "rows": 2
+      },
+      "inputs": {
+        "text": "alpha beta",
+        "emptyClick": {
+          "x": 1,
+          "y": 1
+        },
+        "drag": [
+          {
+            "x": 1,
+            "y": 1
+          },
+          {
+            "x": 5,
+            "y": 1
+          }
+        ]
+      },
+      "expected": {
+        "defaultCopyOnSelect": true,
+        "afterEmptyClick": [],
+        "copied": [
+          "alpha"
+        ],
+        "hasSelection": true
+      }
+    }
+  ]
+}

@@ -2,7 +2,7 @@
   "schema": "pike/tui-evidence/1",
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-14T01:39:13.309Z",
+  "capturedAt": "2026-10-14T03:22:23.543Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -28,7 +28,7 @@
   },
   "generator": {
     "path": "capture/capture-named-tui.mts",
-    "sha256": "031ef302d389b3ca1863d12637b658bb1086eb0b1857058ff2f2e6a02ff0953b",
+    "sha256": "3692e19ee0b174c83cefb9a53e6df8486af616cf5cb596a9d01cb446a52563c9",
     "sources": [
       {
         "path": "capture/select-list-scenarios.mts",
@@ -53,6 +53,10 @@
       {
         "path": "capture/mouse-scenarios.mts",
         "sha256": "b6c670faf619138d378af8f7dd615c7d4d2bc2966008f66a17436aaa16900ead"
+      },
+      {
+        "path": "capture/selection-scenarios.mts",
+        "sha256": "e6862a07f86887963e3f6e85c39a4493b6253953841d45288ee2cb54254b1ec7"
       }
     ]
   },
@@ -61,7 +65,7 @@
       "path": "input.json",
       "family": "input",
       "bytes": 3937,
-      "sha256": "055be67fb6de1b309774197d4b05d723bd9923515a4ee30822119d0d27fbb182",
+      "sha256": "4f517811418a1f59254b16c9473f0007b4cac0b279033f4ce8c0785c29de1299",
       "sourceEndpoints": [
         "packages/tui/src/keys.ts:parseKey,isKeyRepeat,isKeyRelease",
         "packages/tui/src/components/input.ts:handleInput,getValue,onSubmit",
@@ -74,7 +78,7 @@
       "path": "component.json",
       "family": "component",
       "bytes": 1239,
-      "sha256": "8de9f366e0c29dc517f434777e040848c8da7564bab8c7a1227da7e573fe6170",
+      "sha256": "ed65b11f156e61d86fb89059a155a06bd58fc10225e1d3240b834f8e7df2f1b5",
       "sourceEndpoints": [
         "packages/tui/src/components/text.ts:render,setText"
       ]
@@ -83,7 +87,7 @@
       "path": "screen-state.json",
       "family": "screen-state",
       "bytes": 376823,
-      "sha256": "a84eb7f8f8ce784fec0076b1403a759a905af830531cbb48ab09515124d5d67d",
+      "sha256": "b137342c50fc7615293523e9bdc46026798df0f82d5edaffc7845b4702b774e4",
       "sourceEndpoints": [
         "packages/tui/src/tui-main-screen.ts:TuiMainScreen.renderNow",
         "packages/tui/src/tui.ts:setFocus,CURSOR_MARKER",
@@ -104,7 +108,7 @@
       "path": "capability-ledger.json",
       "family": "capability-ledger",
       "bytes": 13980,
-      "sha256": "c8c78379eb1334d6086235d0b286f3c6258bcd494b3fc3dec9d9a7bfb123b92b",
+      "sha256": "2d2737b784f23dee21a889a9e1672d0f1875b4b6b6acb28c856500cd5d54299c",
       "sourceEndpoints": [
         "packages/tui/src/index.ts:export-surface"
       ]
@@ -113,7 +117,7 @@
       "path": "utils-width.json",
       "family": "utils-width",
       "bytes": 3110,
-      "sha256": "e20fbb5e307193b166a899a678094c94b107e614c5d63bc092ceb1062a7541b2",
+      "sha256": "9bbc27bae8032bc76d4f2b1438381e6a34f3e4d1b028da45e21db6b50174ba02",
       "sourceEndpoints": [
         "packages/tui/src/utils.ts:visibleWidth",
         "packages/tui/src/components/text.ts:render",
@@ -124,7 +128,7 @@
       "path": "keys-kitty-text.json",
       "family": "keys-kitty-text",
       "bytes": 2466,
-      "sha256": "922bac214b25f6bf3f58565740488a7f34a238fdb9d762a13b1ee56b170a0229",
+      "sha256": "f69fc7e74cb5ce6ea5b4018ffff3e2b946f6932c729fa83c10af36ce09d206ee",
       "sourceEndpoints": [
         "packages/tui/src/keys.ts:parseKey,decodeKittyPrintable",
         "packages/tui/src/components/input.ts:handleInput,getValue"
@@ -134,7 +138,7 @@
       "path": "utils-ansi.json",
       "family": "utils-ansi",
       "bytes": 10150,
-      "sha256": "90634f7a4e968436261215fc21961b7347bab54365a10b571480c59d10426335",
+      "sha256": "d8641092d9c46bae00c5a06874d9c2b11cead4f0af99cb12cd0ff05ab570e4f2",
       "sourceEndpoints": [
         "packages/tui/src/utils.ts:wrapTextWithAnsi",
         "packages/tui/src/utils.ts:sliceByColumn",
@@ -146,7 +150,7 @@
       "path": "fuzzy.json",
       "family": "fuzzy",
       "bytes": 8095,
-      "sha256": "65ef1ff940477eaeadec4fec6348812d2c8a79d32bd34bbcccde8b0fc6513106",
+      "sha256": "f3fdbb3ee17a37bc1a176ea6fcb90a3bdcc66eda412c6c126b1e0d805a2d1fb5",
       "sourceEndpoints": [
         "packages/tui/src/fuzzy.ts:fuzzyMatch,fuzzyFilter"
       ]
@@ -155,7 +159,7 @@
       "path": "latex.json",
       "family": "latex",
       "bytes": 14183,
-      "sha256": "b3718302410f241cc4c043fde14e323a4ebe5f3b7c405dac24c2a1d400773500",
+      "sha256": "bdd57871bad4e2dc6c924980c28d097f7a71ab9f78fc05c67ee0779097c23b0e",
       "sourceEndpoints": [
         "packages/tui/src/latex.ts:renderLatex,RenderLatexOptions"
       ]
@@ -164,7 +168,7 @@
       "path": "autocomplete.json",
       "family": "autocomplete",
       "bytes": 71393,
-      "sha256": "1930511f66ba9d97e805f0d0126c48e45d6e28d827baa1422ed1df9c80c6c368",
+      "sha256": "03279713980b8f8c58a74f02b4a288c73ecd912da5a1857598dc520db230a79a",
       "sourceEndpoints": [
         "packages/tui/src/utils.ts:autocompleteSeparatorRegex,autocompleteBoundaryRegex",
         "packages/tui/src/autocomplete.ts:CombinedAutocompleteProvider.getSuggestions,extractPathPrefix,extractAtPrefix,applyCompletion,shouldTriggerFileCompletion"
@@ -174,7 +178,7 @@
       "path": "editor-autocomplete.json",
       "family": "editor-autocomplete",
       "bytes": 5887,
-      "sha256": "54da7766443e8b6fd1b058841e0e08ff5aea6f1a3bb27debfc6316644ef5bda3",
+      "sha256": "195aeb070b1019884bf7cca4a68c163527b4807546f528b5bcadf49945babdf8",
       "sourceEndpoints": [
         "packages/tui/src/components/editor.ts:Editor.insertCharacter,handleTabCompletion,setAutocompleteProvider",
         "packages/tui/src/autocomplete.ts:AutocompleteProvider.getSuggestions",
@@ -186,7 +190,7 @@
       "path": "layout.json",
       "family": "stack-layout",
       "bytes": 32185,
-      "sha256": "4c869a8ff85f0d2d3a5b89146f957edd49fb655bf1b7ab0e30a22a63d5c348fc",
+      "sha256": "d299ec1b191c3864246dbb46da3da734304e67644fef6dcc01ad5559e28fbb04",
       "sourceEndpoints": [
         "packages/tui/src/components/stack.ts:allocateStackSizes,visibleStackEntries,Stack.addChild,StackEntryOptions",
         "packages/tui/src/components/v-stack.ts:VStack.render",
@@ -199,7 +203,7 @@
       "path": "scroll-view.json",
       "family": "scroll-view",
       "bytes": 11662,
-      "sha256": "e5c567d4a1b721ce49d01521f436c84228f81b892a32ae5dc40592093b6ebb9f",
+      "sha256": "9d92eaa43d93cb87b452350c940eb65be4f06da7e1a0385b0d21194b206e0aac",
       "sourceEndpoints": [
         "packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo,ScrollView.scrollBy,ScrollView.updateLayout,ScrollView.scrollToStart,ScrollView.scrollToEnd",
         "packages/tui/src/layout.ts:renderLayoutFrame,getScrollViewsAt,cropKittyImageLine",
@@ -211,7 +215,7 @@
       "path": "mouse.json",
       "family": "mouse",
       "bytes": 11910,
-      "sha256": "ae0f3e3d84df3572a54475dd1c8e0c78eefe0f5f36720d34c193f4d4aa04e3ed",
+      "sha256": "5fee16d5c0de8880c8cd0c90b921c3f112ee622625c5369f2133035f9143ab08",
       "sourceEndpoints": [
         "packages/tui/src/tui.ts:dispatchMouseEvent,retargetMouseEvent,Container.handleMouse",
         "packages/tui/src/layout.ts:getLayoutBoxesAt,renderLayoutFrame",
@@ -226,7 +230,7 @@
       "path": "scrollbar.json",
       "family": "scrollbar",
       "bytes": 26568,
-      "sha256": "0c2d1620bfd85eb17d1e8633aaf0dc131f717d5bdd552e40da7d3f0e242979bd",
+      "sha256": "bafd06a688bace8398d76b252e5aea889b21b17fa0b0d4986303ad1b654edaf3",
       "sourceEndpoints": [
         "packages/tui/src/components/scroll-view.ts:ScrollView.getContentWidth,ScrollView.setScrollbar,ScrollView.setScrollbarActive,ScrollView.isScrollbarVisible,ScrollView.isScrollbarActive,ScrollView.scrollBy,ScrollView.scrollToEnd,ScrollView.scrollToStart",
         "packages/tui/src/layout.ts:renderLayoutFrame,getScrollbarGeometry",
@@ -234,6 +238,17 @@
         "packages/tui/src/components/mouse-region.ts:MouseRegion.handleMouse",
         "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleMouseEvent,TuiAltScreen.handleScrollbarMouseEvent,TuiAltScreen.scrollScrollbarToPointer,TuiAltScreen.getScrollbarTargetAt,TuiAltScreen.updateScrollbarHover,TuiAltScreen.stopScrollbarHover,TuiAltScreen.routeWheel",
         "packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.sendInput,VirtualTerminal.resize,VirtualTerminal.waitForRender"
+      ]
+    },
+    {
+      "path": "selection.json",
+      "family": "selection",
+      "bytes": 5663,
+      "sha256": "b8ebb97d1d703a6a68c3a999889bc7f91d7aa5d30928bbe1fe81b1352e7718c0",
+      "sourceEndpoints": [
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleSelectionMouseEvent,getActiveSelectionText,copySelectionToClipboard,copyTextToClipboard,hasActiveSelection,copyActiveSelectionToClipboard,setCopyOnSelect",
+        "packages/tui/src/components/text.ts:Text.render,setText",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,getViewport,waitForRender"
       ]
     }
   ]
