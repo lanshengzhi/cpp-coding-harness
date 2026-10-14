@@ -38,6 +38,11 @@ struct TuiAltScreenRenderState {
 /// error so a host can report it through its own feedback surface.
 using SelectionCopySink = std::move_only_function<support::ExpectedVoid(std::string_view)>;
 
+/// The frozen multi-click selection interval (pi `DOUBLE_CLICK_INTERVAL_MS`):
+/// consecutive presses on the same word within this window count up from
+/// character to word to line granularity.
+inline constexpr auto kSelectionDoubleClickInterval = std::chrono::milliseconds{500};
+
 struct AltScreenOptions {
     /// Copy a non-empty text selection when its mouse gesture ends.
     bool copy_on_select{true};
@@ -105,6 +110,10 @@ public:
     [[nodiscard]] bool copy_on_select() const noexcept { return copy_on_select_; }
     void set_copy_on_select(bool enabled) noexcept { copy_on_select_ = enabled; }
     void set_selection_copy_sink(SelectionCopySink sink);
+    /// Override the clock that times multi-click selection presses; the default
+    /// reads the system clock in milliseconds like pi `Date.now()`. Tests
+    /// inject a deterministic clock here.
+    void set_selection_click_clock(std::move_only_function<std::chrono::milliseconds()> clock);
 
     /// Scroll the primary viewport by a row delta and request a frame
     /// (pi `TuiAltScreen.scrollBy`).
@@ -267,16 +276,65 @@ private:
         std::ptrdiff_t row{0};
         std::ptrdiff_t column{0};
         ScrollView* scroll_view{nullptr};
+        /// pi `SelectionPoint.boundary`: word/line range ends sit on the
+        /// boundary after their last cell, so text extraction skips the
+        /// end-column grapheme snap a character-drag endpoint gets.
+        bool boundary{false};
+    };
+    /// What a multi-click selection expands by (pi `SelectionGranularity`).
+    enum class SelectionGranularity { Character, Word, Line };
+    struct SelectionRange {
+        SelectionPoint start;
+        SelectionPoint end;
+    };
+    /// The last word-selection press (pi `ClickTarget`): consecutive presses on
+    /// the same word, row and viewport inside the interval count up.
+    struct SelectionWordClick {
+        std::chrono::milliseconds at{};
+        std::size_t count{1};
+        std::ptrdiff_t row{0};
+        ScrollView* scroll_view{nullptr};
+        std::ptrdiff_t word_start{0};
+        std::ptrdiff_t word_end{0};
     };
     [[nodiscard]] std::optional<SelectionPoint> selection_point_at(std::ptrdiff_t x, std::ptrdiff_t y,
             ScrollView* scroll_view = nullptr) const;
+    /// The source row for `point` without clamping: missing rows select
+    /// nothing, where text extraction would keep reading the nearest row
+    /// (pi `getSelectionSourceLine` returns undefined outside the content).
+    [[nodiscard]] std::optional<std::string_view> selection_source_line_at(const SelectionPoint& point) const;
     [[nodiscard]] std::string_view selection_source_line(const SelectionPoint& point) const;
+    /// pi `getWordSelection`: the word-segmenter segment containing `point`,
+    /// extended over joiner-adjacent selectable segments. Joiners are
+    /// selectable segments, selectability only gates joining, and any segment
+    /// the click lands on yields a range (pi returns undefined only past the
+    /// last segment, so the press stays a character-granularity click).
+    [[nodiscard]] std::optional<SelectionRange> word_selection_at(const SelectionPoint& point) const;
+    /// pi `getLineSelection`: the whole rendered source row.
+    [[nodiscard]] std::optional<SelectionRange> line_selection_at(const SelectionPoint& point) const;
+    /// pi `getClickCount`: `(previous.count % 3) + 1` when the click lands on
+    /// the same word on the same row and viewport within
+    /// `kSelectionDoubleClickInterval`, else 1. The recorded word comes from
+    /// the current press, so clicking a different word (or past the line,
+    /// where there is no word) starts a fresh cycle.
+    [[nodiscard]] std::size_t next_selection_click_count(
+            const SelectionPoint& point, const std::optional<SelectionRange>& word);
+    /// pi `updateSelectionFocus`: character drags follow the pointer; word and
+    /// line drags snap to whole units of the range under the pointer while the
+    /// initial range's other end stays anchored, reversing the anchor when the
+    /// drag moves before the initial range.
+    void update_selection_focus(const SelectionPoint& point);
+    void clear_selection_click_history() noexcept { last_word_click_.reset(); }
     [[nodiscard]] std::pair<std::ptrdiff_t, std::ptrdiff_t> selection_columns(
             std::string_view line, std::ptrdiff_t row, const SelectionPoint& start, const SelectionPoint& end) const;
     std::optional<SelectionPoint> selection_anchor_{};
     std::optional<SelectionPoint> selection_focus_{};
     bool selection_press_active_{false};
     bool selection_dragged_{false};
+    SelectionGranularity selection_granularity_{SelectionGranularity::Character};
+    std::optional<SelectionRange> selection_initial_range_{};
+    std::optional<SelectionWordClick> last_word_click_{};
+    std::move_only_function<std::chrono::milliseconds()> selection_click_clock_{};
     bool copy_on_select_{true};
     SelectionCopySink selection_copy_sink_{};
     /// Captured scrollbar pointer interaction (pi `scrollbarDrag`). The weak

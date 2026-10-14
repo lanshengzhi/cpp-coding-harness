@@ -513,3 +513,186 @@ TEST_CASE("AltScreen counts viewport repaints, writes, and the debug hook throug
 
     REQUIRE(tui.stop());
 }
+
+TEST_CASE("AltScreen multi-click selection cycles word, line, and character granularity on a click clock",
+        "[tui][alt-screen][selection][issue1007][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 4});
+    std::vector<std::string> copied;
+    cch::tui::AltScreen tui(terminal,
+            cch::tui::AltScreenOptions{.copy_on_select = false,
+                    .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
+                        copied.emplace_back(text);
+                        return {};
+                    }});
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one two", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    const auto click = [&](std::ptrdiff_t x, std::ptrdiff_t advance_ms) {
+        now += std::chrono::milliseconds{advance_ms};
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1m"));
+    };
+    const auto copy = [&]() -> std::optional<std::string> {
+        const auto result = tui.copy_active_selection_to_clipboard();
+        if (!result || !*result) return std::nullopt;
+        return copied.back();
+    };
+
+    click(2, 1000); // First press: character granularity, no selection.
+    CHECK_FALSE(copy());
+    click(2, 150); // Second press on the same word: word granularity.
+    CHECK(copy() == "one");
+    click(2, 150); // Third press: the whole source row.
+    CHECK(copy() == "one two");
+    click(2, 150); // Fourth press wraps the cycle back to a plain click.
+    CHECK_FALSE(copy());
+    CHECK_FALSE(tui.has_active_selection());
+    click(2, 150); // Fifth press starts the next word cycle.
+    CHECK(copy() == "one");
+
+    click(2, 600); // Past the frozen 500 ms interval the cycle resets.
+    CHECK_FALSE(copy());
+    click(2, 150);
+    CHECK(copy() == "one");
+    click(7, 150);       // A different word starts a fresh cycle: its first press
+    CHECK_FALSE(copy()); // selects nothing.
+    click(7, 150);
+    CHECK(copy() == "two");
+    click(2, 150); // Back on the first word its own cycle starts over.
+    CHECK_FALSE(copy());
+    click(2, 150);
+    CHECK(copy() == "one");
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("AltScreen word selection chains joiner-adjacent segments and stops at boundary ends",
+        "[tui][alt-screen][selection][issue1007][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 24, .rows = 4});
+    std::vector<std::string> copied;
+    cch::tui::AltScreen tui(terminal,
+            cch::tui::AltScreenOptions{.copy_on_select = false,
+                    .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
+                        copied.emplace_back(text);
+                        return {};
+                    }});
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("a-b/c 12.45 中x", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    const auto double_click = [&](std::ptrdiff_t x) {
+        // Each call starts a fresh cycle: the previous one dies past the
+        // frozen interval before the first press.
+        now += std::chrono::milliseconds{600};
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1m"));
+        now += std::chrono::milliseconds{150};
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1m"));
+        const auto result = tui.copy_active_selection_to_clipboard();
+        REQUIRE(result);
+        REQUIRE(*result);
+        return copied.back();
+    };
+
+    // pi `canJoin` chains words across a joiner on either side, so clicking
+    // the word, the `-`, or the `/` selects the same joined run.
+    CHECK(double_click(1) == "a-b/c"); // 'a'
+    CHECK(double_click(2) == "a-b/c"); // '-'
+    CHECK(double_click(4) == "a-b/c"); // '/'
+    // Numeric punctuation inside one word segment stays one word.
+    CHECK(double_click(7) == "12.45");
+    // The dictionary-script character is its own word, and the boundary end
+    // keeps the trailing letter out of the copied text.
+    CHECK(double_click(13) == "中");
+    CHECK(double_click(15) == "x");
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("AltScreen word-granularity drags expand by whole words and reverse at the initial range",
+        "[tui][alt-screen][selection][issue1007][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 24, .rows = 4});
+    std::vector<std::string> copied;
+    cch::tui::AltScreen tui(terminal,
+            cch::tui::AltScreenOptions{.copy_on_select = false,
+                    .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
+                        copied.emplace_back(text);
+                        return {};
+                    }});
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one two three", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    const auto copy = [&]() -> std::optional<std::string> {
+        const auto result = tui.copy_active_selection_to_clipboard();
+        if (!result || !*result) return std::nullopt;
+        return copied.back();
+    };
+
+    now += std::chrono::milliseconds{150};
+    REQUIRE(terminal.inject_input("\x1b[<0;5;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;5;1m"));
+    CHECK_FALSE(copy());
+    // Double-click "two" and drag left into "one": the focus snaps to whole
+    // words while the initial word keeps its far end anchored.
+    now += std::chrono::milliseconds{150};
+    REQUIRE(terminal.inject_input("\x1b[<0;5;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<32;1;1M"));
+    CHECK(tui.has_active_selection());
+    CHECK(copy() == "one two");
+    // Dragging past the initial range reverses the anchor instead of
+    // crossing it (pi `updateSelectionFocus`).
+    REQUIRE(terminal.inject_input("\x1b[<32;13;1M"));
+    CHECK(copy() == "two three");
+    REQUIRE(terminal.inject_input("\x1b[<0;13;1m"));
+    CHECK(copy() == "two three");
+    // A drag press clears the click history: the next press is a fresh click.
+    now += std::chrono::milliseconds{150};
+    REQUIRE(terminal.inject_input("\x1b[<0;5;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;5;1m"));
+    CHECK_FALSE(copy());
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("AltScreen cancels a multi-click press on focus loss and drops its click history",
+        "[tui][alt-screen][selection][issue1007][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 4});
+    std::vector<std::string> copied;
+    cch::tui::AltScreen tui(terminal,
+            cch::tui::AltScreenOptions{.copy_on_select = false,
+                    .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
+                        copied.emplace_back(text);
+                        return {};
+                    }});
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("alpha beta", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    const auto copy = [&]() -> std::optional<std::string> {
+        const auto result = tui.copy_active_selection_to_clipboard();
+        if (!result || !*result) return std::nullopt;
+        return copied.back();
+    };
+    const auto click = [&](std::ptrdiff_t x, std::ptrdiff_t advance_ms) {
+        now += std::chrono::milliseconds{advance_ms};
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1m"));
+    };
+
+    click(7, 1000);                                 // "beta", first press.
+    REQUIRE(terminal.inject_input("\x1b[<0;7;1M")); // Second press held...
+    REQUIRE(terminal.inject_input("\x1b[O"));       // ...until focus loss cancels it.
+    CHECK_FALSE(tui.has_active_selection());
+    REQUIRE(terminal.inject_input("\x1b[I"));
+    REQUIRE(terminal.inject_input("\x1b[<0;7;1m"));
+    CHECK_FALSE(copy());
+    click(7, 150); // The cancelled press also dropped the click history.
+    CHECK_FALSE(copy());
+    click(7, 150);
+    CHECK(copy() == "beta");
+    REQUIRE(tui.stop());
+}

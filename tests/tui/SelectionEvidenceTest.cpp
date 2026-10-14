@@ -1,8 +1,10 @@
-// Named pi-v1.0.4 acceptance for fullscreen text selection (#1006). Every
-// expectation comes from the verified frozen bundle; the cases exercise the
-// public AltScreen, Text and VirtualTerminal seams.
+// Named pi-v1.0.4 acceptance for fullscreen text selection (#1006) and
+// frozen multi-click word/line selection (#1007). Every expectation comes
+// from the verified frozen bundle; the cases exercise the public AltScreen,
+// Text, ScrollView and VirtualTerminal seams.
 
 #include <cch/tui/AltScreen.hpp>
+#include <cch/tui/ScrollView.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
@@ -10,6 +12,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -52,6 +56,117 @@ void drag(cch::tui::VirtualTerminal& terminal, const JsonValue& inputs) {
     std::vector<std::string> texts;
     for (const auto& value : values.get_array()) texts.push_back(value.get_string());
     return texts;
+}
+
+/// The visible rows the way the frozen capture records them: ANSI sequences
+/// stripped and trailing whitespace trimmed (pi `stripTerminalSequences` +
+/// `trimEnd`), which keeps the scrollbar glyphs that end a padded row.
+[[nodiscard]] std::vector<std::string> observed_rows(const cch::tui::VirtualTerminal& terminal) {
+    std::vector<std::string> rows;
+    for (const auto& row : terminal.screen()) {
+        auto visible = cch::tui::strip_terminal_sequences(row);
+        while (!visible.empty() && (visible.back() == ' ' || visible.back() == '\t'))
+            visible.pop_back();
+        rows.push_back(std::move(visible));
+    }
+    return rows;
+}
+
+/// Replay one frozen #1007 multi-click scenario. The recorded steps carry
+/// `advanceMs` clock deltas; the replay injects them on a deterministic
+/// selection-click clock and compares every recorded observation (selection
+/// state plus the accumulated copies) and viewport snapshot in order.
+void replay_multiclick_scenario(std::string_view name) {
+    const auto bundle = selection_bundle();
+    REQUIRE(bundle);
+    const auto& scenario = scenario_of(*bundle, name);
+    const auto& dimensions = scenario.at("dimensions");
+    const auto& inputs = scenario.at("inputs");
+    const auto& expected = scenario.at("expected");
+    cch::tui::VirtualTerminal terminal({
+            .columns = static_cast<std::size_t>(dimensions.at("columns").get_number()),
+            .rows = static_cast<std::size_t>(dimensions.at("rows").get_number()),
+    });
+    cch::tui::AltScreen tui(terminal);
+    std::vector<std::string> copied;
+    tui.set_selection_copy_sink([&copied](std::string_view text) -> cch::support::ExpectedVoid {
+        copied.emplace_back(text);
+        return {};
+    });
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+
+    if (const auto* object = inputs.get_if<JsonValue::object_t>();
+            object != nullptr && object->contains("layoutText")) {
+        const auto& scroll = inputs.at("layoutScroll");
+        tui.set_layout_root(std::make_unique<cch::tui::ScrollView>(
+                std::make_unique<cch::tui::Text>(inputs.at("layoutText").get_string(), 0, 0),
+                cch::tui::ScrollViewOptions{.follow_end = scroll.at("follow").get_string() == "end",
+                        .primary = scroll.at("primary").get_boolean(),
+                        .scrollbar = cch::tui::ScrollbarMode::Always,
+                        .scrollbar_hide_delay = std::chrono::milliseconds{
+                                static_cast<int>(scroll.at("scrollbarHideDelayMs").get_number())}}));
+    } else {
+        REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>(inputs.at("text").get_string(), 0, 0)));
+    }
+    REQUIRE(tui.start());
+    // The selection source rows fill during a rendered frame; every frozen
+    // scenario observes clicks against the first rendered content.
+    REQUIRE(tui.render());
+
+    struct Observation {
+        bool has_selection{false};
+        std::size_t copied_count{0};
+    };
+    std::vector<Observation> observations;
+    std::vector<std::vector<std::string>> viewports;
+    for (const auto& step : inputs.at("steps").get_array()) {
+        const auto& action = step.at("action").get_string();
+        const auto has_coordinate = action == "press" || action == "release" || action == "motion";
+        const auto x = has_coordinate ? static_cast<std::ptrdiff_t>(step.at("x").get_number()) : 0;
+        const auto y = has_coordinate ? static_cast<std::ptrdiff_t>(step.at("y").get_number()) : 0;
+        if (action == "press") {
+            now += std::chrono::milliseconds{static_cast<int>(step.at("advanceMs").get_number())};
+            REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";" + std::to_string(y) + "M"));
+        } else if (action == "release") {
+            REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";" + std::to_string(y) + "m"));
+        } else if (action == "motion") {
+            REQUIRE(terminal.inject_input("\x1b[<32;" + std::to_string(x) + ";" + std::to_string(y) + "M"));
+        } else if (action == "focusOut") {
+            REQUIRE(terminal.inject_input("\x1b[O"));
+        } else if (action == "focusIn") {
+            REQUIRE(terminal.inject_input("\x1b[I"));
+        } else if (action == "observe") {
+            observations.push_back(
+                    Observation{.has_selection = tui.has_active_selection(), .copied_count = copied.size()});
+        } else if (action == "observeViewport") {
+            viewports.push_back(observed_rows(terminal));
+        }
+        // pi's capture waits for the pending frame after every step; the
+        // toolkit without a scheduler only queues one, so pump it here.
+        REQUIRE(tui.render());
+    }
+
+    const auto& frozen_observations = expected.at("observations").get_array();
+    REQUIRE(observations.size() == frozen_observations.size());
+    for (std::size_t index = 0; index < observations.size(); ++index) {
+        INFO("observation " << index);
+        const auto& frozen = frozen_observations[index];
+        CHECK(observations[index].has_selection == frozen.at("hasSelection").get<bool>());
+        const auto frozen_copies = copied_texts(frozen.at("copied"));
+        REQUIRE(observations[index].copied_count == frozen_copies.size());
+        CHECK(std::equal(frozen_copies.begin(), frozen_copies.end(), copied.begin()));
+    }
+    if (const auto* object = expected.get_if<JsonValue::object_t>();
+            object != nullptr && object->contains("viewports")) {
+        const auto& frozen = object->at("viewports").get<JsonValue::array_t>();
+        REQUIRE(viewports.size() == frozen.size());
+        for (std::size_t index = 0; index < viewports.size(); ++index) {
+            INFO("viewport " << index);
+            CHECK(viewports[index] == copied_texts(frozen[index]));
+        }
+    }
+    REQUIRE(tui.stop());
 }
 
 } // namespace
@@ -236,4 +351,39 @@ TEST_CASE("AltScreen copy-on-select uses the frozen default and ignores an empty
     CHECK(tui.has_active_selection() == expected.at("hasSelection").get_boolean());
     CHECK(copied == copied_texts(expected.at("copied")));
     REQUIRE(tui.stop());
+}
+
+TEST_CASE("AltScreen multi-click selection replays the frozen word-line cycle",
+        "[tui][alt-screen][selection][issue1007][compat-pi]") {
+    replay_multiclick_scenario("multiclick-word-line-cycle");
+}
+
+TEST_CASE("AltScreen multi-click selection replays the frozen word classes and joiners",
+        "[tui][alt-screen][selection][issue1007][compat-pi]") {
+    replay_multiclick_scenario("multiclick-word-joiners-and-classes");
+}
+
+TEST_CASE("AltScreen multi-click selection replays the frozen word drag expansion",
+        "[tui][alt-screen][selection][issue1007][compat-pi]") {
+    replay_multiclick_scenario("multiclick-word-drag-expansion");
+}
+
+TEST_CASE("AltScreen multi-click selection replays the frozen wrapped-row line granularity",
+        "[tui][alt-screen][selection][issue1007][compat-pi]") {
+    replay_multiclick_scenario("multiclick-line-wrapped-rows");
+}
+
+TEST_CASE("AltScreen multi-click selection replays the frozen interval expiry and word identity",
+        "[tui][alt-screen][selection][issue1007][compat-pi]") {
+    replay_multiclick_scenario("multiclick-expiry-and-word-identity");
+}
+
+TEST_CASE("AltScreen multi-click selection replays the frozen focus-out cancellation",
+        "[tui][alt-screen][selection][issue1007][compat-pi]") {
+    replay_multiclick_scenario("multiclick-focus-out-cancels");
+}
+
+TEST_CASE("AltScreen multi-click selection replays the frozen scrollbar cancellation",
+        "[tui][alt-screen][selection][issue1007][compat-pi]") {
+    replay_multiclick_scenario("multiclick-scrollbar-cancels");
 }
