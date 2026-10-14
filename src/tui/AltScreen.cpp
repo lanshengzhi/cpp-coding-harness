@@ -1071,7 +1071,9 @@ bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet)
     }
     selection_anchor_ = *anchor;
     selection_focus_ = *anchor;
-    last_mouse_click_.reset();
+    // The component click history belongs to the dispatch layer; a root-level
+    // selection press does not clear it (pi keeps selection and component
+    // clicks independent, frozen sequence in ScrollbarTest issue1005).
     request_render();
     return true;
 }
