@@ -2,19 +2,29 @@ import { pathToFileURL } from "node:url";
 import path from "node:path";
 
 /// Independent pi-v1.0.4 observations of fullscreen mouse selection and copy
-/// lifecycle (#1006). The C++ replay reads these values from the named bundle;
-/// no Pike output is used to construct the expectations.
+/// lifecycle (#1006) and frozen multi-click word/line selection (#1007). The
+/// C++ replay reads these values from the named bundle; no Pike output is used
+/// to construct the expectations.
+///
+/// Word segments come from the host `Intl.Segmenter` with its ICU word-break
+/// dictionaries. The C++ side implements the rule-based classes this corpus
+/// exercises (letters, digits, `/` `-` `_` `.` `,` `:` `'`, spaces, Katakana
+/// runs, Hangul runs, and single dictionary-script characters between ASCII),
+/// so multi-character Han/Hiragana/Thai runs — whose ICU boundaries are
+/// text-specific — are deliberately not part of the corpus.
 export async function captureSelection(piCheckout: string) {
 	const packageRoot = path.join(piCheckout, "packages/tui");
 	const source = (relative: string) => pathToFileURL(path.join(packageRoot, relative)).href;
 	const { TuiAltScreen } = await import(source("src/tui-alt-screen.ts"));
 	const { Text } = await import(source("src/components/text.ts"));
+	const { ScrollView } = await import(source("src/components/scroll-view.ts"));
 	const { VirtualTerminal } = await import(source("test/virtual-terminal.ts"));
-	const { stripTerminalSequences } = await import(source("src/utils.ts"));
+	const { stripTerminalSequences, visibleWidth } = await import(source("src/utils.ts"));
 
 	const sourceEndpoints = [
-		"packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleSelectionMouseEvent,getActiveSelectionText,copySelectionToClipboard,copyTextToClipboard,hasActiveSelection,copyActiveSelectionToClipboard,setCopyOnSelect",
+		"packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleSelectionMouseEvent,getActiveSelectionText,copySelectionToClipboard,copyTextToClipboard,hasActiveSelection,copyActiveSelectionToClipboard,setCopyOnSelect,getClickCount,getWordSelection,getLineSelection,updateSelectionFocus,handleScrollbarMouseEvent,handleViewportInput",
 		"packages/tui/src/components/text.ts:Text.render,setText",
+		"packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo",
 		"packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,getViewport,waitForRender",
 	];
 	const visibleLines = (lines: readonly string[]) => lines.map((line) => stripTerminalSequences(line).trimEnd());
@@ -31,6 +41,12 @@ export async function captureSelection(piCheckout: string) {
 			});
 		});
 	};
+	const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+	/// Visible column of `token` in a rendered row: UTF-16 indexes are not cell
+	/// columns once a wide character precedes the token.
+	const columnOf = (row: string, token: string, from = 0) =>
+		visibleWidth(stripTerminalSequences(row).slice(0, stripTerminalSequences(row).indexOf(token, from)));
+	const sgr = (code: number, x: number, y: number, release = false) => `\x1b[<${code};${x};${y}${release ? "m" : "M"}`;
 	const makeHost = (columns: number, rows: number, options: Record<string, unknown> = {}) => {
 		const terminal = new VirtualTerminal(columns, rows);
 		const writes: string[] = [];
@@ -53,6 +69,46 @@ export async function captureSelection(piCheckout: string) {
 		terminal.sendInput(`\x1b[<0;${start.x};${start.y}M`);
 		terminal.sendInput(`\x1b[<32;${end.x};${end.y}M`);
 		terminal.sendInput(`\x1b[<0;${end.x};${end.y}m`);
+	};
+	/// Execute #1007 multi-click steps against frozen pi and record one
+	/// observation per `observe` (selection state and the accumulated copies)
+	/// and one viewport snapshot per `observeViewport`. The recorded `steps`
+	/// with their `advanceMs` clock deltas are the replay input.
+	const runSteps = async (
+		terminal: any,
+		tui: any,
+		steps: any[],
+		copied: string[],
+		observations: any[],
+		viewports?: string[][],
+	) => {
+		for (const step of steps) {
+			switch (step.action) {
+				case "press":
+					if (step.advanceMs > 0) await sleep(step.advanceMs);
+					terminal.sendInput(sgr(0, step.x, step.y));
+					break;
+				case "release":
+					terminal.sendInput(sgr(0, step.x, step.y, true));
+					break;
+				case "motion":
+					terminal.sendInput(`\x1b[<32;${step.x};${step.y}M`);
+					break;
+				case "focusOut":
+					terminal.sendInput("\x1b[O");
+					break;
+				case "focusIn":
+					terminal.sendInput("\x1b[I");
+					break;
+				case "observe":
+					observations.push({ hasSelection: tui.hasActiveSelection(), copied: [...copied] });
+					break;
+				case "observeViewport":
+					viewports?.push(visibleLines(terminal.getViewport()));
+					break;
+			}
+			await terminal.waitForRender();
+		}
 	};
 	const scenarios: any[] = [];
 
@@ -217,6 +273,342 @@ export async function captureSelection(piCheckout: string) {
 				copied,
 				hasSelection: tui.hasActiveSelection(),
 			},
+		});
+		tui.stop();
+	}
+
+	// Repeated presses on one word cycle the granularity character -> word ->
+	// line and wrap back to word (pi `getClickCount`, `DOUBLE_CLICK_INTERVAL_MS`).
+	{
+		const copied: string[] = [];
+		const { terminal, tui } = makeHost(30, 4, {
+			copySelection: async (text: string) => {
+				copied.push(text);
+				return true;
+			},
+		});
+		tui.addChild(new Text("alpha beta gamma", 0, 0));
+		tui.start();
+		await terminal.waitForRender();
+		const betaX = columnOf(terminal.getViewport()[0], "beta") + 1;
+		const steps: any[] = [];
+		for (let click = 0; click < 5; click++) {
+			steps.push(
+				{ action: "press", x: betaX, y: 1, advanceMs: click === 0 ? 0 : 150, target: "beta" },
+				{ action: "release", x: betaX, y: 1 },
+				{ action: "observe" },
+			);
+		}
+		const observations: any[] = [];
+		await runSteps(terminal, tui, steps, copied, observations);
+		scenarios.push({
+			name: "multiclick-word-line-cycle",
+			dimensions: { columns: 30, rows: 4 },
+			inputs: { text: "alpha beta gamma", steps },
+			expected: { observations },
+		});
+		tui.stop();
+	}
+
+	// Word granularity merges joiner-adjacent segments (`/`, `-`) and the
+	// rule-based classes; punctuation and spaces select only themselves.
+	{
+		const copied: string[] = [];
+		const { terminal, tui } = makeHost(44, 6, {
+			copySelection: async (text: string) => {
+				copied.push(text);
+				return true;
+			},
+		});
+		const rows = ["src/main-component util", "a.b ee_ff 3.14 カタカナ", "中x foo,bar"];
+		tui.addChild(new Text(rows.join("\n"), 0, 0));
+		tui.start();
+		await terminal.waitForRender();
+		const targets = [
+			{ row: 0, token: "main", note: "joiners merge left and right" },
+			{ row: 0, token: "util", note: "plain word" },
+			{ row: 1, token: "a.b", note: "MidNumLet joins letters" },
+			{ row: 1, token: "ee_ff", note: "ExtendNumLet joins letters" },
+			{ row: 1, token: "3.14", note: "MidNumLet joins digits" },
+			{ row: 1, token: "カタカナ", note: "Katakana run" },
+			{ row: 2, token: "中", note: "single dictionary-script character" },
+			{ row: 2, token: "x", note: "letter after a wide character", from: "中" },
+			{ row: 2, token: ",", note: "punctuation selects itself" },
+		];
+		const steps: any[] = [];
+		for (const target of targets) {
+			const rendered = stripTerminalSequences(terminal.getViewport()[target.row]);
+			const x = columnOf(rendered, target.token, target.from ? rendered.indexOf(target.from) + 1 : 0) + 1;
+			steps.push(
+				{ action: "press", x, y: target.row + 1, advanceMs: 400, target: `${target.token} (${target.note})` },
+				{ action: "release", x, y: target.row + 1 },
+				{ action: "press", x, y: target.row + 1, advanceMs: 150, target: `${target.token} (second)` },
+				{ action: "release", x, y: target.row + 1 },
+				{ action: "observe" },
+			);
+		}
+		const observations: any[] = [];
+		await runSteps(terminal, tui, steps, copied, observations);
+		scenarios.push({
+			name: "multiclick-word-joiners-and-classes",
+			dimensions: { columns: 44, rows: 6 },
+			inputs: { text: rows.join("\n"), steps },
+			expected: { observations },
+		});
+		tui.stop();
+	}
+
+	// A drag that started from a word press expands by whole words, forward and
+	// backward (pi `updateSelectionFocus` with `selectionGranularity: "word"`).
+	{
+		const copied: string[] = [];
+		const { terminal, tui } = makeHost(40, 4, {
+			copySelection: async (text: string) => {
+				copied.push(text);
+				return true;
+			},
+		});
+		tui.addChild(new Text("one two three four", 0, 0));
+		tui.start();
+		await terminal.waitForRender();
+		const row = stripTerminalSequences(terminal.getViewport()[0]);
+		const twoX = columnOf(row, "two") + 1;
+		const fourX = columnOf(row, "four") + 1;
+		const threeX = columnOf(row, "three") + 1;
+		const steps: any[] = [
+			// Double-click "two" then drag to "four": expands forward by words.
+			{ action: "press", x: twoX, y: 1, advanceMs: 400, target: "two" },
+			{ action: "release", x: twoX, y: 1 },
+			{ action: "press", x: twoX, y: 1, advanceMs: 150, target: "two (second)" },
+			{ action: "motion", x: fourX, y: 1, target: "four" },
+			{ action: "release", x: fourX, y: 1 },
+			{ action: "observe" },
+			// Double-click "four" then drag back to "one": the anchor swaps to
+			// the initial range end, so the whole span stays selected.
+			{ action: "press", x: fourX, y: 1, advanceMs: 400, target: "four" },
+			{ action: "release", x: fourX, y: 1 },
+			{ action: "press", x: fourX, y: 1, advanceMs: 150, target: "four (second)" },
+			{ action: "motion", x: 1, y: 1, target: "one" },
+			{ action: "release", x: 1, y: 1 },
+			{ action: "observe" },
+			// A single press still drags by characters between two words.
+			{ action: "press", x: twoX, y: 1, advanceMs: 600, target: "two" },
+			{ action: "motion", x: threeX, y: 1, target: "three" },
+			{ action: "release", x: threeX, y: 1 },
+			{ action: "observe" },
+		];
+		const observations: any[] = [];
+		await runSteps(terminal, tui, steps, copied, observations);
+		scenarios.push({
+			name: "multiclick-word-drag-expansion",
+			dimensions: { columns: 40, rows: 4 },
+			inputs: { text: "one two three four", steps },
+			expected: { observations },
+		});
+		tui.stop();
+	}
+
+	// Line granularity selects the rendered screen row, so a wrapped logical
+	// line contributes row by row; presses on different wrapped rows of one
+	// logical line do not count as one multi-click.
+	{
+		const copied: string[] = [];
+		const { terminal, tui } = makeHost(10, 4, {
+			copySelection: async (text: string) => {
+				copied.push(text);
+				return true;
+			},
+		});
+		tui.addChild(new Text("abcdefghij klmnop", 0, 0));
+		tui.start();
+		await terminal.waitForRender();
+		const steps: any[] = [
+			{ action: "press", x: 3, y: 1, advanceMs: 400, target: "first wrapped row" },
+			{ action: "release", x: 3, y: 1 },
+			{ action: "press", x: 3, y: 1, advanceMs: 150 },
+			{ action: "release", x: 3, y: 1 },
+			{ action: "press", x: 3, y: 1, advanceMs: 150 },
+			{ action: "release", x: 3, y: 1 },
+			{ action: "observe" },
+			{ action: "press", x: 3, y: 2, advanceMs: 400, target: "second wrapped row" },
+			{ action: "release", x: 3, y: 2 },
+			{ action: "press", x: 3, y: 2, advanceMs: 150 },
+			{ action: "release", x: 3, y: 2 },
+			{ action: "observe" },
+			// Same logical line, different screen rows: each press is a fresh
+			// single click, and only the repeated press on the same row counts.
+			{ action: "press", x: 3, y: 1, advanceMs: 400, target: "row one again" },
+			{ action: "release", x: 3, y: 1 },
+			{ action: "observe" },
+			{ action: "press", x: 3, y: 2, advanceMs: 150, target: "row two" },
+			{ action: "release", x: 3, y: 2 },
+			{ action: "observe" },
+			{ action: "press", x: 3, y: 2, advanceMs: 150, target: "row two (second)" },
+			{ action: "release", x: 3, y: 2 },
+			{ action: "observe" },
+		];
+		const observations: any[] = [];
+		await runSteps(terminal, tui, steps, copied, observations);
+		scenarios.push({
+			name: "multiclick-line-wrapped-rows",
+			dimensions: { columns: 10, rows: 4 },
+			inputs: { text: "abcdefghij klmnop", steps },
+			expected: { observations },
+		});
+		tui.stop();
+	}
+
+	// Presses more than the double-click interval apart restart the count; a
+	// press on a different word restarts it too. The interval clock refreshes
+	// even when the intervening press expired.
+	{
+		const copied: string[] = [];
+		const { terminal, tui } = makeHost(30, 4, {
+			copySelection: async (text: string) => {
+				copied.push(text);
+				return true;
+			},
+		});
+		tui.addChild(new Text("alpha beta", 0, 0));
+		tui.start();
+		await terminal.waitForRender();
+		const betaX = columnOf(terminal.getViewport()[0], "beta") + 1;
+		const alphaX = columnOf(terminal.getViewport()[0], "alpha") + 1;
+		const steps: any[] = [
+			{ action: "press", x: betaX, y: 1, advanceMs: 400, target: "beta" },
+			{ action: "release", x: betaX, y: 1 },
+			{ action: "observe" },
+			{ action: "press", x: betaX, y: 1, advanceMs: 650, target: "beta after 650ms" },
+			{ action: "release", x: betaX, y: 1 },
+			{ action: "observe" },
+			{ action: "press", x: betaX, y: 1, advanceMs: 150, target: "beta again" },
+			{ action: "release", x: betaX, y: 1 },
+			{ action: "observe" },
+			{ action: "press", x: alphaX, y: 1, advanceMs: 150, target: "alpha, a different word" },
+			{ action: "release", x: alphaX, y: 1 },
+			{ action: "observe" },
+			{ action: "press", x: alphaX, y: 1, advanceMs: 150, target: "alpha (second)" },
+			{ action: "release", x: alphaX, y: 1 },
+			{ action: "observe" },
+		];
+		const observations: any[] = [];
+		await runSteps(terminal, tui, steps, copied, observations);
+		scenarios.push({
+			name: "multiclick-expiry-and-word-identity",
+			dimensions: { columns: 30, rows: 4 },
+			inputs: { text: "alpha beta", steps },
+			expected: { observations },
+		});
+		tui.stop();
+	}
+
+	// Focus loss cancels a pending multi-click: the click history clears, an
+	// unfinished press dies with the gesture, and the next press starts at one.
+	{
+		const copied: string[] = [];
+		const { terminal, tui } = makeHost(30, 4, {
+			copySelection: async (text: string) => {
+				copied.push(text);
+				return true;
+			},
+		});
+		tui.addChild(new Text("alpha beta", 0, 0));
+		tui.start();
+		await terminal.waitForRender();
+		const betaX = columnOf(terminal.getViewport()[0], "beta") + 1;
+		const steps: any[] = [
+			{ action: "press", x: betaX, y: 1, advanceMs: 400, target: "beta" },
+			{ action: "release", x: betaX, y: 1 },
+			{ action: "observe" },
+			{ action: "focusOut" },
+			{ action: "focusIn" },
+			{ action: "press", x: betaX, y: 1, advanceMs: 150, target: "beta after focus return" },
+			{ action: "release", x: betaX, y: 1 },
+			{ action: "observe" },
+			{ action: "press", x: betaX, y: 1, advanceMs: 150, target: "beta (second)" },
+			{ action: "release", x: betaX, y: 1 },
+			{ action: "observe" },
+			// A press that never released dies with the focus loss.
+			{ action: "press", x: betaX, y: 1, advanceMs: 400, target: "beta (held)" },
+			{ action: "focusOut" },
+			{ action: "release", x: betaX, y: 1 },
+			{ action: "observe" },
+			{ action: "press", x: betaX, y: 1, advanceMs: 150, target: "beta after held press" },
+			{ action: "release", x: betaX, y: 1 },
+			{ action: "observe" },
+			{ action: "press", x: betaX, y: 1, advanceMs: 150, target: "beta (second after held)" },
+			{ action: "release", x: betaX, y: 1 },
+			{ action: "observe" },
+		];
+		const observations: any[] = [];
+		await runSteps(terminal, tui, steps, copied, observations);
+		scenarios.push({
+			name: "multiclick-focus-out-cancels",
+			dimensions: { columns: 30, rows: 4 },
+			inputs: { text: "alpha beta", steps },
+			expected: { observations },
+		});
+		tui.stop();
+	}
+
+	// A scrollbar press cancels a pending multi-click. The layout viewport uses
+	// an always-visible bar so the track column accepts presses without a hover
+	// reveal; the track presses also pin the frozen scroll-to-pointer mapping.
+	{
+		const copied: string[] = [];
+		const { terminal, tui } = makeHost(30, 3, {
+			copySelection: async (text: string) => {
+				copied.push(text);
+				return true;
+			},
+		});
+		const layoutText = "one two\nthree four\nfive six\nseven eight\nnine ten\neleven";
+		tui.setLayoutRoot(
+			new ScrollView(new Text(layoutText, 0, 0), {
+				follow: "none",
+				primary: true,
+				scrollbar: "always",
+				scrollbarHideDelayMs: 0,
+			}),
+		);
+		tui.start();
+		await terminal.waitForRender();
+		const trackX = 30;
+		const twoX = columnOf(terminal.getViewport()[0], "two") + 1;
+		const steps: any[] = [
+			{ action: "press", x: trackX, y: 3, advanceMs: 400, target: "track bottom" },
+			{ action: "release", x: trackX, y: 3 },
+			{ action: "observeViewport" },
+			{ action: "press", x: trackX, y: 1, advanceMs: 400, target: "track top" },
+			{ action: "release", x: trackX, y: 1 },
+			{ action: "observeViewport" },
+			{ action: "press", x: twoX, y: 1, advanceMs: 400, target: "two" },
+			{ action: "release", x: twoX, y: 1 },
+			{ action: "observe" },
+			// Grabbing the thumb scrolls nowhere: the viewport must stay put for
+			// the cancellation clicks below to land on the same word.
+			{ action: "press", x: trackX, y: 1, advanceMs: 150, target: "thumb grab" },
+			{ action: "release", x: trackX, y: 1 },
+			{ action: "observeViewport" },
+			{ action: "press", x: twoX, y: 1, advanceMs: 150, target: "two after scrollbar" },
+			{ action: "release", x: twoX, y: 1 },
+			{ action: "observe" },
+			{ action: "press", x: twoX, y: 1, advanceMs: 150, target: "two (second)" },
+			{ action: "release", x: twoX, y: 1 },
+			{ action: "observe" },
+		];
+		const observations: any[] = [];
+		const viewports: string[][] = [];
+		await runSteps(terminal, tui, steps, copied, observations, viewports);
+		scenarios.push({
+			name: "multiclick-scrollbar-cancels",
+			dimensions: { columns: 30, rows: 3 },
+			inputs: {
+				layoutText,
+				layoutScroll: { follow: "none", primary: true, scrollbar: "always", scrollbarHideDelayMs: 0 },
+				steps,
+			},
+			expected: { observations, viewports },
 		});
 		tui.stop();
 	}
