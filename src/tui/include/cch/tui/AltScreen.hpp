@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,6 +32,17 @@ struct TuiAltScreenRenderState {
     std::size_t width{0};
     std::size_t height{0};
     std::optional<CursorPosition> cursor;
+};
+
+/// Synchronous selection clipboard operation. A failure keeps its specific
+/// error so a host can report it through its own feedback surface.
+using SelectionCopySink = std::move_only_function<support::ExpectedVoid(std::string_view)>;
+
+struct AltScreenOptions {
+    /// Copy a non-empty text selection when its mouse gesture ends.
+    bool copy_on_select{true};
+    /// An empty sink selects the toolkit's default OSC 52 clipboard operation.
+    SelectionCopySink copy_selection{};
 };
 
 /// Alternate-screen (fullscreen) root: owns the terminal's alternate buffer
@@ -60,7 +72,7 @@ struct TuiAltScreenRenderState {
 /// it settled.
 class AltScreen final : public ITui, public detail::TuiHost {
 public:
-    explicit AltScreen(Terminal& terminal);
+    explicit AltScreen(Terminal& terminal, AltScreenOptions options = {});
     ~AltScreen() override;
 
     AltScreen(const AltScreen&) = delete;
@@ -85,6 +97,15 @@ public:
     [[nodiscard]] std::size_t viewport_top() const;
     /// pi `isFollowingOutput`: whether appended rows move the primary viewport.
     [[nodiscard]] bool is_following_output() const;
+    /// Whether the last rendered viewport contains a non-empty mouse selection.
+    [[nodiscard]] bool has_active_selection() const;
+    /// Copy the current selection. An empty selection returns false without
+    /// invoking the configured sink; sink errors are returned unchanged.
+    [[nodiscard]] support::Expected<bool> copy_active_selection_to_clipboard();
+    [[nodiscard]] bool copy_on_select() const noexcept { return copy_on_select_; }
+    void set_copy_on_select(bool enabled) noexcept { copy_on_select_ = enabled; }
+    void set_selection_copy_sink(SelectionCopySink sink);
+
     /// Scroll the primary viewport by a row delta and request a frame
     /// (pi `TuiAltScreen.scrollBy`).
     void scroll_by(std::ptrdiff_t lines);
@@ -159,6 +180,7 @@ private:
     /// press, or return false when no live gesture owns it.
     bool handle_gesture_mouse_report(const detail::MousePacket& packet, const MouseEvent& event);
     void handle_mouse_report(const detail::MousePacket& packet);
+    [[nodiscard]] bool handle_selection_mouse_report(const detail::MousePacket& packet);
     [[nodiscard]] bool handle_scrollbar_mouse_report(const detail::MousePacket& packet);
     void stop_scrollbar_drag() noexcept;
     void validate_scrollbar_interaction(const detail::LayoutFrame& frame);
@@ -187,6 +209,10 @@ private:
     /// they name has changed (a removed component may already be destroyed).
     void invalidate_composition_cache() noexcept;
     void clear_mouse_gesture() noexcept;
+    void clear_text_selection() noexcept;
+    [[nodiscard]] std::optional<std::string> active_selection_text() const;
+    [[nodiscard]] bool selection_anchor_precedes_focus() const noexcept;
+    [[nodiscard]] std::vector<std::string> apply_text_selection(const std::vector<std::string>& lines) const;
     [[nodiscard]] MouseEvent create_mouse_event(const detail::MousePacket& packet,
             MouseEventType type,
             std::optional<std::ptrdiff_t> wheel_delta = std::nullopt,
@@ -237,6 +263,22 @@ private:
     std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> mouse_press_point_{};
     bool mouse_press_moved_{false};
     std::optional<MouseClick> last_mouse_click_{};
+    struct SelectionPoint {
+        std::ptrdiff_t row{0};
+        std::ptrdiff_t column{0};
+        ScrollView* scroll_view{nullptr};
+    };
+    [[nodiscard]] std::optional<SelectionPoint> selection_point_at(std::ptrdiff_t x, std::ptrdiff_t y,
+            ScrollView* scroll_view = nullptr) const;
+    [[nodiscard]] std::string_view selection_source_line(const SelectionPoint& point) const;
+    [[nodiscard]] std::pair<std::ptrdiff_t, std::ptrdiff_t> selection_columns(
+            std::string_view line, std::ptrdiff_t row, const SelectionPoint& start, const SelectionPoint& end) const;
+    std::optional<SelectionPoint> selection_anchor_{};
+    std::optional<SelectionPoint> selection_focus_{};
+    bool selection_press_active_{false};
+    bool selection_dragged_{false};
+    bool copy_on_select_{true};
+    SelectionCopySink selection_copy_sink_{};
     /// Captured scrollbar pointer interaction (pi `scrollbarDrag`). The weak
     /// token prevents a detached or destroyed viewport from being dereferenced.
     struct ScrollbarDrag {
@@ -277,6 +319,7 @@ private:
     bool baseline_from_restore_{false};
     std::optional<TerminalDimensions> previous_dimensions_;
     std::vector<std::string> previous_lines_;
+    std::vector<std::string> selection_source_lines_;
     std::optional<CursorPosition> cursor_;
     bool cursor_visible_{false};
     std::size_t full_redraws_{0};

@@ -45,6 +45,12 @@ struct LayoutBox {
     /// `ScrollView` (pi `LayoutBox.scrollView`): the box clips and translates
     /// its child to the window the viewport shows.
     ScrollView* scroll_view{nullptr};
+    /// The content rendered by this viewport before its scroll offset is
+    /// applied (pi `LayoutBox.scrollContentLines`).
+    std::vector<std::string> scroll_content_lines{};
+    /// Whether the content came from a terminal-visible leaf rather than a
+    /// composite stack whose selection source is the composed screen.
+    bool has_scroll_content_lines{false};
 };
 
 /// One layout frame (pi `LayoutFrame`): the box tree plus the composed rows,

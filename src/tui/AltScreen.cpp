@@ -6,12 +6,14 @@
 #include "tui/UnicodeWidth.hpp"
 
 #include <cch/support/Error.hpp>
+#include <cch/tui/Utils.hpp>
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <format>
+#include <ranges>
 #include <utility>
 
 namespace cch::tui {
@@ -46,6 +48,71 @@ constexpr auto kComponentDoubleClickInterval = std::chrono::milliseconds{500};
 [[nodiscard]] support::Error alt_overlay_unavailable() {
     return support::make_error(
             support::ErrorCode::Validation, "Alternate-screen overlays are not available on this root yet");
+}
+
+[[nodiscard]] std::string base64_encode(std::string_view value) {
+    constexpr std::string_view alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string result;
+    for (std::size_t offset = 0; offset < value.size(); offset += 3) {
+        const auto remaining = value.size() - offset;
+        const auto first = static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset]));
+        const auto second = remaining > 1 ? static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset + 1])) : 0U;
+        const auto third = remaining > 2 ? static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset + 2])) : 0U;
+        const auto bits = (first << 16U) | (second << 8U) | third;
+        result.push_back(alphabet[(bits >> 18U) & 0x3fU]);
+        result.push_back(alphabet[(bits >> 12U) & 0x3fU]);
+        result.push_back(remaining > 1 ? alphabet[(bits >> 6U) & 0x3fU] : '=');
+        result.push_back(remaining > 2 ? alphabet[bits & 0x3fU] : '=');
+    }
+    return result;
+}
+
+[[nodiscard]] std::string apply_selection_inverse(std::string_view text) {
+    std::string result{"\x1b[7m"};
+    for (std::size_t index = 0; index < text.size();) {
+        if (text[index] == '\x1b') {
+            const auto ansi = detail::extract_ansi_code(text, index);
+            if (ansi) {
+                result += ansi->code;
+                if (ansi->code.ends_with('m')) result += "\x1b[7m";
+                index += ansi->length;
+                continue;
+            }
+        }
+        const auto [codepoint, size] = detail::decode_utf8(text, index);
+        (void)codepoint;
+        if (size == 0) break;
+        result.append(text.substr(index, size));
+        index += size;
+    }
+    result += "\x1b[27m";
+    return result;
+}
+
+[[nodiscard]] std::pair<std::size_t, std::size_t> grapheme_cell_range(
+        std::string_view line, std::size_t column) {
+    auto tokens = detail::tokenize_terminal_output(line);
+    if (!tokens) return {column, column + 1};
+    std::size_t current = 0;
+    for (const auto& token : *tokens) {
+        if (token.kind != detail::TerminalTokenKind::Grapheme) continue;
+        if (column < current + token.width) return {current, current + token.width};
+        current += token.width;
+    }
+    return {std::min(column, current), std::min(column + 1, current)};
+}
+
+[[nodiscard]] std::string trim_end(std::string text) {
+    while (!text.empty()) {
+        const auto ch = static_cast<unsigned char>(text.back());
+        if (ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r' && ch != '\f' && ch != '\v') break;
+        text.pop_back();
+    }
+    return text;
+}
+
+[[nodiscard]] support::ExpectedVoid write_osc52(Terminal& terminal, std::string_view text) {
+    return terminal.write(std::format("\x1b]52;c;{}\x07", base64_encode(text)));
 }
 
 void scroll_scrollbar_to_pointer(ScrollView& scroll_view,
@@ -104,9 +171,13 @@ private:
     std::optional<CursorPosition> cursor_{};
 };
 
-AltScreen::AltScreen(Terminal& terminal)
-    : detail::TuiHost(terminal), render_schedule_state_(std::make_shared<RenderScheduleState>()) {
+AltScreen::AltScreen(Terminal& terminal, AltScreenOptions options)
+    : detail::TuiHost(terminal), render_schedule_state_(std::make_shared<RenderScheduleState>()),
+      copy_on_select_(options.copy_on_select), selection_copy_sink_(std::move(options.copy_selection)) {
     render_schedule_state_->owner = this;
+    if (!selection_copy_sink_) {
+        selection_copy_sink_ = [this](std::string_view text) { return write_osc52(terminal_, text); };
+    }
     implicit_scroll_view_ = std::make_unique<ScrollView>(
             std::make_unique<ImplicitDocument>(*this), ScrollViewOptions{.follow_end = true, .primary = true});
     // pi registers the viewport input stage with the instance
@@ -115,6 +186,14 @@ AltScreen::AltScreen(Terminal& terminal)
     mouse_listener_ = add_raw_input_listener([this](std::string_view data) {
         return handle_viewport_input(data) ? RawInputListenerResult::consume() : RawInputListenerResult::pass();
     });
+}
+
+void AltScreen::set_selection_copy_sink(SelectionCopySink sink) {
+    if (sink) {
+        selection_copy_sink_ = std::move(sink);
+        return;
+    }
+    selection_copy_sink_ = [this](std::string_view text) { return write_osc52(terminal_, text); };
 }
 
 AltScreen::~AltScreen() {
@@ -338,6 +417,7 @@ support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
     // A gesture never survives the session that captured it, and neither does
     // the scrollbar hover (pi `beforeTerminalStop`).
     clear_mouse_gesture();
+    if (selection_press_active_) clear_text_selection();
     last_mouse_click_.reset();
     stop_scrollbar_drag();
     stop_scrollbar_hover();
@@ -485,6 +565,173 @@ std::size_t AltScreen::viewport_top() const { return primary_scroll_view().scrol
 
 bool AltScreen::is_following_output() const { return primary_scroll_view().following_end(); }
 
+bool AltScreen::has_active_selection() const { return active_selection_text().has_value(); }
+
+void AltScreen::clear_text_selection() noexcept {
+    selection_press_active_ = false;
+    selection_dragged_ = false;
+    selection_anchor_.reset();
+    selection_focus_.reset();
+}
+
+std::string_view AltScreen::selection_source_line(const SelectionPoint& point) const {
+    if (point.scroll_view != nullptr && cached_frame_ != nullptr) {
+        const auto* box = detail::get_scroll_view_box(*cached_frame_, point.scroll_view);
+        if (box != nullptr && box->has_scroll_content_lines && !box->scroll_content_lines.empty()) {
+            const auto row = std::clamp<std::ptrdiff_t>(point.row, 0,
+                    static_cast<std::ptrdiff_t>(box->scroll_content_lines.size() - 1));
+            return box->scroll_content_lines[static_cast<std::size_t>(row)];
+        }
+    }
+    if (point.row < 0 || static_cast<std::size_t>(point.row) >= selection_source_lines_.size()) return {};
+    return selection_source_lines_[static_cast<std::size_t>(point.row)];
+}
+
+std::optional<AltScreen::SelectionPoint> AltScreen::selection_point_at(
+        std::ptrdiff_t x, std::ptrdiff_t y, ScrollView* scroll_view) const {
+    if (scroll_view == nullptr && cached_frame_) {
+        const auto candidates = detail::scroll_views_at(*cached_frame_, x, y);
+        if (!candidates.empty()) scroll_view = candidates.front();
+    }
+    if (scroll_view != nullptr && cached_frame_ != nullptr) {
+        const auto* box = detail::get_scroll_view_box(*cached_frame_, scroll_view);
+        if (box == nullptr || box->rect.height == 0 || box->clip.height == 0) return std::nullopt;
+        const auto visible_top = std::max<std::ptrdiff_t>({0, box->rect.y, box->clip.y});
+        const auto visible_bottom = std::min<std::ptrdiff_t>({static_cast<std::ptrdiff_t>(terminal_.dimensions().rows) - 1,
+                box->rect.y + static_cast<std::ptrdiff_t>(box->rect.height) - 1,
+                box->clip.y + static_cast<std::ptrdiff_t>(box->clip.height) - 1});
+        if (visible_bottom < visible_top) return std::nullopt;
+        const auto pointer_row = std::clamp(y, visible_top, visible_bottom);
+        const auto content_height = scroll_view->content_height();
+        const auto row = std::clamp<std::ptrdiff_t>(
+                static_cast<std::ptrdiff_t>(scroll_view->scroll_top()) + pointer_row - box->rect.y,
+                0, content_height == 0 ? 0 : static_cast<std::ptrdiff_t>(content_height - 1));
+        const auto column = std::clamp<std::ptrdiff_t>(x - box->rect.x, 0,
+                box->rect.width == 0 ? 0 : static_cast<std::ptrdiff_t>(box->rect.width - 1));
+        return SelectionPoint{.row = row, .column = column, .scroll_view = scroll_view};
+    }
+    const auto dimensions = terminal_.dimensions();
+    if (dimensions.rows == 0 || dimensions.columns == 0) return std::nullopt;
+    return SelectionPoint{.row = std::clamp<std::ptrdiff_t>(y, 0, static_cast<std::ptrdiff_t>(dimensions.rows - 1)),
+            .column = std::clamp<std::ptrdiff_t>(x, 0, static_cast<std::ptrdiff_t>(dimensions.columns - 1)),
+            .scroll_view = nullptr};
+}
+
+std::pair<std::ptrdiff_t, std::ptrdiff_t> AltScreen::selection_columns(
+        std::string_view line, std::ptrdiff_t row, const SelectionPoint& start, const SelectionPoint& end) const {
+    const auto width = static_cast<std::ptrdiff_t>(visible_width(line));
+    auto first = std::ptrdiff_t{0};
+    auto last = width;
+    if (row == start.row) {
+        const auto [cell_start, cell_end] = grapheme_cell_range(line, static_cast<std::size_t>(std::max<std::ptrdiff_t>(0, start.column)));
+        (void)cell_end;
+        first = std::min<std::ptrdiff_t>(static_cast<std::ptrdiff_t>(cell_start), width);
+    }
+    if (row == end.row) {
+        const auto [cell_start, cell_end] = grapheme_cell_range(line, static_cast<std::size_t>(std::max<std::ptrdiff_t>(0, end.column)));
+        (void)cell_start;
+        last = std::min<std::ptrdiff_t>(static_cast<std::ptrdiff_t>(cell_end), width);
+    }
+    return {first, std::max(first, last)};
+}
+
+bool AltScreen::selection_anchor_precedes_focus() const noexcept {
+    if (!selection_anchor_ || !selection_focus_) return false;
+    const auto& anchor = *selection_anchor_;
+    const auto& focus = *selection_focus_;
+    return anchor.row < focus.row || (anchor.row == focus.row && anchor.column < focus.column);
+}
+
+std::optional<std::string> AltScreen::active_selection_text() const {
+    if (!selection_anchor_ || !selection_focus_ || selection_anchor_->scroll_view != selection_focus_->scroll_view)
+        return std::nullopt;
+    const auto& anchor = *selection_anchor_;
+    const auto& focus = *selection_focus_;
+    if (anchor.row == focus.row && anchor.column == focus.column) return std::nullopt;
+    const auto& start = selection_anchor_precedes_focus() ? anchor : focus;
+    const auto& end = selection_anchor_precedes_focus() ? focus : anchor;
+    const auto first_row = std::min(start.row, end.row);
+    const auto last_row = std::max(start.row, end.row);
+    std::vector<std::string> selected;
+    for (auto row = first_row; row <= last_row; ++row) {
+        auto point = start;
+        point.row = row;
+        const auto line = selection_source_line(point);
+        const auto [first, last] = selection_columns(line, row, start, end);
+        if (last > first) {
+            auto sliced = slice_by_column(line, static_cast<std::size_t>(first), static_cast<std::size_t>(last - first), true);
+            selected.push_back(trim_end(strip_terminal_sequences(sliced ? *sliced : std::string{})));
+        } else {
+            selected.emplace_back();
+        }
+    }
+    auto text = std::string{};
+    for (std::size_t index = 0; index < selected.size(); ++index) {
+        if (index > 0) text.push_back('\n');
+        text += selected[index];
+    }
+    if (text.empty()) return std::nullopt;
+    return text;
+}
+
+std::vector<std::string> AltScreen::apply_text_selection(const std::vector<std::string>& lines) const {
+    const auto text = active_selection_text();
+    if (!text || !selection_anchor_ || !selection_focus_) return lines;
+    const auto& anchor = *selection_anchor_;
+    const auto& focus = *selection_focus_;
+    if (anchor.scroll_view != focus.scroll_view) return lines;
+    const auto& start = selection_anchor_precedes_focus() ? anchor : focus;
+    const auto& end = selection_anchor_precedes_focus() ? focus : anchor;
+    auto result = lines;
+    auto first_visible = std::ptrdiff_t{0};
+    auto last_visible = static_cast<std::ptrdiff_t>(result.size()) - 1;
+    auto column_offset = std::ptrdiff_t{0};
+    auto row_offset = std::ptrdiff_t{0};
+    if (start.scroll_view != nullptr && cached_frame_) {
+        const auto* box = detail::get_scroll_view_box(*cached_frame_, start.scroll_view);
+        if (box == nullptr) return lines;
+        first_visible = std::max<std::ptrdiff_t>({0, box->rect.y, box->clip.y});
+        last_visible = std::min<std::ptrdiff_t>({static_cast<std::ptrdiff_t>(result.size()) - 1,
+                box->rect.y + static_cast<std::ptrdiff_t>(box->rect.height) - 1,
+                box->clip.y + static_cast<std::ptrdiff_t>(box->clip.height) - 1});
+        column_offset = box->rect.x;
+        row_offset = box->rect.y - static_cast<std::ptrdiff_t>(start.scroll_view->scroll_top());
+    }
+    for (auto screen_row = first_visible; screen_row <= last_visible; ++screen_row) {
+        const auto source_row = screen_row - row_offset;
+        if (source_row < start.row || source_row > end.row || is_image_line(result[static_cast<std::size_t>(screen_row)]))
+            continue;
+        SelectionPoint source_point = start;
+        source_point.row = source_row;
+        const auto source_line = selection_source_line(source_point);
+        const auto [source_first, source_last] = selection_columns(source_line, source_row, start, end);
+        const auto first = std::max<std::ptrdiff_t>(0, column_offset + source_first);
+        const auto last = std::min<std::ptrdiff_t>(
+                static_cast<std::ptrdiff_t>(visible_width(result[static_cast<std::size_t>(screen_row)])),
+                column_offset + source_last);
+        if (last <= first) continue;
+        auto& line = result[static_cast<std::size_t>(screen_row)];
+        auto before = slice_by_column(line, 0, static_cast<std::size_t>(first), true);
+        auto selected = slice_by_column(
+                line, static_cast<std::size_t>(first), static_cast<std::size_t>(last - first), true);
+        auto after = slice_by_column(line,
+                static_cast<std::size_t>(last),
+                static_cast<std::size_t>(std::max<std::ptrdiff_t>(
+                        0, static_cast<std::ptrdiff_t>(visible_width(line)) - last)),
+                true);
+        line = (before ? *before : std::string{}) + apply_selection_inverse(selected ? *selected : std::string{}) +
+               (after ? *after : std::string{});
+    }
+    return result;
+}
+
+support::Expected<bool> AltScreen::copy_active_selection_to_clipboard() {
+    const auto text = active_selection_text();
+    if (!text) return false;
+    if (auto copied = selection_copy_sink_(*text); !copied) return std::unexpected(copied.error());
+    return true;
+}
+
 void AltScreen::scroll_by(std::ptrdiff_t lines) {
     // The viewport's unconsumed lines have no cross-viewport consumer here:
     // input routing hands a wheel delta to `detail::scroll_views_at` callers
@@ -532,9 +779,11 @@ support::ExpectedVoid AltScreen::render_viewport(
         }
     }
 
+    selection_source_lines_ = lines;
+    const auto selected_lines = apply_text_selection(lines);
     for (std::size_t row = 0; row < visible_rows; ++row) {
         const std::string empty;
-        const auto& desired = row < lines.size() ? lines[row] : empty;
+        const auto& desired = row < selected_lines.size() ? selected_lines[row] : empty;
         if (!full_repaint && row < previous_lines_.size() && previous_lines_[row] == desired) continue;
         // Absolute row placement with an explicit line erase: the viewport is
         // not a flow, so a shorter row must not leave the previous tail behind.
@@ -568,8 +817,9 @@ support::ExpectedVoid AltScreen::render_viewport(
     // Commit the frame only after it fully reached the terminal, so a failed
     // frame repaints instead of being skipped by the differential.
     previous_lines_.assign(visible_rows, std::string{});
-    for (std::size_t row = 0; row < visible_rows && row < lines.size(); ++row)
-        previous_lines_[row] = lines[row];
+    for (std::size_t row = 0; row < visible_rows && row < selected_lines.size(); ++row)
+        previous_lines_[row] = selected_lines[row];
+    selection_source_lines_ = lines;
     previous_dimensions_ = dimensions;
     cursor_ = resolved;
     first_render_ = false;
@@ -695,10 +945,9 @@ void AltScreen::handle_resize(TerminalDimensions dimensions) {
 
 bool AltScreen::handle_viewport_input(std::string_view data) {
     if (data == kFocusOut) {
-        // The terminal reports that the window lost focus: a press that left the
-        // terminal must not stay captured, the next click sequence starts over,
-        // and a hovered scrollbar is no longer under a pointer (pi
-        // `tui-alt-screen.ts:673-694`).
+        // An unfinished selection is a gesture and ends with focus loss; a
+        // released selection remains visible across focus changes (pi #1006).
+        if (selection_press_active_) clear_text_selection();
         clear_mouse_gesture();
         last_mouse_click_.reset();
         stop_scrollbar_drag();
@@ -746,6 +995,7 @@ void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
     const auto type = detail::pointer_event_type(packet);
     const auto event = create_mouse_event(packet, type);
 
+    if (selection_press_active_ && handle_selection_mouse_report(packet)) return;
     if (handle_gesture_mouse_report(packet, event)) return;
 
     // A report no gesture owns moves the scrollbar hover before any component
@@ -757,6 +1007,7 @@ void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
     if (auto result = dispatch_mouse_to_layout(event)) {
         const bool render = apply_mouse_dispatch_result(event, *result);
         if (type == MouseEventType::Press) {
+            clear_text_selection();
             mouse_press_target_ = result->target;
             mouse_press_point_ = std::pair{packet.x, packet.y};
             mouse_press_moved_ = false;
@@ -765,10 +1016,64 @@ void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
         return;
     }
 
-    // A pointer report no component claims is where the frozen root starts a
-    // text selection or an on-screen control interaction. Those consumers are
-    // #1015 and #1003; until one lands the report is consumed without an effect
-    // rather than leaking into typed input.
+    if (handle_selection_mouse_report(packet)) return;
+    // Unclaimed pointer reports are consumed by the fullscreen root, which is
+    // also the owner of text selection on terminal-rendered content.
+}
+
+bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet) {
+    const auto button = packet.button & 3;
+    if (button != 0 && !(packet.release && button == 3)) return false;
+
+    if (packet.release) {
+        if (!selection_press_active_) return false;
+        selection_press_active_ = false;
+        const auto point = selection_point_at(packet.x, packet.y,
+                selection_anchor_ ? selection_anchor_->scroll_view : nullptr);
+        if (!point || !selection_anchor_) {
+            clear_text_selection();
+            request_render();
+            return true;
+        }
+        selection_focus_ = *point;
+        const bool is_click = !selection_dragged_ && selection_anchor_->scroll_view == point->scroll_view &&
+                              selection_anchor_->row == point->row && selection_anchor_->column == point->column;
+        if (is_click) {
+            auto click = create_mouse_event(packet, MouseEventType::Click, std::nullopt, std::size_t{1});
+            if (auto result = dispatch_mouse_to_layout(click)) {
+                clear_text_selection();
+                if (apply_mouse_dispatch_result(click, *result)) request_render();
+                return true;
+            }
+        }
+        if (copy_on_select_) (void)copy_active_selection_to_clipboard();
+        request_render();
+        return true;
+    }
+
+    if ((packet.button & 32) != 0) {
+        if (!selection_press_active_ || !selection_anchor_) return true;
+        selection_dragged_ = true;
+        if (auto point = selection_point_at(packet.x, packet.y, selection_anchor_->scroll_view)) selection_focus_ = *point;
+        request_render();
+        return true;
+    }
+
+    selection_press_active_ = true;
+    selection_dragged_ = false;
+    const auto scroll_views = cached_frame_ ? detail::scroll_views_at(*cached_frame_, packet.x, packet.y)
+                                            : std::vector<ScrollView*>{};
+    const auto scroll_view = scroll_views.empty() ? nullptr : scroll_views.front();
+    auto anchor = selection_point_at(packet.x, packet.y, scroll_view);
+    if (!anchor) {
+        clear_text_selection();
+        return true;
+    }
+    selection_anchor_ = *anchor;
+    selection_focus_ = *anchor;
+    last_mouse_click_.reset();
+    request_render();
+    return true;
 }
 
 bool AltScreen::handle_gesture_mouse_report(const detail::MousePacket& packet, const MouseEvent& event) {
@@ -933,6 +1238,7 @@ bool AltScreen::handle_scrollbar_mouse_report(const detail::MousePacket& packet)
             continue;
         }
 
+        clear_text_selection();
         set_scrollbar_hover(scroll_view);
         const auto grab_offset =
                 packet.y >= geometry->thumb_top &&
@@ -1003,9 +1309,11 @@ void AltScreen::stop_scrollbar_hover() { set_scrollbar_hover(nullptr); }
 void AltScreen::invalidate_composition_cache() noexcept {
     // The frame boxes and the document rows name components by pointer, and a
     // composition that changed may have destroyed one: a hit test needs the next
-    // frame, never a stale name.
+    // frame, never a stale name. A selection can also name a viewport being
+    // removed, so its coordinates are no longer meaningful after this point.
     cached_frame_.reset();
     implicit_document_rows_.clear();
+    clear_text_selection();
 }
 
 void AltScreen::clear_mouse_gesture() noexcept {

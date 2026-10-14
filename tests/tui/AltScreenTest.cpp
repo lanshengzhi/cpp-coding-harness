@@ -112,6 +112,67 @@ public:
 
 } // namespace
 
+TEST_CASE("AltScreen selects styled wrapped CJK text, highlights cells, and copies through its sink",
+        "[tui][alt-screen][selection][issue1006][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 6, .rows = 4});
+    std::vector<std::string> copied;
+    cch::tui::AltScreen tui(terminal, cch::tui::AltScreenOptions{.copy_on_select = false,
+            .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
+                copied.emplace_back(text);
+                return {};
+            }});
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("\x1b[31mred界abc\x1b[0m", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<32;2;2M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;2;2m"));
+    REQUIRE(tui.render());
+
+    CHECK(tui.has_active_selection());
+    CHECK(all_output(terminal).find("\x1b[7m") != std::string::npos);
+    const auto result = tui.copy_active_selection_to_clipboard();
+    REQUIRE(result);
+    CHECK(*result);
+    REQUIRE(copied == std::vector<std::string>{"ed界\nab"});
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("AltScreen keeps selection coordinates across content updates and focus changes",
+        "[tui][alt-screen][selection][issue1006][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 4});
+    std::vector<std::string> copied;
+    cch::tui::AltScreen tui(terminal, cch::tui::AltScreenOptions{.copy_on_select = false,
+            .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
+                copied.emplace_back(text);
+                return {};
+            }});
+    auto text = std::make_unique<cch::tui::Text>("alpha\nbeta\ngamma\ndelta", 0, 0);
+    auto* text_pointer = text.get();
+    REQUIRE(tui.add_child(std::move(text)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<32;5;2M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;5;2m"));
+    CHECK(tui.has_active_selection());
+
+    text_pointer->set_text("omega\nsigma\ngamma\ndelta");
+    REQUIRE(tui.render());
+    const auto updated = tui.copy_active_selection_to_clipboard();
+    REQUIRE(updated);
+    CHECK(*updated);
+    REQUIRE(copied == std::vector<std::string>{"mega\nsigma"});
+
+    REQUIRE(terminal.inject_input("\x1b[O"));
+    REQUIRE(terminal.inject_input("\x1b[I"));
+    CHECK(tui.has_active_selection());
+    REQUIRE(terminal.inject_input("\x1b[<0;2;3M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;2;3m"));
+    CHECK_FALSE(tui.has_active_selection());
+    REQUIRE(tui.stop());
+}
+
 TEST_CASE("AltScreen enters the alternate buffer, disables autowrap, and restores the main buffer on stop",
         "[tui][alt-screen][issue997][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 3});
