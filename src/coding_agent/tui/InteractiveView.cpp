@@ -728,7 +728,7 @@ cch::tui::InputAdmissionOutcome InteractiveView::handle_input(const cch::tui::In
         // pi's main-editor `app.message.copy` binding (P14: the tree
         // selector matches the same action through the shared registry).
         if (keys.matches(*key, "app.message.copy")) {
-            emit_action(CopyLastMessageAction{}, "Native TUI copy action failed");
+            emit_action(CopyLastMessageAction{.prefer_selection = true}, "Native TUI copy action failed");
             return cch::tui::InputAdmissionOutcome::Consumed;
         }
     }

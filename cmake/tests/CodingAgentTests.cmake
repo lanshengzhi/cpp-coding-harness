@@ -162,6 +162,7 @@ include_guard(GLOBAL)
         tests/Catch2Main.cpp
         tests/support/ScriptedProvider.cpp
         tests/support/ModelRuntimeTestSupport.cpp
+        tests/coding_agent/tui/AltScreenHostTest.cpp
         tests/coding_agent/tui/BootTrustInteractiveTest.cpp
         tests/coding_agent/tui/ChatContainerStatusTest.cpp
         tests/coding_agent/tui/ClipboardInteractiveTest.cpp

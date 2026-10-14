@@ -8,6 +8,8 @@
 #include "support/AsyncResultBridge.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/InteractiveEngine.hpp"
+
+#include "coding_agent/tui/AltScreenHost.hpp"
 #include "coding_agent/tui/ClipboardPaste.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
 #include "coding_agent/tui/ExternalEditor.hpp"
@@ -142,7 +144,13 @@ void InteractiveEngine::dispatch(ForkSessionAction) { session_flows_->open_fork(
 
 void InteractiveEngine::dispatch(NewSessionAction) { session_flows_->open_new(); }
 
-void InteractiveEngine::dispatch(CopyLastMessageAction) { handle_copy_last_message(); }
+void InteractiveEngine::dispatch(CopyLastMessageAction action) {
+    if (action.prefer_selection && alt_screen_host_ != nullptr && alt_screen_host_->copy_selection_for_keyboard())
+        return;
+    handle_copy_last_message();
+}
+
+void InteractiveEngine::set_alt_screen_host(AltScreenHost* host) noexcept { alt_screen_host_ = host; }
 
 void InteractiveEngine::dispatch(OpenTreeSelectorAction) { session_flows_->open_tree(); }
 

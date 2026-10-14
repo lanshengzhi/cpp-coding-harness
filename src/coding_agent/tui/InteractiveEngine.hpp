@@ -59,6 +59,7 @@
 
 namespace cch::coding_agent::tui {
 
+class AltScreenHost;
 class AuthFlowController;
 class InteractiveView;
 class McpManagerFlow;
@@ -135,6 +136,11 @@ public:
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> finish();
 
     [[nodiscard]] std::size_t render_count() const noexcept { return render_count_; }
+
+    /// Borrow a reusable fullscreen host for pi's keyboard selection-copy
+    /// preference. The host must outlive its registration; regular mode leaves
+    /// this unset and keeps copying the last assistant message.
+    void set_alt_screen_host(AltScreenHost* host) noexcept;
 
 private:
     // ── Submission kinds (folded from the deleted InteractionPolicy) ──────
@@ -488,6 +494,7 @@ private:
     /// replace_session().
     std::vector<std::unique_ptr<AgentSession>> retired_sessions_;
     cch::tui::Terminal& terminal_; // must outlive this interactive run.
+    AltScreenHost* alt_screen_host_{nullptr}; // borrowed fullscreen host, when a fullscreen consumer is active.
     std::unique_ptr<cch::tui::TuiScheduler> tui_scheduler_;
     cch::tui::MainScreen main_screen_;
     cch::tui::ITui& tui_; // main_screen_ outlives this interface and every consumer.

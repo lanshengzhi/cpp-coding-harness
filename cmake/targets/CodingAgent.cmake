@@ -107,6 +107,7 @@ cch_parity_declare_target(
     ROLE implementation
     OWNER cch_coding_agent
     SOURCES
+        src/coding_agent/tui/AltScreenHost.cpp
         src/coding_agent/tui/AssistantMessageComponent.cpp
         src/coding_agent/tui/AuthFlowController.cpp
         src/coding_agent/tui/BashExecutionComponent.cpp

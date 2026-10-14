@@ -253,7 +253,9 @@ TEST_CASE(
 
     static_cast<void>(view.handle_input(key("x", /*ctrl=*/true)));
     REQUIRE(fixture.actions.size() == 12);
-    CHECK(std::holds_alternative<coding_agent::tui::CopyLastMessageAction>(fixture.actions[11]));
+    const auto* copy = std::get_if<coding_agent::tui::CopyLastMessageAction>(&fixture.actions[11]);
+    REQUIRE(copy != nullptr);
+    CHECK(copy->prefer_selection);
 
     // Session actions are unbound by default and reachable through the
     // explicit overrides in the fixture registry.

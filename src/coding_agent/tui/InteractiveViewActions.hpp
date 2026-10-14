@@ -97,8 +97,11 @@ struct ForkSessionAction {};
 /// Start the new-session flow (pi `app.session.new`).
 struct NewSessionAction {};
 
-/// Copy the last message to the clipboard (pi `app.message.copy`).
-struct CopyLastMessageAction {};
+/// Copy the fullscreen selection when pi `app.message.copy` prefers it;
+/// otherwise copy the last assistant message.
+struct CopyLastMessageAction {
+    bool prefer_selection{false};
+};
 
 /// Open the session tree selector (pi `app.session.tree`).
 struct OpenTreeSelectorAction {};

@@ -1,7 +1,10 @@
 #include "ai/ModelStreamBridge.hpp"
+#include "coding_agent/tui/AltScreenHost.hpp"
 #include "coding_agent/tui/ClipboardPaste.hpp"
+#include "coding_agent/tui/InteractiveEngine.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
+#include "TestTuiActionSink.hpp"
 #include "support/FakeTool.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/EnvVarGuard.hpp"
@@ -15,6 +18,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/tui/NativeClipboard.hpp>
+#include <cch/tui/Text.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "coding_agent/AgentSession.hpp"
@@ -78,6 +82,43 @@ struct TestRunOptions {
             .with_action_sink(std::move(options.action_sink))
             .with_session_facts(std::move(options.session_facts))
             .build();
+}
+
+/// pi #1006 retained-selection precondition: `AltScreen::stop` keeps a
+/// completed selection, so a fullscreen host can carry one while the regular
+/// interactive engine owns the same terminal. Copy-on-select stays disabled
+/// so manufacturing the selection does not itself emit a clipboard action.
+void make_retained_alpha_selection(tui::AltScreen& alt_screen, tui::VirtualTerminal& terminal) {
+    alt_screen.set_copy_on_select(false);
+    REQUIRE(alt_screen.add_child(std::make_unique<tui::Text>("alpha beta", 0, 0)));
+    REQUIRE(alt_screen.start());
+    // `selection_source_lines_` fills during a rendered frame; without one the
+    // selection has no text to copy (the toolkit selection tests render first).
+    REQUIRE(alt_screen.render());
+    // SGR mouse press-drag-release across "alpha".
+    REQUIRE(terminal.inject_input("\x1b[<0;1;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<32;5;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;5;1m"));
+    CHECK(alt_screen.has_active_selection());
+    REQUIRE(alt_screen.stop());
+}
+
+/// `run_interactive_mode` owns its engine privately; host-registered runs
+/// replicate its sequence so the fullscreen host is set before `start`.
+[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_engine_with_host(
+        std::shared_ptr<coding_agent::tui::InteractiveEngine> engine, coding_agent::tui::InteractiveSessionRun run) {
+    if (auto started = engine->start(std::move(run)); !started) co_return std::unexpected(started.error());
+    if (auto warning = co_await engine->append_project_trust_warning_if_needed(); !warning) {
+        if (warning.error().code == support::ErrorCode::Cancelled) co_return co_await engine->finish();
+        auto finished = co_await engine->finish();
+        if (!finished) co_return std::unexpected(finished.error());
+        co_return std::unexpected(warning.error());
+    }
+    boost::system::error_code wait_error;
+    if (!engine->exit_requested()) {
+        co_await engine->exit_wait().async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+    }
+    co_return co_await engine->finish();
 }
 
 [[nodiscard]] tests::ModelsSessionOptions session_options(
@@ -4544,4 +4585,224 @@ TEST_CASE("Native TUI starts regular rendering on a dirty screen at physical row
 
     run_from(1);
     run_from(4);
+}
+
+TEST_CASE("Native TUI keyboard copy prefers a retained fullscreen selection",
+        "[coding_agent][tui][fullscreen][copy][issue1006][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    coding_agent::tui::testing::ActionSinkRecorder recorder;
+    auto host_sink = recorder.make_sink();
+    const std::size_t host_generation = 41;
+    std::vector<coding_agent::tui::ClipboardCopyResult> feedback;
+    tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
+    coding_agent::tui::AltScreenHost host(
+            terminal, host_sink, host_generation, [&feedback](const coding_agent::tui::ClipboardCopyResult& result) {
+                feedback.push_back(result);
+            });
+    make_retained_alpha_selection(host.alt_screen(), terminal);
+
+    boost::asio::io_context io;
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(terminal, io.get_executor());
+    engine->set_alt_screen_host(&host);
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            run_engine_with_host(engine,
+                    make_run(*created->session,
+                            {
+                                    .agent_config_directory = config.path(),
+                                    .action_sink = recorder.make_sink(),
+                            })),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    CHECK(terminal.modes().started);
+
+    // A last assistant message exists, so a fallback copy would be observable.
+    REQUIRE(terminal.inject_input("hello\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 3);
+
+    // pi `app.message.copy` (ctrl+x) prefers the retained selection: exactly
+    // one selection clipboard action, generation-stamped by the host, and no
+    // last-message fallback.
+    REQUIRE(terminal.inject_input("\x18"));
+    drain_ready(io);
+    REQUIRE(recorder.write_clipboard.size() == 1);
+    CHECK(recorder.write_clipboard.front().text == "alpha");
+    CHECK(recorder.generations == std::vector<std::size_t>{host_generation});
+    REQUIRE(feedback.size() == 1);
+    CHECK(feedback.front().copied);
+    CHECK(feedback.front().error.empty());
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+    CHECK_FALSE(terminal.modes().started);
+    CHECK(terminal.modes().cursor_visible);
+}
+
+TEST_CASE("Native TUI keyboard selection copy failure suppresses the last-message copy",
+        "[coding_agent][tui][fullscreen][copy][issue1006][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    coding_agent::tui::testing::ActionSinkRecorder recorder;
+    auto host_sink = recorder.make_sink();
+    const std::size_t host_generation = 7;
+    std::vector<coding_agent::tui::ClipboardCopyResult> feedback;
+    tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
+    coding_agent::tui::AltScreenHost host(
+            terminal, host_sink, host_generation, [&feedback](const coding_agent::tui::ClipboardCopyResult& result) {
+                feedback.push_back(result);
+            });
+    make_retained_alpha_selection(host.alt_screen(), terminal);
+
+    boost::asio::io_context io;
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(terminal, io.get_executor());
+    engine->set_alt_screen_host(&host);
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            run_engine_with_host(engine,
+                    make_run(*created->session,
+                            {
+                                    .agent_config_directory = config.path(),
+                                    .action_sink = recorder.make_sink(),
+                            })),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("hello\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 3);
+
+    // pi reports the clipboard failure and suppresses the last-message
+    // fallback after an attempted selection copy.
+    recorder.state->clipboard_copy_result = coding_agent::tui::ClipboardCopyResult{
+            .copied = false, .error = "Clipboard unavailable: install wl-clipboard"};
+    REQUIRE(terminal.inject_input("\x18"));
+    drain_ready(io);
+    REQUIRE(recorder.write_clipboard.size() == 1);
+    CHECK(recorder.write_clipboard.front().text == "alpha");
+    CHECK(recorder.generations == std::vector<std::size_t>{host_generation});
+    REQUIRE(feedback.size() == 1);
+    CHECK_FALSE(feedback.front().copied);
+    CHECK(feedback.front().error == "Clipboard unavailable: install wl-clipboard");
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE("Native TUI keyboard copy falls back to the last assistant message without a fullscreen host",
+        "[coding_agent][tui][fullscreen][copy][issue1006][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    coding_agent::tui::testing::ActionSinkRecorder recorder;
+    tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal,
+                    make_run(*created->session,
+                            {
+                                    .agent_config_directory = config.path(),
+                                    .action_sink = recorder.make_sink(),
+                            })),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("hello\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 3);
+
+    // Regular mode leaves the fullscreen host unset, so ctrl+x copies the
+    // last assistant message through one engine-stamped clipboard action.
+    REQUIRE(terminal.inject_input("\x18"));
+    drain_ready(io);
+    REQUIRE(recorder.write_clipboard.size() == 1);
+    CHECK(recorder.write_clipboard.front().text == "fake: hello");
+    CHECK(recorder.generations.size() == 1);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE("Native TUI keyboard copy falls back when the fullscreen host has no eligible selection",
+        "[coding_agent][tui][fullscreen][copy][issue1006][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    coding_agent::tui::testing::ActionSinkRecorder recorder;
+    auto host_sink = recorder.make_sink();
+    const std::size_t host_generation = 3;
+    tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
+    // Copy-on-select stays enabled (the default): pi's keyboard preference
+    // only consults the selection when automatic copy-on-select is disabled.
+    coding_agent::tui::AltScreenHost host(terminal, host_sink, host_generation);
+
+    boost::asio::io_context io;
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(terminal, io.get_executor());
+    engine->set_alt_screen_host(&host);
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            run_engine_with_host(engine,
+                    make_run(*created->session,
+                            {
+                                    .agent_config_directory = config.path(),
+                                    .action_sink = recorder.make_sink(),
+                            })),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+
+    REQUIRE(terminal.inject_input("hello\r"));
+    drain_ready(io);
+    CHECK(created->session->message_count() == 3);
+
+    REQUIRE(terminal.inject_input("\x18"));
+    drain_ready(io);
+    REQUIRE(recorder.write_clipboard.size() == 1);
+    CHECK(recorder.write_clipboard.front().text == "fake: hello");
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
 }
