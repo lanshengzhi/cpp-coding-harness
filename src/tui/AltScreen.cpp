@@ -108,6 +108,9 @@ AltScreen::~AltScreen() {
 bool AltScreen::owns(const Component* component) const {
     if (component == nullptr) return false;
     if (layout_root_) return layout_root_->contains(component);
+    // The implicit document and its viewport are live routing nodes in the
+    // child composition, though they are not themselves mounted children.
+    if (component == implicit_scroll_view_.get() || component == implicit_scroll_view_->child_.get()) return true;
     for (const auto& child : children_) {
         if (child && child->contains(component)) return true;
     }
@@ -777,17 +780,26 @@ bool AltScreen::handle_gesture_mouse_report(const detail::MousePacket& packet, c
 
 std::optional<MouseDispatchResult> AltScreen::dispatch_mouse_to_layout(const MouseEvent& event) {
     if (!cached_frame_) return std::nullopt;
+    struct Candidate {
+        Component* component;
+        detail::LayoutRect rect;
+    };
+    std::vector<Candidate> candidates;
     std::vector<const Component*> visited;
     for (const auto* box : detail::layout_boxes_at(*cached_frame_, event.screen_x, event.screen_y)) {
         if (box->component == nullptr) continue;
         if (std::find(visited.begin(), visited.end(), box->component) != visited.end()) continue;
         visited.push_back(box->component);
+        candidates.push_back(Candidate{.component = box->component, .rect = box->rect});
+    }
+    for (const auto& candidate : candidates) {
+        if (!owns(candidate.component)) continue;
         auto target_event = event;
-        target_event.x = event.screen_x - box->rect.x;
-        target_event.y = event.screen_y - box->rect.y;
-        target_event.width = box->rect.width;
-        target_event.height = box->rect.height;
-        if (auto result = dispatch_mouse_event(*box->component, target_event)) return result;
+        target_event.x = event.screen_x - candidate.rect.x;
+        target_event.y = event.screen_y - candidate.rect.y;
+        target_event.width = candidate.rect.width;
+        target_event.height = candidate.rect.height;
+        if (auto result = dispatch_mouse_event(*candidate.component, target_event)) return result;
     }
     return std::nullopt;
 }

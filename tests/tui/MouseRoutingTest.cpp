@@ -57,8 +57,12 @@ class MouseProbe final : public cch::tui::Component,
 public:
     using Handler = std::function<std::optional<MouseEventResult>(const MouseEvent&)>;
 
-    explicit MouseProbe(std::vector<std::string> lines, Handler handler = {})
-        : lines_(std::move(lines)), handler_(std::move(handler)) {}
+    explicit MouseProbe(std::vector<std::string> lines, Handler handler = {}, std::function<void()> on_destroy = {})
+        : lines_(std::move(lines)), handler_(std::move(handler)), on_destroy_(std::move(on_destroy)) {}
+
+    ~MouseProbe() override {
+        if (on_destroy_) on_destroy_();
+    }
 
     void set_handler(Handler handler) { handler_ = std::move(handler); }
 
@@ -106,6 +110,7 @@ public:
 private:
     std::vector<std::string> lines_;
     Handler handler_;
+    std::function<void()> on_destroy_;
 };
 
 [[nodiscard]] MouseEvent pointer_event(MouseEventType type, std::ptrdiff_t x, std::ptrdiff_t y) {
@@ -428,6 +433,69 @@ TEST_CASE("Box offsets a hit by its padding and content width", "[tui][mouse][is
 
     // Below the child's two rows the box routes nothing.
     CHECK_FALSE(box.handle_mouse_forwarded(pointer_event(MouseEventType::Press, 1, 4)).has_value());
+}
+
+TEST_CASE("AltScreen ignores a cached component destroyed before the next frame", "[tui][mouse][issue1034][spec]") {
+    VirtualTerminal terminal({.columns = 8, .rows = 2});
+    cch::tui::AltScreen tui(terminal);
+    auto stack = std::make_unique<cch::tui::VStack>();
+    auto* stack_pointer = stack.get();
+    auto deliveries = std::make_shared<std::size_t>(0);
+    auto destroyed = std::make_shared<bool>(false);
+    auto probe = std::make_unique<MouseProbe>(
+            std::vector<std::string>{"target"},
+            [deliveries](const MouseEvent&) -> std::optional<MouseEventResult> {
+                ++*deliveries;
+                return MouseEventResult{.handled = true};
+            },
+            [destroyed] { *destroyed = true; });
+    auto* probe_pointer = probe.get();
+    REQUIRE(stack->add_child(std::move(probe)));
+    tui.set_layout_root(std::move(stack));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // Mutating the mounted layout directly leaves AltScreen's completed frame
+    // cached. Destroy the component and inject before a replacement render.
+    auto detached = stack_pointer->remove_child(probe_pointer);
+    REQUIRE(detached != nullptr);
+    detached.reset();
+    CHECK(*destroyed);
+
+    REQUIRE(terminal.inject_input("\x1b[<0;1;1M"));
+    CHECK(*deliveries == 0);
+    CHECK(tui.stop());
+}
+
+TEST_CASE("AltScreen revalidates later mouse candidates after reentrant layout replacement",
+        "[tui][mouse][issue1034][spec]") {
+    VirtualTerminal terminal({.columns = 8, .rows = 2});
+    cch::tui::AltScreen tui(terminal);
+    auto original = std::make_unique<cch::tui::VStack>();
+    auto* original_pointer = original.get();
+    auto probe = std::make_unique<MouseProbe>(std::vector<std::string>{"target"});
+    auto* probe_pointer = probe.get();
+    std::size_t deliveries = 0;
+    probe_pointer->set_handler([&](const MouseEvent&) -> std::optional<MouseEventResult> {
+        ++deliveries;
+        auto moved = original_pointer->remove_child(probe_pointer);
+        REQUIRE(moved != nullptr);
+        auto replacement = std::make_unique<cch::tui::VStack>();
+        REQUIRE(replacement->add_child(std::move(moved)));
+        tui.set_layout_root(std::move(replacement));
+        return std::nullopt;
+    });
+    REQUIRE(original->add_child(std::move(probe)));
+    tui.set_layout_root(std::move(original));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    // The child is the first hit candidate. Its handler moves itself into a new
+    // tree, which destroys the old root and the cached boxes naming that root.
+    // The old root is a later candidate and must be skipped from safe snapshots.
+    REQUIRE(terminal.inject_input("\x1b[<0;1;1M"));
+    CHECK(deliveries == 1);
+    CHECK(tui.stop());
 }
 
 TEST_CASE("AltScreen clicks a nested mouse region through the cached frame", "[tui][mouse][issue1002][spec]") {
