@@ -120,6 +120,19 @@ verified artifact directly; expected values are not generated from Pike output.
 `capture/selection-scenarios.mts` executes the frozen components directly, and its digest is
 recorded in the manifest.
 
+For #1009, the same artifact adds `osc8-click-and-drag-routing` and `linux-secondary-button-paste`.
+The OSC 8 case records the frozen character click opening on release, a count-two
+word-granularity click that does not open another URL, and a drag that does not open a URL. The
+frozen OSC 8 capture click is replayed against Pike's OSC 8 `Text` to verify link routing. The Linux
+case records frozen pi's no-op for the secondary button. Issue #1009 explicitly requires the Linux
+route, so Pike handles raw unmodified button 2 after component dispatch declines and before text
+selection, invokes the native clipboard path once on press, and ignores release and motion reports.
+The frozen Windows-only gate is
+`packages/tui/src/tui-alt-screen.ts` `handleRightClickPaste` (lines 1011–1028); its named test is
+`packages/tui/test/tui-alt-screen.test.ts` `invokes the right-click paste handler only on Windows outside VS Code`
+(lines 421–457). This Linux behavior is an intentional compatibility deviation. The scenarios are
+captured from the unmodified frozen checkout.
+
 For #1007, the same artifact holds nine frozen multi-click scenarios for pi's word/line selection
 cycle: `multiclick-word-line-cycle` (press/double/triple over one word), `multiclick-word-joiners-and-classes`
 (`/` `-` joiner chains, the rule-based word classes and dictionary-script boundaries),

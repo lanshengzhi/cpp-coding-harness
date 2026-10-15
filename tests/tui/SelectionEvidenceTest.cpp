@@ -1,5 +1,5 @@
-// Named pi-v1.0.4 acceptance for fullscreen text selection (#1006) and
-// frozen multi-click word/line selection (#1007). Every expectation comes
+// Named pi-v1.0.4 acceptance for fullscreen text selection (#1006),
+// multi-click selection (#1007) and mouse action routing (#1009). Expectations
 // from the verified frozen bundle; the cases exercise the public AltScreen,
 // Text, ScrollView and VirtualTerminal seams.
 
@@ -50,6 +50,14 @@ void drag(cch::tui::VirtualTerminal& terminal, const JsonValue& inputs) {
 
 [[nodiscard]] cch::support::Expected<JsonValue> selection_bundle() {
     return cch::tests::read_pi_tui_evidence("selection.json");
+}
+
+[[nodiscard]] const JsonValue& mouse_scenario_of(const JsonValue& bundle, std::string_view name) {
+    for (const auto& scenario : bundle.at("scenarios").get_array()) {
+        if (scenario.at("name").get_string() == name) return scenario;
+    }
+    FAIL("missing frozen mouse routing scenario");
+    return bundle;
 }
 
 [[nodiscard]] std::vector<std::string> copied_texts(const JsonValue& values) {
@@ -169,7 +177,87 @@ void replay_multiclick_scenario(std::string_view name) {
     REQUIRE(tui.stop());
 }
 
+void replay_mouse_routing_scenario(std::string_view name) {
+    const auto bundle = selection_bundle();
+    REQUIRE(bundle);
+    const auto& scenario = mouse_scenario_of(*bundle, name);
+    const auto& dimensions = scenario.at("dimensions");
+    const auto& inputs = scenario.at("inputs");
+    const auto& expected = scenario.at("expected");
+    cch::tui::VirtualTerminal terminal({
+            .columns = static_cast<std::size_t>(dimensions.at("columns").get_number()),
+            .rows = static_cast<std::size_t>(dimensions.at("rows").get_number()),
+    });
+    cch::tui::AltScreen tui(terminal);
+    std::vector<std::string> opened;
+    std::size_t paste_count = 0;
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    tui.set_link_open_sink([&opened](std::string_view url) noexcept { opened.emplace_back(url); });
+    tui.set_right_click_paste_handler([&paste_count]() -> cch::support::ExpectedVoid {
+        ++paste_count;
+        return {};
+    });
+    const auto routed_text = name == "osc8-click-and-drag-routing"
+                                     ? cch::tui::hyperlink("alpha", inputs.at("url").get_string()) + " plain"
+                                     : "alpha beta";
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>(routed_text, 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    if (name == "osc8-click-and-drag-routing") {
+        const auto url = inputs.at("url").get_string();
+        const auto text = inputs.at("text").get_string();
+        REQUIRE(cch::tui::osc8_link_at_column(text, 1) == std::nullopt);
+        REQUIRE(cch::tui::osc8_link_at_column(routed_text, 1) == url);
+        REQUIRE(terminal.inject_input("\x1b[<0;2;1M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;2;1m"));
+        CHECK(opened == copied_texts(expected.at("afterClick")));
+        now += std::chrono::milliseconds{150};
+        REQUIRE(terminal.inject_input("\x1b[<0;2;1M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;2;1m"));
+        CHECK(opened == copied_texts(expected.at("afterWordClick")));
+        now += std::chrono::milliseconds{150};
+        REQUIRE(terminal.inject_input("\x1b[<0;2;1M"));
+        REQUIRE(terminal.inject_input("\x1b[<32;5;1M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;5;1m"));
+        CHECK(opened == copied_texts(expected.at("afterDrag")));
+    } else {
+        CHECK(expected.at("afterPress").get_number() == 0);
+        REQUIRE(inputs.at("platform").get_string() == "linux");
+        const auto& press = inputs.at("press");
+        CHECK(press.at("button").get_number() == 2);
+        REQUIRE(terminal.inject_input("\x1b[<" + std::to_string(static_cast<int>(press.at("button").get_number())) +
+                                      ";" + std::to_string(static_cast<int>(press.at("x").get_number())) + ";" +
+                                      std::to_string(static_cast<int>(press.at("y").get_number())) + "M"));
+        CHECK(paste_count == 1);
+        CHECK(expected.at("afterPress").get_number() == 0);
+        const auto release_button = static_cast<int>(inputs.at("releaseButton").get_number());
+        REQUIRE(terminal.inject_input("\x1b[<" + std::to_string(release_button) + ";" +
+                                      std::to_string(static_cast<int>(press.at("x").get_number())) + ";" +
+                                      std::to_string(static_cast<int>(press.at("y").get_number())) + "m"));
+        const auto motion_button = static_cast<int>(inputs.at("motionButton").get_number());
+        REQUIRE(terminal.inject_input("\x1b[<" + std::to_string(motion_button) + ";" +
+                                      std::to_string(static_cast<int>(press.at("x").get_number())) + ";" +
+                                      std::to_string(static_cast<int>(press.at("y").get_number())) + "M"));
+        CHECK(paste_count == 1);
+        CHECK(expected.at("afterMotion").get_number() == 0);
+        CHECK_FALSE(tui.has_active_selection());
+    }
+    REQUIRE(tui.stop());
+}
+
 } // namespace
+
+TEST_CASE("AltScreen OSC 8 clicks and drags replay named frozen observations",
+        "[tui][alt-screen][mouse][issue1009][compat-pi]") {
+    replay_mouse_routing_scenario("osc8-click-and-drag-routing");
+}
+
+TEST_CASE("AltScreen secondary button replays named Linux paste routing observation",
+        "[tui][alt-screen][mouse][issue1009][compat-pi]") {
+    replay_mouse_routing_scenario("linux-secondary-button-paste");
+}
 
 TEST_CASE("AltScreen selection replays styled CJK cells across wrapped rows and copies frozen text",
         "[tui][alt-screen][selection][issue1006][compat-pi]") {

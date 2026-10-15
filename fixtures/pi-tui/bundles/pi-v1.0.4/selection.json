@@ -26,12 +26,75 @@
     }
   },
   "sourceEndpoints": [
-    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleSelectionMouseEvent,getActiveSelectionText,copySelectionToClipboard,copyTextToClipboard,hasActiveSelection,copyActiveSelectionToClipboard,setCopyOnSelect,getClickCount,getWordSelection,getLineSelection,updateSelectionFocus,handleScrollbarMouseEvent,handleViewportInput",
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleSelectionMouseEvent,handleRightClickPaste,handleViewportInput",
+    "packages/tui/src/utils.ts:getOsc8LinkAtColumn",
     "packages/tui/src/components/text.ts:Text.render,setText",
     "packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo",
     "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,getViewport,waitForRender"
   ],
   "scenarios": [
+    {
+      "name": "osc8-click-and-drag-routing",
+      "dimensions": {
+        "columns": 20,
+        "rows": 3
+      },
+      "inputs": {
+        "url": "https://example.com/link",
+        "text": "alpha plain",
+        "click": {
+          "x": 2,
+          "y": 1
+        },
+        "doubleClick": {
+          "x": 2,
+          "y": 1,
+          "advanceMs": 150
+        },
+        "drag": [
+          {
+            "x": 2,
+            "y": 1
+          },
+          {
+            "x": 5,
+            "y": 1
+          }
+        ]
+      },
+      "expected": {
+        "afterClick": [
+          "https://example.com/link"
+        ],
+        "afterWordClick": [
+          "https://example.com/link"
+        ],
+        "afterDrag": [
+          "https://example.com/link"
+        ]
+      }
+    },
+    {
+      "name": "linux-secondary-button-paste",
+      "dimensions": {
+        "columns": 20,
+        "rows": 3
+      },
+      "inputs": {
+        "platform": "linux",
+        "press": {
+          "button": 2,
+          "x": 3,
+          "y": 1
+        },
+        "releaseButton": 2,
+        "motionButton": 34
+      },
+      "expected": {
+        "afterPress": 0,
+        "afterMotion": 0
+      }
+    },
     {
       "name": "styled-cjk-wrapped-selection",
       "dimensions": {
@@ -39,7 +102,7 @@
         "rows": 4
       },
       "inputs": {
-        "text": "\u001b[31mred界abc\u001b[0m",
+        "text": "\u001b[31mred\u754cabc\u001b[0m",
         "drag": [
           {
             "x": 2,
@@ -54,7 +117,7 @@
       },
       "expected": {
         "before": [
-          "red界",
+          "red\u754c",
           "abc",
           "",
           ""
@@ -82,7 +145,7 @@
               "foreground": 1
             },
             {
-              "text": "界",
+              "text": "\u754c",
               "width": 2,
               "inverse": true,
               "foreground": 1
@@ -141,7 +204,7 @@
         ],
         "copyResult": true,
         "copied": [
-          "ed界\nab"
+          "ed\u754c\nab"
         ],
         "copyOnSelect": false
       }
@@ -380,7 +443,7 @@
         "rows": 6
       },
       "inputs": {
-        "text": "src/main-component util\na.b ee_ff 3.14 カタカナ\n中x foo,bar",
+        "text": "src/main-component util\na.b ee_ff 3.14 \u30ab\u30bf\u30ab\u30ca\n\u4e2dx foo,bar",
         "steps": [
           {
             "action": "press",
@@ -522,7 +585,7 @@
             "x": 16,
             "y": 2,
             "advanceMs": 400,
-            "target": "カタカナ (Katakana run)"
+            "target": "\u30ab\u30bf\u30ab\u30ca (Katakana run)"
           },
           {
             "action": "release",
@@ -534,7 +597,7 @@
             "x": 16,
             "y": 2,
             "advanceMs": 150,
-            "target": "カタカナ (second)"
+            "target": "\u30ab\u30bf\u30ab\u30ca (second)"
           },
           {
             "action": "release",
@@ -549,7 +612,7 @@
             "x": 1,
             "y": 3,
             "advanceMs": 400,
-            "target": "中 (single dictionary-script character)"
+            "target": "\u4e2d (single dictionary-script character)"
           },
           {
             "action": "release",
@@ -561,7 +624,7 @@
             "x": 1,
             "y": 3,
             "advanceMs": 150,
-            "target": "中 (second)"
+            "target": "\u4e2d (second)"
           },
           {
             "action": "release",
@@ -677,7 +740,7 @@
               "a.b",
               "ee_ff",
               "3.14",
-              "カタカナ"
+              "\u30ab\u30bf\u30ab\u30ca"
             ]
           },
           {
@@ -688,8 +751,8 @@
               "a.b",
               "ee_ff",
               "3.14",
-              "カタカナ",
-              "中"
+              "\u30ab\u30bf\u30ab\u30ca",
+              "\u4e2d"
             ]
           },
           {
@@ -700,8 +763,8 @@
               "a.b",
               "ee_ff",
               "3.14",
-              "カタカナ",
-              "中",
+              "\u30ab\u30bf\u30ab\u30ca",
+              "\u4e2d",
               "x"
             ]
           },
@@ -713,8 +776,8 @@
               "a.b",
               "ee_ff",
               "3.14",
-              "カタカナ",
-              "中",
+              "\u30ab\u30bf\u30ab\u30ca",
+              "\u4e2d",
               "x",
               ","
             ]
@@ -1402,19 +1465,19 @@
         ],
         "viewports": [
           [
-            "seven eight                  │",
-            "nine ten                     █",
-            "eleven                       █"
+            "seven eight                  \u2502",
+            "nine ten                     \u2588",
+            "eleven                       \u2588"
           ],
           [
-            "one two                      █",
-            "three four                   █",
-            "five six                     │"
+            "one two                      \u2588",
+            "three four                   \u2588",
+            "five six                     \u2502"
           ],
           [
-            "one two                      █",
-            "three four                   █",
-            "five six                     │"
+            "one two                      \u2588",
+            "three four                   \u2588",
+            "five six                     \u2502"
           ]
         ]
       }
@@ -1426,7 +1489,7 @@
         "rows": 5
       },
       "inputs": {
-        "text": "日本語\nこんにちは\nสวัสดีครับ",
+        "text": "\u65e5\u672c\u8a9e\n\u3053\u3093\u306b\u3061\u306f\n\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35\u0e04\u0e23\u0e31\u0e1a",
         "steps": [
           {
             "action": "press",
@@ -1559,52 +1622,52 @@
           {
             "hasSelection": true,
             "copied": [
-              "日本語"
+              "\u65e5\u672c\u8a9e"
             ]
           },
           {
             "hasSelection": false,
             "copied": [
-              "日本語"
+              "\u65e5\u672c\u8a9e"
             ]
           },
           {
             "hasSelection": true,
             "copied": [
-              "日本語",
-              "こんにちは"
+              "\u65e5\u672c\u8a9e",
+              "\u3053\u3093\u306b\u3061\u306f"
             ]
           },
           {
             "hasSelection": false,
             "copied": [
-              "日本語",
-              "こんにちは"
+              "\u65e5\u672c\u8a9e",
+              "\u3053\u3093\u306b\u3061\u306f"
             ]
           },
           {
             "hasSelection": true,
             "copied": [
-              "日本語",
-              "こんにちは",
-              "สวัสดี"
+              "\u65e5\u672c\u8a9e",
+              "\u3053\u3093\u306b\u3061\u306f",
+              "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35"
             ]
           },
           {
             "hasSelection": false,
             "copied": [
-              "日本語",
-              "こんにちは",
-              "สวัสดี"
+              "\u65e5\u672c\u8a9e",
+              "\u3053\u3093\u306b\u3061\u306f",
+              "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35"
             ]
           },
           {
             "hasSelection": true,
             "copied": [
-              "日本語",
-              "こんにちは",
-              "สวัสดี",
-              "ครับ"
+              "\u65e5\u672c\u8a9e",
+              "\u3053\u3093\u306b\u3061\u306f",
+              "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35",
+              "\u0e04\u0e23\u0e31\u0e1a"
             ]
           }
         ]

@@ -20,9 +20,11 @@ export async function captureSelection(piCheckout: string) {
 	const { ScrollView } = await import(source("src/components/scroll-view.ts"));
 	const { VirtualTerminal } = await import(source("test/virtual-terminal.ts"));
 	const { stripTerminalSequences, visibleWidth } = await import(source("src/utils.ts"));
+	const { hyperlink } = await import(source("src/terminal-image.ts"));
 
 	const sourceEndpoints = [
-		"packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleSelectionMouseEvent,getActiveSelectionText,copySelectionToClipboard,copyTextToClipboard,hasActiveSelection,copyActiveSelectionToClipboard,setCopyOnSelect,getClickCount,getWordSelection,getLineSelection,updateSelectionFocus,handleScrollbarMouseEvent,handleViewportInput",
+		"packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleSelectionMouseEvent,handleRightClickPaste,handleViewportInput",
+		"packages/tui/src/utils.ts:getOsc8LinkAtColumn",
 		"packages/tui/src/components/text.ts:Text.render,setText",
 		"packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo",
 		"packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,getViewport,waitForRender",
@@ -70,6 +72,15 @@ export async function captureSelection(piCheckout: string) {
 		terminal.sendInput(`\x1b[<32;${end.x};${end.y}M`);
 		terminal.sendInput(`\x1b[<0;${end.x};${end.y}m`);
 	};
+	const makeSelectionClock = () => {
+		const originalNow = Date.now;
+		let now = 0;
+		Date.now = () => now;
+		return {
+			advance: (ms: number) => { now += ms; },
+			restore: () => { Date.now = originalNow; },
+		};
+	};
 	/// Execute #1007 multi-click steps against frozen pi and record one
 	/// observation per `observe` (selection state and the accumulated copies)
 	/// and one viewport snapshot per `observeViewport`. The recorded `steps`
@@ -111,6 +122,62 @@ export async function captureSelection(piCheckout: string) {
 		}
 	};
 	const scenarios: any[] = [];
+
+	// OSC 8 activation opens on a primary click release; the next click in the
+	// pair resolves to word granularity, and a drag never opens the URL.
+	{
+		const opened: string[] = [];
+		const clock = makeSelectionClock();
+		const { terminal, tui } = makeHost(20, 3, { openUrl: (url: string) => opened.push(url) });
+		const url = "https://example.com/link";
+		tui.addChild(new Text(hyperlink("alpha", url) + " plain", 0, 0));
+		tui.start();
+		await terminal.waitForRender();
+		terminal.sendInput("\x1b[<0;2;1M");
+		terminal.sendInput("\x1b[<0;2;1m");
+		await terminal.waitForRender();
+		const afterClick = [...opened];
+		clock.advance(150);
+		terminal.sendInput("\x1b[<0;2;1M");
+		terminal.sendInput("\x1b[<0;2;1m");
+		await terminal.waitForRender();
+		const afterWordClick = [...opened];
+		clock.advance(150);
+		terminal.sendInput("\x1b[<0;2;1M");
+		terminal.sendInput("\x1b[<32;5;1M");
+		terminal.sendInput("\x1b[<0;5;1m");
+		await terminal.waitForRender();
+		scenarios.push({
+			name: "osc8-click-and-drag-routing",
+			dimensions: { columns: 20, rows: 3 },
+			inputs: { url, text: "alpha plain", click: { x: 2, y: 1 }, doubleClick: { x: 2, y: 1, advanceMs: 150 }, drag: [{ x: 2, y: 1 }, { x: 5, y: 1 }] },
+			expected: { afterClick, afterWordClick, afterDrag: opened },
+		});
+		clock.restore();
+		tui.stop();
+	}
+
+	// Linux right-click paste is required by #1009, although frozen pi gates
+	// this callback to Windows outside VS Code. The harness adds that Linux route.
+	{
+		let pasteCount = 0;
+		const { terminal, tui } = makeHost(20, 3, { onRightClickPaste: () => pasteCount++ });
+		tui.addChild(new Text("alpha beta", 0, 0));
+		tui.start();
+		await terminal.waitForRender();
+		terminal.sendInput("\x1b[<2;3;1M");
+		const afterPress = pasteCount;
+		terminal.sendInput("\x1b[<2;3;1m");
+		terminal.sendInput("\x1b[<34;3;1M");
+		const afterMotion = pasteCount;
+		scenarios.push({
+			name: "linux-secondary-button-paste",
+			dimensions: { columns: 20, rows: 3 },
+			inputs: { platform: "linux", press: { button: 2, x: 3, y: 1 }, releaseButton: 2, motionButton: 34 },
+			expected: { afterPress, afterMotion },
+		});
+		tui.stop();
+	}
 
 	// This single logical Text line wraps at six columns. Its styled span and
 	// wide CJK grapheme cross the selected cell range, so extracting by UTF-8

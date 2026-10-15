@@ -56,7 +56,7 @@
       },
       {
         "path": "capture/selection-scenarios.mts",
-        "sha256": "16e6c44148d29c7c955753509eaf906a51f682984830eb9dcdbf60726c3e94ae"
+        "sha256": "48b3eed9a19bc4a305f21d1f8d7b77874a834fe8870fb9d0d50afd3f69cbcf95"
       }
     ]
   },
@@ -243,10 +243,11 @@
     {
       "path": "selection.json",
       "family": "selection",
-      "bytes": 34996,
-      "sha256": "8484a9838aeb8e4b3f49402d29ed68d421dd3614b4e52e3da0e1783c271446e6",
+      "bytes": 36445,
+      "sha256": "45a1228134b560baeb2cb09d4de7e61581385ed449fda7e0c7e460aed2e49d74",
       "sourceEndpoints": [
-        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleSelectionMouseEvent,getActiveSelectionText,copySelectionToClipboard,copyTextToClipboard,hasActiveSelection,copyActiveSelectionToClipboard,setCopyOnSelect,getClickCount,getWordSelection,getLineSelection,updateSelectionFocus,handleScrollbarMouseEvent,handleViewportInput",
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleSelectionMouseEvent,handleRightClickPaste,handleViewportInput",
+        "packages/tui/src/utils.ts:getOsc8LinkAtColumn",
         "packages/tui/src/components/text.ts:Text.render,setText",
         "packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo",
         "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,getViewport,waitForRender"
