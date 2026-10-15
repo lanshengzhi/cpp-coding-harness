@@ -513,8 +513,6 @@ private:
     bool render_scheduled_{false};
     bool clear_on_shrink_{false};
     std::size_t render_generation_{0};
-    std::size_t overlay_focus_order_counter_{0};
-    detail::TuiHost::OverlayFocusRestoreState overlay_focus_restore_{};
 
     // Absolute-viewport baseline. Construction starts with no baseline and
     // paints every row without clearing; `reset_pending_` is the sentinel set

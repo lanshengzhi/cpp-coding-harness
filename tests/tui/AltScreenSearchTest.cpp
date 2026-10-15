@@ -3,6 +3,7 @@
 #include <cch/tui/AltScreen.hpp>
 #include <cch/tui/AltScreenSearch.hpp>
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/Input.hpp>
 #include <cch/tui/Overlay.hpp>
 #include <cch/tui/ScrollView.hpp>
 #include <cch/tui/Text.hpp>
@@ -139,6 +140,19 @@ TEST_CASE("fullscreen search normalizes multiline queries and maps ANSI "
     CHECK(cch::tui::alt_screen_search_match_key(matches.front()) == "0:6:1:5");
 }
 
+TEST_CASE("fullscreen search uses frozen JavaScript whitespace for grapheme clusters and NEL",
+        "[tui][alt-screen-search][issue1010][compat-pi]") {
+    const auto combining_match = cch::tui::find_alt_screen_search_matches({" \xcc\x81"
+                                                                           "b"},
+            "\xcc\x81");
+    REQUIRE(combining_match.size() == 1);
+    REQUIRE(combining_match.front().segments.size() == 1);
+    CHECK(combining_match.front().segments.front() == cch::tui::SearchSegment{.row = 0, .start_col = 0, .end_col = 1});
+
+    const auto nel_query = cch::tui::find_alt_screen_search_matches({"left right"}, "left\xc2\x85right");
+    CHECK(nel_query.empty());
+}
+
 TEST_CASE("fullscreen search index reuses cached matches until its inputs change",
         "[tui][alt-screen-search][issue1010][compat-pi]") {
     const auto bundle = search_evidence();
@@ -151,8 +165,41 @@ TEST_CASE("fullscreen search index reuses cached matches until its inputs change
     for (std::size_t step = 0; step < inputs.size(); ++step) {
         const auto result = index.search(lines_of(inputs[step].at("lines")), inputs[step].at("query").get_string());
         CHECK(result.changed == expected[step].at("changed").get_boolean());
-        REQUIRE(result.matches.size() == expected[step].at("matches").get_array().size());
+        const auto& expected_matches = expected[step].at("matches").get_array();
+        REQUIRE(result.matches.size() == expected_matches.size());
+        for (std::size_t match_index = 0; match_index < result.matches.size(); ++match_index) {
+            const auto& actual_segments = result.matches[match_index].segments;
+            const auto& expected_segments = expected_matches[match_index].at("segments").get_array();
+            REQUIRE(actual_segments.size() == expected_segments.size());
+            for (std::size_t segment_index = 0; segment_index < actual_segments.size(); ++segment_index) {
+                const auto& expected_segment = expected_segments[segment_index];
+                CHECK(actual_segments[segment_index].row ==
+                        static_cast<std::size_t>(expected_segment.at("row").get_number()));
+                CHECK(actual_segments[segment_index].start_col ==
+                        static_cast<std::size_t>(expected_segment.at("startCol").get_number()));
+                CHECK(actual_segments[segment_index].end_col ==
+                        static_cast<std::size_t>(expected_segment.at("endCol").get_number()));
+            }
+        }
     }
+}
+
+TEST_CASE("fullscreen search renders input before applying truncated result width",
+        "[tui][alt-screen-search][issue1010]") {
+    const auto registry = cch::tests::fullscreen_registry();
+    cch::tui::AltScreenSearchComponent component([](std::string) {}, *registry);
+    for (const char value : std::string{"abcdefghij"}) {
+        const std::string text(1, value);
+        const cch::tui::InputEventVariant key = cch::tui::KeyEvent{.key = text, .text = text};
+        CHECK(component.handle_input(key) == cch::tui::InputAdmissionOutcome::Consumed);
+    }
+    component.set_result(0, 1);
+
+    const auto rendered = component.render(12);
+    REQUIRE(rendered);
+    REQUIRE(rendered->lines.size() == 3);
+    CHECK(cch::tui::visible_width(rendered->lines[1]) == 12);
+    CHECK(rendered->lines[1].find("j") != std::string::npos);
 }
 
 TEST_CASE("fullscreen search opens and renders its frozen navigation controls",

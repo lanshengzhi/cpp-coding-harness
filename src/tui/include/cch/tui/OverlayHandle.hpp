@@ -54,7 +54,6 @@ public:
     void focus() const;
     /// An absent target releases to the overlay's previous focus target. A
     /// present null target explicitly leaves focus empty.
-    /// Explicitly release focus to the fallback, a component, or null.
     void unfocus(std::optional<Component*> target = std::nullopt) const;
     [[nodiscard]] bool is_focused() const;
     [[nodiscard]] std::optional<OverlayBounds> get_bounds() const;

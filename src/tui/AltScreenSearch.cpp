@@ -19,10 +19,13 @@ namespace {
 }
 
 [[nodiscard]] bool unicode_space(char32_t value) {
-    return (value >= 0x09 && value <= 0x0d) || value == 0x20 || value == 0x85 || value == 0xa0 || value == 0x1680 ||
+    return (value >= 0x09 && value <= 0x0d) || value == 0x20 || value == 0xa0 || value == 0x1680 ||
            (value >= 0x2000 && value <= 0x200a) || value == 0x2028 || value == 0x2029 || value == 0x202f ||
            value == 0x205f || value == 0x3000 || value == 0xfeff;
 }
+
+/// Match JavaScript `\\s` against every code point of one frozen grapheme.
+/// Fuzzy tests one preceding code unit; word navigation tests a whole segment.
 
 [[nodiscard]] std::string normalize_query(std::string_view query) {
     std::string normalized;
@@ -85,10 +88,18 @@ namespace {
             }
         } else {
             for (const auto& grapheme : detail::split_graphemes(line)) {
-                const auto [codepoint, ignored_size] = detail::decode_utf8(grapheme, 0);
-                (void)ignored_size;
+                bool whitespace = true;
+                for (std::size_t offset = 0; offset < grapheme.size();) {
+                    const auto [codepoint, size] = detail::decode_utf8(grapheme, offset);
+                    if (size == 0) {
+                        whitespace = false;
+                        break;
+                    }
+                    if (!unicode_space(codepoint)) whitespace = false;
+                    offset += size;
+                }
                 const auto width = visible_width(grapheme);
-                if (unicode_space(codepoint)) {
+                if (whitespace) {
                     if (!corpus.text.empty()) pending_separator = true;
                     column += width;
                     continue;
@@ -293,16 +304,16 @@ support::Expected<RenderResult> AltScreenSearchComponent::render(std::size_t wid
     const auto safe_width = std::max<std::size_t>(1, width);
     if (safe_width == 1) return RenderResult{.lines = {"┌", "│", "└"}};
     const auto inner_width = safe_width - 2;
-    auto input_result = input_.render(std::max<std::size_t>(1, inner_width));
-    if (!input_result) return std::unexpected(input_result.error());
     const auto current_query = input_.value();
     const auto result = current_query.empty() ? std::string{}
                         : result_count_ == 0  ? std::string{"No matches"}
                                               : std::to_string(result_index_ + 1) + "/" + std::to_string(result_count_);
     const auto result_space = inner_width > 3 ? inner_width - 3 : 0;
     const auto visible_result = fit(result, result_space, false);
-    const auto result_text = result.empty() ? std::string{} : "\x1b[2m " + visible_result + " \x1b[22m";
+    const auto result_text = visible_result.empty() ? std::string{} : "\x1b[2m " + visible_result + " \x1b[22m";
     const auto input_width = inner_width > visible_width(result_text) ? inner_width - visible_width(result_text) : 0;
+    auto input_result = input_.render(std::max<std::size_t>(1, input_width));
+    if (!input_result) return std::unexpected(input_result.error());
     const auto input_line = input_width == 0 || input_result->lines.empty()
                                     ? std::string{}
                                     : fit(input_result->lines.front(), input_width, false);

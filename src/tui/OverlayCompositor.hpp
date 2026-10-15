@@ -19,11 +19,11 @@ namespace cch::tui::detail {
 /// overlay storage and lifetime, z-ordered responsive visibility, 2D viewport
 /// layout and clipping, ANSI-preserving line splicing, in-memory image
 /// intersection clipping and retained overlay metadata. Focus transitions
-/// remain owned by MainScreen.
+/// remain owned by MainScreen and AltScreen.
 ///
 /// The compositor is pure presentation state and performs no terminal I/O.
-/// Focus application (mutating Focusable state) stays with Tui, which supplies
-/// the current focus and applies the compositor's focus decisions.
+/// Focus application (mutating Focusable state) stays with MainScreen and
+/// AltScreen, which supply the current focus and apply the compositor's focus decisions.
 class OverlayCompositor final {
 public:
     OverlayCompositor() = default;

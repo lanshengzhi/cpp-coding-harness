@@ -1,3 +1,4 @@
+#include <cch/tui/AltScreen.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Overlay.hpp>
 #include <cch/tui/Text.hpp>
@@ -8,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -64,6 +66,39 @@ private:
 };
 
 } // namespace
+
+TEST_CASE("overlay handles from MainScreen and AltScreen become inert after root destruction",
+        "[tui][overlay][issue1010]") {
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 6});
+    std::optional<cch::tui::OverlayHandle> main_handle;
+    std::optional<cch::tui::OverlayHandle> alt_handle;
+    {
+        cch::tui::MainScreen main_screen(terminal);
+        auto main_overlay = std::make_unique<cch::tui::Overlay>();
+        auto main_result = main_screen.show_overlay(std::move(main_overlay));
+        REQUIRE(main_result);
+        main_handle.emplace(std::move(*main_result));
+
+        cch::tui::AltScreen alt_screen(terminal);
+        auto alt_overlay = std::make_unique<cch::tui::Overlay>();
+        auto alt_result = alt_screen.show_overlay(std::move(alt_overlay));
+        REQUIRE(alt_result);
+        alt_handle.emplace(std::move(*alt_result));
+        CHECK(main_handle->is_focused());
+        CHECK(alt_handle->is_focused());
+    }
+
+    for (const auto* handle : {&*main_handle, &*alt_handle}) {
+        handle->hide();
+        handle->set_hidden(true);
+        CHECK_FALSE(handle->is_hidden());
+        handle->set_hidden(false);
+        handle->focus();
+        handle->unfocus();
+        CHECK_FALSE(handle->is_focused());
+        CHECK(handle->get_bounds() == std::nullopt);
+    }
+}
 
 TEST_CASE("Overlay renders children and reports visibility", "[tui][overlay][issue50][spec]") {
     cch::tui::Overlay overlay;
