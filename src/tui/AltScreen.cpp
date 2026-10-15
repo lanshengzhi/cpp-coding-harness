@@ -9,6 +9,7 @@
 #include "tui/WordNavigation.hpp"
 
 #include <cch/support/Error.hpp>
+#include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/Utils.hpp>
 
 #include <algorithm>
@@ -17,6 +18,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <format>
+#include <limits>
 #include <ranges>
 #include <utility>
 
@@ -110,6 +112,12 @@ constexpr auto kComponentDoubleClickInterval = std::chrono::milliseconds{500};
     }
     return text;
 }
+
+struct SearchHighlightRange {
+    std::size_t start_col{0};
+    std::size_t end_col{0};
+    bool current{false};
+};
 
 /// One word segment of a rendered source row in visible columns (pi
 /// `Intl.Segmenter` word segment mapped to terminal cells).
@@ -217,13 +225,20 @@ AltScreen::AltScreen(Terminal& terminal, AltScreenOptions options)
       }),
       wheel_scroll_lines_(std::move(options.wheel_scroll_lines)), wheel_clock_(std::move(options.wheel_clock)),
       scroll_to_end_indicator_(std::move(options.scroll_to_end_indicator)), copy_on_select_(options.copy_on_select),
-      selection_copy_sink_(std::move(options.copy_selection)) {
+      selection_copy_sink_(std::move(options.copy_selection)),
+      search_match_style_(std::move(options.search_match_style)),
+      search_current_match_style_(std::move(options.search_current_match_style)),
+      search_navigation_button_style_(std::move(options.search_navigation_button_style)) {
     render_schedule_state_->owner = this;
     overlay_handle_context_->owner = this;
     if (!selection_copy_sink_) {
         selection_copy_sink_ = [this](std::string_view text) { return write_osc52(terminal_, text); };
     }
     if (!wheel_clock_) wheel_clock_ = [] { return std::chrono::steady_clock::now(); };
+    if (!search_match_style_) search_match_style_ = [](std::string text) { return "\x1b[4m" + text + "\x1b[24m"; };
+    if (!search_current_match_style_)
+        search_current_match_style_ = [](std::string text) { return "\x1b[1;7m" + text + "\x1b[22;27m"; };
+    if (!search_navigation_button_style_) search_navigation_button_style_ = [](std::string text, bool) { return text; };
     implicit_scroll_view_ = std::make_unique<ScrollView>(
             std::make_unique<ImplicitDocument>(*this), ScrollViewOptions{.follow_end = true, .primary = true});
     // pi registers the viewport input stage with the instance
@@ -509,7 +524,8 @@ support::ExpectedVoid AltScreen::start() {
     if (started_) return {};
 
     started_ = true;
-    // No pointer interaction survives the session boundary (pi `beforeTerminalStart`).
+    // No pointer interaction survives the session boundary (pi
+    // `beforeTerminalStart`).
     stop_scrollbar_drag();
     stop_scrollbar_hover();
     clear_selection_click_history();
@@ -583,7 +599,8 @@ support::ExpectedVoid AltScreen::start() {
 
 support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
     if (!started_ || stopping_) return {};
-    (void)options; // The alternate buffer is always exited; the main buffer returns.
+    (void)options; // The alternate buffer is always exited; the main buffer
+                   // returns.
 
     cancel_scheduled_render();
     ++render_generation_;
@@ -631,6 +648,274 @@ support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
 
 support::ExpectedVoid AltScreen::render() { return render_now(); }
 
+void AltScreen::toggle_search() {
+    if (active_search_) {
+        close_search();
+        return;
+    }
+    auto component = std::make_unique<AltScreenSearchComponent>(
+            [this](std::string query) { update_search_query(std::move(query)); },
+            *default_tui_keybindings(),
+            keybinding_context_,
+            search_navigation_button_style_);
+    auto* component_pointer = component.get();
+    auto overlay = std::make_unique<Overlay>(OverlayOptions{
+            .width = SizeValue::percent(40),
+            .min_width = 32,
+            .anchor = OverlayAnchor::TopRight,
+            .margins = OverlayMargins{.left = 1, .right = 1, .top = 1, .bottom = 1},
+    });
+    auto added = overlay->add_child(std::move(component));
+    if (!added) return;
+    auto shown = show_overlay(std::move(overlay));
+    if (!shown) return;
+    active_search_ = ActiveSearch{
+            .component = component_pointer,
+            .index = std::make_unique<SearchIndex>(),
+            .overlay = std::move(*shown),
+            .query = {},
+            .matches = {},
+            .selected_index = -1,
+            .selected_key = std::nullopt,
+            .anchor_row = primary_scroll_view().scroll_top(),
+            .selection_mode = ActiveSearch::SelectionMode::Query,
+    };
+    request_render();
+}
+
+void AltScreen::close_search() {
+    if (!active_search_) return;
+    auto overlay = std::move(active_search_->overlay);
+    active_search_.reset();
+    if (overlay) overlay->hide();
+    request_render();
+}
+
+void AltScreen::update_search_query(std::string query) {
+    if (!active_search_ || query == active_search_->query) return;
+    auto& search = *active_search_;
+    if (search.selected_index >= 0 && static_cast<std::size_t>(search.selected_index) < search.matches.size())
+        search.anchor_row = search.matches[static_cast<std::size_t>(search.selected_index)].segments.front().row;
+    else
+        search.anchor_row = primary_scroll_view().scroll_top();
+    search.query = std::move(query);
+    search.selection_mode = ActiveSearch::SelectionMode::Query;
+    search.component->set_result(-1, 0);
+    request_render();
+}
+
+void AltScreen::navigate_search(int direction) {
+    if (!active_search_ || active_search_->query.empty()) return;
+    active_search_->selection_mode =
+            direction < 0 ? ActiveSearch::SelectionMode::Previous : ActiveSearch::SelectionMode::Next;
+    request_render();
+}
+
+bool AltScreen::refresh_search(const detail::LayoutFrame& frame) {
+    if (!active_search_) return false;
+    auto& search = *active_search_;
+    auto* scroll_view = frame.primary_scroll_view != nullptr ? frame.primary_scroll_view : implicit_scroll_view_.get();
+    const auto* box = detail::get_scroll_view_box(frame, scroll_view);
+    if (!box || search.query.empty()) {
+        search.matches.clear();
+        search.selected_index = -1;
+        search.selected_key.reset();
+        search.selection_mode = ActiveSearch::SelectionMode::Retain;
+        search.component->set_result(-1, 0);
+        return false;
+    }
+
+    const bool should_reveal = search.selection_mode != ActiveSearch::SelectionMode::Retain;
+    const auto result = search.index->search(box->scroll_content_lines, search.query);
+    search.matches = result.matches;
+    if (!result.changed && search.selection_mode == ActiveSearch::SelectionMode::Retain) return false;
+
+    std::ptrdiff_t exact_index = -1;
+    if (search.selected_key) {
+        const auto found =
+                std::find_if(search.matches.begin(), search.matches.end(), [&search](const SearchMatch& match) {
+                    return alt_screen_search_match_key(match) == *search.selected_key;
+                });
+        if (found != search.matches.end()) exact_index = std::distance(search.matches.begin(), found);
+    }
+    std::ptrdiff_t selected_index = -1;
+    if (!search.matches.empty()) {
+        switch (search.selection_mode) {
+        case ActiveSearch::SelectionMode::Query: {
+            const auto found = std::lower_bound(search.matches.begin(),
+                    search.matches.end(),
+                    search.anchor_row,
+                    [](const SearchMatch& match, std::size_t row) { return match.segments.front().row < row; });
+            selected_index = found == search.matches.end() ? 0 : std::distance(search.matches.begin(), found);
+            break;
+        }
+        case ActiveSearch::SelectionMode::Next: {
+            const auto base = exact_index >= 0 ? exact_index
+                                               : std::min(search.selected_index,
+                                                         static_cast<std::ptrdiff_t>(search.matches.size()) - 1);
+            selected_index = base < 0 ? 0 : (base + 1) % static_cast<std::ptrdiff_t>(search.matches.size());
+            break;
+        }
+        case ActiveSearch::SelectionMode::Previous: {
+            const auto base = exact_index >= 0 ? exact_index
+                                               : std::min(search.selected_index,
+                                                         static_cast<std::ptrdiff_t>(search.matches.size()) - 1);
+            selected_index = base < 0 ? static_cast<std::ptrdiff_t>(search.matches.size()) - 1
+                                      : (base - 1 + static_cast<std::ptrdiff_t>(search.matches.size())) %
+                                                static_cast<std::ptrdiff_t>(search.matches.size());
+            break;
+        }
+        case ActiveSearch::SelectionMode::Retain:
+            selected_index = exact_index >= 0 ? exact_index
+                                              : std::clamp<std::ptrdiff_t>(search.selected_index,
+                                                        0,
+                                                        static_cast<std::ptrdiff_t>(search.matches.size()) - 1);
+            break;
+        }
+    }
+
+    search.selected_index = selected_index;
+    search.selected_key = selected_index >= 0 ? std::optional<std::string>{alt_screen_search_match_key(
+                                                        search.matches[static_cast<std::size_t>(selected_index)])}
+                                              : std::nullopt;
+    search.selection_mode = ActiveSearch::SelectionMode::Retain;
+    search.component->set_result(selected_index, search.matches.size());
+    if (!should_reveal || selected_index < 0 || scroll_view->viewport_height() == 0) return false;
+    const auto& selected = search.matches[static_cast<std::size_t>(selected_index)];
+    const auto before = scroll_view->scroll_top();
+    const auto visible_bottom = before + scroll_view->viewport_height() - 1;
+    auto target = static_cast<std::ptrdiff_t>(before);
+    if (selected.segments.front().row < before || selected.segments.back().row > visible_bottom) {
+        target = static_cast<std::ptrdiff_t>(selected.segments.front().row) -
+                 static_cast<std::ptrdiff_t>(scroll_view->viewport_height() / 3);
+    }
+    scroll_view->scroll_to(target, true);
+    return scroll_view->scroll_top() != before;
+}
+
+std::vector<std::string> AltScreen::apply_search_highlights(
+        const std::vector<std::string>& screen, const detail::LayoutFrame& frame) const {
+    if (!active_search_ || active_search_->selected_index < 0 || active_search_->matches.empty()) return screen;
+    auto* scroll_view = frame.primary_scroll_view != nullptr ? frame.primary_scroll_view : implicit_scroll_view_.get();
+    const auto* box = detail::get_scroll_view_box(frame, scroll_view);
+    if (!box) return screen;
+
+    std::vector<std::vector<SearchHighlightRange>> ranges(screen.size());
+    const auto scrollbar = detail::get_scrollbar_geometry(*box);
+    const auto min_row = std::max<std::ptrdiff_t>({0, box->rect.y, box->clip.y});
+    const auto max_row = std::min<std::ptrdiff_t>({static_cast<std::ptrdiff_t>(screen.size()),
+            box->rect.y + static_cast<std::ptrdiff_t>(box->rect.height),
+            box->clip.y + static_cast<std::ptrdiff_t>(box->clip.height)});
+    const auto min_column = std::max<std::ptrdiff_t>({0, box->rect.x, box->clip.x});
+    const auto max_column = std::min<std::ptrdiff_t>({static_cast<std::ptrdiff_t>(terminal_.dimensions().columns),
+            box->rect.x + static_cast<std::ptrdiff_t>(box->rect.width),
+            box->clip.x + static_cast<std::ptrdiff_t>(box->clip.width),
+            scrollbar ? scrollbar->column : std::numeric_limits<std::ptrdiff_t>::max()});
+    const auto min_content_row = scroll_view->scroll_top() + static_cast<std::size_t>(min_row - box->rect.y);
+    const auto max_content_row = scroll_view->scroll_top() + static_cast<std::size_t>(max_row - box->rect.y - 1);
+    auto first_match = std::lower_bound(active_search_->matches.begin(),
+            active_search_->matches.end(),
+            min_content_row,
+            [](const SearchMatch& match, std::size_t row) { return match.segments.back().row < row; });
+    for (auto iterator = first_match; iterator != active_search_->matches.end(); ++iterator) {
+        const auto match_index = static_cast<std::ptrdiff_t>(std::distance(active_search_->matches.begin(), iterator));
+        if (iterator->segments.front().row > max_content_row) break;
+        for (const auto& segment : iterator->segments) {
+            const auto row = box->rect.y + static_cast<std::ptrdiff_t>(segment.row) -
+                             static_cast<std::ptrdiff_t>(scroll_view->scroll_top());
+            if (row < min_row || row >= max_row || row < 0 || static_cast<std::size_t>(row) >= ranges.size()) continue;
+            const auto start_col = std::max(min_column, box->rect.x + static_cast<std::ptrdiff_t>(segment.start_col));
+            const auto end_col = std::min(max_column, box->rect.x + static_cast<std::ptrdiff_t>(segment.end_col));
+            if (end_col <= start_col) continue;
+            ranges[static_cast<std::size_t>(row)].push_back(SearchHighlightRange{
+                    .start_col = static_cast<std::size_t>(start_col),
+                    .end_col = static_cast<std::size_t>(end_col),
+                    .current = match_index == active_search_->selected_index,
+            });
+        }
+    }
+
+    auto result = screen;
+    for (std::size_t row = 0; row < ranges.size(); ++row) {
+        if (ranges[row].empty() || is_image_line(result[row])) continue;
+        std::sort(ranges[row].begin(), ranges[row].end(), [](const auto& left, const auto& right) {
+            return left.start_col > right.start_col;
+        });
+        auto line = result[row];
+        const auto line_width = visible_width(line);
+        for (const auto& range : ranges[row]) {
+            const auto start = std::min(range.start_col, line_width);
+            const auto end = std::min(range.end_col, line_width);
+            if (end <= start) continue;
+            auto before = slice_by_column(line, 0, start, true);
+            auto highlighted = slice_by_column(line, start, end - start, true);
+            auto after = slice_by_column(line, end, line_width - end, true);
+            if (!before || !highlighted || !after) continue;
+            auto& style = range.current ? search_current_match_style_ : search_match_style_;
+            std::string styled;
+            std::size_t plain_start = 0;
+            for (std::size_t position = 0; position < highlighted->size();) {
+                const auto ansi = detail::extract_ansi_code(*highlighted, position);
+                if (!ansi) {
+                    const auto [codepoint, size] = detail::decode_utf8(*highlighted, position);
+                    (void)codepoint;
+                    position += size == 0 ? 1 : size;
+                    continue;
+                }
+                if (position > plain_start) styled += style(highlighted->substr(plain_start, position - plain_start));
+                styled += ansi->code;
+                position += ansi->length;
+                plain_start = position;
+            }
+            if (plain_start < highlighted->size()) styled += style(highlighted->substr(plain_start));
+            line = *before + styled + *after;
+        }
+        result[row] = std::move(line);
+    }
+    return result;
+}
+
+std::optional<int> AltScreen::search_navigation_direction_at(std::ptrdiff_t x, std::ptrdiff_t y) const {
+    if (!active_search_ || !active_search_->overlay) return std::nullopt;
+    const auto bounds = active_search_->overlay->get_bounds();
+    if (!bounds || x < static_cast<std::ptrdiff_t>(bounds->col) ||
+            x >= static_cast<std::ptrdiff_t>(bounds->col + bounds->width) ||
+            y < static_cast<std::ptrdiff_t>(bounds->row) ||
+            y >= static_cast<std::ptrdiff_t>(bounds->row + bounds->height))
+        return std::nullopt;
+    return active_search_->component->navigation_direction_at(
+            static_cast<std::size_t>(y - static_cast<std::ptrdiff_t>(bounds->row)),
+            static_cast<std::size_t>(x - static_cast<std::ptrdiff_t>(bounds->col)));
+}
+
+bool AltScreen::search_overlay_contains(std::ptrdiff_t x, std::ptrdiff_t y) const {
+    if (!active_search_ || !active_search_->overlay) return false;
+    const auto bounds = active_search_->overlay->get_bounds();
+    return bounds && x >= static_cast<std::ptrdiff_t>(bounds->col) &&
+           x < static_cast<std::ptrdiff_t>(bounds->col + bounds->width) &&
+           y >= static_cast<std::ptrdiff_t>(bounds->row) &&
+           y < static_cast<std::ptrdiff_t>(bounds->row + bounds->height);
+}
+
+bool AltScreen::handle_search_mouse_report(const detail::MousePacket& packet) {
+    if (!active_search_) return false;
+    const auto direction = search_navigation_direction_at(packet.x, packet.y);
+    if (active_search_->component->set_hovered_navigation_direction(direction)) request_render();
+    if (!search_overlay_contains(packet.x, packet.y)) return false;
+    if (direction && !packet.release && packet.kind == detail::MousePacket::Kind::Pointer &&
+            (packet.button & 32) == 0 && (packet.button & 3) == 0)
+        navigate_search(*direction);
+    return true;
+}
+
+bool AltScreen::should_defer_viewport_input_to_overlay() const {
+    return dynamic_cast<Overlay*>(focused_) != nullptr && !search_overlay_focused();
+}
+
+bool AltScreen::search_overlay_focused() const {
+    return active_search_ && active_search_->overlay && active_search_->overlay->is_focused();
+}
+
 support::ExpectedVoid AltScreen::render_now() {
     if (!started_) {
         return std::unexpected(
@@ -676,6 +961,10 @@ support::ExpectedVoid AltScreen::render_frame() {
     Component& root = layout_root_ ? *layout_root_ : *implicit_scroll_view_;
     auto frame = detail::LayoutEngine::render(root, dimensions.columns, dimensions.rows, [this] { request_render(); });
     if (!frame) return std::unexpected(frame.error());
+    if (refresh_search(*frame)) {
+        frame = detail::LayoutEngine::render(root, dimensions.columns, dimensions.rows, [this] { request_render(); });
+        if (!frame) return std::unexpected(frame.error());
+    }
     layout_primary_scroll_view_ = frame->primary_scroll_view;
     // A mode change can hide the captured bar without another pointer report.
     // Validate against the new frame before retaining the active drag.
@@ -687,6 +976,7 @@ support::ExpectedVoid AltScreen::render_frame() {
     // Frame image placements are not emitted by this root yet (#1012).
     lines = std::move(cached_frame_->lines);
     cursor = cached_frame_->cursor;
+    lines = apply_search_highlights(lines, *cached_frame_);
     if (auto indicator = composite_scroll_to_end_indicator(lines); !indicator) return indicator;
     const bool compose_overlays = compositor_->has_visible_overlays(dimensions);
     if (compose_overlays) {
@@ -809,8 +1099,8 @@ void AltScreen::auto_scroll_selection() {
     // `scroll_by` returns the lines it could not consume (pi `scrollBy`,
     // ScrollView.cpp). A following viewport scrolls from the content end, so
     // the first upward step consumes one line and reports `direction - 1`;
-    // nothing moved reports exactly `direction` (frozen `remaining === direction`,
-    // tui-alt-screen.ts:1295) and stops the interval.
+    // nothing moved reports exactly `direction` (frozen `remaining ===
+    // direction`, tui-alt-screen.ts:1295) and stops the interval.
     const auto remaining = scroll_view->scroll_by(direction);
     if (remaining == direction) {
         stop_selection_auto_scroll();
@@ -1384,7 +1674,14 @@ void AltScreen::handle_input(std::string input) {
 void AltScreen::dispatch_input(const InputEventVariant& event) {
     ChildOperation operation(*this);
     reconcile_overlay_focus(terminal_.dimensions());
-    if (const auto* key = std::get_if<KeyEvent>(&event); key != nullptr && handle_viewport_key(*key)) return;
+    const auto* key = std::get_if<KeyEvent>(&event);
+    const bool defer_viewport_key = key != nullptr && keybinding_context_ && should_defer_viewport_input_to_overlay() &&
+                                    keybinding_context_->first_match(*key,
+                                            std::array<std::string_view, 4>{"tui.altScreen.pageUp",
+                                                    "tui.altScreen.pageDown",
+                                                    "tui.altScreen.top",
+                                                    "tui.altScreen.bottom"});
+    if (key != nullptr && !defer_viewport_key && handle_viewport_key(*key)) return;
     auto* input_handler = dynamic_cast<InputHandler*>(focused_);
     if (input_handler == nullptr) return;
     static_cast<void>(input_handler->handle_input(event));
@@ -1399,6 +1696,8 @@ void AltScreen::handle_resize(TerminalDimensions dimensions) {
 
 bool AltScreen::handle_viewport_input(std::string_view data) {
     if (data == kFocusOut) {
+        if (active_search_ && active_search_->component->set_hovered_navigation_direction(std::nullopt))
+            request_render();
         // An unfinished selection is a gesture and ends with focus loss; a
         // released selection remains visible across focus changes (pi #1006).
         // A pending multi-click dies with the gesture too (pi `lastClick`).
@@ -1413,21 +1712,50 @@ bool AltScreen::handle_viewport_input(std::string_view data) {
     }
     if (data == kFocusIn) return true;
 
-    if (const auto key = parse_key(data, terminal_.capabilities().keyboard_protocol == KeyboardProtocol::Kitty)) {
-        if (handle_viewport_key(*key)) return true;
-    }
-
     if (const auto packet = detail::parse_mouse_packet(data)) {
         if (packet->kind == detail::MousePacket::Kind::Wheel) {
+            if (should_defer_viewport_input_to_overlay()) return false;
             handle_wheel_report(*packet);
         } else {
+            if (handle_search_mouse_report(*packet)) return true;
+            if (should_defer_viewport_input_to_overlay() && !search_overlay_contains(packet->x, packet->y))
+                return false;
             handle_mouse_report(*packet);
         }
         return true;
     }
     // A fragment that can only be a mouse report never becomes typed input, even
     // when its payload is malformed (pi `isMouseSequence`).
-    return detail::is_mouse_sequence(data);
+    if (detail::is_mouse_sequence(data)) return true;
+
+    const auto key = parse_key(data, terminal_.capabilities().keyboard_protocol == KeyboardProtocol::Kitty);
+    if (key && keybinding_context_) {
+        constexpr std::array<std::string_view, 1> toggle_action{"tui.altScreen.search"};
+        if (keybinding_context_->first_match(*key, toggle_action)) {
+            if (key->type != KeyEventType::Release) toggle_search();
+            return true;
+        }
+        if (search_overlay_focused()) {
+            constexpr std::array<std::string_view, 1> next_action{"tui.altScreen.searchNext"};
+            constexpr std::array<std::string_view, 1> previous_action{"tui.altScreen.searchPrevious"};
+            constexpr std::array<std::string_view, 1> close_action{"tui.altScreen.searchClose"};
+            if (keybinding_context_->first_match(*key, next_action)) {
+                if (key->type != KeyEventType::Release) navigate_search(1);
+                return true;
+            }
+            if (keybinding_context_->first_match(*key, previous_action)) {
+                if (key->type != KeyEventType::Release) navigate_search(-1);
+                return true;
+            }
+            if (keybinding_context_->first_match(*key, close_action)) {
+                if (key->type != KeyEventType::Release) close_search();
+                return true;
+            }
+        }
+        if (should_defer_viewport_input_to_overlay()) return false;
+        if (handle_viewport_key(*key)) return true;
+    }
+    return false;
 }
 
 MouseEvent AltScreen::create_mouse_event(const detail::MousePacket& packet,

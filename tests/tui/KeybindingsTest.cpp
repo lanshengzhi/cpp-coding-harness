@@ -40,7 +40,8 @@ TEST_CASE("Keybinding resolution replaces defaults with canonical user alternati
     CHECK_FALSE(resolved->registry->matches(tui::KeyEvent{.key = "enter", .shift = true}, "tui.input.newLine"));
 }
 
-TEST_CASE("User key conflicts preserve context defaults and resolve by candidate order",
+TEST_CASE("User key conflicts preserve context defaults and resolve by "
+          "candidate order",
         "[tui][keybindings][issue57][spec]") {
     tui::KeybindingResolutionRequest request;
     request.definitions = tui::builtin_tui_keybinding_definitions();
@@ -161,7 +162,7 @@ TEST_CASE("Builtin table is exactly the frozen pi default table at 83114817", "[
 
 TEST_CASE("Known-but-unassembled IDs are recognized and never become no-op bindings",
         "[tui][keybindings][issue382][spec]") {
-    constexpr std::array<std::string_view, 11> kUnassembled{
+    constexpr std::array<std::string_view, 7> kUnassembled{
             "tui.input.copy",
             "tui.altScreen.previousPrompt",
             "tui.altScreen.nextPrompt",
@@ -169,10 +170,6 @@ TEST_CASE("Known-but-unassembled IDs are recognized and never become no-op bindi
             "tui.altScreen.halfPageDown",
             "tui.altScreen.lineUp",
             "tui.altScreen.lineDown",
-            "tui.altScreen.search",
-            "tui.altScreen.searchNext",
-            "tui.altScreen.searchPrevious",
-            "tui.altScreen.searchClose",
     };
     for (const auto id : kUnassembled) {
         CHECK(tui::is_known_unassembled_tui_keybinding(id));
@@ -182,6 +179,10 @@ TEST_CASE("Known-but-unassembled IDs are recognized and never become no-op bindi
     CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.pageDown"));
     CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.top"));
     CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.bottom"));
+    CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.search"));
+    CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.searchNext"));
+    CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.searchPrevious"));
+    CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.searchClose"));
     CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.input.submit"));
     CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.editor.cursorUp"));
     CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.zoom"));
@@ -201,7 +202,8 @@ TEST_CASE("Known-but-unassembled IDs are recognized and never become no-op bindi
     }
 }
 
-TEST_CASE("Known-but-unassembled overrides diagnose as unavailable, unknown ids stay unknown",
+TEST_CASE("Known-but-unassembled overrides diagnose as unavailable, unknown "
+          "ids stay unknown",
         "[tui][keybindings][issue382][spec]") {
     tui::KeybindingResolutionRequest request;
     request.definitions = tui::builtin_tui_keybinding_definitions();
