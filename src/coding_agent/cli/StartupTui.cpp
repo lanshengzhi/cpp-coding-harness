@@ -81,10 +81,7 @@ public:
 
     [[nodiscard]] std::unique_ptr<cch::tui::TuiScheduledHandle> schedule_delayed(
             std::chrono::steady_clock::duration delay, cch::tui::TuiScheduledWork work) override {
-        delayed_work_.erase(
-                std::remove_if(
-                        delayed_work_.begin(), delayed_work_.end(), [](const auto& item) { return item.expired(); }),
-                delayed_work_.end());
+        std::erase_if(delayed_work_, [](const auto& item) { return item.expired(); });
         auto state = std::make_shared<StartupDelayedTuiWork>(executor_);
         delayed_work_.push_back(state);
         state->timer.expires_after(std::max(delay, std::chrono::steady_clock::duration::zero()));

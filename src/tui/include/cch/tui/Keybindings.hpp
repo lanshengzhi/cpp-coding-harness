@@ -116,10 +116,10 @@ struct KeybindingResolution {
 [[nodiscard]] std::vector<KeybindingDefinition> alt_screen_keybinding_definitions();
 
 /// Whether `id` is a known pi `tui.*` action that cch_tui recognizes but does
-/// not assemble in this phase: `tui.input.copy`, prompt navigation, half-page
-/// and line scrolling, and transcript search. (`tui.altScreen.pageUp`,
-/// `pageDown`, `top`, and `bottom` ARE assembled by the fullscreen
-/// keybinding manager.) Such IDs are never entries in the resolved registry —
+/// not assemble in this phase: `tui.input.copy`, half-page and line scrolling.
+/// (Prompt navigation, transcript search, and `tui.altScreen.pageUp`,
+/// `pageDown`, `top`, `bottom` ARE assembled by the fullscreen keybinding
+/// manager.) Such IDs are never entries in the resolved registry —
 /// never no-op bindings — and diagnostic callers report them as
 /// known-but-unbound.
 [[nodiscard]] bool is_known_unassembled_tui_keybinding(std::string_view id);

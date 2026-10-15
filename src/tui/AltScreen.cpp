@@ -2076,45 +2076,48 @@ void AltScreen::reset_wheel_scroll_acceleration() noexcept {
 
 bool AltScreen::handle_viewport_key(const KeyEvent& event) {
     if (!keybinding_context_) return false;
-    constexpr std::array<std::string_view, 4> actions{
-            "tui.altScreen.pageUp", "tui.altScreen.pageDown", "tui.altScreen.top", "tui.altScreen.bottom"};
-    constexpr std::array<std::string_view, 2> prompt_actions{
-            "tui.altScreen.previousPrompt", "tui.altScreen.nextPrompt"};
+    // Frozen dispatch order (tui-alt-screen.ts:~720-777): pageUp, pageDown,
+    // previousPrompt, nextPrompt, top, bottom. A single ordered pass keeps
+    // conflict resolution identical to frozen when user overrides collide.
+    constexpr std::array<std::string_view, 6> actions{
+            "tui.altScreen.pageUp", "tui.altScreen.pageDown", "tui.altScreen.previousPrompt",
+            "tui.altScreen.nextPrompt", "tui.altScreen.top", "tui.altScreen.bottom"};
     const auto matched = keybinding_context_->first_match(event, actions);
-    const auto matched_prompt =
-            matched ? std::optional<std::string>{} : keybinding_context_->first_match(event, prompt_actions);
-    if (!matched && !matched_prompt) return false;
+    if (!matched) return false;
     if (event.type == KeyEventType::Release) return true;
-    if (matched_prompt) {
-        const auto direction = *matched_prompt == "tui.altScreen.previousPrompt" ? -1 : 1;
-        if (!cached_frame_) return true;
-        const auto* box = detail::get_scroll_view_box(*cached_frame_, &primary_scroll_view());
-        if (box == nullptr || !box->has_scroll_content_lines) return true;
-        const auto& rows = box->scroll_content_lines;
-        auto row = static_cast<std::ptrdiff_t>(primary_scroll_view().scroll_top()) + direction;
-        while (row >= 0 && row < static_cast<std::ptrdiff_t>(rows.size())) {
-            if (rows[static_cast<std::size_t>(row)].starts_with("\x1b]133;A\x07") ||
-                    rows[static_cast<std::size_t>(row)].starts_with("\x1b]133;A\x1b\\")) {
-                primary_scroll_view().scroll_to(row);
-                request_render();
-                break;
-            }
-            row += direction;
-        }
-        return true;
-    }
     if (*matched == "tui.altScreen.pageUp") {
         scroll_by(
                 -std::max<std::ptrdiff_t>(1, static_cast<std::ptrdiff_t>(primary_scroll_view().viewport_height()) - 4));
     } else if (*matched == "tui.altScreen.pageDown") {
         scroll_by(
                 std::max<std::ptrdiff_t>(1, static_cast<std::ptrdiff_t>(primary_scroll_view().viewport_height()) - 4));
+    } else if (*matched == "tui.altScreen.previousPrompt") {
+        scroll_to_prompt(-1);
+    } else if (*matched == "tui.altScreen.nextPrompt") {
+        scroll_to_prompt(1);
     } else if (*matched == "tui.altScreen.top") {
         scroll_to_top();
     } else {
         scroll_to_bottom();
     }
     return true;
+}
+
+void AltScreen::scroll_to_prompt(int direction) {
+    if (!cached_frame_) return;
+    const auto* box = detail::get_scroll_view_box(*cached_frame_, &primary_scroll_view());
+    if (box == nullptr || !box->has_scroll_content_lines) return;
+    const auto& rows = box->scroll_content_lines;
+    auto row = static_cast<std::ptrdiff_t>(primary_scroll_view().scroll_top()) + direction;
+    while (row >= 0 && row < static_cast<std::ptrdiff_t>(rows.size())) {
+        if (rows[static_cast<std::size_t>(row)].starts_with("\x1b]133;A\x07") ||
+                rows[static_cast<std::size_t>(row)].starts_with("\x1b]133;A\x1b\\")) {
+            primary_scroll_view().scroll_to(row);
+            request_render();
+            break;
+        }
+        row += direction;
+    }
 }
 
 std::optional<MouseDispatchResult> AltScreen::dispatch_mouse_to_layout(const MouseEvent& event) {

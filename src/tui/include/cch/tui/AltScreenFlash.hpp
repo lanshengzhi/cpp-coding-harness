@@ -23,6 +23,11 @@ public:
 
     void set_scheduler(TuiScheduler* scheduler);
     void set_style(std::function<std::string(std::string)> style);
+    /// Post a transient message. When no scheduler is attached the entry has
+    /// no timer: it persists until dispose() (frozen's setTimeout always
+    /// expires regardless of TUI state — a toolkit-embedder deviation, not
+    /// reachable in production where a scheduler is always installed before
+    /// start()).
     void flash(std::string message, std::chrono::milliseconds duration = std::chrono::milliseconds{1000});
     void dispose() noexcept;
 
@@ -43,6 +48,10 @@ private:
 
     std::function<void()> request_render_;
     std::function<std::string(std::string)> style_;
+    /// §7.5: non-owning; must outlive this container or be detached first via
+    /// `set_scheduler(nullptr)` (also invoked by `dispose()`). All callbacks
+    /// scheduled on it are cancelled (handle + generation guard) before this
+    /// container or the scheduler is destroyed.
     TuiScheduler* scheduler_{nullptr};
     std::vector<Entry> entries_;
     std::size_t next_id_{0};

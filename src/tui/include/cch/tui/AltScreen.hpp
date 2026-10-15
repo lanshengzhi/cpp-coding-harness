@@ -163,6 +163,10 @@ public:
     /// (pi `TuiAltScreen.scrollBy`).
     void scroll_by(std::ptrdiff_t lines);
     void scroll_to_top();
+    /// Scan raw scroll-content lines for an OSC 133;A prompt-start marker in
+    /// `direction` and scroll the primary viewport to it (frozen
+    /// tui-alt-screen.ts:498-512). No-op when no marker is found.
+    void scroll_to_prompt(int direction);
     void scroll_to_bottom();
     void set_wheel_scroll_lines(WheelScrollLines lines);
     void set_scroll_to_end_indicator(std::function<std::string()> indicator);

@@ -24,6 +24,7 @@ namespace {
 
 class ManualDelayedHandle final : public cch::tui::TuiScheduledHandle {
 public:
+    ~ManualDelayedHandle() override { *cancelled_ = true; }
     explicit ManualDelayedHandle(std::shared_ptr<bool> cancelled) : cancelled_(std::move(cancelled)) {}
     void cancel() noexcept override { *cancelled_ = true; }
 

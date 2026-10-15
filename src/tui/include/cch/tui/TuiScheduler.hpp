@@ -8,6 +8,10 @@ namespace cch::tui {
 
 using TuiScheduledWork = std::move_only_function<void()>;
 
+/// Handle to one schedule_delayed() work item. Destroying the handle cancels
+/// the work (destruction IS cancellation); after the work has fired or the
+/// owning scheduler died, cancel() and destruction are no-ops. Handles never
+/// affect render or interval timers.
 class TuiScheduledHandle {
 public:
     virtual ~TuiScheduledHandle() = default;

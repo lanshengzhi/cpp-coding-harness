@@ -303,7 +303,7 @@ TEST_CASE("AltScreen flash timers expire independently and dispose safely", "[tu
     }));
 
     tui.flash("Disposed", std::chrono::seconds{10});
-    REQUIRE(scheduler.pending_delayed() == 2);
+    CHECK(scheduler.pending_delayed() == 2);
     REQUIRE(tui.stop());
     CHECK(scheduler.pending_delayed() == 0);
     scheduler.advance(std::chrono::seconds{20});
