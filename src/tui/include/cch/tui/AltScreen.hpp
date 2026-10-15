@@ -37,6 +37,11 @@ struct TuiAltScreenRenderState {
 /// Synchronous selection clipboard operation. A failure keeps its specific
 /// error so a host can report it through its own feedback surface.
 using SelectionCopySink = std::move_only_function<support::ExpectedVoid(std::string_view)>;
+/// Best-effort navigation for a clicked OSC 8 link.
+using LinkOpenSink = std::move_only_function<void(std::string_view url) noexcept>;
+/// Synchronous right-click paste request. The fullscreen root consumes a
+/// declined request without starting text selection.
+using RightClickPasteHandler = std::move_only_function<support::ExpectedVoid()>;
 
 /// The frozen multi-click selection interval (pi `DOUBLE_CLICK_INTERVAL_MS`):
 /// consecutive presses on the same word within this window count up from
@@ -110,6 +115,9 @@ public:
     [[nodiscard]] bool copy_on_select() const noexcept { return copy_on_select_; }
     void set_copy_on_select(bool enabled) noexcept { copy_on_select_ = enabled; }
     void set_selection_copy_sink(SelectionCopySink sink);
+    void set_link_open_sink(LinkOpenSink sink);
+    /// Install the host action for an unmodified secondary-button press.
+    void set_right_click_paste_handler(RightClickPasteHandler handler);
     /// Override the clock that times multi-click selection presses; the default
     /// reads the system clock in milliseconds like pi `Date.now()`. Tests
     /// inject a deterministic clock here.
@@ -189,6 +197,7 @@ private:
     /// press, or return false when no live gesture owns it.
     bool handle_gesture_mouse_report(const detail::MousePacket& packet, const MouseEvent& event);
     void handle_mouse_report(const detail::MousePacket& packet);
+    [[nodiscard]] bool handle_right_click_paste(const detail::MousePacket& packet);
     [[nodiscard]] bool handle_selection_mouse_report(const detail::MousePacket& packet);
     [[nodiscard]] bool handle_scrollbar_mouse_report(const detail::MousePacket& packet);
     void stop_scrollbar_drag() noexcept;
@@ -336,7 +345,10 @@ private:
     SelectionGranularity selection_granularity_{SelectionGranularity::Character};
     std::optional<SelectionRange> selection_initial_range_{};
     std::optional<SelectionWordClick> last_word_click_{};
+    std::optional<std::string> pressed_url_{};
     std::move_only_function<std::chrono::milliseconds()> selection_click_clock_{};
+    LinkOpenSink link_open_sink_{};
+    RightClickPasteHandler right_click_paste_handler_{};
     bool copy_on_select_{true};
     SelectionCopySink selection_copy_sink_{};
     /// Captured scrollbar pointer interaction (pi `scrollbarDrag`). The weak

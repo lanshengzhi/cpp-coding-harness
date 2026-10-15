@@ -141,11 +141,12 @@ TEST_CASE("AltScreen selects styled wrapped CJK text, highlights cells, and copi
         "[tui][alt-screen][selection][issue1006][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 6, .rows = 4});
     std::vector<std::string> copied;
-    cch::tui::AltScreen tui(terminal, cch::tui::AltScreenOptions{.copy_on_select = false,
-            .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
-                copied.emplace_back(text);
-                return {};
-            }});
+    cch::tui::AltScreen tui(terminal,
+            cch::tui::AltScreenOptions{.copy_on_select = false,
+                    .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
+                        copied.emplace_back(text);
+                        return {};
+                    }});
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("\x1b[31mred界abc\x1b[0m", 0, 0)));
     REQUIRE(tui.start());
     REQUIRE(tui.render());
@@ -167,11 +168,12 @@ TEST_CASE("AltScreen keeps selection coordinates across content updates and focu
         "[tui][alt-screen][selection][issue1006][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 4});
     std::vector<std::string> copied;
-    cch::tui::AltScreen tui(terminal, cch::tui::AltScreenOptions{.copy_on_select = false,
-            .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
-                copied.emplace_back(text);
-                return {};
-            }});
+    cch::tui::AltScreen tui(terminal,
+            cch::tui::AltScreenOptions{.copy_on_select = false,
+                    .copy_selection = [&copied](std::string_view text) -> cch::support::ExpectedVoid {
+                        copied.emplace_back(text);
+                        return {};
+                    }});
     auto text = std::make_unique<cch::tui::Text>("alpha\nbeta\ngamma\ndelta", 0, 0);
     auto* text_pointer = text.get();
     REQUIRE(tui.add_child(std::move(text)));
@@ -883,6 +885,60 @@ TEST_CASE("AltScreen word-granularity drags expand by whole words and reverse at
     REQUIRE(terminal.inject_input("\x1b[<0;5;1M"));
     REQUIRE(terminal.inject_input("\x1b[<0;5;1m"));
     CHECK_FALSE(copy());
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE(
+        "AltScreen opens OSC 8 links only on a matching character click", "[tui][alt-screen][mouse][issue1009][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 30, .rows = 2});
+    std::vector<std::string> opened;
+    cch::tui::AltScreen tui(terminal);
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    tui.set_link_open_sink([&opened](std::string_view url) noexcept { opened.emplace_back(url); });
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>(
+            "\x1b]8;;https://example.com/alpha\x1b\\alpha\x1b]8;;\x1b\\ plain", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<3;2;1m"));
+    CHECK(opened == std::vector<std::string>{"https://example.com/alpha"});
+
+    now += std::chrono::milliseconds{600};
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<32;3;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;3;1m"));
+    CHECK(opened == std::vector<std::string>{"https://example.com/alpha"});
+
+    now += std::chrono::milliseconds{600};
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1m"));
+    // The first click of a double-click pair opens on its release. The
+    // count-two press starts word selection and has no pending URL.
+    CHECK(opened == std::vector<std::string>{"https://example.com/alpha", "https://example.com/alpha"});
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE(
+        "AltScreen routes secondary-button presses to its paste handler", "[tui][alt-screen][mouse][issue1009][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 2});
+    std::vector<int> paste_buttons;
+    cch::tui::AltScreen tui(terminal);
+    tui.set_right_click_paste_handler([&paste_buttons]() -> cch::support::ExpectedVoid {
+        paste_buttons.push_back(1);
+        return {};
+    });
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("alpha beta", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    REQUIRE(terminal.inject_input("\x1b[<2;3;1M"));
+    CHECK(paste_buttons.size() == 1);
+    CHECK_FALSE(tui.has_active_selection());
+    REQUIRE(terminal.inject_input("\x1b[<2;3;1m"));
+    REQUIRE(terminal.inject_input("\x1b[<34;3;1M"));
+    CHECK(paste_buttons.size() == 1);
     REQUIRE(tui.stop());
 }
 

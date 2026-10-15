@@ -238,6 +238,12 @@ void AltScreen::set_selection_copy_sink(SelectionCopySink sink) {
     selection_copy_sink_ = [this](std::string_view text) { return write_osc52(terminal_, text); };
 }
 
+void AltScreen::set_link_open_sink(LinkOpenSink sink) { link_open_sink_ = std::move(sink); }
+
+void AltScreen::set_right_click_paste_handler(RightClickPasteHandler handler) {
+    right_click_paste_handler_ = std::move(handler);
+}
+
 void AltScreen::set_selection_click_clock(std::move_only_function<std::chrono::milliseconds()> clock) {
     // An empty callable would be invoked on the next press (undefined
     // behavior); ignoring it keeps the current clock.
@@ -385,6 +391,7 @@ support::ExpectedVoid AltScreen::start() {
     stop_scrollbar_drag();
     stop_scrollbar_hover();
     clear_selection_click_history();
+    pressed_url_.reset();
     if (focused_ == nullptr) fallback_focus();
     if (auto result = terminal_.start(
                 [this](std::string input) -> support::ExpectedVoid {
@@ -468,6 +475,7 @@ support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
     // the scrollbar hover (pi `beforeTerminalStop`).
     clear_mouse_gesture();
     if (selection_press_active_) clear_text_selection();
+    pressed_url_.reset();
     last_mouse_click_.reset();
     clear_selection_click_history();
     stop_scrollbar_drag();
@@ -1135,6 +1143,7 @@ bool AltScreen::handle_viewport_input(std::string_view data) {
         clear_mouse_gesture();
         last_mouse_click_.reset();
         clear_selection_click_history();
+        pressed_url_.reset();
         stop_scrollbar_drag();
         stop_scrollbar_hover();
         return true;
@@ -1179,6 +1188,9 @@ void AltScreen::handle_wheel_report(const detail::MousePacket& packet) {
 void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
     const auto type = detail::pointer_event_type(packet);
     const auto event = create_mouse_event(packet, type);
+    if (!packet.release && packet.button != 0) pressed_url_.reset();
+    if (packet.release && (!selection_press_active_ || ((packet.button & 3) != 0 && (packet.button & 3) != 3)))
+        pressed_url_.reset();
 
     if (selection_press_active_ && handle_selection_mouse_report(packet)) return;
     if (handle_gesture_mouse_report(packet, event)) return;
@@ -1201,9 +1213,21 @@ void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
         return;
     }
 
+    if (handle_right_click_paste(packet)) return;
     if (handle_selection_mouse_report(packet)) return;
     // Unclaimed pointer reports are consumed by the fullscreen root, which is
     // also the owner of text selection on terminal-rendered content.
+}
+
+bool AltScreen::handle_right_click_paste(const detail::MousePacket& packet) {
+    if (packet.release || packet.kind != detail::MousePacket::Kind::Pointer || packet.button != 2 ||
+            !right_click_paste_handler_) {
+        return false;
+    }
+    // A handler decline still owns this secondary press, matching pi's
+    // best-effort clipboard route and preventing it from starting selection.
+    static_cast<void>(right_click_paste_handler_());
+    return true;
 }
 
 bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet) {
@@ -1223,6 +1247,14 @@ bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet)
         update_selection_focus(*point);
         const bool is_click = !selection_dragged_ && selection_anchor_->scroll_view == point->scroll_view &&
                               selection_anchor_->row == point->row && selection_anchor_->column == point->column;
+        const auto clicked_url = is_click ? std::move(pressed_url_) : std::nullopt;
+        pressed_url_.reset();
+        if (clicked_url && link_open_sink_) {
+            clear_text_selection();
+            link_open_sink_(*clicked_url);
+            request_render();
+            return true;
+        }
         if (is_click) {
             // The release ends a click only when the press never selected:
             // after a word/line selection the release lands inside the
@@ -1247,6 +1279,7 @@ bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet)
     if ((packet.button & 32) != 0) {
         if (!selection_press_active_ || !selection_anchor_) return true;
         selection_dragged_ = true;
+        pressed_url_.reset();
         clear_selection_click_history();
         if (auto point = selection_point_at(packet.x, packet.y, selection_anchor_->scroll_view))
             update_selection_focus(*point);
@@ -1257,6 +1290,7 @@ bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet)
     selection_press_active_ = true;
     selection_dragged_ = false;
     selection_granularity_ = SelectionGranularity::Character;
+    pressed_url_.reset();
     selection_initial_range_.reset();
     const auto scroll_views = cached_frame_ ? detail::scroll_views_at(*cached_frame_, packet.x, packet.y)
                                             : std::vector<ScrollView*>{};
@@ -1269,6 +1303,7 @@ bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet)
     const auto word = word_selection_at(*anchor);
     const auto count = next_selection_click_count(*anchor, word);
     if (count == 2 && word) {
+        pressed_url_.reset();
         selection_anchor_ = word->start;
         selection_focus_ = word->end;
         selection_granularity_ = SelectionGranularity::Word;
@@ -1288,6 +1323,10 @@ bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet)
         // word selection (frozen capture `multiclick-word-line-cycle`).
         selection_anchor_ = *anchor;
         selection_focus_ = *anchor;
+    }
+    if (selection_granularity_ == SelectionGranularity::Character && anchor->column >= 0) {
+        if (const auto source_line = selection_source_line_at(*anchor))
+            pressed_url_ = osc8_link_at_column(*source_line, static_cast<std::size_t>(anchor->column));
     }
     // The component click history belongs to the dispatch layer; a root-level
     // selection press does not clear it (pi keeps selection and component
@@ -1459,6 +1498,7 @@ bool AltScreen::handle_scrollbar_mouse_report(const detail::MousePacket& packet)
         }
 
         clear_text_selection();
+        pressed_url_.reset();
         clear_selection_click_history();
         set_scrollbar_hover(scroll_view);
         const auto grab_offset =
