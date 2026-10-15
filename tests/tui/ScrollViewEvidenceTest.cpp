@@ -4,6 +4,9 @@
 // `fixtures/pi-tui/*.json` root snapshots.
 
 #include <cch/tui/AltScreen.hpp>
+#include <cch/tui/HStack.hpp>
+#include <cch/tui/Keybindings.hpp>
+#include <cch/tui/MouseRegion.hpp>
 #include <cch/tui/ScrollView.hpp>
 #include <cch/tui/Stack.hpp>
 #include <cch/tui/Text.hpp>
@@ -23,6 +26,8 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <chrono>
+#include <optional>
 
 namespace {
 
@@ -115,6 +120,37 @@ private:
         text += std::to_string(index);
     }
     return text;
+}
+
+class InputProbe final : public cch::tui::Component, public cch::tui::Focusable, public cch::tui::InputHandler {
+public:
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{.lines = {"editor"}};
+    }
+    void invalidate() override {}
+    cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& event) override {
+        if (const auto* key = std::get_if<cch::tui::KeyEvent>(&event)) inputs.push_back(key->raw_sequence);
+        return cch::tui::InputAdmissionOutcome::Consumed;
+    }
+    void set_focused(bool focused) override { focused_ = focused; }
+    [[nodiscard]] bool focused() const override { return focused_; }
+
+    std::vector<std::string> inputs{};
+
+private:
+    bool focused_{false};
+};
+
+[[nodiscard]] std::shared_ptr<const cch::tui::KeybindingRegistry> fullscreen_registry(
+        std::vector<cch::tui::KeybindingOverride> overrides = {}) {
+    auto definitions = cch::tui::builtin_tui_keybinding_definitions();
+    auto fullscreen = cch::tui::alt_screen_keybinding_definitions();
+    definitions.insert(
+            definitions.end(), std::make_move_iterator(fullscreen.begin()), std::make_move_iterator(fullscreen.end()));
+    auto resolution = cch::tui::resolve_keybindings(cch::tui::KeybindingResolutionRequest{
+            .definitions = std::move(definitions), .overrides = std::move(overrides)});
+    REQUIRE(resolution);
+    return resolution->registry;
 }
 
 } // namespace
@@ -400,4 +436,189 @@ TEST_CASE("the implicit alternate-screen viewport matches the frozen pi phases",
     REQUIRE(tui.render());
     check_phase(phases[phase_index++]);
     CHECK(phase_index == phases.size());
+}
+
+TEST_CASE("frozen wheel policy drives fixed, accelerated, burst, reset, and fractional deltas",
+        "[tui][scroll-view][issue1004][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    const auto& scenario = scenario_of(*bundle, "wheel-accelerator");
+    const auto& inputs = scenario.at("inputs");
+    const auto& expected = scenario.at("expected");
+    auto clock = std::chrono::steady_clock::time_point{};
+    const auto exercise = [&](cch::tui::WheelScrollLines policy,
+                                  const JsonValue& stream,
+                                  std::string_view expected_key) {
+        std::vector<std::ptrdiff_t> observed;
+        auto region = std::make_unique<cch::tui::MouseRegion>(std::make_unique<cch::tui::Text>(numbered_text(80), 0, 0),
+                [&observed](const cch::tui::MouseEvent& event) -> std::optional<cch::tui::MouseEventResult> {
+                    if (event.type != cch::tui::MouseEventType::Wheel) return std::nullopt;
+                    observed.push_back(event.wheel_delta.value_or(0));
+                    return cch::tui::MouseEventResult{.handled = true, .render = false};
+                });
+        cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 4});
+        cch::tui::AltScreen tui(terminal,
+                cch::tui::AltScreenOptions{
+                        .wheel_scroll_lines = std::move(policy), .wheel_clock = [&clock] { return clock; }});
+        REQUIRE(tui.add_child(std::move(region)));
+        REQUIRE(tui.start());
+        REQUIRE(tui.render());
+        const auto& times = stream.at("times").get_array();
+        const auto direction_it = stream.get_object().find("directions");
+        const auto* directions =
+                direction_it == stream.get_object().end() ? nullptr : direction_it->second.get_if<JsonValue::array_t>();
+        std::size_t index = 0;
+        for (const auto& time : times) {
+            clock = std::chrono::steady_clock::time_point{} +
+                    std::chrono::milliseconds{static_cast<std::ptrdiff_t>(time.get_number())};
+            const bool up = directions != nullptr && int_of((*directions)[index]) < 0;
+            REQUIRE(terminal.inject_input(up ? "\x1b[<64;1;1M" : "\x1b[<65;1;1M"));
+            ++index;
+        }
+        REQUIRE(tui.stop());
+        std::vector<std::ptrdiff_t> frozen;
+        const auto& frozen_values = expected.at(std::string{expected_key}).get_array();
+        for (std::size_t value_index = 0; value_index < frozen_values.size(); ++value_index) {
+            auto value = int_of(frozen_values[value_index]);
+            if (directions != nullptr) value *= int_of((*directions)[value_index]);
+            frozen.push_back(value);
+        }
+        CHECK(observed == frozen);
+        return observed;
+    };
+
+    const auto& fixed = inputs.at("fixed");
+    CHECK(exercise(cch::tui::WheelScrollLines{static_cast<std::size_t>(int_of(fixed.at("lines")))}, fixed, "fixed") ==
+            std::vector<std::ptrdiff_t>{3, 3, 3, 3});
+    CHECK(exercise(cch::tui::AutoWheelScrollLines{}, inputs.at("auto"), "accelerated") ==
+            std::vector<std::ptrdiff_t>{1, 2, 2, 1, 2, 1});
+    CHECK(exercise(cch::tui::AutoWheelScrollLines{}, inputs.at("directionReset"), "directionReset") ==
+            std::vector<std::ptrdiff_t>{1, 5, 5, -1, 1, 5});
+    CHECK(exercise(cch::tui::AutoWheelScrollLines{}, inputs.at("fractionalCarry"), "fractionalCarry") ==
+            std::vector<std::ptrdiff_t>{1, 2, 3, 2, 3});
+
+    std::vector<std::ptrdiff_t> alt_deltas;
+    auto alt_region = std::make_unique<cch::tui::MouseRegion>(std::make_unique<cch::tui::Text>(numbered_text(20), 0, 0),
+            [&alt_deltas](const cch::tui::MouseEvent& event) -> std::optional<cch::tui::MouseEventResult> {
+                if (event.type != cch::tui::MouseEventType::Wheel) return std::nullopt;
+                alt_deltas.push_back(event.wheel_delta.value_or(0));
+                return cch::tui::MouseEventResult{.handled = true, .render = false};
+            });
+    cch::tui::VirtualTerminal alt_terminal({.columns = 20, .rows = 4});
+    cch::tui::AltScreen alt_tui(alt_terminal, cch::tui::AltScreenOptions{.wheel_scroll_lines = std::size_t{3}});
+    REQUIRE(alt_tui.add_child(std::move(alt_region)));
+    REQUIRE(alt_tui.start());
+    REQUIRE(alt_tui.render());
+    REQUIRE(alt_terminal.inject_input("\x1b[<72;1;1M"));
+    REQUIRE(alt_tui.stop());
+    CHECK(alt_deltas == std::vector<std::ptrdiff_t>{-15});
+}
+
+TEST_CASE("frozen nested wheel routing consumes the child then chains only to its enclosing viewport",
+        "[tui][scroll-view][issue1004][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    const auto& scenario = scenario_of(*bundle, "nested-wheel-chaining");
+    const auto& expected = scenario.at("expected");
+    cch::tui::VirtualTerminal terminal({.columns = 30, .rows = 3});
+    cch::tui::AltScreen tui(terminal, cch::tui::AltScreenOptions{.wheel_scroll_lines = std::size_t{5}});
+    tui.set_keybinding_context(std::make_shared<cch::tui::KeybindingsContext>(fullscreen_registry()));
+    auto inner = std::make_unique<cch::tui::ScrollView>(std::make_unique<cch::tui::Text>(numbered_text(4), 0, 0));
+    auto* inner_ptr = inner.get();
+    cch::tui::VStack left;
+    REQUIRE(left.add_child(std::make_unique<cch::tui::Text>("head", 0, 0), cch::tui::StackEntryOptions{.basis = 1}));
+    REQUIRE(left.add_child(std::move(inner), cch::tui::StackEntryOptions{.basis = 2}));
+    REQUIRE(left.add_child(std::make_unique<cch::tui::Text>("tail", 0, 0), cch::tui::StackEntryOptions{.basis = 5}));
+    auto outer = std::make_unique<cch::tui::ScrollView>(
+            std::make_unique<cch::tui::VStack>(std::move(left)), cch::tui::ScrollViewOptions{.primary = true});
+    auto* outer_ptr = outer.get();
+    auto sibling = std::make_unique<cch::tui::ScrollView>(std::make_unique<cch::tui::Text>(numbered_text(10), 0, 0));
+    auto* sibling_ptr = sibling.get();
+    cch::tui::HStack root;
+    REQUIRE(root.add_child(std::move(outer), cch::tui::StackEntryOptions{.basis = 15}));
+    REQUIRE(root.add_child(std::move(sibling), cch::tui::StackEntryOptions{.basis = 15}));
+    tui.set_layout_root(std::make_unique<cch::tui::HStack>(std::move(root)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    CHECK(static_cast<std::ptrdiff_t>(inner_ptr->scroll_top()) == int_of(expected.at("before").at("inner")));
+    CHECK(static_cast<std::ptrdiff_t>(outer_ptr->scroll_top()) == int_of(expected.at("before").at("outer")));
+    CHECK(static_cast<std::ptrdiff_t>(sibling_ptr->scroll_top()) == int_of(expected.at("before").at("unrelated")));
+    REQUIRE(terminal.inject_input(std::string{scenario.at("inputs").at("wheelReport").get_string()}));
+    REQUIRE(tui.render());
+    CHECK(static_cast<std::ptrdiff_t>(inner_ptr->scroll_top()) == int_of(expected.at("after").at("inner")));
+    CHECK(static_cast<std::ptrdiff_t>(outer_ptr->scroll_top()) == int_of(expected.at("after").at("outer")));
+    CHECK(static_cast<std::ptrdiff_t>(sibling_ptr->scroll_top()) == int_of(expected.at("after").at("unrelated")));
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("frozen fullscreen navigation, releases, and indicator clicks match pi",
+        "[tui][scroll-view][issue1004][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    const auto& scenario = scenario_of(*bundle, "alt-screen-navigation-indicator");
+    const auto& phases = scenario.at("expected").at("phases").get_array();
+    const auto phase = [&](std::string_view name) -> const JsonValue& {
+        for (const auto& value : phases)
+            if (value.at("action").get_string() == name) return value;
+        REQUIRE(false);
+        return phases.front();
+    };
+    const auto& inputs = scenario.at("inputs");
+    cch::tui::VirtualTerminal terminal({.columns = 20,
+            .rows = 4,
+            .capabilities = {.synchronized_output = true, .keyboard_protocol = cch::tui::KeyboardProtocol::Kitty}});
+    cch::tui::AltScreen tui(
+            terminal, cch::tui::AltScreenOptions{.scroll_to_end_indicator = [] { return std::string{"Jump end"}; }});
+    auto transcript = std::make_unique<cch::tui::ScrollView>(std::make_unique<cch::tui::Text>(numbered_text(12), 0, 0),
+            cch::tui::ScrollViewOptions{.follow_end = true, .primary = true});
+    auto* transcript_ptr = transcript.get();
+    auto editor = std::make_unique<InputProbe>();
+    auto* editor_ptr = editor.get();
+    cch::tui::VStack root;
+    REQUIRE(root.add_child(std::move(transcript), cch::tui::StackEntryOptions{.basis = 0, .grow = 1}));
+    REQUIRE(root.add_child(std::move(editor), cch::tui::StackEntryOptions{.basis = 1, .shrink = 0}));
+    tui.set_layout_root(std::make_unique<cch::tui::VStack>(std::move(root)));
+    auto context = std::make_shared<cch::tui::KeybindingsContext>(fullscreen_registry());
+    tui.set_keybinding_context(context);
+    REQUIRE(tui.set_focus(editor_ptr));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    CHECK(static_cast<std::ptrdiff_t>(transcript_ptr->scroll_top()) == int_of(phase("initial").at("scrollTop")));
+    for (const auto& value : inputs.at("navigation").get_array())
+        REQUIRE(terminal.inject_input(value.get_string()));
+    REQUIRE(tui.render());
+    CHECK(static_cast<std::ptrdiff_t>(transcript_ptr->scroll_top()) ==
+            int_of(phase("ctrl-home-release").at("scrollTop")));
+    std::vector<std::string> expected_editor_inputs;
+    for (const auto& value : scenario.at("expected").at("editorInputs").get_array())
+        expected_editor_inputs.push_back(value.get_string());
+    CHECK(editor_ptr->inputs == expected_editor_inputs);
+    REQUIRE(terminal.inject_input("\x1b[1;5H"));
+    REQUIRE(tui.render());
+    const auto& home = phase("ctrl-home");
+    CHECK(static_cast<std::ptrdiff_t>(transcript_ptr->scroll_top()) == int_of(home.at("scrollTop")));
+    CHECK(transcript_ptr->following_end() == home.at("followingEnd").get_boolean());
+    for (std::size_t row = 0; row < home.at("lines").get_array().size(); ++row) {
+        auto actual = terminal.screen()[row];
+        while (!actual.empty() && actual.back() == ' ')
+            actual.pop_back();
+        CHECK(actual == home.at("lines").get_array()[row].get_string());
+    }
+    REQUIRE(terminal.inject_input("\x1b[1;5F"));
+    REQUIRE(tui.render());
+    const auto& end = phase("ctrl-end");
+    CHECK(static_cast<std::ptrdiff_t>(transcript_ptr->scroll_top()) == int_of(end.at("scrollTop")));
+    CHECK(transcript_ptr->following_end() == end.at("followingEnd").get_boolean());
+    REQUIRE(terminal.inject_input("\x1b[<64;1;1M"));
+    REQUIRE(tui.render());
+    const auto& wheel = phase("wheel-up-indicator");
+    CHECK(static_cast<std::ptrdiff_t>(transcript_ptr->scroll_top()) == int_of(wheel.at("scrollTop")));
+    CHECK(transcript_ptr->following_end() == wheel.at("followingEnd").get_boolean());
+    CHECK(terminal.screen()[2].find("Jump end") != std::string::npos);
+    REQUIRE(terminal.inject_input("\x1b[<0;7;3M"));
+    REQUIRE(tui.render());
+    const auto& clicked = phase("indicator-click");
+    CHECK(static_cast<std::ptrdiff_t>(transcript_ptr->scroll_top()) == int_of(clicked.at("scrollTop")));
+    CHECK(transcript_ptr->following_end() == clicked.at("followingEnd").get_boolean());
+    REQUIRE(tui.stop());
 }

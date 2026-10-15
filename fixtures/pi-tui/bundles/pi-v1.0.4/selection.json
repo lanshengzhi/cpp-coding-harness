@@ -1,7 +1,7 @@
 {
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-  "capturedAt": "2026-10-14T17:40:14.327Z",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -102,7 +102,7 @@
         "rows": 4
       },
       "inputs": {
-        "text": "\u001b[31mred\u754cabc\u001b[0m",
+        "text": "\u001b[31mred界abc\u001b[0m",
         "drag": [
           {
             "x": 2,
@@ -117,7 +117,7 @@
       },
       "expected": {
         "before": [
-          "red\u754c",
+          "red界",
           "abc",
           "",
           ""
@@ -145,7 +145,7 @@
               "foreground": 1
             },
             {
-              "text": "\u754c",
+              "text": "界",
               "width": 2,
               "inverse": true,
               "foreground": 1
@@ -204,7 +204,7 @@
         ],
         "copyResult": true,
         "copied": [
-          "ed\u754c\nab"
+          "ed界\nab"
         ],
         "copyOnSelect": false
       }
@@ -443,7 +443,7 @@
         "rows": 6
       },
       "inputs": {
-        "text": "src/main-component util\na.b ee_ff 3.14 \u30ab\u30bf\u30ab\u30ca\n\u4e2dx foo,bar",
+        "text": "src/main-component util\na.b ee_ff 3.14 カタカナ\n中x foo,bar",
         "steps": [
           {
             "action": "press",
@@ -585,7 +585,7 @@
             "x": 16,
             "y": 2,
             "advanceMs": 400,
-            "target": "\u30ab\u30bf\u30ab\u30ca (Katakana run)"
+            "target": "カタカナ (Katakana run)"
           },
           {
             "action": "release",
@@ -597,7 +597,7 @@
             "x": 16,
             "y": 2,
             "advanceMs": 150,
-            "target": "\u30ab\u30bf\u30ab\u30ca (second)"
+            "target": "カタカナ (second)"
           },
           {
             "action": "release",
@@ -612,7 +612,7 @@
             "x": 1,
             "y": 3,
             "advanceMs": 400,
-            "target": "\u4e2d (single dictionary-script character)"
+            "target": "中 (single dictionary-script character)"
           },
           {
             "action": "release",
@@ -624,7 +624,7 @@
             "x": 1,
             "y": 3,
             "advanceMs": 150,
-            "target": "\u4e2d (second)"
+            "target": "中 (second)"
           },
           {
             "action": "release",
@@ -740,7 +740,7 @@
               "a.b",
               "ee_ff",
               "3.14",
-              "\u30ab\u30bf\u30ab\u30ca"
+              "カタカナ"
             ]
           },
           {
@@ -751,8 +751,8 @@
               "a.b",
               "ee_ff",
               "3.14",
-              "\u30ab\u30bf\u30ab\u30ca",
-              "\u4e2d"
+              "カタカナ",
+              "中"
             ]
           },
           {
@@ -763,8 +763,8 @@
               "a.b",
               "ee_ff",
               "3.14",
-              "\u30ab\u30bf\u30ab\u30ca",
-              "\u4e2d",
+              "カタカナ",
+              "中",
               "x"
             ]
           },
@@ -776,8 +776,8 @@
               "a.b",
               "ee_ff",
               "3.14",
-              "\u30ab\u30bf\u30ab\u30ca",
-              "\u4e2d",
+              "カタカナ",
+              "中",
               "x",
               ","
             ]
@@ -1465,19 +1465,19 @@
         ],
         "viewports": [
           [
-            "seven eight                  \u2502",
-            "nine ten                     \u2588",
-            "eleven                       \u2588"
+            "seven eight                  │",
+            "nine ten                     █",
+            "eleven                       █"
           ],
           [
-            "one two                      \u2588",
-            "three four                   \u2588",
-            "five six                     \u2502"
+            "one two                      █",
+            "three four                   █",
+            "five six                     │"
           ],
           [
-            "one two                      \u2588",
-            "three four                   \u2588",
-            "five six                     \u2502"
+            "one two                      █",
+            "three four                   █",
+            "five six                     │"
           ]
         ]
       }
@@ -1489,7 +1489,7 @@
         "rows": 5
       },
       "inputs": {
-        "text": "\u65e5\u672c\u8a9e\n\u3053\u3093\u306b\u3061\u306f\n\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35\u0e04\u0e23\u0e31\u0e1a",
+        "text": "日本語\nこんにちは\nสวัสดีครับ",
         "steps": [
           {
             "action": "press",
@@ -1622,52 +1622,52 @@
           {
             "hasSelection": true,
             "copied": [
-              "\u65e5\u672c\u8a9e"
+              "日本語"
             ]
           },
           {
             "hasSelection": false,
             "copied": [
-              "\u65e5\u672c\u8a9e"
+              "日本語"
             ]
           },
           {
             "hasSelection": true,
             "copied": [
-              "\u65e5\u672c\u8a9e",
-              "\u3053\u3093\u306b\u3061\u306f"
+              "日本語",
+              "こんにちは"
             ]
           },
           {
             "hasSelection": false,
             "copied": [
-              "\u65e5\u672c\u8a9e",
-              "\u3053\u3093\u306b\u3061\u306f"
+              "日本語",
+              "こんにちは"
             ]
           },
           {
             "hasSelection": true,
             "copied": [
-              "\u65e5\u672c\u8a9e",
-              "\u3053\u3093\u306b\u3061\u306f",
-              "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35"
+              "日本語",
+              "こんにちは",
+              "สวัสดี"
             ]
           },
           {
             "hasSelection": false,
             "copied": [
-              "\u65e5\u672c\u8a9e",
-              "\u3053\u3093\u306b\u3061\u306f",
-              "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35"
+              "日本語",
+              "こんにちは",
+              "สวัสดี"
             ]
           },
           {
             "hasSelection": true,
             "copied": [
-              "\u65e5\u672c\u8a9e",
-              "\u3053\u3093\u306b\u3061\u306f",
-              "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35",
-              "\u0e04\u0e23\u0e31\u0e1a"
+              "日本語",
+              "こんにちは",
+              "สวัสดี",
+              "ครับ"
             ]
           }
         ]

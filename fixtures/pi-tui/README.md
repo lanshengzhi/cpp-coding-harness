@@ -108,6 +108,21 @@ track, a motion that keeps the hover, a motion that leaves it to the hide timer,
 `stop()` from each other. `capture/scrollbar-scenarios.mts` executes the frozen components
 directly; its source digest is recorded alongside the main generator digest.
 
+For #1004, the named runner re-captured all 16 current families at the same frozen revision and
+extended `scroll-view.json` with `wheel-accelerator`, `nested-wheel-chaining` and
+`alt-screen-navigation-indicator`. They execute the frozen `WheelScrollAccelerator` and
+`TuiAltScreen` over pi's `VirtualTerminal`: fixed and automatic wheel line counts, velocity
+scaling, same-notch burst handling, direction/pause resets and fractional carry are pinned by
+individual streams; the nested route proves the inner viewport consumes two of five lines, its
+parent consumes the remaining three, and a side-by-side viewport stays fixed; and the fullscreen
+case distinguishes focused-editor Home/End input from Ctrl+Home/End viewport navigation, checks
+key releases leave the viewport alone, and checks a wheel-up indicator click returns to the end.
+The C++ replay drives `AltScreen` through `VirtualTerminal` and checks both frozen outputs and the
+cases that distinguish consumption, chaining, key routing and click handling. The capture asserts
+the nested and fullscreen observations while running against frozen pi, and its source endpoints
+name the accelerator, keybindings and indicator handlers. `capture/scroll-view-scenarios.mts`
+executes these cases directly; its source digest is recorded in the manifest.
+
 For #1006, the named runner re-captured all 16 current families at the same frozen revision and
 added `selection.json`. Its four scenarios execute pi's `TuiAltScreen`, `Text` and
 `VirtualTerminal`, and record the visible selection cells, exact copied text, copy-on-select
