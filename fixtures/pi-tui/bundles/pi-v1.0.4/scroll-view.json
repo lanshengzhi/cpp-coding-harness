@@ -29,7 +29,7 @@
   "sourceEndpoints": [
     "packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo,ScrollView.scrollBy,ScrollView.updateLayout,ScrollView.scrollToStart,ScrollView.scrollToEnd",
     "packages/tui/src/layout.ts:renderLayoutFrame,getScrollViewsAt,cropKittyImageLine",
-    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.constructor,TuiAltScreen.handleViewportInput,TuiAltScreen.routeWheel,TuiAltScreen.compositeScrollToEndIndicator,TuiAltScreen.handleMouseEvent",
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.constructor,TuiAltScreen.handleViewportInput,TuiAltScreen.routeWheel,TuiAltScreen.compositeScrollToEndIndicator,TuiAltScreen.handleMouseEvent,TuiAltScreen.updateSelectionAutoScroll,TuiAltScreen.autoScrollSelection,TuiAltScreen.stopSelectionAutoScroll",
     "packages/tui/src/wheel-scroll.ts:WheelScrollAccelerator.constructor,WheelScrollAccelerator.setLines,WheelScrollAccelerator.next",
     "packages/tui/src/keybindings.ts:TUI_KEYBINDINGS,KeybindingsManager,setKeybindings,getKeybindings",
     "packages/tui/test/tui-alt-screen.test.ts:routes Home and End to the focused component and Ctrl+Home/End to the transcript,shows a clickable jump-to-end indicator on the transcript's last row while scrolled up",
@@ -785,6 +785,181 @@
               "four"
             ]
           }
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-auto-scroll-edge",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "documentLines": 10,
+        "press": {
+          "x": 1,
+          "y": 3
+        },
+        "drag": {
+          "x": 1,
+          "y": 1
+        },
+        "holdMs": 130,
+        "release": {
+          "x": 1,
+          "y": 1
+        }
+      },
+      "expected": {
+        "initialViewportTop": 6,
+        "trace": [
+          {
+            "tick": 1,
+            "viewportTop": 5,
+            "focusRow": 5,
+            "focusCol": 0,
+            "selectionText": "line 6\nline 7\nline 8\nl"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 4,
+            "focusRow": 4,
+            "focusCol": 0,
+            "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
+          },
+          {
+            "tick": 3,
+            "viewportTop": 3,
+            "focusRow": 3,
+            "focusCol": 0,
+            "selectionText": "line 4\nline 5\nline 6\nline 7\nline 8\nl"
+          },
+          {
+            "tick": 3,
+            "viewportTop": 3,
+            "pointerRow": 0,
+            "selectionText": "line 4\nline 5\nline 6\nline 7\nline 8\nl"
+          }
+        ],
+        "tickCount": 3,
+        "clipboardWrites": [
+          "\u001b]52;c;bGluZSA0CmxpbmUgNQpsaW5lIDYKbGluZSA3CmxpbmUgOAps\u0007"
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-auto-scroll-cancel",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "documentLines": 10,
+        "firstDrag": {
+          "x": 1,
+          "y": 1
+        },
+        "release": {
+          "x": 1,
+          "y": 1
+        },
+        "secondDrag": {
+          "x": 1,
+          "y": 2
+        }
+      },
+      "expected": {
+        "initialViewportTop": 6,
+        "trace": [
+          {
+            "tick": 1,
+            "viewportTop": 5,
+            "focusRow": 5,
+            "focusCol": 0,
+            "selectionText": "line 6\nline 7\nline 8\nl"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 4,
+            "focusRow": 4,
+            "focusCol": 0,
+            "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 4,
+            "pointerRow": 0,
+            "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 4,
+            "pointerRow": 0,
+            "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 4,
+            "pointerRow": 0,
+            "selectionText": "line 6\nl"
+          }
+        ],
+        "tickCount": 2,
+        "clipboardWrites": [
+          "\u001b]52;c;bGluZSA1CmxpbmUgNgpsaW5lIDcKbGluZSA4Cmw=\u0007",
+          "\u001b]52;c;bGluZSA1CmxpbmUgNgps\u0007"
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-auto-scroll-limit",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "documentLines": 5,
+        "press": {
+          "x": 1,
+          "y": 4
+        },
+        "drag": {
+          "x": 1,
+          "y": 1
+        },
+        "holdMs": 200,
+        "release": {
+          "x": 1,
+          "y": 1
+        }
+      },
+      "expected": {
+        "initialViewportTop": 1,
+        "trace": [
+          {
+            "tick": 1,
+            "viewportTop": 0,
+            "focusRow": 0,
+            "focusCol": 0,
+            "selectionText": "line 1\nline 2\nline 3\nline 4\nl"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 0,
+            "focusRow": 0,
+            "focusCol": 0,
+            "selectionText": "line 1\nline 2\nline 3\nline 4\nl"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 0,
+            "pointerRow": 0,
+            "selectionText": "line 1\nline 2\nline 3\nline 4\nl"
+          }
+        ],
+        "tickCount": 2,
+        "clipboardWrites": [
+          "\u001b]52;c;bGluZSAxCmxpbmUgMgpsaW5lIDMKbGluZSA0Cmw=\u0007"
         ]
       }
     }

@@ -527,10 +527,209 @@ export async function captureScrollView(piCheckout: string) {
 		});
 	}
 
+	// A terminal that records its writes, so the clipboard (OSC 52) expansion
+	// the auto-scroll selection produces is part of the recorded observation
+	// (mirrors the frozen test's RecordingTerminal, :1727-1742).
+	class RecordingTerminal extends VirtualTerminal {
+		readonly events: Array<{ type: "write"; data: string }> = [];
+		override write(data: string): void {
+			this.events.push({ type: "write", data });
+			super.write(data);
+		}
+	}
+
+	/// The auto-scroll observation harness: one `TuiAltScreen` over a
+	/// RecordingTerminal, the `autoScrollSelection` interval wrapped so every
+	/// 50ms tick appends its exact observable state (wall-clock independent).
+	const autoScrollObservation = async (
+		lines: number,
+		drag: (
+			controls: { record: () => void; tickCount: () => number },
+			terminal: RecordingTerminal,
+			tui: any,
+			text: any,
+		) => Promise<void>,
+	) => {
+		const terminal = new RecordingTerminal(20, 4);
+		const tui = new TuiAltScreen(terminal);
+		const text = new Text(Array.from({ length: lines }, (_, index) => `line ${index + 1}`).join("\n"), 0, 0);
+		tui.addChild(text);
+		tui.start();
+		await terminal.waitForRender();
+		const trace: any[] = [];
+		let tickCount = 0;
+		const orig = tui.autoScrollSelection.bind(tui);
+		// Method assignment on the instance: the class method reads
+		// `this.autoScrollSelection`, so the wrapper sees every interval tick.
+		tui.autoScrollSelection = () => {
+			orig();
+			tickCount += 1;
+			trace.push({
+				tick: tickCount,
+				viewportTop: tui.viewportTop,
+				focusRow: tui.selectionFocus?.row ?? null,
+				focusCol: tui.selectionFocus?.col ?? null,
+				selectionText: tui.getActiveSelectionText() ?? null,
+			});
+		};
+		await drag({
+			record: () => {
+			// Drain the frame the tick requested before recording the pointer row:
+			// render reads the live focus (which moves with the scroll), while the
+			// recorded pointer row is the fixed report the drag stays at.
+			void terminal.flush();
+			trace.push({
+				tick: tickCount,
+				viewportTop: tui.viewportTop,
+				pointerRow: Math.max(0, Math.min(3, tui.selectionDragPointer?.y ?? 0)),
+				selectionText: tui.getActiveSelectionText() ?? null,
+			});
+			},
+			tickCount: () => tickCount,
+		}, terminal, tui, text);
+		const clipboardWrites = terminal.events
+			.filter((event) => event.data.includes("\x1b]52;c;"))
+			.map((event) => event.data);
+		tui.stop();
+		return { initialViewportTop: lines - 4, trace, tickCount, clipboardWrites };
+	};
+
+	// A held drag above the viewport's visible top scrolls one line per 50ms
+	// tick, extends the focus from the clipped pointer, and the release copies
+	// the selected rows (frozen `test/tui-alt-screen.test.ts:1734-1761`).
+	{
+		const result = await autoScrollObservation(10, async ({ record }, terminal) => {
+			terminal.sendInput("\x1b[<0;1;3M");
+			terminal.sendInput("\x1b[<32;1;1M");
+			await new Promise((resolve) => setTimeout(resolve, 130));
+			await terminal.waitForRender();
+			record();
+			terminal.sendInput("\x1b[<0;1;1m");
+			await terminal.waitForRender();
+		});
+		assert.ok(result.tickCount >= 1, `expected at least one auto-scroll tick, got ${result.tickCount}`);
+		assert.ok(
+			result.trace[0].viewportTop < result.initialViewportTop,
+			`expected auto-scroll above row ${result.initialViewportTop}, got ${result.trace[0].viewportTop} (trace ${JSON.stringify(result.trace)})`,
+		);
+		// The copied text is base64 inside the OSC 52 sequence: assert on the
+		// decoded payload (the frozen test decodes it the same way, :1750-1760).
+		const decoded = result.clipboardWrites.map((data) =>
+			Buffer.from(/\x1b\]52;c;([^\x07]*)\x07/.exec(data)?.[1] ?? "", "base64").toString("utf8"),
+		);
+		assert.ok(
+			decoded.some((text) => text.includes("line 7")),
+			`expected the OSC 52 write to contain the selected rows: ${JSON.stringify(decoded)}`,
+		);
+		scenarios.push({
+			name: "alt-screen-auto-scroll-edge",
+			dimensions: { columns: 20, rows: 4 },
+			inputs: {
+				documentLines: 10,
+				press: { x: 1, y: 3 },
+				drag: { x: 1, y: 1 },
+				holdMs: 130,
+				release: { x: 1, y: 1 },
+			},
+			expected: {
+				initialViewportTop: result.initialViewportTop,
+				trace: result.trace,
+				tickCount: result.tickCount,
+				clipboardWrites: result.clipboardWrites,
+			},
+		});
+	}
+
+	// Release cancels the interval immediately (no further tick after the
+	// release even though the wrapper keeps counting), and a second drag back
+	// to a direction-0 cell stops the interval on that motion itself
+	// (frozen `clearInterval` semantics, :1308-1313).
+	{
+		const result = await autoScrollObservation(10, async ({ record, tickCount }, terminal) => {
+			terminal.sendInput("\x1b[<0;1;3M");
+			terminal.sendInput("\x1b[<32;1;1M");
+			await new Promise((resolve) => setTimeout(resolve, 110));
+			await terminal.waitForRender();
+			record();
+			const ticksBeforeRelease = tickCount();
+			terminal.sendInput("\x1b[<0;1;1m");
+			await terminal.waitForRender();
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			const ticksAfterRelease = tickCount();
+			record();
+			assert.strictEqual(ticksAfterRelease, ticksBeforeRelease, "release must cancel the interval");
+			terminal.sendInput("\x1b[<0;1;3M");
+			terminal.sendInput("\x1b[<32;1;2M");
+			await terminal.waitForRender();
+			const ticksBeforeCenter = tickCount();
+			await new Promise((resolve) => setTimeout(resolve, 80));
+			const ticksAfterCenter = tickCount();
+			record();
+			assert.strictEqual(ticksAfterCenter, ticksBeforeCenter, "direction-0 motion must stop the interval");
+			terminal.sendInput("\x1b[<0;1;1m");
+			await terminal.waitForRender();
+		});
+		scenarios.push({
+			name: "alt-screen-auto-scroll-cancel",
+			dimensions: { columns: 20, rows: 4 },
+			inputs: {
+				documentLines: 10,
+				firstDrag: { x: 1, y: 1 },
+				release: { x: 1, y: 1 },
+				secondDrag: { x: 1, y: 2 },
+			},
+			expected: {
+				initialViewportTop: result.initialViewportTop,
+				trace: result.trace,
+				tickCount: result.tickCount,
+				clipboardWrites: result.clipboardWrites,
+			},
+		});
+	}
+
+	// A document one scroll step from the end stops on the tick that hits the
+	// limit: the limit tick is the last (the interval counter proves it).
+	{
+		const result = await autoScrollObservation(5, async ({ record }, terminal) => {
+			// Row 4 is one line from the content end (rows 1-5 fill the viewport):
+		// the first tick reaches the limit and stops the interval.
+			terminal.sendInput("\x1b[<0;1;4M");
+			terminal.sendInput("\x1b[<32;1;1M");
+			await new Promise((resolve) => setTimeout(resolve, 200));
+			await terminal.waitForRender();
+			record();
+			terminal.sendInput("\x1b[<0;1;1m");
+			await terminal.waitForRender();
+		});
+		// The limit tick is the last scroll: a second fired tick stops without
+		// moving (frozen `remaining === direction`, :1295), which is the proof
+		// the interval no longer scrolls.
+		assert.strictEqual(result.tickCount, 2, `expected the limit to fire one moving tick then stop, got ${result.tickCount} (trace ${JSON.stringify(result.trace)})`);
+		assert.strictEqual(result.trace[0].viewportTop, 0, "the limit tick must reach the top");
+		assert.strictEqual(result.trace[1].viewportTop, 0, "the post-limit tick must not scroll");
+		scenarios.push({
+			name: "alt-screen-auto-scroll-limit",
+			dimensions: { columns: 20, rows: 4 },
+			inputs: {
+				documentLines: 5,
+				press: { x: 1, y: 4 },
+				drag: { x: 1, y: 1 },
+				holdMs: 200,
+				release: { x: 1, y: 1 },
+			},
+			expected: {
+				initialViewportTop: result.initialViewportTop,
+				trace: result.trace,
+				tickCount: result.tickCount,
+				clipboardWrites: result.clipboardWrites,
+			},
+		});
+	}
+
 	const sourceEndpoints = [
 		"packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo,ScrollView.scrollBy,ScrollView.updateLayout,ScrollView.scrollToStart,ScrollView.scrollToEnd",
 		"packages/tui/src/layout.ts:renderLayoutFrame,getScrollViewsAt,cropKittyImageLine",
-		"packages/tui/src/tui-alt-screen.ts:TuiAltScreen.constructor,TuiAltScreen.handleViewportInput,TuiAltScreen.routeWheel,TuiAltScreen.compositeScrollToEndIndicator,TuiAltScreen.handleMouseEvent",
+		"packages/tui/src/tui-alt-screen.ts:TuiAltScreen.constructor,TuiAltScreen.handleViewportInput,TuiAltScreen.routeWheel,TuiAltScreen.compositeScrollToEndIndicator,TuiAltScreen.handleMouseEvent,TuiAltScreen.updateSelectionAutoScroll,TuiAltScreen.autoScrollSelection,TuiAltScreen.stopSelectionAutoScroll",
 		"packages/tui/src/wheel-scroll.ts:WheelScrollAccelerator.constructor,WheelScrollAccelerator.setLines,WheelScrollAccelerator.next",
 		"packages/tui/src/keybindings.ts:TUI_KEYBINDINGS,KeybindingsManager,setKeybindings,getKeybindings",
 		"packages/tui/test/tui-alt-screen.test.ts:routes Home and End to the focused component and Ctrl+Home/End to the transcript,shows a clickable jump-to-end indicator on the transcript's last row while scrolled up",
