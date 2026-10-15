@@ -2,6 +2,7 @@
 
 #include <cch/tui/ITui.hpp>
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/OverlayHandle.hpp>
 #include <cch/tui/Mouse.hpp>
 #include <cch/tui/RawInputListener.hpp>
 #include <cch/tui/ScrollView.hpp>
@@ -21,8 +22,10 @@
 namespace cch::tui {
 
 namespace detail {
+class OverlayCompositor;
 struct LayoutFrame;
 struct MousePacket;
+struct OverlayHandleContext;
 } // namespace detail
 
 /// Absolute-viewport render state of an alternate-screen root, for transfer
@@ -87,9 +90,6 @@ struct AltScreenOptions {
 /// main buffer returns, whether it is called normally or after a failed
 /// start; `TuiStopOptions::preserve_screen` does not apply to this root.
 ///
-/// Overlays are not implemented on this root yet: every overlay entry point
-/// fails validation until the deferred overlay chain lands.
-///
 /// Pointer routing is this root's own stage (pi `TuiAltScreen.handleViewportInput`):
 /// complete mouse reports are normalized into `MouseEvent` values, dispatched to
 /// the component the last rendered frame placed under the pointer, and otherwise
@@ -102,7 +102,7 @@ struct AltScreenOptions {
 /// `tui-alt-screen.ts:262-270`): the viewport shows the document's end while it
 /// follows appended rows, and `viewport_top`/`is_following_output` report where
 /// it settled.
-class AltScreen final : public ITui, public detail::TuiHost {
+class AltScreen final : public ITui, public detail::TuiHost, private detail::OverlayHost {
 public:
     explicit AltScreen(Terminal& terminal, AltScreenOptions options = {});
     ~AltScreen() override;
@@ -205,6 +205,8 @@ public:
     [[nodiscard]] std::optional<std::string> selection_text_trace() const;
 
 private:
+    friend class OverlayHandle;
+
     struct RenderScheduleState {
         AltScreen* owner{nullptr};
     };
@@ -285,6 +287,16 @@ private:
     void handle_input(std::string input);
     void handle_resize(TerminalDimensions dimensions);
     void apply_focus(Component* component);
+    void set_focus_internal(Component* component, bool preserve_restore);
+    void remove_overlay_internal(Overlay* overlay) override;
+    void hide_overlay_internal(Overlay* overlay, bool hidden) override;
+    void focus_overlay_internal(Overlay* overlay) override;
+    void unfocus_overlay_internal(Overlay* overlay, std::optional<Component*> target) override;
+    [[nodiscard]] bool is_overlay_focused_internal(const Overlay* overlay) const override;
+    [[nodiscard]] std::optional<OverlayBounds> overlay_bounds_internal(const Overlay* overlay) const override;
+    void clear_overlay_restore_for(Overlay* overlay);
+    [[nodiscard]] Component* resolve_overlay_restore();
+    void reconcile_overlay_focus(TerminalDimensions dimensions);
     [[nodiscard]] bool focus_target_available(Component* component) const;
     void fallback_focus();
     void schedule_render();
@@ -292,6 +304,8 @@ private:
     void execute_scheduled_render(std::size_t generation);
 
     std::shared_ptr<RenderScheduleState> render_schedule_state_;
+    std::shared_ptr<detail::OverlayHandleContext> overlay_handle_context_;
+    std::unique_ptr<detail::OverlayCompositor> compositor_;
     /// One click sequence of the pointer (pi `lastComponentClick`): the number a
     /// repeated click on the same component and cell reports.
     struct MouseClick {
@@ -460,6 +474,8 @@ private:
     bool render_scheduled_{false};
     bool clear_on_shrink_{false};
     std::size_t render_generation_{0};
+    std::size_t overlay_focus_order_counter_{0};
+    detail::TuiHost::OverlayFocusRestoreState overlay_focus_restore_{};
 
     // Absolute-viewport baseline. Construction starts with no baseline and
     // paints every row without clearing; `reset_pending_` is the sentinel set

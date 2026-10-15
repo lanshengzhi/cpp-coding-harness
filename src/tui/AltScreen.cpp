@@ -3,6 +3,7 @@
 #include "tui/Layout.hpp"
 #include "tui/LineCompositor.hpp"
 #include "tui/MouseRouting.hpp"
+#include "tui/OverlayCompositor.hpp"
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 #include "tui/WordNavigation.hpp"
@@ -46,11 +47,6 @@ constexpr auto kComponentDoubleClickInterval = std::chrono::milliseconds{500};
     if (term == nullptr) return true;
     const std::string_view value{term};
     return !value.starts_with("tmux") && !value.starts_with("screen");
-}
-
-[[nodiscard]] support::Error alt_overlay_unavailable() {
-    return support::make_error(
-            support::ErrorCode::Validation, "Alternate-screen overlays are not available on this root yet");
 }
 
 [[nodiscard]] std::string base64_encode(std::string_view value) {
@@ -214,7 +210,8 @@ private:
 
 AltScreen::AltScreen(Terminal& terminal, AltScreenOptions options)
     : detail::TuiHost(terminal), render_schedule_state_(std::make_shared<RenderScheduleState>()),
-      selection_click_clock_([] {
+      overlay_handle_context_(std::make_shared<detail::OverlayHandleContext>()),
+      compositor_(std::make_unique<detail::OverlayCompositor>()), selection_click_clock_([] {
           return std::chrono::duration_cast<std::chrono::milliseconds>(
                   std::chrono::system_clock::now().time_since_epoch());
       }),
@@ -222,6 +219,7 @@ AltScreen::AltScreen(Terminal& terminal, AltScreenOptions options)
       scroll_to_end_indicator_(std::move(options.scroll_to_end_indicator)), copy_on_select_(options.copy_on_select),
       selection_copy_sink_(std::move(options.copy_selection)) {
     render_schedule_state_->owner = this;
+    overlay_handle_context_->owner = this;
     if (!selection_copy_sink_) {
         selection_copy_sink_ = [this](std::string_view text) { return write_osc52(terminal_, text); };
     }
@@ -272,6 +270,7 @@ void AltScreen::set_selection_click_clock(std::move_only_function<std::chrono::m
 AltScreen::~AltScreen() {
     (void)stop();
     render_schedule_state_->owner = nullptr;
+    overlay_handle_context_->owner = nullptr;
 }
 
 bool AltScreen::owns(const Component* component) const {
@@ -329,6 +328,24 @@ support::ExpectedVoid AltScreen::remove_child(Component* component) {
     }
 
     const bool was_focused = focused_ == component;
+    const bool was_blocker = overlay_focus_restore_.status == OverlayFocusRestoreStatus::Blocked &&
+                             overlay_focus_restore_.blocked_by == component;
+    const auto restore_state = overlay_focus_restore_;
+    compositor_->forget_component(component);
+    if (was_blocker) {
+        overlay_focus_restore_ = {};
+        if (restore_state.resume_to_overlay && compositor_->owns(restore_state.overlay)) {
+            set_focus_internal(restore_state.overlay, false);
+        } else if (!restore_state.resume_to_overlay && restore_state.resume_target != component &&
+                   focus_target_available(restore_state.resume_target)) {
+            set_focus_internal(restore_state.resume_target, false);
+        } else if (focused_ == component) {
+            apply_focus(nullptr);
+        }
+    } else if (overlay_focus_restore_.status == OverlayFocusRestoreStatus::Blocked &&
+               !overlay_focus_restore_.resume_to_overlay && overlay_focus_restore_.resume_target == component) {
+        overlay_focus_restore_.resume_target = nullptr;
+    }
     if (scrollbar_drag_ != std::nullopt && component->contains(scrollbar_drag_->scroll_view)) {
         stop_scrollbar_drag();
         stop_scrollbar_hover();
@@ -338,9 +355,9 @@ support::ExpectedVoid AltScreen::remove_child(Component* component) {
     retired_children_.push_back(std::move(*found));
     children_.erase(found);
     invalidate_composition_cache();
-    if (was_focused) {
-        apply_focus(nullptr);
-        fallback_focus();
+    if (was_focused && !was_blocker) {
+        set_focus_internal(nullptr, false);
+        if (focused_ == nullptr) fallback_focus();
     }
     request_render();
     return {};
@@ -349,26 +366,106 @@ support::ExpectedVoid AltScreen::remove_child(Component* component) {
 void AltScreen::clear_children() {
     ChildOperation operation(*this);
     const bool was_focused = focused_ != nullptr && owns(focused_);
+    const bool was_blocker = overlay_focus_restore_.status == OverlayFocusRestoreStatus::Blocked &&
+                             overlay_focus_restore_.blocked_by != nullptr && owns(overlay_focus_restore_.blocked_by);
+    const auto restore_state = overlay_focus_restore_;
+    const bool removed_restore_target =
+            restore_state.status == OverlayFocusRestoreStatus::Blocked && !restore_state.resume_to_overlay &&
+            std::any_of(children_.begin(), children_.end(), [&restore_state](const auto& child) {
+                return child.get() == restore_state.resume_target;
+            });
     // Without a layout root, the attached children are the whole composition,
     // so clearing them invalidates any viewport interaction with that document.
     if (layout_root_ == nullptr) {
         stop_scrollbar_drag();
         stop_scrollbar_hover();
     }
+    for (const auto& child : children_)
+        compositor_->forget_component(child.get());
+    if (was_blocker) {
+        overlay_focus_restore_ = {};
+        if (restore_state.resume_to_overlay && compositor_->owns(restore_state.overlay)) {
+            set_focus_internal(restore_state.overlay, false);
+        } else if (!restore_state.resume_to_overlay && !removed_restore_target &&
+                   focus_target_available(restore_state.resume_target)) {
+            set_focus_internal(restore_state.resume_target, false);
+        } else if (focused_ != nullptr && owns(focused_)) {
+            apply_focus(nullptr);
+        }
+    } else if (removed_restore_target) {
+        overlay_focus_restore_.resume_target = nullptr;
+    }
     for (auto& child : children_)
         retired_children_.push_back(std::move(child));
     children_.clear();
     invalidate_composition_cache();
-    if (was_focused) apply_focus(nullptr);
+    if (was_focused && !was_blocker) set_focus_internal(nullptr, false);
     request_render();
 }
 
 bool AltScreen::focus_target_available(Component* component) const {
-    return owns(component) && dynamic_cast<Focusable*>(component) != nullptr;
+    if (component == nullptr) return false;
+    if (owns(component)) return dynamic_cast<Focusable*>(component) != nullptr;
+    return compositor_->focus_target_available(component, terminal_.dimensions());
 }
 
 void AltScreen::apply_focus(Component* component) {
     detail::TuiHost::apply_focus(component, [this](Component* candidate) { return focus_target_available(candidate); });
+}
+
+void AltScreen::set_focus_internal(Component* component, bool preserve_restore) {
+    const auto previous = focused_;
+    const auto restore_before = overlay_focus_restore_;
+    const auto is_overlay = [this](Component* candidate) {
+        auto* overlay = dynamic_cast<Overlay*>(candidate);
+        return overlay != nullptr && compositor_->owns(overlay);
+    };
+    auto* previous_overlay = is_overlay(previous) ? dynamic_cast<Overlay*>(previous) : nullptr;
+    auto* next_overlay = is_overlay(component) ? dynamic_cast<Overlay*>(component) : nullptr;
+
+    if (component != nullptr && next_overlay == nullptr) {
+        if (overlay_focus_restore_.status == OverlayFocusRestoreStatus::Blocked &&
+                overlay_focus_restore_.blocked_by == previous) {
+            if (!overlay_focus_restore_.resume_to_overlay) {
+                component = overlay_focus_restore_.resume_target;
+                overlay_focus_restore_ = {};
+            } else if (previous == nullptr || !owns(previous)) {
+                component = resolve_overlay_restore();
+            } else {
+                overlay_focus_restore_.blocked_by = component;
+            }
+        } else if (!preserve_restore && previous_overlay != nullptr &&
+                   overlay_focus_restore_.status == OverlayFocusRestoreStatus::Eligible &&
+                   overlay_focus_restore_.overlay == previous_overlay) {
+            overlay_focus_restore_ = OverlayFocusRestoreState{
+                    .status = OverlayFocusRestoreStatus::Blocked,
+                    .overlay = previous_overlay,
+                    .blocked_by = component,
+            };
+        }
+    } else if (component == nullptr) {
+        if (overlay_focus_restore_.status == OverlayFocusRestoreStatus::Blocked &&
+                overlay_focus_restore_.blocked_by == previous) {
+            component = resolve_overlay_restore();
+        } else if (overlay_focus_restore_.status == OverlayFocusRestoreStatus::Blocked &&
+                   !overlay_focus_restore_.resume_to_overlay && previous == overlay_focus_restore_.resume_target) {
+            overlay_focus_restore_ = {};
+        } else if (!preserve_restore) {
+            overlay_focus_restore_ = {};
+        }
+    }
+
+    apply_focus(component);
+    auto* focused_overlay = dynamic_cast<Overlay*>(focused_);
+    if (focused_overlay != nullptr && compositor_->visible(focused_overlay, terminal_.dimensions())) {
+        overlay_focus_restore_ = OverlayFocusRestoreState{
+                .status = OverlayFocusRestoreStatus::Eligible,
+                .overlay = focused_overlay,
+        };
+    } else if (preserve_restore && restore_before.status != OverlayFocusRestoreStatus::Inactive &&
+               overlay_focus_restore_.status == OverlayFocusRestoreStatus::Inactive) {
+        overlay_focus_restore_ = restore_before;
+    }
 }
 
 support::ExpectedVoid AltScreen::set_focus(Component* component) {
@@ -378,25 +475,32 @@ support::ExpectedVoid AltScreen::set_focus(Component* component) {
                 support::make_error(support::ErrorCode::Validation, "TUI cannot focus components while stopping"));
     }
     if (component != nullptr && !owns(component)) {
-        return std::unexpected(
-                support::make_error(support::ErrorCode::Validation, "TUI focus target is not attached to this root"));
+        auto* overlay = dynamic_cast<Overlay*>(component);
+        if (overlay == nullptr || !compositor_->owns(overlay)) {
+            return std::unexpected(support::make_error(
+                    support::ErrorCode::Validation, "TUI focus target is not attached to this root"));
+        }
     }
     if (component != nullptr && dynamic_cast<Focusable*>(component) == nullptr) {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "TUI focus target does not participate in focus"));
     }
     if (component == focused_) return {};
-    apply_focus(component);
+    set_focus_internal(component, false);
     return {};
 }
 
 void AltScreen::fallback_focus() {
     ChildOperation operation(*this);
+    if (auto* overlay = compositor_->topmost_focusable(terminal_.dimensions())) {
+        set_focus_internal(overlay, false);
+        return;
+    }
     for (const auto& child : children_) {
         auto* focusable = dynamic_cast<Focusable*>(child.get());
         if (focusable == nullptr) continue;
         auto* as_component = dynamic_cast<Component*>(focusable);
-        if (as_component != focused_) apply_focus(as_component);
+        if (as_component != focused_) set_focus_internal(as_component, false);
         return;
     }
 }
@@ -557,6 +661,7 @@ support::ExpectedVoid AltScreen::render_now() {
 support::ExpectedVoid AltScreen::render_frame() {
     ChildOperation operation(*this);
     const auto dimensions = terminal_.dimensions();
+    reconcile_overlay_focus(dimensions);
     if (dimensions.columns == 0 || dimensions.rows == 0) {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "TUI requires positive terminal dimensions"));
@@ -583,6 +688,16 @@ support::ExpectedVoid AltScreen::render_frame() {
     lines = std::move(cached_frame_->lines);
     cursor = cached_frame_->cursor;
     if (auto indicator = composite_scroll_to_end_indicator(lines); !indicator) return indicator;
+    const bool compose_overlays = compositor_->has_visible_overlays(dimensions);
+    if (compose_overlays) {
+        RenderResult output{.lines = std::move(lines), .images = std::move(cached_frame_->images)};
+        auto materialized = detail::OverlayCompositor::materialize_images(
+                std::move(output), terminal_.capabilities(), dimensions.columns, dimensions.rows);
+        if (auto overlaid = compositor_->composite(dimensions, terminal_.capabilities(), materialized); !overlaid)
+            return overlaid;
+        lines = std::move(materialized.lines);
+        if (materialized.cursor) cursor = materialized.cursor;
+    }
     return render_viewport(lines, cursor, dimensions);
 }
 
@@ -1268,6 +1383,7 @@ void AltScreen::handle_input(std::string input) {
 
 void AltScreen::dispatch_input(const InputEventVariant& event) {
     ChildOperation operation(*this);
+    reconcile_overlay_focus(terminal_.dimensions());
     if (const auto* key = std::get_if<KeyEvent>(&event); key != nullptr && handle_viewport_key(*key)) return;
     auto* input_handler = dynamic_cast<InputHandler*>(focused_);
     if (input_handler == nullptr) return;
@@ -1827,28 +1943,254 @@ std::future<TerminalColors> AltScreen::query_terminal_colors(TerminalColorsQuery
 }
 
 support::Expected<OverlayHandle> AltScreen::show_overlay(std::unique_ptr<Overlay> overlay) {
-    (void)overlay;
-    return std::unexpected(alt_overlay_unavailable());
+    if (!overlay) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "TUI cannot attach a null Overlay"));
+    }
+    auto* component = overlay.get();
+    auto state = std::make_shared<detail::OverlayHandleState>();
+    if (auto attached = compositor_->add_overlay(std::move(overlay), focused_, ++overlay_focus_order_counter_, state);
+            !attached) {
+        return std::unexpected(attached.error());
+    }
+    auto handle = OverlayHandle{overlay_handle_context_, std::move(state), component};
+    if (!component->options().non_capturing && compositor_->visible(component, terminal_.dimensions()))
+        set_focus_internal(component, false);
+    request_render();
+    return handle;
 }
 
 support::Expected<std::reference_wrapper<Overlay>> AltScreen::add_overlay(std::unique_ptr<Overlay> overlay) {
-    (void)overlay;
-    return std::unexpected(alt_overlay_unavailable());
+    if (!overlay) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "TUI cannot attach a null Overlay"));
+    }
+    auto attached = compositor_->add_overlay(std::move(overlay), focused_, ++overlay_focus_order_counter_);
+    if (attached && !attached->get().options().non_capturing &&
+            compositor_->visible(&attached->get(), terminal_.dimensions()))
+        set_focus_internal(&attached->get(), false);
+    if (attached) request_render();
+    return attached;
 }
 
 support::ExpectedVoid AltScreen::remove_overlay(Overlay* overlay) {
-    (void)overlay;
-    return std::unexpected(alt_overlay_unavailable());
+    if (overlay == nullptr) return {};
+    if (!compositor_->owns(overlay)) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Overlay is not attached to this TUI"));
+    }
+    remove_overlay_internal(overlay);
+    return {};
+}
+
+void AltScreen::remove_overlay_internal(Overlay* overlay) {
+    if (overlay == nullptr || !compositor_->owns(overlay)) return;
+    const auto pre_focus = compositor_->pre_focus(overlay);
+    const bool was_focused = focused_ == overlay;
+    const auto restore_state = overlay_focus_restore_;
+    const bool was_blocker =
+            restore_state.status == OverlayFocusRestoreStatus::Blocked && restore_state.blocked_by == overlay;
+    const bool restore_another_overlay = was_blocker && restore_state.resume_to_overlay &&
+                                         restore_state.overlay != overlay && compositor_->owns(restore_state.overlay);
+    compositor_->retarget_pre_focus(overlay, pre_focus);
+    clear_overlay_restore_for(overlay);
+    if (was_focused) apply_focus(nullptr);
+    static_cast<void>(compositor_->remove(overlay));
+
+    if (restore_another_overlay) {
+        overlay_focus_restore_ = restore_state;
+        overlay_focus_restore_.blocked_by = nullptr;
+        set_focus_internal(restore_state.overlay, true);
+    } else if (was_blocker) {
+        overlay_focus_restore_ = restore_state;
+        overlay_focus_restore_.blocked_by = nullptr;
+        auto* resume_target = restore_state.resume_to_overlay ? static_cast<Component*>(restore_state.overlay)
+                                                              : restore_state.resume_target;
+        if (!restore_state.resume_to_overlay || compositor_->owns(restore_state.overlay))
+            set_focus_internal(resume_target, true);
+        else
+            overlay_focus_restore_ = {};
+    } else if (was_focused) {
+        auto* next = compositor_->topmost_focusable(terminal_.dimensions());
+        auto* target = next != nullptr ? static_cast<Component*>(next) : pre_focus;
+        set_focus_internal(target, false);
+        if (focused_ == nullptr) fallback_focus();
+    }
+    request_render();
 }
 
 support::ExpectedVoid AltScreen::hide_overlay(Overlay* overlay) {
-    (void)overlay;
-    return std::unexpected(alt_overlay_unavailable());
+    if (overlay == nullptr) return {};
+    if (!compositor_->owns(overlay)) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Overlay is not attached to this TUI"));
+    }
+    overlay->set_visible(false);
+    hide_overlay_internal(overlay, true);
+    return {};
+}
+
+void AltScreen::hide_overlay_internal(Overlay* overlay, bool hidden) {
+    if (!compositor_->owns(overlay) || compositor_->is_hidden(overlay) == hidden) return;
+    const bool was_focused = focused_ == overlay;
+    static_cast<void>(compositor_->set_hidden(overlay, hidden));
+    if (hidden) {
+        const bool restore_was_blocked = overlay_focus_restore_.status == OverlayFocusRestoreStatus::Blocked &&
+                                         overlay_focus_restore_.overlay == overlay &&
+                                         focused_ == overlay_focus_restore_.blocked_by;
+        const auto restore_state = overlay_focus_restore_;
+        clear_overlay_restore_for(overlay);
+        if (was_focused) {
+            auto* pre_focus = compositor_->pre_focus(overlay);
+            auto* next = compositor_->topmost_focusable(terminal_.dimensions());
+            set_focus_internal(next != nullptr ? static_cast<Component*>(next) : pre_focus, false);
+        } else if (restore_was_blocked) {
+            auto* pre_focus = compositor_->pre_focus(overlay);
+            auto* next = compositor_->topmost_focusable(terminal_.dimensions());
+            set_focus_internal(next != nullptr ? static_cast<Component*>(next) : pre_focus, false);
+            if (!restore_state.resume_to_overlay) {
+                overlay_focus_restore_ = restore_state;
+                overlay_focus_restore_.blocked_by = focused_;
+            }
+        }
+    } else if (!overlay->options().non_capturing && compositor_->visible(overlay, terminal_.dimensions())) {
+        compositor_->set_focus_order(overlay, ++overlay_focus_order_counter_);
+        set_focus_internal(overlay, false);
+    }
+    invalidate();
 }
 
 support::ExpectedVoid AltScreen::restore_overlay(Overlay* overlay) {
-    (void)overlay;
-    return std::unexpected(alt_overlay_unavailable());
+    if (overlay == nullptr) return {};
+    if (!compositor_->owns(overlay)) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Overlay is not attached to this TUI"));
+    }
+    overlay->set_visible(true);
+    hide_overlay_internal(overlay, false);
+    return {};
+}
+
+void AltScreen::focus_overlay_internal(Overlay* overlay) {
+    if (!compositor_->owns(overlay) || !compositor_->visible(overlay, terminal_.dimensions()) ||
+            overlay->options().non_capturing)
+        return;
+    compositor_->set_focus_order(overlay, ++overlay_focus_order_counter_);
+    set_focus_internal(overlay, false);
+    request_render();
+}
+
+void AltScreen::unfocus_overlay_internal(Overlay* overlay, std::optional<Component*> target) {
+    if (!compositor_->owns(overlay)) return;
+    const bool is_focused = focused_ == overlay;
+    const bool pending = overlay_focus_restore_.status != OverlayFocusRestoreStatus::Inactive &&
+                         overlay_focus_restore_.overlay == overlay;
+    if (!is_focused && !pending) return;
+    if (overlay_focus_restore_.status == OverlayFocusRestoreStatus::Blocked &&
+            overlay_focus_restore_.overlay == overlay && focused_ == overlay_focus_restore_.blocked_by) {
+        if (target) {
+            overlay_focus_restore_.resume_to_overlay = false;
+            overlay_focus_restore_.resume_target = *target;
+        } else {
+            clear_overlay_restore_for(overlay);
+        }
+        request_render();
+        return;
+    }
+    clear_overlay_restore_for(overlay);
+    if (is_focused || target) {
+        auto* top = compositor_->topmost_focusable(terminal_.dimensions());
+        Component* fallback =
+                top != nullptr && top != overlay ? static_cast<Component*>(top) : compositor_->pre_focus(overlay);
+        set_focus_internal(target ? *target : fallback, true);
+        if (!target || dynamic_cast<Overlay*>(*target) == nullptr) clear_overlay_restore_for(overlay);
+    }
+    request_render();
+}
+
+bool AltScreen::is_overlay_focused_internal(const Overlay* overlay) const {
+    return compositor_->owns(overlay) && focused_ == overlay;
+}
+
+std::optional<OverlayBounds> AltScreen::overlay_bounds_internal(const Overlay* overlay) const {
+    if (!compositor_->owns(overlay) || compositor_->is_hidden(overlay)) return std::nullopt;
+    const auto dimensions = terminal_.dimensions();
+    if (!compositor_->visible(overlay, dimensions)) return std::nullopt;
+    return compositor_->bounds(overlay);
+}
+
+void AltScreen::clear_overlay_restore_for(Overlay* overlay) {
+    if (overlay_focus_restore_.status != OverlayFocusRestoreStatus::Inactive &&
+            overlay_focus_restore_.overlay == overlay)
+        overlay_focus_restore_ = {};
+}
+
+Component* AltScreen::resolve_overlay_restore() {
+    if (overlay_focus_restore_.status != OverlayFocusRestoreStatus::Blocked) return nullptr;
+    if (!overlay_focus_restore_.resume_to_overlay) {
+        auto* target = overlay_focus_restore_.resume_target;
+        overlay_focus_restore_ = {};
+        return target;
+    }
+    auto* overlay = overlay_focus_restore_.overlay;
+    if (compositor_->owns(overlay) && compositor_->visible(overlay, terminal_.dimensions())) return overlay;
+    overlay_focus_restore_ = {};
+    return nullptr;
+}
+
+void AltScreen::reconcile_overlay_focus(TerminalDimensions dimensions) {
+    auto* focused_overlay = dynamic_cast<Overlay*>(focused_);
+    if (focused_overlay != nullptr && compositor_->owns(focused_overlay) &&
+            !compositor_->visible(focused_overlay, dimensions)) {
+        auto* replacement = compositor_->topmost_focusable(dimensions);
+        if (replacement != nullptr) {
+            set_focus_internal(replacement, true);
+            overlay_focus_restore_ = OverlayFocusRestoreState{
+                    .status = OverlayFocusRestoreStatus::Blocked,
+                    .overlay = focused_overlay,
+                    .blocked_by = replacement,
+            };
+        } else {
+            Component* fallback = compositor_->pre_focus(focused_overlay);
+            auto* fallback_overlay = dynamic_cast<Overlay*>(fallback);
+            while (fallback_overlay != nullptr && compositor_->owns(fallback_overlay) &&
+                    !compositor_->visible(fallback_overlay, dimensions)) {
+                fallback = compositor_->pre_focus(fallback_overlay);
+                fallback_overlay = dynamic_cast<Overlay*>(fallback);
+            }
+            set_focus_internal(fallback, true);
+            overlay_focus_restore_ = OverlayFocusRestoreState{
+                    .status = OverlayFocusRestoreStatus::Eligible,
+                    .overlay = focused_overlay,
+            };
+        }
+    }
+
+    auto* current_overlay = dynamic_cast<Overlay*>(focused_);
+    if (current_overlay != nullptr && compositor_->owns(current_overlay)) {
+        if (overlay_focus_restore_.status == OverlayFocusRestoreStatus::Blocked &&
+                overlay_focus_restore_.blocked_by == current_overlay &&
+                compositor_->owns(overlay_focus_restore_.overlay) &&
+                compositor_->visible(overlay_focus_restore_.overlay, dimensions))
+            set_focus_internal(overlay_focus_restore_.overlay, true);
+        return;
+    }
+    if ((overlay_focus_restore_.status == OverlayFocusRestoreStatus::Eligible ||
+                (overlay_focus_restore_.status == OverlayFocusRestoreStatus::Blocked &&
+                        overlay_focus_restore_.resume_to_overlay &&
+                        !compositor_->visible(overlay_focus_restore_.overlay, dimensions))) &&
+            compositor_->owns(overlay_focus_restore_.overlay) &&
+            compositor_->visible(overlay_focus_restore_.overlay, dimensions)) {
+        set_focus_internal(overlay_focus_restore_.overlay, true);
+    } else if (overlay_focus_restore_.status == OverlayFocusRestoreStatus::Blocked &&
+               overlay_focus_restore_.blocked_by != focused_) {
+        if (overlay_focus_restore_.resume_to_overlay) {
+            if (compositor_->owns(overlay_focus_restore_.overlay) &&
+                    compositor_->visible(overlay_focus_restore_.overlay, dimensions))
+                set_focus_internal(overlay_focus_restore_.overlay, true);
+        } else {
+            auto* target = resolve_overlay_restore();
+            set_focus_internal(target, true);
+        }
+    }
 }
 
 TuiAltScreenRenderState AltScreen::capture_render_state() const {

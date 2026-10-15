@@ -44,7 +44,7 @@ namespace detail::testing {
 
 /// Regular-mode root implementation. `Tui` remains an alias for source
 /// compatibility while consumers use the shared ITui contract.
-class MainScreen final : public ITui, public detail::TuiHost {
+class MainScreen final : public ITui, public detail::TuiHost, private detail::OverlayHost {
 public:
     explicit MainScreen(Terminal& terminal);
     MainScreen(MainScreen&&) = delete;
@@ -133,10 +133,12 @@ private:
     void execute_scheduled_render(std::size_t generation);
     void apply_focus(Component* component);
     void set_focus_internal(Component* component, bool preserve_restore);
-    void remove_overlay_internal(Overlay* overlay);
-    void hide_overlay_internal(Overlay* overlay, bool hidden);
-    void focus_overlay_internal(Overlay* overlay);
-    void unfocus_overlay_internal(Overlay* overlay, std::optional<Component*> target);
+    void remove_overlay_internal(Overlay* overlay) override;
+    void hide_overlay_internal(Overlay* overlay, bool hidden) override;
+    void focus_overlay_internal(Overlay* overlay) override;
+    [[nodiscard]] bool is_overlay_focused_internal(const Overlay* overlay) const override;
+    [[nodiscard]] std::optional<OverlayBounds> overlay_bounds_internal(const Overlay* overlay) const override;
+    void unfocus_overlay_internal(Overlay* overlay, std::optional<Component*> target) override;
     void reconcile_overlay_focus(TerminalDimensions dimensions);
     void clear_overlay_restore_for(Overlay* overlay);
     [[nodiscard]] Component* resolve_overlay_restore();
