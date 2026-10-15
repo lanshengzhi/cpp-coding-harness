@@ -49,6 +49,9 @@ using RightClickPasteSink = std::move_only_function<support::ExpectedVoid()>;
 /// consecutive presses on the same word within this window count up from
 /// character to word to line granularity.
 inline constexpr auto kSelectionDoubleClickInterval = std::chrono::milliseconds{500};
+/// The edge auto-scroll cadence while a drag selection is held at the
+/// viewport edge (pi `setInterval(..., 50)` in `updateSelectionAutoScroll`).
+inline constexpr auto kSelectionAutoScrollInterval = std::chrono::milliseconds{50};
 
 struct AutoWheelScrollLines {};
 using WheelScrollLines = std::variant<std::size_t, AutoWheelScrollLines>;
@@ -193,6 +196,13 @@ public:
     /// Drop the baseline and force the next frame through the clearing
     /// full-redraw path (the -1 sentinel; distinct from a fresh root).
     void reset_render_state() noexcept;
+
+public:
+    /// Debug-only snapshots of live selection endpoints for evidence tests:
+    /// pi capture reads `tui.selectionAnchor` and `tui.selectionFocus` directly.
+    [[nodiscard]] std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> selection_anchor_trace() const;
+    [[nodiscard]] std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> selection_focus_trace() const;
+    [[nodiscard]] std::optional<std::string> selection_text_trace() const;
 
 private:
     struct RenderScheduleState {
@@ -362,6 +372,22 @@ private:
     /// initial range's other end stays anchored, reversing the anchor when the
     /// drag moves before the initial range.
     void update_selection_focus(const SelectionPoint& point);
+    /// Start or stop the edge auto-scroll timer from the last drag report:
+    /// the pointer at the viewport's visible top/bottom edge scrolls one line
+    /// per tick while the gesture is held outside the viewport, and anywhere
+    /// else stops it (pi `updateSelectionAutoScroll`, `tui-alt-screen.ts:1262-1306`).
+    void update_selection_auto_scroll(const detail::MousePacket& packet);
+    /// One interval tick: scroll the selection's viewport one line, extend the
+    /// focus to the clipped pointer, and stop when the scroll is consumed or
+    /// the gesture state vanished (pi `autoScrollSelection`, `:1287-1306`).
+    void auto_scroll_selection();
+    /// Run a tick only when its arm generation is still current: a stale queued
+    /// interval item must never change a new selection (pi `clearInterval`).
+    void execute_auto_scroll_tick(std::size_t generation);
+    /// Cancel the interval, the drag pointer, and the direction — every exit
+    /// path and the generation guard make a stale queued tick a no-op
+    /// (pi `stopSelectionAutoScroll`, `:1308-1314` and `clearInterval`).
+    void stop_selection_auto_scroll() noexcept;
     void clear_selection_click_history() noexcept { last_word_click_.reset(); }
     [[nodiscard]] std::pair<std::ptrdiff_t, std::ptrdiff_t> selection_columns(
             std::string_view line, std::ptrdiff_t row, const SelectionPoint& start, const SelectionPoint& end) const;
@@ -372,6 +398,15 @@ private:
     SelectionGranularity selection_granularity_{SelectionGranularity::Character};
     std::optional<SelectionRange> selection_initial_range_{};
     std::optional<SelectionWordClick> last_word_click_{};
+    /// The last drag report's pointer and the armed direction while a held
+    /// drag rides an edge (pi `selectionDragPointer`/`selectionAutoScrollDirection`).
+    std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> selection_drag_pointer_{};
+    std::ptrdiff_t selection_auto_scroll_direction_{0};
+    bool selection_auto_scroll_armed_{false};
+    /// Incremented on every arm/stop: an interval work item queued by an
+    /// earlier generation no-ops, so a stale tick can never change a new
+    /// selection (pi `clearInterval` semantics).
+    std::size_t selection_auto_scroll_generation_{0};
     std::optional<std::string> pressed_url_{};
     std::move_only_function<std::chrono::milliseconds()> selection_click_clock_{};
     WheelScrollLines wheel_scroll_lines_{std::size_t{1}};

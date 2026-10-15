@@ -44,7 +44,7 @@
       },
       {
         "path": "capture/scroll-view-scenarios.mts",
-        "sha256": "5fe4006bf0dee88b1a1221c2ab5efb880e2b0226990c4eaa5e2d2cca870b171e"
+        "sha256": "a84ce2669e735c356a1a44b0a2154bcf18e399c63a33d85637d5cc5bb733f18c"
       },
       {
         "path": "capture/scrollbar-scenarios.mts",
@@ -202,12 +202,12 @@
     {
       "path": "scroll-view.json",
       "family": "scroll-view",
-      "bytes": 17697,
-      "sha256": "daef22ac62fbd1e1f6cbcd00e1fec6ecfaee120acf010aa2749e1d614f9da110",
+      "bytes": 27544,
+      "sha256": "5dcfe901c19ddcafcecc080f411a04bada3a1c630635d55b5c0a75cc49aa352b",
       "sourceEndpoints": [
         "packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo,ScrollView.scrollBy,ScrollView.updateLayout,ScrollView.scrollToStart,ScrollView.scrollToEnd",
         "packages/tui/src/layout.ts:renderLayoutFrame,getScrollViewsAt,cropKittyImageLine",
-        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.constructor,TuiAltScreen.handleViewportInput,TuiAltScreen.routeWheel,TuiAltScreen.compositeScrollToEndIndicator,TuiAltScreen.handleMouseEvent",
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.constructor,TuiAltScreen.handleViewportInput,TuiAltScreen.routeWheel,TuiAltScreen.compositeScrollToEndIndicator,TuiAltScreen.handleMouseEvent,TuiAltScreen.updateSelectionAutoScroll,TuiAltScreen.autoScrollSelection,TuiAltScreen.stopSelectionAutoScroll",
         "packages/tui/src/wheel-scroll.ts:WheelScrollAccelerator.constructor,WheelScrollAccelerator.setLines,WheelScrollAccelerator.next",
         "packages/tui/src/keybindings.ts:TUI_KEYBINDINGS,KeybindingsManager,setKeybindings,getKeybindings",
         "packages/tui/test/tui-alt-screen.test.ts:routes Home and End to the focused component and Ctrl+Home/End to the transcript,shows a clickable jump-to-end indicator on the transcript's last row while scrolled up",

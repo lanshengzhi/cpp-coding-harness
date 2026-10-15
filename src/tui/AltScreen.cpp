@@ -484,6 +484,7 @@ support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
     cancel_scheduled_render();
     ++render_generation_;
     render_scheduled_ = false;
+    stop_selection_auto_scroll();
     ChildOperation operation(*this);
     stopping_ = true;
     started_ = false;
@@ -645,7 +646,77 @@ bool AltScreen::is_following_output() const { return primary_scroll_view().follo
 
 bool AltScreen::has_active_selection() const { return active_selection_text().has_value(); }
 
+void AltScreen::update_selection_auto_scroll(const detail::MousePacket& packet) {
+    auto* scroll_view = selection_anchor_ ? selection_anchor_->scroll_view : nullptr;
+    const auto* box = scroll_view != nullptr && cached_frame_ ? detail::get_scroll_view_box(*cached_frame_, scroll_view)
+                                                              : nullptr;
+    if (box == nullptr || box->rect.height == 0 || box->clip.height == 0) {
+        stop_selection_auto_scroll();
+        return;
+    }
+    const auto visible_top = std::max<std::ptrdiff_t>({0, box->rect.y, box->clip.y});
+    const auto visible_bottom = std::min<std::ptrdiff_t>({static_cast<std::ptrdiff_t>(terminal_.dimensions().rows) - 1,
+            box->rect.y + static_cast<std::ptrdiff_t>(box->rect.height) - 1,
+            box->clip.y + static_cast<std::ptrdiff_t>(box->clip.height) - 1});
+    selection_drag_pointer_ = std::pair{packet.x, packet.y};
+    selection_auto_scroll_direction_ = packet.y <= visible_top ? -1 : packet.y >= visible_bottom ? 1 : 0;
+    if (selection_auto_scroll_direction_ == 0) {
+        stop_selection_auto_scroll();
+        return;
+    }
+    if (selection_auto_scroll_armed_) return;
+    // Without a scheduler the interval cannot run, matching how
+    // `schedule_render` no-ops: the arm is skipped silently.
+    if (scheduler_ == nullptr) return;
+    selection_auto_scroll_armed_ = true;
+    ++selection_auto_scroll_generation_;
+    const auto generation = selection_auto_scroll_generation_;
+    const std::weak_ptr<RenderScheduleState> weak_state = render_schedule_state_;
+    scheduler_->schedule_interval(kSelectionAutoScrollInterval, [weak_state, generation] {
+        if (const auto state = weak_state.lock(); state && state->owner != nullptr)
+            state->owner->execute_auto_scroll_tick(generation);
+    });
+}
+
+void AltScreen::execute_auto_scroll_tick(std::size_t generation) {
+    if (!selection_auto_scroll_armed_ || generation != selection_auto_scroll_generation_) return;
+    auto_scroll_selection();
+}
+
+void AltScreen::auto_scroll_selection() {
+    auto* scroll_view = selection_anchor_ ? selection_anchor_->scroll_view : nullptr;
+    const auto pointer = selection_drag_pointer_;
+    const auto direction = selection_auto_scroll_direction_;
+    if (scroll_view == nullptr || !pointer || direction == 0) {
+        stop_selection_auto_scroll();
+        return;
+    }
+    // `scroll_by` returns the lines it could not consume (pi `scrollBy`,
+    // ScrollView.cpp). A following viewport scrolls from the content end, so
+    // the first upward step consumes one line and reports `direction - 1`;
+    // nothing moved reports exactly `direction` (frozen `remaining === direction`,
+    // tui-alt-screen.ts:1295) and stops the interval.
+    const auto remaining = scroll_view->scroll_by(direction);
+    if (remaining == direction) {
+        stop_selection_auto_scroll();
+        return;
+    }
+    if (auto point = selection_point_at(pointer->first, pointer->second, scroll_view)) update_selection_focus(*point);
+    request_render();
+}
+
+void AltScreen::stop_selection_auto_scroll() noexcept {
+    if (selection_auto_scroll_armed_) {
+        selection_auto_scroll_armed_ = false;
+        if (scheduler_ != nullptr) scheduler_->cancel_interval();
+    }
+    selection_drag_pointer_.reset();
+    selection_auto_scroll_direction_ = 0;
+    ++selection_auto_scroll_generation_;
+}
+
 void AltScreen::clear_text_selection() noexcept {
+    stop_selection_auto_scroll();
     pressed_url_.reset();
     selection_press_active_ = false;
     selection_dragged_ = false;
@@ -1143,6 +1214,9 @@ bool AltScreen::clear_on_shrink() const noexcept { return clear_on_shrink_; }
 
 void AltScreen::set_scheduler(TuiScheduler* scheduler) {
     if (scheduler_ == scheduler) return;
+    // The interval belongs to the previous scheduler; cancel through it before
+    // the pointer moves so the cancellation reaches the right host.
+    stop_selection_auto_scroll();
     cancel_scheduled_render();
     ++render_generation_;
     render_scheduled_ = false;
@@ -1174,6 +1248,18 @@ void AltScreen::execute_scheduled_render(std::size_t generation) {
     if (!started_ || stopping_ || !render_scheduled_ || generation != render_generation_) return;
     (void)render_now();
 }
+
+std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> AltScreen::selection_anchor_trace() const {
+    if (!selection_anchor_) return std::nullopt;
+    return std::pair{selection_anchor_->row, selection_anchor_->column};
+}
+
+std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> AltScreen::selection_focus_trace() const {
+    if (!selection_focus_) return std::nullopt;
+    return std::pair{selection_focus_->row, selection_focus_->column};
+}
+
+std::optional<std::string> AltScreen::selection_text_trace() const { return active_selection_text(); }
 
 void AltScreen::handle_input(std::string input) {
     if (!started_) return;
@@ -1299,6 +1385,7 @@ bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet)
     if (packet.release) {
         if (!selection_press_active_) return false;
         selection_press_active_ = false;
+        stop_selection_auto_scroll();
         const auto point =
                 selection_point_at(packet.x, packet.y, selection_anchor_ ? selection_anchor_->scroll_view : nullptr);
         if (!point || !selection_anchor_) {
@@ -1345,10 +1432,14 @@ bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet)
         clear_selection_click_history();
         if (auto point = selection_point_at(packet.x, packet.y, selection_anchor_->scroll_view))
             update_selection_focus(*point);
+        update_selection_auto_scroll(packet);
         request_render();
         return true;
     }
 
+    // A fresh press arms a new gesture; an interval a previous drag still has
+    // queued must not extend it (pi `stopSelectionAutoScroll`, :1369).
+    stop_selection_auto_scroll();
     selection_press_active_ = true;
     selection_dragged_ = false;
     selection_granularity_ = SelectionGranularity::Character;

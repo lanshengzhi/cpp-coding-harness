@@ -70,6 +70,7 @@ tests/tui/KeysKittyTextTest.cpp
         tests/tui/ScrollViewTest.cpp
         tests/tui/ScrollbarEvidenceTest.cpp
         tests/tui/ScrollbarTest.cpp
+        tests/tui/SelectionAutoScrollTest.cpp
         tests/tui/SelectionEvidenceTest.cpp
         tests/tui/SelectListTest.cpp
         tests/tui/SettingsListTest.cpp
