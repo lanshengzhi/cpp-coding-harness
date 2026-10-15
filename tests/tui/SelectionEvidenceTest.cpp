@@ -62,7 +62,8 @@ void drag(cch::tui::VirtualTerminal& terminal, const JsonValue& inputs) {
 
 [[nodiscard]] std::vector<std::string> copied_texts(const JsonValue& values) {
     std::vector<std::string> texts;
-    for (const auto& value : values.get_array()) texts.push_back(value.get_string());
+    for (const auto& value : values.get_array())
+        texts.push_back(value.get_string());
     return texts;
 }
 
@@ -387,8 +388,8 @@ TEST_CASE("AltScreen selection copy returns the frozen specific clipboard failur
     tui.set_copy_on_select(false);
     tui.set_selection_copy_sink([&attempted, &expected](std::string_view text) -> cch::support::ExpectedVoid {
         attempted.emplace_back(text);
-        return std::unexpected(cch::support::make_error(
-                cch::support::ErrorCode::Unknown, expected.at("copyError").get_string()));
+        return std::unexpected(
+                cch::support::make_error(cch::support::ErrorCode::Unknown, expected.at("copyError").get_string()));
     });
     REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>(inputs.at("text").get_string(), 0, 0)));
     REQUIRE(tui.start());

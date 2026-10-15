@@ -306,8 +306,8 @@ private:
         std::ptrdiff_t word_start{0};
         std::ptrdiff_t word_end{0};
     };
-    [[nodiscard]] std::optional<SelectionPoint> selection_point_at(std::ptrdiff_t x, std::ptrdiff_t y,
-            ScrollView* scroll_view = nullptr) const;
+    [[nodiscard]] std::optional<SelectionPoint> selection_point_at(
+            std::ptrdiff_t x, std::ptrdiff_t y, ScrollView* scroll_view = nullptr) const;
     /// The source row for `point` without clamping: missing rows select
     /// nothing, where text extraction would keep reading the nearest row
     /// (pi `getSelectionSourceLine` returns undefined outside the content).

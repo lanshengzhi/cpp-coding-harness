@@ -57,8 +57,10 @@ constexpr auto kComponentDoubleClickInterval = std::chrono::milliseconds{500};
     for (std::size_t offset = 0; offset < value.size(); offset += 3) {
         const auto remaining = value.size() - offset;
         const auto first = static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset]));
-        const auto second = remaining > 1 ? static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset + 1])) : 0U;
-        const auto third = remaining > 2 ? static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset + 2])) : 0U;
+        const auto second =
+                remaining > 1 ? static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset + 1])) : 0U;
+        const auto third =
+                remaining > 2 ? static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset + 2])) : 0U;
         const auto bits = (first << 16U) | (second << 8U) | third;
         result.push_back(alphabet[(bits >> 18U) & 0x3fU]);
         result.push_back(alphabet[(bits >> 12U) & 0x3fU]);
@@ -90,8 +92,7 @@ constexpr auto kComponentDoubleClickInterval = std::chrono::milliseconds{500};
     return result;
 }
 
-[[nodiscard]] std::pair<std::size_t, std::size_t> grapheme_cell_range(
-        std::string_view line, std::size_t column) {
+[[nodiscard]] std::pair<std::size_t, std::size_t> grapheme_cell_range(std::string_view line, std::size_t column) {
     auto tokens = detail::tokenize_terminal_output(line);
     if (!tokens) return {column, column + 1};
     std::size_t current = 0;
@@ -654,8 +655,8 @@ std::string_view AltScreen::selection_source_line(const SelectionPoint& point) c
     if (point.scroll_view != nullptr && cached_frame_ != nullptr) {
         const auto* box = detail::get_scroll_view_box(*cached_frame_, point.scroll_view);
         if (box != nullptr && box->has_scroll_content_lines && !box->scroll_content_lines.empty()) {
-            const auto row = std::clamp<std::ptrdiff_t>(point.row, 0,
-                    static_cast<std::ptrdiff_t>(box->scroll_content_lines.size() - 1));
+            const auto row = std::clamp<std::ptrdiff_t>(
+                    point.row, 0, static_cast<std::ptrdiff_t>(box->scroll_content_lines.size() - 1));
             return box->scroll_content_lines[static_cast<std::size_t>(row)];
         }
     }
@@ -783,17 +784,19 @@ std::optional<AltScreen::SelectionPoint> AltScreen::selection_point_at(
         if (box->rect.height == 0 || box->clip.height == 0)
             return SelectionPoint{.row = 0, .column = 0, .scroll_view = scroll_view};
         const auto visible_top = std::max<std::ptrdiff_t>({0, box->rect.y, box->clip.y});
-        const auto visible_bottom = std::min<std::ptrdiff_t>({static_cast<std::ptrdiff_t>(terminal_.dimensions().rows) - 1,
-                box->rect.y + static_cast<std::ptrdiff_t>(box->rect.height) - 1,
-                box->clip.y + static_cast<std::ptrdiff_t>(box->clip.height) - 1});
+        const auto visible_bottom =
+                std::min<std::ptrdiff_t>({static_cast<std::ptrdiff_t>(terminal_.dimensions().rows) - 1,
+                        box->rect.y + static_cast<std::ptrdiff_t>(box->rect.height) - 1,
+                        box->clip.y + static_cast<std::ptrdiff_t>(box->clip.height) - 1});
         if (visible_bottom < visible_top) return std::nullopt;
         const auto pointer_row = std::clamp(y, visible_top, visible_bottom);
         const auto content_height = scroll_view->content_height();
         const auto row = std::clamp<std::ptrdiff_t>(
                 static_cast<std::ptrdiff_t>(scroll_view->scroll_top()) + pointer_row - box->rect.y,
-                0, content_height == 0 ? 0 : static_cast<std::ptrdiff_t>(content_height - 1));
-        const auto column = std::clamp<std::ptrdiff_t>(x - box->rect.x, 0,
-                box->rect.width == 0 ? 0 : static_cast<std::ptrdiff_t>(box->rect.width - 1));
+                0,
+                content_height == 0 ? 0 : static_cast<std::ptrdiff_t>(content_height - 1));
+        const auto column = std::clamp<std::ptrdiff_t>(
+                x - box->rect.x, 0, box->rect.width == 0 ? 0 : static_cast<std::ptrdiff_t>(box->rect.width - 1));
         return SelectionPoint{.row = row, .column = column, .scroll_view = scroll_view};
     }
     const auto dimensions = terminal_.dimensions();
@@ -809,7 +812,8 @@ std::pair<std::ptrdiff_t, std::ptrdiff_t> AltScreen::selection_columns(
     auto first = std::ptrdiff_t{0};
     auto last = width;
     if (row == start.row) {
-        const auto [cell_start, cell_end] = grapheme_cell_range(line, static_cast<std::size_t>(std::max<std::ptrdiff_t>(0, start.column)));
+        const auto [cell_start, cell_end] =
+                grapheme_cell_range(line, static_cast<std::size_t>(std::max<std::ptrdiff_t>(0, start.column)));
         (void)cell_end;
         first = std::min<std::ptrdiff_t>(static_cast<std::ptrdiff_t>(cell_start), width);
     }
@@ -850,7 +854,8 @@ std::optional<std::string> AltScreen::active_selection_text() const {
         const auto line = selection_source_line(point);
         const auto [first, last] = selection_columns(line, row, start, end);
         if (last > first) {
-            auto sliced = slice_by_column(line, static_cast<std::size_t>(first), static_cast<std::size_t>(last - first), true);
+            auto sliced = slice_by_column(
+                    line, static_cast<std::size_t>(first), static_cast<std::size_t>(last - first), true);
             selected.push_back(trim_end(strip_terminal_sequences(sliced ? *sliced : std::string{})));
         } else {
             selected.emplace_back();
@@ -890,7 +895,8 @@ std::vector<std::string> AltScreen::apply_text_selection(const std::vector<std::
     }
     for (auto screen_row = first_visible; screen_row <= last_visible; ++screen_row) {
         const auto source_row = screen_row - row_offset;
-        if (source_row < start.row || source_row > end.row || is_image_line(result[static_cast<std::size_t>(screen_row)]))
+        if (source_row < start.row || source_row > end.row ||
+                is_image_line(result[static_cast<std::size_t>(screen_row)]))
             continue;
         SelectionPoint source_point = start;
         source_point.row = source_row;
@@ -903,12 +909,12 @@ std::vector<std::string> AltScreen::apply_text_selection(const std::vector<std::
         if (last <= first) continue;
         auto& line = result[static_cast<std::size_t>(screen_row)];
         auto before = slice_by_column(line, 0, static_cast<std::size_t>(first), true);
-        auto selected = slice_by_column(
-                line, static_cast<std::size_t>(first), static_cast<std::size_t>(last - first), true);
+        auto selected =
+                slice_by_column(line, static_cast<std::size_t>(first), static_cast<std::size_t>(last - first), true);
         auto after = slice_by_column(line,
                 static_cast<std::size_t>(last),
-                static_cast<std::size_t>(std::max<std::ptrdiff_t>(
-                        0, static_cast<std::ptrdiff_t>(visible_width(line)) - last)),
+                static_cast<std::size_t>(
+                        std::max<std::ptrdiff_t>(0, static_cast<std::ptrdiff_t>(visible_width(line)) - last)),
                 true);
         line = (before ? *before : std::string{}) + apply_selection_inverse(selected ? *selected : std::string{}) +
                (after ? *after : std::string{});
@@ -1237,8 +1243,8 @@ bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet)
     if (packet.release) {
         if (!selection_press_active_) return false;
         selection_press_active_ = false;
-        const auto point = selection_point_at(packet.x, packet.y,
-                selection_anchor_ ? selection_anchor_->scroll_view : nullptr);
+        const auto point =
+                selection_point_at(packet.x, packet.y, selection_anchor_ ? selection_anchor_->scroll_view : nullptr);
         if (!point || !selection_anchor_) {
             clear_text_selection();
             request_render();
@@ -1292,8 +1298,8 @@ bool AltScreen::handle_selection_mouse_report(const detail::MousePacket& packet)
     selection_granularity_ = SelectionGranularity::Character;
     pressed_url_.reset();
     selection_initial_range_.reset();
-    const auto scroll_views = cached_frame_ ? detail::scroll_views_at(*cached_frame_, packet.x, packet.y)
-                                            : std::vector<ScrollView*>{};
+    const auto scroll_views =
+            cached_frame_ ? detail::scroll_views_at(*cached_frame_, packet.x, packet.y) : std::vector<ScrollView*>{};
     const auto scroll_view = scroll_views.empty() ? nullptr : scroll_views.front();
     auto anchor = selection_point_at(packet.x, packet.y, scroll_view);
     if (!anchor) {
