@@ -1,6 +1,7 @@
 #include <cch/tui/AltScreen.hpp>
 
 #include "tui/Layout.hpp"
+#include "tui/LineCompositor.hpp"
 #include "tui/MouseRouting.hpp"
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
@@ -10,6 +11,7 @@
 #include <cch/tui/Utils.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -216,11 +218,14 @@ AltScreen::AltScreen(Terminal& terminal, AltScreenOptions options)
           return std::chrono::duration_cast<std::chrono::milliseconds>(
                   std::chrono::system_clock::now().time_since_epoch());
       }),
-      copy_on_select_(options.copy_on_select), selection_copy_sink_(std::move(options.copy_selection)) {
+      wheel_scroll_lines_(std::move(options.wheel_scroll_lines)), wheel_clock_(std::move(options.wheel_clock)),
+      scroll_to_end_indicator_(std::move(options.scroll_to_end_indicator)), copy_on_select_(options.copy_on_select),
+      selection_copy_sink_(std::move(options.copy_selection)) {
     render_schedule_state_->owner = this;
     if (!selection_copy_sink_) {
         selection_copy_sink_ = [this](std::string_view text) { return write_osc52(terminal_, text); };
     }
+    if (!wheel_clock_) wheel_clock_ = [] { return std::chrono::steady_clock::now(); };
     implicit_scroll_view_ = std::make_unique<ScrollView>(
             std::make_unique<ImplicitDocument>(*this), ScrollViewOptions{.follow_end = true, .primary = true});
     // pi registers the viewport input stage with the instance
@@ -229,6 +234,20 @@ AltScreen::AltScreen(Terminal& terminal, AltScreenOptions options)
     mouse_listener_ = add_raw_input_listener([this](std::string_view data) {
         return handle_viewport_input(data) ? RawInputListenerResult::consume() : RawInputListenerResult::pass();
     });
+}
+
+void AltScreen::set_keybinding_context(std::shared_ptr<KeybindingsContext> context) {
+    keybinding_context_ = std::move(context);
+}
+
+void AltScreen::set_wheel_scroll_lines(WheelScrollLines lines) {
+    wheel_scroll_lines_ = std::move(lines);
+    reset_wheel_scroll_acceleration();
+}
+
+void AltScreen::set_scroll_to_end_indicator(std::function<std::string()> indicator) {
+    scroll_to_end_indicator_ = std::move(indicator);
+    request_render();
 }
 
 void AltScreen::set_selection_copy_sink(SelectionCopySink sink) {
@@ -562,6 +581,7 @@ support::ExpectedVoid AltScreen::render_frame() {
     // Frame image placements are not emitted by this root yet (#1012).
     lines = std::move(cached_frame_->lines);
     cursor = cached_frame_->cursor;
+    if (auto indicator = composite_scroll_to_end_indicator(lines); !indicator) return indicator;
     return render_viewport(lines, cursor, dimensions);
 }
 
@@ -946,6 +966,41 @@ void AltScreen::scroll_to_bottom() {
     request_render();
 }
 
+support::ExpectedVoid AltScreen::composite_scroll_to_end_indicator(std::vector<std::string>& lines) {
+    scroll_to_end_indicator_rect_.reset();
+    if (!scroll_to_end_indicator_) return {};
+    auto* scroll_view = cached_frame_ && cached_frame_->primary_scroll_view != nullptr
+                                ? cached_frame_->primary_scroll_view
+                                : implicit_scroll_view_.get();
+    if (!scroll_view->follow_end() || scroll_view->following_end() || !cached_frame_) return {};
+    const auto* box = detail::get_scroll_view_box(*cached_frame_, scroll_view);
+    if (box == nullptr || box->clip.width == 0 || box->clip.height == 0) return {};
+    const auto row = box->clip.y + static_cast<std::ptrdiff_t>(box->clip.height) - 1;
+    if (row < 0 || static_cast<std::size_t>(row) >= lines.size() || is_image_line(lines[static_cast<std::size_t>(row)]))
+        return {};
+    const auto scrollbar = detail::get_scrollbar_geometry(*box);
+    const auto right_edge = scrollbar ? scrollbar->column : box->clip.x + static_cast<std::ptrdiff_t>(box->clip.width);
+    auto label = scroll_to_end_indicator_();
+    auto clipped = truncate_text(label, box->clip.width, "", false);
+    if (!clipped) return std::unexpected(clipped.error());
+    const auto label_width = static_cast<std::ptrdiff_t>(visible_width(*clipped));
+    const auto column = box->clip.x + (static_cast<std::ptrdiff_t>(box->clip.width) - label_width) / 2;
+    const auto available = static_cast<std::size_t>(std::max<std::ptrdiff_t>(0, right_edge - column));
+    auto text = truncate_text(*clipped, available, "", false);
+    if (!text) return std::unexpected(text.error());
+    const auto text_width = visible_width(*text);
+    if (text_width == 0) return {};
+    auto composed = detail::replace_line_region(lines[static_cast<std::size_t>(row)],
+            *text,
+            static_cast<std::size_t>(column),
+            text_width,
+            terminal_.dimensions().columns);
+    if (!composed) return std::unexpected(composed.error());
+    lines[static_cast<std::size_t>(row)] = std::move(*composed);
+    scroll_to_end_indicator_rect_ = ScrollToEndIndicatorRect{.row = row, .column = column, .width = text_width};
+    return {};
+}
+
 support::ExpectedVoid AltScreen::render_viewport(
         const std::vector<std::string>& lines, std::optional<CursorPosition> cursor, TerminalDimensions dimensions) {
     const auto visible_rows = dimensions.rows;
@@ -1127,6 +1182,7 @@ void AltScreen::handle_input(std::string input) {
 
 void AltScreen::dispatch_input(const InputEventVariant& event) {
     ChildOperation operation(*this);
+    if (const auto* key = std::get_if<KeyEvent>(&event); key != nullptr && handle_viewport_key(*key)) return;
     auto* input_handler = dynamic_cast<InputHandler*>(focused_);
     if (input_handler == nullptr) return;
     static_cast<void>(input_handler->handle_input(event));
@@ -1155,6 +1211,10 @@ bool AltScreen::handle_viewport_input(std::string_view data) {
     }
     if (data == kFocusIn) return true;
 
+    if (const auto key = parse_key(data, terminal_.capabilities().keyboard_protocol == KeyboardProtocol::Kitty)) {
+        if (handle_viewport_key(*key)) return true;
+    }
+
     if (const auto packet = detail::parse_mouse_packet(data)) {
         if (packet->kind == detail::MousePacket::Kind::Wheel) {
             handle_wheel_report(*packet);
@@ -1177,11 +1237,9 @@ MouseEvent AltScreen::create_mouse_event(const detail::MousePacket& packet,
 }
 
 void AltScreen::handle_wheel_report(const detail::MousePacket& packet) {
-    // One wheel notch is one logical line here: the frozen default of
-    // `wheelScrollLines`. The accelerator, its configuration and the Alt
-    // multiplier belong to #1004 (pi `tui-alt-screen.ts:697-716`).
-    constexpr std::ptrdiff_t kWheelLines = 1;
-    const auto delta = packet.direction * kWheelLines;
+    const auto lines = next_wheel_scroll_lines(packet.direction);
+    const auto multiplier = (packet.button & 8) != 0 ? std::ptrdiff_t{5} : std::ptrdiff_t{1};
+    const auto delta = packet.direction * lines * multiplier;
     const auto event = create_mouse_event(packet, MouseEventType::Wheel, delta);
     if (auto result = dispatch_mouse_to_layout(event)) {
         if (apply_mouse_dispatch_result(event, *result)) request_render();
@@ -1195,6 +1253,7 @@ void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
     const auto event = create_mouse_event(packet, type);
     if (selection_press_active_ && handle_selection_mouse_report(packet)) return;
     if (handle_gesture_mouse_report(packet, event)) return;
+    if (handle_scroll_to_end_indicator_mouse_report(packet)) return;
 
     // A report no gesture owns moves the scrollbar hover before any component
     // sees it (pi `handleMouseEvent`).
@@ -1376,6 +1435,62 @@ bool AltScreen::handle_gesture_mouse_report(const detail::MousePacket& packet, c
     return true;
 }
 
+std::ptrdiff_t AltScreen::next_wheel_scroll_lines(std::ptrdiff_t direction) {
+    if (const auto* fixed = std::get_if<std::size_t>(&wheel_scroll_lines_))
+        return static_cast<std::ptrdiff_t>(std::max<std::size_t>(1, *fixed));
+    const auto now = wheel_clock_();
+    if (!wheel_last_time_) {
+        wheel_last_time_ = now;
+        wheel_last_direction_ = direction;
+        wheel_average_gap_ms_.reset();
+        wheel_carry_ = 0;
+        return 1;
+    }
+    const auto gap = std::chrono::duration<double, std::milli>(now - *wheel_last_time_).count();
+    const bool same_gesture = direction == wheel_last_direction_ && gap <= 200.0;
+    wheel_last_time_ = now;
+    wheel_last_direction_ = direction;
+    if (!same_gesture) {
+        wheel_average_gap_ms_.reset();
+        wheel_carry_ = 0;
+        return 1;
+    }
+    if (gap < 5.0) return 1;
+    wheel_average_gap_ms_ = wheel_average_gap_ms_ ? (*wheel_average_gap_ms_ + gap) / 2.0 : gap;
+    const auto scaled = std::min(6.0, std::max(1.0, 100.0 / *wheel_average_gap_ms_)) + wheel_carry_;
+    const auto whole = static_cast<std::ptrdiff_t>(std::floor(scaled));
+    wheel_carry_ = scaled - static_cast<double>(whole);
+    return whole;
+}
+
+void AltScreen::reset_wheel_scroll_acceleration() noexcept {
+    wheel_last_time_.reset();
+    wheel_last_direction_ = 0;
+    wheel_average_gap_ms_.reset();
+    wheel_carry_ = 0;
+}
+
+bool AltScreen::handle_viewport_key(const KeyEvent& event) {
+    if (!keybinding_context_) return false;
+    constexpr std::array<std::string_view, 4> actions{
+            "tui.altScreen.pageUp", "tui.altScreen.pageDown", "tui.altScreen.top", "tui.altScreen.bottom"};
+    const auto matched = keybinding_context_->first_match(event, actions);
+    if (!matched) return false;
+    if (event.type == KeyEventType::Release) return true;
+    if (*matched == "tui.altScreen.pageUp") {
+        scroll_by(
+                -std::max<std::ptrdiff_t>(1, static_cast<std::ptrdiff_t>(primary_scroll_view().viewport_height()) - 4));
+    } else if (*matched == "tui.altScreen.pageDown") {
+        scroll_by(
+                std::max<std::ptrdiff_t>(1, static_cast<std::ptrdiff_t>(primary_scroll_view().viewport_height()) - 4));
+    } else if (*matched == "tui.altScreen.top") {
+        scroll_to_top();
+    } else {
+        scroll_to_bottom();
+    }
+    return true;
+}
+
 std::optional<MouseDispatchResult> AltScreen::dispatch_mouse_to_layout(const MouseEvent& event) {
     if (!cached_frame_) return std::nullopt;
     struct Candidate {
@@ -1461,6 +1576,18 @@ void AltScreen::route_wheel(const MouseEvent& event, std::ptrdiff_t delta) {
     // the wheel cell (pi `routeWheel`).
     update_scrollbar_hover(event.x, event.y);
     request_render();
+}
+
+bool AltScreen::handle_scroll_to_end_indicator_mouse_report(const detail::MousePacket& packet) {
+    const auto& rect = scroll_to_end_indicator_rect_;
+    if (!rect || packet.kind == detail::MousePacket::Kind::Wheel || packet.release || (packet.button & 32) != 0 ||
+            (packet.button & 3) != 0)
+        return false;
+    if (packet.y != rect->row || packet.x < rect->column ||
+            packet.x >= rect->column + static_cast<std::ptrdiff_t>(rect->width))
+        return false;
+    scroll_to_bottom();
+    return true;
 }
 
 bool AltScreen::handle_scrollbar_mouse_report(const detail::MousePacket& packet) {

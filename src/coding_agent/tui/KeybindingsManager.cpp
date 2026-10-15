@@ -270,6 +270,10 @@ struct ApplicationTemplate {
 }
 
 [[nodiscard]] bool known_unassembled_id(std::string_view id) {
+    if (id == "tui.altScreen.previousPrompt" || id == "tui.altScreen.nextPrompt" || id == "tui.altScreen.halfPageUp" ||
+            id == "tui.altScreen.halfPageDown" || id == "tui.altScreen.lineUp" || id == "tui.altScreen.lineDown" ||
+            id.starts_with("tui.altScreen.search"))
+        return true;
     if (cch::tui::is_known_unassembled_tui_keybinding(id)) return true;
     return find_application_template(id) != nullptr;
 }
@@ -434,6 +438,11 @@ support::Expected<std::vector<cch::tui::KeybindingDefinition>> app_keybinding_de
 support::Expected<KeybindingsManagerResult> load_keybindings_manager(
     KeybindingsManagerRequest request) {
     auto definitions = cch::tui::builtin_tui_keybinding_definitions();
+    for (auto& definition : cch::tui::alt_screen_keybinding_definitions()) {
+        if (definition.id == "tui.altScreen.pageUp" || definition.id == "tui.altScreen.pageDown" ||
+                definition.id == "tui.altScreen.top" || definition.id == "tui.altScreen.bottom")
+            definitions.push_back(std::move(definition));
+    }
     definitions.insert(
         definitions.end(),
         std::make_move_iterator(request.application_definitions.begin()),

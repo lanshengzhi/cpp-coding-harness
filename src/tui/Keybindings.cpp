@@ -453,10 +453,9 @@ std::vector<KeybindingDefinition> alt_screen_keybinding_definitions() {
 }
 
 bool is_known_unassembled_tui_keybinding(std::string_view id) {
-    return id == "tui.input.copy" ||
-        id == "tui.altScreen.pageUp" || id == "tui.altScreen.pageDown" ||
-        id == "tui.altScreen.previousPrompt" || id == "tui.altScreen.nextPrompt" ||
-        id == "tui.altScreen.top" || id == "tui.altScreen.bottom";
+    return id == "tui.input.copy" || id == "tui.altScreen.pageUp" || id == "tui.altScreen.pageDown" ||
+           id == "tui.altScreen.previousPrompt" || id == "tui.altScreen.nextPrompt" || id == "tui.altScreen.top" ||
+           id == "tui.altScreen.bottom";
 }
 
 std::shared_ptr<const KeybindingRegistry> default_tui_keybindings() {

@@ -209,15 +209,30 @@ TEST_CASE("Known-but-unassembled tui ids are diagnosed as unavailable and never 
         manager->diagnostics.begin(),
         manager->diagnostics.end(),
         [](const auto& diagnostic) { return diagnostic.code == "unavailable_action"; });
-    CHECK(unavailable == 3);
+    CHECK(unavailable == 2);
     CHECK_FALSE(has_diagnostic(*manager, "unknown_action"));
     CHECK(manager->registry->find("tui.input.copy") == nullptr);
-    CHECK(manager->registry->find("tui.altScreen.pageUp") == nullptr);
+    REQUIRE(manager->registry->find("tui.altScreen.pageUp") != nullptr);
+    CHECK(manager->registry->keys("tui.altScreen.pageUp") == std::vector<std::string>{"pageUp"});
     CHECK(manager->registry->find("tui.altScreen.previousPrompt") == nullptr);
-    CHECK(manager->registry->entries().size() == 32);
+    CHECK(manager->registry->entries().size() == 36);
     const auto text = coding_agent::tui::format_hotkeys_text(*manager->help);
     CHECK(text.find("tui.input.copy") == std::string::npos);
     CHECK(text.find("app.model.select") == std::string::npos);
+}
+
+TEST_CASE("fullscreen keybindings assemble primary viewport actions and defer prompt navigation",
+        "[coding_agent][keybindings][issue1004]") {
+    coding_agent::tui::KeybindingsManagerRequest request;
+    const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
+
+    REQUIRE(manager);
+    CHECK(manager->registry->keys("tui.altScreen.pageUp") == std::vector<std::string>{"pageUp"});
+    CHECK(manager->registry->keys("tui.altScreen.pageDown") == std::vector<std::string>{"pageDown"});
+    CHECK(manager->registry->keys("tui.altScreen.top") == std::vector<std::string>{"ctrl+home"});
+    CHECK(manager->registry->keys("tui.altScreen.bottom") == std::vector<std::string>{"ctrl+end"});
+    CHECK(manager->registry->find("tui.altScreen.previousPrompt") == nullptr);
+    CHECK(manager->registry->find("tui.altScreen.nextPrompt") == nullptr);
 }
 
 TEST_CASE("Keybindings manager bounds diagnostics and redacts invalid key text",

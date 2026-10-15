@@ -18,6 +18,8 @@
 #include "coding_agent/tui/SessionFlowController.hpp"
 #include "coding_agent/tui/SessionUiBinding.hpp"
 #include "coding_agent/tui/SettingsFlowController.hpp"
+#include "coding_agent/tui/KeybindingHints.hpp"
+#include "coding_agent/tui/ThemeController.hpp"
 #include "coding_agent/tui/SuspendController.hpp"
 
 #include <boost/asio/post.hpp>
@@ -152,7 +154,28 @@ void InteractiveEngine::dispatch(CopyLastMessageAction action) {
     handle_copy_last_message();
 }
 
-void InteractiveEngine::set_alt_screen_host(AltScreenHost* host) noexcept { alt_screen_host_ = host; }
+void InteractiveEngine::set_alt_screen_host(AltScreenHost* host) noexcept {
+    alt_screen_host_ = host;
+    if (host == nullptr) return;
+    if (keybindings_) host->alt_screen().set_keybinding_context(keybindings_->context());
+    const auto weak = weak_from_this();
+    host->alt_screen().set_scroll_to_end_indicator([weak] {
+        if (const auto self = weak.lock()) {
+            std::string label = " ↓ Jump to latest message";
+            if (self->keybindings_) {
+                const auto key = self->keybindings_->context()->key_text("tui.altScreen.bottom");
+                if (!key.empty()) label += " · " + format_key_text(key, true);
+            }
+            label.push_back(' ');
+            if (self->theme_controller_) {
+                const auto& theme = self->theme_controller_->live_theme();
+                return theme.background(ThemeToken::SelectedBg, theme.foreground(ThemeToken::Text, std::move(label)));
+            }
+            return label;
+        }
+        return std::string{};
+    });
+}
 
 void InteractiveEngine::dispatch(OpenTreeSelectorAction) { session_flows_->open_tree(); }
 

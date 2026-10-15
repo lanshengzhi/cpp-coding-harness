@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/tui/ITui.hpp>
+#include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Mouse.hpp>
 #include <cch/tui/RawInputListener.hpp>
 #include <cch/tui/ScrollView.hpp>
@@ -14,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace cch::tui {
@@ -48,11 +50,24 @@ using RightClickPasteSink = std::move_only_function<support::ExpectedVoid()>;
 /// character to word to line granularity.
 inline constexpr auto kSelectionDoubleClickInterval = std::chrono::milliseconds{500};
 
+struct AutoWheelScrollLines {};
+using WheelScrollLines = std::variant<std::size_t, AutoWheelScrollLines>;
+using WheelScrollClock = std::move_only_function<std::chrono::steady_clock::time_point()>;
+
 struct AltScreenOptions {
     /// Copy a non-empty text selection when its mouse gesture ends.
     bool copy_on_select{true};
     /// An empty sink selects the toolkit's default OSC 52 clipboard operation.
     SelectionCopySink copy_selection{};
+    /// Render a clickable label on the primary follow-end viewport's last row
+    /// while it is scrolled away from the end (pi `scrollToEndIndicator`).
+    std::function<std::string()> scroll_to_end_indicator{};
+    /// Logical rows per wheel event; the alternate-screen frozen default is one.
+    /// `AutoWheelScrollLines` enables the frozen velocity-based accelerator.
+    WheelScrollLines wheel_scroll_lines{std::size_t{1}};
+    /// Monotonic input clock for automatic wheel acceleration. Tests inject a
+    /// deterministic sequence; production defaults to `steady_clock`.
+    WheelScrollClock wheel_clock{};
 };
 
 /// Alternate-screen (fullscreen) root: owns the terminal's alternate buffer
@@ -90,6 +105,7 @@ public:
 
     [[nodiscard]] Terminal& terminal() noexcept override { return terminal_; }
     [[nodiscard]] const Terminal& terminal() const noexcept override { return terminal_; }
+    void set_keybinding_context(std::shared_ptr<KeybindingsContext> context) override;
 
     [[nodiscard]] support::Expected<std::reference_wrapper<Component>> add_child(
             std::unique_ptr<Component> component) override;
@@ -128,6 +144,8 @@ public:
     void scroll_by(std::ptrdiff_t lines);
     void scroll_to_top();
     void scroll_to_bottom();
+    void set_wheel_scroll_lines(WheelScrollLines lines);
+    void set_scroll_to_end_indicator(std::function<std::string()> indicator);
 
     [[nodiscard]] support::ExpectedVoid set_focus(Component* component) override;
     [[nodiscard]] Component* focus() const noexcept override { return focused_; }
@@ -193,12 +211,14 @@ private:
     /// The alternate-screen input stage (pi `handleViewportInput`): focus reports
     /// and mouse reports are consumed here, everything else passes unchanged.
     [[nodiscard]] bool handle_viewport_input(std::string_view data);
+    [[nodiscard]] bool handle_viewport_key(const KeyEvent& event);
     /// Route a pointer report to the gesture captured or started by an earlier
     /// press, or return false when no live gesture owns it.
     bool handle_gesture_mouse_report(const detail::MousePacket& packet, const MouseEvent& event);
     void handle_mouse_report(const detail::MousePacket& packet);
     [[nodiscard]] bool handle_right_click_paste(const detail::MousePacket& packet);
     [[nodiscard]] bool handle_selection_mouse_report(const detail::MousePacket& packet);
+    [[nodiscard]] bool handle_scroll_to_end_indicator_mouse_report(const detail::MousePacket& packet);
     [[nodiscard]] bool handle_scrollbar_mouse_report(const detail::MousePacket& packet);
     void stop_scrollbar_drag() noexcept;
     void validate_scrollbar_interaction(const detail::LayoutFrame& frame);
@@ -215,6 +235,9 @@ private:
     /// Offer a wheel delta to the viewports under the pointer, then to the
     /// primary viewport (pi `routeWheel`).
     void route_wheel(const MouseEvent& event, std::ptrdiff_t delta);
+    [[nodiscard]] std::ptrdiff_t next_wheel_scroll_lines(std::ptrdiff_t direction);
+    void reset_wheel_scroll_acceleration() noexcept;
+    [[nodiscard]] support::ExpectedVoid composite_scroll_to_end_indicator(std::vector<std::string>& lines);
     /// Move the scrollbar hover to the viewport under a frame cell, or clear it
     /// (pi `updateScrollbarHover`).
     void update_scrollbar_hover(std::ptrdiff_t x, std::ptrdiff_t y);
@@ -347,6 +370,20 @@ private:
     std::optional<SelectionWordClick> last_word_click_{};
     std::optional<std::string> pressed_url_{};
     std::move_only_function<std::chrono::milliseconds()> selection_click_clock_{};
+    WheelScrollLines wheel_scroll_lines_{std::size_t{1}};
+    WheelScrollClock wheel_clock_{};
+    std::optional<std::chrono::steady_clock::time_point> wheel_last_time_{};
+    std::ptrdiff_t wheel_last_direction_{0};
+    std::optional<double> wheel_average_gap_ms_{};
+    double wheel_carry_{0};
+    std::shared_ptr<KeybindingsContext> keybinding_context_{};
+    std::function<std::string()> scroll_to_end_indicator_{};
+    struct ScrollToEndIndicatorRect {
+        std::ptrdiff_t row{0};
+        std::ptrdiff_t column{0};
+        std::size_t width{0};
+    };
+    std::optional<ScrollToEndIndicatorRect> scroll_to_end_indicator_rect_{};
     LinkOpenSink link_open_sink_{};
     RightClickPasteSink right_click_paste_sink_{};
     bool copy_on_select_{true};
