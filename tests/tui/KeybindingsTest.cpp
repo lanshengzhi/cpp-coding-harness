@@ -162,10 +162,8 @@ TEST_CASE("Builtin table is exactly the frozen pi default table at 83114817", "[
 
 TEST_CASE("Known-but-unassembled IDs are recognized and never become no-op bindings",
         "[tui][keybindings][issue382][spec]") {
-    constexpr std::array<std::string_view, 7> kUnassembled{
+    constexpr std::array<std::string_view, 5> kUnassembled{
             "tui.input.copy",
-            "tui.altScreen.previousPrompt",
-            "tui.altScreen.nextPrompt",
             "tui.altScreen.halfPageUp",
             "tui.altScreen.halfPageDown",
             "tui.altScreen.lineUp",
@@ -174,7 +172,9 @@ TEST_CASE("Known-but-unassembled IDs are recognized and never become no-op bindi
     for (const auto id : kUnassembled) {
         CHECK(tui::is_known_unassembled_tui_keybinding(id));
     }
-    // Assembled by the fullscreen keybinding manager (#1004).
+    // Assembled by the fullscreen keybinding manager (#1004, #1011).
+    CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.previousPrompt"));
+    CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.nextPrompt"));
     CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.pageUp"));
     CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.pageDown"));
     CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.top"));
@@ -189,6 +189,12 @@ TEST_CASE("Known-but-unassembled IDs are recognized and never become no-op bindi
     CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("future.action"));
 
     const auto definitions = tui::builtin_tui_keybinding_definitions();
+    const auto fullscreen = tui::alt_screen_keybinding_definitions();
+    for (const auto id :
+            {std::string_view{"tui.altScreen.previousPrompt"}, std::string_view{"tui.altScreen.nextPrompt"}}) {
+        CHECK(std::any_of(
+                fullscreen.begin(), fullscreen.end(), [id](const auto& definition) { return definition.id == id; }));
+    }
     for (const auto id : kUnassembled) {
         const auto found = std::find_if(
                 definitions.begin(), definitions.end(), [id](const auto& definition) { return definition.id == id; });
@@ -209,7 +215,7 @@ TEST_CASE("Known-but-unassembled overrides diagnose as unavailable, unknown "
     request.definitions = tui::builtin_tui_keybinding_definitions();
     request.overrides = {
             {.id = "tui.input.copy", .keys = {"ctrl+c"}},
-            {.id = "tui.altScreen.previousPrompt", .keys = {"ctrl+shift+up"}},
+            {.id = "tui.altScreen.halfPageUp", .keys = {"ctrl+shift+up"}},
             {.id = "future.action", .keys = {"f1"}},
     };
 
@@ -220,11 +226,11 @@ TEST_CASE("Known-but-unassembled overrides diagnose as unavailable, unknown "
     CHECK(resolved->issues[0].code == "unavailable_action");
     CHECK(resolved->issues[0].action_id == "tui.input.copy");
     CHECK(resolved->issues[1].code == "unavailable_action");
-    CHECK(resolved->issues[1].action_id == "tui.altScreen.previousPrompt");
+    CHECK(resolved->issues[1].action_id == "tui.altScreen.halfPageUp");
     CHECK(resolved->issues[2].code == "unknown_action");
     CHECK(resolved->issues[2].action_id == "future.action");
     CHECK(resolved->registry->find("tui.input.copy") == nullptr);
-    CHECK(resolved->registry->find("tui.altScreen.previousPrompt") == nullptr);
+    CHECK(resolved->registry->find("tui.altScreen.halfPageUp") == nullptr);
     CHECK(resolved->registry->find("future.action") == nullptr);
     CHECK(resolved->registry->entries().size() == 32);
 }

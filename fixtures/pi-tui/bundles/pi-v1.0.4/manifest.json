@@ -28,7 +28,7 @@
   },
   "generator": {
     "path": "capture/capture-named-tui.mts",
-    "sha256": "6df7c8b776e12c3fed2f94be1815dcd6dfbb0066a9aa7e1b5314889653c00304",
+    "sha256": "8f7175c4418955bd17420ea6e7be4a54b541508a0020659d91268c8c719acfbb",
     "sources": [
       {
         "path": "capture/select-list-scenarios.mts",
@@ -61,6 +61,10 @@
       {
         "path": "capture/alt-screen-search-scenarios.mts",
         "sha256": "fc401d94fa06ed21078d89a7b1be3ce0dc7acbfcbfe51f19f44ec6c74f36149c"
+      },
+      {
+        "path": "capture/alt-screen-nav-scenarios.mts",
+        "sha256": "36de6cf47a00015a6a24da3bf70707ed88dbee2fa645f1b3afec943153f6234b"
       }
     ]
   },
@@ -271,6 +275,17 @@
         "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleViewportInput,TuiAltScreen.toggleSearch,TuiAltScreen.refreshSearch,TuiAltScreen.applySearchHighlights,TuiAltScreen.doRender",
         "packages/tui/src/keybindings.ts:TUI_KEYBINDINGS,KeybindingsManager",
         "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,VirtualTerminal.resize,VirtualTerminal.waitForRender"
+      ]
+    },
+    {
+      "path": "alt-screen-nav.json",
+      "family": "alt-screen-nav",
+      "bytes": 6395,
+      "sha256": "538066f0fcfc748ebf88fff697b76eb3936f3a3904caab16752070cce84f341a",
+      "sourceEndpoints": [
+        "packages/tui/src/components/alt-screen-flash.ts:AltScreenFlashContainer.flash,AltScreenFlashContainer.render",
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.flash,TuiAltScreen.scrollToPrompt,TuiAltScreen.compositeFlashes,TuiAltScreen.compositeScrollToEndIndicator,TuiAltScreen.handleScrollToEndIndicatorMouseEvent,TuiAltScreen.doRender",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,VirtualTerminal.waitForRender,VirtualTerminal.getViewport"
       ]
     }
   ]

@@ -36,6 +36,27 @@
 namespace cch::cli {
 namespace {
 
+struct StartupDelayedTuiWork {
+    explicit StartupDelayedTuiWork(boost::asio::any_io_executor executor) : timer(std::move(executor)) {}
+    boost::asio::steady_timer timer;
+    std::shared_ptr<std::atomic_bool> alive = std::make_shared<std::atomic_bool>(true);
+};
+
+class StartupTuiScheduledHandle final : public cch::tui::TuiScheduledHandle {
+public:
+    explicit StartupTuiScheduledHandle(std::shared_ptr<StartupDelayedTuiWork> state) : state_(std::move(state)) {}
+    ~StartupTuiScheduledHandle() override { cancel(); }
+    void cancel() noexcept override {
+        if (!state_) return;
+        *state_->alive = false;
+        (void)state_->timer.cancel();
+        state_.reset();
+    }
+
+private:
+    std::shared_ptr<StartupDelayedTuiWork> state_;
+};
+
 class StartupTuiScheduler final : public cch::tui::TuiScheduler {
 public:
     explicit StartupTuiScheduler(boost::asio::any_io_executor executor)
@@ -58,6 +79,20 @@ public:
         });
     }
 
+    [[nodiscard]] std::unique_ptr<cch::tui::TuiScheduledHandle> schedule_delayed(
+            std::chrono::steady_clock::duration delay, cch::tui::TuiScheduledWork work) override {
+        std::erase_if(delayed_work_, [](const auto& item) { return item.expired(); });
+        auto state = std::make_shared<StartupDelayedTuiWork>(executor_);
+        delayed_work_.push_back(state);
+        state->timer.expires_after(std::max(delay, std::chrono::steady_clock::duration::zero()));
+        state->timer.async_wait([state, work = std::move(work)](const boost::system::error_code& error) mutable {
+            if (error || !*state->alive) return;
+            *state->alive = false;
+            if (work) work();
+        });
+        return std::make_unique<StartupTuiScheduledHandle>(std::move(state));
+    }
+
     void cancel() noexcept override { (void)timer_.cancel(); }
 
     void schedule_interval(std::chrono::steady_clock::duration period, cch::tui::TuiScheduledWork work) override {
@@ -75,6 +110,12 @@ public:
     /// CODING_STANDARDS §6.2: async callbacks must not touch a dying owner.
     /// This token follows AltScreen's RenderScheduleState weak-owner/generation pattern.
     ~StartupTuiScheduler() override {
+        for (const auto& weak_state : delayed_work_) {
+            if (const auto state = weak_state.lock()) {
+                *state->alive = false;
+                (void)state->timer.cancel();
+            }
+        }
         *interval_alive_ = false;
         interval_work_.reset();
     }
@@ -97,6 +138,7 @@ private:
     std::chrono::steady_clock::duration interval_period_{};
     std::shared_ptr<cch::tui::TuiScheduledWork> interval_work_;
     std::shared_ptr<std::atomic_bool> interval_alive_ = std::make_shared<std::atomic_bool>(true);
+    std::vector<std::weak_ptr<StartupDelayedTuiWork>> delayed_work_;
 };
 
 /// One awaiting startup-TUI outcome (pi `startup-ui.ts` promise): first

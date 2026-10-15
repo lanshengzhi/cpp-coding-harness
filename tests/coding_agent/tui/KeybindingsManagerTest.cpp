@@ -191,8 +191,8 @@ TEST_CASE("Malformed keybindings documents retain defaults with a bounded diagno
     CHECK(manager->registry->keys("tui.input.submit") == std::vector<std::string>{"enter"});
 }
 
-TEST_CASE("Known-but-unassembled tui ids are diagnosed as unavailable and never installed",
-        "[coding_agent][keybindings][issue382][spec]") {
+TEST_CASE("Known-but-unassembled tui ids are diagnosed while prompt navigation is installed",
+        "[coding_agent][keybindings][issue382][issue1011][spec]") {
     tests::TempWorkspace config;
     config.write("keybindings.json", R"({
         "tui.input.copy": "ctrl+c",
@@ -213,7 +213,7 @@ TEST_CASE("Known-but-unassembled tui ids are diagnosed as unavailable and never 
         manager->diagnostics.begin(),
         manager->diagnostics.end(),
         [](const auto& diagnostic) { return diagnostic.code == "unavailable_action"; });
-    CHECK(unavailable == 2);
+    CHECK(unavailable == 1);
     CHECK_FALSE(has_diagnostic(*manager, "unknown_action"));
     CHECK(manager->registry->find("tui.input.copy") == nullptr);
     REQUIRE(manager->registry->find("tui.altScreen.pageUp") != nullptr);
@@ -222,15 +222,15 @@ TEST_CASE("Known-but-unassembled tui ids are diagnosed as unavailable and never 
     CHECK(manager->registry->keys("tui.altScreen.searchNext") == std::vector<std::string>{"f3"});
     CHECK(manager->registry->keys("tui.altScreen.searchPrevious") == std::vector<std::string>{"shift+f3"});
     CHECK(manager->registry->keys("tui.altScreen.searchClose") == std::vector<std::string>{"escape"});
-    CHECK(manager->registry->find("tui.altScreen.previousPrompt") == nullptr);
-    CHECK(manager->registry->entries().size() == 40);
+    CHECK(manager->registry->keys("tui.altScreen.previousPrompt") == std::vector<std::string>{"shift+ctrl+up"});
+    CHECK(manager->registry->entries().size() == 42);
     const auto text = coding_agent::tui::format_hotkeys_text(*manager->help);
     CHECK(text.find("tui.input.copy") == std::string::npos);
     CHECK(text.find("app.model.select") == std::string::npos);
 }
 
-TEST_CASE("fullscreen keybindings assemble viewport and search actions and defer prompt navigation",
-        "[coding_agent][keybindings][issue1004][issue1010]") {
+TEST_CASE("fullscreen keybindings assemble viewport, prompt navigation and search actions",
+        "[coding_agent][keybindings][issue1004][issue1010][issue1011]") {
     coding_agent::tui::KeybindingsManagerRequest request;
     const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
 
@@ -248,8 +248,10 @@ TEST_CASE("fullscreen keybindings assemble viewport and search actions and defer
             std::vector<std::string>{"shift+enter", "shift+ctrl+g"});
     CHECK(manager->registry->find("tui.altScreen.searchClose") != nullptr);
     CHECK(manager->registry->keys("tui.altScreen.searchClose") == std::vector<std::string>{"escape"});
-    CHECK(manager->registry->find("tui.altScreen.previousPrompt") == nullptr);
-    CHECK(manager->registry->find("tui.altScreen.nextPrompt") == nullptr);
+    CHECK(manager->registry->keys("tui.altScreen.previousPrompt") ==
+            std::vector<std::string>{"shift+ctrl+up", "ctrl+up"});
+    CHECK(manager->registry->keys("tui.altScreen.nextPrompt") ==
+            std::vector<std::string>{"shift+ctrl+down", "ctrl+down"});
 }
 
 TEST_CASE("Keybindings manager bounds diagnostics and redacts invalid key text",

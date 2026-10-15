@@ -1,0 +1,278 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/components/alt-screen-flash.ts:AltScreenFlashContainer.flash,AltScreenFlashContainer.render",
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.flash,TuiAltScreen.scrollToPrompt,TuiAltScreen.compositeFlashes,TuiAltScreen.compositeScrollToEndIndicator,TuiAltScreen.handleScrollToEndIndicatorMouseEvent,TuiAltScreen.doRender",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,VirtualTerminal.waitForRender,VirtualTerminal.getViewport"
+  ],
+  "scenarios": [
+    {
+      "name": "prompt-navigation-uses-raw-osc-133-and-ignores-releases",
+      "dimensions": {
+        "columns": 20,
+        "rows": 3
+      },
+      "inputs": {
+        "transcript": [
+          "\u001b]133;A\u0007message 1",
+          "detail",
+          "\u001b]133;A\u0007message 2",
+          "detail",
+          "\u001b]133;A\u0007message 3",
+          "detail",
+          "\u001b]133;A\u0007message 4",
+          "detail"
+        ],
+        "keys": [
+          "previous-press",
+          "previous-release",
+          "previous",
+          "previous",
+          "next-press",
+          "next-release",
+          "next"
+        ]
+      },
+      "expected": {
+        "navigation": [
+          {
+            "action": "initial",
+            "viewportTop": 5,
+            "screen": [
+              "detail",
+              "message 4",
+              "detail"
+            ]
+          },
+          {
+            "action": "previous-press-and-release",
+            "viewportTop": 4,
+            "screen": [
+              "message 3",
+              "detail",
+              "message 4"
+            ]
+          },
+          {
+            "action": "previous",
+            "viewportTop": 2,
+            "screen": [
+              "message 2",
+              "detail",
+              "message 3"
+            ]
+          },
+          {
+            "action": "previous-again",
+            "viewportTop": 0,
+            "screen": [
+              "message 1",
+              "detail",
+              "message 2"
+            ]
+          },
+          {
+            "action": "next-press-and-release",
+            "viewportTop": 2,
+            "screen": [
+              "message 2",
+              "detail",
+              "message 3"
+            ]
+          },
+          {
+            "action": "next",
+            "viewportTop": 4,
+            "screen": [
+              "message 3",
+              "detail",
+              "message 4"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "prompt-navigation-leaves-view-when-no-prompt-matches",
+      "dimensions": {
+        "columns": 20,
+        "rows": 3
+      },
+      "inputs": {
+        "transcript": [
+          "\u001b]133;B\u0007message output",
+          "\u001b]133;C\u0007assistant output",
+          "plain three",
+          "plain four",
+          "plain five"
+        ],
+        "keys": [
+          "previous",
+          "next"
+        ]
+      },
+      "expected": {
+        "navigation": [
+          {
+            "action": "initial",
+            "viewportTop": 2,
+            "screen": [
+              "plain three",
+              "plain four",
+              "plain five"
+            ]
+          },
+          {
+            "action": "previous-without-prompt",
+            "viewportTop": 2,
+            "screen": [
+              "plain three",
+              "plain four",
+              "plain five"
+            ]
+          },
+          {
+            "action": "next-without-prompt",
+            "viewportTop": 2,
+            "screen": [
+              "plain three",
+              "plain four",
+              "plain five"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "flash-replaces-top-rows-oldest-first",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "transcript": [
+          "one",
+          "two",
+          "three",
+          "four"
+        ],
+        "flashes": [
+          "First",
+          "Second"
+        ]
+      },
+      "expected": {
+        "screen": [
+          "one           First",
+          "two          Second",
+          "three",
+          "four"
+        ]
+      }
+    },
+    {
+      "name": "flash-overflow-keeps-newest-rows-in-original-order",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "transcript": [
+          "one",
+          "two",
+          "three",
+          "four"
+        ],
+        "flashes": [
+          "Flash 1",
+          "Flash 2",
+          "Flash 3",
+          "Flash 4",
+          "Flash 5",
+          "Flash 6"
+        ]
+      },
+      "expected": {
+        "screen": [
+          "one         Flash 3",
+          "two         Flash 4",
+          "three       Flash 5",
+          "four        Flash 6"
+        ]
+      }
+    },
+    {
+      "name": "indicator-shown-when-scrolled",
+      "dimensions": {
+        "columns": 30,
+        "rows": 3
+      },
+      "inputs": {
+        "transcript": [
+          "one",
+          "two",
+          "three",
+          "four",
+          "five"
+        ],
+        "wheel": "\u001b[<64;1;1M"
+      },
+      "expected": {
+        "indicator": "Jump to end",
+        "screen": [
+          "two",
+          "three",
+          "four    ↓ Jump to end"
+        ],
+        "clickFollowingEnd": true
+      }
+    },
+    {
+      "name": "indicator-hidden-without-follow-end",
+      "dimensions": {
+        "columns": 30,
+        "rows": 3
+      },
+      "inputs": {
+        "transcript": [
+          "one",
+          "two",
+          "three",
+          "four",
+          "five"
+        ],
+        "wheel": "\u001b[<64;1;1M",
+        "followEnd": false
+      },
+      "expected": {
+        "indicatorShown": false
+      }
+    }
+  ]
+}

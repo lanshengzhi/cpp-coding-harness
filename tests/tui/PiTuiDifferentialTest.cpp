@@ -316,10 +316,11 @@ TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS",
             CHECK(definition->default_keys[index] == keys[index].get_string());
         }
     }
-    // 39 frozen entries minus `tui.input.copy` and the four assembled
-    // `tui.altScreen.pageUp`/`pageDown`/`top`/`bottom` entries (the
-    // pre-v1.0.4 `previousPrompt`/`nextPrompt` entries are already skipped as
-    // recognized-but-unassembled).
+    // 39 frozen entries minus `tui.input.copy` and the eight assembled
+    // `tui.altScreen.pageUp`/`pageDown`/`top`/`bottom` and
+    // `previousPrompt`/`nextPrompt` + search entries (all `tui.altScreen.*`
+    // ids are skipped by the prefix guard above, which also covers the
+    // pre-v1.0.4 `previousPrompt`/`nextPrompt` fixture rows).
     CHECK(assembled == 32);
 }
 

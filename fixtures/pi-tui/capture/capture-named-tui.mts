@@ -19,6 +19,7 @@ import { captureMouse } from "./mouse-scenarios.mts";
 import { captureScrollbar } from "./scrollbar-scenarios.mts";
 import { captureSelection } from "./selection-scenarios.mts";
 import { captureAltScreenSearch } from "./alt-screen-search-scenarios.mts";
+import { captureAltScreenNav } from "./alt-screen-nav-scenarios.mts";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), "..");
@@ -859,6 +860,10 @@ const selectionArtifact = envelope(selectionObservation.sourceEndpoints, selecti
 const altScreenSearchObservation = await captureAltScreenSearch(pi);
 const altScreenSearchArtifact = envelope(altScreenSearchObservation.sourceEndpoints, altScreenSearchObservation.scenarios);
 
+// Observe fullscreen prompt navigation, indicator, and flash composition (#1011).
+const altScreenNavObservation = await captureAltScreenNav(pi);
+const altScreenNavArtifact = envelope(altScreenNavObservation.sourceEndpoints, altScreenNavObservation.scenarios);
+
 // Observe normalized mouse routing: the cached-frame hit test, the capture and
 // host-focus rules, wheel consumption and the regular screen's terminal-owned
 // mouse behavior (#1002).
@@ -886,6 +891,7 @@ const artifacts = [
 	["scrollbar.json", "scrollbar", scrollbarArtifact],
 	["selection.json", "selection", selectionArtifact],
 	["alt-screen-search.json", "alt-screen-search", altScreenSearchArtifact],
+	["alt-screen-nav.json", "alt-screen-nav", altScreenNavArtifact],
 ] as const;
 const records = artifacts.map(([file, family, artifact]) => {
 	const bytes = Buffer.from(JSON.stringify(artifact, null, 2) + "\n");
@@ -928,6 +934,10 @@ const manifest = {
 			{
 				path: "capture/alt-screen-search-scenarios.mts",
 				sha256: sha256(readFileSync(path.join(root, "capture/alt-screen-search-scenarios.mts"))),
+			},
+			{
+				path: "capture/alt-screen-nav-scenarios.mts",
+				sha256: sha256(readFileSync(path.join(root, "capture/alt-screen-nav-scenarios.mts"))),
 			},
 		],
 	},

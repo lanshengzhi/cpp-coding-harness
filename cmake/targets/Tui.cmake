@@ -8,6 +8,7 @@ cch_parity_declare_target(
     OWNER cch_tui
     SOURCES
         src/tui/AltScreen.cpp
+        src/tui/AltScreenFlash.cpp
         src/tui/AltScreenSearch.cpp
         src/tui/Autocomplete.cpp
         src/tui/NativeClipboard.cpp
