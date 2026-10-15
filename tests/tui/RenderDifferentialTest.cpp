@@ -30,6 +30,10 @@ public:
         ++schedule_count_;
     }
     void cancel() noexcept override { scheduled_ = nullptr; }
+    void schedule_interval(std::chrono::steady_clock::duration, cch::tui::TuiScheduledWork work) override {
+        interval_work_ = std::make_shared<cch::tui::TuiScheduledWork>(std::move(work));
+    }
+    void cancel_interval() noexcept override { interval_work_.reset(); }
 
     std::chrono::steady_clock::duration scheduled_delay_{};
     std::size_t schedule_count_{0};
@@ -37,6 +41,7 @@ public:
 private:
     std::chrono::steady_clock::time_point now_{};
     cch::tui::TuiScheduledWork scheduled_;
+    std::shared_ptr<cch::tui::TuiScheduledWork> interval_work_;
     std::vector<cch::tui::TuiScheduledWork> posted_;
 };
 

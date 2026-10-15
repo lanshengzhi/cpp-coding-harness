@@ -57,7 +57,7 @@ namespace {
 class AsioTuiScheduler final : public cch::tui::TuiScheduler {
 public:
     explicit AsioTuiScheduler(boost::asio::any_io_executor executor)
-        : executor_(std::move(executor)), timer_(executor_) {}
+        : executor_(std::move(executor)), timer_(executor_), interval_timer_(executor_) {}
 
     [[nodiscard]] std::chrono::steady_clock::time_point now() const noexcept override {
         return std::chrono::steady_clock::now();
@@ -78,9 +78,34 @@ public:
 
     void cancel() noexcept override { (void)timer_.cancel(); }
 
+    void schedule_interval(std::chrono::steady_clock::duration period, cch::tui::TuiScheduledWork work) override {
+        (void)interval_timer_.cancel();
+        interval_period_ = std::max(period, std::chrono::steady_clock::duration::zero());
+        interval_work_ = std::make_shared<cch::tui::TuiScheduledWork>(std::move(work));
+        arm_interval();
+    }
+
+    void cancel_interval() noexcept override {
+        interval_work_.reset();
+        (void)interval_timer_.cancel();
+    }
+
 private:
+    void arm_interval() {
+        interval_timer_.expires_after(interval_period_);
+        interval_timer_.async_wait([this](const boost::system::error_code& error) {
+            const auto work = interval_work_;
+            if (error || !work || !*work) return;
+            arm_interval();
+            (*work)();
+        });
+    }
+
     boost::asio::any_io_executor executor_;
     boost::asio::steady_timer timer_;
+    boost::asio::steady_timer interval_timer_;
+    std::chrono::steady_clock::duration interval_period_{};
+    std::shared_ptr<cch::tui::TuiScheduledWork> interval_work_;
 };
 
 } // namespace

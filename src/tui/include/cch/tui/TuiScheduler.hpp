@@ -10,6 +10,8 @@ using TuiScheduledWork = std::move_only_function<void()>;
 /// Execution capabilities used by the toolkit's render policy. One scheduler
 /// belongs to one TUI instance. post() must defer work to the next execution
 /// turn; schedule() replaces its pending timer; cancel() cancels that timer.
+/// schedule_interval() replaces its pending interval; cancel_interval() stops
+/// it. An interval invokes its work every period until it is cancelled.
 class TuiScheduler {
 public:
     virtual ~TuiScheduler() = default;
@@ -18,6 +20,8 @@ public:
     virtual void post(TuiScheduledWork work) = 0;
     virtual void schedule(std::chrono::steady_clock::duration delay, TuiScheduledWork work) = 0;
     virtual void cancel() noexcept = 0;
+    virtual void schedule_interval(std::chrono::steady_clock::duration period, TuiScheduledWork work) = 0;
+    virtual void cancel_interval() noexcept = 0;
 };
 
 } // namespace cch::tui
