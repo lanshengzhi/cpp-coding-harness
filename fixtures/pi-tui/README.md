@@ -133,7 +133,7 @@ The frozen Windows-only gate is
 (lines 421–457). This Linux behavior is an intentional compatibility deviation. The scenarios are
 captured from the unmodified frozen checkout.
 
-For #1007, the same artifact holds nine frozen multi-click scenarios for pi's word/line selection
+For #1007, the same artifact holds eight frozen multi-click scenarios for pi's word/line selection
 cycle: `multiclick-word-line-cycle` (press/double/triple over one word), `multiclick-word-joiners-and-classes`
 (`/` `-` joiner chains, the rule-based word classes and dictionary-script boundaries),
 `multiclick-word-drag-expansion` and `multiclick-line-wrapped-rows` (granularity-preserving
@@ -142,8 +142,9 @@ reset; the exact 500 ms/501 ms boundary itself is pinned by the deterministic-cl
 since this runner's wall-clock sleeps cannot land exactly on the inclusive boundary), `multiclick-focus-out-cancels`
 and `multiclick-scrollbar-cancels` (the stale-click cancellation sites), plus
 `multiclick-dictionary-script-runs` (double-clicks inside multi-character Han `日本語`,
-Hiragana `こんにちは` and Thai `สวัสดีครับ` runs select whole ICU word segments) and
-`multiclick-interval-boundary`. Word segments come from pi's `Intl.Segmenter` (ICU word-break
+Hiragana `こんにちは` and Thai `สวัสดีครับ` runs select whole ICU word segments). These eight
+#1007 scenarios join four #1006 scenarios and two #1009 scenarios for 14 total in `selection.json`.
+Word segments come from pi's `Intl.Segmenter` (ICU word-break
 dictionaries and rules); Pike replays them through the pinned vcpkg ICU breaker
 (`cch::tui::detail::segment_words`, UBRK_WORD), the same engine class. Correction to an earlier
 packet claim: frozen pi does NOT clear its click state on content resize or content change — it

@@ -195,7 +195,7 @@ void replay_mouse_routing_scenario(std::string_view name) {
     std::chrono::milliseconds now{0};
     tui.set_selection_click_clock([&now] { return now; });
     tui.set_link_open_sink([&opened](std::string_view url) noexcept { opened.emplace_back(url); });
-    tui.set_right_click_paste_handler([&paste_count]() -> cch::support::ExpectedVoid {
+    tui.set_right_click_paste_sink([&paste_count]() -> cch::support::ExpectedVoid {
         ++paste_count;
         return {};
     });

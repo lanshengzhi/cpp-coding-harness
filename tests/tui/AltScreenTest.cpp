@@ -920,12 +920,11 @@ TEST_CASE(
     REQUIRE(tui.stop());
 }
 
-TEST_CASE(
-        "AltScreen routes secondary-button presses to its paste handler", "[tui][alt-screen][mouse][issue1009][spec]") {
+TEST_CASE("AltScreen routes secondary-button presses to its paste sink", "[tui][alt-screen][mouse][issue1009][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 2});
     std::vector<int> paste_buttons;
     cch::tui::AltScreen tui(terminal);
-    tui.set_right_click_paste_handler([&paste_buttons]() -> cch::support::ExpectedVoid {
+    tui.set_right_click_paste_sink([&paste_buttons]() -> cch::support::ExpectedVoid {
         paste_buttons.push_back(1);
         return {};
     });
@@ -939,6 +938,41 @@ TEST_CASE(
     REQUIRE(terminal.inject_input("\x1b[<2;3;1m"));
     REQUIRE(terminal.inject_input("\x1b[<34;3;1M"));
     CHECK(paste_buttons.size() == 1);
+
+    std::size_t declines = 0;
+    tui.set_right_click_paste_sink([&declines]() -> cch::support::ExpectedVoid {
+        ++declines;
+        return std::unexpected(cch::support::make_error(cch::support::ErrorCode::Unknown, "paste declined"));
+    });
+    REQUIRE(terminal.inject_input("\x1b[<2;4;1M"));
+    CHECK(declines == 1);
+    CHECK(paste_buttons.size() == 1);
+    CHECK_FALSE(tui.has_active_selection());
+
+    REQUIRE(terminal.inject_input("\x1b[<6;5;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<18;6;1M"));
+    CHECK(declines == 1);
+    CHECK(paste_buttons.size() == 1);
+    CHECK_FALSE(tui.has_active_selection());
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("AltScreen preserves a pending OSC 8 link through pure pointer motion",
+        "[tui][alt-screen][mouse][issue1009][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 2});
+    std::vector<std::string> opened;
+    cch::tui::AltScreen tui(terminal);
+    tui.set_link_open_sink([&opened](std::string_view url) noexcept { opened.emplace_back(url); });
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>(
+            "\x1b]8;;https://example.com/motion\x1b\\alpha\x1b]8;;\x1b\\ plain", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<35;3;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<35;2;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<3;2;1m"));
+    CHECK(opened == std::vector<std::string>{"https://example.com/motion"});
     REQUIRE(tui.stop());
 }
 

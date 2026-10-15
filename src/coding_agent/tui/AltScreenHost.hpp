@@ -2,7 +2,7 @@
 
 // Repository-private composition host for the fullscreen TUI root (#1006).
 // The toolkit owns selection geometry and lifecycle; this frontend host adapts
-// selection copies to the existing closed clipboard action seam.
+// selection copies, OSC 8 link opens and right-click paste to closed action seams.
 
 #include "coding_agent/tui/ClipboardWrite.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"

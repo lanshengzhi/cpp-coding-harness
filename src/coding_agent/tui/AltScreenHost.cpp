@@ -19,7 +19,7 @@ AltScreenHost::AltScreenHost(cch::tui::Terminal& terminal,
             static_cast<void>(action_sink_(action_generation_, TuiActionVariant{OpenBrowserAction{std::string{url}}}));
         }
     });
-    alt_screen_.set_right_click_paste_handler([this]() -> support::ExpectedVoid {
+    alt_screen_.set_right_click_paste_sink([this]() -> support::ExpectedVoid {
         if (action_sink_) {
             auto result = action_sink_(action_generation_, TuiActionVariant{PasteClipboardAction{}});
             if (!result) return std::unexpected(result.error());

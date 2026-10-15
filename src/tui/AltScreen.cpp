@@ -241,9 +241,7 @@ void AltScreen::set_selection_copy_sink(SelectionCopySink sink) {
 
 void AltScreen::set_link_open_sink(LinkOpenSink sink) { link_open_sink_ = std::move(sink); }
 
-void AltScreen::set_right_click_paste_handler(RightClickPasteHandler handler) {
-    right_click_paste_handler_ = std::move(handler);
-}
+void AltScreen::set_right_click_paste_sink(RightClickPasteSink sink) { right_click_paste_sink_ = std::move(sink); }
 
 void AltScreen::set_selection_click_clock(std::move_only_function<std::chrono::milliseconds()> clock) {
     // An empty callable would be invoked on the next press (undefined
@@ -628,6 +626,7 @@ bool AltScreen::is_following_output() const { return primary_scroll_view().follo
 bool AltScreen::has_active_selection() const { return active_selection_text().has_value(); }
 
 void AltScreen::clear_text_selection() noexcept {
+    pressed_url_.reset();
     selection_press_active_ = false;
     selection_dragged_ = false;
     selection_anchor_.reset();
@@ -1194,10 +1193,6 @@ void AltScreen::handle_wheel_report(const detail::MousePacket& packet) {
 void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
     const auto type = detail::pointer_event_type(packet);
     const auto event = create_mouse_event(packet, type);
-    if (!packet.release && packet.button != 0) pressed_url_.reset();
-    if (packet.release && (!selection_press_active_ || ((packet.button & 3) != 0 && (packet.button & 3) != 3)))
-        pressed_url_.reset();
-
     if (selection_press_active_ && handle_selection_mouse_report(packet)) return;
     if (handle_gesture_mouse_report(packet, event)) return;
 
@@ -1227,12 +1222,12 @@ void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
 
 bool AltScreen::handle_right_click_paste(const detail::MousePacket& packet) {
     if (packet.release || packet.kind != detail::MousePacket::Kind::Pointer || packet.button != 2 ||
-            !right_click_paste_handler_) {
+            !right_click_paste_sink_) {
         return false;
     }
     // A handler decline still owns this secondary press, matching pi's
     // best-effort clipboard route and preventing it from starting selection.
-    static_cast<void>(right_click_paste_handler_());
+    static_cast<void>(right_click_paste_sink_());
     return true;
 }
 

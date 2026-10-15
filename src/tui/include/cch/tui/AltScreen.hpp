@@ -41,7 +41,7 @@ using SelectionCopySink = std::move_only_function<support::ExpectedVoid(std::str
 using LinkOpenSink = std::move_only_function<void(std::string_view url) noexcept>;
 /// Synchronous right-click paste request. The fullscreen root consumes a
 /// declined request without starting text selection.
-using RightClickPasteHandler = std::move_only_function<support::ExpectedVoid()>;
+using RightClickPasteSink = std::move_only_function<support::ExpectedVoid()>;
 
 /// The frozen multi-click selection interval (pi `DOUBLE_CLICK_INTERVAL_MS`):
 /// consecutive presses on the same word within this window count up from
@@ -117,7 +117,7 @@ public:
     void set_selection_copy_sink(SelectionCopySink sink);
     void set_link_open_sink(LinkOpenSink sink);
     /// Install the host action for an unmodified secondary-button press.
-    void set_right_click_paste_handler(RightClickPasteHandler handler);
+    void set_right_click_paste_sink(RightClickPasteSink sink);
     /// Override the clock that times multi-click selection presses; the default
     /// reads the system clock in milliseconds like pi `Date.now()`. Tests
     /// inject a deterministic clock here.
@@ -348,7 +348,7 @@ private:
     std::optional<std::string> pressed_url_{};
     std::move_only_function<std::chrono::milliseconds()> selection_click_clock_{};
     LinkOpenSink link_open_sink_{};
-    RightClickPasteHandler right_click_paste_handler_{};
+    RightClickPasteSink right_click_paste_sink_{};
     bool copy_on_select_{true};
     SelectionCopySink selection_copy_sink_{};
     /// Captured scrollbar pointer interaction (pi `scrollbarDrag`). The weak

@@ -301,6 +301,16 @@ TEST_CASE("osc8_link_at_column exposes the frozen link for every cell it covers"
     CHECK(tui::osc8_link_at_column(linked, 4) == std::optional<std::string>{"https://x"});
     CHECK(tui::osc8_link_at_column(linked, 5) == std::nullopt);
     CHECK(tui::osc8_link_at_column(linked, 99) == std::nullopt);
+
+    const std::string linked_with_params{"\x1b]8;id=x;https://x\x07"
+                                         "a\x1b]8;;\x07"};
+    CHECK(tui::osc8_link_at_column(linked_with_params, 0) == std::optional<std::string>{"https://x"});
+
+    const std::string linked_tab{"\x1b]8;;https://x\x07"
+                                 "a\tb\x1b]8;;\x07"};
+    CHECK(tui::osc8_link_at_column(linked_tab, 1) == std::optional<std::string>{"https://x"});
+    CHECK(tui::osc8_link_at_column(linked_tab, 2) == std::optional<std::string>{"https://x"});
+    CHECK(tui::osc8_link_at_column(linked_tab, 3) == std::optional<std::string>{"https://x"});
 }
 
 TEST_CASE("wrapped and truncated lines keep the frozen cells, styles and links after composition",
