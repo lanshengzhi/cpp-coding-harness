@@ -142,6 +142,11 @@ public:
     /// this unset and keeps copying the last assistant message.
     void set_alt_screen_host(AltScreenHost* host) noexcept;
 
+    /// Forward a fullscreen paste request to the existing native clipboard
+    /// read and editor insertion path. Production fullscreen assembly installs
+    /// this action route in T71.
+    void paste_clipboard();
+
 private:
     // ── Submission kinds (folded from the deleted InteractionPolicy) ──────
 

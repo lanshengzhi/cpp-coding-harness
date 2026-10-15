@@ -1747,6 +1747,70 @@ TEST_CASE("Native TUI clipboard images become distinct supported temporary paths
     }
 }
 
+TEST_CASE("Native TUI right-click paste action composes into native clipboard editor insertion",
+        "[coding_agent][tui][clipboard][fullscreen][issue1009][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    auto clipboard = std::make_unique<FakeNativeClipboard>();
+    clipboard->text = "clipboard text";
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    coding_agent::tui::testing::ActionSinkRecorder recorder;
+    tui::VirtualTerminal terminal({.columns = 60, .rows = 19});
+    tui::VirtualTerminal host_terminal({.columns = 20, .rows = 2});
+    boost::asio::io_context io;
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(terminal, io.get_executor());
+    constexpr std::size_t generation = 41;
+    auto action_sink = coding_agent::tui::TuiActionSink{
+            [&recorder, &engine](std::size_t action_generation, coding_agent::tui::TuiActionVariant action)
+                    -> support::Expected<coding_agent::tui::TuiActionResultVariant> {
+                recorder.generations.push_back(action_generation);
+                if (std::holds_alternative<coding_agent::tui::PasteClipboardAction>(action)) {
+                    recorder.paste_clipboard.emplace_back();
+                    engine->paste_clipboard();
+                    return coding_agent::tui::TuiActionResultVariant{std::monostate{}};
+                }
+                return std::unexpected(support::make_error(support::ErrorCode::Unknown, "unexpected test action"));
+            }};
+    coding_agent::tui::AltScreenHost host(host_terminal, action_sink, generation);
+    std::chrono::milliseconds now{0};
+    host.alt_screen().set_selection_click_clock([&now] { return now; });
+    engine->set_alt_screen_host(&host);
+    REQUIRE(host.alt_screen().add_child(std::make_unique<tui::Text>("paste here", 0, 0)));
+    REQUIRE(host.alt_screen().start());
+    REQUIRE(host.alt_screen().render());
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            run_engine_with_host(engine,
+                    make_run(*created->session,
+                            {
+                                    .agent_config_directory = config.path(),
+                                    .native_clipboard = std::move(clipboard),
+                                    .action_sink = recorder.make_sink(),
+                            })),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    REQUIRE(host_terminal.inject_input("\x1b[<2;1;1M"));
+    REQUIRE(tests::pump_until(
+            io, [&] { return visible_screen(terminal).find("clipboard text") != std::string::npos; }));
+    CHECK(recorder.paste_clipboard.size() == 1);
+    CHECK(recorder.generations == std::vector<std::size_t>{generation});
+    const auto screen = visible_screen(terminal);
+    CHECK(screen.find("clipboard text") != std::string::npos);
+    REQUIRE(terminal.inject_input("\x03"));
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+    REQUIRE(host.alt_screen().stop());
+}
+
 TEST_CASE("Native TUI clipboard falls back to text at the cursor and ignores read failures",
         "[coding_agent][tui][clipboard][issue63][issue992][spec]") {
     tests::RuntimeFixture runtime;

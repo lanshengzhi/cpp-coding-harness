@@ -219,6 +219,10 @@ support::Expected<TuiActionResultVariant> InteractiveSessionRun::dispatch_action
                 } else if constexpr (std::is_same_v<T, ReportBootCreationFailureAction>) {
                     report_boot_creation_failure(payload.error);
                     return TuiActionResultVariant{std::monostate{}};
+                } else if constexpr (std::is_same_v<T, PasteClipboardAction>) {
+                    // Production paste composition belongs to T71 fullscreen CLI reachability; until then the default
+                    // run sink acknowledges this action without performing the native clipboard read and editor insert.
+                    return TuiActionResultVariant{std::monostate{}};
                 } else {
                     return TuiActionResultVariant{std::monostate{}};
                 }

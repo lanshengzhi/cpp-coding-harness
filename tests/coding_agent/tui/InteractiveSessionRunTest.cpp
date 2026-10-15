@@ -31,6 +31,7 @@ using coding_agent::PromptOptions;
 using coding_agent::tui::InteractiveSessionRun;
 using coding_agent::tui::InteractiveSessionRunBuilder;
 using coding_agent::tui::OpenBrowserAction;
+using coding_agent::tui::PasteClipboardAction;
 using coding_agent::tui::ReportBootCreationFailureAction;
 using coding_agent::tui::ReportBootDiagnosticsAction;
 using coding_agent::tui::TuiActionVariant;
@@ -177,6 +178,14 @@ TEST_CASE("InteractiveSessionRun's asynchronous replacement sink installs runtim
     (*outcome)->session->close();
     runtime_root->close();
     tests::drain_ready(*io);
+}
+
+TEST_CASE("InteractiveSessionRun acknowledges PasteClipboardAction until fullscreen paste is composed",
+        "[coding_agent][tui][session_run][issue1009][spec]") {
+    auto run = InteractiveSessionRunBuilder{}.with_is_resume_target(false).build();
+    const auto result = run.dispatch_action(0, TuiActionVariant{PasteClipboardAction{}});
+    REQUIRE(result);
+    CHECK(std::holds_alternative<std::monostate>(*result));
 }
 
 TEST_CASE("InteractiveSessionRun dispatches host effects for ReportBootCreationFailureAction",

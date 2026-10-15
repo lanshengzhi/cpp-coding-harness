@@ -100,6 +100,8 @@ void InteractiveEngine::dispatch(SubmitAction action) {
             action.request.editor_revision);
 }
 
+void InteractiveEngine::paste_clipboard() { dispatch(ClipboardPasteAction{}); }
+
 void InteractiveEngine::dispatch(ClipboardPasteAction) {
     if (native_clipboard_ == nullptr || clipboard_read_active_) return;
     clipboard_read_active_ = true;

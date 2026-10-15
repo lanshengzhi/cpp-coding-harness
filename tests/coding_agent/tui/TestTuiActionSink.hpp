@@ -50,6 +50,7 @@ struct ActionSinkRecorder {
         std::vector<std::size_t> generations;
         std::vector<OpenBrowserAction> open_browser;
         std::vector<WriteClipboardAction> write_clipboard;
+        std::vector<PasteClipboardAction> paste_clipboard;
         std::vector<SuspendProcessAction> suspend_process;
         std::vector<ReplaceSessionRecord> replace_sessions;
         std::vector<ReportBootDiagnosticsAction> boot_diagnostics;
@@ -76,6 +77,7 @@ struct ActionSinkRecorder {
     std::vector<std::size_t>& generations{state->generations};
     std::vector<OpenBrowserAction>& open_browser{state->open_browser};
     std::vector<WriteClipboardAction>& write_clipboard{state->write_clipboard};
+    std::vector<PasteClipboardAction>& paste_clipboard{state->paste_clipboard};
     std::vector<SuspendProcessAction>& suspend_process{state->suspend_process};
     std::vector<ReplaceSessionRecord>& replace_sessions{state->replace_sessions};
     std::vector<ReportBootDiagnosticsAction>& boot_diagnostics{state->boot_diagnostics};
@@ -101,6 +103,9 @@ struct ActionSinkRecorder {
                     } else if constexpr (std::is_same_v<T, WriteClipboardAction>) {
                         shared->write_clipboard.push_back(std::move(payload));
                         return TuiActionResultVariant{shared->clipboard_copy_result};
+                    } else if constexpr (std::is_same_v<T, PasteClipboardAction>) {
+                        shared->paste_clipboard.push_back(std::move(payload));
+                        return TuiActionResultVariant{std::monostate{}};
                     } else if constexpr (std::is_same_v<T, SuspendProcessAction>) {
                         shared->suspend_process.push_back(std::move(payload));
                         return TuiActionResultVariant{std::monostate{}};

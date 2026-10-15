@@ -53,6 +53,11 @@ struct WriteClipboardAction {
     std::string text;
 };
 
+/// Request a native clipboard read and editor insertion. Fullscreen production
+/// composition through `InteractiveEngine::paste_clipboard()` is owned by T71;
+/// the current default run sink acknowledges this action until then.
+struct PasteClipboardAction {};
+
 /// Suspend the process group (pi `handleCtrlZ` `process.kill(0, "SIGTSTP")`).
 /// Fire-and-forget; a null host performs the platform SIGTSTP directly.
 struct SuspendProcessAction {};
@@ -77,6 +82,7 @@ struct ReportBootCreationFailureAction {
 /// `AsyncSessionReplacementSink` strong capability exclusively (issue #581).
 using TuiActionVariant = std::variant<OpenBrowserAction,
         WriteClipboardAction,
+        PasteClipboardAction,
         SuspendProcessAction,
         ReportBootDiagnosticsAction,
         ReportBootCreationFailureAction>;

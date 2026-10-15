@@ -7,6 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -75,6 +76,33 @@ TEST_CASE("AltScreenHost defers automatic selection copy when disabled and copie
     REQUIRE(recorder.write_clipboard.size() == 1);
     CHECK(recorder.write_clipboard.front().text == "alpha");
     CHECK(recorder.generations == std::vector<std::size_t>{generation});
+    REQUIRE(host.alt_screen().stop());
+}
+
+TEST_CASE("AltScreenHost routes OSC 8 clicks and right-click paste through the generation-stamped action sink",
+        "[coding_agent][tui][fullscreen][mouse][issue1009][spec]") {
+    ActionSinkRecorder recorder;
+    auto sink = recorder.make_sink();
+    const std::size_t generation = 23;
+    cch::tui::VirtualTerminal terminal({.columns = 40, .rows = 3});
+    AltScreenHost host(terminal, sink, generation);
+    std::chrono::milliseconds now{0};
+    host.alt_screen().set_selection_click_clock([&now] { return now; });
+    REQUIRE(host.alt_screen().add_child(
+            std::make_unique<cch::tui::Text>("\x1b]8;;https://example.com/target\x1b\\target\x1b]8;;\x1b\\", 0, 0)));
+    REQUIRE(host.alt_screen().start());
+    REQUIRE(host.alt_screen().render());
+
+    REQUIRE(terminal.inject_input("\x1b[<0;2;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<3;2;1m"));
+    REQUIRE(recorder.open_browser.size() == 1);
+    CHECK(recorder.open_browser.front().url == "https://example.com/target");
+
+    now += std::chrono::milliseconds{600};
+    REQUIRE(terminal.inject_input("\x1b[<2;3;1M"));
+    CHECK(recorder.paste_clipboard.size() == 1);
+    REQUIRE(terminal.inject_input("\x1b[<2;3;1m"));
+    CHECK(recorder.generations == std::vector<std::size_t>{generation, generation});
     REQUIRE(host.alt_screen().stop());
 }
 

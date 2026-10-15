@@ -14,6 +14,18 @@ AltScreenHost::AltScreenHost(cch::tui::Terminal& terminal,
     : alt_screen_(terminal), action_sink_(action_sink), action_generation_(action_generation),
       feedback_(std::move(feedback)) {
     alt_screen_.set_selection_copy_sink([this](std::string_view text) { return copy_selection(text); });
+    alt_screen_.set_link_open_sink([this](std::string_view url) noexcept {
+        if (action_sink_) {
+            static_cast<void>(action_sink_(action_generation_, TuiActionVariant{OpenBrowserAction{std::string{url}}}));
+        }
+    });
+    alt_screen_.set_right_click_paste_handler([this]() -> support::ExpectedVoid {
+        if (action_sink_) {
+            auto result = action_sink_(action_generation_, TuiActionVariant{PasteClipboardAction{}});
+            if (!result) return std::unexpected(result.error());
+        }
+        return {};
+    });
 }
 
 void AltScreenHost::set_copy_on_select(bool enabled) { alt_screen_.set_copy_on_select(enabled); }
