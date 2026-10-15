@@ -544,7 +544,7 @@ export async function captureScrollView(piCheckout: string) {
 	const autoScrollObservation = async (
 		lines: number,
 		drag: (
-			controls: { record: () => void; tickCount: () => number },
+			controls: { record: (action?: string) => void; tickCount: () => number },
 			terminal: RecordingTerminal,
 			tui: any,
 			text: any,
@@ -567,23 +567,28 @@ export async function captureScrollView(piCheckout: string) {
 			trace.push({
 				tick: tickCount,
 				viewportTop: tui.viewportTop,
+				anchorRow: tui.selectionAnchor?.row ?? null,
+				anchorCol: tui.selectionAnchor?.col ?? null,
 				focusRow: tui.selectionFocus?.row ?? null,
 				focusCol: tui.selectionFocus?.col ?? null,
 				selectionText: tui.getActiveSelectionText() ?? null,
 			});
 		};
 		await drag({
-			record: () => {
-			// Drain the frame the tick requested before recording the pointer row:
-			// render reads the live focus (which moves with the scroll), while the
-			// recorded pointer row is the fixed report the drag stays at.
-			void terminal.flush();
-			trace.push({
-				tick: tickCount,
-				viewportTop: tui.viewportTop,
-				pointerRow: Math.max(0, Math.min(3, tui.selectionDragPointer?.y ?? 0)),
-				selectionText: tui.getActiveSelectionText() ?? null,
-			});
+			record: (action?: string) => {
+				void terminal.flush();
+				if (action) {
+					trace.push({
+						action,
+						tick: tickCount,
+						viewportTop: tui.viewportTop,
+						anchorRow: tui.selectionAnchor?.row ?? null,
+						anchorCol: tui.selectionAnchor?.col ?? null,
+						focusRow: tui.selectionFocus?.row ?? null,
+						focusCol: tui.selectionFocus?.col ?? null,
+						selectionText: tui.getActiveSelectionText() ?? null,
+					});
+				}
 			},
 			tickCount: () => tickCount,
 		}, terminal, tui, text);
@@ -656,7 +661,7 @@ export async function captureScrollView(piCheckout: string) {
 			await terminal.waitForRender();
 			await new Promise((resolve) => setTimeout(resolve, 100));
 			const ticksAfterRelease = tickCount();
-			record();
+			record("released");
 			assert.strictEqual(ticksAfterRelease, ticksBeforeRelease, "release must cancel the interval");
 			terminal.sendInput("\x1b[<0;1;3M");
 			terminal.sendInput("\x1b[<32;1;2M");
@@ -664,7 +669,7 @@ export async function captureScrollView(piCheckout: string) {
 			const ticksBeforeCenter = tickCount();
 			await new Promise((resolve) => setTimeout(resolve, 80));
 			const ticksAfterCenter = tickCount();
-			record();
+			record("direction-zero");
 			assert.strictEqual(ticksAfterCenter, ticksBeforeCenter, "direction-0 motion must stop the interval");
 			terminal.sendInput("\x1b[<0;1;1m");
 			await terminal.waitForRender();
@@ -674,9 +679,12 @@ export async function captureScrollView(piCheckout: string) {
 			dimensions: { columns: 20, rows: 4 },
 			inputs: {
 				documentLines: 10,
+				press: { x: 1, y: 3 },
 				firstDrag: { x: 1, y: 1 },
 				release: { x: 1, y: 1 },
+				secondPress: { x: 1, y: 3 },
 				secondDrag: { x: 1, y: 2 },
+				secondRelease: { x: 1, y: 1 },
 			},
 			expected: {
 				initialViewportTop: result.initialViewportTop,
@@ -712,6 +720,7 @@ export async function captureScrollView(piCheckout: string) {
 			dimensions: { columns: 20, rows: 4 },
 			inputs: {
 				documentLines: 5,
+				scrollToTop: false,
 				press: { x: 1, y: 4 },
 				drag: { x: 1, y: 1 },
 				holdMs: 200,
@@ -722,6 +731,196 @@ export async function captureScrollView(piCheckout: string) {
 				trace: result.trace,
 				tickCount: result.tickCount,
 				clipboardWrites: result.clipboardWrites,
+			},
+		});
+	}
+
+	// Reaching the lower edge consumes downward ticks until the viewport reaches
+	// the content end; the limit tick leaves both scroll and selection unchanged.
+	{
+		const result = await autoScrollObservation(8, async ({ record }, terminal, tui) => {
+			tui.scrollBy(-2);
+			await terminal.waitForRender();
+			terminal.sendInput("\x1b[<0;1;1M");
+			terminal.sendInput("\x1b[<32;1;4M");
+			await new Promise((resolve) => setTimeout(resolve, 180));
+			await terminal.waitForRender();
+			record();
+			terminal.sendInput("\x1b[<0;1;4m");
+			await terminal.waitForRender();
+		});
+		assert.ok(result.trace.at(-1)?.viewportTop === 4);
+		scenarios.push({
+			name: "alt-screen-auto-scroll-limit-bottom",
+			dimensions: { columns: 20, rows: 4 },
+			inputs: {
+				documentLines: 8,
+				manualScrollDelta: -2,
+				press: { x: 1, y: 1 },
+				drag: { x: 1, y: 4 },
+				release: { x: 1, y: 4 },
+			},
+			expected: {
+				initialViewportTop: 2,
+				trace: result.trace,
+				tickCount: result.tickCount,
+				clipboardWrites: result.clipboardWrites,
+			},
+		});
+	}
+
+	// A nested scroll view beneath the primary follow-end viewport proves an
+	// edge drag scrolls only the anchor's inner view and keeps its content-row
+	// coordinates tied to that view as its top advances.
+	{
+		const terminal = new RecordingTerminal(20, 4);
+		const tui = new TuiAltScreen(terminal);
+		const inner = new ScrollView(new Text(numberedText(12), 0, 0));
+		const outer = new ScrollView(new VStack([{ component: inner, basis: 5 }]), { follow: "end", primary: true });
+		tui.setLayoutRoot(outer);
+		tui.start();
+		await terminal.waitForRender();
+		const initialOuterScrollTop = outer.scrollTop;
+		const initialInnerScrollTop = inner.scrollTop;
+		const trace: any[] = [];
+		let tickCount = 0;
+		const originalAutoScroll = tui.autoScrollSelection.bind(tui);
+		tui.autoScrollSelection = () => {
+			originalAutoScroll();
+			tickCount += 1;
+			trace.push({
+				tick: tickCount,
+				innerScrollTop: inner.scrollTop,
+				outerScrollTop: outer.scrollTop,
+				scrolledView: tui.selectionAnchor?.scrollView === inner ? "inner" : "other",
+				anchorRow: tui.selectionAnchor?.row ?? null,
+				anchorCol: tui.selectionAnchor?.col ?? null,
+				focusRow: tui.selectionFocus?.row ?? null,
+				focusCol: tui.selectionFocus?.col ?? null,
+				selectionText: tui.getActiveSelectionText() ?? null,
+			});
+		};
+		terminal.sendInput("\x1b[<0;1;3M");
+		await terminal.waitForRender();
+		terminal.sendInput("\x1b[<32;1;4M");
+		await terminal.waitForRender();
+		await new Promise((resolve) => setTimeout(resolve, 180));
+		await terminal.waitForRender();
+		terminal.sendInput("\x1b[<0;1;4m");
+		await terminal.waitForRender();
+		const clipboardWrites = terminal.events.filter((event) => event.data.includes("\x1b]52;c;")).map((event) => event.data);
+		assert.ok(trace.length > 0);
+		assert.ok(trace.every((entry) => entry.outerScrollTop === initialOuterScrollTop));
+		assert.ok(trace.every((entry) => entry.scrolledView === "inner"));
+		assert.ok(trace.some((entry) => entry.innerScrollTop > initialInnerScrollTop));
+		tui.stop();
+		scenarios.push({
+			name: "alt-screen-auto-scroll-nested",
+			dimensions: { columns: 20, rows: 4 },
+			inputs: {
+				innerLines: 12,
+				head: "",
+				headRows: 0,
+				innerRows: 5,
+				tail: "",
+				tailRows: 0,
+				press: { x: 1, y: 3 },
+				drag: { x: 1, y: 4 },
+				release: { x: 1, y: 4 },
+			},
+			expected: {
+				initialInnerScrollTop,
+				initialOuterScrollTop,
+				trace,
+				tickCount,
+				clipboardWrites,
+			},
+		});
+	}
+
+	// Growth is inserted after one frozen tick while the held pointer remains
+	// at the bottom edge. The following ticks must retain valid document rows.
+	{
+		const terminal = new RecordingTerminal(20, 4);
+		const tui = new TuiAltScreen(terminal);
+		const text = new Text(numberedText(10), 0, 0);
+		tui.addChild(text);
+		tui.start();
+		await terminal.waitForRender();
+		tui.scrollBy(-2);
+		await terminal.waitForRender();
+		const trace: any[] = [];
+		let tickCount = 0;
+		let growthState: any;
+		let afterGrowth: any;
+		let growAfterTick = 0;
+		const originalAutoScroll = tui.autoScrollSelection.bind(tui);
+		tui.autoScrollSelection = () => {
+			originalAutoScroll();
+			tickCount += 1;
+			trace.push({
+				tick: tickCount,
+				viewportTop: tui.viewportTop,
+				anchorRow: tui.selectionAnchor?.row ?? null,
+				anchorCol: tui.selectionAnchor?.col ?? null,
+				focusRow: tui.selectionFocus?.row ?? null,
+				focusCol: tui.selectionFocus?.col ?? null,
+				selectionText: tui.getActiveSelectionText() ?? null,
+			});
+		};
+		terminal.sendInput("\x1b[<0;1;1M");
+		await terminal.waitForRender();
+		terminal.sendInput("\x1b[<32;1;4M");
+		await terminal.waitForRender();
+		await new Promise((resolve) => setTimeout(resolve, 65));
+		await terminal.waitForRender();
+		growAfterTick = tickCount;
+		assert.ok(growAfterTick > 0, "content growth must occur during an armed auto-scroll");
+		growthState = {
+			viewportTop: tui.viewportTop,
+			anchorRow: tui.selectionAnchor?.row ?? null,
+			anchorCol: tui.selectionAnchor?.col ?? null,
+			focusRow: tui.selectionFocus?.row ?? null,
+			focusCol: tui.selectionFocus?.col ?? null,
+			selectionText: tui.getActiveSelectionText() ?? null,
+		};
+		text.setText(numberedText(16));
+		tui.requestRender();
+		await terminal.waitForRender();
+		afterGrowth = {
+			viewportTop: tui.viewportTop,
+			anchorRow: tui.selectionAnchor?.row ?? null,
+			anchorCol: tui.selectionAnchor?.col ?? null,
+			focusRow: tui.selectionFocus?.row ?? null,
+			focusCol: tui.selectionFocus?.col ?? null,
+			selectionText: tui.getActiveSelectionText() ?? null,
+		};
+		await new Promise((resolve) => setTimeout(resolve, 130));
+		await terminal.waitForRender();
+		terminal.sendInput("\x1b[<0;1;4m");
+		await terminal.waitForRender();
+		const clipboardWrites = terminal.events.filter((event) => event.data.includes("\x1b]52;c;")).map((event) => event.data);
+		tui.stop();
+		scenarios.push({
+			name: "alt-screen-auto-scroll-content-growth",
+			dimensions: { columns: 20, rows: 4 },
+			inputs: {
+				documentLines: 10,
+				manualScrollDelta: -2,
+				grownDocumentLines: 16,
+				growAfterTick,
+				press: { x: 1, y: 1 },
+				drag: { x: 1, y: 4 },
+				release: { x: 1, y: 4 },
+			},
+			expected: {
+				initialViewportTop: 4,
+				growthState,
+				afterGrowth,
+				trace,
+				tickCount,
+				ticksAfterGrowth: tickCount - growAfterTick,
+				clipboardWrites,
 			},
 		});
 	}

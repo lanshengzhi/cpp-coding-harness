@@ -1249,10 +1249,17 @@ void AltScreen::execute_scheduled_render(std::size_t generation) {
     (void)render_now();
 }
 
-std::pair<std::ptrdiff_t, std::ptrdiff_t> AltScreen::selection_focus_trace() const {
-    if (!selection_focus_) return {-1, -1};
-    return {selection_focus_->row, selection_focus_->column};
+std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> AltScreen::selection_anchor_trace() const {
+    if (!selection_anchor_) return std::nullopt;
+    return std::pair{selection_anchor_->row, selection_anchor_->column};
 }
+
+std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> AltScreen::selection_focus_trace() const {
+    if (!selection_focus_) return std::nullopt;
+    return std::pair{selection_focus_->row, selection_focus_->column};
+}
+
+std::optional<std::string> AltScreen::selection_text_trace() const { return active_selection_text(); }
 
 void AltScreen::handle_input(std::string input) {
     if (!started_) return;

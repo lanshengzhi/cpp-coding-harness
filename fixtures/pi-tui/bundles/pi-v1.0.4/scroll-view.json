@@ -816,6 +816,8 @@
           {
             "tick": 1,
             "viewportTop": 5,
+            "anchorRow": 8,
+            "anchorCol": 0,
             "focusRow": 5,
             "focusCol": 0,
             "selectionText": "line 6\nline 7\nline 8\nl"
@@ -823,6 +825,8 @@
           {
             "tick": 2,
             "viewportTop": 4,
+            "anchorRow": 8,
+            "anchorCol": 0,
             "focusRow": 4,
             "focusCol": 0,
             "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
@@ -830,14 +834,10 @@
           {
             "tick": 3,
             "viewportTop": 3,
+            "anchorRow": 8,
+            "anchorCol": 0,
             "focusRow": 3,
             "focusCol": 0,
-            "selectionText": "line 4\nline 5\nline 6\nline 7\nline 8\nl"
-          },
-          {
-            "tick": 3,
-            "viewportTop": 3,
-            "pointerRow": 0,
             "selectionText": "line 4\nline 5\nline 6\nline 7\nline 8\nl"
           }
         ],
@@ -855,6 +855,10 @@
       },
       "inputs": {
         "documentLines": 10,
+        "press": {
+          "x": 1,
+          "y": 3
+        },
         "firstDrag": {
           "x": 1,
           "y": 1
@@ -863,9 +867,17 @@
           "x": 1,
           "y": 1
         },
+        "secondPress": {
+          "x": 1,
+          "y": 3
+        },
         "secondDrag": {
           "x": 1,
           "y": 2
+        },
+        "secondRelease": {
+          "x": 1,
+          "y": 1
         }
       },
       "expected": {
@@ -874,6 +886,8 @@
           {
             "tick": 1,
             "viewportTop": 5,
+            "anchorRow": 8,
+            "anchorCol": 0,
             "focusRow": 5,
             "focusCol": 0,
             "selectionText": "line 6\nline 7\nline 8\nl"
@@ -881,26 +895,30 @@
           {
             "tick": 2,
             "viewportTop": 4,
+            "anchorRow": 8,
+            "anchorCol": 0,
             "focusRow": 4,
             "focusCol": 0,
             "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
           },
           {
+            "action": "released",
             "tick": 2,
             "viewportTop": 4,
-            "pointerRow": 0,
+            "anchorRow": 8,
+            "anchorCol": 0,
+            "focusRow": 4,
+            "focusCol": 0,
             "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
           },
           {
+            "action": "direction-zero",
             "tick": 2,
             "viewportTop": 4,
-            "pointerRow": 0,
-            "selectionText": "line 5\nline 6\nline 7\nline 8\nl"
-          },
-          {
-            "tick": 2,
-            "viewportTop": 4,
-            "pointerRow": 0,
+            "anchorRow": 6,
+            "anchorCol": 0,
+            "focusRow": 5,
+            "focusCol": 0,
             "selectionText": "line 6\nl"
           }
         ],
@@ -919,6 +937,7 @@
       },
       "inputs": {
         "documentLines": 5,
+        "scrollToTop": false,
         "press": {
           "x": 1,
           "y": 4
@@ -939,6 +958,8 @@
           {
             "tick": 1,
             "viewportTop": 0,
+            "anchorRow": 4,
+            "anchorCol": 0,
             "focusRow": 0,
             "focusCol": 0,
             "selectionText": "line 1\nline 2\nline 3\nline 4\nl"
@@ -946,20 +967,234 @@
           {
             "tick": 2,
             "viewportTop": 0,
+            "anchorRow": 4,
+            "anchorCol": 0,
             "focusRow": 0,
             "focusCol": 0,
-            "selectionText": "line 1\nline 2\nline 3\nline 4\nl"
-          },
-          {
-            "tick": 2,
-            "viewportTop": 0,
-            "pointerRow": 0,
             "selectionText": "line 1\nline 2\nline 3\nline 4\nl"
           }
         ],
         "tickCount": 2,
         "clipboardWrites": [
           "\u001b]52;c;bGluZSAxCmxpbmUgMgpsaW5lIDMKbGluZSA0Cmw=\u0007"
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-auto-scroll-limit-bottom",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "documentLines": 8,
+        "manualScrollDelta": -2,
+        "press": {
+          "x": 1,
+          "y": 1
+        },
+        "drag": {
+          "x": 1,
+          "y": 4
+        },
+        "release": {
+          "x": 1,
+          "y": 4
+        }
+      },
+      "expected": {
+        "initialViewportTop": 2,
+        "trace": [
+          {
+            "tick": 1,
+            "viewportTop": 3,
+            "anchorRow": 2,
+            "anchorCol": 0,
+            "focusRow": 6,
+            "focusCol": 0,
+            "selectionText": "line 3\nline 4\nline 5\nline 6\nl"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 4,
+            "anchorRow": 2,
+            "anchorCol": 0,
+            "focusRow": 7,
+            "focusCol": 0,
+            "selectionText": "line 3\nline 4\nline 5\nline 6\nline 7\nl"
+          },
+          {
+            "tick": 3,
+            "viewportTop": 4,
+            "anchorRow": 2,
+            "anchorCol": 0,
+            "focusRow": 7,
+            "focusCol": 0,
+            "selectionText": "line 3\nline 4\nline 5\nline 6\nline 7\nl"
+          }
+        ],
+        "tickCount": 3,
+        "clipboardWrites": [
+          "\u001b]52;c;bGluZSAzCmxpbmUgNApsaW5lIDUKbGluZSA2CmxpbmUgNwps\u0007"
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-auto-scroll-nested",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "innerLines": 12,
+        "head": "",
+        "headRows": 0,
+        "innerRows": 5,
+        "tail": "",
+        "tailRows": 0,
+        "press": {
+          "x": 1,
+          "y": 3
+        },
+        "drag": {
+          "x": 1,
+          "y": 4
+        },
+        "release": {
+          "x": 1,
+          "y": 4
+        }
+      },
+      "expected": {
+        "initialInnerScrollTop": 0,
+        "initialOuterScrollTop": 1,
+        "trace": [
+          {
+            "tick": 1,
+            "innerScrollTop": 1,
+            "outerScrollTop": 1,
+            "scrolledView": "inner",
+            "anchorRow": 3,
+            "anchorCol": 0,
+            "focusRow": 5,
+            "focusCol": 0,
+            "selectionText": "4\n5\n6"
+          },
+          {
+            "tick": 2,
+            "innerScrollTop": 2,
+            "outerScrollTop": 1,
+            "scrolledView": "inner",
+            "anchorRow": 3,
+            "anchorCol": 0,
+            "focusRow": 6,
+            "focusCol": 0,
+            "selectionText": "4\n5\n6\n7"
+          },
+          {
+            "tick": 3,
+            "innerScrollTop": 3,
+            "outerScrollTop": 1,
+            "scrolledView": "inner",
+            "anchorRow": 3,
+            "anchorCol": 0,
+            "focusRow": 7,
+            "focusCol": 0,
+            "selectionText": "4\n5\n6\n7\n8"
+          },
+          {
+            "tick": 4,
+            "innerScrollTop": 4,
+            "outerScrollTop": 1,
+            "scrolledView": "inner",
+            "anchorRow": 3,
+            "anchorCol": 0,
+            "focusRow": 8,
+            "focusCol": 0,
+            "selectionText": "4\n5\n6\n7\n8\n9"
+          }
+        ],
+        "tickCount": 4,
+        "clipboardWrites": [
+          "\u001b]52;c;NAo1CjYKNwo4Cjk=\u0007"
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-auto-scroll-content-growth",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "documentLines": 10,
+        "manualScrollDelta": -2,
+        "grownDocumentLines": 16,
+        "growAfterTick": 2,
+        "press": {
+          "x": 1,
+          "y": 1
+        },
+        "drag": {
+          "x": 1,
+          "y": 4
+        },
+        "release": {
+          "x": 1,
+          "y": 4
+        }
+      },
+      "expected": {
+        "initialViewportTop": 4,
+        "growthState": {
+          "viewportTop": 6,
+          "anchorRow": 4,
+          "anchorCol": 0,
+          "focusRow": 9,
+          "focusCol": 0,
+          "selectionText": "5\n6\n7\n8\n9\n1"
+        },
+        "afterGrowth": {
+          "viewportTop": 12,
+          "anchorRow": 4,
+          "anchorCol": 0,
+          "focusRow": 9,
+          "focusCol": 0,
+          "selectionText": "5\n6\n7\n8\n9\n1"
+        },
+        "trace": [
+          {
+            "tick": 1,
+            "viewportTop": 5,
+            "anchorRow": 4,
+            "anchorCol": 0,
+            "focusRow": 8,
+            "focusCol": 0,
+            "selectionText": "5\n6\n7\n8\n9"
+          },
+          {
+            "tick": 2,
+            "viewportTop": 6,
+            "anchorRow": 4,
+            "anchorCol": 0,
+            "focusRow": 9,
+            "focusCol": 0,
+            "selectionText": "5\n6\n7\n8\n9\n1"
+          },
+          {
+            "tick": 3,
+            "viewportTop": 12,
+            "anchorRow": 4,
+            "anchorCol": 0,
+            "focusRow": 9,
+            "focusCol": 0,
+            "selectionText": "5\n6\n7\n8\n9\n1"
+          }
+        ],
+        "tickCount": 3,
+        "ticksAfterGrowth": 1,
+        "clipboardWrites": [
+          "\u001b]52;c;NQo2CjcKOAo5CjEwCjExCjEyCjEzCjE0CjE1CjE=\u0007"
         ]
       }
     }

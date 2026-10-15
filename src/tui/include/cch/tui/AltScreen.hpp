@@ -198,10 +198,11 @@ public:
     void reset_render_state() noexcept;
 
 public:
-    /// Debug-only snapshot of the live selection endpoints for evidence tests:
-    /// the C++ coordinate a tick extended the focus to is not observable from
-    /// the rendered screen (pi capture reads `tui.selectionFocus` directly).
-    [[nodiscard]] std::pair<std::ptrdiff_t, std::ptrdiff_t> selection_focus_trace() const;
+    /// Debug-only snapshots of live selection endpoints for evidence tests:
+    /// pi capture reads `tui.selectionAnchor` and `tui.selectionFocus` directly.
+    [[nodiscard]] std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> selection_anchor_trace() const;
+    [[nodiscard]] std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> selection_focus_trace() const;
+    [[nodiscard]] std::optional<std::string> selection_text_trace() const;
 
 private:
     struct RenderScheduleState {

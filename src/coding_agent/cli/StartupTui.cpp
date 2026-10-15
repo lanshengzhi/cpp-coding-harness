@@ -72,10 +72,18 @@ public:
         (void)interval_timer_.cancel();
     }
 
+    /// CODING_STANDARDS §6.2: async callbacks must not touch a dying owner.
+    /// This token follows AltScreen's RenderScheduleState weak-owner/generation pattern.
+    ~StartupTuiScheduler() override {
+        *interval_alive_ = false;
+        interval_work_.reset();
+    }
+
 private:
     void arm_interval() {
         interval_timer_.expires_after(interval_period_);
-        interval_timer_.async_wait([this](const boost::system::error_code& error) {
+        interval_timer_.async_wait([alive = interval_alive_, this](const boost::system::error_code& error) {
+            if (!*alive) return;
             const auto work = interval_work_;
             if (error || !work || !*work) return;
             arm_interval();
@@ -88,6 +96,7 @@ private:
     boost::asio::steady_timer interval_timer_;
     std::chrono::steady_clock::duration interval_period_{};
     std::shared_ptr<cch::tui::TuiScheduledWork> interval_work_;
+    std::shared_ptr<std::atomic_bool> interval_alive_ = std::make_shared<std::atomic_bool>(true);
 };
 
 /// One awaiting startup-TUI outcome (pi `startup-ui.ts` promise): first
