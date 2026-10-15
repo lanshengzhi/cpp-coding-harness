@@ -229,6 +229,7 @@ AltScreen::AltScreen(Terminal& terminal, AltScreenOptions options)
       search_match_style_(std::move(options.search_match_style)),
       search_current_match_style_(std::move(options.search_current_match_style)),
       search_navigation_button_style_(std::move(options.search_navigation_button_style)) {
+    flashes_.set_style(std::move(options.flash_style));
     render_schedule_state_->owner = this;
     overlay_handle_context_->owner = this;
     if (!selection_copy_sink_) {
@@ -263,6 +264,10 @@ void AltScreen::set_scroll_to_end_indicator(std::function<std::string()> indicat
     request_render();
 }
 
+void AltScreen::flash(std::string message, std::chrono::milliseconds duration) {
+    flashes_.flash(std::move(message), duration);
+}
+
 void AltScreen::set_selection_copy_sink(SelectionCopySink sink) {
     if (sink) {
         selection_copy_sink_ = std::move(sink);
@@ -284,6 +289,7 @@ void AltScreen::set_selection_click_clock(std::move_only_function<std::chrono::m
 
 AltScreen::~AltScreen() {
     (void)stop();
+    flashes_.dispose();
     render_schedule_state_->owner = nullptr;
     overlay_handle_context_->owner = nullptr;
 }
@@ -590,6 +596,7 @@ support::ExpectedVoid AltScreen::start() {
     }
 
     pending_render_ = false;
+    flashes_.set_scheduler(scheduler_);
     if (color_scheme_notifications_enabled_) {
         (void)terminal_.write("\x1b[?2031h");
     }
@@ -610,6 +617,7 @@ support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
     cancel_scheduled_render();
     ++render_generation_;
     render_scheduled_ = false;
+    flashes_.dispose();
     stop_selection_auto_scroll();
     ChildOperation operation(*this);
     stopping_ = true;
@@ -983,18 +991,20 @@ support::ExpectedVoid AltScreen::render_frame() {
     lines = std::move(cached_frame_->lines);
     cursor = cached_frame_->cursor;
     lines = apply_search_highlights(lines, *cached_frame_);
-    if (auto indicator = composite_scroll_to_end_indicator(lines); !indicator) return indicator;
+    auto display_lines = strip_osc133_zone_prefixes(lines);
+    if (auto indicator = composite_scroll_to_end_indicator(display_lines); !indicator) return indicator;
     const bool compose_overlays = compositor_->has_visible_overlays(dimensions);
     if (compose_overlays) {
-        RenderResult output{.lines = std::move(lines), .images = std::move(cached_frame_->images)};
+        RenderResult output{.lines = std::move(display_lines), .images = std::move(cached_frame_->images)};
         auto materialized = detail::OverlayCompositor::materialize_images(
                 std::move(output), terminal_.capabilities(), dimensions.columns, dimensions.rows);
         if (auto overlaid = compositor_->composite(dimensions, terminal_.capabilities(), materialized); !overlaid)
             return overlaid;
-        lines = std::move(materialized.lines);
+        display_lines = std::move(materialized.lines);
         if (materialized.cursor) cursor = materialized.cursor;
     }
-    return render_viewport(lines, cursor, dimensions);
+    if (auto flashed = composite_flashes(display_lines, dimensions.columns, dimensions.rows); !flashed) return flashed;
+    return render_viewport(display_lines, cursor, dimensions);
 }
 
 support::Expected<RenderResult> AltScreen::render_implicit_document(std::size_t width) {
@@ -1448,6 +1458,51 @@ void AltScreen::scroll_to_bottom() {
     request_render();
 }
 
+std::vector<std::string> AltScreen::strip_osc133_zone_prefixes(const std::vector<std::string>& lines) const {
+    constexpr std::string_view kStart = "\x1b]133;";
+    std::vector<std::string> result;
+    result.reserve(lines.size());
+    for (const auto& line : lines) {
+        std::size_t position = 0;
+        while (line.compare(position, kStart.size(), kStart) == 0 && position + kStart.size() < line.size() &&
+                (line[position + kStart.size()] == 'A' || line[position + kStart.size()] == 'B' ||
+                        line[position + kStart.size()] == 'C')) {
+            const auto start = position;
+            position += kStart.size() + 1;
+            if (position < line.size() && line[position] == '\x07') {
+                ++position;
+            } else if (position + 1 < line.size() && line[position] == '\x1b' && line[position + 1] == '\\') {
+                position += 2;
+            } else {
+                position = start;
+                break;
+            }
+        }
+        result.push_back(line.substr(position));
+    }
+    return result;
+}
+
+support::ExpectedVoid AltScreen::composite_flashes(
+        std::vector<std::string>& lines, std::size_t width, std::size_t height) {
+    auto rendered_flashes = flashes_.render(width);
+    if (!rendered_flashes) return std::unexpected(rendered_flashes.error());
+    auto& flashes = rendered_flashes->lines;
+    if (flashes.size() > height) {
+        flashes.erase(flashes.begin(), flashes.end() - static_cast<std::ptrdiff_t>(height));
+    }
+    if (flashes.empty()) return {};
+    if (lines.size() < height) lines.resize(height);
+    for (std::size_t row = 0; row < flashes.size(); ++row) {
+        const auto flash_width = visible_width(flashes[row]);
+        if (flash_width == 0) continue;
+        auto composed = detail::replace_line_region(lines[row], flashes[row], width - flash_width, flash_width, width);
+        if (!composed) return std::unexpected(composed.error());
+        lines[row] = std::move(*composed);
+    }
+    return {};
+}
+
 support::ExpectedVoid AltScreen::composite_scroll_to_end_indicator(std::vector<std::string>& lines) {
     scroll_to_end_indicator_rect_.reset();
     if (!scroll_to_end_indicator_) return {};
@@ -1632,6 +1687,7 @@ void AltScreen::set_scheduler(TuiScheduler* scheduler) {
     ++render_generation_;
     render_scheduled_ = false;
     scheduler_ = scheduler;
+    flashes_.set_scheduler(scheduler_);
     if (started_ && pending_render_) schedule_render();
 }
 
@@ -1683,10 +1739,12 @@ void AltScreen::dispatch_input(const InputEventVariant& event) {
     const auto* key = std::get_if<KeyEvent>(&event);
     const bool defer_viewport_key = key != nullptr && keybinding_context_ && should_defer_viewport_input_to_overlay() &&
                                     keybinding_context_->first_match(*key,
-                                            std::array<std::string_view, 4>{"tui.altScreen.pageUp",
+                                            std::array<std::string_view, 6>{"tui.altScreen.pageUp",
                                                     "tui.altScreen.pageDown",
                                                     "tui.altScreen.top",
-                                                    "tui.altScreen.bottom"});
+                                                    "tui.altScreen.bottom",
+                                                    "tui.altScreen.previousPrompt",
+                                                    "tui.altScreen.nextPrompt"});
     if (key != nullptr && !defer_viewport_key && handle_viewport_key(*key)) return;
     auto* input_handler = dynamic_cast<InputHandler*>(focused_);
     if (input_handler == nullptr) return;
@@ -2020,9 +2078,31 @@ bool AltScreen::handle_viewport_key(const KeyEvent& event) {
     if (!keybinding_context_) return false;
     constexpr std::array<std::string_view, 4> actions{
             "tui.altScreen.pageUp", "tui.altScreen.pageDown", "tui.altScreen.top", "tui.altScreen.bottom"};
+    constexpr std::array<std::string_view, 2> prompt_actions{
+            "tui.altScreen.previousPrompt", "tui.altScreen.nextPrompt"};
     const auto matched = keybinding_context_->first_match(event, actions);
-    if (!matched) return false;
+    const auto matched_prompt =
+            matched ? std::optional<std::string>{} : keybinding_context_->first_match(event, prompt_actions);
+    if (!matched && !matched_prompt) return false;
     if (event.type == KeyEventType::Release) return true;
+    if (matched_prompt) {
+        const auto direction = *matched_prompt == "tui.altScreen.previousPrompt" ? -1 : 1;
+        if (!cached_frame_) return true;
+        const auto* box = detail::get_scroll_view_box(*cached_frame_, &primary_scroll_view());
+        if (box == nullptr || !box->has_scroll_content_lines) return true;
+        const auto& rows = box->scroll_content_lines;
+        auto row = static_cast<std::ptrdiff_t>(primary_scroll_view().scroll_top()) + direction;
+        while (row >= 0 && row < static_cast<std::ptrdiff_t>(rows.size())) {
+            if (rows[static_cast<std::size_t>(row)].starts_with("\x1b]133;A\x07") ||
+                    rows[static_cast<std::size_t>(row)].starts_with("\x1b]133;A\x1b\\")) {
+                primary_scroll_view().scroll_to(row);
+                request_render();
+                break;
+            }
+            row += direction;
+        }
+        return true;
+    }
     if (*matched == "tui.altScreen.pageUp") {
         scroll_by(
                 -std::max<std::ptrdiff_t>(1, static_cast<std::ptrdiff_t>(primary_scroll_view().viewport_height()) - 4));

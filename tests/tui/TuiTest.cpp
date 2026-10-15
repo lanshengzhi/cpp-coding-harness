@@ -22,6 +22,15 @@
 
 namespace {
 
+class ManualDelayedHandle final : public cch::tui::TuiScheduledHandle {
+public:
+    explicit ManualDelayedHandle(std::shared_ptr<bool> cancelled) : cancelled_(std::move(cancelled)) {}
+    void cancel() noexcept override { *cancelled_ = true; }
+
+private:
+    std::shared_ptr<bool> cancelled_;
+};
+
 class ManualTuiScheduler final : public cch::tui::TuiScheduler {
 public:
     [[nodiscard]] std::chrono::steady_clock::time_point now() const noexcept override { return now_; }
@@ -31,13 +40,27 @@ public:
         scheduled_ = std::move(work);
         ++schedule_count_;
     }
+    [[nodiscard]] std::unique_ptr<cch::tui::TuiScheduledHandle> schedule_delayed(
+            std::chrono::steady_clock::duration delay, cch::tui::TuiScheduledWork work) override {
+        auto cancelled = std::make_shared<bool>(false);
+        delayed_.push_back(Delayed{.deadline = now_ + delay, .work = std::move(work), .cancelled = cancelled});
+        return std::make_unique<ManualDelayedHandle>(std::move(cancelled));
+    }
     void cancel() noexcept override { scheduled_ = nullptr; }
     void schedule_interval(std::chrono::steady_clock::duration, cch::tui::TuiScheduledWork work) override {
         interval_work_ = std::make_shared<cch::tui::TuiScheduledWork>(std::move(work));
     }
     void cancel_interval() noexcept override { interval_work_.reset(); }
 
-    void advance(std::chrono::steady_clock::duration duration) { now_ += duration; }
+    void advance(std::chrono::steady_clock::duration duration) {
+        now_ += duration;
+        for (auto& item : delayed_) {
+            if (!*item.cancelled && item.deadline <= now_) {
+                *item.cancelled = true;
+                if (item.work) item.work();
+            }
+        }
+    }
     void run_scheduled() {
         auto scheduled = std::exchange(scheduled_, nullptr);
         if (scheduled) scheduled();
@@ -47,10 +70,16 @@ public:
     std::size_t schedule_count_{0};
 
 private:
+    struct Delayed {
+        std::chrono::steady_clock::time_point deadline{};
+        cch::tui::TuiScheduledWork work;
+        std::shared_ptr<bool> cancelled;
+    };
     std::chrono::steady_clock::time_point now_{};
     cch::tui::TuiScheduledWork scheduled_;
     std::shared_ptr<cch::tui::TuiScheduledWork> interval_work_;
     std::vector<cch::tui::TuiScheduledWork> posted_;
+    std::vector<Delayed> delayed_;
 };
 
 class OverwideComponent final : public cch::tui::Component {

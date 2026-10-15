@@ -32,6 +32,7 @@
 #include <boost/asio/use_awaitable.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -53,6 +54,27 @@ namespace {
     return support::make_error(
             support::ErrorCode::Workspace, "Project resource detection filesystem capability is unavailable");
 }
+
+struct DelayedTuiWork {
+    explicit DelayedTuiWork(boost::asio::any_io_executor executor) : timer(std::move(executor)) {}
+    boost::asio::steady_timer timer;
+    std::shared_ptr<std::atomic_bool> alive = std::make_shared<std::atomic_bool>(true);
+};
+
+class AsioTuiScheduledHandle final : public cch::tui::TuiScheduledHandle {
+public:
+    explicit AsioTuiScheduledHandle(std::shared_ptr<DelayedTuiWork> state) : state_(std::move(state)) {}
+    ~AsioTuiScheduledHandle() override { cancel(); }
+    void cancel() noexcept override {
+        if (!state_) return;
+        *state_->alive = false;
+        (void)state_->timer.cancel();
+        state_.reset();
+    }
+
+private:
+    std::shared_ptr<DelayedTuiWork> state_;
+};
 
 class AsioTuiScheduler final : public cch::tui::TuiScheduler {
 public:
@@ -76,6 +98,20 @@ public:
         });
     }
 
+    [[nodiscard]] std::unique_ptr<cch::tui::TuiScheduledHandle> schedule_delayed(
+            std::chrono::steady_clock::duration delay, cch::tui::TuiScheduledWork work) override {
+        std::erase_if(delayed_work_, [](const auto& item) { return item.expired(); });
+        auto state = std::make_shared<DelayedTuiWork>(executor_);
+        delayed_work_.push_back(state);
+        state->timer.expires_after(std::max(delay, std::chrono::steady_clock::duration::zero()));
+        state->timer.async_wait([state, work = std::move(work)](const boost::system::error_code& error) mutable {
+            if (error || !*state->alive) return;
+            *state->alive = false;
+            if (work) work();
+        });
+        return std::make_unique<AsioTuiScheduledHandle>(std::move(state));
+    }
+
     void cancel() noexcept override { (void)timer_.cancel(); }
 
     void schedule_interval(std::chrono::steady_clock::duration period, cch::tui::TuiScheduledWork work) override {
@@ -93,6 +129,12 @@ public:
     /// CODING_STANDARDS §6.2: async callbacks must not touch a dying owner.
     /// This token follows AltScreen's RenderScheduleState weak-owner/generation pattern.
     ~AsioTuiScheduler() override {
+        for (const auto& weak_state : delayed_work_) {
+            if (const auto state = weak_state.lock()) {
+                *state->alive = false;
+                (void)state->timer.cancel();
+            }
+        }
         *interval_alive_ = false;
         interval_work_.reset();
     }
@@ -115,6 +157,7 @@ private:
     std::chrono::steady_clock::duration interval_period_{};
     std::shared_ptr<cch::tui::TuiScheduledWork> interval_work_;
     std::shared_ptr<std::atomic_bool> interval_alive_ = std::make_shared<std::atomic_bool>(true);
+    std::vector<std::weak_ptr<DelayedTuiWork>> delayed_work_;
 };
 
 } // namespace

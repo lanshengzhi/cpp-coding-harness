@@ -446,12 +446,11 @@ std::vector<KeybindingDefinition> alt_screen_keybinding_definitions() {
 }
 
 bool is_known_unassembled_tui_keybinding(std::string_view id) {
-    // `tui.altScreen.pageUp`/`pageDown`/`top`/`bottom` and search actions are
-    // assembled by the fullscreen keybinding manager (#1004, #1010). Remaining
-    // alternate-screen actions are kept recognized until their slices land.
-    return id == "tui.input.copy" || id == "tui.altScreen.previousPrompt" || id == "tui.altScreen.nextPrompt" ||
-           id == "tui.altScreen.halfPageUp" || id == "tui.altScreen.halfPageDown" || id == "tui.altScreen.lineUp" ||
-           id == "tui.altScreen.lineDown";
+    // Fullscreen viewport, prompt-navigation, and search actions are assembled
+    // by the fullscreen keybinding manager (#1004, #1010, #1011). Four remaining
+    // alternate-screen actions stay recognized until their slices land.
+    return id == "tui.input.copy" || id == "tui.altScreen.halfPageUp" || id == "tui.altScreen.halfPageDown" ||
+           id == "tui.altScreen.lineUp" || id == "tui.altScreen.lineDown";
 }
 
 std::shared_ptr<const KeybindingRegistry> default_tui_keybindings() {

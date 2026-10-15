@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/tui/AltScreenFlash.hpp>
 #include <cch/tui/AltScreenSearch.hpp>
 #include <cch/tui/ITui.hpp>
 #include <cch/tui/Keybindings.hpp>
@@ -69,6 +70,9 @@ struct AltScreenOptions {
     /// Render a clickable label on the primary follow-end viewport's last row
     /// while it is scrolled away from the end (pi `scrollToEndIndicator`).
     std::function<std::string()> scroll_to_end_indicator{};
+    /// Style a transient flash line (pi `AltScreenFlashContainer`).
+    /// An empty style uses inverse video.
+    std::function<std::string(std::string)> flash_style{};
     /// Logical rows per wheel event; the alternate-screen frozen default is one.
     /// `AutoWheelScrollLines` enables the frozen velocity-based accelerator.
     /// Frozen pi additionally gates auto on `!terminalAcceleratesWheel()` so
@@ -162,6 +166,8 @@ public:
     void scroll_to_bottom();
     void set_wheel_scroll_lines(WheelScrollLines lines);
     void set_scroll_to_end_indicator(std::function<std::string()> indicator);
+    /// Show a transient message in the fullscreen viewport (pi `flash`).
+    void flash(std::string message, std::chrono::milliseconds duration = std::chrono::milliseconds{1000});
 
     [[nodiscard]] support::ExpectedVoid set_focus(Component* component) override;
     [[nodiscard]] Component* focus() const noexcept override { return focused_; }
@@ -275,6 +281,9 @@ private:
     [[nodiscard]] std::ptrdiff_t next_wheel_scroll_lines(std::ptrdiff_t direction);
     void reset_wheel_scroll_acceleration() noexcept;
     [[nodiscard]] support::ExpectedVoid composite_scroll_to_end_indicator(std::vector<std::string>& lines);
+    [[nodiscard]] support::ExpectedVoid composite_flashes(
+            std::vector<std::string>& lines, std::size_t width, std::size_t height);
+    [[nodiscard]] std::vector<std::string> strip_osc133_zone_prefixes(const std::vector<std::string>& lines) const;
     /// Move the scrollbar hover to the viewport under a frame cell, or clear it
     /// (pi `updateScrollbarHover`).
     void update_scrollbar_hover(std::ptrdiff_t x, std::ptrdiff_t y);
@@ -470,6 +479,8 @@ private:
     /// (`InteractiveEngine`) always wires this.
     std::shared_ptr<KeybindingsContext> keybinding_context_{};
     std::function<std::string()> scroll_to_end_indicator_{};
+    AltScreenFlashContainer flashes_{[this] { request_render(); }};
+
     struct ScrollToEndIndicatorRect {
         std::ptrdiff_t row{0};
         std::ptrdiff_t column{0};
