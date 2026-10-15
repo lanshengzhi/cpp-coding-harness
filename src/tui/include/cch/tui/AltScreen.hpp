@@ -64,6 +64,10 @@ struct AltScreenOptions {
     std::function<std::string()> scroll_to_end_indicator{};
     /// Logical rows per wheel event; the alternate-screen frozen default is one.
     /// `AutoWheelScrollLines` enables the frozen velocity-based accelerator.
+    /// Frozen pi additionally gates auto on `!terminalAcceleratesWheel()` so
+    /// darwin/local terminals get one line per event even in "auto"
+    /// (pi `wheel-scroll.ts:35-44`); that platform gate is deliberately
+    /// deferred in this Linux-only port and is opt-in here.
     WheelScrollLines wheel_scroll_lines{std::size_t{1}};
     /// Monotonic input clock for automatic wheel acceleration. Tests inject a
     /// deterministic sequence; production defaults to `steady_clock`.
@@ -376,6 +380,10 @@ private:
     std::ptrdiff_t wheel_last_direction_{0};
     std::optional<double> wheel_average_gap_ms_{};
     double wheel_carry_{0};
+    /// Resolved viewport key bindings. Viewport keys (pageUp/pageDown/
+    /// home/end) stay inert until `set_keybinding_context` installs a
+    /// context; frozen pi always has global keybindings, and the frontend
+    /// (`InteractiveEngine`) always wires this.
     std::shared_ptr<KeybindingsContext> keybinding_context_{};
     std::function<std::string()> scroll_to_end_indicator_{};
     struct ScrollToEndIndicatorRect {

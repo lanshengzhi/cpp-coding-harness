@@ -13,6 +13,9 @@
 #include <cch/tui/VStack.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "support/FullscreenKeybindings.hpp"
+
+using cch::tests::fullscreen_registry;
 #include "support/PiTuiEvidence.hpp"
 #include "tui/Layout.hpp"
 
@@ -140,18 +143,6 @@ public:
 private:
     bool focused_{false};
 };
-
-[[nodiscard]] std::shared_ptr<const cch::tui::KeybindingRegistry> fullscreen_registry(
-        std::vector<cch::tui::KeybindingOverride> overrides = {}) {
-    auto definitions = cch::tui::builtin_tui_keybinding_definitions();
-    auto fullscreen = cch::tui::alt_screen_keybinding_definitions();
-    definitions.insert(
-            definitions.end(), std::make_move_iterator(fullscreen.begin()), std::make_move_iterator(fullscreen.end()));
-    auto resolution = cch::tui::resolve_keybindings(cch::tui::KeybindingResolutionRequest{
-            .definitions = std::move(definitions), .overrides = std::move(overrides)});
-    REQUIRE(resolution);
-    return resolution->registry;
-}
 
 } // namespace
 
@@ -620,5 +611,48 @@ TEST_CASE("frozen fullscreen navigation, releases, and indicator clicks match pi
     const auto& clicked = phase("indicator-click");
     CHECK(static_cast<std::ptrdiff_t>(transcript_ptr->scroll_top()) == int_of(clicked.at("scrollTop")));
     CHECK(transcript_ptr->following_end() == clicked.at("followingEnd").get_boolean());
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("a primary scroll view without follow-end never shows the jump-to-end indicator",
+        "[tui][alt-screen][scroll-view][issue1004][compat-pi]") {
+    const auto bundle = named_bundle();
+    REQUIRE(bundle);
+    const auto& scenario = scenario_of(*bundle, "alt-screen-indicator-no-follow-end");
+    const auto& phases = scenario.at("expected").at("phases").get_array();
+    const auto phase = [&](std::string_view name) -> const JsonValue& {
+        for (const auto& value : phases)
+            if (value.at("action").get_string() == name) return value;
+        REQUIRE(false);
+        return phases.front();
+    };
+    cch::tui::VirtualTerminal terminal({.columns = 30, .rows = 3});
+    cch::tui::AltScreen tui(terminal, cch::tui::AltScreenOptions{.scroll_to_end_indicator = [] {
+        return std::string{" \xe2\x86\x93 Jump to end "};
+    }});
+    auto transcript = std::make_unique<cch::tui::ScrollView>(
+            std::make_unique<cch::tui::Text>("one\ntwo\nthree\nfour\nfive", 0, 0),
+            cch::tui::ScrollViewOptions{.primary = true});
+    auto* transcript_ptr = transcript.get();
+    tui.set_layout_root(std::move(transcript));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    const auto& initial = phase("initial");
+    CHECK(static_cast<std::ptrdiff_t>(transcript_ptr->scroll_top()) == int_of(initial.at("scrollTop")));
+    CHECK(transcript_ptr->following_end() == initial.at("followingEnd").get_boolean());
+    [[maybe_unused]] const auto scrolled = transcript_ptr->scroll_by(
+            int_of(phase("scrolled-away-from-end").at("scrollTop")) - int_of(initial.at("scrollTop")));
+    REQUIRE(tui.render());
+    const auto& away = phase("scrolled-away-from-end");
+    CHECK(static_cast<std::ptrdiff_t>(transcript_ptr->scroll_top()) == int_of(away.at("scrollTop")));
+    // The frozen negative claim: scrolled away from the end, the indicator
+    // label must not appear anywhere in the viewport.
+    for (std::size_t row = 0; row < away.at("lines").get_array().size(); ++row) {
+        auto actual = terminal.screen()[row];
+        while (!actual.empty() && actual.back() == ' ')
+            actual.pop_back();
+        CHECK(actual == away.at("lines").get_array()[row].get_string());
+        CHECK(actual.find("Jump to end") == std::string::npos);
+    }
     REQUIRE(tui.stop());
 }

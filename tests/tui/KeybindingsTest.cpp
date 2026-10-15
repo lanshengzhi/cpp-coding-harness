@@ -27,22 +27,17 @@ TEST_CASE("Keybinding resolution replaces defaults with canonical user alternati
     tui::KeybindingResolutionRequest request;
     request.definitions = tui::builtin_tui_keybinding_definitions();
     request.overrides = {
-        {.id = "tui.input.submit", .keys = {"ctrl+enter", "return", "enter"}},
-        {.id = "tui.input.newLine", .keys = {}},
+            {.id = "tui.input.submit", .keys = {"ctrl+enter", "return", "enter"}},
+            {.id = "tui.input.newLine", .keys = {}},
     };
 
     const auto resolved = tui::resolve_keybindings(std::move(request));
 
     REQUIRE(resolved);
-    CHECK((resolved->registry->keys("tui.input.submit") ==
-        std::vector<std::string>{"ctrl+enter", "enter"}));
+    CHECK((resolved->registry->keys("tui.input.submit") == std::vector<std::string>{"ctrl+enter", "enter"}));
     CHECK(resolved->registry->keys("tui.input.newLine").empty());
-    CHECK(resolved->registry->matches(
-        tui::KeyEvent{.key = "enter", .ctrl = true},
-        "tui.input.submit"));
-    CHECK_FALSE(resolved->registry->matches(
-        tui::KeyEvent{.key = "enter", .shift = true},
-        "tui.input.newLine"));
+    CHECK(resolved->registry->matches(tui::KeyEvent{.key = "enter", .ctrl = true}, "tui.input.submit"));
+    CHECK_FALSE(resolved->registry->matches(tui::KeyEvent{.key = "enter", .shift = true}, "tui.input.newLine"));
 }
 
 TEST_CASE("User key conflicts preserve context defaults and resolve by candidate order",
@@ -50,8 +45,8 @@ TEST_CASE("User key conflicts preserve context defaults and resolve by candidate
     tui::KeybindingResolutionRequest request;
     request.definitions = tui::builtin_tui_keybinding_definitions();
     request.overrides = {
-        {.id = "tui.editor.cursorUp", .keys = {"down"}},
-        {.id = "tui.select.up", .keys = {"down"}},
+            {.id = "tui.editor.cursorUp", .keys = {"down"}},
+            {.id = "tui.select.up", .keys = {"down"}},
     };
 
     const auto resolved = tui::resolve_keybindings(std::move(request));
@@ -62,12 +57,12 @@ TEST_CASE("User key conflicts preserve context defaults and resolve by candidate
     REQUIRE(resolved->issues.size() == 1);
     CHECK(resolved->issues.front().code == "conflicting_user_key");
     constexpr std::array<std::string_view, 2> kEditorFirst{
-        "tui.editor.cursorUp",
-        "tui.select.up",
+            "tui.editor.cursorUp",
+            "tui.select.up",
     };
     constexpr std::array<std::string_view, 2> kSelectFirst{
-        "tui.select.up",
-        "tui.editor.cursorUp",
+            "tui.select.up",
+            "tui.editor.cursorUp",
     };
     const tui::KeyEvent down{.key = "down"};
     REQUIRE(resolved->registry->first_match(down, kEditorFirst));
@@ -88,9 +83,8 @@ TEST_CASE(
     REQUIRE(resolved->issues.size() == 1);
     CHECK(resolved->issues.front().code == "invalid_key");
     CHECK((resolved->registry->keys("tui.editor.cursorWordLeft") ==
-        std::vector<std::string>{"alt+left", "ctrl+left", "alt+b"}));
-    CHECK(resolved->registry->key_text("tui.editor.cursorWordLeft") ==
-        "alt+left/ctrl+left/alt+b");
+            std::vector<std::string>{"alt+left", "ctrl+left", "alt+b"}));
+    CHECK(resolved->registry->key_text("tui.editor.cursorWordLeft") == "alt+left/ctrl+left/alt+b");
 }
 
 TEST_CASE("Builtin table is exactly the frozen pi default table at 83114817", "[tui][keybindings][issue382][spec]") {
@@ -167,18 +161,27 @@ TEST_CASE("Builtin table is exactly the frozen pi default table at 83114817", "[
 
 TEST_CASE("Known-but-unassembled IDs are recognized and never become no-op bindings",
         "[tui][keybindings][issue382][spec]") {
-    constexpr std::array<std::string_view, 7> kUnassembled{
-        "tui.input.copy",
-        "tui.altScreen.pageUp",
-        "tui.altScreen.pageDown",
-        "tui.altScreen.previousPrompt",
-        "tui.altScreen.nextPrompt",
-        "tui.altScreen.top",
-        "tui.altScreen.bottom",
+    constexpr std::array<std::string_view, 11> kUnassembled{
+            "tui.input.copy",
+            "tui.altScreen.previousPrompt",
+            "tui.altScreen.nextPrompt",
+            "tui.altScreen.halfPageUp",
+            "tui.altScreen.halfPageDown",
+            "tui.altScreen.lineUp",
+            "tui.altScreen.lineDown",
+            "tui.altScreen.search",
+            "tui.altScreen.searchNext",
+            "tui.altScreen.searchPrevious",
+            "tui.altScreen.searchClose",
     };
     for (const auto id : kUnassembled) {
         CHECK(tui::is_known_unassembled_tui_keybinding(id));
     }
+    // Assembled by the fullscreen keybinding manager (#1004).
+    CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.pageUp"));
+    CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.pageDown"));
+    CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.top"));
+    CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.bottom"));
     CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.input.submit"));
     CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.editor.cursorUp"));
     CHECK_FALSE(tui::is_known_unassembled_tui_keybinding("tui.altScreen.zoom"));
@@ -187,9 +190,7 @@ TEST_CASE("Known-but-unassembled IDs are recognized and never become no-op bindi
     const auto definitions = tui::builtin_tui_keybinding_definitions();
     for (const auto id : kUnassembled) {
         const auto found = std::find_if(
-            definitions.begin(),
-            definitions.end(),
-            [id](const auto& definition) { return definition.id == id; });
+                definitions.begin(), definitions.end(), [id](const auto& definition) { return definition.id == id; });
         CHECK(found == definitions.end());
     }
     const auto registry = tui::default_tui_keybindings();
@@ -205,9 +206,9 @@ TEST_CASE("Known-but-unassembled overrides diagnose as unavailable, unknown ids 
     tui::KeybindingResolutionRequest request;
     request.definitions = tui::builtin_tui_keybinding_definitions();
     request.overrides = {
-        {.id = "tui.input.copy", .keys = {"ctrl+c"}},
-        {.id = "tui.altScreen.previousPrompt", .keys = {"ctrl+shift+up"}},
-        {.id = "future.action", .keys = {"f1"}},
+            {.id = "tui.input.copy", .keys = {"ctrl+c"}},
+            {.id = "tui.altScreen.previousPrompt", .keys = {"ctrl+shift+up"}},
+            {.id = "future.action", .keys = {"f1"}},
     };
 
     const auto resolved = tui::resolve_keybindings(std::move(request));

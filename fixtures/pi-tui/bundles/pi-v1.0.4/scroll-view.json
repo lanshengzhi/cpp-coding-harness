@@ -1,4 +1,5 @@
 {
+  "schema": "pike/tui-evidence/1",
   "baseline": "pi-v1.0.4",
   "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
   "capturedAt": "2026-10-15T06:53:20.747Z",
@@ -746,6 +747,43 @@
             ],
             "viewportTop": 0,
             "isFollowingOutput": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-indicator-no-follow-end",
+      "dimensions": {
+        "columns": 30,
+        "rows": 3
+      },
+      "inputs": {
+        "manualDelta": 1,
+        "indicatorLabel": " ↓ Jump to end "
+      },
+      "expected": {
+        "phases": [
+          {
+            "action": "initial",
+            "scrollTop": 0,
+            "followingEnd": false,
+            "indicatorShown": false,
+            "lines": [
+              "one",
+              "two",
+              "three"
+            ]
+          },
+          {
+            "action": "scrolled-away-from-end",
+            "scrollTop": 1,
+            "followingEnd": false,
+            "indicatorShown": false,
+            "lines": [
+              "two",
+              "three",
+              "four"
+            ]
           }
         ]
       }

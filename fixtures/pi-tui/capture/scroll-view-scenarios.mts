@@ -492,6 +492,41 @@ export async function captureScrollView(piCheckout: string) {
 		});
 	}
 
+	// A primary scroll view without follow-end never shows the jump-to-end
+	// indicator, even scrolled away from the end (pi
+	// `test/tui-alt-screen.test.ts:215-229`).
+	{
+		const terminal = new VirtualTerminal(30, 3);
+		const tui = new TuiAltScreen(terminal, undefined, undefined, {
+			scrollToEndIndicator: () => " ↓ Jump to end ",
+		});
+		const transcript = new ScrollView(new Text("one\ntwo\nthree\nfour\nfive", 0, 0), { primary: true });
+		tui.setLayoutRoot(transcript);
+		tui.start();
+		await terminal.waitForRender();
+		const observe = () => ({
+			scrollTop: transcript.scrollTop,
+			followingEnd: transcript.isFollowingEnd,
+			indicatorShown: terminal.getViewport().some((line: string) => line.includes("Jump to end")),
+			lines: terminal.getViewport().map((line: string) => line.trimEnd()),
+		});
+		const phases: any[] = [{ action: "initial", ...observe() }];
+		tui.scrollBy(1);
+		await terminal.waitForRender();
+		phases.push({ action: "scrolled-away-from-end", ...observe() });
+		assert.strictEqual(phases[0].followingEnd, false);
+		assert.ok(!phases[0].indicatorShown);
+		assert.strictEqual(phases[1].scrollTop, 1);
+		assert.ok(!phases[1].indicatorShown);
+		tui.stop();
+		scenarios.push({
+			name: "alt-screen-indicator-no-follow-end",
+			dimensions: { columns: 30, rows: 3 },
+			inputs: { manualDelta: 1, indicatorLabel: " ↓ Jump to end " },
+			expected: { phases },
+		});
+	}
+
 	const sourceEndpoints = [
 		"packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo,ScrollView.scrollBy,ScrollView.updateLayout,ScrollView.scrollToStart,ScrollView.scrollToEnd",
 		"packages/tui/src/layout.ts:renderLayoutFrame,getScrollViewsAt,cropKittyImageLine",

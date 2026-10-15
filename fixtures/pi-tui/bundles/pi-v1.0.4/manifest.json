@@ -44,7 +44,7 @@
       },
       {
         "path": "capture/scroll-view-scenarios.mts",
-        "sha256": "bdc26571bd71c17acf6edd4e337e84a509bb32676b7a4483802ed075b1a309e8"
+        "sha256": "5fe4006bf0dee88b1a1221c2ab5efb880e2b0226990c4eaa5e2d2cca870b171e"
       },
       {
         "path": "capture/scrollbar-scenarios.mts",
@@ -202,8 +202,8 @@
     {
       "path": "scroll-view.json",
       "family": "scroll-view",
-      "bytes": 16835,
-      "sha256": "5252f2eb3605f231585bcda3876444ac6ccf5aa68e6af2103de325fec98e057e",
+      "bytes": 17697,
+      "sha256": "daef22ac62fbd1e1f6cbcd00e1fec6ecfaee120acf010aa2749e1d614f9da110",
       "sourceEndpoints": [
         "packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo,ScrollView.scrollBy,ScrollView.updateLayout,ScrollView.scrollToStart,ScrollView.scrollToEnd",
         "packages/tui/src/layout.ts:renderLayoutFrame,getScrollViewsAt,cropKittyImageLine",

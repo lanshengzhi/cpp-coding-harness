@@ -1238,6 +1238,8 @@ MouseEvent AltScreen::create_mouse_event(const detail::MousePacket& packet,
 
 void AltScreen::handle_wheel_report(const detail::MousePacket& packet) {
     const auto lines = next_wheel_scroll_lines(packet.direction);
+    // Frozen applies the Alt multiplier to the accelerated line count before
+    // layout dispatch (pi `tui-alt-screen.ts:699-704`, SGR bit 3).
     const auto multiplier = (packet.button & 8) != 0 ? std::ptrdiff_t{5} : std::ptrdiff_t{1};
     const auto delta = packet.direction * lines * multiplier;
     const auto event = create_mouse_event(packet, MouseEventType::Wheel, delta);
@@ -1435,6 +1437,7 @@ bool AltScreen::handle_gesture_mouse_report(const detail::MousePacket& packet, c
     return true;
 }
 
+// Velocity-based wheel acceleration (pi `wheel-scroll.ts:35-74`).
 std::ptrdiff_t AltScreen::next_wheel_scroll_lines(std::ptrdiff_t direction) {
     if (const auto* fixed = std::get_if<std::size_t>(&wheel_scroll_lines_))
         return static_cast<std::ptrdiff_t>(std::max<std::size_t>(1, *fixed));

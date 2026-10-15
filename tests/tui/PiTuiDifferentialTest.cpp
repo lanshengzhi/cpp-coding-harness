@@ -62,15 +62,11 @@ namespace {
         return std::unexpected(support::make_error(support::ErrorCode::Unknown,
                 "Failed to open pi-tui fixture: " + historical_fixture_path(name).string()));
     }
-    const std::string json{
-        std::istreambuf_iterator<char>{input},
-        std::istreambuf_iterator<char>{}};
+    const std::string json{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
     return support::read_json(json);
 }
 
-[[nodiscard]] const support::JsonValue* field(
-    const support::JsonValue::object_t& fields,
-    std::string_view key) {
+[[nodiscard]] const support::JsonValue* field(const support::JsonValue::object_t& fields, std::string_view key) {
     const auto found = fields.find(std::string(key));
     return found == fields.end() ? nullptr : &found->second;
 }
@@ -83,25 +79,23 @@ struct ExpectedKey {
 };
 
 [[nodiscard]] ExpectedKey expected_key(const support::JsonValue& entry) {
-    const auto& expected = entry.get<support::JsonValue::object_t>().at("expected")
-                               .get<support::JsonValue::object_t>();
+    const auto& expected = entry.get<support::JsonValue::object_t>().at("expected").get<support::JsonValue::object_t>();
     const auto& id = expected.at("id");
     return {
-        .id = id.holds<std::string>() ? id.get_string() : std::string{},
-        .event_type = expected.at("eventType").holds<std::string>()
-            ? expected.at("eventType").get_string()
-            : std::string{},
+            .id = id.holds<std::string>() ? id.get_string() : std::string{},
+            .event_type = expected.at("eventType").holds<std::string>() ? expected.at("eventType").get_string()
+                                                                        : std::string{},
     };
 }
 
 [[nodiscard]] std::string event_type_name(tui::KeyEventType type) {
     switch (type) {
-        case tui::KeyEventType::Press:
-            return "press";
-        case tui::KeyEventType::Repeat:
-            return "repeat";
-        case tui::KeyEventType::Release:
-            return "release";
+    case tui::KeyEventType::Press:
+        return "press";
+    case tui::KeyEventType::Repeat:
+        return "repeat";
+    case tui::KeyEventType::Release:
+        return "release";
     }
     return {};
 }
@@ -180,8 +174,7 @@ TEST_CASE(
         const auto sequence = object.at("sequence").get_string();
         const auto& pi = object.at("pi").get<support::JsonValue::object_t>();
         const auto& pi_id_value = pi.at("id");
-        const auto pi_id =
-            pi_id_value.holds<std::string>() ? pi_id_value.get_string() : std::string{};
+        const auto pi_id = pi_id_value.holds<std::string>() ? pi_id_value.get_string() : std::string{};
         const auto context = std::string{"sequence "} + sequence;
         INFO(context);
         const auto key = decode_key(sequence);
@@ -191,8 +184,7 @@ TEST_CASE(
             // the C++ decoder canonicalizes to the shift+letter identifier
             // with the typed case preserved in inserted text
             // (tui::printable_text).
-            const auto expected =
-                std::string{"shift+"} + static_cast<char>(pi_id.front() - 'A' + 'a');
+            const auto expected = std::string{"shift+"} + static_cast<char>(pi_id.front() - 'A' + 'a');
             CHECK(tui::key_id(*key) == expected);
             CHECK(key->shift);
             CHECK(tui::printable_text(*key) == std::optional<std::string>{pi_id});
@@ -303,12 +295,17 @@ TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS",
         const auto id = object.at("id").get_string();
         INFO(id);
         if (tui::is_known_unassembled_tui_keybinding(id)) continue;
+        // The six `tui.altScreen.*` entries in this historical fixture predate
+        // pi v1.0.4: frozen moved them out of `TUI_KEYBINDINGS` into
+        // `ALT_SCREEN_KEYBINDINGS` and changed some defaults (top/bottom are
+        // ctrl+home/ctrl+end since v1.0.4, `keybindings.ts:208-211`). They are
+        // validated against the frozen v1.0.4 source and behavior instead
+        // (`alt_screen_keybinding_definitions()`, scroll-view evidence).
+        if (id.starts_with("tui.altScreen.")) continue;
         ++assembled;
 
         auto definition = std::find_if(
-            definitions.begin(),
-            definitions.end(),
-            [&](const auto& candidate) { return candidate.id == id; });
+                definitions.begin(), definitions.end(), [&](const auto& candidate) { return candidate.id == id; });
         REQUIRE(definition != definitions.end());
         CHECK(definition->description == object.at("description").get_string());
 
@@ -316,10 +313,13 @@ TEST_CASE("assembled keybinding table matches pi's TUI_KEYBINDINGS",
         REQUIRE(definition->default_keys.size() == keys.size());
         for (std::size_t index = 0; index < keys.size(); ++index) {
             INFO(id + " key " + std::to_string(index));
-            CHECK(
-                definition->default_keys[index] == keys[index].get_string());
+            CHECK(definition->default_keys[index] == keys[index].get_string());
         }
     }
+    // 39 frozen entries minus `tui.input.copy` and the four assembled
+    // `tui.altScreen.pageUp`/`pageDown`/`top`/`bottom` entries (the
+    // pre-v1.0.4 `previousPrompt`/`nextPrompt` entries are already skipped as
+    // recognized-but-unassembled).
     CHECK(assembled == 32);
 }
 
@@ -342,14 +342,13 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders",
         const auto context = std::string{"kitty case "} + object.at("name").get_string();
         INFO(context);
 
-        const auto encoded = tui::detail::encode_terminal_image(
-            tui::InlineImageProtocol::Kitty,
-            tui::TerminalImage{
-                .encoded_data = base64,
-                .mime_type = "image/png",
-                .region = {.columns = columns, .rows = rows},
-            },
-            tui::TerminalImageHandle{.value = image_id});
+        const auto encoded = tui::detail::encode_terminal_image(tui::InlineImageProtocol::Kitty,
+                tui::TerminalImage{
+                        .encoded_data = base64,
+                        .mime_type = "image/png",
+                        .region = {.columns = columns, .rows = rows},
+                },
+                tui::TerminalImageHandle{.value = image_id});
         REQUIRE(encoded.has_value());
         CHECK(*encoded == output);
     }
@@ -367,17 +366,15 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders",
         const auto context = std::string{"iterm2 case "} + object.at("name").get_string();
         INFO(context);
 
-        const auto encoded = tui::detail::encode_terminal_image(
-            tui::InlineImageProtocol::ITerm2,
-            tui::TerminalImage{
-                .encoded_data = base64,
-                .mime_type = "image/png",
-                .filename = name == nullptr
-                    ? std::optional<std::string_view>{}
-                    : std::optional<std::string_view>{name->get_string()},
-                .region = {.columns = columns, .rows = rows},
-            },
-            tui::TerminalImageHandle{.value = 1});
+        const auto encoded = tui::detail::encode_terminal_image(tui::InlineImageProtocol::ITerm2,
+                tui::TerminalImage{
+                        .encoded_data = base64,
+                        .mime_type = "image/png",
+                        .filename = name == nullptr ? std::optional<std::string_view>{}
+                                                    : std::optional<std::string_view>{name->get_string()},
+                        .region = {.columns = columns, .rows = rows},
+                },
+                tui::TerminalImageHandle{.value = 1});
         REQUIRE(encoded.has_value());
         CHECK(*encoded == output);
     }
@@ -385,9 +382,8 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders",
     const auto& hyperlinks = root.at("hyperlink").get<support::JsonValue::array_t>();
     for (const auto& entry : hyperlinks) {
         const auto& object = entry.get<support::JsonValue::object_t>();
-        CHECK(
-            tui::hyperlink(object.at("text").get_string(), object.at("url").get_string()) ==
-            object.at("output").get_string());
+        CHECK(tui::hyperlink(object.at("text").get_string(), object.at("url").get_string()) ==
+                object.at("output").get_string());
     }
 
     // Fallback text with a deterministic HOME and capability cache, exactly
@@ -403,8 +399,8 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders",
         const auto context = std::string{"fallback case "} + object.at("name").get_string();
         INFO(context);
         tests::ImageCapabilitiesGuard capabilities({
-            .images = tui::InlineImageProtocol::Kitty,
-            .hyperlinks = hyperlinks_enabled,
+                .images = tui::InlineImageProtocol::Kitty,
+                .hyperlinks = hyperlinks_enabled,
         });
         const auto* filename = field(object, "filename");
         const auto* dimensions = field(object, "dimensions");
@@ -412,16 +408,14 @@ TEST_CASE("terminal-image encoder bytes match the frozen pi encoders",
         if (dimensions != nullptr) {
             const auto& dims = dimensions->get<support::JsonValue::object_t>();
             size = tui::ImagePixelSize{
-                .width = static_cast<std::size_t>(dims.at("widthPx").get_number()),
-                .height = static_cast<std::size_t>(dims.at("heightPx").get_number()),
+                    .width = static_cast<std::size_t>(dims.at("widthPx").get_number()),
+                    .height = static_cast<std::size_t>(dims.at("heightPx").get_number()),
             };
         }
-        const auto rendered = tui::image_fallback(
-            "image/png",
-            size,
-            filename == nullptr
-                ? std::optional<std::string_view>{}
-                : std::optional<std::string_view>{filename->get_string()});
+        const auto rendered = tui::image_fallback("image/png",
+                size,
+                filename == nullptr ? std::optional<std::string_view>{}
+                                    : std::optional<std::string_view>{filename->get_string()});
         CHECK(rendered == object.at("output").get_string());
     }
 }
@@ -437,8 +431,7 @@ TEST_CASE("width truncate wrap slice strip match the frozen pi utils",
         const auto& object = entry.get<support::JsonValue::object_t>();
         const auto context = std::string{"visibleWidth case "} + object.at("name").get_string();
         INFO(context);
-        CHECK(
-            tui::visible_width(object.at("input").get_string()) ==
+        CHECK(tui::visible_width(object.at("input").get_string()) ==
                 static_cast<std::size_t>(object.at("output").get_number()));
     }
 
@@ -461,8 +454,7 @@ TEST_CASE("width truncate wrap slice strip match the frozen pi utils",
         const auto context = std::string{"wrap case "} + object.at("name").get_string();
         INFO(context);
         const auto output = tui::wrap_text(
-            object.at("input").get_string(),
-            static_cast<std::size_t>(object.at("width").get_number()));
+                object.at("input").get_string(), static_cast<std::size_t>(object.at("width").get_number()));
         REQUIRE(output.has_value());
         const auto& expected = object.at("output").get<support::JsonValue::array_t>();
         REQUIRE(output->size() == expected.size());
@@ -476,11 +468,10 @@ TEST_CASE("width truncate wrap slice strip match the frozen pi utils",
         const auto& object = entry.get<support::JsonValue::object_t>();
         const auto context = std::string{"slice case "} + object.at("name").get_string();
         INFO(context);
-        const auto output = tui::slice_by_column(
-            object.at("input").get_string(),
-            static_cast<std::size_t>(object.at("start").get_number()),
-            static_cast<std::size_t>(object.at("length").get_number()),
-            object.at("strict").get_boolean());
+        const auto output = tui::slice_by_column(object.at("input").get_string(),
+                static_cast<std::size_t>(object.at("start").get_number()),
+                static_cast<std::size_t>(object.at("length").get_number()),
+                object.at("strict").get_boolean());
         REQUIRE(output.has_value());
         CHECK(*output == object.at("output").get_string());
     }
@@ -490,9 +481,7 @@ TEST_CASE("width truncate wrap slice strip match the frozen pi utils",
         const auto& object = entry.get<support::JsonValue::object_t>();
         const auto context = std::string{"strip case "} + object.at("name").get_string();
         INFO(context);
-        CHECK(
-            tui::strip_terminal_sequences(object.at("input").get_string()) ==
-                object.at("output").get_string());
+        CHECK(tui::strip_terminal_sequences(object.at("input").get_string()) == object.at("output").get_string());
     }
 }
 
@@ -505,12 +494,11 @@ TEST_CASE("fuzzy match and filter match the frozen pi fuzzy outputs",
     const auto& match = root.at("match").get<support::JsonValue::array_t>();
     for (const auto& entry : match) {
         const auto& object = entry.get<support::JsonValue::object_t>();
-        const auto context = std::string{"query "} + object.at("query").get_string() +
-            " in " + object.at("text").get_string();
+        const auto context =
+                std::string{"query "} + object.at("query").get_string() + " in " + object.at("text").get_string();
         INFO(context);
         const auto& expected = object.at("output").get<support::JsonValue::object_t>();
-        const auto result =
-            tui::fuzzy_match(object.at("query").get_string(), object.at("text").get_string());
+        const auto result = tui::fuzzy_match(object.at("query").get_string(), object.at("text").get_string());
         CHECK(result.matches == expected.at("matches").get_boolean());
         CHECK(result.score == expected.at("score").get_number());
     }
@@ -522,11 +510,10 @@ TEST_CASE("fuzzy match and filter match the frozen pi fuzzy outputs",
         INFO(context);
         const auto& items = object.at("items").get<support::JsonValue::array_t>();
         std::vector<std::string> items_vector;
-        for (const auto& item : items) items_vector.push_back(item.get_string());
+        for (const auto& item : items)
+            items_vector.push_back(item.get_string());
         const auto query = object.at("query").get_string();
-        const auto ranked = tui::fuzzy_filter(items_vector, query, [](const std::string& item) {
-            return item;
-        });
+        const auto ranked = tui::fuzzy_filter(items_vector, query, [](const std::string& item) { return item; });
         const auto& expected = object.at("output").get<support::JsonValue::array_t>();
         REQUIRE(ranked.size() == expected.size());
         for (std::size_t index = 0; index < expected.size(); ++index) {
@@ -565,9 +552,7 @@ TEST_CASE("markdown rendered output matches the frozen pi component",
     style.horizontal_rule = wrap_style("hr");
     const auto underline = wrap_style("underline");
     const auto link_text = wrap_style("link");
-    style.link_text = [underline, link_text](std::string text) {
-        return link_text(underline(std::move(text)));
-    };
+    style.link_text = [underline, link_text](std::string text) { return link_text(underline(std::move(text))); };
     style.link_url = wrap_style("linkUrl");
     style.link = [](std::string text, std::string_view destination) {
         return tui::hyperlink(std::move(text), destination);
@@ -576,8 +561,8 @@ TEST_CASE("markdown rendered output matches the frozen pi component",
 
     // The capture pinned hyperlinks=true for the link rendering.
     tests::ImageCapabilitiesGuard capabilities({
-        .images = tui::InlineImageProtocol::Kitty,
-        .hyperlinks = true,
+            .images = tui::InlineImageProtocol::Kitty,
+            .hyperlinks = true,
     });
 
     const auto& cases = root.at("cases").get<support::JsonValue::array_t>();

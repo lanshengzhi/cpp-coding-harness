@@ -7,6 +7,9 @@
 #include <cch/tui/VStack.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "support/FullscreenKeybindings.hpp"
+
+using cch::tests::fullscreen_registry;
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
@@ -26,18 +29,6 @@ namespace {
         result += "line " + std::to_string(index);
     }
     return result;
-}
-
-[[nodiscard]] std::shared_ptr<const cch::tui::KeybindingRegistry> fullscreen_registry(
-        std::vector<cch::tui::KeybindingOverride> overrides = {}) {
-    auto definitions = cch::tui::builtin_tui_keybinding_definitions();
-    auto fullscreen = cch::tui::alt_screen_keybinding_definitions();
-    definitions.insert(
-            definitions.end(), std::make_move_iterator(fullscreen.begin()), std::make_move_iterator(fullscreen.end()));
-    auto resolution = cch::tui::resolve_keybindings(cch::tui::KeybindingResolutionRequest{
-            .definitions = std::move(definitions), .overrides = std::move(overrides)});
-    REQUIRE(resolution);
-    return resolution->registry;
 }
 
 class FocusProbe final : public cch::tui::Component, public cch::tui::Focusable, public cch::tui::InputHandler {
@@ -150,6 +141,35 @@ TEST_CASE("AltScreen chains a nested wheel remainder to its parent without movin
     REQUIRE(tui.render());
     CHECK(inner_pointer->scroll_top() == 2);
     CHECK(outer_pointer->scroll_top() == 3);
+    CHECK(unrelated_pointer->scroll_top() == 0);
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("AltScreen wheel over a plain region falls back to the primary viewport without moving an unrelated view",
+        "[tui][alt-screen][scroll][issue1004]") {
+    cch::tui::VirtualTerminal terminal({.columns = 30, .rows = 3});
+    cch::tui::AltScreen tui(terminal, cch::tui::AltScreenOptions{.wheel_scroll_lines = std::size_t{5}});
+
+    auto primary = std::make_unique<cch::tui::ScrollView>(
+            std::make_unique<cch::tui::Text>(numbered_lines(6), 0, 0), cch::tui::ScrollViewOptions{.primary = true});
+    auto* primary_pointer = primary.get();
+    auto unrelated = std::make_unique<cch::tui::ScrollView>(std::make_unique<cch::tui::Text>(numbered_lines(10), 0, 0));
+    auto* unrelated_pointer = unrelated.get();
+    cch::tui::HStack root;
+    REQUIRE(root.add_child(std::move(primary), cch::tui::StackEntryOptions{.basis = 15}));
+    // Plain non-scroll region: the pointer lands here on the second wheel.
+    REQUIRE(root.add_child(std::make_unique<cch::tui::Text>("plain", 0, 0), cch::tui::StackEntryOptions{.basis = 15}));
+    tui.set_layout_root(std::make_unique<cch::tui::HStack>(std::move(root)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+
+    CHECK(primary_pointer->scroll_top() == 0);
+    CHECK(unrelated_pointer->scroll_top() == 0);
+    // Wheel over the plain right-hand region; the primary viewport absorbs the
+    // delta (pi `tui-alt-screen.ts:993-995`).
+    REQUIRE(terminal.inject_input("\x1b[<65;22;2M"));
+    REQUIRE(tui.render());
+    CHECK(primary_pointer->scroll_top() > 0);
     CHECK(unrelated_pointer->scroll_top() == 0);
     REQUIRE(tui.stop());
 }

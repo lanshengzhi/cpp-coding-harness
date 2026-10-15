@@ -310,12 +310,19 @@ baseline. Every entry is `escape sequence → {id, eventType}` where the TS side
 
 ### Keybinding table (`keybindings.json`)
 
-The assembled default table from pi `TUI_KEYBINDINGS` (`keybindings.ts` at the baseline) — all 37
+The assembled default table from pi `TUI_KEYBINDINGS` (`keybindings.ts` at the baseline) — all 39
 entries with `defaultKeys` normalized to arrays and their descriptions. `PiTuiDifferentialTest`
-compares the 30 assembled actions (21 `tui.editor.*`, 3 `tui.input.*`, 6 `tui.select.*`) against
+compares the 32 assembled actions against
 `builtin_tui_keybinding_definitions()` action-for-action (ids, keys, descriptions) and asserts the
-other 7 ids (`tui.input.copy` + the six `tui.altScreen.*`) are recognized-but-unassembled
-(`is_known_unassembled_tui_keybinding`), never no-op bindings.
+other ids are never no-op bindings. `tui.input.copy` is recognized-but-unassembled
+(`is_known_unassembled_tui_keybinding`). The six `tui.altScreen.*` entries in this historical
+fixture predate pi v1.0.4 — frozen v1.0.4 moved them out of `TUI_KEYBINDINGS` into
+`ALT_SCREEN_KEYBINDINGS` and changed defaults (`top`/`bottom` are `ctrl+home`/`ctrl+end`,
+`keybindings.ts:208-211`) — so the differential test skips them and they are validated against the
+frozen v1.0.4 source (`alt_screen_keybinding_definitions()`) and captured scroll-view behavior
+instead. Within the toolkit, `tui.altScreen.pageUp`/`pageDown`/`top`/`bottom` are assembled by the
+fullscreen keybinding manager (#1004); prompt navigation, half-page/line scroll, and transcript
+search stay recognized-but-unassembled until their own slices.
 
 ### Terminal-image encoder (`image-encoder.json`)
 
