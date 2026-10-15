@@ -197,6 +197,10 @@ TEST_CASE("Known-but-unassembled tui ids are diagnosed as unavailable and never 
     config.write("keybindings.json", R"({
         "tui.input.copy": "ctrl+c",
         "tui.altScreen.pageUp": ["pageUp"],
+        "tui.altScreen.search": "ctrl+f",
+        "tui.altScreen.searchNext": "f3",
+        "tui.altScreen.searchPrevious": "shift+f3",
+        "tui.altScreen.searchClose": "escape",
         "tui.altScreen.previousPrompt": "ctrl+shift+up"
     })");
 
@@ -214,15 +218,19 @@ TEST_CASE("Known-but-unassembled tui ids are diagnosed as unavailable and never 
     CHECK(manager->registry->find("tui.input.copy") == nullptr);
     REQUIRE(manager->registry->find("tui.altScreen.pageUp") != nullptr);
     CHECK(manager->registry->keys("tui.altScreen.pageUp") == std::vector<std::string>{"pageUp"});
+    CHECK(manager->registry->keys("tui.altScreen.search") == std::vector<std::string>{"ctrl+f"});
+    CHECK(manager->registry->keys("tui.altScreen.searchNext") == std::vector<std::string>{"f3"});
+    CHECK(manager->registry->keys("tui.altScreen.searchPrevious") == std::vector<std::string>{"shift+f3"});
+    CHECK(manager->registry->keys("tui.altScreen.searchClose") == std::vector<std::string>{"escape"});
     CHECK(manager->registry->find("tui.altScreen.previousPrompt") == nullptr);
-    CHECK(manager->registry->entries().size() == 36);
+    CHECK(manager->registry->entries().size() == 40);
     const auto text = coding_agent::tui::format_hotkeys_text(*manager->help);
     CHECK(text.find("tui.input.copy") == std::string::npos);
     CHECK(text.find("app.model.select") == std::string::npos);
 }
 
-TEST_CASE("fullscreen keybindings assemble primary viewport actions and defer prompt navigation",
-        "[coding_agent][keybindings][issue1004]") {
+TEST_CASE("fullscreen keybindings assemble viewport and search actions and defer prompt navigation",
+        "[coding_agent][keybindings][issue1004][issue1010]") {
     coding_agent::tui::KeybindingsManagerRequest request;
     const auto manager = coding_agent::tui::load_keybindings_manager(std::move(request));
 
@@ -231,6 +239,15 @@ TEST_CASE("fullscreen keybindings assemble primary viewport actions and defer pr
     CHECK(manager->registry->keys("tui.altScreen.pageDown") == std::vector<std::string>{"pageDown"});
     CHECK(manager->registry->keys("tui.altScreen.top") == std::vector<std::string>{"ctrl+home"});
     CHECK(manager->registry->keys("tui.altScreen.bottom") == std::vector<std::string>{"ctrl+end"});
+    CHECK(manager->registry->find("tui.altScreen.search") != nullptr);
+    CHECK(manager->registry->keys("tui.altScreen.search") == std::vector<std::string>{"shift+ctrl+f"});
+    CHECK(manager->registry->find("tui.altScreen.searchNext") != nullptr);
+    CHECK(manager->registry->keys("tui.altScreen.searchNext") == std::vector<std::string>{"enter", "ctrl+g"});
+    CHECK(manager->registry->find("tui.altScreen.searchPrevious") != nullptr);
+    CHECK(manager->registry->keys("tui.altScreen.searchPrevious") ==
+            std::vector<std::string>{"shift+enter", "shift+ctrl+g"});
+    CHECK(manager->registry->find("tui.altScreen.searchClose") != nullptr);
+    CHECK(manager->registry->keys("tui.altScreen.searchClose") == std::vector<std::string>{"escape"});
     CHECK(manager->registry->find("tui.altScreen.previousPrompt") == nullptr);
     CHECK(manager->registry->find("tui.altScreen.nextPrompt") == nullptr);
 }

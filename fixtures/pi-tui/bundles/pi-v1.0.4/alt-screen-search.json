@@ -1,0 +1,538 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/alt-screen-search.ts:buildSearchCorpus,findSearchCorpusMatches,AltScreenSearchIndex,AltScreenSearchComponent.render",
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleViewportInput,TuiAltScreen.toggleSearch,TuiAltScreen.refreshSearch,TuiAltScreen.applySearchHighlights,TuiAltScreen.doRender",
+    "packages/tui/src/keybindings.ts:TUI_KEYBINDINGS,KeybindingsManager",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,VirtualTerminal.resize,VirtualTerminal.waitForRender"
+  ],
+  "scenarios": [
+    {
+      "name": "search-normalized-multirow",
+      "dimensions": {
+        "columns": 40,
+        "rows": 6
+      },
+      "inputs": {
+        "lines": [
+          "alpha QUICK",
+          "brown fox"
+        ],
+        "query": "quick   brown"
+      },
+      "expected": [
+        {
+          "segments": [
+            {
+              "row": 0,
+              "startCol": 6,
+              "endCol": 11
+            },
+            {
+              "row": 1,
+              "startCol": 0,
+              "endCol": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "search-ansi-cjk-columns",
+      "dimensions": {
+        "columns": 40,
+        "rows": 6
+      },
+      "inputs": {
+        "lines": [
+          "\u001b[31mfoo  bar\u001b[0m",
+          "A界🙂éZ"
+        ],
+        "query": "oo   bar\nA界🙂é"
+      },
+      "expected": [
+        {
+          "segments": [
+            {
+              "row": 0,
+              "startCol": 1,
+              "endCol": 3
+            },
+            {
+              "row": 0,
+              "startCol": 5,
+              "endCol": 8
+            },
+            {
+              "row": 1,
+              "startCol": 0,
+              "endCol": 6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "search-index-cache",
+      "dimensions": {
+        "columns": 40,
+        "rows": 6
+      },
+      "inputs": [
+        {
+          "lines": [
+            "alpha needle",
+            "omega"
+          ],
+          "query": "needle"
+        },
+        {
+          "lines": [
+            "alpha needle",
+            "omega"
+          ],
+          "query": "needle"
+        },
+        {
+          "lines": [
+            "alpha needle",
+            "omega"
+          ],
+          "query": "omega"
+        },
+        {
+          "lines": [
+            "alpha needle",
+            "no match"
+          ],
+          "query": "omega"
+        }
+      ],
+      "expected": [
+        {
+          "changed": true,
+          "matches": [
+            {
+              "segments": [
+                {
+                  "row": 0,
+                  "startCol": 6,
+                  "endCol": 12
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "changed": false,
+          "matches": [
+            {
+              "segments": [
+                {
+                  "row": 0,
+                  "startCol": 6,
+                  "endCol": 12
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "changed": true,
+          "matches": [
+            {
+              "segments": [
+                {
+                  "row": 1,
+                  "startCol": 0,
+                  "endCol": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "changed": true,
+          "matches": []
+        }
+      ]
+    },
+    {
+      "name": "search-render-controls",
+      "dimensions": {
+        "columns": 60,
+        "rows": 8
+      },
+      "inputs": {
+        "transcript": [
+          "alpha needle",
+          "middle",
+          "needle omega",
+          "end"
+        ],
+        "open": "\u001b[102;6u"
+      },
+      "expected": {
+        "screen": [
+          "alpha needle",
+          "middle                     ┌──────────────────────────────┐",
+          "needle omega               │ Find in transcript           │",
+          "end                        └──── ↑ Shift+Enter · ↓ Enter ─┘",
+          "",
+          "",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "name": "search-navigate-wrap",
+      "dimensions": {
+        "columns": 120,
+        "rows": 6
+      },
+      "inputs": {
+        "transcript": [
+          "needle one",
+          "middle",
+          "needle two",
+          "end"
+        ],
+        "query": "needle",
+        "keys": [
+          "enter",
+          "shift+enter",
+          "backspace",
+          "e",
+          "ctrl+shift+f"
+        ],
+        "hover": "\u001b[<35;112;4M",
+        "nextClick": "\u001b[<0;112;4M"
+      },
+      "expected": {
+        "phases": [
+          {
+            "action": "query",
+            "screen": [
+              "needle one",
+              "middle                                                                 ┌──────────────────────────────────────────────┐",
+              "needle two                                                             │ needle                                   1/2 │",
+              "end                                                                    └──────────────────── ↑ Shift+Enter · ↓ Enter ─┘",
+              "",
+              ""
+            ]
+          },
+          {
+            "action": "next-wrap",
+            "screen": [
+              "needle one",
+              "middle                                                                 ┌──────────────────────────────────────────────┐",
+              "needle two                                                             │ needle                                   2/2 │",
+              "end                                                                    └──────────────────── ↑ Shift+Enter · ↓ Enter ─┘",
+              "",
+              ""
+            ]
+          },
+          {
+            "action": "previous-wrap",
+            "screen": [
+              "needle one",
+              "middle                                                                 ┌──────────────────────────────────────────────┐",
+              "needle two                                                             │ needle                                   1/2 │",
+              "end                                                                    └──────────────────── ↑ Shift+Enter · ↓ Enter ─┘",
+              "",
+              ""
+            ]
+          },
+          {
+            "action": "hover-next",
+            "screen": [
+              "needle one",
+              "middle                                                                 ┌──────────────────────────────────────────────┐",
+              "needle two                                                             │ needle                                   1/2 │",
+              "end                                                                    └──────────────────── ↑ Shift+Enter · ↓ Enter ─┘",
+              "",
+              ""
+            ]
+          },
+          {
+            "action": "mouse-next",
+            "screen": [
+              "needle one",
+              "middle                                                                 ┌──────────────────────────────────────────────┐",
+              "needle two                                                             │ needle                                   2/2 │",
+              "end                                                                    └──────────────────── ↑ Shift+Enter · ↓ Enter ─┘",
+              "",
+              ""
+            ]
+          },
+          {
+            "action": "query-edit",
+            "screen": [
+              "needle one",
+              "middle                                                                 ┌──────────────────────────────────────────────┐",
+              "needle two                                                             │ needl                                    2/2 │",
+              "end                                                                    └──────────────────── ↑ Shift+Enter · ↓ Enter ─┘",
+              "",
+              ""
+            ]
+          },
+          {
+            "action": "query-restore",
+            "screen": [
+              "needle one",
+              "middle                                                                 ┌──────────────────────────────────────────────┐",
+              "needle two                                                             │ needle                                   2/2 │",
+              "end                                                                    └──────────────────── ↑ Shift+Enter · ↓ Enter ─┘",
+              "",
+              ""
+            ]
+          },
+          {
+            "action": "toggle-close",
+            "screen": [
+              "needle one",
+              "middle",
+              "needle two",
+              "end",
+              "",
+              ""
+            ]
+          },
+          {
+            "action": "toggle-reopen",
+            "screen": [
+              "needle one",
+              "middle                                                                 ┌──────────────────────────────────────────────┐",
+              "needle two                                                             │ Find in transcript                           │",
+              "end                                                                    └──────────────────── ↑ Shift+Enter · ↓ Enter ─┘",
+              "",
+              ""
+            ]
+          }
+        ],
+        "hoverWrites": [
+          "\u001b[?2026h\u001b[4;1H\u001b[2Kend                                                                    \u001b[0m\u001b]8;;\u0007└──────────────────── \u001b[44m↑ Shift+Enter\u001b[49m · \u001b[45m↓ Enter\u001b[49m ─┘\u001b[0m\u001b]8;;\u0007 \u001b[0m\u001b]8;;\u0007\u001b[3;80H\u001b[?25l\u001b[?2026l"
+        ],
+        "hoverCursor": {
+          "before": {
+            "x": 79,
+            "y": 2
+          },
+          "after": {
+            "x": 79,
+            "y": 2
+          }
+        }
+      }
+    },
+    {
+      "name": "search-close-restores-focus",
+      "dimensions": {
+        "columns": 60,
+        "rows": 8
+      },
+      "inputs": {
+        "transcript": [
+          "line 1",
+          "line 2",
+          "line 3",
+          "line 4",
+          "line 5 needle one",
+          "line 6",
+          "line 7",
+          "line 8",
+          "line 9",
+          "line 10 needle two",
+          "line 11",
+          "line 12"
+        ],
+        "open": "\u001b[102;6u",
+        "query": "needle",
+        "close": "\u001b[27u",
+        "resumedInput": "x",
+        "pageUp": "\u001b[5~"
+      },
+      "expected": {
+        "topBefore": 5,
+        "topAfterPageUp": 5,
+        "openScreen": [
+          "line 6",
+          "line 7                     ┌──────────────────────────────┐",
+          "line 8                     │ needle                   2/2 │",
+          "overlay                    └──── ↑ Shift+Enter · ↓ Enter ─┘",
+          "line 10 needle two",
+          "line 11",
+          "line 12",
+          "editor"
+        ],
+        "closed": {
+          "screen": [
+            "line 6",
+            "line 7",
+            "line 8",
+            "overlay",
+            "line 10 needle two",
+            "line 11",
+            "line 12",
+            "editor"
+          ],
+          "editorFocused": false,
+          "editorInputs": [],
+          "overlayFocused": true,
+          "overlayInputs": [
+            "\u001b[5~",
+            "x"
+          ]
+        }
+      }
+    },
+    {
+      "name": "search-boxdrawing-not-buttons",
+      "dimensions": {
+        "columns": 80,
+        "rows": 10
+      },
+      "inputs": {
+        "transcript": [
+          "needle one",
+          "middle",
+          "needle two",
+          "filler",
+          "┌────────────────────────────────────────┐",
+          "│ box                                    │",
+          "└────────────────────────────────────────┘",
+          "end"
+        ],
+        "query": "needle",
+        "click": "\u001b[<0;24;7M"
+      },
+      "expected": {
+        "before": [
+          "needle one",
+          "middle                                         ┌──────────────────────────────┐",
+          "needle two                                     │ needle                   1/2 │",
+          "filler                                         └──── ↑ Shift+Enter · ↓ Enter ─┘",
+          "┌────────────────────────────────────────┐",
+          "│ box                                    │",
+          "└────────────────────────────────────────┘",
+          "end",
+          "",
+          ""
+        ],
+        "after": [
+          "needle one",
+          "middle                                         ┌──────────────────────────────┐",
+          "needle two                                     │ needle                   1/2 │",
+          "filler                                         └──── ↑ Shift+Enter · ↓ Enter ─┘",
+          "┌────────────────────────────────────────┐",
+          "│ box                                    │",
+          "└────────────────────────────────────────┘",
+          "end",
+          "",
+          ""
+        ]
+      }
+    },
+    {
+      "name": "search-styled-highlights",
+      "dimensions": {
+        "columns": 60,
+        "rows": 4
+      },
+      "inputs": {
+        "transcript": [
+          "needle first",
+          "middle",
+          "needle second",
+          "end"
+        ],
+        "query": "needle",
+        "currentStyle": "\\x1b[42m…\\x1b[49m",
+        "matchStyle": "\\x1b[41m…\\x1b[49m"
+      },
+      "expected": {
+        "writes": [
+          "\u001b[?2026h\u001b[1;1H\u001b[2K\u001b[42mneedle\u001b[49m first                                                \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kmiddle                     \u001b[0m\u001b]8;;\u0007┌──────────────────────────────┐\u001b[0m\u001b]8;;\u0007 \u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[41mneedle\u001b[49m second              \u001b[0m\u001b]8;;\u0007│ needle\u001b[7m \u001b[27m                 \u001b[2m 1/2 \u001b[22m│\u001b[0m\u001b]8;;\u0007 \u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kend                        \u001b[0m\u001b]8;;\u0007└──── ↑ Shift+Enter · ↓ Enter ─┘\u001b[0m\u001b]8;;\u0007 \u001b[0m\u001b]8;;\u0007\u001b[3;36H\u001b[?25l\u001b[?2026l"
+        ]
+      }
+    },
+    {
+      "name": "search-streaming-resize",
+      "dimensions": {
+        "columns": 30,
+        "rows": 5
+      },
+      "inputs": {
+        "initialLines": 5,
+        "appendedLine": "needle third",
+        "resizedDimensions": {
+          "columns": 40,
+          "rows": 6
+        },
+        "query": "needle"
+      },
+      "expected": {
+        "phases": [
+          {
+            "action": "initial",
+            "screen": [
+              "line 1",
+              "n┌──────────────────────────┐",
+              "l│ needle               1/2 │",
+              "n└ ↑ Shift+Enter · ↓ Enter ─┘",
+              "line 5"
+            ]
+          },
+          {
+            "action": "append",
+            "screen": [
+              "line 1",
+              "n┌──────────────────────────┐",
+              "l│ needle               1/3 │",
+              "n└ ↑ Shift+Enter · ↓ Enter ─┘",
+              "line 5"
+            ]
+          },
+          {
+            "action": "resize",
+            "screen": [
+              "line 1",
+              "needle ┌──────────────────────────────┐",
+              "line 3 │ needle                   1/3 │",
+              "needle └──── ↑ Shift+Enter · ↓ Enter ─┘",
+              "line 5",
+              "needle third"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

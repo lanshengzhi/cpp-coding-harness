@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cch/tui/AltScreenSearch.hpp>
 #include <cch/tui/ITui.hpp>
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Mouse.hpp>
+#include <cch/tui/OverlayHandle.hpp>
 #include <cch/tui/RawInputListener.hpp>
 #include <cch/tui/ScrollView.hpp>
 #include <cch/tui/TuiHost.hpp>
@@ -21,8 +23,10 @@
 namespace cch::tui {
 
 namespace detail {
+class OverlayCompositor;
 struct LayoutFrame;
 struct MousePacket;
+struct OverlayHandleContext;
 } // namespace detail
 
 /// Absolute-viewport render state of an alternate-screen root, for transfer
@@ -75,6 +79,13 @@ struct AltScreenOptions {
     /// Monotonic input clock for automatic wheel acceleration. Tests inject a
     /// deterministic sequence; production defaults to `steady_clock`.
     WheelScrollClock wheel_clock{};
+    /// Style a non-current transcript search match (pi `searchMatchStyle`).
+    std::function<std::string(std::string)> search_match_style{};
+    /// Style the selected transcript search match (pi `searchCurrentMatchStyle`).
+    std::function<std::string(std::string)> search_current_match_style{};
+    /// Style a search navigation button with its hover state (pi
+    /// `searchNavigationButtonStyle`).
+    std::function<std::string(std::string, bool)> search_navigation_button_style{};
 };
 
 /// Alternate-screen (fullscreen) root: owns the terminal's alternate buffer
@@ -87,22 +98,20 @@ struct AltScreenOptions {
 /// main buffer returns, whether it is called normally or after a failed
 /// start; `TuiStopOptions::preserve_screen` does not apply to this root.
 ///
-/// Overlays are not implemented on this root yet: every overlay entry point
-/// fails validation until the deferred overlay chain lands.
-///
-/// Pointer routing is this root's own stage (pi `TuiAltScreen.handleViewportInput`):
-/// complete mouse reports are normalized into `MouseEvent` values, dispatched to
-/// the component the last rendered frame placed under the pointer, and otherwise
-/// offered to the frame's viewports. The frame itself is the cached geometry the
-/// hit test runs against, so no hit test renders; keyboard focus, capture and
-/// render decisions follow the component's `MouseEventResult`.
+/// Pointer routing is this root's own stage (pi
+/// `TuiAltScreen.handleViewportInput`): complete mouse reports are normalized
+/// into `MouseEvent` values, dispatched to the component the last rendered
+/// frame placed under the pointer, and otherwise offered to the frame's
+/// viewports. The frame itself is the cached geometry the hit test runs
+/// against, so no hit test renders; keyboard focus, capture and render
+/// decisions follow the component's `MouseEventResult`.
 ///
 /// Without a layout root the attached children are one implicitly scrolled
 /// document (`implicitDocument` + `implicitScrollView`, pi
 /// `tui-alt-screen.ts:262-270`): the viewport shows the document's end while it
 /// follows appended rows, and `viewport_top`/`is_following_output` report where
 /// it settled.
-class AltScreen final : public ITui, public detail::TuiHost {
+class AltScreen final : public ITui, public detail::TuiHost, private detail::OverlayHost {
 public:
     explicit AltScreen(Terminal& terminal, AltScreenOptions options = {});
     ~AltScreen() override;
@@ -205,6 +214,8 @@ public:
     [[nodiscard]] std::optional<std::string> selection_text_trace() const;
 
 private:
+    friend class OverlayHandle;
+
     struct RenderScheduleState {
         AltScreen* owner{nullptr};
     };
@@ -225,6 +236,18 @@ private:
     /// The alternate-screen input stage (pi `handleViewportInput`): focus reports
     /// and mouse reports are consumed here, everything else passes unchanged.
     [[nodiscard]] bool handle_viewport_input(std::string_view data);
+    void toggle_search();
+    void close_search();
+    void update_search_query(std::string query);
+    void navigate_search(int direction);
+    [[nodiscard]] bool refresh_search(const detail::LayoutFrame& frame);
+    [[nodiscard]] std::vector<std::string> apply_search_highlights(
+            const std::vector<std::string>& lines, const detail::LayoutFrame& frame) const;
+    [[nodiscard]] std::optional<int> search_navigation_direction_at(std::ptrdiff_t x, std::ptrdiff_t y) const;
+    [[nodiscard]] bool search_overlay_contains(std::ptrdiff_t x, std::ptrdiff_t y) const;
+    [[nodiscard]] bool handle_search_mouse_report(const detail::MousePacket& packet);
+    [[nodiscard]] bool should_defer_viewport_input_to_overlay() const;
+    [[nodiscard]] bool search_overlay_focused() const;
     [[nodiscard]] bool handle_viewport_key(const KeyEvent& event);
     /// Route a pointer report to the gesture captured or started by an earlier
     /// press, or return false when no live gesture owns it.
@@ -285,6 +308,16 @@ private:
     void handle_input(std::string input);
     void handle_resize(TerminalDimensions dimensions);
     void apply_focus(Component* component);
+    void set_focus_internal(Component* component, bool preserve_restore);
+    void remove_overlay_internal(Overlay* overlay) override;
+    void hide_overlay_internal(Overlay* overlay, bool hidden) override;
+    void focus_overlay_internal(Overlay* overlay) override;
+    void unfocus_overlay_internal(Overlay* overlay, std::optional<Component*> target) override;
+    [[nodiscard]] bool is_overlay_focused_internal(const Overlay* overlay) const override;
+    [[nodiscard]] std::optional<OverlayBounds> overlay_bounds_internal(const Overlay* overlay) const override;
+    void clear_overlay_restore_for(Overlay* overlay);
+    [[nodiscard]] Component* resolve_overlay_restore();
+    void reconcile_overlay_focus(TerminalDimensions dimensions);
     [[nodiscard]] bool focus_target_available(Component* component) const;
     void fallback_focus();
     void schedule_render();
@@ -292,6 +325,20 @@ private:
     void execute_scheduled_render(std::size_t generation);
 
     std::shared_ptr<RenderScheduleState> render_schedule_state_;
+    std::shared_ptr<detail::OverlayHandleContext> overlay_handle_context_;
+    std::unique_ptr<detail::OverlayCompositor> compositor_;
+    struct ActiveSearch {
+        AltScreenSearchComponent* component{nullptr};
+        std::unique_ptr<SearchIndex> index;
+        std::optional<OverlayHandle> overlay;
+        std::string query;
+        std::vector<SearchMatch> matches;
+        std::ptrdiff_t selected_index{-1};
+        std::optional<std::string> selected_key;
+        std::size_t anchor_row{0};
+        enum class SelectionMode { Query, Retain, Next, Previous } selection_mode{SelectionMode::Query};
+    };
+    std::optional<ActiveSearch> active_search_;
     /// One click sequence of the pointer (pi `lastComponentClick`): the number a
     /// repeated click on the same component and cell reports.
     struct MouseClick {
@@ -375,7 +422,8 @@ private:
     /// Start or stop the edge auto-scroll timer from the last drag report:
     /// the pointer at the viewport's visible top/bottom edge scrolls one line
     /// per tick while the gesture is held outside the viewport, and anywhere
-    /// else stops it (pi `updateSelectionAutoScroll`, `tui-alt-screen.ts:1262-1306`).
+    /// else stops it (pi `updateSelectionAutoScroll`,
+    /// `tui-alt-screen.ts:1262-1306`).
     void update_selection_auto_scroll(const detail::MousePacket& packet);
     /// One interval tick: scroll the selection's viewport one line, extend the
     /// focus to the clipped pointer, and stop when the scroll is consumed or
@@ -399,7 +447,8 @@ private:
     std::optional<SelectionRange> selection_initial_range_{};
     std::optional<SelectionWordClick> last_word_click_{};
     /// The last drag report's pointer and the armed direction while a held
-    /// drag rides an edge (pi `selectionDragPointer`/`selectionAutoScrollDirection`).
+    /// drag rides an edge (pi
+    /// `selectionDragPointer`/`selectionAutoScrollDirection`).
     std::optional<std::pair<std::ptrdiff_t, std::ptrdiff_t>> selection_drag_pointer_{};
     std::ptrdiff_t selection_auto_scroll_direction_{0};
     bool selection_auto_scroll_armed_{false};
@@ -431,6 +480,9 @@ private:
     RightClickPasteSink right_click_paste_sink_{};
     bool copy_on_select_{true};
     SelectionCopySink selection_copy_sink_{};
+    std::function<std::string(std::string)> search_match_style_;
+    std::function<std::string(std::string)> search_current_match_style_;
+    SearchNavigationButtonStyle search_navigation_button_style_;
     /// Captured scrollbar pointer interaction (pi `scrollbarDrag`). The weak
     /// token prevents a detached or destroyed viewport from being dereferenced.
     struct ScrollbarDrag {
@@ -449,7 +501,8 @@ private:
     // The implicit viewport the attached children are shown through when no
     // layout root is installed (pi `implicitScrollView`).
     std::unique_ptr<ScrollView> implicit_scroll_view_;
-    // The primary viewport of the last frame (pi `currentLayout.primaryScrollView`).
+    // The primary viewport of the last frame (pi
+    // `currentLayout.primaryScrollView`).
     ScrollView* layout_primary_scroll_view_{nullptr};
     TuiScheduler* scheduler_{nullptr};
     TuiRenderPrepareSink render_prepare_sink_;

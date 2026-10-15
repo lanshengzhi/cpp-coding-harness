@@ -1,7 +1,7 @@
 #include <cch/tui/Keybindings.hpp>
 
-#include <cch/support/Error.hpp>
 #include <algorithm>
+#include <cch/support/Error.hpp>
 #include <format>
 #include <map>
 #include <set>
@@ -170,8 +170,9 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
             if (is_known_unassembled_tui_keybinding(override.id)) {
                 issues.push_back({
                         .code = "unavailable_action",
-                        .message = std::format(
-                                "keybinding action '{}' is recognized but not assembled by cch_tui", override.id),
+                        .message = std::format("keybinding action '{}' is recognized but "
+                                               "not assembled by cch_tui",
+                                override.id),
                         .action_id = override.id,
                 });
             } else {
@@ -445,15 +446,12 @@ std::vector<KeybindingDefinition> alt_screen_keybinding_definitions() {
 }
 
 bool is_known_unassembled_tui_keybinding(std::string_view id) {
-    // `tui.altScreen.pageUp`/`pageDown`/`top`/`bottom` are assembled by the
-    // fullscreen keybinding manager (#1004); the remaining toolkit-defined
-    // alternate-screen actions stay recognized-but-unassembled until their
-    // slices land (prompt navigation: T65; half-page/line scroll and search:
-    // their own tickets).
+    // `tui.altScreen.pageUp`/`pageDown`/`top`/`bottom` and search actions are
+    // assembled by the fullscreen keybinding manager (#1004, #1010). Remaining
+    // alternate-screen actions are kept recognized until their slices land.
     return id == "tui.input.copy" || id == "tui.altScreen.previousPrompt" || id == "tui.altScreen.nextPrompt" ||
            id == "tui.altScreen.halfPageUp" || id == "tui.altScreen.halfPageDown" || id == "tui.altScreen.lineUp" ||
-           id == "tui.altScreen.lineDown" || id == "tui.altScreen.search" || id == "tui.altScreen.searchNext" ||
-           id == "tui.altScreen.searchPrevious" || id == "tui.altScreen.searchClose";
+           id == "tui.altScreen.lineDown";
 }
 
 std::shared_ptr<const KeybindingRegistry> default_tui_keybindings() {

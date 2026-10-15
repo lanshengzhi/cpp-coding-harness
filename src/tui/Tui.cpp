@@ -31,14 +31,6 @@ constexpr std::size_t kInputDecodeChunkBytes = 4096;
 
 } // namespace
 
-namespace detail {
-
-struct OverlayHandleContext {
-    MainScreen* owner{nullptr};
-};
-
-} // namespace detail
-
 struct MainScreen::RenderScheduleState {
     MainScreen* owner{nullptr};
 };
@@ -72,17 +64,13 @@ void OverlayHandle::unfocus(std::optional<Component*> target) const {
 
 bool OverlayHandle::is_focused() const {
     const auto context = context_.lock();
-    return context && context->owner != nullptr && context->owner->compositor_->owns(overlay_) &&
-           context->owner->focused_ == overlay_;
+    return context && context->owner != nullptr && context->owner->is_overlay_focused_internal(overlay_);
 }
 
 std::optional<OverlayBounds> OverlayHandle::get_bounds() const {
     const auto context = context_.lock();
-    if (!context || context->owner == nullptr || !context->owner->compositor_->owns(overlay_) || is_hidden())
-        return std::nullopt;
-    const auto dimensions = context->owner->terminal_.dimensions();
-    if (!context->owner->compositor_->visible(overlay_, dimensions)) return std::nullopt;
-    return context->owner->compositor_->bounds(overlay_);
+    if (!context || context->owner == nullptr || is_hidden()) return std::nullopt;
+    return context->owner->overlay_bounds_internal(overlay_);
 }
 
 MainScreen::MainScreen(Terminal& terminal)
@@ -332,6 +320,17 @@ void MainScreen::focus_overlay_internal(Overlay* overlay) {
     compositor_->set_focus_order(overlay, ++focus_order_counter_);
     set_focus_internal(overlay, false);
     request_render();
+}
+
+bool MainScreen::is_overlay_focused_internal(const Overlay* overlay) const {
+    return compositor_->owns(overlay) && focused_ == overlay;
+}
+
+std::optional<OverlayBounds> MainScreen::overlay_bounds_internal(const Overlay* overlay) const {
+    if (!compositor_->owns(overlay)) return std::nullopt;
+    const auto dimensions = terminal_.dimensions();
+    if (!compositor_->visible(overlay, dimensions)) return std::nullopt;
+    return compositor_->bounds(overlay);
 }
 
 void MainScreen::unfocus_overlay_internal(Overlay* overlay, std::optional<Component*> target) {

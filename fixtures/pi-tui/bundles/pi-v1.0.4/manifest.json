@@ -28,7 +28,7 @@
   },
   "generator": {
     "path": "capture/capture-named-tui.mts",
-    "sha256": "3692e19ee0b174c83cefb9a53e6df8486af616cf5cb596a9d01cb446a52563c9",
+    "sha256": "6df7c8b776e12c3fed2f94be1815dcd6dfbb0066a9aa7e1b5314889653c00304",
     "sources": [
       {
         "path": "capture/select-list-scenarios.mts",
@@ -57,6 +57,10 @@
       {
         "path": "capture/selection-scenarios.mts",
         "sha256": "48b3eed9a19bc4a305f21d1f8d7b77874a834fe8870fb9d0d50afd3f69cbcf95"
+      },
+      {
+        "path": "capture/alt-screen-search-scenarios.mts",
+        "sha256": "fc401d94fa06ed21078d89a7b1be3ce0dc7acbfcbfe51f19f44ec6c74f36149c"
       }
     ]
   },
@@ -255,6 +259,18 @@
         "packages/tui/src/components/text.ts:Text.render,setText",
         "packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo",
         "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,getViewport,waitForRender"
+      ]
+    },
+    {
+      "path": "alt-screen-search.json",
+      "family": "alt-screen-search",
+      "bytes": 18756,
+      "sha256": "eff72c25aeff1b71512b02335951db7ec7a6a1e1766b74a255b71da900c8a4d2",
+      "sourceEndpoints": [
+        "packages/tui/src/alt-screen-search.ts:buildSearchCorpus,findSearchCorpusMatches,AltScreenSearchIndex,AltScreenSearchComponent.render",
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleViewportInput,TuiAltScreen.toggleSearch,TuiAltScreen.refreshSearch,TuiAltScreen.applySearchHighlights,TuiAltScreen.doRender",
+        "packages/tui/src/keybindings.ts:TUI_KEYBINDINGS,KeybindingsManager",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,VirtualTerminal.resize,VirtualTerminal.waitForRender"
       ]
     }
   ]
