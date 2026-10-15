@@ -31,6 +31,28 @@ public:
         ++cancel_count_;
     }
 
+    void schedule_interval(std::chrono::steady_clock::duration period, cch::tui::TuiScheduledWork work) override {
+        interval_period_ = period;
+        interval_work_ = std::make_shared<cch::tui::TuiScheduledWork>(std::move(work));
+    }
+
+    void cancel_interval() noexcept override { interval_work_.reset(); }
+
+    void run_interval_tick() {
+        const auto work = interval_work_;
+        if (work && *work) {
+            ++interval_run_count_;
+            (*work)();
+        }
+    }
+
+    void run_intervals(std::size_t count) {
+        for (std::size_t tick = 0; tick < count; ++tick)
+            run_interval_tick();
+    }
+
+    [[nodiscard]] std::shared_ptr<cch::tui::TuiScheduledWork> interval_work() const { return interval_work_; }
+
     void advance(std::chrono::steady_clock::duration duration) { now_ += duration; }
 
     void run_posted() {
@@ -51,10 +73,13 @@ public:
     std::chrono::steady_clock::duration scheduled_delay_{};
     std::size_t schedule_count_{0};
     std::size_t cancel_count_{0};
+    std::chrono::steady_clock::duration interval_period_{};
+    std::size_t interval_run_count_{0};
 
 private:
     std::chrono::steady_clock::time_point now_{};
     cch::tui::TuiScheduledWork scheduled_;
+    std::shared_ptr<cch::tui::TuiScheduledWork> interval_work_;
     std::vector<cch::tui::TuiScheduledWork> posted_;
 };
 
@@ -89,6 +114,25 @@ TEST_CASE("Tui schedules its first frame and coalesces requests at 16 millisecon
     scheduler.advance(std::chrono::milliseconds{16});
     scheduler.run_scheduled();
     REQUIRE(tui.stop());
+}
+
+TEST_CASE("Tui interval work runs independently from the replaceable render timer", "[tui][render][issue1008]") {
+    ManualTuiScheduler scheduler;
+    std::size_t interval_ticks = 0;
+    std::size_t scheduled_runs = 0;
+    scheduler.schedule_interval(std::chrono::milliseconds{50}, [&interval_ticks] { ++interval_ticks; });
+    scheduler.schedule(std::chrono::steady_clock::duration::zero(), [&scheduled_runs] { ++scheduled_runs; });
+
+    CHECK(scheduler.interval_period_ == std::chrono::milliseconds{50});
+    scheduler.run_scheduled();
+    scheduler.run_intervals(3);
+    CHECK(scheduled_runs == 1);
+    CHECK(interval_ticks == 3);
+    CHECK(scheduler.interval_run_count_ == 3);
+    scheduler.cancel_interval();
+    scheduler.run_intervals(2);
+    CHECK(scheduler.interval_run_count_ == 3);
+    CHECK(interval_ticks == 3);
 }
 
 TEST_CASE("Tui renders keyboard input on the next execution turn", "[tui][render][issue978][spec]") {
