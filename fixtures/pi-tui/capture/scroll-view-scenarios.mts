@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import path from "node:path";
+import assert from "node:assert/strict";
 
 /// Independent pi-v1.0.4 observation of scroll viewports (#1000).
 ///
@@ -16,8 +17,11 @@ export async function captureScrollView(piCheckout: string) {
 	const source = (relative: string) => pathToFileURL(path.join(packageRoot, relative)).href;
 	const { ScrollView } = await import(source("src/components/scroll-view.ts"));
 	const { Text } = await import(source("src/components/text.ts"));
+	const { HStack } = await import(source("src/components/h-stack.ts"));
 	const { VStack } = await import(source("src/components/v-stack.ts"));
 	const { getScrollViewsAt, renderLayoutFrame } = await import(source("src/layout.ts"));
+	const { WheelScrollAccelerator } = await import(source("src/wheel-scroll.ts"));
+	const { KeybindingsManager, TUI_KEYBINDINGS, getKeybindings, setKeybindings } = await import(source("src/keybindings.ts"));
 	const { encodeKitty, getKittyImageMetadata, registerKittyImageMetadata } = await import(source("src/terminal-image.ts"));
 	const { stripTerminalSequences } = await import(source("src/utils.ts"));
 	const { TuiAltScreen } = await import(source("src/tui-alt-screen.ts"));
@@ -74,6 +78,28 @@ export async function captureScrollView(piCheckout: string) {
 	};
 
 	const scenarios: any[] = [];
+
+	// `wheel-scroll.ts:35-74` distinguishes fixed counts, event bursts,
+	// velocity scaling, direction changes, and pauses using explicit times.
+	{
+		const observe = (accelerator: InstanceType<typeof WheelScrollAccelerator>, times: number[], directions?: number[]) =>
+			times.map((time, index) => accelerator.next((directions?.[index] ?? 1) as -1 | 1, time));
+		const fixed = observe(new WheelScrollAccelerator(3, true), [0, 10, 20, 1000]);
+		const accelerated = observe(new WheelScrollAccelerator("auto", true), [0, 50, 100, 103, 123, 373]);
+		const directionReset = observe(new WheelScrollAccelerator("auto", true), [0, 20, 40, 60, 500, 520], [1, 1, 1, -1, 1, 1]);
+		const fractionalCarry = observe(new WheelScrollAccelerator("auto", true), [0, 40, 80, 120, 160]);
+		scenarios.push({
+			name: "wheel-accelerator",
+			dimensions: { columns: 10, rows: 3 },
+			inputs: {
+				fixed: { lines: 3, times: [0, 10, 20, 1000] },
+				auto: { lines: "auto", times: [0, 50, 100, 103, 123, 373] },
+				directionReset: { lines: "auto", times: [0, 20, 40, 60, 500, 520], directions: [1, 1, 1, -1, 1, 1] },
+				fractionalCarry: { lines: "auto", times: [0, 40, 80, 120, 160] },
+			},
+			expected: { fixed, accelerated, directionReset, fractionalCarry },
+		});
+	}
 
 	// `scroll-view.ts:127-201` over a constrained frame (pi
 	// `test/layout.test.ts:170-189`): the first frame follows the content end, an
@@ -299,6 +325,119 @@ export async function captureScrollView(piCheckout: string) {
 		});
 	}
 
+	// A real alternate-screen wheel report over the nested viewport consumes two
+	// rows there and chains its one-row remainder to the outer viewport. The
+	// side-by-side viewport under the same frame remains stationary.
+	{
+		const terminal = new VirtualTerminal(30, 3);
+		const previousKeybindings = getKeybindings();
+		setKeybindings(new KeybindingsManager(TUI_KEYBINDINGS));
+		try {
+			const tui = new TuiAltScreen(terminal, undefined, undefined, { wheelScrollLines: 5 });
+			const inner = new ScrollView(new Text(numberedText(4), 0, 0));
+			const leftContent = new VStack([
+				{ component: new Text("head", 0, 0), basis: 1 },
+				{ component: inner, basis: 2 },
+				{ component: new Text("tail", 0, 0), basis: 5 },
+			]);
+			const outer = new ScrollView(leftContent, { primary: true });
+			const unrelated = new ScrollView(new Text(numberedText(10), 0, 0));
+			tui.setLayoutRoot(new HStack([
+				{ component: outer, basis: 15 },
+				{ component: unrelated, basis: 15 },
+			]));
+			tui.start();
+			await terminal.waitForRender();
+			const before = { inner: inner.scrollTop, outer: outer.scrollTop, unrelated: unrelated.scrollTop };
+			terminal.sendInput("\x1b[<65;2;2M");
+			await terminal.waitForRender();
+			const after = { inner: inner.scrollTop, outer: outer.scrollTop, unrelated: unrelated.scrollTop };
+			assert.deepStrictEqual(before, { inner: 0, outer: 0, unrelated: 0 });
+			assert.deepStrictEqual(after, { inner: 2, outer: 3, unrelated: 0 });
+			tui.stop();
+			scenarios.push({
+				name: "nested-wheel-chaining",
+				dimensions: { columns: 30, rows: 3 },
+				inputs: { wheelReport: "\x1b[<65;2;2M", wheelDelta: 5, viewportRows: { inner: 2, outer: 3 } },
+				expected: { before, after },
+			});
+		} finally {
+			setKeybindings(previousKeybindings);
+		}
+	}
+
+	// A real alternate-screen input stream proves Ctrl+Home/End run before the
+	// focused editor, releases do not change the viewport, and the jump label
+	// resumes follow-end when clicked.
+	{
+		const terminal = new VirtualTerminal(20, 4);
+		const previousKeybindings = getKeybindings();
+		setKeybindings(new KeybindingsManager(TUI_KEYBINDINGS));
+		try {
+			const tui = new TuiAltScreen(terminal, undefined, undefined, {
+				scrollToEndIndicator: () => "Jump end",
+			});
+			const transcript = new ScrollView(new Text(numberedText(12), 0, 0), { follow: "end", primary: true });
+		const editorInputs: string[] = [];
+		const editor = {
+			focused: false,
+			render: () => ["editor"],
+			invalidate: () => {},
+			handleInput: (data: string) => editorInputs.push(data),
+		};
+			tui.setLayoutRoot(new VStack([
+				{ component: transcript, basis: 0, grow: 1, minSize: 1 },
+				{ component: editor, basis: 1, shrink: 0 },
+			]));
+			tui.setFocus(editor);
+			tui.start();
+			await terminal.waitForRender();
+			const observe = () => ({
+			scrollTop: transcript.scrollTop,
+			followingEnd: transcript.isFollowingEnd,
+			lines: terminal.getViewport().map((line: string) => line.trimEnd()),
+		});
+			const phases: any[] = [{ action: "initial", ...observe() }];
+			terminal.sendInput("\x1bOH");
+			terminal.sendInput("\x1b[F");
+			terminal.sendInput("\x1b[57423u");
+			terminal.sendInput("\x1b[5;5~");
+			terminal.sendInput("\x1b[6;5~");
+			await terminal.waitForRender();
+			phases.push({ action: "unmodified-navigation-remains-with-editor", ...observe() });
+			terminal.sendInput("\x1b[1;5H");
+			await terminal.waitForRender();
+			phases.push({ action: "ctrl-home", ...observe() });
+			terminal.sendInput("\x1b[1;5F");
+			await terminal.waitForRender();
+			phases.push({ action: "ctrl-end", ...observe() });
+			terminal.sendInput("\x1b[57423;5:3u");
+			await terminal.waitForRender();
+			phases.push({ action: "ctrl-home-release", ...observe() });
+			terminal.sendInput("\x1b[<64;1;1M");
+			await terminal.waitForRender();
+			phases.push({ action: "wheel-up-indicator", ...observe() });
+			terminal.sendInput("\x1b[<0;7;3M");
+			await terminal.waitForRender();
+			phases.push({ action: "indicator-click", ...observe() });
+			assert.deepStrictEqual(editorInputs, ["\x1bOH", "\x1b[F", "\x1b[57423u", "\x1b[5;5~", "\x1b[6;5~"]);
+			const phaseTop = (name: string) => phases.find((phase) => phase.action === name)?.scrollTop;
+			assert.strictEqual(phaseTop("ctrl-home"), 0);
+			assert.strictEqual(phaseTop("ctrl-end"), 9);
+			assert.strictEqual(phaseTop("wheel-up-indicator"), 8);
+			assert.strictEqual(phaseTop("indicator-click"), 9);
+			tui.stop();
+			scenarios.push({
+				name: "alt-screen-navigation-indicator",
+				dimensions: { columns: 20, rows: 4 },
+				inputs: { navigation: ["\x1bOH", "\x1b[F", "\x1b[57423u", "\x1b[5;5~", "\x1b[6;5~", "\x1b[1;5H", "\x1b[1;5F", "\x1b[57423;5:3u"], wheelReport: "\x1b[<64;1;1M", indicatorPress: "\x1b[<0;7;3M", indicatorWidth: 9 },
+				expected: { phases, editorInputs },
+			});
+		} finally {
+			setKeybindings(previousKeybindings);
+		}
+	}
+
 	// A child mounted without a layout root is one document behind the implicit
 	// follow-end viewport (pi `tui-alt-screen.ts:262-270,1673-1680`), and the
 	// viewport survives content growth, an explicit jump and a resize (pi
@@ -353,10 +492,49 @@ export async function captureScrollView(piCheckout: string) {
 		});
 	}
 
+	// A primary scroll view without follow-end never shows the jump-to-end
+	// indicator, even scrolled away from the end (pi
+	// `test/tui-alt-screen.test.ts:215-229`).
+	{
+		const terminal = new VirtualTerminal(30, 3);
+		const tui = new TuiAltScreen(terminal, undefined, undefined, {
+			scrollToEndIndicator: () => " ↓ Jump to end ",
+		});
+		const transcript = new ScrollView(new Text("one\ntwo\nthree\nfour\nfive", 0, 0), { primary: true });
+		tui.setLayoutRoot(transcript);
+		tui.start();
+		await terminal.waitForRender();
+		const observe = () => ({
+			scrollTop: transcript.scrollTop,
+			followingEnd: transcript.isFollowingEnd,
+			indicatorShown: terminal.getViewport().some((line: string) => line.includes("Jump to end")),
+			lines: terminal.getViewport().map((line: string) => line.trimEnd()),
+		});
+		const phases: any[] = [{ action: "initial", ...observe() }];
+		tui.scrollBy(1);
+		await terminal.waitForRender();
+		phases.push({ action: "scrolled-away-from-end", ...observe() });
+		assert.strictEqual(phases[0].followingEnd, false);
+		assert.ok(!phases[0].indicatorShown);
+		assert.strictEqual(phases[1].scrollTop, 1);
+		assert.ok(!phases[1].indicatorShown);
+		tui.stop();
+		scenarios.push({
+			name: "alt-screen-indicator-no-follow-end",
+			dimensions: { columns: 30, rows: 3 },
+			inputs: { manualDelta: 1, indicatorLabel: " ↓ Jump to end " },
+			expected: { phases },
+		});
+	}
+
 	const sourceEndpoints = [
 		"packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo,ScrollView.scrollBy,ScrollView.updateLayout,ScrollView.scrollToStart,ScrollView.scrollToEnd",
 		"packages/tui/src/layout.ts:renderLayoutFrame,getScrollViewsAt,cropKittyImageLine",
-		"packages/tui/src/tui-alt-screen.ts:TuiAltScreen.getPrimaryScrollView,TuiAltScreen.viewportTop,TuiAltScreen.scrollBy,TuiAltScreen.scrollToTop,TuiAltScreen.scrollToBottom,TuiAltScreen.doRender",
+		"packages/tui/src/tui-alt-screen.ts:TuiAltScreen.constructor,TuiAltScreen.handleViewportInput,TuiAltScreen.routeWheel,TuiAltScreen.compositeScrollToEndIndicator,TuiAltScreen.handleMouseEvent",
+		"packages/tui/src/wheel-scroll.ts:WheelScrollAccelerator.constructor,WheelScrollAccelerator.setLines,WheelScrollAccelerator.next",
+		"packages/tui/src/keybindings.ts:TUI_KEYBINDINGS,KeybindingsManager,setKeybindings,getKeybindings",
+		"packages/tui/test/tui-alt-screen.test.ts:routes Home and End to the focused component and Ctrl+Home/End to the transcript,shows a clickable jump-to-end indicator on the transcript's last row while scrolled up",
+		"packages/tui/test/wheel-scroll.test.ts:uses fixed line counts regardless of timing,scales auto mode with wheel velocity,does not accelerate bursts of events for a single notch,resets acceleration on direction changes and pauses,carries fractional lines between events",
 		"packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.resize",
 	];
 

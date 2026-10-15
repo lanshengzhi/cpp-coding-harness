@@ -108,6 +108,21 @@ track, a motion that keeps the hover, a motion that leaves it to the hide timer,
 `stop()` from each other. `capture/scrollbar-scenarios.mts` executes the frozen components
 directly; its source digest is recorded alongside the main generator digest.
 
+For #1004, the named runner re-captured all 16 current families at the same frozen revision and
+extended `scroll-view.json` with `wheel-accelerator`, `nested-wheel-chaining` and
+`alt-screen-navigation-indicator`. They execute the frozen `WheelScrollAccelerator` and
+`TuiAltScreen` over pi's `VirtualTerminal`: fixed and automatic wheel line counts, velocity
+scaling, same-notch burst handling, direction/pause resets and fractional carry are pinned by
+individual streams; the nested route proves the inner viewport consumes two of five lines, its
+parent consumes the remaining three, and a side-by-side viewport stays fixed; and the fullscreen
+case distinguishes focused-editor Home/End input from Ctrl+Home/End viewport navigation, checks
+key releases leave the viewport alone, and checks a wheel-up indicator click returns to the end.
+The C++ replay drives `AltScreen` through `VirtualTerminal` and checks both frozen outputs and the
+cases that distinguish consumption, chaining, key routing and click handling. The capture asserts
+the nested and fullscreen observations while running against frozen pi, and its source endpoints
+name the accelerator, keybindings and indicator handlers. `capture/scroll-view-scenarios.mts`
+executes these cases directly; its source digest is recorded in the manifest.
+
 For #1006, the named runner re-captured all 16 current families at the same frozen revision and
 added `selection.json`. Its four scenarios execute pi's `TuiAltScreen`, `Text` and
 `VirtualTerminal`, and record the visible selection cells, exact copied text, copy-on-select
@@ -295,12 +310,19 @@ baseline. Every entry is `escape sequence → {id, eventType}` where the TS side
 
 ### Keybinding table (`keybindings.json`)
 
-The assembled default table from pi `TUI_KEYBINDINGS` (`keybindings.ts` at the baseline) — all 37
+The assembled default table from pi `TUI_KEYBINDINGS` (`keybindings.ts` at the baseline) — all 39
 entries with `defaultKeys` normalized to arrays and their descriptions. `PiTuiDifferentialTest`
-compares the 30 assembled actions (21 `tui.editor.*`, 3 `tui.input.*`, 6 `tui.select.*`) against
+compares the 32 assembled actions against
 `builtin_tui_keybinding_definitions()` action-for-action (ids, keys, descriptions) and asserts the
-other 7 ids (`tui.input.copy` + the six `tui.altScreen.*`) are recognized-but-unassembled
-(`is_known_unassembled_tui_keybinding`), never no-op bindings.
+other ids are never no-op bindings. `tui.input.copy` is recognized-but-unassembled
+(`is_known_unassembled_tui_keybinding`). The six `tui.altScreen.*` entries in this historical
+fixture predate pi v1.0.4 — frozen v1.0.4 moved them out of `TUI_KEYBINDINGS` into
+`ALT_SCREEN_KEYBINDINGS` and changed defaults (`top`/`bottom` are `ctrl+home`/`ctrl+end`,
+`keybindings.ts:208-211`) — so the differential test skips them and they are validated against the
+frozen v1.0.4 source (`alt_screen_keybinding_definitions()`) and captured scroll-view behavior
+instead. Within the toolkit, `tui.altScreen.pageUp`/`pageDown`/`top`/`bottom` are assembled by the
+fullscreen keybinding manager (#1004); prompt navigation, half-page/line scroll, and transcript
+search stay recognized-but-unassembled until their own slices.
 
 ### Terminal-image encoder (`image-encoder.json`)
 

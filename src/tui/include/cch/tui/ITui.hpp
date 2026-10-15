@@ -3,6 +3,7 @@
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Overlay.hpp>
 #include <cch/tui/OverlayHandle.hpp>
+#include <cch/tui/Keybindings.hpp>
 #include <cch/tui/RawInputListener.hpp>
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/TerminalColors.hpp>
@@ -35,6 +36,9 @@ public:
 
     [[nodiscard]] virtual Terminal& terminal() noexcept = 0;
     [[nodiscard]] virtual const Terminal& terminal() const noexcept = 0;
+    /// Update the live keybinding snapshot used by mode-specific root actions.
+    /// Regular-screen roots do not consume viewport bindings.
+    virtual void set_keybinding_context(std::shared_ptr<KeybindingsContext>) {}
 
     [[nodiscard]] virtual support::Expected<std::reference_wrapper<Component>> add_child(
             std::unique_ptr<Component> component) = 0;

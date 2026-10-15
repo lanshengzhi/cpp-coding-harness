@@ -6,6 +6,7 @@
 
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/AuthFlowController.hpp"
+#include "coding_agent/tui/AltScreenHost.hpp"
 #include "coding_agent/tui/EditorAutocomplete.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
 #include "coding_agent/tui/ImageTranscoder.hpp"
@@ -397,6 +398,9 @@ support::ExpectedVoid InteractiveEngine::re_catalog_keybindings() {
     if (auto manager = load_app_keybinding_manager(agent_config_directory_, actions); !manager) {
         return std::unexpected(manager.error());
     } else {
+        if (keybindings_) keybindings_->replace(manager->registry, manager->help);
+        if (alt_screen_host_ != nullptr && keybindings_)
+            alt_screen_host_->alt_screen().set_keybinding_context(keybindings_->context());
         if (view_ != nullptr) {
             view_->set_keybindings(manager->registry, manager->help);
             for (const auto& diagnostic : manager->diagnostics) {
@@ -423,6 +427,7 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
             keybindings_ = std::make_shared<SharedKeybindings>();
         }
         keybindings_->replace(manager->registry, manager->help);
+        if (alt_screen_host_ != nullptr) alt_screen_host_->alt_screen().set_keybinding_context(keybindings_->context());
         diagnostics.keybindings = std::move(manager->diagnostics);
     }
 

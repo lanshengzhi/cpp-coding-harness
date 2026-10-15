@@ -14,16 +14,14 @@ namespace cch::tui {
 namespace {
 
 [[nodiscard]] support::Expected<std::vector<std::string>> canonical_keys(
-    const std::vector<std::string>& keys,
-    std::string_view action_id) {
+        const std::vector<std::string>& keys, std::string_view action_id) {
     std::vector<std::string> result;
     std::set<std::string, std::less<>> seen;
     for (const auto& key : keys) {
         if (auto parsed = parse_key_id(key); !parsed) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Validation,
-                std::format("keybinding '{}' has invalid key '{}'", action_id, key),
-                key));
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    std::format("keybinding '{}' has invalid key '{}'", action_id, key),
+                    key));
         } else {
             auto canonical = key_id(*parsed);
             if (seen.insert(canonical).second) result.push_back(std::move(canonical));
@@ -58,13 +56,11 @@ namespace {
 
 } // namespace
 
-KeybindingRegistry::KeybindingRegistry(std::vector<EffectiveKeybinding> entries)
-    : entries_(std::move(entries)) {}
+KeybindingRegistry::KeybindingRegistry(std::vector<EffectiveKeybinding> entries) : entries_(std::move(entries)) {}
 
 const EffectiveKeybinding* KeybindingRegistry::find(std::string_view id) const {
-    const auto found = std::find_if(entries_.begin(), entries_.end(), [id](const auto& entry) {
-        return entry.id == id;
-    });
+    const auto found =
+            std::find_if(entries_.begin(), entries_.end(), [id](const auto& entry) { return entry.id == id; });
     return found == entries_.end() ? nullptr : &*found;
 }
 
@@ -76,14 +72,12 @@ std::vector<std::string> KeybindingRegistry::keys(std::string_view id) const {
 bool KeybindingRegistry::matches(const KeyEvent& event, std::string_view id) const {
     const auto* entry = find(id);
     if (entry == nullptr) return false;
-    return std::any_of(entry->keys.begin(), entry->keys.end(), [&event](const auto& key) {
-        return matches_key(event, key);
-    });
+    return std::any_of(
+            entry->keys.begin(), entry->keys.end(), [&event](const auto& key) { return matches_key(event, key); });
 }
 
 std::optional<std::string> KeybindingRegistry::first_match(
-    const KeyEvent& event,
-    std::span<const std::string_view> candidate_ids) const {
+        const KeyEvent& event, std::span<const std::string_view> candidate_ids) const {
     for (const auto id : candidate_ids) {
         if (matches(event, id)) return std::string(id);
     }
@@ -101,9 +95,7 @@ std::string KeybindingRegistry::key_text(std::string_view id) const {
     return text;
 }
 
-const std::vector<EffectiveKeybinding>& KeybindingRegistry::entries() const {
-    return entries_;
-}
+const std::vector<EffectiveKeybinding>& KeybindingRegistry::entries() const { return entries_; }
 
 KeybindingsContext::KeybindingsContext() : state_(std::make_shared<State>(default_tui_keybindings())) {}
 
@@ -149,12 +141,12 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
             return std::unexpected(definition_error("keybinding definition has an empty id"));
         }
         if (!definition_indices.emplace(definition.id, entries.size()).second) {
-            return std::unexpected(definition_error(
-                std::format("duplicate keybinding definition '{}'", definition.id)));
+            return std::unexpected(
+                    definition_error(std::format("duplicate keybinding definition '{}'", definition.id)));
         }
         if (auto defaults = canonical_keys(definition.default_keys, definition.id); !defaults) {
-            return std::unexpected(definition_error(
-                std::format("keybinding definition '{}' has an invalid default", definition.id)));
+            return std::unexpected(
+                    definition_error(std::format("keybinding definition '{}' has an invalid default", definition.id)));
         } else {
             entries.push_back({
                     .id = std::move(definition.id),
@@ -177,17 +169,16 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
         if (definition == definition_indices.end()) {
             if (is_known_unassembled_tui_keybinding(override.id)) {
                 issues.push_back({
-                    .code = "unavailable_action",
-                    .message = std::format(
-                        "keybinding action '{}' is recognized but not assembled by cch_tui",
-                        override.id),
-                    .action_id = override.id,
+                        .code = "unavailable_action",
+                        .message = std::format(
+                                "keybinding action '{}' is recognized but not assembled by cch_tui", override.id),
+                        .action_id = override.id,
                 });
             } else {
                 issues.push_back({
-                    .code = "unknown_action",
-                    .message = std::format("unknown keybinding action '{}'", override.id),
-                    .action_id = override.id,
+                        .code = "unknown_action",
+                        .message = std::format("unknown keybinding action '{}'", override.id),
+                        .action_id = override.id,
                 });
             }
             continue;
@@ -195,23 +186,24 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
         auto& entry = entries[definition->second];
         if (!overridden_actions.insert(override.id).second) {
             issues.push_back({
-                .code = "duplicate_override",
-                .message = std::format("duplicate keybinding override '{}' was skipped", override.id),
-                .action_id = override.id,
+                    .code = "duplicate_override",
+                    .message = std::format("duplicate keybinding override '{}' was skipped", override.id),
+                    .action_id = override.id,
             });
             continue;
         }
         if (auto keys = canonical_keys(override.keys, override.id); !keys) {
             issues.push_back({
-                .code = "invalid_key",
-                .message = keys.error().message,
-                .action_id = override.id,
-                .key = keys.error().detail,
+                    .code = "invalid_key",
+                    .message = keys.error().message,
+                    .action_id = override.id,
+                    .key = keys.error().detail,
             });
             overridden_actions.erase(override.id);
         } else {
             entry.keys = std::move(*keys);
-            for (const auto& key : entry.keys) user_claims[key].push_back(entry.id);
+            for (const auto& key : entry.keys)
+                user_claims[key].push_back(entry.id);
         }
     }
 
@@ -223,16 +215,16 @@ support::Expected<KeybindingResolution> resolve_keybindings(KeybindingResolution
                 actions += claimant;
             }
             issues.push_back({
-                .code = "conflicting_user_key",
-                .message = std::format("key '{}' is assigned to multiple user actions: {}", key, actions),
-                .key = key,
+                    .code = "conflicting_user_key",
+                    .message = std::format("key '{}' is assigned to multiple user actions: {}", key, actions),
+                    .key = key,
             });
         }
     }
 
     return KeybindingResolution{
-        .registry = std::make_shared<const KeybindingRegistry>(std::move(entries)),
-        .issues = std::move(issues),
+            .registry = std::make_shared<const KeybindingRegistry>(std::move(entries)),
+            .issues = std::move(issues),
     };
 }
 
@@ -453,10 +445,15 @@ std::vector<KeybindingDefinition> alt_screen_keybinding_definitions() {
 }
 
 bool is_known_unassembled_tui_keybinding(std::string_view id) {
-    return id == "tui.input.copy" ||
-        id == "tui.altScreen.pageUp" || id == "tui.altScreen.pageDown" ||
-        id == "tui.altScreen.previousPrompt" || id == "tui.altScreen.nextPrompt" ||
-        id == "tui.altScreen.top" || id == "tui.altScreen.bottom";
+    // `tui.altScreen.pageUp`/`pageDown`/`top`/`bottom` are assembled by the
+    // fullscreen keybinding manager (#1004); the remaining toolkit-defined
+    // alternate-screen actions stay recognized-but-unassembled until their
+    // slices land (prompt navigation: T65; half-page/line scroll and search:
+    // their own tickets).
+    return id == "tui.input.copy" || id == "tui.altScreen.previousPrompt" || id == "tui.altScreen.nextPrompt" ||
+           id == "tui.altScreen.halfPageUp" || id == "tui.altScreen.halfPageDown" || id == "tui.altScreen.lineUp" ||
+           id == "tui.altScreen.lineDown" || id == "tui.altScreen.search" || id == "tui.altScreen.searchNext" ||
+           id == "tui.altScreen.searchPrevious" || id == "tui.altScreen.searchClose";
 }
 
 std::shared_ptr<const KeybindingRegistry> default_tui_keybindings() {
