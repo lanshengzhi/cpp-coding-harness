@@ -178,6 +178,15 @@ void RenderPipeline::position_hardware_cursor(
         return;
     }
 
+    const auto dims = terminal_.dimensions();
+    if (dims.rows > 0 && total_lines > dims.rows) {
+        const std::size_t viewport_top = total_lines - dims.rows;
+        if (cursor_pos->row < viewport_top) {
+            (void)terminal_.set_cursor_visible(false);
+            return;
+        }
+    }
+
     const std::size_t target_row = std::min(cursor_pos->row, total_lines - 1);
     const std::size_t target_col = cursor_pos->column;
 

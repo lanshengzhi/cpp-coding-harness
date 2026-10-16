@@ -278,33 +278,78 @@ TEST_CASE("Resize full redraw emits the pi-exact clear-screen and scrollback byt
     CHECK(output.back() == "\x1b[?2026l");
 }
 
-TEST_CASE("Tui clamps the IME cursor to the visible viewport over scrolled content",
-        "[tui][render][issue49][issue435][compat-pi]") {
-    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
-    cch::tui::Tui tui(terminal);
-    auto cursor = std::make_unique<CursorReportingComponent>(4);
-    auto* cursor_ptr = cursor.get();
-    REQUIRE(tui.add_child(std::move(cursor)));
-    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one\ntwo\nthree\nfour\nfive", 0, 0)));
-    REQUIRE(tui.start());
-    REQUIRE(tui.set_focus(cursor_ptr));
-    REQUIRE(tui.render());
+TEST_CASE("Tui positions visible IME and hides cursor scrolled out of viewport",
+        "[tui][render][issue49][issue435][issue1037][compat-pi]") {
+    const auto run_test = [](bool pref_visible) {
+        cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
+        cch::tui::Tui tui(terminal, pref_visible);
+        auto cursor = std::make_unique<CursorReportingComponent>(4);
+        auto* cursor_ptr = cursor.get();
+        REQUIRE(tui.add_child(std::move(cursor)));
+        REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("one\ntwo\nthree\nfour\nfive", 0, 0)));
+        REQUIRE(tui.start());
+        REQUIRE(tui.set_focus(cursor_ptr));
+        REQUIRE(tui.render());
 
-    // Five content lines on a three-row viewport: the viewport top is at
-    // buffer row 2 (rows 2..4 visible). The cursor at buffer row 4 is inside
-    // the viewport, so it is positioned at screen row 2 (pi
-    // positionHardwareCursor relative to the viewport).
-    REQUIRE(terminal.viewport_top() == 2);
-    const cch::tui::CursorPosition expected_visible{.column = 0, .row = 2};
-    CHECK(terminal.cursor() == expected_visible);
+        // Five content lines on a three-row viewport: the viewport top is at
+        // buffer row 2 (rows 2..4 visible). The cursor at buffer row 4 is inside
+        // the viewport, so it is positioned at screen row 2 (pi
+        // positionHardwareCursor relative to the viewport).
+        REQUIRE(terminal.viewport_top() == 2);
+        const cch::tui::CursorPosition expected_visible{.column = 0, .row = 2};
+        CHECK(terminal.cursor() == expected_visible);
+        CHECK(terminal.modes().cursor_visible == pref_visible);
 
-    // A cursor above the viewport is clamped to the viewport top instead of
-    // scrolling the terminal.
-    cursor_ptr->set_row(1);
-    tui.invalidate();
-    REQUIRE(tui.render());
-    const cch::tui::CursorPosition expected_clamped{.column = 0, .row = 0};
-    CHECK(terminal.cursor() == expected_clamped);
+        // A cursor above the viewport (in terminal scrollback) is hidden rather than
+        // scrolling the terminal or emitting out-of-viewport IME coordinates
+        // (pi tui.ts extractCursorPosition null + positionHardwareCursor hide).
+        const auto output_snapshot = terminal.output().size();
+        cursor_ptr->set_row(1);
+        tui.invalidate();
+        REQUIRE(tui.render());
+
+        CHECK(terminal.modes().cursor_visible == false);
+        CHECK(terminal.cursor() == expected_visible);
+        CHECK(terminal.viewport_top() == 2);
+
+        // No IME relative (A/B/G) or absolute (H) positioning bytes emitted in the no-content-change frame
+        for (std::size_t i = output_snapshot; i < terminal.output().size(); ++i) {
+            const auto& chunk = terminal.output()[i];
+            CHECK(chunk.find("\x1b[3A") == std::string::npos);
+            CHECK(chunk.find("\x1b[1G") == std::string::npos);
+            CHECK(chunk.find("H") == std::string::npos);
+        }
+
+        // Returning to a valid in-viewport row restores IME cursor positioning and visibility == pref
+        cursor_ptr->set_row(4);
+        tui.invalidate();
+        REQUIRE(tui.render());
+        CHECK(terminal.cursor() == expected_visible);
+        CHECK(terminal.modes().cursor_visible == pref_visible);
+
+        // Moving above viewport again hides the cursor
+        cursor_ptr->set_row(1);
+        tui.invalidate();
+        REQUIRE(tui.render());
+        CHECK(terminal.modes().cursor_visible == false);
+
+        // Terminal resize unclips the cursor: 5 lines on a 6-row terminal puts viewport_top at 0,
+        // making buffer row 1 visible at screen row 1 with visibility == pref.
+        REQUIRE(terminal.inject_resize({.columns = 8, .rows = 6}));
+        REQUIRE(tui.render());
+        REQUIRE(terminal.viewport_top() == 0);
+        const cch::tui::CursorPosition expected_unclipped{.column = 0, .row = 1};
+        CHECK(terminal.cursor() == expected_unclipped);
+        CHECK(terminal.modes().cursor_visible == pref_visible);
+    };
+
+    SECTION("hardware cursor visible preference enabled") {
+        run_test(true);
+    }
+
+    SECTION("hardware cursor visible preference disabled") {
+        run_test(false);
+    }
 }
 
 TEST_CASE("Changes at the viewport top diff in place without clearing", "[tui][render][issue49][issue435][compat-pi]") {
