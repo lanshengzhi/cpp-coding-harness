@@ -20,6 +20,7 @@ import { captureScrollbar } from "./scrollbar-scenarios.mts";
 import { captureSelection } from "./selection-scenarios.mts";
 import { captureAltScreenSearch } from "./alt-screen-search-scenarios.mts";
 import { captureAltScreenNav } from "./alt-screen-nav-scenarios.mts";
+import { captureMouseComponents } from "./mouse-components-scenarios.mts";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), "..");
@@ -870,6 +871,15 @@ const altScreenNavArtifact = envelope(altScreenNavObservation.sourceEndpoints, a
 const mouseObservation = await captureMouse(pi);
 const mouseArtifact = envelope(mouseObservation.sourceEndpoints, mouseObservation.scenarios);
 
+// Observe mouse editing and list/settings selection: press/click cursor and row
+// mapping, wheel and hover rules, submenu/search delegation and the
+// alternate-screen focus inheritance of a delegating host (#1003).
+const mouseComponentsObservation = await captureMouseComponents(pi);
+const mouseComponentsArtifact = envelope(
+	mouseComponentsObservation.sourceEndpoints,
+	mouseComponentsObservation.scenarios,
+);
+
 // No output is touched before source guards and all observations complete.
 const bundle = path.join(root, selected.bundle);
 mkdirSync(bundle, { recursive: true });
@@ -888,6 +898,7 @@ const artifacts = [
 	["layout.json", "stack-layout", stackLayoutArtifact],
 	["scroll-view.json", "scroll-view", scrollViewArtifact],
 	["mouse.json", "mouse", mouseArtifact],
+	["mouse-components.json", "mouse-components", mouseComponentsArtifact],
 	["scrollbar.json", "scrollbar", scrollbarArtifact],
 	["selection.json", "selection", selectionArtifact],
 	["alt-screen-search.json", "alt-screen-search", altScreenSearchArtifact],
@@ -938,6 +949,10 @@ const manifest = {
 			{
 				path: "capture/alt-screen-nav-scenarios.mts",
 				sha256: sha256(readFileSync(path.join(root, "capture/alt-screen-nav-scenarios.mts"))),
+			},
+			{
+				path: "capture/mouse-components-scenarios.mts",
+				sha256: sha256(readFileSync(path.join(root, "capture/mouse-components-scenarios.mts"))),
 			},
 		],
 	},

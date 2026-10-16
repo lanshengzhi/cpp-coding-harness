@@ -1,0 +1,1962 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/components/input.ts:handleMouse,render,handleInput,setValue,getValue",
+    "packages/tui/src/components/editor.ts:handleMouse,render,setText,setPaddingX,handleInput,getCursor,getText",
+    "packages/tui/src/components/select-list.ts:handleMouse,render,setSelectedIndex,getSelectedItem",
+    "packages/tui/src/components/settings-list.ts:handleMouse,render,selectItem,getSelectedItem,handleInput",
+    "packages/tui/src/tui.ts:Container.handleMouse,dispatchMouseEvent",
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.dispatchMouseEvent,TuiAltScreen.getFocusedComponent",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,VirtualTerminal.getViewport"
+  ],
+  "scenarios": [
+    {
+      "name": "input-press-cursor-and-unhandled-gestures",
+      "dimensions": {
+        "columns": 20,
+        "rows": 1
+      },
+      "inputs": {
+        "prompt": "> ",
+        "value": "hello",
+        "width": 20,
+        "typed": "X",
+        "cases": [
+          {
+            "label": "value-column-two",
+            "x": 4,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "press",
+            "button": "left"
+          },
+          {
+            "label": "prompt-column-zero",
+            "x": 2,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "press",
+            "button": "left"
+          },
+          {
+            "label": "past-line-end",
+            "x": 20,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "press",
+            "button": "left"
+          },
+          {
+            "label": "right-button",
+            "x": 4,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "press",
+            "button": "right"
+          },
+          {
+            "label": "release",
+            "x": 4,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "release",
+            "button": "left"
+          },
+          {
+            "label": "move",
+            "x": 4,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "move",
+            "button": "none"
+          },
+          {
+            "label": "wheel",
+            "x": 4,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "wheel",
+            "button": "left"
+          },
+          {
+            "label": "second-row",
+            "x": 4,
+            "y": 1,
+            "width": 20,
+            "height": 1,
+            "type": "press",
+            "button": "left"
+          }
+        ]
+      },
+      "expected": {
+        "cases": [
+          {
+            "label": "value-column-two",
+            "x": 4,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "press",
+            "button": "left",
+            "prompt": "> ",
+            "value": "hello",
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "cursorColumn": 4,
+            "row": "> hello",
+            "valueAfterType": "heXllo"
+          },
+          {
+            "label": "prompt-column-zero",
+            "x": 2,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "press",
+            "button": "left",
+            "prompt": "> ",
+            "value": "hello",
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "cursorColumn": 2,
+            "row": "> hello",
+            "valueAfterType": "Xhello"
+          },
+          {
+            "label": "past-line-end",
+            "x": 20,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "press",
+            "button": "left",
+            "prompt": "> ",
+            "value": "hello",
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "cursorColumn": 7,
+            "row": "> hello",
+            "valueAfterType": "helloX"
+          },
+          {
+            "label": "right-button",
+            "x": 4,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "press",
+            "button": "right",
+            "prompt": "> ",
+            "value": "hello",
+            "result": null,
+            "cursorColumn": 2,
+            "row": "> hello",
+            "valueAfterType": "Xhello"
+          },
+          {
+            "label": "release",
+            "x": 4,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "release",
+            "button": "left",
+            "prompt": "> ",
+            "value": "hello",
+            "result": null,
+            "cursorColumn": 2,
+            "row": "> hello",
+            "valueAfterType": "Xhello"
+          },
+          {
+            "label": "move",
+            "x": 4,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "move",
+            "button": "none",
+            "prompt": "> ",
+            "value": "hello",
+            "result": null,
+            "cursorColumn": 2,
+            "row": "> hello",
+            "valueAfterType": "Xhello"
+          },
+          {
+            "label": "wheel",
+            "x": 4,
+            "y": 0,
+            "width": 20,
+            "height": 1,
+            "type": "wheel",
+            "button": "left",
+            "prompt": "> ",
+            "value": "hello",
+            "result": null,
+            "cursorColumn": 2,
+            "row": "> hello",
+            "valueAfterType": "Xhello"
+          },
+          {
+            "label": "second-row",
+            "x": 4,
+            "y": 1,
+            "width": 20,
+            "height": 1,
+            "type": "press",
+            "button": "left",
+            "prompt": "> ",
+            "value": "hello",
+            "result": null,
+            "cursorColumn": 2,
+            "row": "> hello",
+            "valueAfterType": "Xhello"
+          }
+        ]
+      }
+    },
+    {
+      "name": "input-press-maps-grapheme-widths-and-scrolled-columns",
+      "dimensions": {
+        "columns": 20,
+        "rows": 1
+      },
+      "inputs": {
+        "prompt": "> ",
+        "typed": "X",
+        "cases": [
+          {
+            "label": "cjk-inside-first-grapheme",
+            "value": "你好",
+            "width": 20,
+            "height": 1,
+            "presses": [
+              4
+            ]
+          },
+          {
+            "label": "cjk-inside-second-grapheme",
+            "value": "你好",
+            "width": 20,
+            "height": 1,
+            "presses": [
+              5
+            ]
+          },
+          {
+            "label": "cjk-past-end",
+            "value": "你好",
+            "width": 20,
+            "height": 1,
+            "presses": [
+              6
+            ]
+          },
+          {
+            "label": "scrolled-column-zero",
+            "value": "abcdefghij",
+            "width": 8,
+            "height": 1,
+            "presses": [
+              7,
+              2
+            ]
+          },
+          {
+            "label": "scrolled-column-one",
+            "value": "abcdefghij",
+            "width": 8,
+            "height": 1,
+            "presses": [
+              7,
+              3
+            ]
+          },
+          {
+            "label": "scrolled-past-end",
+            "value": "abcdefghij",
+            "width": 8,
+            "height": 1,
+            "presses": [
+              7,
+              7
+            ]
+          },
+          {
+            "label": "scrolled-wide-grapheme",
+            "value": "一二三四五六七八",
+            "width": 8,
+            "height": 1,
+            "presses": [
+              20,
+              4
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "cases": [
+          {
+            "label": "cjk-inside-first-grapheme",
+            "value": "你好",
+            "width": 20,
+            "height": 1,
+            "presses": [
+              4
+            ],
+            "prompt": "> ",
+            "y": 0,
+            "steps": [
+              {
+                "x": 4,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "row": "> 你好",
+                "cursorColumn": 4
+              }
+            ],
+            "valueAfterType": "你X好"
+          },
+          {
+            "label": "cjk-inside-second-grapheme",
+            "value": "你好",
+            "width": 20,
+            "height": 1,
+            "presses": [
+              5
+            ],
+            "prompt": "> ",
+            "y": 0,
+            "steps": [
+              {
+                "x": 5,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "row": "> 你好",
+                "cursorColumn": 4
+              }
+            ],
+            "valueAfterType": "你X好"
+          },
+          {
+            "label": "cjk-past-end",
+            "value": "你好",
+            "width": 20,
+            "height": 1,
+            "presses": [
+              6
+            ],
+            "prompt": "> ",
+            "y": 0,
+            "steps": [
+              {
+                "x": 6,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "row": "> 你好",
+                "cursorColumn": 6
+              }
+            ],
+            "valueAfterType": "你好X"
+          },
+          {
+            "label": "scrolled-column-zero",
+            "value": "abcdefghij",
+            "width": 8,
+            "height": 1,
+            "presses": [
+              7,
+              2
+            ],
+            "prompt": "> ",
+            "y": 0,
+            "steps": [
+              {
+                "x": 7,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "row": "> cdefgh",
+                "cursorColumn": 5
+              },
+              {
+                "x": 2,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "row": "> abcdef",
+                "cursorColumn": 4
+              }
+            ],
+            "valueAfterType": "abXcdefghij"
+          },
+          {
+            "label": "scrolled-column-one",
+            "value": "abcdefghij",
+            "width": 8,
+            "height": 1,
+            "presses": [
+              7,
+              3
+            ],
+            "prompt": "> ",
+            "y": 0,
+            "steps": [
+              {
+                "x": 7,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "row": "> cdefgh",
+                "cursorColumn": 5
+              },
+              {
+                "x": 3,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "row": "> abcdef",
+                "cursorColumn": 5
+              }
+            ],
+            "valueAfterType": "abcXdefghij"
+          },
+          {
+            "label": "scrolled-past-end",
+            "value": "abcdefghij",
+            "width": 8,
+            "height": 1,
+            "presses": [
+              7,
+              7
+            ],
+            "prompt": "> ",
+            "y": 0,
+            "steps": [
+              {
+                "x": 7,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "row": "> cdefgh",
+                "cursorColumn": 5
+              },
+              {
+                "x": 7,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "row": "> efghij",
+                "cursorColumn": 5
+              }
+            ],
+            "valueAfterType": "abcdefgXhij"
+          },
+          {
+            "label": "scrolled-wide-grapheme",
+            "value": "一二三四五六七八",
+            "width": 8,
+            "height": 1,
+            "presses": [
+              20,
+              4
+            ],
+            "prompt": "> ",
+            "y": 0,
+            "steps": [
+              {
+                "x": 20,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "row": "> 七八",
+                "cursorColumn": 6
+              },
+              {
+                "x": 4,
+                "result": {
+                  "handled": true,
+                  "focus": true,
+                  "render": null
+                },
+                "row": "> 六七",
+                "cursorColumn": 4
+              }
+            ],
+            "valueAfterType": "一二三四五六X七八"
+          }
+        ]
+      }
+    },
+    {
+      "name": "select-list-press-selects-and-click-activates",
+      "dimensions": {
+        "columns": 40,
+        "rows": 3
+      },
+      "inputs": {
+        "items": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e"
+        ],
+        "maxVisible": 3
+      },
+      "expected": {
+        "pressClick": {
+          "maxVisible": 3,
+          "items": [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e"
+          ],
+          "press": {
+            "x": 1,
+            "y": 2,
+            "width": 40,
+            "height": 3,
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "selected": "c"
+          },
+          "click": {
+            "x": 1,
+            "y": 2,
+            "width": 40,
+            "height": 3,
+            "result": {
+              "handled": true,
+              "focus": false,
+              "render": null
+            },
+            "selected": "c"
+          }
+        }
+      }
+    },
+    {
+      "name": "select-list-wheel-hover-and-scrolled-rows",
+      "dimensions": {
+        "columns": 80,
+        "rows": 5
+      },
+      "inputs": {
+        "itemCount": 12,
+        "maxVisible": 5,
+        "selectedIndex": 5,
+        "wheelDelta": 1,
+        "rows": [
+          0,
+          4
+        ]
+      },
+      "expected": {
+        "rows": [
+          {
+            "row": 0,
+            "afterWheel": {
+              "result": {
+                "handled": true,
+                "focus": false,
+                "render": true
+              },
+              "selected": "item-6",
+              "changes": [
+                "item-6"
+              ]
+            },
+            "rows": [
+              "  Item 4",
+              "  Item 5",
+              "→ Item 6",
+              "  Item 7",
+              "  Item 8",
+              "  (7/12)"
+            ],
+            "hover": [
+              {
+                "y": 0,
+                "result": null,
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ]
+              },
+              {
+                "y": 1,
+                "result": null,
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ]
+              },
+              {
+                "y": 2,
+                "result": null,
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ]
+              },
+              {
+                "y": 3,
+                "result": null,
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ]
+              },
+              {
+                "y": 4,
+                "result": null,
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ]
+              },
+              {
+                "y": 0,
+                "result": null,
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ]
+              }
+            ],
+            "press": {
+              "result": {
+                "handled": true,
+                "focus": true,
+                "render": null
+              },
+              "selected": "item-4",
+              "changes": [
+                "item-6",
+                "item-4"
+              ]
+            },
+            "click": {
+              "result": {
+                "handled": true,
+                "focus": false,
+                "render": null
+              },
+              "selected": "item-4",
+              "changes": [
+                "item-6",
+                "item-4"
+              ]
+            }
+          },
+          {
+            "row": 4,
+            "afterWheel": {
+              "result": {
+                "handled": true,
+                "focus": false,
+                "render": true
+              },
+              "selected": "item-6",
+              "changes": [
+                "item-6"
+              ]
+            },
+            "rows": [
+              "  Item 4",
+              "  Item 5",
+              "→ Item 6",
+              "  Item 7",
+              "  Item 8",
+              "  (7/12)"
+            ],
+            "hover": [
+              {
+                "y": 0,
+                "result": null,
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ]
+              },
+              {
+                "y": 1,
+                "result": null,
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ]
+              },
+              {
+                "y": 2,
+                "result": null,
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ]
+              },
+              {
+                "y": 3,
+                "result": null,
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ]
+              },
+              {
+                "y": 4,
+                "result": null,
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ]
+              },
+              {
+                "y": 4,
+                "result": null,
+                "rows": [
+                  "  Item 4",
+                  "  Item 5",
+                  "→ Item 6",
+                  "  Item 7",
+                  "  Item 8",
+                  "  (7/12)"
+                ]
+              }
+            ],
+            "press": {
+              "result": {
+                "handled": true,
+                "focus": true,
+                "render": null
+              },
+              "selected": "item-8",
+              "changes": [
+                "item-6",
+                "item-8"
+              ]
+            },
+            "click": {
+              "result": {
+                "handled": true,
+                "focus": false,
+                "render": null
+              },
+              "selected": "item-8",
+              "changes": [
+                "item-6",
+                "item-8"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings-list-press-selects-and-click-activates",
+      "dimensions": {
+        "columns": 40,
+        "rows": 5
+      },
+      "inputs": {
+        "items": [
+          "mode",
+          "other",
+          "third",
+          "fourth"
+        ],
+        "maxVisible": 3
+      },
+      "expected": {
+        "pressClick": {
+          "maxVisible": 3,
+          "items": [
+            "mode",
+            "other",
+            "third",
+            "fourth"
+          ],
+          "press": {
+            "x": 1,
+            "y": 2,
+            "width": 40,
+            "height": 5,
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            }
+          },
+          "click": {
+            "x": 1,
+            "y": 2,
+            "width": 40,
+            "height": 5,
+            "result": {
+              "handled": true,
+              "focus": false,
+              "render": null
+            }
+          },
+          "changes": [
+            {
+              "id": "third",
+              "value": "high"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "settings-list-wheel-hover-and-scrolled-rows",
+      "dimensions": {
+        "columns": 80,
+        "rows": 6
+      },
+      "inputs": {
+        "itemCount": 12,
+        "maxVisible": 5,
+        "selectedItem": "item-5",
+        "wheelDelta": 1,
+        "rows": [
+          0,
+          4
+        ]
+      },
+      "expected": {
+        "rows": [
+          {
+            "row": 0,
+            "rowOffset": 2,
+            "afterWheel": {
+              "result": {
+                "handled": true,
+                "focus": false,
+                "render": true
+              },
+              "rows": [
+                ">",
+                "",
+                "  Item 4   off",
+                "  Item 5   off",
+                "> Item 6   off",
+                "  Item 7   off",
+                "  Item 8   off",
+                "  (7/12)",
+                "",
+                "  Description 6",
+                "",
+                "  Type to search · Enter/Space to change · Esc to cancel"
+              ]
+            },
+            "hover": [
+              {
+                "y": 2,
+                "result": null,
+                "rows": [
+                  ">",
+                  "",
+                  "  Item 4   off",
+                  "  Item 5   off",
+                  "> Item 6   off",
+                  "  Item 7   off",
+                  "  Item 8   off",
+                  "  (7/12)",
+                  "",
+                  "  Description 6",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ]
+              },
+              {
+                "y": 3,
+                "result": null,
+                "rows": [
+                  ">",
+                  "",
+                  "  Item 4   off",
+                  "  Item 5   off",
+                  "> Item 6   off",
+                  "  Item 7   off",
+                  "  Item 8   off",
+                  "  (7/12)",
+                  "",
+                  "  Description 6",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ]
+              },
+              {
+                "y": 4,
+                "result": null,
+                "rows": [
+                  ">",
+                  "",
+                  "  Item 4   off",
+                  "  Item 5   off",
+                  "> Item 6   off",
+                  "  Item 7   off",
+                  "  Item 8   off",
+                  "  (7/12)",
+                  "",
+                  "  Description 6",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ]
+              },
+              {
+                "y": 5,
+                "result": null,
+                "rows": [
+                  ">",
+                  "",
+                  "  Item 4   off",
+                  "  Item 5   off",
+                  "> Item 6   off",
+                  "  Item 7   off",
+                  "  Item 8   off",
+                  "  (7/12)",
+                  "",
+                  "  Description 6",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ]
+              },
+              {
+                "y": 6,
+                "result": null,
+                "rows": [
+                  ">",
+                  "",
+                  "  Item 4   off",
+                  "  Item 5   off",
+                  "> Item 6   off",
+                  "  Item 7   off",
+                  "  Item 8   off",
+                  "  (7/12)",
+                  "",
+                  "  Description 6",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ]
+              },
+              {
+                "y": 2,
+                "result": null,
+                "rows": [
+                  ">",
+                  "",
+                  "  Item 4   off",
+                  "  Item 5   off",
+                  "> Item 6   off",
+                  "  Item 7   off",
+                  "  Item 8   off",
+                  "  (7/12)",
+                  "",
+                  "  Description 6",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ]
+              }
+            ],
+            "press": {
+              "result": {
+                "handled": true,
+                "focus": true,
+                "render": null
+              },
+              "rows": [
+                ">",
+                "",
+                "  Item 2   off",
+                "  Item 3   off",
+                "> Item 4   off",
+                "  Item 5   off",
+                "  Item 6   off",
+                "  (5/12)",
+                "",
+                "  Description 4",
+                "",
+                "  Type to search · Enter/Space to change · Esc to cancel"
+              ]
+            },
+            "click": {
+              "result": {
+                "handled": true,
+                "focus": false,
+                "render": null
+              },
+              "rows": [
+                ">",
+                "",
+                "  Item 2   off",
+                "  Item 3   off",
+                "> Item 4   on",
+                "  Item 5   off",
+                "  Item 6   off",
+                "  (5/12)",
+                "",
+                "  Description 4",
+                "",
+                "  Type to search · Enter/Space to change · Esc to cancel"
+              ],
+              "changes": [
+                {
+                  "id": "item-4",
+                  "value": "on"
+                }
+              ]
+            }
+          },
+          {
+            "row": 4,
+            "rowOffset": 2,
+            "afterWheel": {
+              "result": {
+                "handled": true,
+                "focus": false,
+                "render": true
+              },
+              "rows": [
+                ">",
+                "",
+                "  Item 4   off",
+                "  Item 5   off",
+                "> Item 6   off",
+                "  Item 7   off",
+                "  Item 8   off",
+                "  (7/12)",
+                "",
+                "  Description 6",
+                "",
+                "  Type to search · Enter/Space to change · Esc to cancel"
+              ]
+            },
+            "hover": [
+              {
+                "y": 2,
+                "result": null,
+                "rows": [
+                  ">",
+                  "",
+                  "  Item 4   off",
+                  "  Item 5   off",
+                  "> Item 6   off",
+                  "  Item 7   off",
+                  "  Item 8   off",
+                  "  (7/12)",
+                  "",
+                  "  Description 6",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ]
+              },
+              {
+                "y": 3,
+                "result": null,
+                "rows": [
+                  ">",
+                  "",
+                  "  Item 4   off",
+                  "  Item 5   off",
+                  "> Item 6   off",
+                  "  Item 7   off",
+                  "  Item 8   off",
+                  "  (7/12)",
+                  "",
+                  "  Description 6",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ]
+              },
+              {
+                "y": 4,
+                "result": null,
+                "rows": [
+                  ">",
+                  "",
+                  "  Item 4   off",
+                  "  Item 5   off",
+                  "> Item 6   off",
+                  "  Item 7   off",
+                  "  Item 8   off",
+                  "  (7/12)",
+                  "",
+                  "  Description 6",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ]
+              },
+              {
+                "y": 5,
+                "result": null,
+                "rows": [
+                  ">",
+                  "",
+                  "  Item 4   off",
+                  "  Item 5   off",
+                  "> Item 6   off",
+                  "  Item 7   off",
+                  "  Item 8   off",
+                  "  (7/12)",
+                  "",
+                  "  Description 6",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ]
+              },
+              {
+                "y": 6,
+                "result": null,
+                "rows": [
+                  ">",
+                  "",
+                  "  Item 4   off",
+                  "  Item 5   off",
+                  "> Item 6   off",
+                  "  Item 7   off",
+                  "  Item 8   off",
+                  "  (7/12)",
+                  "",
+                  "  Description 6",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ]
+              },
+              {
+                "y": 6,
+                "result": null,
+                "rows": [
+                  ">",
+                  "",
+                  "  Item 4   off",
+                  "  Item 5   off",
+                  "> Item 6   off",
+                  "  Item 7   off",
+                  "  Item 8   off",
+                  "  (7/12)",
+                  "",
+                  "  Description 6",
+                  "",
+                  "  Type to search · Enter/Space to change · Esc to cancel"
+                ]
+              }
+            ],
+            "press": {
+              "result": {
+                "handled": true,
+                "focus": true,
+                "render": null
+              },
+              "rows": [
+                ">",
+                "",
+                "  Item 6   off",
+                "  Item 7   off",
+                "> Item 8   off",
+                "  Item 9   off",
+                "  Item 10  off",
+                "  (9/12)",
+                "",
+                "  Description 8",
+                "",
+                "  Type to search · Enter/Space to change · Esc to cancel"
+              ]
+            },
+            "click": {
+              "result": {
+                "handled": true,
+                "focus": false,
+                "render": null
+              },
+              "rows": [
+                ">",
+                "",
+                "  Item 6   off",
+                "  Item 7   off",
+                "> Item 8   on",
+                "  Item 9   off",
+                "  Item 10  off",
+                "  (9/12)",
+                "",
+                "  Description 8",
+                "",
+                "  Type to search · Enter/Space to change · Esc to cancel"
+              ],
+              "changes": [
+                {
+                  "id": "item-8",
+                  "value": "on"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings-list-search-row-forwards-and-separator-is-inert",
+      "dimensions": {
+        "columns": 80,
+        "rows": 6
+      },
+      "inputs": {
+        "itemCount": 4,
+        "maxVisible": 5,
+        "typedQuery": "it",
+        "edited": "X",
+        "searchClick": {
+          "x": 3,
+          "y": 0
+        }
+      },
+      "expected": {
+        "search": {
+          "rows": [
+            "> it",
+            "",
+            "> Item 0  off",
+            "  Item 1  off",
+            "  Item 2  off",
+            "  Item 3  off",
+            "",
+            "  Type to search · Enter/Space to change · Esc to cancel"
+          ],
+          "typedQuery": "it",
+          "searchRow": {
+            "x": 3,
+            "y": 0,
+            "width": 80,
+            "height": 6,
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "cursorColumnBeforeClick": 4,
+            "afterClick": "> it",
+            "cursorColumnAfterClick": 3,
+            "queryAfterType": "iXt",
+            "edited": "X"
+          },
+          "separatorRow": {
+            "x": 3,
+            "y": 1,
+            "width": 80,
+            "height": 6,
+            "result": null
+          },
+          "firstItemRow": {
+            "x": 3,
+            "y": 2,
+            "width": 80,
+            "height": 6,
+            "press": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "rowsAfterPress": [
+              "> it",
+              "",
+              "> Item 0  off",
+              "  Item 1  off",
+              "  Item 2  off",
+              "  Item 3  off",
+              "",
+              "  Type to search · Enter/Space to change · Esc to cancel"
+            ],
+            "click": {
+              "handled": true,
+              "focus": false,
+              "render": null
+            },
+            "changesAfterClick": [
+              {
+                "id": "item-0",
+                "value": "on"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "alternate-screen-nested-input-click-keeps-host-focus",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "overlayWidth": 20,
+        "overlayHeight": 4,
+        "value": "hi",
+        "columns": [
+          5,
+          3
+        ],
+        "typed": "!"
+      },
+      "expected": {
+        "overlays": [
+          {
+            "column": 5,
+            "hostFocusedBeforeOverlay": false,
+            "value": "hi!",
+            "hostFocusedAfterClick": true,
+            "screen": [
+              "> hi!",
+              "",
+              "",
+              ""
+            ]
+          },
+          {
+            "column": 3,
+            "hostFocusedBeforeOverlay": false,
+            "value": "!hi",
+            "hostFocusedAfterClick": true,
+            "screen": [
+              "> !hi",
+              "",
+              "",
+              ""
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings-submenu-click-closes-and-keeps-host-focus",
+      "dimensions": {
+        "columns": 30,
+        "rows": 6
+      },
+      "inputs": {
+        "submenuItems": [
+          "first",
+          "second"
+        ],
+        "settings": [
+          "theme",
+          "other"
+        ]
+      },
+      "expected": {
+        "submenu": {
+          "keys": [
+            "\r",
+            "\u001b[B",
+            "\r"
+          ],
+          "click": {
+            "press": "\u001b[<0;3;2M",
+            "release": "\u001b[<0;3;2m"
+          },
+          "submenuOpen": true,
+          "changesAfterClick": [
+            {
+              "id": "theme",
+              "value": "second"
+            }
+          ],
+          "focusedAfterClick": true,
+          "closedAfterClick": true,
+          "changesAfterKeys": [
+            {
+              "id": "theme",
+              "value": "second"
+            },
+            {
+              "id": "other",
+              "value": "on"
+            }
+          ],
+          "screens": [
+            [
+              "> Theme  first",
+              "  Other  off",
+              "",
+              "  Enter/Space to change · E...",
+              "",
+              ""
+            ],
+            [
+              "→ First",
+              "  Second",
+              "",
+              "",
+              "",
+              ""
+            ],
+            [
+              "> Theme  second",
+              "  Other  off",
+              "",
+              "  Enter/Space to change · E...",
+              "",
+              ""
+            ],
+            [
+              "  Theme  second",
+              "> Other  on",
+              "",
+              "  Enter/Space to change · E...",
+              "",
+              ""
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "editor-alternate-screen-click-positions-cursor",
+      "dimensions": {
+        "columns": 20,
+        "rows": 6
+      },
+      "inputs": {
+        "text": "hello",
+        "typed": "X"
+      },
+      "expected": {
+        "editor": {
+          "text": "hello",
+          "columns": 20,
+          "rows": 6,
+          "click": {
+            "press": "\u001b[<0;3;2M",
+            "release": "\u001b[<0;3;2m"
+          },
+          "resolvedClick": {
+            "x": 2,
+            "y": 1,
+            "width": 20,
+            "height": 3
+          },
+          "cursorAfterClick": {
+            "line": 0,
+            "col": 2
+          },
+          "textAfterType": "heXllo",
+          "focused": true,
+          "screens": [
+            [
+              "────────────────────",
+              "hello",
+              "────────────────────",
+              "",
+              "",
+              ""
+            ],
+            [
+              "────────────────────",
+              "heXllo",
+              "────────────────────",
+              "",
+              "",
+              ""
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "editor-click-bounds-wrapped-segments-and-wide-graphemes",
+      "dimensions": {
+        "columns": 20,
+        "rows": 24
+      },
+      "inputs": {
+        "typed": "X",
+        "cases": [
+          {
+            "label": "top-border-row",
+            "text": "hello",
+            "width": 20,
+            "x": 3,
+            "y": 0,
+            "paddingX": 0
+          },
+          {
+            "label": "content-row",
+            "text": "hello",
+            "width": 20,
+            "x": 3,
+            "y": 1,
+            "paddingX": 0
+          },
+          {
+            "label": "past-content-end",
+            "text": "hello",
+            "width": 20,
+            "x": 3,
+            "y": 2,
+            "paddingX": 0
+          },
+          {
+            "label": "bottom-border-row",
+            "text": "hello",
+            "width": 20,
+            "x": 3,
+            "y": 3,
+            "paddingX": 0
+          },
+          {
+            "label": "wrapped-first-segment-past-end",
+            "text": "abcdefghij",
+            "width": 6,
+            "x": 6,
+            "y": 1,
+            "paddingX": 0
+          },
+          {
+            "label": "wrapped-second-segment",
+            "text": "abcdefghij",
+            "width": 6,
+            "x": 2,
+            "y": 2,
+            "paddingX": 0
+          },
+          {
+            "label": "cjk-wide-grapheme",
+            "text": "世界",
+            "width": 20,
+            "x": 3,
+            "y": 1,
+            "paddingX": 0
+          },
+          {
+            "label": "cjk-past-end",
+            "text": "世界",
+            "width": 20,
+            "x": 5,
+            "y": 1,
+            "paddingX": 0
+          },
+          {
+            "label": "padded-content",
+            "text": "hello",
+            "width": 20,
+            "x": 4,
+            "y": 1,
+            "paddingX": 2
+          }
+        ]
+      },
+      "expected": {
+        "cases": [
+          {
+            "label": "top-border-row",
+            "text": "hello",
+            "width": 20,
+            "x": 3,
+            "y": 0,
+            "paddingX": 0,
+            "prompt": null,
+            "rows": [
+              "────────────────────",
+              "hello\u001b[7m \u001b[0m              ",
+              "────────────────────"
+            ],
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "cursorBefore": {
+              "line": 0,
+              "col": 5
+            },
+            "cursorAfterClick": {
+              "line": 0,
+              "col": 5
+            },
+            "textAfterType": "helloX"
+          },
+          {
+            "label": "content-row",
+            "text": "hello",
+            "width": 20,
+            "x": 3,
+            "y": 1,
+            "paddingX": 0,
+            "prompt": null,
+            "rows": [
+              "────────────────────",
+              "hello\u001b[7m \u001b[0m              ",
+              "────────────────────"
+            ],
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "cursorBefore": {
+              "line": 0,
+              "col": 5
+            },
+            "cursorAfterClick": {
+              "line": 0,
+              "col": 3
+            },
+            "textAfterType": "helXlo"
+          },
+          {
+            "label": "past-content-end",
+            "text": "hello",
+            "width": 20,
+            "x": 3,
+            "y": 2,
+            "paddingX": 0,
+            "prompt": null,
+            "rows": [
+              "────────────────────",
+              "hello\u001b[7m \u001b[0m              ",
+              "────────────────────"
+            ],
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "cursorBefore": {
+              "line": 0,
+              "col": 5
+            },
+            "cursorAfterClick": {
+              "line": 0,
+              "col": 5
+            },
+            "textAfterType": "helloX"
+          },
+          {
+            "label": "bottom-border-row",
+            "text": "hello",
+            "width": 20,
+            "x": 3,
+            "y": 3,
+            "paddingX": 0,
+            "prompt": null,
+            "rows": [
+              "────────────────────",
+              "hello\u001b[7m \u001b[0m              ",
+              "────────────────────"
+            ],
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "cursorBefore": {
+              "line": 0,
+              "col": 5
+            },
+            "cursorAfterClick": {
+              "line": 0,
+              "col": 5
+            },
+            "textAfterType": "helloX"
+          },
+          {
+            "label": "wrapped-first-segment-past-end",
+            "text": "abcdefghij",
+            "width": 6,
+            "x": 6,
+            "y": 1,
+            "paddingX": 0,
+            "prompt": null,
+            "rows": [
+              "──────",
+              "abcde ",
+              "fghij\u001b[7m \u001b[0m",
+              "──────"
+            ],
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "cursorBefore": {
+              "line": 0,
+              "col": 10
+            },
+            "cursorAfterClick": {
+              "line": 0,
+              "col": 4
+            },
+            "textAfterType": "abcdXefghij"
+          },
+          {
+            "label": "wrapped-second-segment",
+            "text": "abcdefghij",
+            "width": 6,
+            "x": 2,
+            "y": 2,
+            "paddingX": 0,
+            "prompt": null,
+            "rows": [
+              "──────",
+              "abcde ",
+              "fghij\u001b[7m \u001b[0m",
+              "──────"
+            ],
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "cursorBefore": {
+              "line": 0,
+              "col": 10
+            },
+            "cursorAfterClick": {
+              "line": 0,
+              "col": 7
+            },
+            "textAfterType": "abcdefgXhij"
+          },
+          {
+            "label": "cjk-wide-grapheme",
+            "text": "世界",
+            "width": 20,
+            "x": 3,
+            "y": 1,
+            "paddingX": 0,
+            "prompt": null,
+            "rows": [
+              "────────────────────",
+              "世界\u001b[7m \u001b[0m               ",
+              "────────────────────"
+            ],
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "cursorBefore": {
+              "line": 0,
+              "col": 2
+            },
+            "cursorAfterClick": {
+              "line": 0,
+              "col": 1
+            },
+            "textAfterType": "世X界"
+          },
+          {
+            "label": "cjk-past-end",
+            "text": "世界",
+            "width": 20,
+            "x": 5,
+            "y": 1,
+            "paddingX": 0,
+            "prompt": null,
+            "rows": [
+              "────────────────────",
+              "世界\u001b[7m \u001b[0m               ",
+              "────────────────────"
+            ],
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "cursorBefore": {
+              "line": 0,
+              "col": 2
+            },
+            "cursorAfterClick": {
+              "line": 0,
+              "col": 2
+            },
+            "textAfterType": "世界X"
+          },
+          {
+            "label": "padded-content",
+            "text": "hello",
+            "width": 20,
+            "x": 4,
+            "y": 1,
+            "paddingX": 2,
+            "prompt": null,
+            "rows": [
+              "────────────────────",
+              "  hello\u001b[7m \u001b[0m            ",
+              "────────────────────"
+            ],
+            "result": {
+              "handled": true,
+              "focus": true,
+              "render": null
+            },
+            "cursorBefore": {
+              "line": 0,
+              "col": 5
+            },
+            "cursorAfterClick": {
+              "line": 0,
+              "col": 2
+            },
+            "textAfterType": "heXllo"
+          }
+        ]
+      }
+    },
+    {
+      "name": "editor-drag-selects-and-copies-instead-of-moving-the-cursor",
+      "dimensions": {
+        "columns": 20,
+        "rows": 6
+      },
+      "inputs": {
+        "text": "hello world"
+      },
+      "expected": {
+        "drag": {
+          "text": "hello world",
+          "press": "\u001b[<0;1;2M",
+          "drag": "\u001b[<32;5;2M",
+          "release": "\u001b[<0;5;2m",
+          "copied": [
+            "hello"
+          ],
+          "cursorBefore": {
+            "line": 0,
+            "col": 11
+          },
+          "cursorAfter": {
+            "line": 0,
+            "col": 11
+          },
+          "textAfterDrag": "hello world",
+          "screen": [
+            "─────────── Copied!",
+            "hello world",
+            "────────────────────",
+            "",
+            "",
+            ""
+          ]
+        }
+      }
+    }
+  ]
+}
