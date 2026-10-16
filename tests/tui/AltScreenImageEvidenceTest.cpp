@@ -24,6 +24,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
@@ -280,8 +281,8 @@ TEST_CASE("frozen fullscreen scroll crop keeps the destination rows and source b
     cch::tui::AltScreen tui(terminal);
     std::vector<std::string> lines{"alpha", "beta", "", "", "", "", "gamma", "delta"};
     std::vector<cch::tui::InlineImageRenderRegion> images;
-    images.push_back(placement(image, 2, int_of(image.at("columns")), int_of(image.at("rows")),
-                               int_of(image.at("id"))));
+    images.push_back(
+            placement(image, 2, int_of(image.at("columns")), int_of(image.at("rows")), int_of(image.at("id"))));
     auto viewport = std::make_unique<cch::tui::ScrollView>(
             std::make_unique<PlacementChild>(std::move(lines), std::move(images)),
             cch::tui::ScrollViewOptions{.follow_end = true, .primary = true});
@@ -300,6 +301,46 @@ TEST_CASE("frozen fullscreen scroll crop keeps the destination rows and source b
     REQUIRE(tui.render());
     check.check("scroll-back");
     CHECK(scroll_top->scroll_top() == int_of(check.last().at("scrollTop")));
+    check.require_done();
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("frozen fullscreen resize clears stale placements and re-places the band",
+        "[tui][image][alt-screen][issue1012][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_tui_evidence("alt-screen-image.json");
+    REQUIRE(bundle);
+    const auto& scenario = scenario_of(*bundle, "image-resize-repaint");
+    const auto& inputs = scenario.at("inputs");
+    const auto& image = inputs.at("image");
+    const auto& resizes = inputs.at("resizes").get_array();
+
+    auto terminal = terminal_of(scenario, cch::tui::InlineImageProtocol::Kitty);
+    cch::tui::AltScreen tui(terminal);
+    std::vector<std::string> lines{"alpha", "beta", "", "", "", "", "gamma", "delta"};
+    std::vector<cch::tui::InlineImageRenderRegion> images;
+    images.push_back(
+            placement(image, 2, int_of(image.at("columns")), int_of(image.at("rows")), int_of(image.at("id"))));
+    auto viewport = std::make_unique<cch::tui::ScrollView>(
+            std::make_unique<PlacementChild>(std::move(lines), std::move(images)),
+            cch::tui::ScrollViewOptions{.follow_end = true, .primary = true});
+    auto* scroll_top = viewport.get();
+    tui.set_layout_root(std::move(viewport));
+    PhaseChecker check(terminal, scenario);
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    check.check("initial");
+    CHECK(scroll_top->scroll_top() == int_of(check.last().at("scrollTop")));
+
+    const std::array<std::string_view, 2> actions{"shrink-to-2-rows", "grow-back-to-4-rows"};
+    REQUIRE(resizes.size() == actions.size());
+    for (std::size_t index = 0; index < actions.size(); ++index) {
+        const auto& resize = resizes[index];
+        REQUIRE(terminal.inject_resize(cch::tui::TerminalDimensions{
+                .columns = int_of(resize.at("columns")), .rows = int_of(resize.at("rows"))}));
+        REQUIRE(tui.render());
+        check.check(actions[index]);
+        CHECK(scroll_top->scroll_top() == int_of(check.last().at("scrollTop")));
+    }
     check.require_done();
     REQUIRE(tui.stop());
 }

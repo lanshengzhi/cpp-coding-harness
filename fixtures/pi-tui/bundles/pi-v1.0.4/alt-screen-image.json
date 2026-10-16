@@ -138,6 +138,117 @@
       }
     },
     {
+      "name": "image-resize-repaint",
+      "dimensions": {
+        "columns": 12,
+        "rows": 4
+      },
+      "inputs": {
+        "capabilities": "kitty",
+        "image": {
+          "id": 7004,
+          "columns": 4,
+          "rows": 4,
+          "widthPx": 16,
+          "heightPx": 64,
+          "mimeType": "image/png",
+          "data": "iVBORw0KGgoAAAANSUhEUgAAABAAAABACAIAAACcH2DBAAAALklEQVR42u3TsQkAAAwCQfdf2iyQJm04+PYawTQ5FQB4DMwEAA4BAFs9BgCPwQCIUPs91s6WBgAAAABJRU5ErkJggg=="
+        },
+        "content": [
+          "alpha",
+          "beta",
+          null,
+          "",
+          "",
+          "",
+          "gamma",
+          "delta"
+        ],
+        "follow": "end",
+        "resizes": [
+          {
+            "columns": 12,
+            "rows": 2
+          },
+          {
+            "columns": 12,
+            "rows": 4
+          }
+        ],
+        "steps": [
+          {
+            "action": "render"
+          },
+          {
+            "action": "resize",
+            "rows": 2
+          },
+          {
+            "action": "resize",
+            "rows": 4
+          }
+        ]
+      },
+      "expected": {
+        "phases": [
+          {
+            "action": "initial",
+            "scrollTop": 4,
+            "viewport": [
+              "",
+              "",
+              "gamma",
+              "delta"
+            ],
+            "images": [
+              {
+                "row": null,
+                "command": "\u001b_Ga=d,d=A,q=2\u001b\\"
+              },
+              {
+                "row": 0,
+                "command": "\u001b_Ga=T,f=100,q=2,C=1,c=4,i=7004,y=32,h=32,r=2;iVBORw0KGgoAAAANSUhEUgAAABAAAABACAIAAACcH2DBAAAALklEQVR42u3TsQkAAAwCQfdf2iyQJm04+PYawTQ5FQB4DMwEAA4BAFs9BgCPwQCIUPs91s6WBgAAAABJRU5ErkJggg==\u001b\\"
+              }
+            ]
+          },
+          {
+            "action": "shrink-to-2-rows",
+            "scrollTop": 6,
+            "viewport": [
+              "gamma",
+              "delta"
+            ],
+            "images": [
+              {
+                "row": null,
+                "command": "\u001b_Ga=d,d=a,q=2\u001b\\"
+              }
+            ]
+          },
+          {
+            "action": "grow-back-to-4-rows",
+            "scrollTop": 4,
+            "viewport": [
+              "",
+              "",
+              "gamma",
+              "delta"
+            ],
+            "images": [
+              {
+                "row": null,
+                "command": "\u001b_Ga=d,d=a,q=2\u001b\\"
+              },
+              {
+                "row": 0,
+                "command": "\u001b_Ga=p,q=2,C=1,c=4,i=7004,y=32,h=32,r=2\u001b\\"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "name": "image-anchor-move-reuse",
       "dimensions": {
         "columns": 10,

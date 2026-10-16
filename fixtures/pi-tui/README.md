@@ -248,6 +248,8 @@ fails. The kitty scenarios use a 16x64 PNG whose four 16-pixel bands differ in c
 `image-scroll-crop-round-trip` distinguishes the cropped source band at the window edge
 (`y=48,h=16,r=1`) from a reduced destination height or an unmodified source,
 `image-anchor-move-reuse` distinguishes the placement-only `a=p` reuse from a second transmission,
+`image-resize-repaint` distinguishes a reflowed window that drops the placement entirely from one
+that keeps a stale strip (the upload survives and returns as `a=p`),
 `image-removal-session-teardown` distinguishes the redraw clear `d=a` from the teardown `d=A`, and
 `image-decoded-bytes-eviction` / `image-offscreen-count-eviction` distinguish the per-id `d=I`
 eviction under the decoded-byte and count caps. The iTerm2 family stays separate original evidence

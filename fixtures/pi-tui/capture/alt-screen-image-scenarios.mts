@@ -137,6 +137,82 @@ export async function captureAltScreenImage(piCheckout: string) {
 		});
 	}
 
+	// A terminal resize reflows the viewport: the frozen full redraw clears the
+	// placements it had placed (the upload survives), drops the placement when
+	// the image leaves the smaller window, and re-places the cropped source band
+	// with a placement-only command when the window grows back. A stale
+	// placement beside the reflowed text would leave an image strip behind.
+	{
+		setCapabilities(KITTY);
+		const terminal = new VirtualTerminal(12, 4);
+		const writes = recordWrites(terminal);
+		const tui = new TuiAltScreen(terminal);
+		const imageId = 7004;
+		registerKittyImageMetadata({ imageId, columns: 4, rows: 4, widthPx: 16, heightPx: 64 });
+		const imageLine = encodeKitty(PNG, { columns: 4, rows: 4, imageId, moveCursor: false });
+		const transcript = new ScrollView(
+			{ render: () => ["alpha", "beta", imageLine, "", "", "", "gamma", "delta"], invalidate: () => {} },
+			{ follow: "end", primary: true },
+		);
+		tui.setLayoutRoot(transcript);
+		tui.start();
+		await terminal.waitForRender();
+
+		let cursor = 0;
+		const phases: any[] = [];
+		const observe = (action: string) => {
+			const commands = imageCommands(writes.slice(cursor));
+			cursor = writes.length;
+			phases.push({
+				action,
+				scrollTop: transcript.scrollTop,
+				viewport: terminal.getViewport().map((line: string) => line.trimEnd()),
+				images: commands,
+			});
+		};
+		observe("initial");
+		terminal.resize(12, 2);
+		await terminal.waitForRender();
+		observe("shrink-to-2-rows");
+		terminal.resize(12, 4);
+		await terminal.waitForRender();
+		observe("grow-back-to-4-rows");
+		tui.stop();
+		assert.ok(
+			phases[0].images.some((entry: any) => entry.command.includes("i=" + imageId + ",y=32,h=32,r=2")),
+			"the followed window starts on the source band below the hidden rows",
+		);
+		assert.ok(
+			phases[1].images.some((entry: any) => entry.command.includes("d=a")),
+			"the reflow clears the placements it had placed",
+		);
+		assert.ok(
+			!phases[1].images.some((entry: any) => entry.command.includes("a=p") || entry.command.includes("a=T")),
+			"the image leaves the smaller window instead of keeping a strip",
+		);
+		assert.ok(
+			phases[2].images.some((entry: any) => entry.command.includes("a=p") && entry.command.includes("y=32,h=32,r=2")),
+			"the grown window re-places the same cropped source band",
+		);
+
+		scenarios.push({
+			name: "image-resize-repaint",
+			dimensions: { columns: 12, rows: 4 },
+			inputs: {
+				capabilities: "kitty",
+				image: { id: imageId, columns: 4, rows: 4, widthPx: 16, heightPx: 64, mimeType: "image/png", data: PNG },
+				content: ["alpha", "beta", null, "", "", "", "gamma", "delta"],
+				follow: "end",
+				resizes: [
+					{ columns: 12, rows: 2 },
+					{ columns: 12, rows: 4 },
+				],
+				steps: [{ action: "render" }, { action: "resize", rows: 2 }, { action: "resize", rows: 4 }],
+			},
+			expected: { phases },
+		});
+	}
+
 	// The same resource placed at a new anchor row: the frozen cache reuses the
 	// upload with a placement-only command instead of transmitting again.
 	{

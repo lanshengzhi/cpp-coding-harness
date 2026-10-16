@@ -68,7 +68,7 @@
       },
       {
         "path": "capture/alt-screen-image-scenarios.mts",
-        "sha256": "44c25cf6f3cb88ace081534fde810e937144f8ab61300a2bde6d77ed62cd4e58"
+        "sha256": "adfaf6b97814736bf9d2693981cbf3b7198d0a34e103a20a48cb7e7af8879d40"
       }
     ]
   },
@@ -295,8 +295,8 @@
     {
       "path": "alt-screen-image.json",
       "family": "alt-screen-image",
-      "bytes": 43111,
-      "sha256": "64cd8113a1bb7ad0faf9ef18cc153798e1e582ca1e804f241f1b19c565c4462f",
+      "bytes": 45811,
+      "sha256": "9f6488f50bf71050b89f1215bdfec48f094b02808ce7cfbc2b3b1161106b22d8",
       "sourceEndpoints": [
         "packages/tui/src/tui-alt-screen.ts:doRender,beforeTerminalStart,beforeTerminalStop,scrollBy,prepareKittyScreen",
         "packages/tui/src/terminal-image.ts:cropKittyImageLine,getKittyImagePlacement,registerKittyImageMetadata,encodeKitty",
