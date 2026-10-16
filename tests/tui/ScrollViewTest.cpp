@@ -588,7 +588,7 @@ TEST_CASE(
 TEST_CASE("AltScreen reports a cursor only while its row is inside the implicit viewport",
         "[tui][alt-screen][scroll-view][issue1000]") {
     cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 4});
-    cch::tui::AltScreen tui(terminal);
+    cch::tui::AltScreen tui(terminal, true);
     auto child = std::make_unique<CursorChild>(numbered_lines(10), 2, 1);
     auto* child_pointer = child.get();
     REQUIRE(tui.add_child(std::move(child)));

@@ -345,7 +345,7 @@ TEST_CASE("AltScreen clears on shrink only when requested and after a render-sta
 TEST_CASE("AltScreen clamps the child cursor column and hides a row the frame does not paint",
         "[tui][alt-screen][issue997][issue1000][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 3});
-    cch::tui::AltScreen tui(terminal);
+    cch::tui::AltScreen tui(terminal, true);
     auto child = std::make_unique<AltChild>(std::vector<std::string>{"row"});
     auto* child_pointer = child.get();
     child_pointer->set_cursor(cch::tui::CursorPosition{.column = 20, .row = 0});

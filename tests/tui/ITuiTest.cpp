@@ -1,5 +1,8 @@
+#include <cch/tui/AltScreen.hpp>
+#include <cch/tui/Container.hpp>
 #include <cch/tui/ITui.hpp>
 #include <cch/tui/Overlay.hpp>
+#include <cch/tui/ScrollView.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
@@ -49,6 +52,32 @@ public:
 
 private:
     InputStats* stats_;
+    bool focused_{false};
+};
+
+class FocusableCursorInput final : public cch::tui::Component, public cch::tui::Focusable {
+public:
+    explicit FocusableCursorInput(
+            std::vector<std::string> lines, std::optional<cch::tui::CursorPosition> cursor = std::nullopt)
+        : lines_(std::move(lines)), cursor_(cursor) {}
+
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{.lines = lines_};
+    }
+
+    void invalidate() override {}
+
+    void set_cursor(std::optional<cch::tui::CursorPosition> cursor) { cursor_ = cursor; }
+    [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
+        return focused_ ? cursor_ : std::nullopt;
+    }
+
+    void set_focused(bool focused) override { focused_ = focused; }
+    [[nodiscard]] bool focused() const override { return focused_; }
+
+private:
+    std::vector<std::string> lines_;
+    std::optional<cch::tui::CursorPosition> cursor_;
     bool focused_{false};
 };
 
@@ -197,4 +226,215 @@ TEST_CASE("ITui clear_children does not dispatch to detached children", "[tui][i
     CHECK(stats.received == 0);
     REQUIRE(tui.render());
     REQUIRE(tui.stop());
+}
+
+TEST_CASE("ITui roots support hardware-cursor preference and IME positioning",
+        "[tui][hardware-cursor][issue1037][spec]") {
+    SECTION("defaults to false on both roots") {
+        cch::tui::VirtualTerminal term_main({.columns = 20, .rows = 5});
+        cch::tui::MainScreen main_screen{term_main};
+        CHECK_FALSE(main_screen.show_hardware_cursor());
+        CHECK_FALSE(main_screen.get_show_hardware_cursor());
+
+        cch::tui::VirtualTerminal term_alt({.columns = 20, .rows = 5});
+        cch::tui::AltScreen alt_screen{term_alt};
+        CHECK_FALSE(alt_screen.show_hardware_cursor());
+        CHECK_FALSE(alt_screen.get_show_hardware_cursor());
+    }
+
+    SECTION("preference survives stop and restart on ITui") {
+        cch::tui::VirtualTerminal term_main({.columns = 20, .rows = 5});
+        cch::tui::MainScreen main_screen{term_main};
+        cch::tui::ITui& tui = main_screen;
+
+        tui.set_show_hardware_cursor(true);
+        CHECK(tui.show_hardware_cursor());
+        REQUIRE(tui.start());
+        CHECK(tui.show_hardware_cursor());
+        REQUIRE(tui.stop());
+        CHECK(tui.show_hardware_cursor());
+        REQUIRE(tui.start());
+        CHECK(tui.show_hardware_cursor());
+        REQUIRE(tui.stop());
+    }
+
+    SECTION("MainScreen positions cursor for IME with visibility disabled by default") {
+        cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 5});
+        cch::tui::MainScreen main_screen{terminal};
+        auto input = std::make_unique<FocusableCursorInput>(
+                std::vector<std::string>{"test text"}, cch::tui::CursorPosition{.column = 4, .row = 0});
+        auto* input_pointer = input.get();
+        REQUIRE(main_screen.add_child(std::move(input)));
+        REQUIRE(main_screen.start());
+        REQUIRE(main_screen.set_focus(input_pointer));
+        REQUIRE(main_screen.render());
+
+        CHECK_FALSE(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 4);
+        CHECK(terminal.cursor().row == 0);
+
+        // When preference enabled, cursor becomes visible at same position
+        main_screen.set_show_hardware_cursor(true);
+        REQUIRE(main_screen.render());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 4);
+        CHECK(terminal.cursor().row == 0);
+
+        // When cursor is invalid/nullopt, cursor hides even if preference enabled
+        input_pointer->set_cursor(std::nullopt);
+        REQUIRE(main_screen.render());
+        CHECK_FALSE(terminal.modes().cursor_visible);
+
+        REQUIRE(main_screen.stop());
+    }
+
+    SECTION("AltScreen positions cursor for IME with visibility disabled by default") {
+        cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 5});
+        cch::tui::AltScreen alt_screen{terminal};
+        auto input = std::make_unique<FocusableCursorInput>(
+                std::vector<std::string>{"line 0", "line 1"}, cch::tui::CursorPosition{.column = 6, .row = 1});
+        auto* input_pointer = input.get();
+        REQUIRE(alt_screen.add_child(std::move(input)));
+        REQUIRE(alt_screen.start());
+        REQUIRE(alt_screen.set_focus(input_pointer));
+        REQUIRE(alt_screen.render());
+
+        CHECK_FALSE(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 6);
+        CHECK(terminal.cursor().row == 1);
+
+        // When preference enabled, cursor becomes visible at same position
+        alt_screen.set_show_hardware_cursor(true);
+        REQUIRE(alt_screen.render());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 6);
+        CHECK(terminal.cursor().row == 1);
+
+        // When preference toggled off while running, terminal cursor is immediately hidden
+        alt_screen.set_show_hardware_cursor(false);
+        CHECK_FALSE(terminal.modes().cursor_visible);
+
+        // When cursor is invalid/nullopt, cursor hides even if preference enabled
+        alt_screen.set_show_hardware_cursor(true);
+        input_pointer->set_cursor(std::nullopt);
+        REQUIRE(alt_screen.render());
+        CHECK_FALSE(terminal.modes().cursor_visible);
+
+        REQUIRE(alt_screen.stop());
+    }
+
+    SECTION("nested component positions cursor for IME with visibility disabled on MainScreen") {
+        cch::tui::VirtualTerminal terminal({.columns = 30, .rows = 10});
+        cch::tui::MainScreen main_screen{terminal};
+
+        auto container = std::make_unique<cch::tui::Container>();
+        REQUIRE(container->add_child(std::make_unique<cch::tui::Text>("header line", 0, 0)));
+        auto box = std::make_unique<cch::tui::Box>(2, 1);
+        auto input = std::make_unique<FocusableCursorInput>(
+                std::vector<std::string>{"nested input"}, cch::tui::CursorPosition{.column = 3, .row = 0});
+        auto* input_pointer = input.get();
+        REQUIRE(box->add_child(std::move(input)));
+        REQUIRE(container->add_child(std::move(box)));
+
+        REQUIRE(main_screen.add_child(std::move(container)));
+        REQUIRE(main_screen.start());
+        REQUIRE(main_screen.set_focus(input_pointer));
+        REQUIRE(main_screen.render());
+
+        // Box padding is left=2, top=1, plus 1 header line before box -> row = 1 + 1 = 2, col = 2 + 3 = 5
+        CHECK_FALSE(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 5);
+        CHECK(terminal.cursor().row == 2);
+
+        // When preference enabled, visible at same nested coordinates
+        main_screen.set_show_hardware_cursor(true);
+        REQUIRE(main_screen.render());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 5);
+        CHECK(terminal.cursor().row == 2);
+
+        REQUIRE(main_screen.stop());
+    }
+
+    SECTION("nested component positions cursor for IME with visibility disabled on AltScreen") {
+        cch::tui::VirtualTerminal terminal({.columns = 30, .rows = 10});
+        cch::tui::AltScreen alt_screen{terminal};
+
+        auto container = std::make_unique<cch::tui::Container>();
+        REQUIRE(container->add_child(std::make_unique<cch::tui::Text>("first row", 0, 0)));
+        auto box = std::make_unique<cch::tui::Box>(3, 1);
+        auto input = std::make_unique<FocusableCursorInput>(
+                std::vector<std::string>{"alt nested"}, cch::tui::CursorPosition{.column = 4, .row = 0});
+        auto* input_pointer = input.get();
+        REQUIRE(box->add_child(std::move(input)));
+        REQUIRE(container->add_child(std::move(box)));
+
+        REQUIRE(alt_screen.add_child(std::move(container)));
+        REQUIRE(alt_screen.start());
+        REQUIRE(alt_screen.set_focus(input_pointer));
+        REQUIRE(alt_screen.render());
+
+        // Box padding left=3, top=1, header 1 row -> row = 1 + 1 = 2, col = 3 + 4 = 7
+        CHECK_FALSE(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 7);
+        CHECK(terminal.cursor().row == 2);
+
+        // Enabled visibility
+        alt_screen.set_show_hardware_cursor(true);
+        REQUIRE(alt_screen.render());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 7);
+        CHECK(terminal.cursor().row == 2);
+
+        REQUIRE(alt_screen.stop());
+    }
+
+    SECTION("scrolled and clipped cursor positions for IME and hides when scrolled off on AltScreen") {
+        cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 4});
+        cch::tui::AltScreen alt_screen{terminal};
+
+        // Create 8 lines of text followed by a cursor input
+        std::vector<std::string> lines;
+        for (int i = 0; i < 8; ++i)
+            lines.push_back(std::format("line {}", i));
+        auto input = std::make_unique<FocusableCursorInput>(lines, cch::tui::CursorPosition{.column = 5, .row = 2});
+        auto* input_pointer = input.get();
+
+        REQUIRE(alt_screen.add_child(std::move(input)));
+        REQUIRE(alt_screen.start());
+        REQUIRE(alt_screen.set_focus(input_pointer));
+        REQUIRE(alt_screen.render());
+
+        // Following document end in a 4-row terminal with 8 lines scrolls viewport_top to 4
+        // Cursor at line 2 is above viewport_top (4), so it is not visible
+        CHECK_FALSE(terminal.modes().cursor_visible);
+
+        // Scroll to top: line 2 is visible at row 2
+        alt_screen.scroll_to_top();
+        REQUIRE(alt_screen.render());
+        CHECK_FALSE(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 5);
+        CHECK(terminal.cursor().row == 2);
+
+        // Turn on preference: cursor visible at row 2, col 5
+        alt_screen.set_show_hardware_cursor(true);
+        REQUIRE(alt_screen.render());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 5);
+        CHECK(terminal.cursor().row == 2);
+
+        // Scroll by 1 down: viewport_top is 1, so line 2 is at row 2 - 1 = 1
+        alt_screen.scroll_by(1);
+        REQUIRE(alt_screen.render());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 5);
+        CHECK(terminal.cursor().row == 1);
+
+        // Scroll to bottom: line 2 is scrolled off, so cursor hides even with preference true
+        alt_screen.scroll_to_bottom();
+        REQUIRE(alt_screen.render());
+        CHECK_FALSE(terminal.modes().cursor_visible);
+
+        REQUIRE(alt_screen.stop());
+    }
 }

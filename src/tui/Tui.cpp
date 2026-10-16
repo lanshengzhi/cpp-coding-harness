@@ -73,13 +73,26 @@ std::optional<OverlayBounds> OverlayHandle::get_bounds() const {
     return context->owner->overlay_bounds_internal(overlay_);
 }
 
-MainScreen::MainScreen(Terminal& terminal)
+MainScreen::MainScreen(Terminal& terminal, bool show_hardware_cursor)
     : detail::TuiHost(terminal), render_schedule_state_(std::make_shared<RenderScheduleState>()),
       overlay_handle_context_(std::make_shared<detail::OverlayHandleContext>()),
       compositor_(std::make_unique<detail::OverlayCompositor>()),
-      render_pipeline_(std::make_unique<detail::RenderPipeline>(terminal)) {
+      render_pipeline_(std::make_unique<detail::RenderPipeline>(terminal, show_hardware_cursor)),
+      show_hardware_cursor_(show_hardware_cursor) {
     render_schedule_state_->owner = this;
     overlay_handle_context_->owner = this;
+}
+
+void MainScreen::set_show_hardware_cursor(bool enabled) {
+    if (show_hardware_cursor_ == enabled) return;
+    show_hardware_cursor_ = enabled;
+    if (render_pipeline_) {
+        render_pipeline_->set_show_hardware_cursor(enabled);
+    }
+    if (!enabled && started_ && !stopping_) {
+        (void)terminal_.set_cursor_visible(false);
+    }
+    request_render();
 }
 
 MainScreen::~MainScreen() {

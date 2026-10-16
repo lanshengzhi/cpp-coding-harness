@@ -26,7 +26,8 @@
 
 namespace cch::tui::detail {
 
-RenderPipeline::RenderPipeline(Terminal& terminal) : terminal_(terminal) {}
+RenderPipeline::RenderPipeline(Terminal& terminal, bool show_hardware_cursor)
+    : terminal_(terminal), show_hardware_cursor_(show_hardware_cursor) {}
 
 void RenderPipeline::start(TerminalDimensions dimensions) noexcept {
     if (!restored_state_pending_start_) {
@@ -197,6 +198,12 @@ void RenderPipeline::position_hardware_cursor(
         hardware_cursor_row_ = target_row;
     }
     cursor_row_ = total_lines == 0 ? 0 : total_lines - 1;
+
+    if (show_hardware_cursor_) {
+        (void)terminal_.set_cursor_visible(true);
+    } else {
+        (void)terminal_.set_cursor_visible(false);
+    }
 }
 
 support::ExpectedVoid RenderPipeline::write_frame(std::string_view output) {
