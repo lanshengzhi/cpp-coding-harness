@@ -9,6 +9,7 @@
 #include <cch/tui/AltScreen.hpp>
 #include <cch/tui/ScrollView.hpp>
 #include <cch/tui/Text.hpp>
+#include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <catch2/catch_message.hpp>
@@ -109,6 +110,14 @@ public:
             REQUIRE(terminal.inject_input("\x1b[<64;1;1M"));
     }
 
+    [[nodiscard]] cch::tui::Text* editor() { return editor_; }
+    [[nodiscard]] std::unique_ptr<cch::tui::Component> take_editor() { return viewport_.take_editor(); }
+    [[nodiscard]] support::ExpectedVoid set_editor_component(std::unique_ptr<cch::tui::Component> editor) {
+        return viewport_.set_editor(std::move(editor));
+    }
+    void take_root() { detached_root_ = screen_.take_layout_root(); }
+    [[nodiscard]] std::unique_ptr<cch::tui::Component> release_root() { return std::move(detached_root_); }
+    void reinstall_root(std::unique_ptr<cch::tui::Component> root) { screen_.set_layout_root(std::move(root)); }
     [[nodiscard]] cch::tui::ScrollView& transcript() { return *viewport_.transcript; }
     [[nodiscard]] cch::tui::AltScreen& screen() { return screen_; }
     [[nodiscard]] std::vector<std::string> rows() const { return trimmed_rows(terminal); }
@@ -121,6 +130,7 @@ public:
 private:
     cch::tui::AltScreen screen_;
     ChatViewport viewport_;
+    std::unique_ptr<cch::tui::Component> detached_root_;
     cch::tui::Text* document_{nullptr};
     cch::tui::Text* editor_{nullptr};
 };
@@ -204,6 +214,61 @@ TEST_CASE("ChatViewport keeps the dock fixed while the transcript scrolls indepe
     const std::vector<std::string> dock{after.begin() + 1, after.end()};
     const std::vector<std::string> fixed{before.begin() + 1, before.end()};
     CHECK(dock == fixed);
+}
+
+TEST_CASE("ChatViewport editor can leave and re-enter its retained dock without losing scroll state",
+        "[coding_agent][tui][fullscreen][viewport][issue1018][spec]") {
+    InstalledViewport viewport(20,
+            8,
+            Regions{
+                    .document = {"doc-01", "doc-02", "doc-03", "doc-04", "doc-05", "doc-06", "doc-07", "doc-08",
+                            "doc-09", "doc-10", "doc-11", "doc-12", "doc-13", "doc-14", "doc-15", "doc-16",
+                            "doc-17", "doc-18", "doc-19", "doc-20"},
+                    .pending = "pending-1",
+                    .status = "status-1",
+                    .editor = "editor-1",
+                    .footer = {"footer-1", "footer-2"},
+            });
+    viewport.render();
+    viewport.wheel_up(2);
+    viewport.render();
+    const auto scroll_top = viewport.transcript().scroll_top();
+    REQUIRE(scroll_top > 0);
+    REQUIRE_FALSE(viewport.transcript().following_end());
+    auto before = viewport.rows();
+
+    viewport.take_root();
+    auto root = viewport.release_root();
+    REQUIRE(root);
+    REQUIRE(viewport.screen().stop(cch::tui::TuiStopOptions{.preserve_screen = true}));
+    auto* original_editor = viewport.editor();
+    REQUIRE(original_editor != nullptr);
+    auto taken = viewport.take_editor();
+    REQUIRE(taken);
+    CHECK(taken.get() == original_editor);
+    REQUIRE(root->render(20));
+
+    cch::tui::MainScreen regular(viewport.terminal);
+    REQUIRE(regular.add_child(std::move(taken)));
+    REQUIRE(regular.set_focus(nullptr));
+    REQUIRE(regular.start());
+    REQUIRE(regular.render());
+    auto returned = regular.take_children();
+    REQUIRE(returned.size() == 1);
+    REQUIRE(regular.stop(cch::tui::TuiStopOptions{.preserve_screen = true}));
+
+    CHECK(returned.front().get() == original_editor);
+    REQUIRE(viewport.set_editor_component(std::move(returned.front())));
+    REQUIRE(root->render(20));
+    CHECK(viewport.transcript().scroll_top() == scroll_top);
+    CHECK_FALSE(viewport.transcript().following_end());
+    viewport.reinstall_root(std::move(root));
+    REQUIRE(viewport.screen().start());
+    REQUIRE(viewport.screen().render());
+    const auto after = viewport.rows();
+    CHECK(after == before);
+    CHECK(viewport.transcript().scroll_top() == scroll_top);
+    CHECK_FALSE(viewport.transcript().following_end());
 }
 
 TEST_CASE("ChatViewport measures the whole document and follows appended rows",

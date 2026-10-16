@@ -6,6 +6,60 @@
 #include <utility>
 
 namespace cch::coding_agent::tui {
+class ChatViewport::EditorSlot final : public cch::tui::Component {
+public:
+    explicit EditorSlot(std::unique_ptr<cch::tui::Component> editor) : editor_(std::move(editor)) {}
+
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
+        if (!editor_) return cch::tui::RenderResult{};
+        return editor_->render(width);
+    }
+
+    void invalidate() override {
+        if (editor_) editor_->invalidate();
+    }
+
+    [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
+        return editor_ ? editor_->cursor_location() : std::nullopt;
+    }
+
+    [[nodiscard]] bool contains(const cch::tui::Component* target) const override {
+        return this == target || (editor_ && editor_->contains(target));
+    }
+
+    [[nodiscard]] std::unique_ptr<cch::tui::Component> take() { return std::move(editor_); }
+
+    [[nodiscard]] support::ExpectedVoid set(std::unique_ptr<cch::tui::Component> editor) {
+        if (!editor) {
+            return std::unexpected(support::make_error(
+                    support::ErrorCode::Validation, "Chat viewport editor cannot be null"));
+        }
+        if (editor_) {
+            return std::unexpected(support::make_error(
+                    support::ErrorCode::Validation, "Chat viewport editor slot is already occupied"));
+        }
+        editor_ = std::move(editor);
+        return {};
+    }
+
+private:
+    std::unique_ptr<cch::tui::Component> editor_;
+};
+
+std::unique_ptr<cch::tui::Component> ChatViewport::take_editor() {
+    if (!editor_slot_) return nullptr;
+    return editor_slot_->take();
+}
+
+support::ExpectedVoid ChatViewport::set_editor(std::unique_ptr<cch::tui::Component> editor) {
+    if (!editor_slot_) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Chat viewport has no editor slot"));
+    }
+    if (auto restored = editor_slot_->set(std::move(editor)); !restored) return restored;
+    return {};
+}
+
 namespace {
 
 /// The frozen dock entry for a non-editor region (`{ shrink: 1, minSize: 0 }`).
@@ -53,6 +107,7 @@ support::Expected<ChatViewport> create_chat_viewport(ChatViewportOptions options
     auto* transcript_pointer = transcript.get();
 
     auto dock = std::make_unique<cch::tui::VStack>();
+    ChatViewport result;
     if (auto added = add_dock_region(*dock, std::move(options.pending_messages), 0); !added) {
         return std::unexpected(added.error());
     }
@@ -64,7 +119,9 @@ support::Expected<ChatViewport> create_chat_viewport(ChatViewportOptions options
             return std::unexpected(added.error());
         }
     }
-    if (auto added = add_dock_region(*dock, std::move(options.editor), kEditorMinRows); !added) {
+    auto editor_slot = std::make_unique<ChatViewport::EditorSlot>(std::move(options.editor));
+    result.editor_slot_ = editor_slot.get();
+    if (auto added = add_dock_region(*dock, std::move(editor_slot), kEditorMinRows); !added) {
         return std::unexpected(added.error());
     }
     if (options.widgets_below != nullptr) {
@@ -91,7 +148,9 @@ support::Expected<ChatViewport> create_chat_viewport(ChatViewportOptions options
         return std::unexpected(added.error());
     }
 
-    return ChatViewport{.root = std::move(root), .transcript = transcript_pointer};
+    result.root = std::move(root);
+    result.transcript = transcript_pointer;
+    return result;
 }
 
 } // namespace cch::coding_agent::tui
