@@ -16,6 +16,7 @@
 #include <functional>
 #include <memory>
 #include <utility>
+#include <vector>
 
 namespace cch::tui {
 
@@ -44,6 +45,16 @@ public:
             std::unique_ptr<Component> component) = 0;
     [[nodiscard]] virtual support::ExpectedVoid remove_child(Component* component) = 0;
     virtual void clear_children() = 0;
+
+    /// Detach every mounted child and return it without destroying it (pi
+    /// `TuiBase.children` capture plus `clear()`, `tui.ts:362`): the caller
+    /// owns the returned components and may mount them on another root, which
+    /// is how a product keeps one component tree across a renderer switch.
+    [[nodiscard]] virtual std::vector<std::unique_ptr<Component>> take_children() = 0;
+
+    /// Whether any overlay entry exists, hidden entries included (pi
+    /// `TuiBase.hasOverlayEntries`, `tui.ts:527`).
+    [[nodiscard]] virtual bool has_overlay_entries() const noexcept = 0;
 
     [[nodiscard]] virtual support::ExpectedVoid set_focus(Component* component) = 0;
     [[nodiscard]] virtual Component* focus() const noexcept = 0;

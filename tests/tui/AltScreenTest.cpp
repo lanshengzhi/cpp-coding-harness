@@ -1,4 +1,5 @@
 #include <cch/tui/AltScreen.hpp>
+#include <cch/tui/Container.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
@@ -44,6 +45,27 @@ private:
     std::optional<cch::tui::CursorPosition> cursor_;
     bool focused_{false};
 };
+
+TEST_CASE("AltScreen layout root can be taken and reinstalled without destroying its tree",
+        "[tui][layout][issue1018][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 2});
+    cch::tui::AltScreen tui{terminal};
+    auto child = std::make_unique<AltChild>(std::vector<std::string>{"input"});
+    auto* child_pointer = child.get();
+    auto root = std::make_unique<cch::tui::Container>();
+    REQUIRE(root->add_child(std::move(child)));
+    auto* root_pointer = root.get();
+    tui.set_layout_root(std::move(root));
+    REQUIRE(tui.set_focus(child_pointer));
+
+    auto taken = tui.take_layout_root();
+    REQUIRE(taken);
+    CHECK(taken.get() == root_pointer);
+    CHECK(tui.focus() == nullptr);
+    tui.set_layout_root(std::move(taken));
+    REQUIRE(tui.set_focus(child_pointer));
+    CHECK(tui.focus() == child_pointer);
+}
 
 /// A component that renders one word row, ignores presses (so the fullscreen
 /// root owns the selection gesture) and consumes clicks while recording the

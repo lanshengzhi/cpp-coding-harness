@@ -1,4 +1,5 @@
 #include <cch/tui/ITui.hpp>
+#include <cch/tui/Overlay.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
@@ -141,6 +142,41 @@ TEST_CASE("ITui removal detaches before focus callbacks and preserves child life
     REQUIRE(terminal.inject_input("x"));
     tui.clear_children();
     REQUIRE(tui.stop());
+}
+
+TEST_CASE("ITui take_children transfers live components and sees hidden overlay entries",
+        "[tui][lifecycle][issue1018][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 8, .rows = 2});
+    cch::tui::MainScreen main_screen{terminal};
+    cch::tui::ITui& tui = main_screen;
+
+    InputStats stats;
+    auto input = std::make_unique<FocusableInput>(&stats);
+    auto* input_pointer = input.get();
+    REQUIRE(tui.add_child(std::move(input)));
+    REQUIRE(tui.set_focus(input_pointer));
+    CHECK_FALSE(tui.has_overlay_entries());
+
+    auto overlay = std::make_unique<cch::tui::Overlay>();
+    overlay->set_visible(false);
+    REQUIRE(tui.add_overlay(std::move(overlay)));
+    CHECK(tui.has_overlay_entries());
+
+    auto children = tui.take_children();
+    REQUIRE(children.size() == 1);
+    CHECK(children.front().get() == input_pointer);
+    CHECK(tui.focus() == nullptr);
+    CHECK_FALSE(stats.destroyed);
+    CHECK_FALSE(stats.focused);
+    CHECK(tui.has_overlay_entries());
+
+    auto remounted = tui.add_child(std::move(children.front()));
+    REQUIRE(remounted);
+    CHECK(&remounted->get() == input_pointer);
+    REQUIRE(tui.set_focus(input_pointer));
+    CHECK(tui.focus() == input_pointer);
+    tui.clear_children();
+    CHECK(stats.destroyed);
 }
 
 TEST_CASE("ITui clear_children does not dispatch to detached children", "[tui][issue977][spec]") {

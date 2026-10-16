@@ -143,7 +143,9 @@ support::ExpectedVoid MainScreen::remove_child(Component* component) {
     return {};
 }
 
-void MainScreen::clear_children() {
+void MainScreen::clear_children() { static_cast<void>(take_children()); }
+
+std::vector<std::unique_ptr<Component>> MainScreen::take_children() {
     ChildOperation operation(*this);
     const bool was_focused = focused_ != nullptr && owns(focused_);
     const bool was_blocker = overlay_focus_restore_.status == OverlayFocusRestoreStatus::Blocked &&
@@ -169,14 +171,16 @@ void MainScreen::clear_children() {
     } else if (removed_restore_target) {
         overlay_focus_restore_.resume_target = nullptr;
     }
-    for (auto& child : children_)
-        retired_children_.push_back(std::move(child));
+    auto taken = std::move(children_);
     children_.clear();
     rendered_child_rows_.clear();
     rendered_children_valid_ = false;
     if (was_focused && !was_blocker) set_focus_internal(nullptr, false);
     request_render();
+    return taken;
 }
+
+bool MainScreen::has_overlay_entries() const noexcept { return compositor_->has_overlay_entries(); }
 
 support::Expected<OverlayHandle> MainScreen::show_overlay(std::unique_ptr<Overlay> overlay) {
     if (!overlay) {

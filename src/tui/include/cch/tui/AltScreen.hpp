@@ -132,6 +132,8 @@ public:
             std::unique_ptr<Component> component) override;
     [[nodiscard]] support::ExpectedVoid remove_child(Component* component) override;
     void clear_children() override;
+    [[nodiscard]] std::vector<std::unique_ptr<Component>> take_children() override;
+    [[nodiscard]] bool has_overlay_entries() const noexcept override;
 
     /// Install the component that fills the viewport as the root of a
     /// constrained layout (pi `TuiAltScreen.setLayoutRoot`). While one is
@@ -139,6 +141,13 @@ public:
     /// frame follow it, and the child composition is ignored. Passing null
     /// restores the sequential composition of the attached children.
     void set_layout_root(std::unique_ptr<Component> root);
+
+    /// Detach the installed layout root and hand it back without destroying it
+    /// (pi `setLayoutRoot(undefined)` with product ownership): the caller owns
+    /// the returned component, so a root that holds the surviving product
+    /// composition can be re-installed on a later root. Null when none is
+    /// installed.
+    [[nodiscard]] std::unique_ptr<Component> take_layout_root();
 
     /// pi `viewportTop`: the top row of the primary scroll viewport.
     [[nodiscard]] std::size_t viewport_top() const;
