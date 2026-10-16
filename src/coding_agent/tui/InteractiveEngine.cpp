@@ -277,7 +277,6 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     const auto weak = weak_from_this();
     auto view = make_interactive_view(weak);
     view_ = view.get();
-    regular_focus_ = view_;
     auto viewport = InteractiveView::make_fullscreen_root(std::move(view), cch::tui::ScrollbarMode::Auto);
     if (!viewport) return fail_start(viewport.error());
     fullscreen_viewport_.emplace(std::move(*viewport));
@@ -301,23 +300,7 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         }
     }
 
-    tui_->set_keybinding_context(keybindings_ ? keybindings_->context() : nullptr);
-    tui_->set_scheduler(tui_scheduler_.get());
-    tui_->set_clear_on_shrink(clear_on_shrink_);
-    apply_debug_hook();
-    if (auto sinks = bind_render_sinks(); !sinks) return std::unexpected(sinks.error());
-    if (tui_ == &fullscreen_host_->tui() && alt_screen_render_state_) {
-        if (auto restored = fullscreen_host_->alt_screen().restore_render_state(*alt_screen_render_state_); !restored) {
-            return fail_start(restored.error());
-        }
-        alt_screen_render_state_.reset();
-    }
-    if (tui_ == main_screen_.get() && main_screen_render_state_) {
-        if (auto restored = main_screen_->restore_render_state(*main_screen_render_state_); !restored) {
-            return fail_start(restored.error());
-        }
-        main_screen_render_state_.reset();
-    }
+    if (auto wired = wire_selected_root(); !wired) return fail_start(wired.error());
     if (auto started = tui_->start(); !started) return fail_start(started.error());
     tui_started_ = true;
     running_ = true;
@@ -385,6 +368,166 @@ void InteractiveEngine::apply_debug_hook() {
         return;
     }
     tui_->set_on_debug(cch::tui::TuiDebugHook{[hook = debug_hook_]() { hook(); }});
+}
+
+support::ExpectedVoid InteractiveEngine::wire_selected_root() {
+    tui_->set_keybinding_context(keybindings_ ? keybindings_->context() : nullptr);
+    tui_->set_scheduler(tui_scheduler_.get());
+    tui_->set_clear_on_shrink(clear_on_shrink_);
+    apply_debug_hook();
+    if (auto sinks = bind_render_sinks(); !sinks) return std::unexpected(sinks.error());
+    // pi restores the captured main-screen state on the replacement before it
+    // mounts components (`interactive-mode.ts:902`), so the regular root
+    // repaints from the committed baseline the preserved main buffer still
+    // shows. A fullscreen root owns no such step: entering the alternate buffer
+    // clears it (`DECSET 1049`) and `AltScreen::start` drops its own stale
+    // baseline for that reason. A root that captured nothing (the initial
+    // wiring, or a first switch to regular) imports nothing.
+    if (tui_ == main_screen_.get() && main_screen_render_state_) {
+        if (auto restored = main_screen_->restore_render_state(*main_screen_render_state_); !restored) {
+            return std::unexpected(restored.error());
+        }
+        main_screen_render_state_.reset();
+    }
+    return {};
+}
+
+void InteractiveEngine::select_root(coding_agent::TuiMode mode) {
+    const bool fullscreen = mode == coding_agent::TuiMode::Fullscreen;
+    tui_ = fullscreen ? static_cast<cch::tui::ITui*>(&fullscreen_host_->tui()) : main_screen_.get();
+    // The fullscreen consumers are borrowed, not owned: pi installs them on the
+    // renderer it creates (`interactive-mode.ts:870-874`) and the regular main
+    // screen dispatches no selection copy and no right-click paste, so the
+    // selected root alone decides which of them are live.
+    set_alt_screen_host(fullscreen ? fullscreen_host_.get() : nullptr);
+    // `switch_tui_mode` refuses while any overlay entry exists, so the engine
+    // owes the retired root no close sequence; dropping the aliases keeps
+    // `close_overlay()` and the `/copy` path from reaching into it afterwards.
+    // pi rebuilds these anyway: the overlay stack belongs to the renderer that
+    // was replaced (`interactive-mode.ts:893`).
+    active_overlay_ = nullptr;
+    active_overlay_handle_ = {};
+}
+
+support::ExpectedVoid InteractiveEngine::mount_selected_root(
+        std::vector<std::unique_ptr<cch::tui::Component>> children) {
+    // Exactly one `InteractiveView` instance survives a switch. Regular mode
+    // mounts it as the main screen's child, so the capture above carried it;
+    // fullscreen keeps it in the retained dock's editor slot (#1036), so the
+    // regular root's capture holds no view and the dock hands the same
+    // instance back.
+    std::unique_ptr<cch::tui::Component> view_owner;
+    for (auto child = children.begin(); child != children.end(); ++child) {
+        if (child->get() == view_) {
+            view_owner = std::move(*child);
+            children.erase(child);
+            break;
+        }
+    }
+    if (view_owner == nullptr) view_owner = fullscreen_viewport_->take_editor();
+    if (view_owner == nullptr) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown, "The interactive view did not survive the TUI mode switch"));
+    }
+
+    const bool fullscreen = tui_ == &fullscreen_host_->tui();
+    // The view renders one shape per mode: the fullscreen dock's editor entry
+    // emits the editor region only, while the regular main-screen child owns the
+    // whole document and dock budget.
+    if (view_ != nullptr) view_->set_fullscreen(fullscreen);
+    if (fullscreen) {
+        if (auto seated = fullscreen_viewport_->set_editor(std::move(view_owner)); !seated) {
+            return std::unexpected(seated.error());
+        }
+    } else if (auto attached = tui_->add_child(std::move(view_owner)); !attached) {
+        return std::unexpected(attached.error());
+    }
+    // pi mounts the captured components and then installs the layout root
+    // (`interactive-mode.ts:873-875`); the explicit focus below follows, so the
+    // toolkit's fallback focus never survives the switch.
+    for (auto& child : children) {
+        if (auto attached = tui_->add_child(std::move(child)); !attached) {
+            return std::unexpected(attached.error());
+        }
+    }
+    if (fullscreen) {
+        fullscreen_host_->alt_screen().set_layout_root(std::move(fullscreen_viewport_->root));
+    }
+    return {};
+}
+
+support::Expected<bool> InteractiveEngine::switch_tui_mode(coding_agent::TuiMode mode) {
+    const auto previous_mode = tui_ == main_screen_.get() ? coding_agent::TuiMode::Regular
+                                                          : coding_agent::TuiMode::Fullscreen;
+    // pi orders the same-mode no-op before the overlay guard, so re-selecting
+    // the live mode always succeeds.
+    if (mode == previous_mode) return true;
+    // pi `if (previousUi.hasOverlayEntries) return false;`: every entry blocks
+    // the switch, hidden ones included, and the refusal leaves the engine
+    // untouched for the caller to report.
+    if (tui_->has_overlay_entries()) return false;
+    if (!tui_started_) {
+        // A swap outside a started renderer has nothing to preserve and would
+        // take the terminal over from a run that is already closing.
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "TUI mode cannot change before the renderer starts"));
+    }
+
+    // The retained layout root owns the dock and the one view instance, so it is
+    // taken back before the retired root stops; the view stays alive through the
+    // dock's own regions while the switch runs.
+    if (previous_mode == coding_agent::TuiMode::Fullscreen) {
+        fullscreen_viewport_->root = fullscreen_host_->alt_screen().take_layout_root();
+    }
+    // pi captures the focused component and the frame flags while the children
+    // are still mounted; `take_children()` is also the detach here, and
+    // detaching the focused component would clear the focus before the
+    // replacement root could be handed it.
+    auto* const focus = tui_->focus();
+    clear_on_shrink_ = tui_->clear_on_shrink();
+    // pi `[...previousUi.children]` plus `previousUi.clear()`: the capture and
+    // the detach are one step, with the toolkit's focus and overlay bookkeeping
+    // included.
+    auto children = tui_->take_children();
+    // pi captures the render state of a `TuiMainScreen` and nothing else: the
+    // replacement fullscreen root enters a cleared alternate buffer, so it has
+    // no baseline to import.
+    if (previous_mode == coding_agent::TuiMode::Regular) {
+        main_screen_render_state_ = main_screen_->capture_render_state();
+    }
+    // pi `previousUi.stop({ preserveScreen: true })`: the retired root writes no
+    // exit sequence, so the replacement's first paint repaints over the same
+    // screen instead of clearing it.
+    if (auto stopped = tui_->stop(cch::tui::TuiStopOptions{.preserve_screen = true}); !stopped) {
+        return std::unexpected(stopped.error());
+    }
+    tui_started_ = false;
+    // pi `previousUi.setFocus(null)`, after the capture above already took the
+    // focused component out of the retired tree.
+    if (auto unfocused = tui_->set_focus(nullptr); !unfocused) return std::unexpected(unfocused.error());
+
+    select_root(mode);
+    if (auto mounted = mount_selected_root(std::move(children)); !mounted) {
+        return std::unexpected(mounted.error());
+    }
+    if (auto wired = wire_selected_root(); !wired) return std::unexpected(wired.error());
+    tui_->invalidate();
+    if (auto focused = tui_->set_focus(focus); !focused) return std::unexpected(focused.error());
+    if (auto started = tui_->start(); !started) return std::unexpected(started.error());
+    tui_started_ = true;
+    // pi rebinds the live consumers after `start()`: the theme's terminal
+    // colour-scheme listener, then the extension terminal input listeners
+    // (`rebindExtensionTerminalInputListeners`, `interactive-mode.ts:928`).
+    // `rebind` reattaches the listeners the host installed and keeps the
+    // extension editor factory from running again, so nothing mode-specific
+    // survives as a per-mode lifecycle.
+    if (theme_controller_) theme_controller_->rebind_tui(*tui_);
+    extension_ui_host_.rebind(*tui_);
+    // pi's trailing progress restore needs `showTerminalProgress` and the
+    // streaming/compacting facts; this product has no terminal-progress setting
+    // and no caller of `Terminal::set_progress` yet, so there is nothing to
+    // restore here.
+    return true;
 }
 
 boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() {

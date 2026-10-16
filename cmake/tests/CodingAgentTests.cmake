@@ -208,6 +208,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/TreeSelectorComponentTest.cpp
         tests/coding_agent/tui/TreeSelectorInteractiveTest.cpp
         tests/coding_agent/tui/TuiActionSeamTest.cpp
+        tests/coding_agent/tui/TuiModeSwitchTest.cpp
         tests/coding_agent/tui/UserBashInteractiveModeTest.cpp
         tests/coding_agent/tui/UserMessageSelectorTest.cpp
 )

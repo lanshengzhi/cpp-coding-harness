@@ -14,9 +14,26 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace cch::coding_agent::tui {
+
+namespace {
+
+/// pi `settings-selector.ts` renders the TUI mode as the `tuiMode` setting's own
+/// wire value; the settings manager stores and returns it in that spelling.
+[[nodiscard]] std::string tui_mode_value(coding_agent::TuiMode mode) {
+    return mode == coding_agent::TuiMode::Regular ? "regular" : "fullscreen";
+}
+
+/// The inverse for `onTuiModeChange(newValue as TuiMode)`: one of the two values
+/// the item offers, resolved back to the mode the engine switches on.
+[[nodiscard]] coding_agent::TuiMode tui_mode_for_value(std::string_view value) {
+    return value == "regular" ? coding_agent::TuiMode::Regular : coding_agent::TuiMode::Fullscreen;
+}
+
+} // namespace
 
 SettingsFlowController::SettingsFlowController(
     boost::asio::any_io_executor executor,
@@ -83,6 +100,13 @@ void SettingsFlowController::show_settings_selector() {
     config.current_theme = settings_manager_->global_settings().theme.value_or("dark");
     config.active_theme = std::string{theme_controller_->active_theme_name()};
     config.available_themes = theme_controller_->available_theme_names();
+    config.current_tui_mode = tui_mode_value(settings_manager_->get_tui_mode());
+
+    // The TUI-mode row rolls back to the live renderer's mode when a switch is
+    // refused (pi `selector?.getSettingsList().updateValue("tui-mode",
+    // this.ui.mode)`), and the selector is built from the callbacks below, so the
+    // row is reached through a slot the callback can outlive.
+    auto selector_slot = std::make_shared<std::weak_ptr<SettingsSelectorComponent>>();
 
     const auto weak = weak_from_this();
     SettingsSelectorCallbacks callbacks;
@@ -168,6 +192,35 @@ void SettingsFlowController::show_settings_selector() {
             });
         }
     };
+    callbacks.on_tui_mode_change = [weak, selector_slot](std::string value) {
+        if (const auto self = weak.lock()) {
+            self->post([self, value = std::move(value), selector_slot]() mutable {
+                if (self->settings_manager_ == nullptr || !self->hooks_.switch_tui_mode) return;
+                const auto requested = tui_mode_for_value(value);
+                auto switched = self->hooks_.switch_tui_mode(requested);
+                if (!switched || !*switched) {
+                    // pi keeps the live mode selected: the refused row is put
+                    // back before the status line explains why.
+                    if (const auto selector = selector_slot->lock(); selector && self->hooks_.current_tui_mode) {
+                        selector->update_value("tui-mode", tui_mode_value(self->hooks_.current_tui_mode()));
+                    }
+                    if (!switched) {
+                        self->show_error(combined_error_text(switched.error()));
+                    } else if (self->presenter_ != nullptr) {
+                        self->presenter_->show_status("Close active overlays before changing TUI mode");
+                    }
+                    return;
+                }
+                // pi `settingsManager.setTuiMode(mode)` then `showStatus(`TUI
+                // mode: ${mode}`)`; only the global scope is written, so the
+                // next run starts on the mode this one is already rendering.
+                if (auto saved = self->settings_manager_->set_tui_mode(requested); !saved) {
+                    self->show_error(combined_error_text(saved.error()));
+                }
+                if (self->presenter_ != nullptr) self->presenter_->show_status("TUI mode: " + value);
+            });
+        }
+    };
     callbacks.on_theme_preview = [weak](std::string theme_name) {
         if (const auto self = weak.lock()) {
             self->post([self, theme_name = std::move(theme_name)]() mutable {
@@ -183,6 +236,7 @@ void SettingsFlowController::show_settings_selector() {
         keybindings_->get(),
         std::move(config),
         std::move(callbacks));
+    *selector_slot = selector;
     if (presenter_ != nullptr) {
         presenter_->replace_prompt_slot(std::move(selector));
     }

@@ -225,6 +225,32 @@ private:
     /// is setter-only on `ITui`), so the engine keeps the value it installed.
     void apply_debug_hook();
 
+    /// Point `tui_` and its borrowed consumers at one of the two owned roots
+    /// (pi `this.renderer = nextUi` plus `this.options.tuiMode = mode`).
+    /// `switch_tui_mode` reaches this only once every alias into the retired
+    /// root is gone: the overlay refusal leaves no engine overlay behind, and
+    /// `view_` keeps its one instance across the switch.
+    void select_root(coding_agent::TuiMode mode);
+
+    /// Install the per-root wiring a selected root needs before it paints:
+    /// keybindings, scheduler, clear-on-shrink, the debug hook and the frame
+    /// render sinks (pi `createInteractiveTui`), plus the render state a mode
+    /// switch carried over from the retired root (`interactive-mode.ts:900-903`).
+    [[nodiscard]] support::ExpectedVoid wire_selected_root();
+
+    /// Mount the retained view and every component captured from the retired
+    /// root on the selected root (pi `mountInteractiveTui`,
+    /// `interactive-mode.ts:868-875`).
+    [[nodiscard]] support::ExpectedVoid mount_selected_root(
+            std::vector<std::unique_ptr<cch::tui::Component>> children);
+
+    /// pi `switchTuiMode` (`interactive-mode.ts:883-933`): replace the live
+    /// renderer while keeping the one `InteractiveView` instance, its editor
+    /// text, transcript, focus and session. `false` is pi's overlay refusal
+    /// (the engine is left exactly as it was); an error reports a swap that
+    /// could not complete.
+    [[nodiscard]] support::Expected<bool> switch_tui_mode(coding_agent::TuiMode mode);
+
     // ── Executor hops and render requests ────────────────────────────────
 
     void post_invalidate();
@@ -633,9 +659,13 @@ private:
     cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_ and is null across switches.
     cch::tui::OverlayHandle active_overlay_handle_;
     std::optional<ChatViewport> fullscreen_viewport_;
-    cch::tui::Component* regular_focus_{nullptr};
+    /// The regular root's render state across a switch: pi captures it from a
+    /// `TuiMainScreen` and restores it on the replacement main screen
+    /// (`interactive-mode.ts:895`, `:902`), which repaints from the baseline the
+    /// preserved main buffer still shows. Consumed by the next
+    /// `wire_selected_root()`; the fullscreen root imports nothing because the
+    /// alternate buffer is cleared on entry.
     std::optional<cch::tui::TuiMainScreenRenderState> main_screen_render_state_;
-    std::optional<cch::tui::TuiAltScreenRenderState> alt_screen_render_state_;
     bool clear_on_shrink_{false};
     SlashCommandRouter slash_command_router_;
     std::atomic<bool> running_{false};
