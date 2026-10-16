@@ -138,6 +138,29 @@ void close_settings(tui::VirtualTerminal& terminal, boost::asio::io_context& io)
     REQUIRE_FALSE(on_tui_mode_row(terminal));
 }
 
+class CustomEditor final : public tui::EditorComponent {
+public:
+    [[nodiscard]] std::string text() const override { return text_; }
+    void set_text(std::string text) override { text_ = std::move(text); }
+    void set_on_change(tui::EditorChangeSink sink) override { on_change_ = std::move(sink); }
+    void set_on_submit(tui::EditorSubmitSink sink) override { on_submit_ = std::move(sink); }
+    [[nodiscard]] support::Expected<tui::RenderResult> render(std::size_t) override {
+        return tui::RenderResult{.lines = {std::format("custom:{}", text_)}};
+    }
+    void invalidate() override {}
+    [[nodiscard]] tui::InputAdmissionOutcome handle_input(const tui::InputEventVariant&) override {
+        return tui::InputAdmissionOutcome::Unhandled;
+    }
+    void set_focused(bool focused) override { focused_ = focused; }
+    [[nodiscard]] bool focused() const override { return focused_; }
+
+private:
+    std::string text_;
+    tui::EditorChangeSink on_change_;
+    tui::EditorSubmitSink on_submit_;
+    bool focused_{false};
+};
+
 } // namespace
 
 TEST_CASE("Native TUI settings TUI mode row swaps the renderer and persists the mode",
@@ -256,6 +279,19 @@ TEST_CASE("Native TUI TUI mode switch refuses while an overlay entry is present"
     drain_ready(io);
     REQUIRE(pump_until(io, [&] { return on_tui_mode_row(terminal); }));
 
+    // 1. Hidden overlay refusal: pi's hasOverlayEntries refuses even when the
+    // entry is temporarily hidden. Test both direct engine switch and UI switch.
+    presenter.hide_overlay();
+    drain_ready(io);
+    REQUIRE(pump_until(io, [&] { return on_tui_mode_row(terminal); }));
+
+    // Direct repository-private engine operation refuses while overlay is hidden:
+    auto direct_hidden_refusal = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+    REQUIRE(direct_hidden_refusal);
+    CHECK_FALSE(*direct_hidden_refusal);
+    CHECK(terminal.modes().alternate_screen);
+
+    // UI attempt while hidden is refused with status message and mode intact:
     REQUIRE(terminal.inject_input("\r"));
     REQUIRE(pump_until(io, [&] {
         return visible_screen(terminal).find("Close active overlays before changing TUI mode") != std::string::npos;
@@ -424,6 +460,203 @@ TEST_CASE("Native TUI fullscreen transcript keeps its scroll window across a mod
     CHECK(after_window != follow_end_window);
     close_settings(terminal, io);
 
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE("Native TUI TUI mode switch preserves focus text and cursor identity across fullscreen to regular round trip",
+        "[coding_agent][tui][fullscreen][focus][issue1018][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("settings.json", R"({"tuiMode": "fullscreen"})");
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+    boost::asio::co_spawn(io,
+            drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+    REQUIRE(terminal.modes().alternate_screen);
+    REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+    // Focus target identity: prompt editor holds focus in fullscreen.
+    auto* const initial_focus = engine->focus();
+    REQUIRE(initial_focus != nullptr);
+
+    // Text and cursor in fullscreen: draft prompt is entered and terminal cursor is visible.
+    REQUIRE(terminal.inject_input("draft prompt"));
+    REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("draft prompt") != std::string::npos; }));
+    const auto fullscreen_cursor = terminal.cursor();
+    CHECK(fullscreen_cursor.row > 0);
+    CHECK(terminal.modes().cursor_visible);
+
+    // Switch fullscreen -> regular directly on the engine (the frontend lifecycle
+    // operation the settings consumer invokes).
+    auto switched_to_regular = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+    REQUIRE(switched_to_regular);
+    REQUIRE(*switched_to_regular);
+    drain_ready(io);
+    REQUIRE(pump_until(io, [&] { return !terminal.modes().alternate_screen; }));
+
+    // Focus target identity: the focused component on the regular root must be the
+    // exact same component instance that held focus in fullscreen.
+    CHECK(engine->focus() == initial_focus);
+
+    // Text continuity: draft text is still present in the editor.
+    CHECK(visible_screen(terminal).find("draft prompt") != std::string::npos);
+
+    // Cursor in regular mode: hardware cursor is hidden during regular main-screen
+    // execution, but position is maintained.
+    CHECK_FALSE(terminal.modes().cursor_visible);
+    const auto regular_cursor = terminal.cursor();
+    CHECK(regular_cursor.row > 0);
+
+    // Input continuity: typing directly into the terminal without opening or closing
+    // settings or repairing focus immediately appends to the draft prompt.
+    REQUIRE(terminal.inject_input(" continued"));
+    REQUIRE(pump_until(
+            io, [&] { return visible_screen(terminal).find("draft prompt continued") != std::string::npos; }));
+
+    // Switch regular -> fullscreen back.
+    auto switched_to_fullscreen = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+    REQUIRE(switched_to_fullscreen);
+    REQUIRE(*switched_to_fullscreen);
+    drain_ready(io);
+    REQUIRE(pump_until(io, [&] { return terminal.modes().alternate_screen; }));
+
+    // Roundtrip focus target identity: the same component instance is still focused.
+    CHECK(engine->focus() == initial_focus);
+
+    // Text and cursor continuity back in fullscreen.
+    CHECK(visible_screen(terminal).find("draft prompt continued") != std::string::npos);
+    REQUIRE(pump_until(io, [&] { return terminal.modes().cursor_visible; }));
+    CHECK(terminal.cursor().row == fullscreen_cursor.row);
+
+    // Submit the prompt and verify normal completion.
+    REQUIRE(terminal.inject_input(" done\r"));
+    REQUIRE(pump_until(io,
+            [&] { return visible_screen(terminal).find("fake: draft prompt continued done") != std::string::npos; }));
+
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE("Native TUI TUI mode switch rebinds extension listeners once with no repeat editor factory",
+        "[coding_agent][tui][fullscreen][extensions][issue1018][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("settings.json", R"({"tuiMode": "fullscreen"})");
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+
+    std::size_t registration_factory_calls = 0;
+    std::size_t editor_factory_calls = 0;
+    std::size_t listener_invocations = 0;
+    std::vector<std::string> delivered_inputs;
+
+    auto extension_factory = [&](coding_agent::tui::ExtensionUiHost& host) {
+        ++registration_factory_calls;
+        host.on_terminal_input([&](std::string_view input) -> cch::tui::RawInputListenerResult {
+            ++listener_invocations;
+            delivered_inputs.emplace_back(input);
+            return cch::tui::RawInputListenerResult::pass();
+        });
+        host.set_editor_component(
+                [&](cch::tui::ITui&, cch::tui::EditorTheme, std::shared_ptr<coding_agent::tui::SharedKeybindings>) {
+                    ++editor_factory_calls;
+                    return std::make_shared<CustomEditor>();
+                });
+    };
+
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+    auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                       .with_session(*created->session)
+                       .with_agent_config_directory(config.path())
+                       .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                       .with_extension_ui_registration_factory(std::move(extension_factory))
+                       .build();
+
+    boost::asio::co_spawn(
+            io, drive_engine(engine, std::move(run)), [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+    REQUIRE(terminal.modes().alternate_screen);
+
+    // Initial registration: exactly 1 factory call, exactly 1 editor construction.
+    CHECK(registration_factory_calls == 1);
+    CHECK(editor_factory_calls == 1);
+
+    // Initial input in fullscreen: exactly 1 delivery per input.
+    REQUIRE(terminal.inject_input("x"));
+    drain_ready(io);
+    CHECK(listener_invocations == 1);
+    REQUIRE(delivered_inputs.size() == 1);
+    CHECK(delivered_inputs.back() == "x");
+
+    // Switch fullscreen -> regular.
+    auto switched_to_regular = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+    REQUIRE(switched_to_regular);
+    REQUIRE(*switched_to_regular);
+    drain_ready(io);
+    REQUIRE(pump_until(io, [&] { return !terminal.modes().alternate_screen; }));
+
+    // No repeat registration factory and no repeat editor construction across switch.
+    CHECK(registration_factory_calls == 1);
+    CHECK(editor_factory_calls == 1);
+
+    // Input on regular root: exactly 1 delivery per input.
+    REQUIRE(terminal.inject_input("y"));
+    drain_ready(io);
+    CHECK(listener_invocations == 2);
+    REQUIRE(delivered_inputs.size() == 2);
+    CHECK(delivered_inputs.back() == "y");
+
+    // Switch regular -> fullscreen.
+    auto switched_to_fullscreen = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+    REQUIRE(switched_to_fullscreen);
+    REQUIRE(*switched_to_fullscreen);
+    drain_ready(io);
+    REQUIRE(pump_until(io, [&] { return terminal.modes().alternate_screen; }));
+
+    // Still no repeat factory calls after roundtrip.
+    CHECK(registration_factory_calls == 1);
+    CHECK(editor_factory_calls == 1);
+
+    // Input on fullscreen root after roundtrip: exactly 1 delivery per input.
+    REQUIRE(terminal.inject_input("z"));
+    drain_ready(io);
+    CHECK(listener_invocations == 3);
+    REQUIRE(delivered_inputs.size() == 3);
+    CHECK(delivered_inputs.back() == "z");
+
+    // Clean exit.
     REQUIRE(terminal.inject_input("\x04"));
     REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
     REQUIRE(run_result);

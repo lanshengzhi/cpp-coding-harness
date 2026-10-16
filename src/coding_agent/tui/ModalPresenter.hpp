@@ -26,6 +26,9 @@ public:
     /// Show one modal overlay (pi's overlay stack: hotkey help, trust
     /// prompts). The presenter takes ownership and focuses the overlay.
     virtual void show_overlay(std::unique_ptr<cch::tui::Overlay> overlay) = 0;
+    /// Hide the active overlay without removing it from the presentation stack
+    /// (pi `overlayHandle.setHidden(true)`).
+    virtual void hide_overlay() {}
     /// Close the active overlay when one is showing; a no-op otherwise.
     virtual void close_overlay() = 0;
 

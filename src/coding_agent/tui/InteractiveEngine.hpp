@@ -155,6 +155,16 @@ public:
     /// reaches this path through the engine's action route (#1017).
     void paste_clipboard();
 
+    /// pi `switchTuiMode` (`interactive-mode.ts:883-933`): replace the live
+    /// renderer while keeping the one `InteractiveView` instance, its editor
+    /// text, transcript, focus and session. `false` is pi's overlay refusal
+    /// (the engine is left exactly as it was); an error reports a swap that
+    /// could not complete.
+    [[nodiscard]] support::Expected<bool> switch_tui_mode(coding_agent::TuiMode mode);
+
+    /// The component holding focus on the live renderer (pi `getFocusedComponent()`).
+    [[nodiscard]] cch::tui::Component* focus() const noexcept { return tui_ != nullptr ? tui_->focus() : nullptr; }
+
 private:
     // ── Submission kinds (folded from the deleted InteractionPolicy) ──────
 
@@ -242,13 +252,6 @@ private:
     /// root on the selected root (pi `mountInteractiveTui`,
     /// `interactive-mode.ts:868-875`).
     [[nodiscard]] support::ExpectedVoid mount_selected_root(std::vector<std::unique_ptr<cch::tui::Component>> children);
-
-    /// pi `switchTuiMode` (`interactive-mode.ts:883-933`): replace the live
-    /// renderer while keeping the one `InteractiveView` instance, its editor
-    /// text, transcript, focus and session. `false` is pi's overlay refusal
-    /// (the engine is left exactly as it was); an error reports a swap that
-    /// could not complete.
-    [[nodiscard]] support::Expected<bool> switch_tui_mode(coding_agent::TuiMode mode);
 
     // ── Executor hops and render requests ────────────────────────────────
 
@@ -380,6 +383,7 @@ private:
     void append_command_error(const support::Error& error);
 
     [[nodiscard]] support::ExpectedVoid attach_overlay(std::unique_ptr<cch::tui::Overlay> overlay);
+    void hide_overlay() override;
     void close_overlay() override;
 
     void show_overlay(std::unique_ptr<cch::tui::Overlay> overlay) override;
