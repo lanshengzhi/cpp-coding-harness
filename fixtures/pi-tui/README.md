@@ -387,8 +387,23 @@ retaining all raw ordered writes, direct `SettingsManager.setShowTerminalProgres
 measurement proving stale progress retention until shutdown teardown, and `InteractiveMode.prototype.stop`
 clear sequence counts across active/idle/toggled states. Historical artifact 28 (`product-progress.json`,
 which exercised a manual `VirtualTerminal` double and literal constants) is partial and remains preserved
-byte-for-byte; appended 29th artifact `product-progress-protocol.json` establishes the authoritative
-protocol acceptance boundary without deleting existing bytes.
+byte-for-byte; its test acceptance role is demoted to supplemental historical checks while appended 29th
+artifact `product-progress-protocol.json` establishes the authoritative protocol acceptance boundary without
+deleting existing bytes.
+Runtime observation boundaries are recorded honestly: the raw keepalive phase observes presence/absence
+of the background interval, not its 1000ms wall-clock timing (`expected.keepaliveIntervalMs` is a source-derived
+literal); switch capture observes the synchronous method boundary and suppresses cleanup/queued paints after
+`stopCapturing` (the brief observer sleep is cleanup, not proof all async output is retained); the accepted
+focus is synchronous OSC 9;4 transitions rather than complete paint/query parity; scenario 5 retains independent
+exact clear counts across active/idle/toggled states, but not raw writes (scenario 4 phase 4 and scenario 1
+`stopActive` retain raw stop protocol); and the both-streaming-and-compacting matrix state is a synthetic
+truth-predicate context rather than proof the live session reaches both simultaneously.
+Public C++ acceptance tests in `ProductProgressEvidenceTest.cpp` and `TuiModeSwitchTest.cpp` consume
+`product-progress-protocol.json` directly through real `InteractiveEngine`, `AgentSession`, and `SettingsManager`
+without stand-in counts, asserting ordered exact OSC 9;4 byte sequences across all reachable states in both
+switch directions (`fullscreen -> regular` and `regular -> fullscreen`), measuring phase-synchronized
+compaction deltas upon event delivery, validating settings selector UI navigation, persistence, `/reload`
+preference continuity, and verifying exact shutdown teardown clear counts.
 `capture/product-progress-protocol-scenarios.mts` defines the scenarios;
 `capture/recapture-product-progress-protocol.mts` is the append recipe (same frozen revision
 `7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`, same `environment`, every other artifact

@@ -28,6 +28,7 @@
 #include <cch/tui/Overlay.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -41,6 +42,7 @@
 #include <iterator>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -50,6 +52,23 @@ using tests::drain_ready;
 using tests::pump_until;
 
 namespace {
+
+using support::JsonValue;
+
+[[nodiscard]] const JsonValue& find_evidence_scenario(const JsonValue& bundle, std::string_view name) {
+    for (const auto& scenario : bundle.at("scenarios").get_array()) {
+        if (scenario.at("name").get_string() == name) return scenario;
+    }
+    REQUIRE(false);
+    return bundle;
+}
+
+[[nodiscard]] std::vector<std::string> strings_of(const JsonValue& value) {
+    std::vector<std::string> strings;
+    for (const auto& entry : value.get_array())
+        strings.emplace_back(entry.get_string());
+    return strings;
+}
 
 [[nodiscard]] std::string visible_screen(const tui::VirtualTerminal& terminal) {
     std::string text;
@@ -145,6 +164,29 @@ void close_hardware_cursor_settings(tui::VirtualTerminal& terminal, boost::asio:
     REQUIRE(terminal.flush_input());
     drain_ready(io);
     REQUIRE_FALSE(on_hardware_cursor_row(terminal));
+}
+
+constexpr std::string_view kTerminalProgressRowKeys = "\x1b[B\x1b[B\x1b[B";
+constexpr std::string_view kTerminalProgressRowDescription = "Show OSC 9;4 progress indicators";
+
+[[nodiscard]] bool on_terminal_progress_row(const tui::VirtualTerminal& terminal) {
+    const auto screen = visible_screen(terminal);
+    return screen.find("Terminal progress") != std::string::npos &&
+           screen.find(kTerminalProgressRowDescription) != std::string::npos;
+}
+
+void focus_terminal_progress_row(tui::VirtualTerminal& terminal, boost::asio::io_context& io) {
+    REQUIRE(terminal.inject_input("/settings\r"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input(std::string{kTerminalProgressRowKeys}));
+    REQUIRE(pump_until(io, [&] { return on_terminal_progress_row(terminal); }));
+}
+
+void close_terminal_progress_settings(tui::VirtualTerminal& terminal, boost::asio::io_context& io) {
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    REQUIRE_FALSE(on_terminal_progress_row(terminal));
 }
 
 /// Open `/settings` and move onto the TUI mode row.
@@ -411,23 +453,14 @@ TEST_CASE("Native TUI TUI mode switch during pending work keeps the run live thr
 
 TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration honor settings and state",
         "[coding_agent][tui][fullscreen][progress][issue1037][spec]") {
-    constexpr std::string_view kProgressActive = "\x1b]9;4;3\x07";
-    constexpr std::string_view kProgressClear = "\x1b]9;4;0\x07";
-
-    const auto count_active = [&](const tui::VirtualTerminal& term) {
-        std::size_t n = 0;
-        for (const auto& out : term.output()) {
-            if (out.find(kProgressActive) != std::string::npos) ++n;
-        }
-        return n;
-    };
-    const auto count_clear = [&](const tui::VirtualTerminal& term) {
-        std::size_t n = 0;
-        for (const auto& out : term.output()) {
-            if (out.find(kProgressClear) != std::string::npos) ++n;
-        }
-        return n;
-    };
+    const auto artifact = tests::read_pi_tui_evidence("product-progress-protocol.json");
+    REQUIRE(artifact);
+    const auto& bundle = *artifact;
+    const auto& lifecycle = find_evidence_scenario(bundle, "interactive-mode-handle-event-lifecycle")
+                                    .at("expected")
+                                    .at("lifecycleResults");
+    const auto& matrix =
+            find_evidence_scenario(bundle, "interactive-mode-switch-matrix").at("expected").at("switchResults");
 
     // ── Case 1: showTerminalProgress = true ──────────────────────────────────
     {
@@ -441,7 +474,7 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
         REQUIRE(created);
         tests::RuntimeLoopDriver runtime_driver(runtime);
 
-        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
         boost::asio::io_context io;
         std::optional<support::ExpectedVoid> run_result;
         auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
@@ -455,48 +488,139 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
         drain_ready(io);
         const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
         REQUIRE(terminal.modes().alternate_screen);
-        CHECK(count_active(terminal) == 0);
+        CHECK(tests::extract_osc_9_4_commands(terminal.output()).empty());
 
-        // Turn start activates progress.
+        // Turn start activates progress: exact vector comparison against turnStartEnabled
+        const auto before_turn1 = terminal.output().size();
         REQUIRE(terminal.inject_input("pending turn\r"));
         REQUIRE(pump_until(io, [&] { return gated->requests.size() == 1; }));
-        CHECK(count_active(terminal) >= 1);
-        const auto active_before_switch = count_active(terminal);
+        std::span<const std::string> turn1_delta(
+                terminal.output().data() + before_turn1, terminal.output().size() - before_turn1);
+        const auto turn1_start_osc = tests::extract_osc_9_4_commands(turn1_delta);
+        const auto expected_turn_start =
+                tests::extract_osc_9_4_commands(strings_of(lifecycle.at("turnStartEnabled").at("writes")));
+        CHECK(turn1_start_osc == expected_turn_start);
+        CHECK(turn1_start_osc == std::vector<std::string>{"\x1b]9;4;3\x07"});
 
-        // Live switch to Regular while streaming: progress restored on new root.
-        auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ true);
-        REQUIRE(switched);
-        CHECK(*switched);
+        // Live switch to Regular while streaming: progress restored on new root
+        const auto before_switch1 = terminal.output().size();
+        auto switched1 = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ true);
+        REQUIRE(switched1);
+        CHECK(*switched1);
         CHECK_FALSE(terminal.modes().alternate_screen);
-        // Active sequence re-emitted on restore.
-        CHECK(count_active(terminal) > active_before_switch);
+        std::span<const std::string> switch1_delta(
+                terminal.output().data() + before_switch1, terminal.output().size() - before_switch1);
+        const auto switch1_osc = tests::extract_osc_9_4_commands(switch1_delta);
+        const auto expected_switch1 = tests::extract_osc_9_4_commands(
+                strings_of(matrix.at("fullscreenToRegular_streamingOnly_enabled_restoreTrue").at("writes")));
+        CHECK(switch1_osc == expected_switch1);
+        REQUIRE(switch1_osc.size() == 2);
+        CHECK(switch1_osc[0] == "\x1b]9;4;0\x07");
+        CHECK(switch1_osc[1] == "\x1b]9;4;3\x07");
 
-        // Turn complete clears progress.
-        const auto clear_before_release = count_clear(terminal);
+        // Reverse live switch to Fullscreen while still streaming: progress restored on fullscreen root
+        const auto before_switch2 = terminal.output().size();
+        auto switched2 = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen, /* restore_progress */ true);
+        REQUIRE(switched2);
+        CHECK(*switched2);
+        CHECK(terminal.modes().alternate_screen);
+        std::span<const std::string> switch2_delta(
+                terminal.output().data() + before_switch2, terminal.output().size() - before_switch2);
+        const auto switch2_osc = tests::extract_osc_9_4_commands(switch2_delta);
+        const auto expected_switch2 = tests::extract_osc_9_4_commands(
+                strings_of(matrix.at("regularToFullscreen_streamingOnly_enabled_restoreTrue").at("writes")));
+        CHECK(switch2_osc == expected_switch2);
+        REQUIRE(switch2_osc.size() == 2);
+        CHECK(switch2_osc[0] == "\x1b]9;4;0\x07");
+        CHECK(switch2_osc[1] == "\x1b]9;4;3\x07");
+
+        // Turn complete clears progress: exact vector comparison against agentEndEnabled
+        const auto before_end1 = terminal.output().size();
         gated->release();
         REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 1") != std::string::npos; }));
-        CHECK(count_clear(terminal) > clear_before_release);
+        std::span<const std::string> end1_delta(
+                terminal.output().data() + before_end1, terminal.output().size() - before_end1);
+        const auto end1_osc = tests::extract_osc_9_4_commands(end1_delta);
+        const auto expected_turn_end =
+                tests::extract_osc_9_4_commands(strings_of(lifecycle.at("agentEndEnabled").at("writes")));
+        CHECK(end1_osc == expected_turn_end);
+        CHECK(end1_osc == std::vector<std::string>{"\x1b]9;4;0\x07"});
 
-        // Switch to Fullscreen while idle: progress NOT restored.
-        const auto active_while_idle = count_active(terminal);
-        auto switched_back = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen, /* restore_progress */ true);
-        REQUIRE(switched_back);
-        CHECK(*switched_back);
+        // Switch to Regular while idle: progress NOT restored
+        const auto before_idle_switch1 = terminal.output().size();
+        auto switched_idle1 = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ true);
+        REQUIRE(switched_idle1);
+        CHECK(*switched_idle1);
+        CHECK_FALSE(terminal.modes().alternate_screen);
+        std::span<const std::string> idle_switch1_delta(
+                terminal.output().data() + before_idle_switch1, terminal.output().size() - before_idle_switch1);
+        const auto idle_switch1_osc = tests::extract_osc_9_4_commands(idle_switch1_delta);
+        const auto expected_idle_switch1 = tests::extract_osc_9_4_commands(
+                strings_of(matrix.at("fullscreenToRegular_idle_enabled_restoreTrue").at("writes")));
+        CHECK(idle_switch1_osc == expected_idle_switch1);
+        CHECK(idle_switch1_osc.empty());
+
+        // Switch back to Fullscreen while idle: progress NOT restored
+        const auto before_idle_switch2 = terminal.output().size();
+        auto switched_idle2 = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen, /* restore_progress */ true);
+        REQUIRE(switched_idle2);
+        CHECK(*switched_idle2);
         CHECK(terminal.modes().alternate_screen);
-        CHECK(count_active(terminal) == active_while_idle);
+        std::span<const std::string> idle_switch2_delta(
+                terminal.output().data() + before_idle_switch2, terminal.output().size() - before_idle_switch2);
+        const auto idle_switch2_osc = tests::extract_osc_9_4_commands(idle_switch2_delta);
+        const auto expected_idle_switch2 = tests::extract_osc_9_4_commands(
+                strings_of(matrix.at("regularToFullscreen_idle_enabled_restoreTrue").at("writes")));
+        CHECK(idle_switch2_osc == expected_idle_switch2);
+        CHECK(idle_switch2_osc.empty());
 
-        // Switch with restore_progress = false: progress NOT restored even if streaming.
+        // Switch with restore_progress = false: progress NOT restored even if streaming
+        // Direction 1: fullscreen -> regular with restore_progress = false
+        const auto before_turn2 = terminal.output().size();
         REQUIRE(terminal.inject_input("second turn\r"));
         REQUIRE(pump_until(io, [&] { return gated->requests.size() == 2; }));
-        const auto active_before_no_restore = count_active(terminal);
-        auto switched_no_restore =
+        std::span<const std::string> turn2_delta(
+                terminal.output().data() + before_turn2, terminal.output().size() - before_turn2);
+        CHECK(tests::extract_osc_9_4_commands(turn2_delta) == expected_turn_start);
+
+        const auto before_no_restore1 = terminal.output().size();
+        auto switched_no_restore1 =
                 engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ false);
-        REQUIRE(switched_no_restore);
-        CHECK(*switched_no_restore);
-        CHECK(count_active(terminal) == active_before_no_restore);
+        REQUIRE(switched_no_restore1);
+        CHECK(*switched_no_restore1);
+        CHECK_FALSE(terminal.modes().alternate_screen);
+        std::span<const std::string> no_restore1_delta(
+                terminal.output().data() + before_no_restore1, terminal.output().size() - before_no_restore1);
+        const auto no_restore1_osc = tests::extract_osc_9_4_commands(no_restore1_delta);
+        const auto expected_no_restore1 = tests::extract_osc_9_4_commands(
+                strings_of(matrix.at("fullscreenToRegular_streamingOnly_enabled_restoreFalse").at("writes")));
+        CHECK(no_restore1_osc == expected_no_restore1);
+        CHECK(no_restore1_osc == std::vector<std::string>{"\x1b]9;4;0\x07"});
 
         gated->release();
         REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 2") != std::string::npos; }));
+
+        // Direction 2: regular -> fullscreen with restore_progress = false
+        const auto before_turn3 = terminal.output().size();
+        REQUIRE(terminal.inject_input("third turn\r"));
+        REQUIRE(pump_until(io, [&] { return gated->requests.size() == 3; }));
+        std::span<const std::string> turn3_delta(
+                terminal.output().data() + before_turn3, terminal.output().size() - before_turn3);
+        CHECK(tests::extract_osc_9_4_commands(turn3_delta) == expected_turn_start);
+
+        const auto before_no_restore2 = terminal.output().size();
+        auto switched_no_restore2 =
+                engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen, /* restore_progress */ false);
+        REQUIRE(switched_no_restore2);
+        CHECK(*switched_no_restore2);
+        CHECK(terminal.modes().alternate_screen);
+        std::span<const std::string> no_restore2_delta(
+                terminal.output().data() + before_no_restore2, terminal.output().size() - before_no_restore2);
+        const auto no_restore2_osc = tests::extract_osc_9_4_commands(no_restore2_delta);
+        CHECK(no_restore2_osc == std::vector<std::string>{"\x1b]9;4;0\x07"});
+
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 3") != std::string::npos; }));
 
         REQUIRE(terminal.inject_input("\x04"));
         REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
@@ -516,7 +640,7 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
         REQUIRE(created);
         tests::RuntimeLoopDriver runtime_driver(runtime);
 
-        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
         boost::asio::io_context io;
         std::optional<support::ExpectedVoid> run_result;
         auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
@@ -531,20 +655,72 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
         const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
         REQUIRE(terminal.modes().alternate_screen);
 
+        const auto before_turn = terminal.output().size();
         REQUIRE(terminal.inject_input("pending turn\r"));
         REQUIRE(pump_until(io, [&] { return gated->requests.size() == 1; }));
-        // When disabled, turn start does NOT emit progress.
-        CHECK(count_active(terminal) == 0);
+        // When disabled, turn start does NOT emit progress: matches turnStartDisabled
+        std::span<const std::string> turn_delta(
+                terminal.output().data() + before_turn, terminal.output().size() - before_turn);
+        const auto turn_osc = tests::extract_osc_9_4_commands(turn_delta);
+        const auto expected_turn_disabled =
+                tests::extract_osc_9_4_commands(strings_of(lifecycle.at("turnStartDisabled").at("writes")));
+        CHECK(turn_osc == expected_turn_disabled);
+        CHECK(turn_osc.empty());
 
-        // Switch does NOT restore progress when disabled.
-        auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ true);
-        REQUIRE(switched);
-        CHECK(*switched);
-        CHECK(count_active(terminal) == 0);
+        // Switch fullscreen -> regular does NOT restore progress when disabled: matches
+        // fullscreenToRegular_streamingOnly_disabled_restoreTrue
+        const auto before_switch1 = terminal.output().size();
+        auto switched1 = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ true);
+        REQUIRE(switched1);
+        CHECK(*switched1);
+        std::span<const std::string> switch1_delta(
+                terminal.output().data() + before_switch1, terminal.output().size() - before_switch1);
+        const auto switch1_osc = tests::extract_osc_9_4_commands(switch1_delta);
+        const auto expected_switch1_disabled = tests::extract_osc_9_4_commands(
+                strings_of(matrix.at("fullscreenToRegular_streamingOnly_disabled_restoreTrue").at("writes")));
+        CHECK(switch1_osc == expected_switch1_disabled);
+        CHECK(switch1_osc.empty());
 
+        // Switch regular -> fullscreen does NOT restore progress when disabled: matches
+        // regularToFullscreen_streamingOnly_disabled_restoreTrue
+        const auto before_switch2 = terminal.output().size();
+        auto switched2 = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen, /* restore_progress */ true);
+        REQUIRE(switched2);
+        CHECK(*switched2);
+        std::span<const std::string> switch2_delta(
+                terminal.output().data() + before_switch2, terminal.output().size() - before_switch2);
+        const auto switch2_osc = tests::extract_osc_9_4_commands(switch2_delta);
+        const auto expected_switch2_disabled = tests::extract_osc_9_4_commands(
+                strings_of(matrix.at("regularToFullscreen_streamingOnly_disabled_restoreTrue").at("writes")));
+        CHECK(switch2_osc == expected_switch2_disabled);
+        CHECK(switch2_osc.empty());
+
+        // Turn completes: matches agentEndDisabled
+        const auto before_end = terminal.output().size();
         gated->release();
         REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 1") != std::string::npos; }));
-        CHECK(count_active(terminal) == 0);
+        std::span<const std::string> end_delta(
+                terminal.output().data() + before_end, terminal.output().size() - before_end);
+        const auto end_osc = tests::extract_osc_9_4_commands(end_delta);
+        const auto expected_end_disabled =
+                tests::extract_osc_9_4_commands(strings_of(lifecycle.at("agentEndDisabled").at("writes")));
+        CHECK(end_osc == expected_end_disabled);
+        CHECK(end_osc.empty());
+
+        // Idle switches in both directions emit no progress
+        const auto before_idle1 = terminal.output().size();
+        auto switched_idle1 = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ true);
+        REQUIRE(switched_idle1);
+        std::span<const std::string> idle1_delta(
+                terminal.output().data() + before_idle1, terminal.output().size() - before_idle1);
+        CHECK(tests::extract_osc_9_4_commands(idle1_delta).empty());
+
+        const auto before_idle2 = terminal.output().size();
+        auto switched_idle2 = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen, /* restore_progress */ true);
+        REQUIRE(switched_idle2);
+        std::span<const std::string> idle2_delta(
+                terminal.output().data() + before_idle2, terminal.output().size() - before_idle2);
+        CHECK(tests::extract_osc_9_4_commands(idle2_delta).empty());
 
         REQUIRE(terminal.inject_input("\x04"));
         REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
@@ -552,7 +728,7 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
         CHECK(*run_result);
     }
 
-    // ── Case 3: compaction lifecycle and switch restoration ──────────────────
+    // ── Case 3: compaction lifecycle and switch restoration in both directions ──
     {
         tests::RuntimeFixture runtime;
         tests::TempWorkspace workspace;
@@ -566,7 +742,7 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
         REQUIRE(created);
         tests::RuntimeLoopDriver runtime_driver(runtime);
 
-        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
         boost::asio::io_context io;
         std::optional<support::ExpectedVoid> run_result;
         auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
@@ -591,6 +767,18 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
         gated->release();
         REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 2") != std::string::npos; }));
 
+        // Register session subscription observer to synchronize compaction start event delivery
+        bool compaction_event_delivered = false;
+        auto comp_sub = created->session->subscribe_session(
+                [&](const coding_agent::AgentSessionEvent& ev) -> support::ExpectedVoid {
+                    if (std::holds_alternative<coding_agent::CompactionStartEvent>(ev)) {
+                        compaction_event_delivered = true;
+                    }
+                    return {};
+                });
+        REQUIRE(comp_sub);
+
+        const auto before_compaction = terminal.output().size();
         std::optional<support::Expected<coding_agent::CompactionResult>> compact_result;
         boost::asio::co_spawn(
                 io,
@@ -600,22 +788,67 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
                 },
                 boost::asio::detached);
 
-        REQUIRE(pump_until(io, [&] { return created->session->is_compacting(); }));
-        // Compaction start emits active sequence.
-        CHECK(count_active(terminal) >= 1);
-        const auto active_during_compaction = count_active(terminal);
+        // Synchronize to actual compaction event delivery to avoid racing UI subscriber
+        REQUIRE(pump_until(io, [&] { return compaction_event_delivered; }));
+        std::span<const std::string> comp_start_delta(
+                terminal.output().data() + before_compaction, terminal.output().size() - before_compaction);
+        const auto comp_start_osc = tests::extract_osc_9_4_commands(comp_start_delta);
+        const auto expected_comp_start =
+                tests::extract_osc_9_4_commands(strings_of(lifecycle.at("compactionStartEnabled").at("writes")));
+        CHECK(comp_start_osc == expected_comp_start);
+        CHECK(comp_start_osc == std::vector<std::string>{"\x1b]9;4;3\x07"});
 
-        // Mode switch during compaction restores progress.
-        auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ true);
-        REQUIRE(switched);
-        CHECK(*switched);
-        CHECK(count_active(terminal) > active_during_compaction);
+        // Mode switch during compaction: fullscreen -> regular (restoreProgress = true)
+        const auto before_switch_c1 = terminal.output().size();
+        auto switched_c1 = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ true);
+        REQUIRE(switched_c1);
+        CHECK(*switched_c1);
+        std::span<const std::string> switch_c1_delta(
+                terminal.output().data() + before_switch_c1, terminal.output().size() - before_switch_c1);
+        const auto switch_c1_osc = tests::extract_osc_9_4_commands(switch_c1_delta);
+        const auto expected_switch_c1 = tests::extract_osc_9_4_commands(
+                strings_of(matrix.at("fullscreenToRegular_compactingOnly_enabled_restoreTrue").at("writes")));
+        CHECK(switch_c1_osc == expected_switch_c1);
+        REQUIRE(switch_c1_osc.size() == 2);
+        CHECK(switch_c1_osc[0] == "\x1b]9;4;0\x07");
+        CHECK(switch_c1_osc[1] == "\x1b]9;4;3\x07");
 
-        // Releasing summarization completes compaction and emits clear sequence.
-        const auto clear_before_compact_end = count_clear(terminal);
+        // Reverse mode switch during compaction: regular -> fullscreen (restoreProgress = true)
+        const auto before_switch_c2 = terminal.output().size();
+        auto switched_c2 = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen, /* restore_progress */ true);
+        REQUIRE(switched_c2);
+        CHECK(*switched_c2);
+        std::span<const std::string> switch_c2_delta(
+                terminal.output().data() + before_switch_c2, terminal.output().size() - before_switch_c2);
+        const auto switch_c2_osc = tests::extract_osc_9_4_commands(switch_c2_delta);
+        const auto expected_switch_c2 = tests::extract_osc_9_4_commands(
+                strings_of(matrix.at("regularToFullscreen_compactingOnly_enabled_restoreTrue").at("writes")));
+        CHECK(switch_c2_osc == expected_switch_c2);
+        REQUIRE(switch_c2_osc.size() == 2);
+        CHECK(switch_c2_osc[0] == "\x1b]9;4;0\x07");
+        CHECK(switch_c2_osc[1] == "\x1b]9;4;3\x07");
+
+        // Mode switch during compaction with restore_progress = false: regular -> fullscreen suppression
+        const auto before_switch_c3 = terminal.output().size();
+        auto switched_c3 = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ false);
+        REQUIRE(switched_c3);
+        CHECK(*switched_c3);
+        std::span<const std::string> switch_c3_delta(
+                terminal.output().data() + before_switch_c3, terminal.output().size() - before_switch_c3);
+        const auto switch_c3_osc = tests::extract_osc_9_4_commands(switch_c3_delta);
+        CHECK(switch_c3_osc == std::vector<std::string>{"\x1b]9;4;0\x07"});
+
+        // Releasing summarization completes compaction and emits clear sequence
+        const auto before_comp_end = terminal.output().size();
         gated->release();
         REQUIRE(pump_until(io, [&] { return compact_result.has_value(); }));
-        CHECK(count_clear(terminal) > clear_before_compact_end);
+        std::span<const std::string> comp_end_delta(
+                terminal.output().data() + before_comp_end, terminal.output().size() - before_comp_end);
+        const auto comp_end_osc = tests::extract_osc_9_4_commands(comp_end_delta);
+        const auto expected_comp_end =
+                tests::extract_osc_9_4_commands(strings_of(lifecycle.at("compactionEndEnabled").at("writes")));
+        CHECK(comp_end_osc == expected_comp_end);
+        CHECK(comp_end_osc == std::vector<std::string>{"\x1b]9;4;0\x07"});
 
         REQUIRE(terminal.inject_input("\x04"));
         REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
@@ -623,7 +856,8 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
         CHECK(*run_result);
     }
 
-    // ── Case 4: settings toggle during streaming does NOT emit immediate write ──
+    // ── Case 4: settings selector UI navigation, persisted true->false->reload, preference continuity through
+    // switches, and stale progress teardown ──
     {
         tests::RuntimeFixture runtime;
         tests::TempWorkspace workspace;
@@ -635,7 +869,7 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
         REQUIRE(created);
         tests::RuntimeLoopDriver runtime_driver(runtime);
 
-        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
         boost::asio::io_context io;
         std::optional<support::ExpectedVoid> run_result;
         auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
@@ -650,36 +884,307 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
         const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
 
         // Turn start activates progress.
+        const auto before_turn = terminal.output().size();
         REQUIRE(terminal.inject_input("pending turn\r"));
         REQUIRE(pump_until(io, [&] { return gated->requests.size() == 1; }));
-        CHECK(count_active(terminal) == 1);
-        const auto active_count = count_active(terminal);
-        const auto clear_count = count_clear(terminal);
+        std::span<const std::string> turn_delta(
+                terminal.output().data() + before_turn, terminal.output().size() - before_turn);
+        CHECK(tests::extract_osc_9_4_commands(turn_delta) == std::vector<std::string>{"\x1b]9;4;3\x07"});
 
-        // Open settings selector while turn is pending.
-        REQUIRE(terminal.inject_input("/settings\r"));
+        // Open settings selector and navigate to Terminal progress row
+        focus_terminal_progress_row(terminal, io);
+        CHECK(on_terminal_progress_row(terminal));
+        const auto screen_before = visible_screen(terminal);
+        CHECK(screen_before.find("Terminal progress") != std::string::npos);
+        CHECK(screen_before.find("true") != std::string::npos);
+
+        // Enter cycles true -> false: updates settings persistence ONLY, no immediate OSC 9;4 sequence
+        const auto before_toggle = terminal.output().size();
+        REQUIRE(terminal.inject_input("\r"));
         drain_ready(io);
+        REQUIRE(pump_until(io, [&] {
+            return read_text_file(config.path() / "settings.json").find("\"showTerminalProgress\": false") !=
+                   std::string::npos;
+        }));
+        std::span<const std::string> toggle_delta(
+                terminal.output().data() + before_toggle, terminal.output().size() - before_toggle);
+        CHECK(tests::extract_osc_9_4_commands(toggle_delta).empty());
 
-        // Move to terminal-progress row (item 3: past skill-commands, show-hardware-cursor, output-padding)
-        REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\r"));
-        drain_ready(io);
+        // Verify independent reloaded SettingsManager reflects persisted false
+        auto reloaded_mgr1 = coding_agent::SettingsManager::create(workspace.path(), config.path(), true);
+        CHECK_FALSE(reloaded_mgr1.get_show_terminal_progress());
 
-        // Toggling updates settings persistence ONLY: no immediate clear or active sequence.
-        CHECK(count_active(terminal) == active_count);
-        CHECK(count_clear(terminal) == clear_count);
+        // Close settings
+        close_terminal_progress_settings(terminal, io);
 
-        // Close settings.
-        close_settings(terminal, io);
-
-        // Releasing turn completes; because it was toggled false, agent_end sees false.
+        // Releasing turn completes; because it was toggled false, agent_end sees false and skips clear
+        const auto before_end = terminal.output().size();
         gated->release();
         REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 1") != std::string::npos; }));
+        std::span<const std::string> end_delta(
+                terminal.output().data() + before_end, terminal.output().size() - before_end);
+        CHECK(tests::extract_osc_9_4_commands(end_delta).empty());
 
+        // Close engine: stop teardown safety net triggers clear count 1
+        const auto before_close = terminal.output().size();
         REQUIRE(terminal.inject_input("\x04"));
         REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
         REQUIRE(run_result);
         CHECK(*run_result);
+
+        std::span<const std::string> close_delta(
+                terminal.output().data() + before_close, terminal.output().size() - before_close);
+        const auto close_osc = tests::extract_osc_9_4_commands(close_delta);
+        // Clear count is exactly 1 (from shutdown teardown safety net)
+        CHECK(close_osc == std::vector<std::string>{"\x1b]9;4;0\x07"});
     }
+}
+
+TEST_CASE("Native TUI terminal progress teardown clear counts match independent frozen observation across all four "
+          "lifecycle states",
+        "[coding_agent][tui][progress][teardown][issue1037][spec]") {
+    const auto artifact = tests::read_pi_tui_evidence("product-progress-protocol.json");
+    REQUIRE(artifact);
+    const auto& bundle = *artifact;
+    const auto& counts =
+            find_evidence_scenario(bundle, "interactive-mode-stop-clear-counts").at("expected").at("counts");
+
+    // Subcase 1: activeEnabled -> 1 clear
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "fullscreen", "terminal": {"showTerminalProgress": true}})");
+        auto client = std::make_shared<tests::GatedChatProvider>();
+        auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        // Active state established at stop (matches artifact 29 Scenario 5.1: activeAtStop = true)
+        REQUIRE(terminal.set_progress(true));
+
+        // Stop while active: teardown clear count
+        const auto before_stop = terminal.output().size();
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        std::span<const std::string> stop_delta(
+                terminal.output().data() + before_stop, terminal.output().size() - before_stop);
+        const auto stop_osc = tests::extract_osc_9_4_commands(stop_delta);
+        const auto expected_clears =
+                static_cast<std::size_t>(counts.at("activeEnabled").at("clearsEmitted").get_number());
+        CHECK(stop_osc.size() == expected_clears);
+        CHECK(stop_osc == std::vector<std::string>{"\x1b]9;4;0\x07"});
+    }
+
+    // Subcase 2: idleDisabled -> 0 clears
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "fullscreen", "terminal": {"showTerminalProgress": false}})");
+        auto client = std::make_shared<tests::GatedChatProvider>();
+        auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        // Stop while idle, disabled
+        const auto before_stop = terminal.output().size();
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        std::span<const std::string> stop_delta(
+                terminal.output().data() + before_stop, terminal.output().size() - before_stop);
+        const auto stop_osc = tests::extract_osc_9_4_commands(stop_delta);
+        const auto expected_clears =
+                static_cast<std::size_t>(counts.at("idleDisabled").at("clearsEmitted").get_number());
+        CHECK(stop_osc.size() == expected_clears);
+        CHECK(stop_osc.empty());
+    }
+
+    // Subcase 3: idleEnabled -> 1 clear
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "fullscreen", "terminal": {"showTerminalProgress": true}})");
+        auto client = std::make_shared<tests::GatedChatProvider>();
+        auto* gated = client.get();
+        auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        // Complete one turn so session is idle after turn completion
+        REQUIRE(terminal.inject_input("first turn\r"));
+        REQUIRE(pump_until(io, [&] { return gated->requests.size() == 1; }));
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 1") != std::string::npos; }));
+
+        // Stop while idle, enabled
+        const auto before_stop = terminal.output().size();
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        std::span<const std::string> stop_delta(
+                terminal.output().data() + before_stop, terminal.output().size() - before_stop);
+        const auto stop_osc = tests::extract_osc_9_4_commands(stop_delta);
+        const auto expected_clears =
+                static_cast<std::size_t>(counts.at("idleEnabled").at("clearsEmitted").get_number());
+        CHECK(stop_osc.size() == expected_clears);
+        CHECK(stop_osc == std::vector<std::string>{"\x1b]9;4;0\x07"});
+    }
+
+    // Subcase 4: activeToggledDisabled -> 1 clear
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "fullscreen", "terminal": {"showTerminalProgress": true}})");
+        auto client = std::make_shared<tests::GatedChatProvider>();
+        auto* gated = client.get();
+        auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        // Turn start activates progress
+        REQUIRE(terminal.inject_input("pending turn\r"));
+        REQUIRE(pump_until(io, [&] { return gated->requests.size() == 1; }));
+
+        // Toggle setting to false via UI
+        focus_terminal_progress_row(terminal, io);
+        REQUIRE(terminal.inject_input("\r"));
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] {
+            return read_text_file(config.path() / "settings.json").find("\"showTerminalProgress\": false") !=
+                   std::string::npos;
+        }));
+        close_terminal_progress_settings(terminal, io);
+
+        // Turn ends: because setting is false, agent_end skips clear
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 1") != std::string::npos; }));
+
+        // Stop: teardown safety net emits clear for orphaned active progress
+        const auto before_stop = terminal.output().size();
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        std::span<const std::string> stop_delta(
+                terminal.output().data() + before_stop, terminal.output().size() - before_stop);
+        const auto stop_osc = tests::extract_osc_9_4_commands(stop_delta);
+        const auto expected_clears =
+                static_cast<std::size_t>(counts.at("activeToggledDisabled").at("clearsEmitted").get_number());
+        CHECK(stop_osc.size() == expected_clears);
+        CHECK(stop_osc == std::vector<std::string>{"\x1b]9;4;0\x07"});
+    }
+}
+
+TEST_CASE("Native TUI reload reapplies showTerminalProgress preference from settings",
+        "[coding_agent][tui][progress][reload][issue1037][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("settings.json", R"({"tuiMode": "fullscreen", "terminal": {"showTerminalProgress": false}})");
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+    boost::asio::co_spawn(io,
+            drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+    REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+    // Mutate file on disk to true
+    config.write("settings.json", R"({"tuiMode": "fullscreen", "terminal": {"showTerminalProgress": true}})");
+
+    // Trigger /reload
+    REQUIRE(terminal.inject_input("/reload\r"));
+    drain_ready(io);
+    focus_terminal_progress_row(terminal, io);
+    const auto screen1 = visible_screen(terminal);
+    CHECK(screen1.find("Terminal progress") != std::string::npos);
+    CHECK(screen1.find("true") != std::string::npos);
+    close_terminal_progress_settings(terminal, io);
+
+    // Mutate file on disk to false
+    config.write("settings.json", R"({"tuiMode": "fullscreen", "terminal": {"showTerminalProgress": false}})");
+
+    // Trigger /reload again
+    REQUIRE(terminal.inject_input("/reload\r"));
+    drain_ready(io);
+    focus_terminal_progress_row(terminal, io);
+    const auto screen2 = visible_screen(terminal);
+    CHECK(screen2.find("Terminal progress") != std::string::npos);
+    CHECK(screen2.find("false") != std::string::npos);
+    close_terminal_progress_settings(terminal, io);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result);
+    CHECK(*run_result);
 }
 
 TEST_CASE("Native TUI fullscreen transcript keeps its scroll window across a mode round trip",
@@ -1353,16 +1858,6 @@ TEST_CASE("Native TUI reload reapplies showHardwareCursor preference from settin
 }
 
 namespace {
-
-using cch::support::JsonValue;
-
-[[nodiscard]] const JsonValue& find_evidence_scenario(const JsonValue& bundle, std::string_view name) {
-    for (const auto& scenario : bundle.at("scenarios").get_array()) {
-        if (scenario.at("name").get_string() == name) return scenario;
-    }
-    REQUIRE(false);
-    return bundle;
-}
 
 class NestedCursorEditor final : public cch::tui::EditorComponent {
 public:
