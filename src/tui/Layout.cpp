@@ -562,6 +562,7 @@ support::ExpectedVoid LayoutBuilder::paint_box(LayoutContext& context, const Lay
             const auto first_visible_row = std::max(row, first_row);
             const auto last_visible_row = std::min(row + rows, last_row);
             if (last_visible_row <= first_visible_row) continue;
+            if (image.source_rows == 0) image.source_rows = static_cast<std::size_t>(rows);
             image.source_row_offset += static_cast<std::size_t>(first_visible_row - row);
             image.region.row = static_cast<std::size_t>(first_visible_row);
             image.region.rows = static_cast<std::size_t>(last_visible_row - first_visible_row);

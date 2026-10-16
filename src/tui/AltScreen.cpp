@@ -4,6 +4,7 @@
 #include "tui/LineCompositor.hpp"
 #include "tui/MouseRouting.hpp"
 #include "tui/OverlayCompositor.hpp"
+#include "tui/RenderPipeline.hpp"
 #include "tui/RenderUtils.hpp"
 #include "tui/UnicodeWidth.hpp"
 #include "tui/WordNavigation.hpp"
@@ -219,7 +220,8 @@ private:
 AltScreen::AltScreen(Terminal& terminal, AltScreenOptions options)
     : detail::TuiHost(terminal), render_schedule_state_(std::make_shared<RenderScheduleState>()),
       overlay_handle_context_(std::make_shared<detail::OverlayHandleContext>()),
-      compositor_(std::make_unique<detail::OverlayCompositor>()), selection_click_clock_([] {
+      compositor_(std::make_unique<detail::OverlayCompositor>()),
+      image_pipeline_(std::make_unique<detail::RenderPipeline>(terminal)), selection_click_clock_([] {
           return std::chrono::duration_cast<std::chrono::milliseconds>(
                   std::chrono::system_clock::now().time_since_epoch());
       }),
@@ -541,6 +543,11 @@ support::ExpectedVoid AltScreen::start() {
     stop_scrollbar_hover();
     clear_selection_click_history();
     pressed_url_.reset();
+    // Frozen `beforeTerminalStart`: the session's image protocol decides
+    // whether the root places Kitty images or shows the text fallback for its
+    // whole lifetime, and a previous session's uploads are forgotten.
+    session_image_protocol_ = terminal_.capabilities().inline_images;
+    image_pipeline_->clear_image_placements();
     if (focused_ == nullptr) fallback_focus();
     if (auto result = terminal_.start(
                 [this](std::string input) -> support::ExpectedVoid {
@@ -637,6 +644,12 @@ support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
     if (color_scheme_notifications_enabled_) {
         (void)terminal_.write("\x1b[?2031l");
     }
+    // Frozen `beforeTerminalStop`: a Kitty session drops every uploaded image
+    // before the alternate buffer is left, and forgets the placements with it.
+    if (session_image_protocol_ == InlineImageProtocol::Kitty) {
+        (void)terminal_.write(delete_all_kitty_images());
+    }
+    image_pipeline_->clear_image_placements();
     // Give pointer reporting back to the terminal before the alternate buffer
     // is left (pi `beforeTerminalStop`).
     (void)terminal_.write(kDisableMouse);
@@ -987,24 +1000,28 @@ support::ExpectedVoid AltScreen::render_frame() {
     // The frame outlives the paint: it is the geometry every later hit test runs
     // against, so a pointer event never renders to find out where a component is
     // (pi `currentLayout`).
-    // Frame image placements are not emitted by this root yet (#1012).
+    // Frame image placements are emitted below (#1012): the row buffer keeps
+    // the image sidecars so the fullscreen image stage owns crop, reuse and
+    // cleanup.
     lines = std::move(cached_frame_->lines);
     cursor = cached_frame_->cursor;
+    std::vector<InlineImageRenderRegion> images = std::move(cached_frame_->images);
     lines = apply_search_highlights(lines, *cached_frame_);
     auto display_lines = strip_osc133_zone_prefixes(lines);
     if (auto indicator = composite_scroll_to_end_indicator(display_lines); !indicator) return indicator;
     const bool compose_overlays = compositor_->has_visible_overlays(dimensions);
     if (compose_overlays) {
-        RenderResult output{.lines = std::move(display_lines), .images = std::move(cached_frame_->images)};
+        RenderResult output{.lines = std::move(display_lines), .images = std::move(images)};
         auto materialized = detail::OverlayCompositor::materialize_images(
                 std::move(output), terminal_.capabilities(), dimensions.columns, dimensions.rows);
         if (auto overlaid = compositor_->composite(dimensions, terminal_.capabilities(), materialized); !overlaid)
             return overlaid;
         display_lines = std::move(materialized.lines);
+        images = std::move(materialized.images);
         if (materialized.cursor) cursor = materialized.cursor;
     }
     if (auto flashed = composite_flashes(display_lines, dimensions.columns, dimensions.rows); !flashed) return flashed;
-    return render_viewport(display_lines, cursor, dimensions);
+    return render_viewport(std::move(display_lines), cursor, dimensions, std::move(images));
 }
 
 support::Expected<RenderResult> AltScreen::render_implicit_document(std::size_t width) {
@@ -1538,8 +1555,10 @@ support::ExpectedVoid AltScreen::composite_scroll_to_end_indicator(std::vector<s
     return {};
 }
 
-support::ExpectedVoid AltScreen::render_viewport(
-        const std::vector<std::string>& lines, std::optional<CursorPosition> cursor, TerminalDimensions dimensions) {
+support::ExpectedVoid AltScreen::render_viewport(std::vector<std::string> lines,
+        std::optional<CursorPosition> cursor,
+        TerminalDimensions dimensions,
+        std::vector<InlineImageRenderRegion> images) {
     const auto visible_rows = dimensions.rows;
     const bool dimensions_changed = !previous_dimensions_ || previous_dimensions_->columns != dimensions.columns ||
                                     previous_dimensions_->rows != dimensions.rows;
@@ -1552,6 +1571,15 @@ support::ExpectedVoid AltScreen::render_viewport(
     // decides it (tui-alt-screen.ts:1724-1725), before any row is written.
     write_accounting_ = {};
     if (full_repaint) ++full_redraws_;
+
+    // The frozen fullscreen image stage (tui-alt-screen.ts
+    // `prepareKittyScreen`): changed image anchors force the full row rewrite
+    // and its placement cleanup, and offscreen uploads past the frozen caps
+    // are deleted by image id.
+    auto prepared =
+            image_pipeline_->prepare_fullscreen_images(std::move(lines), images, session_image_protocol_, full_repaint);
+    lines = std::move(prepared.lines);
+    const bool rewrite_all_rows = full_repaint || prepared.images_need_redraw;
 
     std::optional<CursorPosition> resolved;
     if (cursor) {
@@ -1566,13 +1594,23 @@ support::ExpectedVoid AltScreen::render_viewport(
             return std::unexpected(cleared.error());
         }
     }
+    for (const auto& cleanup : {prepared.clear_bytes, prepared.deletion_bytes}) {
+        if (cleanup.empty()) continue;
+        ++write_accounting_.attempted_writes;
+        if (auto written = terminal_.write(cleanup); !written) {
+            (void)terminal_.end_synchronized_update();
+            return std::unexpected(written.error());
+        }
+        ++write_accounting_.committed_writes;
+        write_accounting_.committed_bytes += cleanup.size();
+    }
 
     selection_source_lines_ = lines;
     const auto selected_lines = apply_text_selection(lines);
     for (std::size_t row = 0; row < visible_rows; ++row) {
         const std::string empty;
         const auto& desired = row < selected_lines.size() ? selected_lines[row] : empty;
-        if (!full_repaint && row < previous_lines_.size() && previous_lines_[row] == desired) continue;
+        if (!rewrite_all_rows && row < previous_lines_.size() && previous_lines_[row] == desired) continue;
         // Absolute row placement with an explicit line erase: the viewport is
         // not a flow, so a shorter row must not leave the previous tail behind.
         auto output = std::format("\x1b[{};1H\x1b[2K{}", row + 1, desired);
@@ -2079,9 +2117,12 @@ bool AltScreen::handle_viewport_key(const KeyEvent& event) {
     // Frozen dispatch order (tui-alt-screen.ts:~720-777): pageUp, pageDown,
     // previousPrompt, nextPrompt, top, bottom. A single ordered pass keeps
     // conflict resolution identical to frozen when user overrides collide.
-    constexpr std::array<std::string_view, 6> actions{
-            "tui.altScreen.pageUp", "tui.altScreen.pageDown", "tui.altScreen.previousPrompt",
-            "tui.altScreen.nextPrompt", "tui.altScreen.top", "tui.altScreen.bottom"};
+    constexpr std::array<std::string_view, 6> actions{"tui.altScreen.pageUp",
+            "tui.altScreen.pageDown",
+            "tui.altScreen.previousPrompt",
+            "tui.altScreen.nextPrompt",
+            "tui.altScreen.top",
+            "tui.altScreen.bottom"};
     const auto matched = keybinding_context_->first_match(event, actions);
     if (!matched) return false;
     if (event.type == KeyEventType::Release) return true;

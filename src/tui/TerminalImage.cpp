@@ -148,14 +148,64 @@ constexpr std::string_view kCellSizeResponsePrefix{"\x1b[6;"};
     return result;
 }
 
+/// Frozen `cropKittyImageLine` geometry for this image: the source pixel band
+/// the placement still shows, or an unset rectangle when frozen would emit no
+/// crop controls.
+[[nodiscard]] detail::KittyImageCrop image_crop(const TerminalImage& image) {
+    const auto total_rows = image.source_rows == 0 ? image.region.rows : image.source_rows;
+    return detail::kitty_image_crop(image.pixel_height, total_rows, image.source_row_offset, image.region.rows);
+}
+
+/// Kitty transmit-and-place controls. A placement cut by an ancestor scrolled
+/// or clipped region drops `r=` and appends the frozen crop controls in
+/// `y=,h=,r=` order (pi `cropKittyImageLine`).
+[[nodiscard]] std::string kitty_transmission_parameters(
+    const TerminalImage& image,
+    TerminalImageHandle handle) {
+    const auto crop = image_crop(image);
+    if (crop.rows == 0) {
+        return std::format(
+            "a=T,f=100,q=2,C=1,c={},r={},i={}",
+            image.region.columns,
+            image.region.rows,
+            handle.value);
+    }
+    return std::format(
+        "a=T,f=100,q=2,C=1,c={},i={},y={},h={},r={}",
+        image.region.columns,
+        handle.value,
+        crop.source_y,
+        crop.source_height,
+        crop.rows);
+}
+
+/// Placement-only controls for a resource already uploaded in this session
+/// (pi `getKittyImagePlacement`): `a=p` instead of the transmission, with the
+/// same placement controls and the identical crop.
+[[nodiscard]] std::string kitty_placement_parameters(
+    const TerminalImage& image,
+    TerminalImageHandle handle) {
+    const auto crop = image_crop(image);
+    if (crop.rows == 0) {
+        return std::format(
+            "a=p,q=2,C=1,c={},r={},i={}",
+            image.region.columns,
+            image.region.rows,
+            handle.value);
+    }
+    return std::format(
+        "a=p,q=2,C=1,c={},i={},y={},h={},r={}",
+        image.region.columns,
+        handle.value,
+        crop.source_y,
+        crop.source_height,
+        crop.rows);
+}
+
 [[nodiscard]] std::string encode_kitty(
     const TerminalImage& image,
     TerminalImageHandle handle) {
-    auto parameters = std::format(
-        "a=T,f=100,q=2,C=1,c={},r={},i={}",
-        image.region.columns,
-        image.region.rows,
-        handle.value);
+    auto parameters = kitty_transmission_parameters(image, handle);
     if (image.encoded_data.size() <= kKittyChunkSize) {
         return std::format("\x1b_G{};{}\x1b\\", parameters, image.encoded_data);
     }
@@ -422,6 +472,29 @@ std::string image_fallback(
 }
 
 namespace detail {
+
+KittyImageCrop kitty_image_crop(
+    std::size_t pixel_height,
+    std::size_t total_rows,
+    std::size_t hidden_rows,
+    std::size_t visible_rows) {
+    if (total_rows == 0 || hidden_rows >= total_rows || visible_rows == 0) return {};
+    const auto cropped_rows = std::min(visible_rows, total_rows - hidden_rows);
+    if (hidden_rows == 0 && cropped_rows == total_rows) return {};
+    const auto source_y = pixel_height * hidden_rows / total_rows;
+    const auto source_end = (pixel_height * (hidden_rows + cropped_rows) + total_rows - 1) / total_rows;
+    return {
+        .source_y = source_y,
+        .source_height = std::max<std::size_t>(1, std::min(pixel_height, source_end) - source_y),
+        .rows = cropped_rows,
+    };
+}
+
+std::string encode_kitty_image_placement(
+    const TerminalImage& image,
+    TerminalImageHandle handle) {
+    return std::format("\x1b_G{}\x1b\\", kitty_placement_parameters(image, handle));
+}
 
 CellSizeInputResult consume_cell_size_input(
     std::string pending,

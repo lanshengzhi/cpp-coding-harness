@@ -65,6 +65,10 @@
       {
         "path": "capture/alt-screen-nav-scenarios.mts",
         "sha256": "36de6cf47a00015a6a24da3bf70707ed88dbee2fa645f1b3afec943153f6234b"
+      },
+      {
+        "path": "capture/alt-screen-image-scenarios.mts",
+        "sha256": "4d999b669b0e17c53a71aad7d842e09152d8903de16818e71acff81c89006479"
       }
     ]
   },
@@ -286,6 +290,30 @@
         "packages/tui/src/components/alt-screen-flash.ts:AltScreenFlashContainer.flash,AltScreenFlashContainer.render",
         "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.flash,TuiAltScreen.scrollToPrompt,TuiAltScreen.compositeFlashes,TuiAltScreen.compositeScrollToEndIndicator,TuiAltScreen.handleScrollToEndIndicatorMouseEvent,TuiAltScreen.doRender",
         "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,VirtualTerminal.waitForRender,VirtualTerminal.getViewport"
+      ]
+    },
+    {
+      "path": "alt-screen-image.json",
+      "family": "alt-screen-image",
+      "bytes": 49625,
+      "sha256": "ebc2e5a0b38621e4bb6ec45a5677e4285f8920d57f96e2aed39d76b81f563375",
+      "sourceEndpoints": [
+        "packages/tui/src/tui-alt-screen.ts:doRender,beforeTerminalStart,beforeTerminalStop,scrollBy,prepareKittyScreen",
+        "packages/tui/src/terminal-image.ts:cropKittyImageLine,getKittyImagePlacement,registerKittyImageMetadata,encodeKitty",
+        "packages/tui/src/layout.ts:paintBox",
+        "packages/tui/src/components/image.ts:render"
+      ]
+    },
+    {
+      "path": "iterm2-image.json",
+      "family": "iterm2-image",
+      "bytes": 2265,
+      "sha256": "0f732f3c4eda01ffae728bf521b1bf1cf757cb3939ae0f4fdbe57293f2e1e7ad",
+      "sourceEndpoints": [
+        "packages/tui/src/tui-alt-screen.ts:doRender,beforeTerminalStart,beforeTerminalStop,scrollBy,prepareKittyScreen",
+        "packages/tui/src/terminal-image.ts:cropKittyImageLine,getKittyImagePlacement,registerKittyImageMetadata,encodeKitty",
+        "packages/tui/src/layout.ts:paintBox",
+        "packages/tui/src/components/image.ts:render"
       ]
     }
   ]

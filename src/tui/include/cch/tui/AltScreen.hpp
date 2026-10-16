@@ -25,6 +25,7 @@ namespace cch::tui {
 
 namespace detail {
 class OverlayCompositor;
+class RenderPipeline;
 struct LayoutFrame;
 struct MousePacket;
 struct OverlayHandleContext;
@@ -315,8 +316,10 @@ private:
     [[nodiscard]] const ScrollView& primary_scroll_view() const noexcept;
     [[nodiscard]] support::ExpectedVoid render_now();
     [[nodiscard]] support::ExpectedVoid render_frame();
-    [[nodiscard]] support::ExpectedVoid render_viewport(
-            const std::vector<std::string>& lines, std::optional<CursorPosition> cursor, TerminalDimensions dimensions);
+    [[nodiscard]] support::ExpectedVoid render_viewport(std::vector<std::string> lines,
+            std::optional<CursorPosition> cursor,
+            TerminalDimensions dimensions,
+            std::vector<InlineImageRenderRegion> images);
     void dispatch_input(const InputEventVariant& event);
     void handle_input(std::string input);
     void handle_resize(TerminalDimensions dimensions);
@@ -340,6 +343,10 @@ private:
     std::shared_ptr<RenderScheduleState> render_schedule_state_;
     std::shared_ptr<detail::OverlayHandleContext> overlay_handle_context_;
     std::unique_ptr<detail::OverlayCompositor> compositor_;
+    /// The fullscreen root's image placement stage (#1012): frozen crop,
+    /// placement-only reuse, per-id eviction, and the session's image
+    /// fallback all run here.
+    std::unique_ptr<detail::RenderPipeline> image_pipeline_;
     struct ActiveSearch {
         AltScreenSearchComponent* component{nullptr};
         std::unique_ptr<SearchIndex> index;
@@ -367,6 +374,10 @@ private:
     /// The last rendered frame, the geometry every hit test runs against (pi
     /// `currentLayout`); the rows are painted away, the boxes stay.
     std::unique_ptr<detail::LayoutFrame> cached_frame_;
+    /// The image protocol captured when the session started
+    /// (pi `beforeTerminalStart`): an iTerm2 session suppresses image
+    /// placements for its whole lifetime and shows the text fallback.
+    InlineImageProtocol session_image_protocol_{InlineImageProtocol::None};
     /// Rendered row count per mounted child of the implicit document, in mount
     /// order (pi `implicitDocument.mouseLayout.children`).
     std::vector<std::pair<Component*, std::size_t>> implicit_document_rows_;

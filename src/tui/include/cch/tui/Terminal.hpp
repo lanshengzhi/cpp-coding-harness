@@ -106,6 +106,13 @@ struct TerminalImage {
     std::uint64_t resource_id{0};
     std::uint64_t revision{0};
     CellRegion region{};
+    /// The placement's row count before an ancestor's clip shortened
+    /// `region.rows`; zero means `region.rows` is already the full count (pi
+    /// kitty `metadata.rows`, the crop denominator).
+    std::size_t source_rows{0};
+    /// Source rows an ancestor scrolled or clipped off the top (pi
+    /// `cropKittyImageLine` `hiddenRows`).
+    std::size_t source_row_offset{0};
     /// When set, re-place with this existing handle instead of allocating a
     /// fresh one (pi's imageId reuse): the Kitty protocol re-transmits with
     /// the same `i=` so animation frames replace in place.

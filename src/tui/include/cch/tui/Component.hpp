@@ -36,6 +36,10 @@ struct InlineImageRenderRegion {
     /// `cropTop`), so a consumer crops this many cell rows off the top of the
     /// source before rendering `region.rows` rows at `region.row`.
     std::size_t source_row_offset{0};
+    /// The placement's row count before an ancestor's clip shortened
+    /// `region.rows` (pi kitty `metadata.rows`); zero means `region.rows` is
+    /// already the full count. The denominator of the frozen crop.
+    std::size_t source_rows{0};
     bool rows_reserved_in_lines{false};
 };
 

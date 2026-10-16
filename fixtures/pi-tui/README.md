@@ -24,6 +24,8 @@ The initial independently captured cases are:
 | `latex.json` | Frozen `renderLatex` inline grammar (symbols, nested groups, fractions including `frac 1/2`, roots, accents, inline scripts, operators), its `undefined` failure value, and the `display` option | `LatexTest` replays every row through `cch_tui::render_latex` and compares complete values |
 | `layout.json` | Constrained-frame allocation and painting: `VStack` grow/shrink/min/max/gap allocation, an auto-basis dock measured through nested minimum sizes, a leaf cropped upward to keep its `CURSOR_MARKER` row, a responsive `visible` entry under two cross-axis alignments, the transcript/editor/menu/footer dock driven through growth, menu appearance, over-constraint and shrink, and the horizontal layout: `HStack` align/grow/shrink/clamp allocation composed into shared rows, unequal-column frames, an auto-basis entry measured at the frame width, a nested `VStack`-in-`HStack` frame re-framed through inner growth, removal and re-add, and an `HStack` grown inside a constrained `VStack` | `StackLayoutEvidenceTest` and `HStackEvidenceTest` replay every frame through `cch_tui::detail::LayoutEngine` and compare child offsets, heights, `lineOffset`, painted rows and cursor |
 | `scroll-view.json` | Scroll algebra and composition: follow-end transitions with the unused delta of every `scrollBy`, appended rows moving a followed window, an absolute `scrollTo` with `disableFollow` at the last row that keeps its position while rows are appended, nested viewport measurement with the `getScrollViewsAt` depth order, placement crop rows and hidden source rows, and the implicit alternate-screen viewport across scroll, append, jump and resize | `ScrollViewEvidenceTest` replays every scenario through the public `cch_tui::ScrollView`, `LayoutEngine` and `AltScreen` seams over `VirtualTerminal` and compares scroll position, follow state, viewport and content heights, painted rows and image placements |
+| `alt-screen-image.json` | Fullscreen kitty placement lifecycle: a scrolled image cropped to its visible source band and restored, an anchor moved by a growing sibling re-emitted as a placement-only `a=p` command, image removal and session teardown deletions, and both offscreen eviction caps deleting by image id; every phase records the image commands with the screen row each executed at plus the buffered screen | `AltScreenImageEvidenceTest` replays every phase through `AltScreen` over `VirtualTerminal`, renames the random kitty ids to first-appearance indices and compares the command trace and the viewport |
+| `iterm2-image.json` | A fullscreen iTerm2 session's real `Image` component: the fallback row and no image sequence before or after `stop` | `AltScreenImageEvidenceTest` replays it through `AltScreen` over an iTerm2 `VirtualTerminal` |
 
 `latex.json` was appended to the existing bundle rather than re-captured with all of it, so it keeps the envelope `capturedAt` and records its own wall clock plus the pinned published build digest under `recapture`. The other five families are unchanged.
 
@@ -236,6 +238,24 @@ remain explicit historical regression inputs. They cannot satisfy a named pi-v1.
 The old reported exclusions/defaults are historical authority only; ADR 0067 governs the
 new effort. The ADR is an accepted scope record, and the three initial observations are
 runner acceptance, not complete behavioral parity.
+
+For #1012, the named runner added `alt-screen-image.json` and `iterm2-image.json`; the other
+families keep their bytes. `capture/alt-screen-image-scenarios.mts` drives pi's real `Image`,
+`ScrollView`, `VStack`, `TuiAltScreen` and `VirtualTerminal`, records the write stream and reduces
+every frame to the image commands it carried together with the row each one executed at, so a
+re-ordered clear, a re-transmitted resource, a stale placement or a deletion aimed at another id
+fails. The kitty scenarios use a 16x64 PNG whose four 16-pixel bands differ in colour:
+`image-scroll-crop-round-trip` distinguishes the cropped source band at the window edge
+(`y=48,h=16,r=1`) from a reduced destination height or an unmodified source,
+`image-anchor-move-reuse` distinguishes the placement-only `a=p` reuse from a second transmission,
+`image-resize-repaint` distinguishes a reflowed window that drops the placement entirely from one
+that keeps a stale strip (the upload survives and returns as `a=p`),
+`image-removal-session-teardown` distinguishes the redraw clear `d=a` from the teardown `d=A`, and
+`image-decoded-bytes-eviction` / `image-offscreen-count-eviction` distinguish the per-id `d=I`
+eviction under the decoded-byte and count caps. The iTerm2 family stays separate original evidence
+for the frozen fullscreen fallback: one `[Image: [image/png] 16x64` fallback row and no image
+command before or after `stop`. The replay renames the random kitty ids to first-appearance
+indices, so identity is compared rather than the allocation.
 
 ## Historical scoped evidence
 
