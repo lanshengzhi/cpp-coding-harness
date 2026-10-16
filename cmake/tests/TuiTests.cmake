@@ -57,6 +57,7 @@ tests/tui/KeysKittyTextTest.cpp
         tests/tui/LatexTest.cpp
         tests/tui/LoaderTest.cpp
         tests/tui/MarkdownTest.cpp
+        tests/tui/MouseComponentsTest.cpp
         tests/tui/MouseEvidenceTest.cpp
         tests/tui/MouseRoutingTest.cpp
         tests/tui/NativeClipboardTest.cpp
