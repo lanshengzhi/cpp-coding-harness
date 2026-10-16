@@ -112,12 +112,12 @@ namespace {
     co_return co_await engine->finish();
 }
 
-/// The TUI mode row is the seventh of the selector's eight items: behind the
+/// The TUI mode row is the eighth of the selector's nine items: behind the
 /// thinking-level row and before the theme row.
-constexpr std::string_view kTuiModeRowKeys = "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B";
+constexpr std::string_view kTuiModeRowKeys = "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B";
 
 /// Only the focused row renders its description, so this is what proves the
-/// six moves above landed on the TUI mode row.
+/// seven moves above landed on the TUI mode row.
 constexpr std::string_view kTuiModeRowDescription = "Interface layout;";
 
 [[nodiscard]] bool on_tui_mode_row(const tui::VirtualTerminal& terminal) {
@@ -274,7 +274,7 @@ TEST_CASE("Native TUI TUI mode switch refuses while an overlay entry is present"
     REQUIRE(created);
     tests::RuntimeLoopDriver runtime_driver(runtime);
 
-    tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+    tui::VirtualTerminal terminal({.columns = 48, .rows = 26});
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
     auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
@@ -469,7 +469,8 @@ TEST_CASE("Native TUI fullscreen transcript keeps its scroll window across a mod
     REQUIRE(pump_until(io, [&] { return terminal.modes().alternate_screen; }));
     REQUIRE(pump_until(io, [&] {
         const auto screen = terminal.screen();
-        return screen.size() == 20 && screen[19].find("fake-model") != std::string::npos;
+        return screen.size() == 20 && (screen[19].find("fake-model") != std::string::npos ||
+                                              screen[19].find("cpp-harness") != std::string::npos);
     }));
 
     // The open selector is dock, not transcript, so its rows are dismissed

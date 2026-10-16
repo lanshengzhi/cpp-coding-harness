@@ -398,6 +398,15 @@ void migrate_settings(JsonObject& settings) {
             settings.show_hardware_cursor = *parsed;
         }
     }
+    if (const auto found = object.find("terminal"); found != object.end()) {
+        if (const auto* terminal_obj = found->second.get_if<JsonObject>()) {
+            if (const auto prog_found = terminal_obj->find("showTerminalProgress"); prog_found != terminal_obj->end()) {
+                if (const auto* parsed = prog_found->second.get_if<bool>()) {
+                    settings.show_terminal_progress = *parsed;
+                }
+            }
+        }
+    }
     if (const auto* value = string_field(object, "deviceId")) {
         settings.device_id = *value;
     }
@@ -645,6 +654,47 @@ private:
     return write_settings_text(path, std::move(*serialized));
 }
 
+/// Surgical nested field-level merge write: re-read the current file under lock,
+/// migrate it, and apply only the caller-supplied child field inside parent field,
+/// preserving every unmodified sibling and unknown field.
+[[nodiscard]] support::ExpectedVoid persist_nested_field(const std::filesystem::path& path,
+        std::string parent_field,
+        std::string child_field,
+        support::JsonValue value) {
+    const auto parent = path.parent_path();
+    if (!parent.empty()) {
+        std::error_code directory_error;
+        std::filesystem::create_directories(parent, directory_error);
+        if (directory_error) {
+            return std::unexpected(settings_error("could not create settings directory", directory_error.message()));
+        }
+        (void)::chmod(parent.c_str(), 0700);
+    }
+
+    auto lock = FileLock::acquire(path);
+    if (!lock) {
+        return std::unexpected(lock.error());
+    }
+    auto object = read_current_settings(path);
+    if (!object) {
+        return std::unexpected(object.error());
+    }
+    JsonObject parent_obj;
+    if (auto existing_parent = object->find(parent_field);
+            existing_parent != object->end() && existing_parent->second.holds<JsonObject>()) {
+        if (const auto* existing_ptr = existing_parent->second.get_if<JsonObject>()) {
+            parent_obj = *existing_ptr;
+        }
+    }
+    parent_obj.insert_or_assign(std::move(child_field), std::move(value));
+    object->insert_or_assign(std::move(parent_field), support::JsonValue{std::move(parent_obj)});
+    auto serialized = detail::serialize_pretty_json(support::JsonValue{*object}, true);
+    if (!serialized) {
+        return std::unexpected(serialized.error());
+    }
+    return write_settings_text(path, std::move(*serialized));
+}
+
 } // namespace
 
 struct SettingsManager::Impl {
@@ -729,6 +779,9 @@ struct SettingsManager::Impl {
         if (project.show_hardware_cursor) {
             merged.show_hardware_cursor = project.show_hardware_cursor;
         }
+        if (project.show_terminal_progress) {
+            merged.show_terminal_progress = project.show_terminal_progress;
+        }
         return merged;
     }
 
@@ -762,6 +815,11 @@ struct SettingsManager::Impl {
 
     [[nodiscard]] support::ExpectedVoid persist_global_field(std::string field, support::JsonValue value) {
         return persist_field(global_path, std::move(field), std::move(value));
+    }
+
+    [[nodiscard]] support::ExpectedVoid persist_global_nested_field(
+            std::string parent_field, std::string child_field, support::JsonValue value) {
+        return persist_nested_field(global_path, std::move(parent_field), std::move(child_field), std::move(value));
     }
 
     void recompute_merged() {
@@ -1158,6 +1216,29 @@ support::ExpectedVoid SettingsManager::set_show_hardware_cursor(bool enabled) {
         return persisted;
     }
     target.show_hardware_cursor = enabled;
+    impl_->recompute_merged();
+    return support::ExpectedVoid{};
+}
+
+bool SettingsManager::get_show_terminal_progress() const noexcept {
+    return impl_->merged_settings.show_terminal_progress.value_or(false);
+}
+
+support::ExpectedVoid SettingsManager::set_show_terminal_progress(bool enabled) {
+    if (impl_->global_write_suppressed()) {
+        return support::ExpectedVoid{};
+    }
+    auto& target = impl_->global_settings;
+    if (target.show_terminal_progress == enabled) {
+        return support::ExpectedVoid{};
+    }
+
+    if (auto persisted =
+                    impl_->persist_global_nested_field("terminal", "showTerminalProgress", support::JsonValue{enabled});
+            !persisted) {
+        return persisted;
+    }
+    target.show_terminal_progress = enabled;
     impl_->recompute_merged();
     return support::ExpectedVoid{};
 }

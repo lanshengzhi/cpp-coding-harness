@@ -4492,10 +4492,10 @@ TEST_CASE("Native TUI settings selector changes render settings live and they su
     // the zero-padding position.
     CHECK(column_of(screen, "resume request") == 1);
 
-    // Down three times to hide-thinking (past skill-commands,
-    // show-hardware-cursor, and output-padding) and confirm: the thinking block
-    // disappears live and the global setting persists.
-    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\r"));
+    // Down four times to hide-thinking (past skill-commands,
+    // show-hardware-cursor, output-padding, and terminal-progress) and confirm:
+    // the thinking block disappears live and the global setting persists.
+    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\x1b[B\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(screen.find("inspect the saved state") == std::string::npos);
@@ -4503,9 +4503,9 @@ TEST_CASE("Native TUI settings selector changes render settings live and they su
     REQUIRE(std::filesystem::exists(settings_path));
     CHECK(read_binary_file(settings_path).find("\"hideThinkingBlock\": true") != std::string::npos);
 
-    // Up to output-padding and confirm: the padding cycles 1 → 0, the user
-    // message re-renders one column left, and the setting persists.
-    REQUIRE(terminal.inject_input("\x1b[A\r"));
+    // Up two times to output-padding and confirm: the padding cycles 1 → 0, the
+    // user message re-renders one column left, and the setting persists.
+    REQUIRE(terminal.inject_input("\x1b[A\x1b[A\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(column_of(screen, "resume request") == 0);

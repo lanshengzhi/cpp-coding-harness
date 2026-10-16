@@ -88,11 +88,12 @@ TEST_CASE("SettingsSelector renders the #327 subset items with pi labels and res
 
     const auto screen = render_screen(selector);
     // pi settings-selector.ts item order for the C++ subset:
-    // skill-commands, show-hardware-cursor, output-padding, hide-thinking,
-    // default-project-trust, thinking, tui-mode, theme.
+    // skill-commands, show-hardware-cursor, output-padding, terminal-progress,
+    // hide-thinking, default-project-trust, thinking, tui-mode, theme.
     const auto skill_commands = screen.find("Skill commands");
     const auto show_hardware_cursor = screen.find("Show hardware cursor");
     const auto output_padding = screen.find("Output padding");
+    const auto terminal_progress = screen.find("Terminal progress");
     const auto hide_thinking = screen.find("Hide thinking");
     const auto project_trust = screen.find("Default project trust");
     const auto thinking = screen.find("Thinking level");
@@ -101,6 +102,7 @@ TEST_CASE("SettingsSelector renders the #327 subset items with pi labels and res
     REQUIRE(skill_commands != std::string::npos);
     REQUIRE(show_hardware_cursor != std::string::npos);
     REQUIRE(output_padding != std::string::npos);
+    REQUIRE(terminal_progress != std::string::npos);
     REQUIRE(hide_thinking != std::string::npos);
     REQUIRE(project_trust != std::string::npos);
     REQUIRE(thinking != std::string::npos);
@@ -108,7 +110,8 @@ TEST_CASE("SettingsSelector renders the #327 subset items with pi labels and res
     REQUIRE(theme_item != std::string::npos);
     CHECK(skill_commands < show_hardware_cursor);
     CHECK(show_hardware_cursor < output_padding);
-    CHECK(output_padding < hide_thinking);
+    CHECK(output_padding < terminal_progress);
+    CHECK(terminal_progress < hide_thinking);
     CHECK(hide_thinking < project_trust);
     CHECK(project_trust < thinking);
     CHECK(thinking < tui_mode);
@@ -121,6 +124,9 @@ TEST_CASE("SettingsSelector renders the #327 subset items with pi labels and res
             std::string::npos);
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     CHECK(render_screen(selector).find("Horizontal padding for user messages, assistant messages, and thinking") !=
+            std::string::npos);
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    CHECK(render_screen(selector).find("Show OSC 9;4 progress indicators in the terminal tab bar") !=
             std::string::npos);
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     CHECK(render_screen(selector).find("Hide thinking blocks in assistant responses") != std::string::npos);
@@ -150,6 +156,7 @@ TEST_CASE("SettingsSelector cycles value items and fires the change sinks",
     config.default_project_trust = coding_agent::DefaultProjectTrust::Ask;
     std::optional<bool> hide_change;
     std::optional<std::size_t> pad_change;
+    std::optional<bool> progress_change;
     std::optional<bool> skill_change;
     std::optional<bool> cursor_change;
     std::optional<coding_agent::DefaultProjectTrust> trust_change;
@@ -157,6 +164,7 @@ TEST_CASE("SettingsSelector cycles value items and fires the change sinks",
     coding_agent::tui::SettingsSelectorCallbacks callbacks;
     callbacks.on_hide_thinking_block_change = [&hide_change](bool hidden) { hide_change = hidden; };
     callbacks.on_output_pad_change = [&pad_change](std::size_t padding) { pad_change = padding; };
+    callbacks.on_show_terminal_progress_change = [&progress_change](bool enabled) { progress_change = enabled; };
     callbacks.on_enable_skill_commands_change = [&skill_change](bool enabled) { skill_change = enabled; };
     callbacks.on_show_hardware_cursor_change = [&cursor_change](bool enabled) { cursor_change = enabled; };
     callbacks.on_default_project_trust_change = [&trust_change](coding_agent::DefaultProjectTrust trust) {
@@ -182,6 +190,12 @@ TEST_CASE("SettingsSelector cycles value items and fires the change sinks",
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     REQUIRE(pad_change.has_value());
     CHECK(*pad_change == 0);
+
+    // Down to terminal-progress; confirm cycles false → true.
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
+    REQUIRE(progress_change.has_value());
+    CHECK(*progress_change == true);
 
     // Down to hide-thinking; confirm cycles false → true.
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
@@ -212,8 +226,8 @@ TEST_CASE("SettingsSelector thinking submenu lists the available levels with pi 
 
     coding_agent::tui::SettingsSelectorComponent selector(theme, test_keybindings(), config, std::move(callbacks));
 
-    // Navigate to the thinking item (index 5) and open the submenu.
-    for (int step = 0; step < 5; ++step) {
+    // Navigate to the thinking item (index 6) and open the submenu.
+    for (int step = 0; step < 6; ++step) {
         static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
@@ -245,9 +259,9 @@ TEST_CASE("SettingsSelector Theme item opens the single-mode ThemeSubmenu with p
 
     coding_agent::tui::SettingsSelectorComponent selector(theme, test_keybindings(), config, std::move(callbacks));
 
-    // Navigate to the theme item (last, index 7, behind the TUI mode row)
+    // Navigate to the theme item (last, index 8, behind the TUI mode row)
     // and confirm.
-    for (int step = 0; step < 7; ++step) {
+    for (int step = 0; step < 8; ++step) {
         static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
@@ -291,7 +305,7 @@ TEST_CASE("SettingsSelector ThemeSubmenu cancel re-previews the original without
 
     coding_agent::tui::SettingsSelectorComponent selector(theme, test_keybindings(), config, std::move(callbacks));
 
-    for (int step = 0; step < 7; ++step) {
+    for (int step = 0; step < 8; ++step) {
         static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
@@ -343,7 +357,7 @@ TEST_CASE("SettingsSelector always renders the Theme item with the single-mode s
     // The Theme item renders always (pi settings-selector.ts renders it
     // unconditionally); the submenu opens with the builtin themes.
     CHECK(screen.find("Theme") != std::string::npos);
-    for (int step = 0; step < 7; ++step) {
+    for (int step = 0; step < 8; ++step) {
         static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
