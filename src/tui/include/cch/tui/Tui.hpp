@@ -61,6 +61,8 @@ public:
             std::unique_ptr<Component> component) override;
     [[nodiscard]] support::ExpectedVoid remove_child(Component* component) override;
     void clear_children() override;
+    [[nodiscard]] std::vector<std::unique_ptr<Component>> take_children() override;
+    [[nodiscard]] bool has_overlay_entries() const noexcept override;
 
     [[nodiscard]] support::ExpectedVoid start() override;
     [[nodiscard]] support::ExpectedVoid stop(TuiStopOptions options = {}) override;

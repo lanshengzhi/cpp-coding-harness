@@ -432,6 +432,22 @@ std::shared_ptr<SettingsFlowController> InteractiveEngine::make_settings_flow_co
     hooks.rebuild_autocomplete_provider = [weak] {
         if (const auto self = weak.lock()) self->rebuild_autocomplete_provider();
     };
+    // pi `onTuiModeChange` calls `this.switchTuiMode(mode)` on the settings
+    // callback's own turn; the controller posts here first, so the swap runs on
+    // the executor like every other renderer-owning step.
+    hooks.switch_tui_mode = [weak](coding_agent::TuiMode mode) -> support::Expected<bool> {
+        const auto self = weak.lock();
+        if (self == nullptr) {
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "TUI mode cannot change without a live run"));
+        }
+        return self->switch_tui_mode(mode);
+    };
+    hooks.current_tui_mode = [weak] {
+        const auto self = weak.lock();
+        return self != nullptr && self->tui_ == self->main_screen_.get() ? coding_agent::TuiMode::Regular
+                                                                         : coding_agent::TuiMode::Fullscreen;
+    };
     return std::make_shared<SettingsFlowController>(
         executor_,
         *this,
@@ -489,16 +505,16 @@ std::shared_ptr<SuspendController> InteractiveEngine::make_suspend_controller() 
     const auto weak = weak_from_this();
     SuspendHooks hooks;
     hooks.stop_tui = [weak]() -> support::ExpectedVoid {
-        if (const auto self = weak.lock()) return self->tui_.stop();
+        if (const auto self = weak.lock()) return self->tui_->stop();
         return {};
     };
     hooks.start_tui = [weak]() -> support::ExpectedVoid {
-        if (const auto self = weak.lock()) return self->tui_.start();
+        if (const auto self = weak.lock()) return self->tui_->start();
         return {};
     };
     hooks.render_tui = [weak]() -> support::ExpectedVoid {
         if (const auto self = weak.lock()) {
-            self->tui_.request_render(true);
+            self->tui_->request_render(true);
             return {};
         }
         return {};

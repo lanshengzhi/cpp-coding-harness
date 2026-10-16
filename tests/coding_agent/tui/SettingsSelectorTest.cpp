@@ -93,25 +93,29 @@ TEST_CASE("SettingsSelector renders the #327 subset items with pi labels and res
     const auto screen = render_screen(selector);
     // pi settings-selector.ts item order for the C++ subset:
     // skill-commands, output-padding, hide-thinking, default-project-trust,
-    // thinking, theme (pi's skill-commands toggle sits immediately before
-    // output-padding).
+    // thinking, tui-mode, theme (pi's skill-commands toggle sits immediately
+    // before output-padding, and the TUI mode row sits where pi's own
+    // `model-thinking` and `theme` rows surround it).
     const auto skill_commands = screen.find("Skill commands");
     const auto output_padding = screen.find("Output padding");
     const auto hide_thinking = screen.find("Hide thinking");
     const auto project_trust = screen.find("Default project trust");
     const auto thinking = screen.find("Thinking level");
+    const auto tui_mode = screen.find("TUI mode");
     const auto theme_item = screen.find("Theme");
     REQUIRE(skill_commands != std::string::npos);
     REQUIRE(output_padding != std::string::npos);
     REQUIRE(hide_thinking != std::string::npos);
     REQUIRE(project_trust != std::string::npos);
     REQUIRE(thinking != std::string::npos);
+    REQUIRE(tui_mode != std::string::npos);
     REQUIRE(theme_item != std::string::npos);
     CHECK(skill_commands < output_padding);
     CHECK(output_padding < hide_thinking);
     CHECK(hide_thinking < project_trust);
     CHECK(project_trust < thinking);
-    CHECK(thinking < theme_item);
+    CHECK(thinking < tui_mode);
+    CHECK(tui_mode < theme_item);
     // The selected item's description renders (pi verbatim wording); the
     // other descriptions render as their rows are selected.
     CHECK(screen.find("Register skills as /skill:name commands") !=
@@ -128,6 +132,9 @@ TEST_CASE("SettingsSelector renders the #327 subset items with pi labels and res
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     CHECK(render_screen(selector).find("Reasoning depth for thinking-capable models") !=
         std::string::npos);
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    CHECK(render_screen(selector).find("Interface layout; regular mode uses the terminal's normal scrollback") !=
+            std::string::npos);
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     CHECK(render_screen(selector).find("Color theme for the interface") !=
         std::string::npos);
@@ -246,8 +253,9 @@ TEST_CASE("SettingsSelector Theme item opens the single-mode ThemeSubmenu with p
         config,
         std::move(callbacks));
 
-    // Navigate to the theme item (last, index 5) and confirm.
-    for (int step = 0; step < 5; ++step) {
+    // Navigate to the theme item (last, index 6, behind the TUI mode row)
+    // and confirm.
+    for (int step = 0; step < 6; ++step) {
         static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
@@ -295,7 +303,7 @@ TEST_CASE("SettingsSelector ThemeSubmenu cancel re-previews the original without
         config,
         std::move(callbacks));
 
-    for (int step = 0; step < 5; ++step) {
+    for (int step = 0; step < 6; ++step) {
         static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
@@ -351,7 +359,7 @@ TEST_CASE("SettingsSelector always renders the Theme item with the single-mode s
     // The Theme item renders always (pi settings-selector.ts renders it
     // unconditionally); the submenu opens with the builtin themes.
     CHECK(screen.find("Theme") != std::string::npos);
-    for (int step = 0; step < 5; ++step) {
+    for (int step = 0; step < 6; ++step) {
         static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));

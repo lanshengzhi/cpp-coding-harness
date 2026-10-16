@@ -191,7 +191,7 @@ struct ThemeController::Impl {
             ThemeTerminalColorsSink configured_on_terminal_colors,
             ThemeTerminalColorSchemeSink configured_on_terminal_color_scheme)
         : custom_themes_dir(std::move(configured_custom_themes_dir)), registered(std::move(configured_registered)),
-          theme_setting(std::move(configured_theme_setting)), capability(configured_capability), root(configured_root),
+          theme_setting(std::move(configured_theme_setting)), capability(configured_capability), root(&configured_root),
           show_error(std::move(configured_show_error)), on_changed(std::move(configured_on_changed)),
           live(builtin_dark_theme(), configured_capability) {
         color_dispatch->sink = std::make_shared<ThemeTerminalColorsSink>(std::move(configured_on_terminal_colors));
@@ -241,7 +241,7 @@ struct ThemeController::Impl {
     }
 
     void notify_changed() {
-        root.invalidate();
+        root->invalidate();
         invoke_best_effort_sink(on_changed);
     }
 
@@ -300,20 +300,20 @@ struct ThemeController::Impl {
         options.on_late_reply = [state = color_dispatch](cch::tui::TerminalColors colors) {
             deliver_report(state, std::nullopt, std::move(colors));
         };
-        (void)root.query_terminal_colors(std::move(options));
+        (void)root->query_terminal_colors(std::move(options));
     }
 
     void set_auto_sync(bool enabled) {
         if (auto_sync_enabled == enabled) return;
         auto_sync_enabled = enabled;
-        root.set_terminal_color_scheme_notifications(enabled);
+        root->set_terminal_color_scheme_notifications(enabled);
     }
 
     std::filesystem::path custom_themes_dir;
     std::vector<RegisteredTheme> registered;
     ThemeSettingProvider theme_setting;
     cch::tui::TerminalColorCapability capability{cch::tui::TerminalColorCapability::Xterm256};
-    cch::tui::ITui& root; // must outlive this controller.
+    cch::tui::ITui* root; // re-pointed before the previously selected root is destroyed.
     ThemeErrorSink show_error;
     ThemeChangedSink on_changed;
     TerminalTheme terminal_theme{TerminalTheme::Dark};
@@ -380,8 +380,8 @@ void ThemeController::apply_terminal_colors(cch::tui::TerminalColors colors) {
     if (impl_->terminal_colors && *impl_->terminal_colors == next) return;
     impl_->terminal_colors = next;
     impl_->reapply_for_terminal();
-    impl_->root.invalidate();
-    impl_->root.request_render();
+    impl_->root->invalidate();
+    impl_->root->request_render();
 }
 
 void ThemeController::apply_terminal_color_scheme(TerminalTheme scheme) {
@@ -392,6 +392,12 @@ void ThemeController::apply_terminal_color_scheme(TerminalTheme scheme) {
     impl_->start_color_query();
 }
 
+void ThemeController::rebind_tui(cch::tui::ITui& root) {
+    if (impl_->scheme_listener.active()) impl_->scheme_listener.reset();
+    impl_->root = &root;
+    rebind_terminal_color_scheme_listener();
+}
+
 void ThemeController::rebind_terminal_color_scheme_listener() {
     if (impl_->scheme_listener.active()) impl_->scheme_listener.reset();
     std::uint64_t generation = 0;
@@ -400,14 +406,14 @@ void ThemeController::rebind_terminal_color_scheme_listener() {
         if (!impl_->scheme_dispatch->active) return;
         generation = ++impl_->scheme_dispatch->generation;
     }
-    impl_->scheme_listener = impl_->root.on_terminal_color_scheme_change(
+    impl_->scheme_listener = impl_->root->on_terminal_color_scheme_change(
             [state = impl_->scheme_dispatch, generation](cch::tui::TerminalColorScheme scheme) {
                 deliver_report(state,
                         generation,
                         scheme == cch::tui::TerminalColorScheme::Light ? TerminalTheme::Light : TerminalTheme::Dark);
             });
     // pi `rebindTui`: the re-registered TUI re-applies the current mode.
-    impl_->root.set_terminal_color_scheme_notifications(impl_->auto_sync_enabled);
+    impl_->root->set_terminal_color_scheme_notifications(impl_->auto_sync_enabled);
 }
 
 void ThemeController::dispose() {
@@ -440,7 +446,7 @@ void ThemeController::preview(std::string_view theme_setting_or_name) {
     auto loaded = load_theme_by_name(name, impl_->custom_themes_dir, impl_->registered);
     if (loaded) {
         impl_->live.replace(std::move(*loaded), impl_->capability);
-        impl_->root.invalidate();
+        impl_->root->invalidate();
     } else {
         impl_->live.replace(builtin_dark_theme(), impl_->capability);
     }

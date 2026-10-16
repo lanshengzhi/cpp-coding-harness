@@ -289,6 +289,13 @@ private:
         .control = cch::tui::SettingSubmenu{},
     });
     items.push_back({
+            .id = "tui-mode",
+            .label = "TUI mode",
+            .description = "Interface layout; regular mode uses the terminal's normal scrollback",
+            .current_value = config.current_tui_mode,
+            .control = cch::tui::SettingValues{{"regular", "fullscreen"}},
+    });
+    items.push_back({
         .id = "theme",
         .label = "Theme",
         .description = "Color theme for the interface",
@@ -352,6 +359,16 @@ struct SettingsSelectorComponent::Impl {
                     // and the settings-list change sink commits it.
                     if (state->callbacks.on_theme_change) {
                         state->callbacks.on_theme_change(std::move(new_value));
+                    }
+                    return {};
+                }
+                if (id == "tui-mode") {
+                    // pi `case "tui-mode": callbacks.onTuiModeChange(newValue
+                    // as TuiMode)`. The switch itself happens on the host
+                    // executor, so a refusal arrives after the list already
+                    // moved the row; the caller rolls it back.
+                    if (state->callbacks.on_tui_mode_change) {
+                        state->callbacks.on_tui_mode_change(std::move(new_value));
                     }
                     return {};
                 }
@@ -442,6 +459,10 @@ cch::tui::InputAdmissionOutcome SettingsSelectorComponent::handle_input(const cc
 
 void SettingsSelectorComponent::set_focused(bool focused) {
     impl_->list_.set_focused(focused);
+}
+
+void SettingsSelectorComponent::update_value(std::string id, std::string new_value) {
+    impl_->list_.update_value(std::move(id), std::move(new_value));
 }
 
 bool SettingsSelectorComponent::focused() const {

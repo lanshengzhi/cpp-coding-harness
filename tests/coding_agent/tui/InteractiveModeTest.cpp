@@ -4283,12 +4283,13 @@ TEST_CASE("Native TUI settings opens only supported overlays and hotkeys renders
     CHECK(screen.find("Hide thinking") != std::string::npos);
     CHECK(screen.find("Thinking level") != std::string::npos);
     CHECK(screen.find("Default project trust") != std::string::npos);
+    CHECK(screen.find("TUI mode") != std::string::npos);
     CHECK(screen.find("Theme") != std::string::npos);
     CHECK(created->session->message_count() == 1);
 
     // The Theme item opens the single-mode theme submenu with the `(current)`
-    // marker on the active theme (index 5).
-    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r"));
+    // marker on the active theme (index 6, behind the TUI mode row).
+    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
     // The `(current)` marker renders as the styled description of the active

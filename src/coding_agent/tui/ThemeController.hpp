@@ -130,6 +130,8 @@ public:
 
     /// Re-register exactly one listener after a TUI rebind; dispose detaches
     /// it and disables mode 2031 before terminal shutdown.
+    /// Rebind the listener exactly once after starting a replacement renderer.
+    void rebind_tui(cch::tui::ITui& root);
     void rebind_terminal_color_scheme_listener();
     void dispose();
 

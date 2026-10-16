@@ -16,6 +16,9 @@
 
 #include <boost/asio/any_io_executor.hpp>
 
+#include <cch/coding_agent/Settings.hpp>
+#include <cch/support/Error.hpp>
+
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -62,6 +65,13 @@ struct SettingsFlowHostHooks {
     std::move_only_function<void()> rebuild_chat{nullptr};
     /// pi `setupAutocompleteProvider` after a settings change.
     std::move_only_function<void()> rebuild_autocomplete_provider{nullptr};
+    /// pi `switchTuiMode(mode)` on the live renderer: `false` is the frozen
+    /// overlay refusal, an error reports a swap that could not complete. Both
+    /// leave the run on its current renderer.
+    std::move_only_function<support::Expected<bool>(coding_agent::TuiMode)> switch_tui_mode{nullptr};
+    /// pi `this.ui.mode`: the mode the live renderer runs, read when a refused
+    /// switch rolls its settings row back to the mode still in effect.
+    std::move_only_function<coding_agent::TuiMode()> current_tui_mode{nullptr};
 };
 
 /// Native TUI settings flow controller (#506). Synchronous like the pi

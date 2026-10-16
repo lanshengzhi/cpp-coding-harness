@@ -329,6 +329,21 @@ void AltScreen::set_layout_root(std::unique_ptr<Component> root) {
     request_render();
 }
 
+std::unique_ptr<Component> AltScreen::take_layout_root() {
+    ChildOperation operation(*this);
+    stop_scrollbar_drag();
+    stop_scrollbar_hover();
+    if (layout_root_ == nullptr) return nullptr;
+    const bool was_focused = focused_ != nullptr && layout_root_->contains(focused_);
+    if (was_focused) apply_focus(nullptr);
+    auto root = std::move(layout_root_);
+    layout_primary_scroll_view_ = nullptr;
+    invalidate_composition_cache();
+    if (was_focused) fallback_focus();
+    request_render();
+    return root;
+}
+
 support::Expected<std::reference_wrapper<Component>> AltScreen::add_child(std::unique_ptr<Component> component) {
     auto attached = detail::attach_child(children_, std::move(component), "");
     if (!attached) return std::unexpected(attached.error());
@@ -387,7 +402,9 @@ support::ExpectedVoid AltScreen::remove_child(Component* component) {
     return {};
 }
 
-void AltScreen::clear_children() {
+void AltScreen::clear_children() { static_cast<void>(take_children()); }
+
+std::vector<std::unique_ptr<Component>> AltScreen::take_children() {
     ChildOperation operation(*this);
     const bool was_focused = focused_ != nullptr && owns(focused_);
     const bool was_blocker = detail::TuiHost::overlay_focus_restore_.status == OverlayFocusRestoreStatus::Blocked &&
@@ -420,13 +437,15 @@ void AltScreen::clear_children() {
     } else if (removed_restore_target) {
         detail::TuiHost::overlay_focus_restore_.resume_target = nullptr;
     }
-    for (auto& child : children_)
-        retired_children_.push_back(std::move(child));
+    auto taken = std::move(children_);
     children_.clear();
     invalidate_composition_cache();
     if (was_focused && !was_blocker) set_focus_internal(nullptr, false);
     request_render();
+    return taken;
 }
+
+bool AltScreen::has_overlay_entries() const noexcept { return compositor_->has_overlay_entries(); }
 
 bool AltScreen::focus_target_available(Component* component) const {
     if (component == nullptr) return false;

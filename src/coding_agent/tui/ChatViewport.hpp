@@ -13,6 +13,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/ScrollView.hpp>
+#include <cch/tui/VStack.hpp>
 
 #include <cch/support/Error.hpp>
 
@@ -52,11 +53,22 @@ struct ChatViewportOptions {
 };
 
 /// The assembled viewport. `root` is the layout root to install; `transcript`
-/// is borrowed from it and stays addressable because the scroll position,
-/// follow-end state and primary navigation target live on the viewport.
+/// and the editor transfer seam stay addressable because scroll state and the
+/// frozen dock slot belong to this retained tree.
 struct ChatViewport {
     std::unique_ptr<cch::tui::Component> root;
     cch::tui::ScrollView* transcript{nullptr};
+
+    /// Transfer the dock editor out while leaving its frozen slot and layout
+    /// attributes in place. The returned component can be mounted in Regular.
+    [[nodiscard]] std::unique_ptr<cch::tui::Component> take_editor();
+    /// Reinstall the same editor instance in the retained dock slot.
+    [[nodiscard]] support::ExpectedVoid set_editor(std::unique_ptr<cch::tui::Component> editor);
+
+private:
+    friend support::Expected<ChatViewport> create_chat_viewport(ChatViewportOptions options);
+    class EditorSlot;
+    EditorSlot* editor_slot_{nullptr};
 };
 
 /// Build the frozen two-region viewport (`chat-viewport.ts:22`):

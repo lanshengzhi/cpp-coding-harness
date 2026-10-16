@@ -45,6 +45,9 @@ struct SettingsSelectorConfig {
     /// pi `getAvailableThemes()`: builtins + custom directory + registered
     /// themes, deduped and sorted by name.
     std::vector<std::string> available_themes{};
+    /// The live `tuiMode` setting (`regular` / `fullscreen`), shown as the TUI
+    /// mode item's value and the value a refused switch rolls back to.
+    std::string current_tui_mode{"regular"};
 };
 
 using SettingsSelectorHideThinkingSink = std::move_only_function<void(bool)>;
@@ -55,6 +58,7 @@ using SettingsSelectorDefaultProjectTrustSink =
     std::move_only_function<void(DefaultProjectTrust)>;
 using SettingsSelectorThemeChangeSink = std::move_only_function<void(std::string)>;
 using SettingsSelectorThemePreviewSink = std::move_only_function<void(std::string)>;
+using SettingsSelectorTuiModeChangeSink = std::move_only_function<void(std::string)>;
 using SettingsSelectorCancelSink = std::move_only_function<void()>;
 
 /// pi `settings-selector.ts` callbacks: one sink per rendered subset item.
@@ -69,6 +73,9 @@ struct SettingsSelectorCallbacks {
     SettingsSelectorThemeChangeSink on_theme_change{};
     /// pi `onThemePreview`: in-memory preview of one theme name or setting.
     SettingsSelectorThemePreviewSink on_theme_preview{};
+    /// pi `onTuiModeChange`: switch the live renderer and persist the mode on
+    /// success; a refusal is reported and the row is rolled back by the caller.
+    SettingsSelectorTuiModeChangeSink on_tui_mode_change{};
     SettingsSelectorCancelSink on_cancel{};
 };
 
@@ -107,6 +114,11 @@ public:
     void set_focused(bool focused) override;
     [[nodiscard]] bool focused() const override;
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override;
+
+    /// pi `selector?.getSettingsList().updateValue(id, value)`: replace one
+    /// item's displayed value without running its change callback, so a refused
+    /// TUI-mode switch can put the row back on the live mode.
+    void update_value(std::string id, std::string new_value);
 
 private:
     struct Impl;

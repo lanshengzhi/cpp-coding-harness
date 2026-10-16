@@ -30,11 +30,13 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/InteractiveStartup.hpp"
 #include "coding_agent/tui/InteractiveViewActions.hpp"
+#include "coding_agent/tui/ChatViewport.hpp"
 #include "coding_agent/tui/ModalPresenter.hpp"
 #include "coding_agent/tui/SlashCommandRouter.hpp"
 
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Settings.hpp>
+#include <cch/tui/AltScreen.hpp>
 #include <cch/tui/OverlayHandle.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/support/Error.hpp>
@@ -209,6 +211,44 @@ private:
     [[nodiscard]] ProjectResourceFileSystems project_resource_filesystems_for(const std::filesystem::path& workspace);
 
     [[nodiscard]] support::ExpectedVoid fail_start(const support::Error& error);
+
+    /// Install the frame prepare/complete sinks on the selected root. pi
+    /// `createInteractiveTui` wires them once at construction and
+    /// `switchTuiMode` rebuilds the root with the same callbacks
+    /// (`interactive-mode.ts:892-899`), so a replacement root needs them
+    /// installed again before it paints.
+    [[nodiscard]] support::ExpectedVoid bind_render_sinks();
+
+    /// Re-apply the debug hook on the selected root. pi reads `onDebug` back
+    /// from the retired renderer and assigns it to the replacement
+    /// (`interactive-mode.ts:900`); the toolkit has no getter (`TuiDiagnostics.hpp:31`
+    /// is setter-only on `ITui`), so the engine keeps the value it installed.
+    void apply_debug_hook();
+
+    /// Point `tui_` and its borrowed consumers at one of the two owned roots
+    /// (pi `this.renderer = nextUi` plus `this.options.tuiMode = mode`).
+    /// `switch_tui_mode` reaches this only once every alias into the retired
+    /// root is gone: the overlay refusal leaves no engine overlay behind, and
+    /// `view_` keeps its one instance across the switch.
+    void select_root(coding_agent::TuiMode mode);
+
+    /// Install the per-root wiring a selected root needs before it paints:
+    /// keybindings, scheduler, clear-on-shrink, the debug hook and the frame
+    /// render sinks (pi `createInteractiveTui`), plus the render state a mode
+    /// switch carried over from the retired root (`interactive-mode.ts:900-903`).
+    [[nodiscard]] support::ExpectedVoid wire_selected_root();
+
+    /// Mount the retained view and every component captured from the retired
+    /// root on the selected root (pi `mountInteractiveTui`,
+    /// `interactive-mode.ts:868-875`).
+    [[nodiscard]] support::ExpectedVoid mount_selected_root(std::vector<std::unique_ptr<cch::tui::Component>> children);
+
+    /// pi `switchTuiMode` (`interactive-mode.ts:883-933`): replace the live
+    /// renderer while keeping the one `InteractiveView` instance, its editor
+    /// text, transcript, focus and session. `false` is pi's overlay refusal
+    /// (the engine is left exactly as it was); an error reports a swap that
+    /// could not complete.
+    [[nodiscard]] support::Expected<bool> switch_tui_mode(coding_agent::TuiMode mode);
 
     // ── Executor hops and render requests ────────────────────────────────
 
@@ -518,14 +558,21 @@ private:
     /// at hook creation. Declared with `action_sink_` because the fullscreen
     /// host borrows it too.
     std::size_t action_generation_{0};
-    /// The run's selected TUI root (pi `createInteractiveTui`): present only
-    /// for `TuiMode::Fullscreen`, where `tui_` binds to it instead of the main
-    /// screen.
-    std::unique_ptr<AltScreenHost> fullscreen_host_{nullptr};
-    AltScreenHost* alt_screen_host_{nullptr}; // borrowed fullscreen host, when a fullscreen consumer is active.
+    /// The frame scheduler every root borrows. Declared before both roots so
+    /// it outlives them: a root's destructor stops the root
+    /// (`Tui.cpp:86` -> `MainScreen::stop` -> `cancel_scheduled_render`),
+    /// which addresses the borrowed scheduler.
     std::unique_ptr<cch::tui::TuiScheduler> tui_scheduler_;
-    cch::tui::MainScreen main_screen_;
-    cch::tui::ITui& tui_; // the selected root outlives this interface and every consumer.
+    /// The currently selected root is updated before a retired root releases
+    /// its callbacks or child tree.
+    std::unique_ptr<cch::tui::MainScreen> main_screen_;
+    std::unique_ptr<AltScreenHost> fullscreen_host_;
+    AltScreenHost* alt_screen_host_{nullptr};
+    /// Copyable because the same hook is installed on every selected root;
+    /// `cch::tui::TuiDebugHook` is a move-only function, so the engine
+    /// remembers the value here and wraps a copy at each install.
+    std::function<void()> debug_hook_{};
+    cch::tui::ITui* tui_{nullptr};
     /// pi's mutable shared KeybindingsManager consumption shape (ADR 0035,
     /// #418): every durable view component observes this slot; `/reload`
     /// replaces the current registry so all consumers see the new bindings
@@ -606,9 +653,19 @@ private:
     boost::asio::steady_timer flows_settled_;
     /// SIGTSTP/SIGCONT suspend flow (pi `handleCtrlZ`); created at start.
     std::shared_ptr<SuspendController> suspend_controller_;
-    InteractiveView* view_{nullptr};             // aliases the child owned by tui_.
-    cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_.
+    std::unique_ptr<cch::tui::Component> active_overlay_placement_;
+    InteractiveView* view_{nullptr};             // aliases the current root's view instance.
+    cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_ and is null across switches.
     cch::tui::OverlayHandle active_overlay_handle_;
+    std::optional<ChatViewport> fullscreen_viewport_;
+    /// The regular root's render state across a switch: pi captures it from a
+    /// `TuiMainScreen` and restores it on the replacement main screen
+    /// (`interactive-mode.ts:895`, `:902`), which repaints from the baseline the
+    /// preserved main buffer still shows. Consumed by the next
+    /// `wire_selected_root()`; the fullscreen root imports nothing because the
+    /// alternate buffer is cleared on entry.
+    std::optional<cch::tui::TuiMainScreenRenderState> main_screen_render_state_;
+    bool clear_on_shrink_{false};
     SlashCommandRouter slash_command_router_;
     std::atomic<bool> running_{false};
     std::stop_source stop_source_;
