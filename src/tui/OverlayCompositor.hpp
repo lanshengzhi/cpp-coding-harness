@@ -57,6 +57,15 @@ public:
 
     void invalidate_all();
 
+    /// The visually topmost visible overlay whose retained bounds cover the
+    /// viewport point, or null when no overlay is there (pi
+    /// `dispatchMouseToOverlay`, `tui.ts:862-887`, which walks the rendered
+    /// overlay layouts topmost-first). The walk uses the draw order the
+    /// compositor splices with, so it needs the bounds retained by the last
+    /// `composite()` call and reports nothing for an overlay that has not been
+    /// composited since it became visible.
+    [[nodiscard]] Overlay* overlay_at(std::ptrdiff_t x, std::ptrdiff_t y, TerminalDimensions viewport) const;
+
     // --- Compositing ---
 
     /// Scale image sidecars into cell space and reserve their line real

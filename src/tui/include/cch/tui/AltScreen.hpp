@@ -255,7 +255,6 @@ private:
     [[nodiscard]] std::vector<std::string> apply_search_highlights(
             const std::vector<std::string>& lines, const detail::LayoutFrame& frame) const;
     [[nodiscard]] std::optional<int> search_navigation_direction_at(std::ptrdiff_t x, std::ptrdiff_t y) const;
-    [[nodiscard]] bool search_overlay_contains(std::ptrdiff_t x, std::ptrdiff_t y) const;
     [[nodiscard]] bool handle_search_mouse_report(const detail::MousePacket& packet);
     [[nodiscard]] bool should_defer_viewport_input_to_overlay() const;
     [[nodiscard]] bool search_overlay_focused() const;
@@ -270,11 +269,30 @@ private:
     [[nodiscard]] bool handle_scrollbar_mouse_report(const detail::MousePacket& packet);
     void stop_scrollbar_drag() noexcept;
     void validate_scrollbar_interaction(const detail::LayoutFrame& frame);
-    void handle_wheel_report(const detail::MousePacket& packet);
+    /// Whether a wheel report was consumed by the overlay, the layout or the
+    /// viewport routing; false leaves the report to the focused component
+    /// (pi `handleViewportInput` returning undefined).
+    [[nodiscard]] bool handle_wheel_report(const detail::MousePacket& packet);
+    /// Frozen `dispatchMouseToOverlay` (`tui.ts:862-887`): whether a visible
+    /// overlay covers the pointer, plus that overlay's answer when it has one.
+    /// A covered pointer never reaches the layout, even when the overlay
+    /// itself has no mouse capability.
+    struct OverlayMouseDispatch {
+        bool hit{false};
+        std::optional<MouseDispatchResult> result{};
+    };
+    [[nodiscard]] OverlayMouseDispatch dispatch_mouse_to_overlay(const MouseEvent& event);
     [[nodiscard]] std::optional<MouseDispatchResult> dispatch_mouse_to_layout(const MouseEvent& event);
     [[nodiscard]] std::optional<MouseDispatchResult> dispatch_mouse_to_target(
             const MouseEvent& event, const MouseDispatchTarget& target);
     [[nodiscard]] bool apply_mouse_dispatch_result(const MouseEvent& event, const MouseDispatchResult& result);
+    /// The target a press or capture gesture is stored under. pi keeps the deep
+    /// child object alive; a C++ host can outlive a privately held child (a
+    /// settings submenu), so a target the tree no longer reaches is anchored at
+    /// its forwarding host, which re-resolves the live child on every dispatch
+    /// (frozen `tui.ts:81-104`, `tui-alt-screen.ts:916-940`).
+    [[nodiscard]] MouseDispatchTarget anchor_gesture_target(
+            const MouseDispatchTarget& target, const MouseDispatchTarget& host) const;
     /// The click count of a click at `x`/`y` on `target`: consecutive clicks on
     /// the same component and cell within the double-click interval count up and
     /// wrap after a triple click (pi `getComponentClickCount`).

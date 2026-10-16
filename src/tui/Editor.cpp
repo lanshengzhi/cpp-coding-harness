@@ -5,6 +5,7 @@
 #include "tui/EditorLayout.hpp"
 #include "tui/InteractionUtils.hpp"
 #include "tui/TextBuffer.hpp"
+#include "tui/UnicodeWidth.hpp"
 
 #include <cch/support/Error.hpp>
 
@@ -141,6 +142,14 @@ struct Editor::Impl {
     std::size_t layout_width{80};
     std::size_t layout_padding{0};
     std::size_t scroll_offset{0};
+    /// Render geometry the mouse mapping resolves against (pi `lastWidth`,
+    /// `renderedVisibleLineCount`, `renderedAutocompleteHeight`): the first
+    /// rendered content row, the rendered content row count, and the completion
+    /// menu's first row and row count.
+    std::size_t content_start_row{0};
+    std::size_t rendered_visible_line_count{1};
+    std::size_t autocomplete_start_row{0};
+    std::size_t rendered_autocomplete_height{0};
     std::optional<std::size_t> preferred_visual_col_;
     enum class JumpDirection { Forward, Backward };
     std::optional<JumpDirection> jump_direction;
@@ -959,11 +968,108 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
     impl.layout_width = layout_res->layout_width;
     impl.layout_padding = layout_res->padding_width;
     impl.scroll_offset = layout_res->scroll_offset;
+    impl.content_start_row = layout_res->content_start_row;
+    impl.rendered_visible_line_count = layout_res->content_row_count;
+    impl.autocomplete_start_row = layout_res->autocomplete_start_row;
+    impl.rendered_autocomplete_height = layout_res->autocomplete_row_count;
 
     return RenderResult{.lines = std::move(layout_res->lines)};
 }
 
 void Editor::invalidate() {}
+
+namespace {
+
+/// Grapheme offset of a visual line's first segment inside its logical line:
+/// the visual line map indexes document segments while a buffer cursor column
+/// counts graphemes.
+[[nodiscard]] std::size_t visual_line_start_column(
+        const detail::BufferDocument& document, const detail::EditorVisualLine& visual_line) {
+    if (visual_line.logical_line >= document.size()) return 0;
+    const auto& line = document[visual_line.logical_line];
+    std::size_t column = 0;
+    for (std::size_t segment = 0; segment < visual_line.start && segment < line.size(); ++segment) {
+        column += detail::split_graphemes(line[segment].text).size();
+    }
+    return column;
+}
+
+} // namespace
+
+std::optional<MouseEventResult> Editor::handle_mouse(const MouseEvent& event) {
+    auto operation = impl_->serialized_operation(impl_);
+    auto& impl = operation.impl;
+
+    const auto content_start = static_cast<std::ptrdiff_t>(impl.content_start_row);
+    const auto content_end = content_start + static_cast<std::ptrdiff_t>(impl.rendered_visible_line_count);
+    // pi editor.ts:633-651 forwards the completion menu band to the
+    // autocomplete list. This Editor draws that band from presentation state
+    // instead of a child component, so the band answers as a non-content row:
+    // handled with focus, and never as a cursor placement.
+    if (impl.autocomplete_menu.open && impl.rendered_autocomplete_height != 0) {
+        const auto menu_start = static_cast<std::ptrdiff_t>(impl.autocomplete_start_row);
+        const auto menu_end = menu_start + static_cast<std::ptrdiff_t>(impl.rendered_autocomplete_height);
+        if (event.y >= menu_start && event.y < menu_end) {
+            return MouseEventResult{.handled = true, .focus = true};
+        }
+    }
+
+    // pi editor.ts:653-657 leaves press, drag, and release unhandled so the
+    // renderer's screen-level text selection runs over the editor rows (drag to
+    // select, release to copy). The renderer synthesizes a click when a press
+    // and a release land on the same cell without movement, and only that
+    // gesture positions the cursor.
+    if (event.type != MouseEventType::Click || event.button != MouseButton::Left) {
+        return std::nullopt;
+    }
+    // pi editor.ts:658 bounds the click with the rendered content rows; the
+    // first content row follows the top border when one is rendered.
+    if (event.y < content_start || event.y >= content_end) {
+        return MouseEventResult{.handled = true, .focus = true};
+    }
+
+    const auto visual = detail::EditorLayout::construct_visual_lines(impl.buffer.document(), impl.layout_width);
+    const auto visual_line_index = static_cast<std::ptrdiff_t>(impl.scroll_offset) + event.y - content_start;
+    if (visual_line_index < 0 || static_cast<std::size_t>(visual_line_index) >= visual.size()) {
+        return MouseEventResult{.handled = true, .focus = true};
+    }
+
+    const auto max_padding = std::max<std::ptrdiff_t>(0, (static_cast<std::ptrdiff_t>(event.width) - 1) / 2);
+    const auto padding_x = std::min(static_cast<std::ptrdiff_t>(impl.options.padding_x), max_padding);
+    const auto target_column = std::max<std::ptrdiff_t>(0, event.x - padding_x);
+
+    const auto& visual_line = visual[static_cast<std::size_t>(visual_line_index)];
+    const auto graphemes = detail::split_graphemes(visual_line.text);
+    std::ptrdiff_t visible_column = 0;
+    std::size_t target_index = graphemes.size();
+    std::size_t last_grapheme_index = 0;
+    for (std::size_t index = 0; index < graphemes.size(); ++index) {
+        const auto next_column = visible_column + static_cast<std::ptrdiff_t>(detail::grapheme_width(graphemes[index]));
+        last_grapheme_index = index;
+        if (target_column < next_column) {
+            target_index = index;
+            break;
+        }
+        visible_column = next_column;
+    }
+    // pi editor.ts:682-685: a click past a wrapped segment's end still lands on
+    // the last grapheme it shows, because the next segment continues the same
+    // logical line from the wrap point.
+    const auto next_visual = static_cast<std::size_t>(visual_line_index) + 1;
+    const bool is_last_segment =
+            next_visual >= visual.size() || visual[next_visual].logical_line != visual_line.logical_line;
+    if (!is_last_segment && target_index == graphemes.size() && !graphemes.empty()) {
+        target_index = last_grapheme_index;
+    }
+
+    impl.buffer.set_cursor(detail::BufferCursor{.line = visual_line.logical_line,
+            .column = visual_line_start_column(impl.buffer.document(), visual_line) + target_index});
+    // pi editor.ts:689-691: a click leaves history browsing and re-queries an
+    // open completion menu for the new cursor position.
+    impl.exit_history_browsing();
+    impl.update_autocomplete();
+    return MouseEventResult{.handled = true, .focus = true};
+}
 
 InputAdmissionOutcome Editor::handle_input(const InputEventVariant& input) {
     auto operation = this->impl_->serialized_operation(this->impl_);

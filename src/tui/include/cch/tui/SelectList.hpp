@@ -2,6 +2,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/Mouse.hpp>
 #include <cch/tui/Style.hpp>
 
 #include <cch/support/Error.hpp>
@@ -65,7 +66,7 @@ struct SelectListOptions {
 
 /// A width-bounded selection list controlled by semantic keys. Search and
 /// surrounding presentation belong to the component that composes this list.
-class SelectList final : public Component, public InputHandler, public Focusable {
+class SelectList final : public Component, public InputHandler, public Focusable, public MouseHandler {
 public:
     explicit SelectList(std::vector<SelectItem> items, SelectListOptions options = {});
     SelectList(SelectList&&) noexcept;
@@ -89,6 +90,10 @@ public:
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
     InputAdmissionOutcome handle_input(const InputEventVariant& input) override;
+    /// A left press selects the rendered row and a left click activates it (pi
+    /// `SelectList.handleMouse`); the wheel moves the selection by one row per
+    /// notch. Hover never changes the selection.
+    [[nodiscard]] std::optional<MouseEventResult> handle_mouse(const MouseEvent& event) override;
     void set_focused(bool focused) override;
     [[nodiscard]] bool focused() const override;
     [[nodiscard]] std::optional<CursorPosition> cursor_location() const override;

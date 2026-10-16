@@ -568,6 +568,23 @@ InputAdmissionOutcome OverlayCompositor::dispatch_input(
 bool OverlayCompositor::has_visible_overlays(TerminalDimensions viewport) const {
     return !sorted_visible(viewport).empty();
 }
+Overlay* OverlayCompositor::overlay_at(std::ptrdiff_t x, std::ptrdiff_t y, TerminalDimensions viewport) const {
+    // Frozen walks the rendered overlay layouts in reverse draw order and
+    // accepts the first bounds hit, without a non-capturing filter (pi
+    // `tui.ts:862-880`).
+    const auto visible = sorted_visible(viewport);
+    for (auto it = visible.rbegin(); it != visible.rend(); ++it) {
+        const auto& entry = **it;
+        if (!entry.bounds) continue;
+        const auto left = static_cast<std::ptrdiff_t>(entry.bounds->col);
+        const auto top = static_cast<std::ptrdiff_t>(entry.bounds->row);
+        const auto right = left + static_cast<std::ptrdiff_t>(entry.bounds->width);
+        const auto bottom = top + static_cast<std::ptrdiff_t>(entry.bounds->height);
+        if (x < left || x >= right || y < top || y >= bottom) continue;
+        return entry.overlay.get();
+    }
+    return nullptr;
+}
 
 std::vector<const OverlayCompositor::OverlayEntry*> OverlayCompositor::sorted_visible(
         TerminalDimensions viewport) const {

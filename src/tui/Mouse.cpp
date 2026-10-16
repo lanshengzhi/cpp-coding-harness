@@ -18,6 +18,14 @@ std::optional<MouseDispatchResult> dispatch_mouse_event(Component& component, co
         if (forwarded->focus && dynamic_cast<InputHandler*>(&component) != nullptr) {
             forwarded->focus_target = &component;
         }
+        // Each nested host overwrites the field on the way out, so the value is
+        // the outermost host's own target: the frame a release can retarget
+        // from the raw screen coordinates.
+        forwarded->host_target = MouseDispatchTarget{.component = &component,
+                .origin_x = event.screen_x - event.x,
+                .origin_y = event.screen_y - event.y,
+                .width = event.width,
+                .height = event.height};
         return forwarded;
     }
 

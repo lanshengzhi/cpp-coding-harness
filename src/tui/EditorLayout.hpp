@@ -55,6 +55,16 @@ struct EditorLayoutResult {
     std::size_t content_width{0};
     std::size_t layout_width{0};
     std::size_t scroll_offset{0};
+    /// Rendered row of the first content row: the top border when one is
+    /// rendered, 0 otherwise.
+    std::size_t content_start_row{0};
+    /// Rendered content rows (pi `renderedVisibleLineCount`): the mouse row
+    /// bound of the text area.
+    std::size_t content_row_count{0};
+    /// Rendered row where the completion menu starts, and its row count (pi
+    /// `renderedAutocompleteHeight`); the count is 0 while no menu is drawn.
+    std::size_t autocomplete_start_row{0};
+    std::size_t autocomplete_row_count{0};
     std::optional<CursorPosition> cursor_position{std::nullopt};
 };
 

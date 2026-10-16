@@ -2,6 +2,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/Mouse.hpp>
 #include <cch/tui/Style.hpp>
 
 #include <cch/support/Error.hpp>
@@ -77,7 +78,7 @@ struct SettingsListOptions {
 /// (pi `components/settings-list.ts`): editing behaviors and paste cleaning are
 /// the component's, ranking is the public `Fuzzy` module's, and space confirms
 /// only while the search is empty.
-class SettingsList final : public Component, public InputHandler, public Focusable {
+class SettingsList final : public Component, public InputHandler, public Focusable, public MouseHandler {
 public:
     explicit SettingsList(std::vector<SettingItem> items, SettingsListOptions options = {});
     SettingsList(SettingsList&&) noexcept;
@@ -96,6 +97,14 @@ public:
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
     InputAdmissionOutcome handle_input(const InputEventVariant& input) override;
+    /// A left press selects the rendered row and a left click activates it; the
+    /// wheel moves the selection by one row per notch; the search row forwards
+    /// to the search `Input` (pi `SettingsList.handleMouse`).
+    [[nodiscard]] std::optional<MouseEventResult> handle_mouse(const MouseEvent& event) override;
+    /// An open submenu owns every mouse event: its resolved dispatch result is
+    /// forwarded unchanged so the submenu keeps the target while this list
+    /// keeps keyboard focus (pi `SettingsList.handleMouse` submenu branch).
+    [[nodiscard]] std::optional<MouseDispatchResult> handle_mouse_forwarded(const MouseEvent& event) override;
     void set_focused(bool focused) override;
     [[nodiscard]] bool focused() const override;
     [[nodiscard]] std::optional<CursorPosition> cursor_location() const override;

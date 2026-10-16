@@ -80,6 +80,10 @@ struct SelectList::Impl {
     std::string filter;
     std::size_t selected_index{0};
     std::size_t max_visible{5};
+    /// Row selected by the last left press, used by the renderer's synthesized
+    /// click so a press-drag-release never activates the release row (pi
+    /// `mousePressedIndex`).
+    std::optional<std::size_t> mouse_pressed_index;
     SelectListTheme theme;
     SelectListLayoutOptions layout;
     std::shared_ptr<SelectItemSink> on_select;
@@ -339,6 +343,58 @@ InputAdmissionOutcome SelectList::handle_input(const InputEventVariant& input) {
 }
 
 void SelectList::set_focused(bool focused) { impl_->focused = focused; }
+
+std::optional<MouseEventResult> SelectList::handle_mouse(const MouseEvent& event) {
+    // pi select-list.ts:109-143. A click is the renderer-synthesized gesture
+    // for a press and release on the same cell; the press already moved the
+    // selection, so the click only activates what the press selected.
+    auto impl = impl_;
+    if (impl->items.empty()) return std::nullopt;
+    if (event.type == MouseEventType::Wheel && event.wheel_delta && *event.wheel_delta != 0) {
+        const auto delta = *event.wheel_delta < 0 ? std::ptrdiff_t{-1} : std::ptrdiff_t{1};
+        const auto previous = impl->selected_index;
+        impl->selected_index = static_cast<std::size_t>(
+                std::clamp<std::ptrdiff_t>(static_cast<std::ptrdiff_t>(impl->selected_index) + delta,
+                        0,
+                        static_cast<std::ptrdiff_t>(impl->items.size() - 1)));
+        const bool changed = impl->selected_index != previous;
+        if (changed) impl->notify_selection_change();
+        return MouseEventResult{.handled = true, .render = changed};
+    }
+    // Hover must not change selection: the visible range is centered on it.
+    if (event.button != MouseButton::Left ||
+            (event.type != MouseEventType::Press && event.type != MouseEventType::Click)) {
+        return std::nullopt;
+    }
+    const auto range = detail::centered_visible_range(impl->items.size(), impl->selected_index, impl->max_visible);
+    const auto item_index = static_cast<std::ptrdiff_t>(range.begin) + event.y;
+    if (item_index < static_cast<std::ptrdiff_t>(range.begin) || item_index >= static_cast<std::ptrdiff_t>(range.end)) {
+        return std::nullopt;
+    }
+    const auto index = static_cast<std::size_t>(item_index);
+    if (event.type == MouseEventType::Press) {
+        impl->mouse_pressed_index = index;
+        if (impl->selected_index != index) {
+            impl->selected_index = index;
+            impl->notify_selection_change();
+        }
+        return MouseEventResult{.handled = true, .focus = true};
+    }
+    const auto clicked_index = impl->mouse_pressed_index.value_or(index);
+    impl->mouse_pressed_index.reset();
+    const bool changed = impl->selected_index != clicked_index;
+    impl->selected_index = clicked_index;
+    if (changed) impl->notify_selection_change();
+    const auto* selected = impl->selected();
+    auto sink = impl->on_select;
+    if (selected != nullptr && sink && *sink) {
+        const auto item_snapshot = *selected;
+        if (auto activated = (*sink)(item_snapshot); !activated) {
+            impl->callback_error = std::move(activated.error());
+        }
+    }
+    return MouseEventResult{.handled = true};
+}
 
 bool SelectList::focused() const { return impl_->focused; }
 

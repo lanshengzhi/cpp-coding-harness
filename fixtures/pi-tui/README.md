@@ -186,6 +186,27 @@ repaints, and the wrapping click counter from a constant one; and
 and turns no packet into text from one that does. `capture/mouse-scenarios.mts` executes the
 frozen components directly; its source digest is recorded alongside the main generator digest.
 
+For #1003, the named runner appended one family and re-captured nothing else: `mouse-components.json`
+records 12 mouse editing and list/settings selection scenarios through the frozen `Input`, `Editor`,
+`SelectList`, `SettingsList`, `Container` and `TuiAltScreen`, so the toolkit's `handle_mouse`
+arithmetic is measured against the frozen components rather than a re-derived value.
+`capture/mouse-components-scenarios.mts` holds the scenario bodies and is emitted by the main
+generator; `capture/recapture-mouse-components.mts` is the append recipe (same frozen revision,
+same `capturedAt`, every other artifact byte-identical). The input scenarios pin the press-to-cursor
+column for a value column, a scrolled window's start column and a wide-grapheme run, and record that
+move, drag, release and wheel stay unhandled; the select-list and settings-list scenarios pin press
+select, click activation through the renderer gesture, the wheel's centered visible window, hover
+never selecting, the search row forwarding to its input (with the input's cursor column) while the
+separator row stays inert, and a submenu click selecting and closing while its host keeps focus; the
+delegating-host and overlay scenarios pin that a nested click keeps the host focused, including the
+frozen `dispatchMouseToOverlay` walk over the rendered overlay layouts with overlay-local
+retargeting; the editor scenarios pin the click's bounded row mapping across the border, the content
+rows, wrapped segments and wide graphemes, and a drag that copies instead of moving the cursor.
+Observations are read after `handleMouse` returns, so a post-click cursor or row is the frozen
+component's own state. Two recorded divergences stay outside the comparison: frozen hardcodes the
+settings hint text while the toolkit spells the same line from the keybinding registry, and the
+editor's border rows need the C++ border hook to exist at all.
+
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
 widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key

@@ -388,6 +388,8 @@ support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions 
     }
 
     const auto end = std::min(visual.size(), scroll_offset + visible_count);
+    const auto content_start_row = top_border_rows;
+    const auto content_row_count = end > scroll_offset ? end - scroll_offset : 0;
     for (std::size_t index = scroll_offset; index < end; ++index) {
         auto content_line = visual[index].text;
         if (index == cursor_line) {
@@ -408,7 +410,9 @@ support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions 
         }
     }
 
+    std::size_t fallback_content_rows = 0;
     if (result.size() == ((options.theme && options.theme->border) ? 1 : 0)) {
+        fallback_content_rows = 1;
         auto line = std::string(options.width, ' ');
         if (options.theme && options.theme->text) {
             auto styled = apply_text_style(options.theme->text, std::move(line), "Editor text");
@@ -429,6 +433,7 @@ support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions 
         result.push_back(std::move(*styled_border));
     }
 
+    const auto autocomplete_start_row = result.size();
     if (options.include_autocomplete && options.autocomplete_menu) {
         SelectListTheme default_select_list_theme;
         auto& select_list_theme = options.theme ? options.theme->select_list : default_select_list_theme;
@@ -453,6 +458,10 @@ support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions 
             .content_width = widths.content,
             .layout_width = widths.layout,
             .scroll_offset = scroll_offset,
+            .content_start_row = content_start_row,
+            .content_row_count = content_row_count != 0 ? content_row_count : fallback_content_rows,
+            .autocomplete_start_row = autocomplete_start_row,
+            .autocomplete_row_count = result.size() - autocomplete_start_row,
             .cursor_position = cursor_position,
     };
 }

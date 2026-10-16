@@ -3,6 +3,7 @@
 #include <cch/tui/Autocomplete.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/Mouse.hpp>
 #include <cch/tui/SelectList.hpp>
 #include <cch/tui/Style.hpp>
 
@@ -160,7 +161,8 @@ class Editor final : public EditorComponent,
                      public EditorBorderStyleSupport,
                      public EditorPaddingSupport,
                      public EditorAutocompleteMaxVisibleSupport,
-                     public ViewportAware {
+                     public ViewportAware,
+                     public MouseHandler {
 public:
     explicit Editor(
         EditorOptions options = {},
@@ -201,6 +203,12 @@ public:
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
     InputAdmissionOutcome handle_input(const InputEventVariant& input) override;
+    /// A left click positions the cursor on the clicked visual line and grapheme
+    /// (pi `Editor.handleMouse`). Press, drag, and release stay unhandled so the
+    /// renderer's screen-level text selection can run over the editor rows; the
+    /// renderer synthesizes the click when a press and release land on the same
+    /// cell without movement.
+    [[nodiscard]] std::optional<MouseEventResult> handle_mouse(const MouseEvent& event) override;
     void set_focused(bool focused) override;
     [[nodiscard]] bool focused() const override;
     [[nodiscard]] std::optional<CursorPosition> cursor_location() const override;

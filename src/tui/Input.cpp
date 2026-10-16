@@ -61,6 +61,9 @@ struct Input::Impl {
     detail::TextBuffer buffer{detail::TextBufferOptions{.multiline = false, .enable_paste_markers = false}};
     bool focused{false};
     std::size_t layout_width{0};
+    /// First visible column of the rendered value window (pi
+    /// `renderedStartColumn`); mouse columns resolve against it.
+    std::size_t rendered_start_column{0};
     std::optional<support::Error> callback_error;
 
     [[nodiscard]] std::string value() const {
@@ -108,6 +111,10 @@ struct Input::Impl {
         std::size_t before_width{0};
         /// Byte offset of the cursor within `text` (pi's `cursorDisplay`).
         std::size_t cursor_offset{0};
+        /// Column the window starts at inside the full value: 0 while the
+        /// value fits, otherwise the horizontal scroll offset (pi
+        /// `renderedStartColumn`).
+        std::size_t start_column{0};
     };
 
     /// The value window shown at `width` and the visible width of the text
@@ -148,9 +155,10 @@ struct Input::Impl {
             true);
         if (!before) return std::unexpected(before.error());
         return VisibleWindow{
-            .text = std::move(*visible),
-            .before_width = visible_width(*before),
-            .cursor_offset = before->size(),
+                .text = std::move(*visible),
+                .before_width = visible_width(*before),
+                .cursor_offset = before->size(),
+                .start_column = start_col,
         };
     }
 };
@@ -237,6 +245,7 @@ support::Expected<RenderResult> Input::render(std::size_t width) {
 
     auto window = impl_->visible_window(width);
     if (!window) return std::unexpected(window.error());
+    impl_->rendered_start_column = window->start_column;
 
     // Fake cursor (pi input.ts render): reverse video on the grapheme at the
     // cursor, or a highlighted space at end of line. ESC[27m (reverse off)
@@ -257,6 +266,34 @@ support::Expected<RenderResult> Input::render(std::size_t width) {
 }
 
 void Input::invalidate() {}
+
+std::optional<MouseEventResult> Input::handle_mouse(const MouseEvent& event) {
+    // pi input.ts:229-245: only a left press on the single rendered row
+    // positions the cursor. pi hardcodes the two-column default prompt offset
+    // in that expression (its render window uses the prompt's own width), so a
+    // custom prompt keeps pi's frozen arithmetic rather than the rendered
+    // prompt width.
+    if (event.type != MouseEventType::Press || event.button != MouseButton::Left || event.y != 0) {
+        return std::nullopt;
+    }
+    const auto visible_column = std::max<std::ptrdiff_t>(0, event.x - 2);
+    const auto target_column = static_cast<std::ptrdiff_t>(impl_->rendered_start_column) + visible_column;
+    const auto graphemes = detail::split_graphemes(impl_->value());
+    std::size_t cursor_column = graphemes.size();
+    std::ptrdiff_t current_column = 0;
+    for (std::size_t index = 0; index < graphemes.size(); ++index) {
+        const auto next_column = current_column + static_cast<std::ptrdiff_t>(detail::grapheme_width(graphemes[index]));
+        if (target_column < next_column) {
+            cursor_column = index;
+            break;
+        }
+        current_column = next_column;
+    }
+    // The press is not an undo unit: pi clears `lastAction` here, which is
+    // what `TextBuffer::set_cursor` does for the same reason.
+    impl_->buffer.set_cursor(detail::BufferCursor{.line = 0, .column = cursor_column});
+    return MouseEventResult{.handled = true, .focus = true};
+}
 
 InputAdmissionOutcome Input::handle_input(const InputEventVariant& input) {
     if (const auto* paste = std::get_if<PasteEvent>(&input)) {
