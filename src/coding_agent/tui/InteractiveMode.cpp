@@ -202,7 +202,7 @@ void InteractiveEngine::dispatch(ExternalEditorAction) {
 
 boost::asio::awaitable<void> InteractiveEngine::handle_open_external_editor() {
     if (view_ == nullptr) co_return;
-    auto result = co_await run_external_editor_flow(tui_, view_->editor_expanded_text());
+    auto result = co_await run_external_editor_flow(*tui_, view_->editor_expanded_text());
     if (!result) {
         completion_result_ = std::unexpected(result.error());
         request_exit();

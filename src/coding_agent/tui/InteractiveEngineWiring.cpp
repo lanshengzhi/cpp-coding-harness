@@ -432,11 +432,6 @@ std::shared_ptr<SettingsFlowController> InteractiveEngine::make_settings_flow_co
     hooks.rebuild_autocomplete_provider = [weak] {
         if (const auto self = weak.lock()) self->rebuild_autocomplete_provider();
     };
-    hooks.switch_tui_mode = [weak](coding_agent::TuiMode mode) -> support::Expected<bool> {
-        if (const auto self = weak.lock()) return self->switch_tui_mode(mode);
-        return self->switch_error_ ? support::Expected<bool>{std::unexpected(*self->switch_error_)}
-                                   : support::Expected<bool>{false};
-    };
     return std::make_shared<SettingsFlowController>(
         executor_,
         *this,

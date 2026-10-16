@@ -36,6 +36,7 @@
 
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Settings.hpp>
+#include <cch/tui/AltScreen.hpp>
 #include <cch/tui/OverlayHandle.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/support/Error.hpp>
@@ -210,9 +211,19 @@ private:
     [[nodiscard]] ProjectResourceFileSystems project_resource_filesystems_for(const std::filesystem::path& workspace);
 
     [[nodiscard]] support::ExpectedVoid fail_start(const support::Error& error);
+
+    /// Install the frame prepare/complete sinks on the selected root. pi
+    /// `createInteractiveTui` wires them once at construction and
+    /// `switchTuiMode` rebuilds the root with the same callbacks
+    /// (`interactive-mode.ts:892-899`), so a replacement root needs them
+    /// installed again before it paints.
     [[nodiscard]] support::ExpectedVoid bind_render_sinks();
+
+    /// Re-apply the debug hook on the selected root. pi reads `onDebug` back
+    /// from the retired renderer and assigns it to the replacement
+    /// (`interactive-mode.ts:900`); the toolkit has no getter (`TuiDiagnostics.hpp:31`
+    /// is setter-only on `ITui`), so the engine keeps the value it installed.
     void apply_debug_hook();
-    void select_root(coding_agent::TuiMode mode);
 
     // ── Executor hops and render requests ────────────────────────────────
 
@@ -352,7 +363,11 @@ private:
     void replace_prompt_slot(std::shared_ptr<cch::tui::Component> component) override;
     void restore_prompt_slot() override;
 
-    [[nodiscard]] support::ExpectedVoid switch_tui_mode(coding_agent::TuiMode mode);
+    /// pi `setCustomEditorComponent`: install the registration context's
+    /// custom prompt editor into the view, or restore the built-in editor
+    /// when the current context registered none. Runs whenever the extension
+    /// registrations refresh (start, deferred boot bind, session
+    /// replacement, `/reload`).
     void apply_extension_editor();
     /// pi `resetExtensionUI` (`beforeSessionInvalidate`): dispose the current
     /// registration context while the terminal stays live, then restore the
@@ -518,13 +533,20 @@ private:
     /// at hook creation. Declared with `action_sink_` because the fullscreen
     /// host borrows it too.
     std::size_t action_generation_{0};
+    /// The frame scheduler every root borrows. Declared before both roots so
+    /// it outlives them: a root's destructor stops the root
+    /// (`Tui.cpp:86` -> `MainScreen::stop` -> `cancel_scheduled_render`),
+    /// which addresses the borrowed scheduler.
+    std::unique_ptr<cch::tui::TuiScheduler> tui_scheduler_;
     /// The currently selected root is updated before a retired root releases
     /// its callbacks or child tree.
     std::unique_ptr<cch::tui::MainScreen> main_screen_;
     std::unique_ptr<AltScreenHost> fullscreen_host_;
     AltScreenHost* alt_screen_host_{nullptr};
-    std::unique_ptr<cch::tui::TuiScheduler> tui_scheduler_;
-    cch::tui::TuiDebugHook debug_hook_{};
+    /// Copyable because the same hook is installed on every selected root;
+    /// `cch::tui::TuiDebugHook` is a move-only function, so the engine
+    /// remembers the value here and wraps a copy at each install.
+    std::function<void()> debug_hook_{};
     cch::tui::ITui* tui_{nullptr};
     /// pi's mutable shared KeybindingsManager consumption shape (ADR 0035,
     /// #418): every durable view component observes this slot; `/reload`
@@ -615,7 +637,6 @@ private:
     std::optional<cch::tui::TuiMainScreenRenderState> main_screen_render_state_;
     std::optional<cch::tui::TuiAltScreenRenderState> alt_screen_render_state_;
     bool clear_on_shrink_{false};
-    std::optional<support::Error> switch_error_;
     SlashCommandRouter slash_command_router_;
     std::atomic<bool> running_{false};
     std::stop_source stop_source_;

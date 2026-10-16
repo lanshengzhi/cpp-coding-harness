@@ -289,13 +289,6 @@ private:
         .control = cch::tui::SettingSubmenu{},
     });
     items.push_back({
-        .id = "tui-mode",
-        .label = "TUI mode",
-        .description = "Regular or fullscreen terminal interface",
-        .current_value = config.current_tui_mode,
-        .control = cch::tui::SettingValues{{"regular", "fullscreen"}},
-    });
-    items.push_back({
         .id = "theme",
         .label = "Theme",
         .description = "Color theme for the interface",
@@ -350,12 +343,6 @@ struct SettingsSelectorComponent::Impl {
                     const auto trust = default_project_trust_by_label(new_value);
                     if (trust && state->callbacks.on_default_project_trust_change) {
                         state->callbacks.on_default_project_trust_change(*trust);
-                    }
-                    return {};
-                }
-                if (id == "tui-mode") {
-                    if (state->callbacks.on_tui_mode_change) {
-                        state->callbacks.on_tui_mode_change(std::move(new_value));
                     }
                     return {};
                 }

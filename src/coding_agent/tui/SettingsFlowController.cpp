@@ -82,11 +82,7 @@ void SettingsFlowController::show_settings_selector() {
     // sorted available themes.
     config.current_theme = settings_manager_->global_settings().theme.value_or("dark");
     config.active_theme = std::string{theme_controller_->active_theme_name()};
-    const auto mode = settings_manager_->get_tui_mode();
-    config.current_tui_mode = mode == coding_agent::TuiMode::Regular ? "regular" : "fullscreen";
     config.available_themes = theme_controller_->available_theme_names();
-    const auto mode = settings_manager_->get_tui_mode();
-    config.current_tui_mode = mode == coding_agent::TuiMode::Regular ? "regular" : "fullscreen";
 
     const auto weak = weak_from_this();
     SettingsSelectorCallbacks callbacks;
@@ -172,57 +168,12 @@ void SettingsFlowController::show_settings_selector() {
             });
         }
     };
-    callbacks.on_tui_mode_change = [weak](std::string value) {
-        if (const auto self = weak.lock()) {
-            self->post([self, value = std::move(value)]() mutable {
-                if (self->settings_manager_ == nullptr || !self->hooks_.switch_tui_mode) return;
-                const auto current = self->settings_manager_->get_tui_mode();
-                const auto requested = value == "regular" ? coding_agent::TuiMode::Regular
-                                                            : coding_agent::TuiMode::Fullscreen;
-                auto switched = self->hooks_.switch_tui_mode(requested);
-                if (!switched) {
-                    (void)self->settings_manager_->set_tui_mode(current);
-                    if (self->presenter_) {
-                        self->presenter_->show_status("Close active overlays before changing TUI mode");
-                    }
-                    return;
-                }
-                if (!*switched) return;
-                if (auto saved = self->settings_manager_->set_tui_mode(requested); !saved) {
-                    self->show_error(combined_error_text(saved.error()));
-                }
-                if (self->presenter_) self->presenter_->show_status("TUI mode: " + value);
-            });
-        }
-    };
     callbacks.on_theme_preview = [weak](std::string theme_name) {
         if (const auto self = weak.lock()) {
             self->post([self, theme_name = std::move(theme_name)]() mutable {
                 if (self->theme_controller_ != nullptr) {
                     self->theme_controller_->preview(theme_name);
                 }
-            });
-        }
-    };
-    callbacks.on_tui_mode_change = [weak](std::string value) {
-        if (const auto self = weak.lock()) {
-            self->post([self, value = std::move(value)]() mutable {
-                if (self->settings_manager_ == nullptr || !self->hooks_.switch_tui_mode) return;
-                const auto current = self->settings_manager_->get_tui_mode();
-                const auto requested = value == "regular" ? coding_agent::TuiMode::Regular
-                                                            : coding_agent::TuiMode::Fullscreen;
-                auto switched = self->hooks_.switch_tui_mode(requested);
-                if (!switched || !*switched) {
-                    (void)self->settings_manager_->set_tui_mode(current);
-                    if (!switched && self->presenter_) {
-                        self->presenter_->show_status("Close active overlays before changing TUI mode");
-                    }
-                    return;
-                }
-                if (auto saved = self->settings_manager_->set_tui_mode(requested); !saved) {
-                    self->show_error(combined_error_text(saved.error()));
-                }
-                if (self->presenter_) self->presenter_->show_status("TUI mode: " + value);
             });
         }
     };

@@ -171,12 +171,11 @@ InteractiveEngine::InteractiveEngine(cch::tui::Terminal& terminal, boost::asio::
 
 InteractiveEngine::InteractiveEngine(
         cch::tui::Terminal& terminal, boost::asio::any_io_executor executor, coding_agent::TuiMode tui_mode)
-    : session_(nullptr), terminal_(terminal),
+    : session_(nullptr), terminal_(terminal), tui_scheduler_(std::make_unique<AsioTuiScheduler>(executor)),
       main_screen_(std::make_unique<cch::tui::MainScreen>(terminal)),
       fullscreen_host_(std::make_unique<AltScreenHost>(terminal, action_sink_, action_generation_)),
-      tui_scheduler_(std::make_unique<AsioTuiScheduler>(executor)),
       tui_(tui_mode == coding_agent::TuiMode::Fullscreen ? static_cast<cch::tui::ITui*>(&fullscreen_host_->tui())
-                                                        : main_screen_.get()),
+                                                         : main_screen_.get()),
       executor_(std::move(executor)), exit_wait_(executor_), flows_settled_(executor_) {
     exit_wait_.expires_at(std::chrono::steady_clock::time_point::max());
     flows_settled_.expires_at(std::chrono::steady_clock::time_point::max());
@@ -231,9 +230,10 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     // The fullscreen root's right-click paste performs the native clipboard read
     // and editor insert through this engine (#1017), which owns the reader, the
     // editor, and the read flow; every other action still crosses to the run's
-    // composition host. A run without a fullscreen host keeps that host's
-    // acknowledge-only fallback: no regular-mode root dispatches a paste.
-    if (fullscreen_host_ != nullptr) {
+    // composition host. A run whose selected root is the regular main screen
+    // keeps that host's acknowledge-only fallback: no regular-mode root
+    // dispatches a paste.
+    if (tui_ == &fullscreen_host_->tui()) {
         auto run_action_sink = run.make_action_sink();
         const auto host_weak = weak_from_this();
         action_sink_ = [host_weak, run_action_sink = std::move(run_action_sink)](std::size_t generation,
@@ -365,6 +365,26 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         initial_prompt_options_ = run.initial_prompt_options();
     }
     return {};
+}
+
+support::ExpectedVoid InteractiveEngine::bind_render_sinks() {
+    const auto weak = weak_from_this();
+    tui_->set_render_prepare_sink([weak]() -> support::Expected<bool> {
+        if (const auto self = weak.lock()) return self->prepare_frame();
+        return false;
+    });
+    tui_->set_render_complete_sink([weak](const support::ExpectedVoid& result) {
+        if (const auto self = weak.lock()) self->complete_frame(result);
+    });
+    return {};
+}
+
+void InteractiveEngine::apply_debug_hook() {
+    if (!debug_hook_) {
+        tui_->set_on_debug(nullptr);
+        return;
+    }
+    tui_->set_on_debug(cch::tui::TuiDebugHook{[hook = debug_hook_]() { hook(); }});
 }
 
 boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() {
@@ -960,7 +980,7 @@ void InteractiveEngine::invalidate() { invalidate_frame(); }
 support::Expected<bool> InteractiveEngine::prepare_frame() {
     if (!running_) return false;
     prepared_counted_frame_ = false;
-    if (fullscreen_host_ != nullptr && view_ != nullptr) {
+    if (tui_ == &fullscreen_host_->tui() && view_ != nullptr) {
         // A layout-root child is never pushed `set_available_height` (the frame
         // allocation is its bound), so the dock's editor needs its own terminal
         // bound before this frame paints, exactly as the frozen editor reads

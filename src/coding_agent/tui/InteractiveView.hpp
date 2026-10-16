@@ -14,6 +14,7 @@
 
 #include "coding_agent/tui/BashExecutionComponent.hpp"
 #include "coding_agent/tui/ChatContainer.hpp"
+#include "coding_agent/tui/ChatViewport.hpp"
 #include "coding_agent/tui/Footer.hpp"
 #include "coding_agent/tui/KeybindingHints.hpp"
 #include "coding_agent/tui/LoadedResources.hpp"

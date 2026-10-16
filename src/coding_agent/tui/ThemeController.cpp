@@ -191,7 +191,7 @@ struct ThemeController::Impl {
             ThemeTerminalColorsSink configured_on_terminal_colors,
             ThemeTerminalColorSchemeSink configured_on_terminal_color_scheme)
         : custom_themes_dir(std::move(configured_custom_themes_dir)), registered(std::move(configured_registered)),
-          theme_setting(std::move(configured_theme_setting)), capability(configured_capability), root(configured_root),
+          theme_setting(std::move(configured_theme_setting)), capability(configured_capability), root(&configured_root),
           show_error(std::move(configured_show_error)), on_changed(std::move(configured_on_changed)),
           live(builtin_dark_theme(), configured_capability) {
         color_dispatch->sink = std::make_shared<ThemeTerminalColorsSink>(std::move(configured_on_terminal_colors));

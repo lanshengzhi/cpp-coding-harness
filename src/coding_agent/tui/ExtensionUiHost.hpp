@@ -37,8 +37,16 @@ public:
     /// Bind the live TUI and install the first registration context.
     void bind(cch::tui::ITui& tui, ExtensionUiRegistrationFactory factory);
 
-    /// Rebind the existing listener callbacks to a new root without invoking
-    /// the extension registration factory again.
+    /// Dispose the current context and install a fresh one on the same TUI.
+    void refresh();
+
+    /// Reattach the registered listener callbacks to a replacement root
+    /// without invoking the registration factory again (pi
+    /// `rebindExtensionTerminalInputListeners`,
+    /// `interactive-mode.ts:2594`). The stored listeners are the
+    /// `subscription.handler` set pi keeps so a renderer switch can move the
+    /// same handlers onto the new root; `refresh()` is the factory rerun, and
+    /// both operations are needed.
     void rebind(cch::tui::ITui& tui);
 
     /// Dispose current listener handles but keep the host ready to refresh.
