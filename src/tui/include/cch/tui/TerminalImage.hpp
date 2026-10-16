@@ -205,10 +205,7 @@ struct KittyImageCrop {
 /// rows with `hidden_rows` scrolled or clipped off the top. `rows == 0` means
 /// frozen leaves the source rectangle unset (no `y=`/`h=`/`r=`).
 [[nodiscard]] KittyImageCrop kitty_image_crop(
-    std::size_t pixel_height,
-    std::size_t total_rows,
-    std::size_t hidden_rows,
-    std::size_t visible_rows);
+        std::size_t pixel_height, std::size_t total_rows, std::size_t hidden_rows, std::size_t visible_rows);
 
 /// Kitty placement-only command for a resource already uploaded in this
 /// terminal session (pi `getKittyImagePlacement`): `a=p,q=2` with the

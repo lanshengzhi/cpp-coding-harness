@@ -763,8 +763,7 @@ void RenderPipeline::clear_image_placements() noexcept {
     fullscreen_image_order_.clear();
 }
 
-FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(
-        std::vector<std::string> lines,
+FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(std::vector<std::string> lines,
         const std::vector<InlineImageRenderRegion>& images,
         InlineImageProtocol protocol,
         bool full_redraw) {
@@ -786,7 +785,8 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(
     // frame's uploads are cached (pi `hadUploadedKittyImages`).
     const bool had_uploaded_images = !fullscreen_image_placements_.empty();
 
-    for (auto& [resource_id, placement] : fullscreen_image_placements_) placement.visible = false;
+    for (auto& [resource_id, placement] : fullscreen_image_placements_)
+        placement.visible = false;
     bool need_redraw = false;
     // Placement rows for the LRU touch order: frozen walks the finished screen
     // top-to-bottom, not the paint order (pi `prepareKittyScreen`).
@@ -833,9 +833,8 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(
         if (cached != fullscreen_image_placements_.end() && cached->second.revision == image.revision) {
             anchor = detail::encode_kitty_image_placement(term_img, cached->second.handle);
         } else {
-            const auto handle = cached != fullscreen_image_placements_.end()
-                    ? cached->second.handle
-                    : allocate_image_id();
+            const auto handle =
+                    cached != fullscreen_image_placements_.end() ? cached->second.handle : allocate_image_id();
             auto encoded = detail::encode_terminal_image(protocol, term_img, handle);
             if (!encoded) continue;
             auto& placement = fullscreen_image_placements_[image.resource_id];
@@ -864,7 +863,8 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(
     for (const auto& [resource_id, placement] : fullscreen_image_placements_) {
         if (placement.anchored && !placement.visible) need_redraw = true;
     }
-    for (auto& [resource_id, placement] : fullscreen_image_placements_) placement.anchored = placement.visible;
+    for (auto& [resource_id, placement] : fullscreen_image_placements_)
+        placement.anchored = placement.visible;
 
     if (full_redraw) {
         frame.clear_bytes = had_uploaded_images ? delete_all_kitty_placements() : delete_all_kitty_images();

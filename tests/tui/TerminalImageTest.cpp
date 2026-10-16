@@ -244,8 +244,8 @@ TEST_CASE("Kitty helper allocation and deletion commands map metadata lifecycle 
     CHECK(cch::tui::is_image_line("prefix\x1b_Ga=T;data\x1b\\"));
 }
 
-TEST_CASE("kitty crop geometry follows frozen cropKittyImageLine",
-        "[tui][image][terminal-image][issue1012][compat-pi]") {
+TEST_CASE(
+        "kitty crop geometry follows frozen cropKittyImageLine", "[tui][image][terminal-image][issue1012][compat-pi]") {
     using cch::tui::detail::kitty_image_crop;
 
     // The frozen pin: a 3-row placement whose top two rows scrolled away shows
@@ -291,8 +291,8 @@ TEST_CASE("kitty placement commands carry the frozen crop and reuse controls",
     };
 
     // A clipped placement drops the destination `r=` and appends `y=,h=,r=`.
-    auto clipped = cch::tui::detail::encode_terminal_image(cch::tui::InlineImageProtocol::Kitty, image,
-            cch::tui::TerminalImageHandle{.value = 42});
+    auto clipped = cch::tui::detail::encode_terminal_image(
+            cch::tui::InlineImageProtocol::Kitty, image, cch::tui::TerminalImageHandle{.value = 42});
     REQUIRE(clipped);
     CHECK(*clipped == "\x1b_Ga=T,f=100,q=2,C=1,c=3,i=42,y=66,h=34,r=1;QUJDRA==\x1b\\");
     CHECK(cch::tui::detail::encode_kitty_image_placement(image, cch::tui::TerminalImageHandle{.value = 42}) ==
@@ -302,16 +302,17 @@ TEST_CASE("kitty placement commands carry the frozen crop and reuse controls",
     // the transmission's placement controls.
     image.region.rows = 3;
     image.source_row_offset = 0;
-    auto full = cch::tui::detail::encode_terminal_image(cch::tui::InlineImageProtocol::Kitty, image,
-            cch::tui::TerminalImageHandle{.value = 42});
+    auto full = cch::tui::detail::encode_terminal_image(
+            cch::tui::InlineImageProtocol::Kitty, image, cch::tui::TerminalImageHandle{.value = 42});
     REQUIRE(full);
     CHECK(*full == "\x1b_Ga=T,f=100,q=2,C=1,c=3,r=3,i=42;QUJDRA==\x1b\\");
     CHECK(cch::tui::detail::encode_kitty_image_placement(image, cch::tui::TerminalImageHandle{.value = 42}) ==
             "\x1b_Ga=p,q=2,C=1,c=3,r=3,i=42\x1b\\");
 }
 
-TEST_CASE("hyperlink emits pi-exact OSC 8 sequences", "[tui][image][terminal-image][issue385][compat-pi]") {    CHECK(cch::tui::hyperlink("click me", "https://example.com") ==
-        "\x1b]8;;https://example.com\x1b\\click me\x1b]8;;\x1b\\");
+TEST_CASE("hyperlink emits pi-exact OSC 8 sequences", "[tui][image][terminal-image][issue385][compat-pi]") {
+    CHECK(cch::tui::hyperlink("click me", "https://example.com") ==
+            "\x1b]8;;https://example.com\x1b\\click me\x1b]8;;\x1b\\");
     CHECK(cch::tui::hyperlink("", "https://example.com") ==
         "\x1b]8;;https://example.com\x1b\\\x1b]8;;\x1b\\");
     CHECK(cch::tui::hyperlink("README.md", "file:///home/user/README.md") ==

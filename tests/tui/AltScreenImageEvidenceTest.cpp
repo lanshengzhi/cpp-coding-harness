@@ -122,15 +122,15 @@ void rename_image_ids(std::vector<ObservedCommand>& commands) {
             const auto at = controls.find("i=", cursor);
             if (at == std::string_view::npos) break;
             std::size_t end = at + 2;
-            while (end < controls.size() && std::isdigit(static_cast<unsigned char>(controls[end]))) ++end;
+            while (end < controls.size() && std::isdigit(static_cast<unsigned char>(controls[end])))
+                ++end;
             if (end == at + 2) {
                 cursor = at + 2;
                 continue;
             }
             const auto id = std::string{controls.substr(at + 2, end - at - 2)};
-            const auto found = std::find_if(seen.begin(), seen.end(), [&](const auto& entry) {
-                return entry.first == id;
-            });
+            const auto found =
+                    std::find_if(seen.begin(), seen.end(), [&](const auto& entry) { return entry.first == id; });
             std::size_t number = 0;
             if (found == seen.end()) {
                 number = seen.size();
@@ -187,12 +187,10 @@ void rename_image_ids(std::vector<ObservedCommand>& commands) {
     return bundle.at("scenarios").get_array().front();
 }
 
-[[nodiscard]] std::size_t int_of(const JsonValue& value) {
-    return static_cast<std::size_t>(value.get_number());
-}
+[[nodiscard]] std::size_t int_of(const JsonValue& value) { return static_cast<std::size_t>(value.get_number()); }
 
-[[nodiscard]] cch::tui::VirtualTerminal terminal_of(const JsonValue& scenario,
-        cch::tui::InlineImageProtocol inline_images) {
+[[nodiscard]] cch::tui::VirtualTerminal terminal_of(
+        const JsonValue& scenario, cch::tui::InlineImageProtocol inline_images) {
     return cch::tui::VirtualTerminal({.columns = int_of(scenario.at("dimensions").at("columns")),
             .rows = int_of(scenario.at("dimensions").at("rows")),
             .capabilities = {.inline_images = inline_images}});
@@ -253,11 +251,8 @@ public:
 
 /// A placement whose declared row count is the frozen crop denominator; an
 /// ancestor clip is free to shorten `region.rows` and raise the source offset.
-[[nodiscard]] cch::tui::InlineImageRenderRegion placement(const JsonValue& image,
-        std::size_t row,
-        std::size_t columns,
-        std::size_t rows,
-        std::uint64_t resource_id) {
+[[nodiscard]] cch::tui::InlineImageRenderRegion placement(
+        const JsonValue& image, std::size_t row, std::size_t columns, std::size_t rows, std::uint64_t resource_id) {
     cch::tui::InlineImageRenderRegion region;
     region.resource_id = resource_id;
     region.revision = 1;
@@ -265,9 +260,8 @@ public:
     region.mime_type = image.at("mimeType").get_string();
     region.pixel_width = int_of(image.at("widthPx"));
     region.pixel_height = int_of(image.at("heightPx"));
-    region.fallback_text =
-            cch::tui::image_fallback(region.mime_type, cch::tui::ImagePixelSize{.width = region.pixel_width,
-                                                                               .height = region.pixel_height});
+    region.fallback_text = cch::tui::image_fallback(
+            region.mime_type, cch::tui::ImagePixelSize{.width = region.pixel_width, .height = region.pixel_height});
     region.region = cch::tui::CellRegion{.column = 0, .row = row, .columns = columns, .rows = rows};
     region.source_rows = rows;
     region.rows_reserved_in_lines = true;
@@ -399,8 +393,8 @@ TEST_CASE("frozen fullscreen anchor move replays the upload as a placement",
     auto* header_pointer = header.get();
     REQUIRE(root->add_child(std::move(header)));
     std::vector<cch::tui::InlineImageRenderRegion> images;
-    images.push_back(placement(image, 0, int_of(image.at("columns")), int_of(image.at("rows")),
-                               int_of(image.at("id"))));
+    images.push_back(
+            placement(image, 0, int_of(image.at("columns")), int_of(image.at("rows")), int_of(image.at("id"))));
     REQUIRE(root->add_child(std::make_unique<PlacementChild>(std::vector<std::string>(4), std::move(images))));
     REQUIRE(root->add_child(std::make_unique<cch::tui::Text>(inputs.at("content").at("tail").get_string(), 0, 0)));
     tui.set_layout_root(std::move(root));
@@ -429,8 +423,8 @@ TEST_CASE("frozen fullscreen image removal and session teardown clear placements
     auto* root_pointer = root.get();
     REQUIRE(root->add_child(std::make_unique<cch::tui::Text>(inputs.at("content").at("head").get_string(), 0, 0)));
     std::vector<cch::tui::InlineImageRenderRegion> images;
-    images.push_back(placement(image, 0, int_of(image.at("columns")), int_of(image.at("rows")),
-                               int_of(image.at("id"))));
+    images.push_back(
+            placement(image, 0, int_of(image.at("columns")), int_of(image.at("rows")), int_of(image.at("id"))));
     auto child = std::make_unique<PlacementChild>(std::vector<std::string>(4), std::move(images));
     auto* child_pointer = child.get();
     REQUIRE(root->add_child(std::move(child)));
@@ -460,13 +454,12 @@ TEST_CASE("frozen fullscreen iTerm2 session shows the fallback without image seq
 
     auto terminal = terminal_of(scenario, cch::tui::InlineImageProtocol::ITerm2);
     cch::tui::AltScreen tui(terminal);
-    tui.set_layout_root(std::make_unique<cch::tui::Image>(
-            cch::tui::ImageContent{.encoded_data = image.at("data").get_string(),
-                    .mime_type = image.at("mimeType").get_string()},
-            cch::tui::ImageOptions{
-                    .dimensions = cch::tui::ImagePixelSize{.width = int_of(image.at("widthPx")),
-                                                                   .height = int_of(image.at("heightPx"))},
-                    .defer_protocol_selection = true}));
+    tui.set_layout_root(
+            std::make_unique<cch::tui::Image>(cch::tui::ImageContent{.encoded_data = image.at("data").get_string(),
+                                                      .mime_type = image.at("mimeType").get_string()},
+                    cch::tui::ImageOptions{.dimensions = cch::tui::ImagePixelSize{.width = int_of(image.at("widthPx")),
+                                                   .height = int_of(image.at("heightPx"))},
+                            .defer_protocol_selection = true}));
     PhaseChecker check(terminal, scenario);
     REQUIRE(tui.start());
     REQUIRE(tui.render());
@@ -487,8 +480,8 @@ TEST_CASE("frozen fullscreen decoded-size cap evicts the offscreen upload by id"
     cch::tui::AltScreen tui(terminal);
     std::vector<std::string> lines{"", "one", "two", "three", "four", "five"};
     std::vector<cch::tui::InlineImageRenderRegion> images;
-    images.push_back(placement(image, 0, int_of(image.at("columns")), int_of(image.at("rows")),
-                               int_of(image.at("id"))));
+    images.push_back(
+            placement(image, 0, int_of(image.at("columns")), int_of(image.at("rows")), int_of(image.at("id"))));
     auto viewport = std::make_unique<cch::tui::ScrollView>(
             std::make_unique<PlacementChild>(std::move(lines), std::move(images)),
             cch::tui::ScrollViewOptions{.primary = true});
@@ -524,8 +517,8 @@ TEST_CASE("frozen fullscreen offscreen count cap evicts the least recently used 
     std::vector<cch::tui::InlineImageRenderRegion> images;
     images.reserve(image_count);
     for (std::size_t index = 0; index < image_count; ++index) {
-        images.push_back(placement(image, index, int_of(image.at("columns")), int_of(image.at("rows")),
-                                   int_of(image_ids[index])));
+        images.push_back(placement(
+                image, index, int_of(image.at("columns")), int_of(image.at("rows")), int_of(image_ids[index])));
     }
     auto viewport = std::make_unique<cch::tui::ScrollView>(
             std::make_unique<PlacementChild>(std::move(lines), std::move(images)),
