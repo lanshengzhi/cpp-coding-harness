@@ -176,18 +176,49 @@ enum class ImeTokenKind {
     AbsoluteMove,
     RelativeMove,
     Visibility,
+    Unsupported,
 };
 
 struct ImeToken {
     ImeTokenKind kind;
     std::size_t row{0};      // 1-indexed for AbsoluteMove
     std::size_t col{0};      // 1-indexed for AbsoluteMove or RelativeMove
-    int row_delta{0};         // negative for up (A), positive for down (B)
+    int row_delta{0};        // negative for up (A), positive for down (B)
     bool visible{false};     // for Visibility
     std::string canonical{}; // canonical string representation
 
     bool operator==(const ImeToken& other) const = default;
 };
+
+[[nodiscard]] constexpr bool is_cursor_final_byte(char c) noexcept { return (c >= 'A' && c <= 'H') || c == 'f'; }
+
+[[nodiscard]] inline bool has_cursor_control(std::string_view s) {
+    if (s.empty()) return false;
+    for (std::size_t i = 0; i < s.size();) {
+        if (s.substr(i).starts_with("\x1b[")) {
+            std::size_t p = i + 2;
+            const bool has_question_25 = s.substr(p).starts_with("?25");
+            while (p < s.size() && s[p] >= 0x20 && s[p] <= 0x3F) {
+                ++p;
+            }
+            if (p < s.size()) {
+                const char final_byte = s[p];
+                if (is_cursor_final_byte(final_byte) || has_question_25) {
+                    return true;
+                }
+                i = p + 1;
+            } else {
+                if (has_question_25) {
+                    return true;
+                }
+                break;
+            }
+        } else {
+            ++i;
+        }
+    }
+    return false;
+}
 
 [[nodiscard]] inline std::optional<std::size_t> parse_uint(std::string_view s) {
     if (s.empty()) return std::nullopt;
@@ -293,9 +324,7 @@ struct FrozenTerminalEvent {
 /// Decodes the final frame IME placement and visibility from frozen raw writes and terminal events.
 /// Retains exact ordered sequence within explicit target final frame boundary.
 [[nodiscard]] inline std::vector<ImeToken> extract_ime_tokens_from_frozen_evidence(
-        std::span<const std::string> writes,
-        std::span<const FrozenTerminalEvent> events,
-        bool is_fullscreen) {
+        std::span<const std::string> writes, std::span<const FrozenTerminalEvent> events, bool is_fullscreen) {
     std::vector<ImeToken> result;
     if (is_fullscreen) {
         // Fullscreen: AltScreen frame write ends in \x1b[?2026l with bundled cursor positioning and visibility.
@@ -329,9 +358,8 @@ struct FrozenTerminalEvent {
         for (std::size_t i = ime_start; i < target_write.size();) {
             if (target_write.substr(i).starts_with("\x1b[")) {
                 std::size_t end = i + 2;
-                while (end < target_write.size() &&
-                       (target_write[end] == '?' || target_write[end] == ';' ||
-                        (target_write[end] >= '0' && target_write[end] <= '9'))) {
+                const bool is_q25 = target_write.substr(end).starts_with("?25");
+                while (end < target_write.size() && target_write[end] >= 0x20 && target_write[end] <= 0x3F) {
                     ++end;
                 }
                 if (end < target_write.size()) {
@@ -358,7 +386,14 @@ struct FrozenTerminalEvent {
                         });
                         continue;
                     }
-                    if (cmd == 'H') {
+                    if (is_q25) {
+                        result.push_back(ImeToken{
+                                .kind = ImeTokenKind::Unsupported,
+                                .canonical = std::string(csi_seq),
+                        });
+                        continue;
+                    }
+                    if (cmd == 'H' || cmd == 'f') {
                         if (const auto parsed = parse_absolute_move(csi_seq)) {
                             result.push_back(ImeToken{
                                     .kind = ImeTokenKind::AbsoluteMove,
@@ -366,11 +401,31 @@ struct FrozenTerminalEvent {
                                     .col = parsed->col,
                                     .canonical = std::string(csi_seq),
                             });
-                            continue;
+                        } else {
+                            result.push_back(ImeToken{
+                                    .kind = ImeTokenKind::Unsupported,
+                                    .canonical = std::string(csi_seq),
+                            });
                         }
+                        continue;
                     }
+                    if (is_cursor_final_byte(cmd)) {
+                        result.push_back(ImeToken{
+                                .kind = ImeTokenKind::Unsupported,
+                                .canonical = std::string(csi_seq),
+                        });
+                        continue;
+                    }
+                    // Noncursor formatting (e.g. SGR 'm', erase 'K') is ignored
                 } else {
-                    break;
+                    const auto csi_seq = target_write.substr(i);
+                    i = target_write.size();
+                    if (is_q25 || has_cursor_control(csi_seq)) {
+                        result.push_back(ImeToken{
+                                .kind = ImeTokenKind::Unsupported,
+                                .canonical = std::string(csi_seq),
+                        });
+                    }
                 }
             } else {
                 ++i;
@@ -382,9 +437,9 @@ struct FrozenTerminalEvent {
         std::size_t boundary_idx = 0;
         for (std::size_t i = 0; i < events.size(); ++i) {
             const auto& ev = events[i];
-            if (ev.op == "write" && (ev.bytes.find("\r\n") != std::string::npos ||
-                                     ev.bytes.find("\x1b[2K") != std::string::npos ||
-                                     (ev.bytes.starts_with("\x1b[?2026h") && ev.bytes.find("header") != std::string::npos))) {
+            if (ev.op == "write" &&
+                    (ev.bytes.find("\r\n") != std::string::npos || ev.bytes.find("\x1b[2K") != std::string::npos ||
+                            (ev.bytes.starts_with("\x1b[?2026h") && ev.bytes.find("header") != std::string::npos))) {
                 boundary_idx = i + 1;
             }
         }
@@ -397,6 +452,11 @@ struct FrozenTerminalEvent {
                             .kind = ImeTokenKind::RelativeMove,
                             .col = parsed->col,
                             .row_delta = parsed->row_delta,
+                            .canonical = ev.bytes,
+                    });
+                } else if (has_cursor_control(ev.bytes)) {
+                    result.push_back(ImeToken{
+                            .kind = ImeTokenKind::Unsupported,
                             .canonical = ev.bytes,
                     });
                 }
@@ -416,6 +476,11 @@ struct FrozenTerminalEvent {
                             .canonical = "\x1b[?25l",
                     });
                 }
+            } else if (ev.op == "setCursor") {
+                result.push_back(ImeToken{
+                        .kind = ImeTokenKind::Unsupported,
+                        .canonical = ev.bytes.empty() ? "setCursor" : ev.bytes,
+                });
             }
         }
     }
@@ -446,25 +511,43 @@ struct FrozenTerminalEvent {
             }
         }
 
-        bool has_visibility = false;
-        // Collect all SetCursor and SetCursorVisible in original order
+        // Paint boundary: paint writes in AltScreen contain \x1b[2K.
+        // Post-boundary ops are collected after the last paint write.
+        std::size_t paint_boundary = start_idx;
         for (std::size_t i = start_idx; i < end_idx; ++i) {
+            if (ops[i].kind == ProtocolRecordingTerminal::OpKind::Write &&
+                    ops[i].write_bytes.find("\x1b[2K") != std::string::npos) {
+                paint_boundary = i + 1;
+            }
+        }
+
+        bool has_visibility = false;
+        // Collect all post-boundary cursor ops in original order
+        for (std::size_t i = paint_boundary; i < end_idx; ++i) {
             const auto& op = ops[i];
             if (op.kind == ProtocolRecordingTerminal::OpKind::SetCursor) {
                 result.push_back(ImeToken{
                         .kind = ImeTokenKind::AbsoluteMove,
                         .row = op.cursor_position.row + 1,
                         .col = op.cursor_position.column + 1,
-                        .canonical = std::format("\x1b[{};{}H", op.cursor_position.row + 1, op.cursor_position.column + 1),
+                        .canonical =
+                                std::format("\x1b[{};{}H", op.cursor_position.row + 1, op.cursor_position.column + 1),
                 });
             } else if (op.kind == ProtocolRecordingTerminal::OpKind::SetCursorVisible) {
                 has_visibility = true;
                 if (result.empty() || result.back().kind != ImeTokenKind::Visibility ||
-                    result.back().visible != op.visible) {
+                        result.back().visible != op.visible) {
                     result.push_back(ImeToken{
                             .kind = ImeTokenKind::Visibility,
                             .visible = op.visible,
                             .canonical = op.visible ? "\x1b[?25h" : "\x1b[?25l",
+                    });
+                }
+            } else if (op.kind == ProtocolRecordingTerminal::OpKind::Write) {
+                if (has_cursor_control(op.write_bytes)) {
+                    result.push_back(ImeToken{
+                            .kind = ImeTokenKind::Unsupported,
+                            .canonical = op.write_bytes,
                     });
                 }
             }
@@ -498,10 +581,23 @@ struct FrozenTerminalEvent {
                             .row_delta = parsed->row_delta,
                             .canonical = op.write_bytes,
                     });
+                } else if (has_cursor_control(op.write_bytes)) {
+                    result.push_back(ImeToken{
+                            .kind = ImeTokenKind::Unsupported,
+                            .canonical = op.write_bytes,
+                    });
                 }
+            } else if (op.kind == ProtocolRecordingTerminal::OpKind::SetCursor) {
+                result.push_back(ImeToken{
+                        .kind = ImeTokenKind::Unsupported,
+                        .row = op.cursor_position.row + 1,
+                        .col = op.cursor_position.column + 1,
+                        .canonical =
+                                std::format("\x1b[{};{}H", op.cursor_position.row + 1, op.cursor_position.column + 1),
+                });
             } else if (op.kind == ProtocolRecordingTerminal::OpKind::SetCursorVisible) {
                 if (result.empty() || result.back().kind != ImeTokenKind::Visibility ||
-                    result.back().visible != op.visible) {
+                        result.back().visible != op.visible) {
                     result.push_back(ImeToken{
                             .kind = ImeTokenKind::Visibility,
                             .visible = op.visible,

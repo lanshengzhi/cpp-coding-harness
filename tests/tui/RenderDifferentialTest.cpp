@@ -343,13 +343,9 @@ TEST_CASE("Tui positions visible IME and hides cursor scrolled out of viewport",
         CHECK(terminal.modes().cursor_visible == pref_visible);
     };
 
-    SECTION("hardware cursor visible preference enabled") {
-        run_test(true);
-    }
+    SECTION("hardware cursor visible preference enabled") { run_test(true); }
 
-    SECTION("hardware cursor visible preference disabled") {
-        run_test(false);
-    }
+    SECTION("hardware cursor visible preference disabled") { run_test(false); }
 }
 
 TEST_CASE("Changes at the viewport top diff in place without clearing", "[tui][render][issue49][issue435][compat-pi]") {

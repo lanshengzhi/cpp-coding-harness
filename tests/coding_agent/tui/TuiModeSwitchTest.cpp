@@ -1151,10 +1151,10 @@ TEST_CASE("Native TUI InteractiveEngine preserves exact nested and clipped curso
         const auto cursor_col = static_cast<std::size_t>(inputs.at("cursorCol").get_number());
         const auto cursor_row = static_cast<std::size_t>(inputs.at("cursorRow").get_number());
 
-        const auto initial_mode = initial_mode_str == "fullscreen" ? coding_agent::TuiMode::Fullscreen
-                                                                   : coding_agent::TuiMode::Regular;
-        const auto target_mode = target_mode_str == "fullscreen" ? coding_agent::TuiMode::Fullscreen
-                                                                 : coding_agent::TuiMode::Regular;
+        const auto initial_mode =
+                initial_mode_str == "fullscreen" ? coding_agent::TuiMode::Fullscreen : coding_agent::TuiMode::Regular;
+        const auto target_mode =
+                target_mode_str == "fullscreen" ? coding_agent::TuiMode::Fullscreen : coding_agent::TuiMode::Regular;
 
         tests::RuntimeFixture runtime;
         tests::TempWorkspace workspace;
@@ -1181,8 +1181,7 @@ TEST_CASE("Native TUI InteractiveEngine preserves exact nested and clipped curso
         tests::ProtocolRecordingTerminal terminal(vt);
         boost::asio::io_context io;
         std::optional<support::ExpectedVoid> run_result;
-        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
-                terminal, io.get_executor(), initial_mode);
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(terminal, io.get_executor(), initial_mode);
         auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
                            .with_session(*created->session)
                            .with_agent_config_directory(config.path())
@@ -1214,7 +1213,8 @@ TEST_CASE("Native TUI InteractiveEngine preserves exact nested and clipped curso
         const auto& live_exp = expected.at("live");
         engine->set_show_hardware_cursor(live_pref);
         drain_ready(io);
-        REQUIRE(pump_until(io, [&] { return vt.modes().cursor_visible == live_exp.at("cursorVisible").get_boolean(); }));
+        REQUIRE(pump_until(
+                io, [&] { return vt.modes().cursor_visible == live_exp.at("cursorVisible").get_boolean(); }));
         CHECK(engine->show_hardware_cursor() == live_exp.at("showHardwareCursor").get_boolean());
         CHECK(vt.cursor().column == static_cast<std::size_t>(live_exp.at("cursor").at("column").get_number()));
         CHECK(vt.cursor().row == static_cast<std::size_t>(live_exp.at("cursor").at("row").get_number()));
@@ -1250,7 +1250,8 @@ TEST_CASE("Native TUI InteractiveEngine preserves exact nested and clipped curso
                     .bytes = ev.get_object().contains("bytes") ? ev.at("bytes").get_string() : "",
             });
         }
-        const auto frozen_ime = tests::extract_ime_tokens_from_frozen_evidence(frozen_writes, frozen_events, is_target_fs);
+        const auto frozen_ime =
+                tests::extract_ime_tokens_from_frozen_evidence(frozen_writes, frozen_events, is_target_fs);
         const auto pike_ime = tests::project_final_ime_sequence(terminal, is_target_fs);
 
         REQUIRE(pike_ime.size() == frozen_ime.size());
@@ -1294,10 +1295,10 @@ TEST_CASE("Native TUI InteractiveEngine preserves exact nested and clipped curso
         const auto cursor_col = static_cast<std::size_t>(inputs.at("cursorCol").get_number());
         const auto cursor_row = static_cast<std::size_t>(inputs.at("cursorRow").get_number());
 
-        const auto initial_mode = initial_mode_str == "fullscreen" ? coding_agent::TuiMode::Fullscreen
-                                                                   : coding_agent::TuiMode::Regular;
-        const auto target_mode = target_mode_str == "fullscreen" ? coding_agent::TuiMode::Fullscreen
-                                                                 : coding_agent::TuiMode::Regular;
+        const auto initial_mode =
+                initial_mode_str == "fullscreen" ? coding_agent::TuiMode::Fullscreen : coding_agent::TuiMode::Regular;
+        const auto target_mode =
+                target_mode_str == "fullscreen" ? coding_agent::TuiMode::Fullscreen : coding_agent::TuiMode::Regular;
 
         tests::RuntimeFixture runtime;
         tests::TempWorkspace workspace;
@@ -1322,8 +1323,7 @@ TEST_CASE("Native TUI InteractiveEngine preserves exact nested and clipped curso
         tests::ProtocolRecordingTerminal terminal(vt);
         boost::asio::io_context io;
         std::optional<support::ExpectedVoid> run_result;
-        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
-                terminal, io.get_executor(), initial_mode);
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(terminal, io.get_executor(), initial_mode);
         auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
                            .with_session(*created->session)
                            .with_agent_config_directory(config.path())
@@ -1394,7 +1394,8 @@ TEST_CASE("Native TUI InteractiveEngine preserves exact nested and clipped curso
         REQUIRE(terminal.inject_resize(tui::TerminalDimensions{.columns = cols, .rows = restored_rows}));
         drain_ready(io);
         const auto& restored_exp = expected.at("afterResizeRestored");
-        REQUIRE(pump_until(io, [&] { return vt.modes().cursor_visible == restored_exp.at("cursorVisible").get_boolean(); }));
+        REQUIRE(pump_until(
+                io, [&] { return vt.modes().cursor_visible == restored_exp.at("cursorVisible").get_boolean(); }));
 
         CHECK(engine->show_hardware_cursor() == restored_exp.at("showHardwareCursor").get_boolean());
         CHECK(vt.modes().cursor_visible == restored_exp.at("cursorVisible").get_boolean());
@@ -1501,7 +1502,8 @@ TEST_CASE("Protocol decoder extracts exact ordered IME tokens from frozen bundle
                             .bytes = ev.get_object().contains("bytes") ? ev.at("bytes").get_string() : "",
                     });
                 }
-                const auto res_tokens = tests::extract_ime_tokens_from_frozen_evidence(res_writes, res_events, is_target_fs);
+                const auto res_tokens =
+                        tests::extract_ime_tokens_from_frozen_evidence(res_writes, res_events, is_target_fs);
                 REQUIRE(res_tokens.size() == 2);
                 CHECK(res_tokens[0].kind != tests::ImeTokenKind::Visibility);
                 CHECK(res_tokens[1].kind == tests::ImeTokenKind::Visibility);
@@ -1532,6 +1534,13 @@ TEST_CASE("Protocol projection detects order inversion and extraneous moves agai
     };
 
     const std::vector<tests::ImeToken> oracle{correct_move, vis_true};
+    const tests::ImeToken fs_move{
+            .kind = tests::ImeTokenKind::AbsoluteMove,
+            .row = 21,
+            .col = 6,
+            .canonical = "\x1b[21;6H",
+    };
+    const std::vector<tests::ImeToken> oracle_fs{fs_move, vis_true};
 
     SECTION("Separating mutation: visibility before move fails comparison") {
         const std::vector<tests::ImeToken> inverted{vis_true, correct_move};
@@ -1553,9 +1562,11 @@ TEST_CASE("Protocol projection detects order inversion and extraneous moves agai
         CHECK(decoded[1].kind == tests::ImeTokenKind::AbsoluteMove);
         CHECK(decoded[1].row == 21);
         CHECK(decoded[1].col == 6);
-        CHECK_FALSE(decoded == std::vector<tests::ImeToken>{
-                tests::ImeToken{.kind = tests::ImeTokenKind::AbsoluteMove, .row = 21, .col = 6, .canonical = "\x1b[21;6H"},
-                vis_true});
+        CHECK_FALSE(decoded == std::vector<tests::ImeToken>{tests::ImeToken{.kind = tests::ImeTokenKind::AbsoluteMove,
+                                                                    .row = 21,
+                                                                    .col = 6,
+                                                                    .canonical = "\x1b[21;6H"},
+                                       vis_true});
     }
 
     SECTION("Frozen decoder does not repair multiple moves or drop wrong moves in MainScreen events") {
@@ -1565,11 +1576,96 @@ TEST_CASE("Protocol projection detects order inversion and extraneous moves agai
                 tests::FrozenTerminalEvent{.op = "write", .bytes = "\x1b[3A\x1b[6G"},
                 tests::FrozenTerminalEvent{.op = "showCursor"},
         };
-        const auto decoded = tests::extract_ime_tokens_from_frozen_evidence({}, mutated_events, /*is_fullscreen=*/false);
+        const auto decoded =
+                tests::extract_ime_tokens_from_frozen_evidence({}, mutated_events, /*is_fullscreen=*/false);
         REQUIRE(decoded.size() == 3);
         CHECK(decoded[0] == wrong_move);
         CHECK(decoded[1] == correct_move);
         CHECK(decoded[2] == vis_true);
         CHECK_FALSE(decoded == oracle);
+    }
+
+    SECTION("Frozen regular decoder rejects unsupported C/D movement and malformed strict parse") {
+        const std::vector<tests::FrozenTerminalEvent> mutated_events{
+                tests::FrozenTerminalEvent{.op = "write", .bytes = "\x1b[?2026hpaint\r\nline\x1b[?2026l"},
+                tests::FrozenTerminalEvent{.op = "write", .bytes = "\x1b[2C"},
+                tests::FrozenTerminalEvent{.op = "write", .bytes = "\x1b[?25x"},
+                tests::FrozenTerminalEvent{.op = "write", .bytes = "\x1b[3A\x1b[6G"},
+                tests::FrozenTerminalEvent{.op = "showCursor"},
+        };
+        const auto decoded =
+                tests::extract_ime_tokens_from_frozen_evidence({}, mutated_events, /*is_fullscreen=*/false);
+        REQUIRE(decoded.size() == 4);
+        CHECK(decoded[0].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(decoded[0].canonical == "\x1b[2C");
+        CHECK(decoded[1].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(decoded[1].canonical == "\x1b[?25x");
+        CHECK(decoded[2] == correct_move);
+        CHECK(decoded[3] == vis_true);
+        CHECK_FALSE(decoded == oracle);
+    }
+
+    SECTION("Frozen fullscreen decoder rejects unsupported C/D movement and malformed strict parse") {
+        const std::vector<std::string> mutated_writes{
+                "\x1b[?2026h\x1b[1;1H\x1b[2Kpaint\x1b[4D\x1b[?25x\x1b[;H\x1b[21;6H\x1b[?25h\x1b[?2026l"};
+        const auto decoded = tests::extract_ime_tokens_from_frozen_evidence(mutated_writes, {}, /*is_fullscreen=*/true);
+        REQUIRE(decoded.size() == 5);
+        CHECK(decoded[0].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(decoded[0].canonical == "\x1b[4D");
+        CHECK(decoded[1].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(decoded[1].canonical == "\x1b[?25x");
+        CHECK(decoded[2].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(decoded[2].canonical == "\x1b[;H");
+        CHECK(decoded[3] == fs_move);
+        CHECK(decoded[4] == vis_true);
+        CHECK_FALSE(decoded == oracle_fs);
+    }
+
+    SECTION("Pike regular projection rejects unsupported C/D movement, unexpected SetCursor, and malformed parse") {
+        const std::vector<tests::ProtocolRecordingTerminal::ObservedOp> pike_ops{
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::BeginSync},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "paint"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::EndSync},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "\x1b[2C"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::SetCursor,
+                        .cursor_position = {.column = 5, .row = 20}},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "\x1b[;G"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "\x1b[3A\x1b[6G"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::SetCursorVisible, .visible = true},
+        };
+        const auto projected = tests::project_final_ime_sequence(pike_ops, /*is_fullscreen=*/false);
+        REQUIRE(projected.size() == 5);
+        CHECK(projected[0].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(projected[0].canonical == "\x1b[2C");
+        CHECK(projected[1].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(projected[1].row == 21);
+        CHECK(projected[1].col == 6);
+        CHECK(projected[2].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(projected[2].canonical == "\x1b[;G");
+        CHECK(projected[3] == correct_move);
+        CHECK(projected[4] == vis_true);
+        CHECK_FALSE(projected == oracle);
+    }
+
+    SECTION("Pike fullscreen projection rejects unsupported relative writes and C/D movement") {
+        const std::vector<tests::ProtocolRecordingTerminal::ObservedOp> pike_fs_ops{
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::BeginSync},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "\x1b[1;1H\x1b[2Kpaint line"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "\x1b[3D"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "\x1b[1A\x1b[6G"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::SetCursor,
+                        .cursor_position = {.column = 5, .row = 20}},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::SetCursorVisible, .visible = true},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::EndSync},
+        };
+        const auto projected_fs = tests::project_final_ime_sequence(pike_fs_ops, /*is_fullscreen=*/true);
+        REQUIRE(projected_fs.size() == 4);
+        CHECK(projected_fs[0].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(projected_fs[0].canonical == "\x1b[3D");
+        CHECK(projected_fs[1].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(projected_fs[1].canonical == "\x1b[1A\x1b[6G");
+        CHECK(projected_fs[2] == fs_move);
+        CHECK(projected_fs[3] == vis_true);
+        CHECK_FALSE(projected_fs == oracle_fs);
     }
 }
