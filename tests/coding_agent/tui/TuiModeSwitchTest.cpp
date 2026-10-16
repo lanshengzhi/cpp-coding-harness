@@ -13,8 +13,11 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "support/EnvVarGuard.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/PiTuiEvidence.hpp"
+#include "support/ProtocolRecordingTerminal.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
@@ -109,16 +112,39 @@ namespace {
     co_return co_await engine->finish();
 }
 
-/// The TUI mode row is the sixth of the selector's seven items: behind the
+/// The TUI mode row is the seventh of the selector's eight items: behind the
 /// thinking-level row and before the theme row.
-constexpr std::string_view kTuiModeRowKeys = "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B";
+constexpr std::string_view kTuiModeRowKeys = "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B";
 
 /// Only the focused row renders its description, so this is what proves the
-/// five moves above landed on the TUI mode row.
+/// six moves above landed on the TUI mode row.
 constexpr std::string_view kTuiModeRowDescription = "Interface layout;";
 
 [[nodiscard]] bool on_tui_mode_row(const tui::VirtualTerminal& terminal) {
     return visible_screen(terminal).find(kTuiModeRowDescription) != std::string::npos;
+}
+
+constexpr std::string_view kHardwareCursorRowKeys = "\x1b[B";
+constexpr std::string_view kHardwareCursorRowDescription = "Show the terminal cursor";
+
+[[nodiscard]] bool on_hardware_cursor_row(const tui::VirtualTerminal& terminal) {
+    const auto screen = visible_screen(terminal);
+    return screen.find("Show hardware cursor") != std::string::npos &&
+           screen.find(kHardwareCursorRowDescription) != std::string::npos;
+}
+
+void focus_hardware_cursor_row(tui::VirtualTerminal& terminal, boost::asio::io_context& io) {
+    REQUIRE(terminal.inject_input("/settings\r"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input(std::string{kHardwareCursorRowKeys}));
+    REQUIRE(pump_until(io, [&] { return on_hardware_cursor_row(terminal); }));
+}
+
+void close_hardware_cursor_settings(tui::VirtualTerminal& terminal, boost::asio::io_context& io) {
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    REQUIRE_FALSE(on_hardware_cursor_row(terminal));
 }
 
 /// Open `/settings` and move onto the TUI mode row.
@@ -665,4 +691,981 @@ TEST_CASE("Native TUI TUI mode switch rebinds extension listeners once with no r
     REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
     REQUIRE(run_result);
     CHECK(*run_result);
+}
+
+TEST_CASE("Native TUI InteractiveEngine resolves hardware cursor preference at startup",
+        "[coding_agent][tui][cursor][issue1037][spec]") {
+    struct StartupCase {
+        coding_agent::TuiMode mode;
+        std::optional<std::string> env_var;
+        std::optional<std::string> config_json;
+        bool expected_show_hardware_cursor;
+        bool expected_cursor_visible;
+    };
+
+    const std::vector<StartupCase> startup_cases = {
+            // 1. Regular mode with default/empty config
+            {coding_agent::TuiMode::Regular, std::nullopt, std::nullopt, false, false},
+            // 2. Regular mode with PI_HARDWARE_CURSOR=1 env fallback
+            {coding_agent::TuiMode::Regular, "1", std::nullopt, true, true},
+            // 3. Regular mode with explicit false override
+            {coding_agent::TuiMode::Regular, "1", R"({"showHardwareCursor": false})", false, false},
+            // 4. Regular mode with explicit true
+            {coding_agent::TuiMode::Regular, std::nullopt, R"({"showHardwareCursor": true})", true, true},
+            // 5. Fullscreen mode with default/empty config
+            {coding_agent::TuiMode::Fullscreen, std::nullopt, R"({"tuiMode": "fullscreen"})", false, false},
+            // 6. Fullscreen mode with PI_HARDWARE_CURSOR=1 env fallback
+            {coding_agent::TuiMode::Fullscreen, "1", R"({"tuiMode": "fullscreen"})", true, true},
+            // 7. Fullscreen mode with explicit false override
+            {coding_agent::TuiMode::Fullscreen,
+                    "1",
+                    R"({"tuiMode": "fullscreen", "showHardwareCursor": false})",
+                    false,
+                    false},
+            // 8. Fullscreen mode with explicit true
+            {coding_agent::TuiMode::Fullscreen,
+                    std::nullopt,
+                    R"({"tuiMode": "fullscreen", "showHardwareCursor": true})",
+                    true,
+                    true},
+    };
+
+    for (const auto& test_case : startup_cases) {
+        tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
+        if (test_case.env_var) {
+            env_guard.set(*test_case.env_var);
+        } else {
+            env_guard.unset();
+        }
+
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        if (test_case.config_json) {
+            config.write("settings.json", *test_case.config_json);
+        }
+
+        auto created = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine =
+                std::make_shared<coding_agent::tui::InteractiveEngine>(terminal, io.get_executor(), test_case.mode);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), test_case.mode)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        if (test_case.mode == coding_agent::TuiMode::Fullscreen) {
+            REQUIRE(terminal.modes().alternate_screen);
+        } else {
+            REQUIRE_FALSE(terminal.modes().alternate_screen);
+        }
+        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+        CHECK(engine->show_hardware_cursor() == test_case.expected_show_hardware_cursor);
+        CHECK(terminal.modes().cursor_visible == test_case.expected_cursor_visible);
+        // Valid IME target positioned at editor prompt even when hidden
+        CHECK(terminal.cursor().row > 0);
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+}
+
+TEST_CASE("Native TUI TUI mode switch preserves live hardware cursor preference in both directions",
+        "[coding_agent][tui][cursor][renderer-switch][issue1037][spec]") {
+    tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
+    env_guard.unset();
+
+    // 1. Regular -> Fullscreen with live preference true differing from setting (setting is false)
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"showHardwareCursor": false})");
+        auto created = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+        // Type input into prompt to give editor cursor a distinct column
+        REQUIRE(terminal.inject_input("prompt text"));
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("prompt text") != std::string::npos; }));
+
+        const auto initial_cursor = terminal.cursor();
+        CHECK(initial_cursor.column > 0);
+        CHECK(initial_cursor.row > 0);
+        CHECK_FALSE(engine->show_hardware_cursor());
+        CHECK_FALSE(terminal.modes().cursor_visible);
+
+        // Dynamically toggle live preference to true
+        engine->set_show_hardware_cursor(true);
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return terminal.modes().cursor_visible; }));
+        CHECK(engine->show_hardware_cursor());
+        CHECK(terminal.cursor().column == initial_cursor.column);
+
+        // Switch regular -> fullscreen: live preference true MUST transfer to the fullscreen root!
+        auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+        REQUIRE(switched);
+        REQUIRE(*switched);
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return terminal.modes().alternate_screen; }));
+
+        // Fullscreen root must retain the live preference (true), not the stored setting (false)
+        CHECK(engine->show_hardware_cursor());
+        CHECK(terminal.modes().cursor_visible);
+        // Target cursor cell coordinates maintained
+        CHECK(terminal.cursor().column == 11);
+        CHECK(terminal.cursor().row == 20);
+
+        REQUIRE(terminal.inject_input("\x03\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+
+    // 2. Fullscreen -> Regular with live preference false differing from setting (setting is true)
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "fullscreen", "showHardwareCursor": true})");
+        auto created = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(terminal.modes().alternate_screen);
+        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+        // Type input into prompt
+        REQUIRE(terminal.inject_input("fullscreen text"));
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fullscreen text") != std::string::npos; }));
+
+        const auto initial_cursor = terminal.cursor();
+        CHECK(initial_cursor.column == 15);
+        CHECK(initial_cursor.row == 20);
+        CHECK(engine->show_hardware_cursor());
+        CHECK(terminal.modes().cursor_visible);
+
+        // Dynamically toggle live preference to false
+        engine->set_show_hardware_cursor(false);
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return !terminal.modes().cursor_visible; }));
+        CHECK_FALSE(engine->show_hardware_cursor());
+        CHECK(terminal.cursor().column == initial_cursor.column);
+        CHECK(terminal.cursor().row == 20);
+
+        // Switch fullscreen -> regular: live preference false MUST transfer to the regular root!
+        auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+        REQUIRE(switched);
+        REQUIRE(*switched);
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return !terminal.modes().alternate_screen; }));
+
+        // Regular root must retain the live preference (false), not the stored setting (true)
+        CHECK_FALSE(engine->show_hardware_cursor());
+        CHECK_FALSE(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 15);
+        CHECK(terminal.cursor().row == 7);
+
+        REQUIRE(terminal.inject_input("\x03\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+
+    // 3. Stored setting modified on disk is NOT re-read during switch
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"showHardwareCursor": true})");
+        auto created = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+        CHECK(engine->show_hardware_cursor());
+        CHECK(terminal.modes().cursor_visible);
+
+        // Mutate the file on disk to false
+        config.write("settings.json", R"({"showHardwareCursor": false})");
+
+        // Switch regular -> fullscreen: switch must NOT re-read the setting file
+        auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+        REQUIRE(switched);
+        REQUIRE(*switched);
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return terminal.modes().alternate_screen; }));
+
+        CHECK(engine->show_hardware_cursor());
+        CHECK(terminal.modes().cursor_visible);
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+}
+
+TEST_CASE("Native TUI settings hardware cursor row toggles live preference and persists setting",
+        "[coding_agent][tui][cursor][settings-selector][issue1037][spec]") {
+    tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
+    env_guard.unset();
+
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("settings.json", R"({"showHardwareCursor": false})");
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+    boost::asio::co_spawn(io,
+            drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+    REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+    CHECK_FALSE(engine->show_hardware_cursor());
+    CHECK_FALSE(terminal.modes().cursor_visible);
+
+    // Open /settings and navigate to Show hardware cursor row
+    focus_hardware_cursor_row(terminal, io);
+
+    // Enter cycles false -> true: live renderer shows cursor immediately and persists to disk
+    REQUIRE(terminal.inject_input("\r"));
+    drain_ready(io);
+    REQUIRE(pump_until(io, [&] { return terminal.modes().cursor_visible; }));
+    CHECK(engine->show_hardware_cursor());
+    CHECK(read_text_file(config.path() / "settings.json").find("\"showHardwareCursor\": true") != std::string::npos);
+
+    // Enter again cycles true -> false: live renderer hides cursor immediately and persists to disk
+    REQUIRE(terminal.inject_input("\r"));
+    drain_ready(io);
+    REQUIRE(pump_until(io, [&] { return !terminal.modes().cursor_visible; }));
+    CHECK_FALSE(engine->show_hardware_cursor());
+    CHECK(read_text_file(config.path() / "settings.json").find("\"showHardwareCursor\": false") != std::string::npos);
+
+    close_hardware_cursor_settings(terminal, io);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE("Native TUI reload reapplies showHardwareCursor preference from settings",
+        "[coding_agent][tui][cursor][reload][issue1037][spec]") {
+    tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
+    env_guard.unset();
+
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("settings.json", R"({"showHardwareCursor": false})");
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+    boost::asio::co_spawn(io,
+            drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+    REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+    CHECK_FALSE(engine->show_hardware_cursor());
+    CHECK_FALSE(terminal.modes().cursor_visible);
+
+    // Mutate file on disk to true
+    config.write("settings.json", R"({"showHardwareCursor": true})");
+
+    // Trigger /reload
+    REQUIRE(terminal.inject_input("/reload\r"));
+    drain_ready(io);
+    REQUIRE(pump_until(io, [&] { return terminal.modes().cursor_visible; }));
+    CHECK(engine->show_hardware_cursor());
+
+    // Mutate file on disk to false
+    config.write("settings.json", R"({"showHardwareCursor": false})");
+
+    // Trigger /reload again
+    REQUIRE(terminal.inject_input("/reload\r"));
+    drain_ready(io);
+    REQUIRE(pump_until(io, [&] { return !terminal.modes().cursor_visible; }));
+    CHECK_FALSE(engine->show_hardware_cursor());
+
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+namespace {
+
+using cch::support::JsonValue;
+
+[[nodiscard]] const JsonValue& find_evidence_scenario(const JsonValue& bundle, std::string_view name) {
+    for (const auto& scenario : bundle.at("scenarios").get_array()) {
+        if (scenario.at("name").get_string() == name) return scenario;
+    }
+    REQUIRE(false);
+    return bundle;
+}
+
+class NestedCursorEditor final : public cch::tui::EditorComponent {
+public:
+    explicit NestedCursorEditor(std::size_t col = 5, std::size_t row = 1)
+        : cursor_(cch::tui::CursorPosition{.column = col, .row = row}) {}
+
+    [[nodiscard]] std::string text() const override { return ""; }
+    void set_text(std::string) override {}
+    void set_on_change(cch::tui::EditorChangeSink sink) override { on_change_ = std::move(sink); }
+    void set_on_submit(cch::tui::EditorSubmitSink sink) override { on_submit_ = std::move(sink); }
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{.lines = {"line 0", "line 1 nested", "line 2"}};
+    }
+    void invalidate() override {}
+    [[nodiscard]] cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant&) override {
+        return cch::tui::InputAdmissionOutcome::Unhandled;
+    }
+    void set_focused(bool focused) override { focused_ = focused; }
+    [[nodiscard]] bool focused() const override { return focused_; }
+    [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
+        return focused_ ? cursor_ : std::nullopt;
+    }
+    void set_cursor(std::optional<cch::tui::CursorPosition> c) {
+        cursor_ = c;
+        if (on_change_) (void)on_change_("");
+    }
+
+private:
+    cch::tui::EditorChangeSink on_change_;
+    cch::tui::EditorSubmitSink on_submit_;
+    bool focused_{false};
+    std::optional<cch::tui::CursorPosition> cursor_;
+};
+
+} // namespace
+
+TEST_CASE("Native TUI InteractiveEngine preserves exact nested and clipped cursor coordinates and protocol across mode "
+          "switch in both directions",
+        "[coding_agent][tui][cursor][renderer-switch][issue1037][spec]") {
+    tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
+    env_guard.unset();
+
+    const auto artifact = tests::read_pi_tui_evidence("product-cursor-layout.json");
+    REQUIRE(artifact);
+    const auto& bundle = *artifact;
+    REQUIRE(bundle.at("baseline").get_string() == "pi-v1.0.4");
+    REQUIRE(bundle.at("revision").get_string() == "7c10bd4337495ee613f2224843ecdf349b80d1df");
+
+    auto run_live_switch_scenario = [&](std::string_view scenario_name) {
+        const auto& scenario = find_evidence_scenario(bundle, scenario_name);
+        const auto& inputs = scenario.at("inputs");
+        const auto& expected = scenario.at("expected");
+        const auto cols = static_cast<std::size_t>(scenario.at("dimensions").at("columns").get_number());
+        const auto rows = static_cast<std::size_t>(scenario.at("dimensions").at("rows").get_number());
+
+        const std::string initial_mode_str = inputs.at("initialMode").get_string();
+        const std::string target_mode_str = inputs.at("targetMode").get_string();
+        const bool initial_pref = inputs.at("initialPreference").get_boolean();
+        const bool live_pref = inputs.at("livePreference").get_boolean();
+        const auto cursor_col = static_cast<std::size_t>(inputs.at("cursorCol").get_number());
+        const auto cursor_row = static_cast<std::size_t>(inputs.at("cursorRow").get_number());
+
+        const auto initial_mode =
+                initial_mode_str == "fullscreen" ? coding_agent::TuiMode::Fullscreen : coding_agent::TuiMode::Regular;
+        const auto target_mode =
+                target_mode_str == "fullscreen" ? coding_agent::TuiMode::Fullscreen : coding_agent::TuiMode::Regular;
+
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        if (initial_pref) {
+            config.write("settings.json", R"({"showHardwareCursor": true})");
+        }
+
+        auto created = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        std::shared_ptr<NestedCursorEditor> custom_editor;
+        auto extension_factory = [&](coding_agent::tui::ExtensionUiHost& host) {
+            host.set_editor_component(
+                    [&](cch::tui::ITui&, cch::tui::EditorTheme, std::shared_ptr<coding_agent::tui::SharedKeybindings>) {
+                        custom_editor = std::make_shared<NestedCursorEditor>(cursor_col, cursor_row);
+                        return custom_editor;
+                    });
+        };
+
+        tui::VirtualTerminal vt({.columns = cols, .rows = rows});
+        tests::ProtocolRecordingTerminal terminal(vt);
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(terminal, io.get_executor(), initial_mode);
+        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                           .with_session(*created->session)
+                           .with_agent_config_directory(config.path())
+                           .with_tui_mode(initial_mode)
+                           .with_extension_ui_registration_factory(std::move(extension_factory))
+                           .build();
+
+        boost::asio::co_spawn(io,
+                drive_engine(engine, std::move(run)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        if (initial_mode == coding_agent::TuiMode::Fullscreen) {
+            REQUIRE(terminal.modes().alternate_screen);
+        }
+        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+        // 1. Initial phase
+        const auto& initial_exp = expected.at("initial");
+        CHECK(engine->show_hardware_cursor() == initial_exp.at("showHardwareCursor").get_boolean());
+        CHECK(vt.modes().cursor_visible == initial_exp.at("cursorVisible").get_boolean());
+        CHECK(vt.cursor().column == static_cast<std::size_t>(initial_exp.at("cursor").at("column").get_number()));
+        CHECK(vt.cursor().row == static_cast<std::size_t>(initial_exp.at("cursor").at("row").get_number()));
+
+        // 2. Live preference update
+        const auto& live_exp = expected.at("live");
+        engine->set_show_hardware_cursor(live_pref);
+        drain_ready(io);
+        REQUIRE(pump_until(
+                io, [&] { return vt.modes().cursor_visible == live_exp.at("cursorVisible").get_boolean(); }));
+        CHECK(engine->show_hardware_cursor() == live_exp.at("showHardwareCursor").get_boolean());
+        CHECK(vt.cursor().column == static_cast<std::size_t>(live_exp.at("cursor").at("column").get_number()));
+        CHECK(vt.cursor().row == static_cast<std::size_t>(live_exp.at("cursor").at("row").get_number()));
+
+        // 3. Mode switch
+        terminal.reset_recording();
+        auto switched = engine->switch_tui_mode(target_mode);
+        REQUIRE(switched);
+        REQUIRE(*switched);
+        drain_ready(io);
+        if (target_mode == coding_agent::TuiMode::Fullscreen) {
+            REQUIRE(pump_until(io, [&] { return vt.modes().alternate_screen; }));
+        } else {
+            REQUIRE(pump_until(io, [&] { return !vt.modes().alternate_screen; }));
+        }
+
+        const auto& switch_exp = expected.at("switch");
+        CHECK(engine->show_hardware_cursor() == switch_exp.at("showHardwareCursor").get_boolean());
+        CHECK(vt.modes().cursor_visible == switch_exp.at("cursorVisible").get_boolean());
+        CHECK(vt.cursor().column == static_cast<std::size_t>(switch_exp.at("cursor").at("column").get_number()));
+        CHECK(vt.cursor().row == static_cast<std::size_t>(switch_exp.at("cursor").at("row").get_number()));
+
+        // 4. Protocol projection and ordered comparison against frozen artifact
+        const bool is_target_fs = (target_mode == coding_agent::TuiMode::Fullscreen);
+        std::vector<std::string> frozen_writes;
+        for (const auto& w : switch_exp.at("rawWrites").get_array()) {
+            frozen_writes.push_back(w.get_string());
+        }
+        std::vector<tests::FrozenTerminalEvent> frozen_events;
+        for (const auto& ev : switch_exp.at("terminalEvents").get_array()) {
+            frozen_events.push_back(tests::FrozenTerminalEvent{
+                    .op = ev.at("op").get_string(),
+                    .bytes = ev.get_object().contains("bytes") ? ev.at("bytes").get_string() : "",
+            });
+        }
+        const auto frozen_ime =
+                tests::extract_ime_tokens_from_frozen_evidence(frozen_writes, frozen_events, is_target_fs);
+        const auto pike_ime = tests::project_final_ime_sequence(terminal, is_target_fs);
+
+        REQUIRE(pike_ime.size() == frozen_ime.size());
+        for (std::size_t i = 0; i < pike_ime.size(); ++i) {
+            CHECK(pike_ime[i].kind == frozen_ime[i].kind);
+            CHECK(pike_ime[i].canonical == frozen_ime[i].canonical);
+        }
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    };
+
+    SECTION("regular to fullscreen with live true") {
+        run_live_switch_scenario("switch-regular-to-fullscreen-live-true");
+    }
+
+    SECTION("regular to fullscreen with live false") {
+        run_live_switch_scenario("switch-regular-to-fullscreen-live-false");
+    }
+
+    SECTION("fullscreen to regular with live false") {
+        run_live_switch_scenario("switch-fullscreen-to-regular-live-false");
+    }
+
+    SECTION("fullscreen to regular with live true") {
+        run_live_switch_scenario("switch-fullscreen-to-regular-live-true");
+    }
+
+    auto run_clipped_switch_scenario = [&](std::string_view scenario_name) {
+        const auto& scenario = find_evidence_scenario(bundle, scenario_name);
+        const auto& inputs = scenario.at("inputs");
+        const auto& expected = scenario.at("expected");
+        const auto cols = static_cast<std::size_t>(scenario.at("dimensions").at("columns").get_number());
+        const auto constrained_rows = static_cast<std::size_t>(inputs.at("constrainedRows").get_number());
+        const auto restored_rows = static_cast<std::size_t>(inputs.at("restoredRows").get_number());
+
+        const std::string initial_mode_str = inputs.at("initialMode").get_string();
+        const std::string target_mode_str = inputs.at("targetMode").get_string();
+        const auto cursor_col = static_cast<std::size_t>(inputs.at("cursorCol").get_number());
+        const auto cursor_row = static_cast<std::size_t>(inputs.at("cursorRow").get_number());
+
+        const auto initial_mode =
+                initial_mode_str == "fullscreen" ? coding_agent::TuiMode::Fullscreen : coding_agent::TuiMode::Regular;
+        const auto target_mode =
+                target_mode_str == "fullscreen" ? coding_agent::TuiMode::Fullscreen : coding_agent::TuiMode::Regular;
+
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"showHardwareCursor": true})");
+
+        auto created = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        std::shared_ptr<NestedCursorEditor> custom_editor;
+        auto extension_factory = [&](coding_agent::tui::ExtensionUiHost& host) {
+            host.set_editor_component(
+                    [&](cch::tui::ITui&, cch::tui::EditorTheme, std::shared_ptr<coding_agent::tui::SharedKeybindings>) {
+                        custom_editor = std::make_shared<NestedCursorEditor>(cursor_col, cursor_row);
+                        return custom_editor;
+                    });
+        };
+
+        tui::VirtualTerminal vt({.columns = cols, .rows = constrained_rows});
+        tests::ProtocolRecordingTerminal terminal(vt);
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(terminal, io.get_executor(), initial_mode);
+        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                           .with_session(*created->session)
+                           .with_agent_config_directory(config.path())
+                           .with_tui_mode(initial_mode)
+                           .with_extension_ui_registration_factory(std::move(extension_factory))
+                           .build();
+
+        boost::asio::co_spawn(io,
+                drive_engine(engine, std::move(run)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        if (initial_mode == coding_agent::TuiMode::Fullscreen) {
+            REQUIRE(terminal.modes().alternate_screen);
+        }
+        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+        // 1. Initial clipped phase: cursor is within component bounds (col 5, row 1 of 3 lines),
+        // but clipped by constrained terminal height (48x2) -> cursorVisible is false
+        const auto& init_clipped_exp = expected.at("initialClipped");
+        CHECK(engine->show_hardware_cursor() == init_clipped_exp.at("showHardwareCursor").get_boolean());
+        CHECK(vt.modes().cursor_visible == init_clipped_exp.at("cursorVisible").get_boolean());
+
+        // 2. Switch mode while clipped
+        terminal.reset_recording();
+        auto switched = engine->switch_tui_mode(target_mode);
+        REQUIRE(switched);
+        REQUIRE(*switched);
+        drain_ready(io);
+        if (target_mode == coding_agent::TuiMode::Fullscreen) {
+            REQUIRE(pump_until(io, [&] { return vt.modes().alternate_screen; }));
+        } else {
+            REQUIRE(pump_until(io, [&] { return !vt.modes().alternate_screen; }));
+        }
+
+        const auto& switch_clipped_exp = expected.at("afterSwitchClipped");
+        CHECK(engine->show_hardware_cursor() == switch_clipped_exp.at("showHardwareCursor").get_boolean());
+        CHECK(vt.modes().cursor_visible == switch_clipped_exp.at("cursorVisible").get_boolean());
+
+        const bool is_target_fs = (target_mode == coding_agent::TuiMode::Fullscreen);
+        std::vector<std::string> frozen_clipped_writes;
+        for (const auto& w : switch_clipped_exp.at("rawWrites").get_array()) {
+            frozen_clipped_writes.push_back(w.get_string());
+        }
+        std::vector<tests::FrozenTerminalEvent> frozen_clipped_events;
+        for (const auto& ev : switch_clipped_exp.at("terminalEvents").get_array()) {
+            frozen_clipped_events.push_back(tests::FrozenTerminalEvent{
+                    .op = ev.at("op").get_string(),
+                    .bytes = ev.get_object().contains("bytes") ? ev.at("bytes").get_string() : "",
+            });
+        }
+        const auto frozen_clipped_ime = tests::extract_ime_tokens_from_frozen_evidence(
+                frozen_clipped_writes, frozen_clipped_events, is_target_fs);
+        const auto pike_clipped_ime = tests::project_final_ime_sequence(terminal, is_target_fs);
+
+        REQUIRE(pike_clipped_ime.size() == 1);
+        CHECK(pike_clipped_ime[0].kind == tests::ImeTokenKind::Visibility);
+        CHECK(pike_clipped_ime[0].visible == false);
+        REQUIRE(frozen_clipped_ime.size() == 1);
+        CHECK(frozen_clipped_ime[0].kind == tests::ImeTokenKind::Visibility);
+        CHECK(frozen_clipped_ime[0].visible == false);
+
+        // 3. Resize to 48x24: layout unclips, restoring visible cursor
+        terminal.reset_recording();
+        REQUIRE(terminal.inject_resize(tui::TerminalDimensions{.columns = cols, .rows = restored_rows}));
+        drain_ready(io);
+        const auto& restored_exp = expected.at("afterResizeRestored");
+        REQUIRE(pump_until(
+                io, [&] { return vt.modes().cursor_visible == restored_exp.at("cursorVisible").get_boolean(); }));
+
+        CHECK(engine->show_hardware_cursor() == restored_exp.at("showHardwareCursor").get_boolean());
+        CHECK(vt.modes().cursor_visible == restored_exp.at("cursorVisible").get_boolean());
+        CHECK(vt.cursor().column == static_cast<std::size_t>(restored_exp.at("cursor").at("column").get_number()));
+        CHECK(vt.cursor().row == static_cast<std::size_t>(restored_exp.at("cursor").at("row").get_number()));
+
+        std::vector<std::string> frozen_restored_writes;
+        for (const auto& w : restored_exp.at("rawWrites").get_array()) {
+            frozen_restored_writes.push_back(w.get_string());
+        }
+        std::vector<tests::FrozenTerminalEvent> frozen_restored_events;
+        for (const auto& ev : restored_exp.at("terminalEvents").get_array()) {
+            frozen_restored_events.push_back(tests::FrozenTerminalEvent{
+                    .op = ev.at("op").get_string(),
+                    .bytes = ev.get_object().contains("bytes") ? ev.at("bytes").get_string() : "",
+            });
+        }
+        const auto frozen_restored_ime = tests::extract_ime_tokens_from_frozen_evidence(
+                frozen_restored_writes, frozen_restored_events, is_target_fs);
+        const auto pike_restored_ime = tests::project_final_ime_sequence(terminal, is_target_fs);
+
+        REQUIRE(pike_restored_ime.size() == frozen_restored_ime.size());
+        for (std::size_t i = 0; i < pike_restored_ime.size(); ++i) {
+            CHECK(pike_restored_ime[i].kind == frozen_restored_ime[i].kind);
+            CHECK(pike_restored_ime[i].canonical == frozen_restored_ime[i].canonical);
+        }
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    };
+
+    SECTION("clipped switch from fullscreen to regular and restore") {
+        run_clipped_switch_scenario("clipped-switch-fullscreen-to-regular");
+    }
+
+    SECTION("clipped switch from regular to fullscreen and restore") {
+        run_clipped_switch_scenario("clipped-switch-regular-to-fullscreen");
+    }
+}
+
+TEST_CASE("Protocol decoder extracts exact ordered IME tokens from frozen bundled writes",
+        "[coding_agent][tui][cursor][protocol][issue1037][spec]") {
+    const auto artifact = tests::read_pi_tui_evidence("product-cursor-layout.json");
+    REQUIRE(artifact);
+    const auto& bundle = *artifact;
+
+    for (const auto& scenario : bundle.at("scenarios").get_array()) {
+        const auto name = scenario.at("name").get_string();
+        DYNAMIC_SECTION("Scenario: " << name) {
+            const auto target_mode = scenario.at("inputs").at("targetMode").get_string();
+            const bool is_target_fs = (target_mode == "fullscreen");
+            const auto& exp = scenario.at("expected");
+
+            if (exp.get_object().contains("switch")) {
+                const auto& sw = exp.at("switch");
+                std::vector<std::string> writes;
+                for (const auto& w : sw.at("rawWrites").get_array()) {
+                    writes.push_back(w.get_string());
+                }
+                std::vector<tests::FrozenTerminalEvent> events;
+                for (const auto& ev : sw.at("terminalEvents").get_array()) {
+                    events.push_back(tests::FrozenTerminalEvent{
+                            .op = ev.at("op").get_string(),
+                            .bytes = ev.get_object().contains("bytes") ? ev.at("bytes").get_string() : "",
+                    });
+                }
+                const auto tokens = tests::extract_ime_tokens_from_frozen_evidence(writes, events, is_target_fs);
+                const bool visible = sw.at("cursorVisible").get_boolean();
+                REQUIRE(!tokens.empty());
+                CHECK(tokens.back().kind == tests::ImeTokenKind::Visibility);
+                CHECK(tokens.back().visible == visible);
+                if (tokens.size() > 1) {
+                    CHECK(tokens[0].kind != tests::ImeTokenKind::Visibility);
+                }
+            } else if (exp.get_object().contains("afterSwitchClipped")) {
+                const auto& cl = exp.at("afterSwitchClipped");
+                std::vector<std::string> writes;
+                for (const auto& w : cl.at("rawWrites").get_array()) {
+                    writes.push_back(w.get_string());
+                }
+                std::vector<tests::FrozenTerminalEvent> events;
+                for (const auto& ev : cl.at("terminalEvents").get_array()) {
+                    events.push_back(tests::FrozenTerminalEvent{
+                            .op = ev.at("op").get_string(),
+                            .bytes = ev.get_object().contains("bytes") ? ev.at("bytes").get_string() : "",
+                    });
+                }
+                const auto tokens = tests::extract_ime_tokens_from_frozen_evidence(writes, events, is_target_fs);
+                REQUIRE(tokens.size() == 1);
+                CHECK(tokens[0].kind == tests::ImeTokenKind::Visibility);
+                CHECK(tokens[0].visible == false);
+
+                const auto& res = exp.at("afterResizeRestored");
+                std::vector<std::string> res_writes;
+                for (const auto& w : res.at("rawWrites").get_array()) {
+                    res_writes.push_back(w.get_string());
+                }
+                std::vector<tests::FrozenTerminalEvent> res_events;
+                for (const auto& ev : res.at("terminalEvents").get_array()) {
+                    res_events.push_back(tests::FrozenTerminalEvent{
+                            .op = ev.at("op").get_string(),
+                            .bytes = ev.get_object().contains("bytes") ? ev.at("bytes").get_string() : "",
+                    });
+                }
+                const auto res_tokens =
+                        tests::extract_ime_tokens_from_frozen_evidence(res_writes, res_events, is_target_fs);
+                REQUIRE(res_tokens.size() == 2);
+                CHECK(res_tokens[0].kind != tests::ImeTokenKind::Visibility);
+                CHECK(res_tokens[1].kind == tests::ImeTokenKind::Visibility);
+                CHECK(res_tokens[1].visible == true);
+            }
+        }
+    }
+}
+
+TEST_CASE("Protocol projection detects order inversion and extraneous moves against oracle",
+        "[coding_agent][tui][cursor][protocol][issue1037][mutation]") {
+    const tests::ImeToken correct_move{
+            .kind = tests::ImeTokenKind::RelativeMove,
+            .col = 6,
+            .row_delta = -3,
+            .canonical = "\x1b[3A\x1b[6G",
+    };
+    const tests::ImeToken wrong_move{
+            .kind = tests::ImeTokenKind::RelativeMove,
+            .col = 1,
+            .row_delta = -1,
+            .canonical = "\x1b[1A\x1b[1G",
+    };
+    const tests::ImeToken vis_true{
+            .kind = tests::ImeTokenKind::Visibility,
+            .visible = true,
+            .canonical = "\x1b[?25h",
+    };
+
+    const std::vector<tests::ImeToken> oracle{correct_move, vis_true};
+    const tests::ImeToken fs_move{
+            .kind = tests::ImeTokenKind::AbsoluteMove,
+            .row = 21,
+            .col = 6,
+            .canonical = "\x1b[21;6H",
+    };
+    const std::vector<tests::ImeToken> oracle_fs{fs_move, vis_true};
+
+    SECTION("Separating mutation: visibility before move fails comparison") {
+        const std::vector<tests::ImeToken> inverted{vis_true, correct_move};
+        CHECK_FALSE(inverted == oracle);
+    }
+
+    SECTION("Separating mutation: wrong move before correct move fails comparison") {
+        const std::vector<tests::ImeToken> extraneous{wrong_move, correct_move, vis_true};
+        CHECK_FALSE(extraneous == oracle);
+    }
+
+    SECTION("Frozen decoder does not repair reversed order in AltScreen raw writes") {
+        // Mutate raw writes to place visibility (?25h) before move (21;6H)
+        const std::vector<std::string> mutated_writes{"\x1b[?2026h\x1b[?25h\x1b[21;6H\x1b[?2026l"};
+        const auto decoded = tests::extract_ime_tokens_from_frozen_evidence(mutated_writes, {}, /*is_fullscreen=*/true);
+        REQUIRE(decoded.size() == 2);
+        CHECK(decoded[0].kind == tests::ImeTokenKind::Visibility);
+        CHECK(decoded[0].visible == true);
+        CHECK(decoded[1].kind == tests::ImeTokenKind::AbsoluteMove);
+        CHECK(decoded[1].row == 21);
+        CHECK(decoded[1].col == 6);
+        CHECK_FALSE(decoded == std::vector<tests::ImeToken>{tests::ImeToken{.kind = tests::ImeTokenKind::AbsoluteMove,
+                                                                    .row = 21,
+                                                                    .col = 6,
+                                                                    .canonical = "\x1b[21;6H"},
+                                       vis_true});
+    }
+
+    SECTION("Frozen decoder does not repair multiple moves or drop wrong moves in MainScreen events") {
+        const std::vector<tests::FrozenTerminalEvent> mutated_events{
+                tests::FrozenTerminalEvent{.op = "write", .bytes = "\x1b[?2026hpaint\r\nline\x1b[?2026l"},
+                tests::FrozenTerminalEvent{.op = "write", .bytes = "\x1b[1A\x1b[1G"},
+                tests::FrozenTerminalEvent{.op = "write", .bytes = "\x1b[3A\x1b[6G"},
+                tests::FrozenTerminalEvent{.op = "showCursor"},
+        };
+        const auto decoded =
+                tests::extract_ime_tokens_from_frozen_evidence({}, mutated_events, /*is_fullscreen=*/false);
+        REQUIRE(decoded.size() == 3);
+        CHECK(decoded[0] == wrong_move);
+        CHECK(decoded[1] == correct_move);
+        CHECK(decoded[2] == vis_true);
+        CHECK_FALSE(decoded == oracle);
+    }
+
+    SECTION("Frozen regular decoder rejects unsupported C/D movement and malformed strict parse") {
+        const std::vector<tests::FrozenTerminalEvent> mutated_events{
+                tests::FrozenTerminalEvent{.op = "write", .bytes = "\x1b[?2026hpaint\r\nline\x1b[?2026l"},
+                tests::FrozenTerminalEvent{.op = "write", .bytes = "\x1b[2C"},
+                tests::FrozenTerminalEvent{.op = "write", .bytes = "\x1b[?25x"},
+                tests::FrozenTerminalEvent{.op = "write", .bytes = "\x1b[3A\x1b[6G"},
+                tests::FrozenTerminalEvent{.op = "showCursor"},
+        };
+        const auto decoded =
+                tests::extract_ime_tokens_from_frozen_evidence({}, mutated_events, /*is_fullscreen=*/false);
+        REQUIRE(decoded.size() == 4);
+        CHECK(decoded[0].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(decoded[0].canonical == "\x1b[2C");
+        CHECK(decoded[1].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(decoded[1].canonical == "\x1b[?25x");
+        CHECK(decoded[2] == correct_move);
+        CHECK(decoded[3] == vis_true);
+        CHECK_FALSE(decoded == oracle);
+    }
+
+    SECTION("Frozen fullscreen decoder rejects unsupported C/D movement and malformed strict parse") {
+        const std::vector<std::string> mutated_writes{
+                "\x1b[?2026h\x1b[1;1H\x1b[2Kpaint\x1b[4D\x1b[?25x\x1b[;H\x1b[21;6H\x1b[?25h\x1b[?2026l"};
+        const auto decoded = tests::extract_ime_tokens_from_frozen_evidence(mutated_writes, {}, /*is_fullscreen=*/true);
+        REQUIRE(decoded.size() == 5);
+        CHECK(decoded[0].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(decoded[0].canonical == "\x1b[4D");
+        CHECK(decoded[1].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(decoded[1].canonical == "\x1b[?25x");
+        CHECK(decoded[2].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(decoded[2].canonical == "\x1b[;H");
+        CHECK(decoded[3] == fs_move);
+        CHECK(decoded[4] == vis_true);
+        CHECK_FALSE(decoded == oracle_fs);
+    }
+
+    SECTION("Pike regular projection rejects unsupported C/D movement, unexpected SetCursor, and malformed parse") {
+        const std::vector<tests::ProtocolRecordingTerminal::ObservedOp> pike_ops{
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::BeginSync},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "paint"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::EndSync},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "\x1b[2C"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::SetCursor,
+                        .cursor_position = {.column = 5, .row = 20}},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "\x1b[;G"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "\x1b[3A\x1b[6G"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::SetCursorVisible, .visible = true},
+        };
+        const auto projected = tests::project_final_ime_sequence(pike_ops, /*is_fullscreen=*/false);
+        REQUIRE(projected.size() == 5);
+        CHECK(projected[0].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(projected[0].canonical == "\x1b[2C");
+        CHECK(projected[1].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(projected[1].row == 21);
+        CHECK(projected[1].col == 6);
+        CHECK(projected[2].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(projected[2].canonical == "\x1b[;G");
+        CHECK(projected[3] == correct_move);
+        CHECK(projected[4] == vis_true);
+        CHECK_FALSE(projected == oracle);
+    }
+
+    SECTION("Pike fullscreen projection rejects unsupported relative writes and C/D movement") {
+        const std::vector<tests::ProtocolRecordingTerminal::ObservedOp> pike_fs_ops{
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::BeginSync},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "\x1b[1;1H\x1b[2Kpaint line"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "\x1b[3D"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::Write, .write_bytes = "\x1b[1A\x1b[6G"},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::SetCursor,
+                        .cursor_position = {.column = 5, .row = 20}},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::SetCursorVisible, .visible = true},
+                {.kind = tests::ProtocolRecordingTerminal::OpKind::EndSync},
+        };
+        const auto projected_fs = tests::project_final_ime_sequence(pike_fs_ops, /*is_fullscreen=*/true);
+        REQUIRE(projected_fs.size() == 4);
+        CHECK(projected_fs[0].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(projected_fs[0].canonical == "\x1b[3D");
+        CHECK(projected_fs[1].kind == tests::ImeTokenKind::Unsupported);
+        CHECK(projected_fs[1].canonical == "\x1b[1A\x1b[6G");
+        CHECK(projected_fs[2] == fs_move);
+        CHECK(projected_fs[3] == vis_true);
+        CHECK_FALSE(projected_fs == oracle_fs);
+    }
 }

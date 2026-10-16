@@ -118,6 +118,8 @@ struct UserSettings {
     /// (pi `getOrCreateDeviceId`); global-only, never honored from the project
     /// scope so a committed project file cannot clone the ID across machines.
     std::optional<std::string> device_id{std::nullopt};
+    /// pi `showHardwareCursor` — Show terminal cursor while still positioning it for IME.
+    std::optional<bool> show_hardware_cursor{std::nullopt};
 };
 
 /// One `settings.json` scope (pi `SettingsScope`).
@@ -246,6 +248,16 @@ public:
     /// always writes `globalSettings`); preserves every other field. A
     /// global load failure suppresses the write. No-op when unchanged.
     [[nodiscard]] support::ExpectedVoid set_enable_skill_commands(bool enabled);
+
+    /// Resolved pi `showHardwareCursor` over the merged view (pi `getShowHardwareCursor`):
+    /// a stored boolean wins over the environment; missing falls back to `PI_HARDWARE_CURSOR === "1"`.
+    [[nodiscard]] bool get_show_hardware_cursor() const noexcept;
+
+    /// Surgical field-level write of the pi `showHardwareCursor` field in the
+    /// global scope (pi `SettingsManager.setShowHardwareCursor`, which always
+    /// writes `globalSettings`); preserves every other field. A global load
+    /// failure suppresses the write. No-op when unchanged.
+    [[nodiscard]] support::ExpectedVoid set_show_hardware_cursor(bool enabled);
 
     /// Surgical field-level write of the pi `hideThinkingBlock` field in the
     /// global scope (pi `SettingsManager.setHideThinkingBlock`, which always

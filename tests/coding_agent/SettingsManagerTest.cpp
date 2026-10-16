@@ -1,4 +1,6 @@
 #include <cch/coding_agent/Settings.hpp>
+
+#include "support/EnvVarGuard.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -977,4 +979,121 @@ TEST_CASE("SettingsManager tuiMode write suppresses on a global load failure",
     // A scope whose load failed suppresses writes to that scope (pi), and the
     // in-memory view does not advance either.
     CHECK(manager.get_tui_mode() == coding_agent::TuiMode::Regular);
+}
+
+TEST_CASE("SettingsManager loads showHardwareCursor with explicit false vs env fallback",
+        "[settings][two-scope][issue1037][spec]") {
+    tests::EnvVarGuard guard{"PI_HARDWARE_CURSOR"};
+
+    // 1. Env unset, empty settings => default false
+    guard.unset();
+    SettingsDirs empty_dirs;
+    auto manager =
+            coding_agent::SettingsManager::create(empty_dirs.cwd, empty_dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.errors().empty());
+    CHECK(manager.settings().show_hardware_cursor == std::nullopt);
+    CHECK(manager.get_show_hardware_cursor() == false);
+
+    // 2. Env "1", empty settings => fallback true
+    guard.set("1");
+    CHECK(manager.get_show_hardware_cursor() == true);
+
+    // 3. Env "0", "true", "yes", "" => fallback false
+    guard.set("0");
+    CHECK(manager.get_show_hardware_cursor() == false);
+    guard.set("true");
+    CHECK(manager.get_show_hardware_cursor() == false);
+    guard.set("yes");
+    CHECK(manager.get_show_hardware_cursor() == false);
+    guard.set("");
+    CHECK(manager.get_show_hardware_cursor() == false);
+
+    // 4. Explicit false wins over env "1"
+    guard.set("1");
+    SettingsDirs false_dirs;
+    false_dirs.write_global(R"({"showHardwareCursor": false})");
+    auto false_manager =
+            coding_agent::SettingsManager::create(false_dirs.cwd, false_dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(false_manager.errors().empty());
+    CHECK(false_manager.settings().show_hardware_cursor == false);
+    CHECK(false_manager.get_show_hardware_cursor() == false);
+
+    // 5. Explicit true wins over env "0"
+    guard.set("0");
+    SettingsDirs true_dirs;
+    true_dirs.write_global(R"({"showHardwareCursor": true})");
+    auto true_manager =
+            coding_agent::SettingsManager::create(true_dirs.cwd, true_dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(true_manager.errors().empty());
+    CHECK(true_manager.settings().show_hardware_cursor == true);
+    CHECK(true_manager.get_show_hardware_cursor() == true);
+}
+
+TEST_CASE("SettingsManager deep-merges showHardwareCursor with the project scope winning",
+        "[settings][two-scope][issue1037][spec]") {
+    tests::EnvVarGuard guard{"PI_HARDWARE_CURSOR"};
+    guard.unset();
+
+    // 1. Global true, Project false (trusted) => Project false wins
+    SettingsDirs dirs1;
+    dirs1.write_global(R"({"showHardwareCursor": true})");
+    dirs1.write_project(R"({"showHardwareCursor": false})");
+    auto manager1 = coding_agent::SettingsManager::create(dirs1.cwd, dirs1.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager1.errors().empty());
+    CHECK(manager1.get_show_hardware_cursor() == false);
+
+    // 2. Global false, Project true (trusted) => Project true wins
+    SettingsDirs dirs2;
+    dirs2.write_global(R"({"showHardwareCursor": false})");
+    dirs2.write_project(R"({"showHardwareCursor": true})");
+    auto manager2 = coding_agent::SettingsManager::create(dirs2.cwd, dirs2.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager2.errors().empty());
+    CHECK(manager2.get_show_hardware_cursor() == true);
+
+    // 3. Global true, Project false (untrusted) => Global true wins (untrusted ignored)
+    SettingsDirs dirs3;
+    dirs3.write_global(R"({"showHardwareCursor": true})");
+    dirs3.write_project(R"({"showHardwareCursor": false})");
+    auto manager3 = coding_agent::SettingsManager::create(dirs3.cwd, dirs3.agent_dir, /* project_trusted */ false);
+    REQUIRE(manager3.errors().empty());
+    CHECK(manager3.get_show_hardware_cursor() == true);
+
+    // 4. Global unset, Project false (trusted), env "1" => Project false wins over env
+    guard.set("1");
+    SettingsDirs dirs4;
+    dirs4.write_project(R"({"showHardwareCursor": false})");
+    auto manager4 = coding_agent::SettingsManager::create(dirs4.cwd, dirs4.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager4.errors().empty());
+    CHECK(manager4.get_show_hardware_cursor() == false);
+}
+
+TEST_CASE("SettingsManager showHardwareCursor write is a surgical global-scope merge",
+        "[settings][two-scope][write][issue1037][spec]") {
+    tests::EnvVarGuard guard{"PI_HARDWARE_CURSOR"};
+    guard.unset();
+
+    SettingsDirs dirs;
+    dirs.write_global(R"({"theme":"dark","future":true})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.errors().empty());
+    CHECK(manager.get_show_hardware_cursor() == false);
+
+    auto saved = manager.set_show_hardware_cursor(true);
+    REQUIRE(saved);
+
+    CHECK(manager.get_show_hardware_cursor() == true);
+    CHECK(manager.settings().theme == "dark");
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"showHardwareCursor\": true") != std::string::npos);
+    CHECK(content.find("\"future\": true") != std::string::npos);
+
+    // Reloading re-reads the persisted value
+    auto reloaded = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    CHECK(reloaded.get_show_hardware_cursor() == true);
+
+    // The unchanged value is a no-op
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_show_hardware_cursor(true));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
 }

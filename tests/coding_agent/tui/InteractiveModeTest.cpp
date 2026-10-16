@@ -4279,6 +4279,7 @@ TEST_CASE("Native TUI settings opens only supported overlays and hotkeys renders
     // pi's settings-selector labels (settings-selector.ts), including the
     // Theme submenu item.
     CHECK(screen.find("Skill commands") != std::string::npos);
+    CHECK(screen.find("Show hardware cursor") != std::string::npos);
     CHECK(screen.find("Output padding") != std::string::npos);
     CHECK(screen.find("Hide thinking") != std::string::npos);
     CHECK(screen.find("Thinking level") != std::string::npos);
@@ -4288,8 +4289,8 @@ TEST_CASE("Native TUI settings opens only supported overlays and hotkeys renders
     CHECK(created->session->message_count() == 1);
 
     // The Theme item opens the single-mode theme submenu with the `(current)`
-    // marker on the active theme (index 6, behind the TUI mode row).
-    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r"));
+    // marker on the active theme (index 7, behind the TUI mode row).
+    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
     // The `(current)` marker renders as the styled description of the active
@@ -4491,10 +4492,10 @@ TEST_CASE("Native TUI settings selector changes render settings live and they su
     // the zero-padding position.
     CHECK(column_of(screen, "resume request") == 1);
 
-    // Down twice to hide-thinking (past skill-commands and output-padding)
-    // and confirm: the thinking block disappears live and the global setting
-    // persists.
-    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\r"));
+    // Down three times to hide-thinking (past skill-commands,
+    // show-hardware-cursor, and output-padding) and confirm: the thinking block
+    // disappears live and the global setting persists.
+    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
     CHECK(screen.find("inspect the saved state") == std::string::npos);

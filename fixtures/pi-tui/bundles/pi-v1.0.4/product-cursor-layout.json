@@ -1,0 +1,820 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/modes/interactive/chat-viewport.ts:createChatViewport",
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.switchTuiMode",
+    "packages/coding-agent/src/modes/interactive/tui-renderer.ts:createInteractiveTui"
+  ],
+  "scenarios": [
+    {
+      "name": "switch-regular-to-fullscreen-live-true",
+      "description": "Live switch from regular to fullscreen preserving live preference true with exact dock offset 20",
+      "dimensions": {
+        "columns": 48,
+        "rows": 24
+      },
+      "inputs": {
+        "initialMode": "regular",
+        "targetMode": "fullscreen",
+        "initialPreference": false,
+        "livePreference": true,
+        "document": [
+          "header 0",
+          "header 1",
+          "header 2",
+          "header 3"
+        ],
+        "pending": [],
+        "status": [
+          "status line 0",
+          "status line 1"
+        ],
+        "editor": [
+          "line 0",
+          "line 1 nested",
+          "line 2"
+        ],
+        "footer": [
+          "footer line 0",
+          "footer line 1"
+        ],
+        "cursorCol": 5,
+        "cursorRow": 1
+      },
+      "expected": {
+        "initial": {
+          "mode": "regular",
+          "showHardwareCursor": false,
+          "cursorVisible": false,
+          "cursor": {
+            "column": 5,
+            "row": 7
+          }
+        },
+        "live": {
+          "mode": "regular",
+          "showHardwareCursor": true,
+          "cursorVisible": true,
+          "cursor": {
+            "column": 5,
+            "row": 7
+          },
+          "rawWrites": [
+            "\u001b[6G"
+          ],
+          "terminalEvents": [
+            {
+              "op": "write",
+              "bytes": "\u001b[6G"
+            },
+            {
+              "op": "showCursor"
+            }
+          ]
+        },
+        "switch": {
+          "mode": "fullscreen",
+          "showHardwareCursor": true,
+          "cursorVisible": true,
+          "cursor": {
+            "column": 5,
+            "row": 20
+          },
+          "screen": [
+            "header 0                                        ",
+            "header 1                                        ",
+            "header 2                                        ",
+            "header 3                                        ",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "status line 0                                   ",
+            "status line 1                                   ",
+            "line 0",
+            "line 1 nested",
+            "line 2",
+            "footer line 0                                   ",
+            "footer line 1                                   "
+          ],
+          "rawWrites": [
+            "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+            "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kheader 0                                        \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kheader 1                                        \u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kheader 2                                        \u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kheader 3                                        \u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[11;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[12;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[13;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[14;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[15;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[16;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[17;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[18;1H\u001b[2Kstatus line 0                                   \u001b[0m\u001b]8;;\u0007\u001b[19;1H\u001b[2Kstatus line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[20;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[21;1H\u001b[2Kline 1 nested\u001b[0m\u001b]8;;\u0007\u001b[22;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[23;1H\u001b[2Kfooter line 0                                   \u001b[0m\u001b]8;;\u0007\u001b[24;1H\u001b[2Kfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[21;6H\u001b[?25h\u001b[?2026l"
+          ],
+          "terminalEvents": [
+            {
+              "op": "showCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l"
+            },
+            {
+              "op": "hideCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kheader 0                                        \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kheader 1                                        \u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kheader 2                                        \u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kheader 3                                        \u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[11;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[12;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[13;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[14;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[15;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[16;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[17;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[18;1H\u001b[2Kstatus line 0                                   \u001b[0m\u001b]8;;\u0007\u001b[19;1H\u001b[2Kstatus line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[20;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[21;1H\u001b[2Kline 1 nested\u001b[0m\u001b]8;;\u0007\u001b[22;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[23;1H\u001b[2Kfooter line 0                                   \u001b[0m\u001b]8;;\u0007\u001b[24;1H\u001b[2Kfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[21;6H\u001b[?25h\u001b[?2026l"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "switch-regular-to-fullscreen-live-false",
+      "description": "Live switch from regular to fullscreen preserving live preference false",
+      "dimensions": {
+        "columns": 48,
+        "rows": 24
+      },
+      "inputs": {
+        "initialMode": "regular",
+        "targetMode": "fullscreen",
+        "initialPreference": true,
+        "livePreference": false,
+        "document": [
+          "header 0",
+          "header 1",
+          "header 2",
+          "header 3"
+        ],
+        "pending": [],
+        "status": [
+          "status line 0",
+          "status line 1"
+        ],
+        "editor": [
+          "line 0",
+          "line 1 nested",
+          "line 2"
+        ],
+        "footer": [
+          "footer line 0",
+          "footer line 1"
+        ],
+        "cursorCol": 5,
+        "cursorRow": 1
+      },
+      "expected": {
+        "initial": {
+          "mode": "regular",
+          "showHardwareCursor": true,
+          "cursorVisible": true,
+          "cursor": {
+            "column": 5,
+            "row": 7
+          }
+        },
+        "live": {
+          "mode": "regular",
+          "showHardwareCursor": false,
+          "cursorVisible": false,
+          "cursor": {
+            "column": 5,
+            "row": 7
+          },
+          "rawWrites": [
+            "\u001b[6G"
+          ],
+          "terminalEvents": [
+            {
+              "op": "hideCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[6G"
+            },
+            {
+              "op": "hideCursor"
+            }
+          ]
+        },
+        "switch": {
+          "mode": "fullscreen",
+          "showHardwareCursor": false,
+          "cursorVisible": false,
+          "cursor": {
+            "column": 5,
+            "row": 20
+          },
+          "screen": [
+            "header 0                                        ",
+            "header 1                                        ",
+            "header 2                                        ",
+            "header 3                                        ",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "status line 0                                   ",
+            "status line 1                                   ",
+            "line 0",
+            "line 1 nested",
+            "line 2",
+            "footer line 0                                   ",
+            "footer line 1                                   "
+          ],
+          "rawWrites": [
+            "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+            "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kheader 0                                        \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kheader 1                                        \u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kheader 2                                        \u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kheader 3                                        \u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[11;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[12;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[13;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[14;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[15;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[16;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[17;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[18;1H\u001b[2Kstatus line 0                                   \u001b[0m\u001b]8;;\u0007\u001b[19;1H\u001b[2Kstatus line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[20;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[21;1H\u001b[2Kline 1 nested\u001b[0m\u001b]8;;\u0007\u001b[22;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[23;1H\u001b[2Kfooter line 0                                   \u001b[0m\u001b]8;;\u0007\u001b[24;1H\u001b[2Kfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[21;6H\u001b[?25l\u001b[?2026l"
+          ],
+          "terminalEvents": [
+            {
+              "op": "showCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l"
+            },
+            {
+              "op": "hideCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kheader 0                                        \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kheader 1                                        \u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kheader 2                                        \u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kheader 3                                        \u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[11;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[12;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[13;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[14;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[15;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[16;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[17;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[18;1H\u001b[2Kstatus line 0                                   \u001b[0m\u001b]8;;\u0007\u001b[19;1H\u001b[2Kstatus line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[20;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[21;1H\u001b[2Kline 1 nested\u001b[0m\u001b]8;;\u0007\u001b[22;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[23;1H\u001b[2Kfooter line 0                                   \u001b[0m\u001b]8;;\u0007\u001b[24;1H\u001b[2Kfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[21;6H\u001b[?25l\u001b[?2026l"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "switch-fullscreen-to-regular-live-false",
+      "description": "Live switch from fullscreen to regular preserving live preference false with exact frame row 7",
+      "dimensions": {
+        "columns": 48,
+        "rows": 24
+      },
+      "inputs": {
+        "initialMode": "fullscreen",
+        "targetMode": "regular",
+        "initialPreference": true,
+        "livePreference": false,
+        "document": [
+          "header 0",
+          "header 1",
+          "header 2",
+          "header 3"
+        ],
+        "pending": [],
+        "status": [
+          "status line 0",
+          "status line 1"
+        ],
+        "editor": [
+          "line 0",
+          "line 1 nested",
+          "line 2"
+        ],
+        "footer": [
+          "footer line 0",
+          "footer line 1"
+        ],
+        "cursorCol": 5,
+        "cursorRow": 1
+      },
+      "expected": {
+        "initial": {
+          "mode": "fullscreen",
+          "showHardwareCursor": true,
+          "cursorVisible": true,
+          "cursor": {
+            "column": 5,
+            "row": 20
+          }
+        },
+        "live": {
+          "mode": "fullscreen",
+          "showHardwareCursor": false,
+          "cursorVisible": false,
+          "cursor": {
+            "column": 5,
+            "row": 20
+          },
+          "rawWrites": [
+            "\u001b[?2026h\u001b[21;6H\u001b[?25l\u001b[?2026l"
+          ],
+          "terminalEvents": [
+            {
+              "op": "hideCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026h\u001b[21;6H\u001b[?25l\u001b[?2026l"
+            }
+          ]
+        },
+        "switch": {
+          "mode": "regular",
+          "showHardwareCursor": false,
+          "cursorVisible": false,
+          "cursor": {
+            "column": 5,
+            "row": 7
+          },
+          "screen": [
+            "header 0                                        ",
+            "header 1                                        ",
+            "header 2                                        ",
+            "header 3                                        ",
+            "status line 0                                   ",
+            "status line 1                                   ",
+            "line 0",
+            "line 1 nested",
+            "line 2",
+            "footer line 0                                   ",
+            "footer line 1                                   ",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            ""
+          ],
+          "rawWrites": [
+            "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+            "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+            "\u001b[?2026hheader 0                                        \u001b[0m\u001b]8;;\u0007\r\nheader 1                                        \u001b[0m\u001b]8;;\u0007\r\nheader 2                                        \u001b[0m\u001b]8;;\u0007\r\nheader 3                                        \u001b[0m\u001b]8;;\u0007\r\nstatus line 0                                   \u001b[0m\u001b]8;;\u0007\r\nstatus line 1                                   \u001b[0m\u001b]8;;\u0007\r\nline 0\u001b[0m\u001b]8;;\u0007\r\nline 1 nested\u001b[0m\u001b]8;;\u0007\r\nline 2\u001b[0m\u001b]8;;\u0007\r\nfooter line 0                                   \u001b[0m\u001b]8;;\u0007\r\nfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+            "\u001b[3A\u001b[6G"
+          ],
+          "terminalEvents": [
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l"
+            },
+            {
+              "op": "showCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l"
+            },
+            {
+              "op": "hideCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026hheader 0                                        \u001b[0m\u001b]8;;\u0007\r\nheader 1                                        \u001b[0m\u001b]8;;\u0007\r\nheader 2                                        \u001b[0m\u001b]8;;\u0007\r\nheader 3                                        \u001b[0m\u001b]8;;\u0007\r\nstatus line 0                                   \u001b[0m\u001b]8;;\u0007\r\nstatus line 1                                   \u001b[0m\u001b]8;;\u0007\r\nline 0\u001b[0m\u001b]8;;\u0007\r\nline 1 nested\u001b[0m\u001b]8;;\u0007\r\nline 2\u001b[0m\u001b]8;;\u0007\r\nfooter line 0                                   \u001b[0m\u001b]8;;\u0007\r\nfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[3A\u001b[6G"
+            },
+            {
+              "op": "hideCursor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "switch-fullscreen-to-regular-live-true",
+      "description": "Live switch from fullscreen to regular preserving live preference true with exact frame row 7",
+      "dimensions": {
+        "columns": 48,
+        "rows": 24
+      },
+      "inputs": {
+        "initialMode": "fullscreen",
+        "targetMode": "regular",
+        "initialPreference": false,
+        "livePreference": true,
+        "document": [
+          "header 0",
+          "header 1",
+          "header 2",
+          "header 3"
+        ],
+        "pending": [],
+        "status": [
+          "status line 0",
+          "status line 1"
+        ],
+        "editor": [
+          "line 0",
+          "line 1 nested",
+          "line 2"
+        ],
+        "footer": [
+          "footer line 0",
+          "footer line 1"
+        ],
+        "cursorCol": 5,
+        "cursorRow": 1
+      },
+      "expected": {
+        "initial": {
+          "mode": "fullscreen",
+          "showHardwareCursor": false,
+          "cursorVisible": false,
+          "cursor": {
+            "column": 5,
+            "row": 20
+          }
+        },
+        "live": {
+          "mode": "fullscreen",
+          "showHardwareCursor": true,
+          "cursorVisible": true,
+          "cursor": {
+            "column": 5,
+            "row": 20
+          },
+          "rawWrites": [
+            "\u001b[?2026h\u001b[21;6H\u001b[?25h\u001b[?2026l"
+          ],
+          "terminalEvents": [
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026h\u001b[21;6H\u001b[?25h\u001b[?2026l"
+            }
+          ]
+        },
+        "switch": {
+          "mode": "regular",
+          "showHardwareCursor": true,
+          "cursorVisible": true,
+          "cursor": {
+            "column": 5,
+            "row": 7
+          },
+          "screen": [
+            "header 0                                        ",
+            "header 1                                        ",
+            "header 2                                        ",
+            "header 3                                        ",
+            "status line 0                                   ",
+            "status line 1                                   ",
+            "line 0",
+            "line 1 nested",
+            "line 2",
+            "footer line 0                                   ",
+            "footer line 1                                   ",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            ""
+          ],
+          "rawWrites": [
+            "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+            "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+            "\u001b[?2026hheader 0                                        \u001b[0m\u001b]8;;\u0007\r\nheader 1                                        \u001b[0m\u001b]8;;\u0007\r\nheader 2                                        \u001b[0m\u001b]8;;\u0007\r\nheader 3                                        \u001b[0m\u001b]8;;\u0007\r\nstatus line 0                                   \u001b[0m\u001b]8;;\u0007\r\nstatus line 1                                   \u001b[0m\u001b]8;;\u0007\r\nline 0\u001b[0m\u001b]8;;\u0007\r\nline 1 nested\u001b[0m\u001b]8;;\u0007\r\nline 2\u001b[0m\u001b]8;;\u0007\r\nfooter line 0                                   \u001b[0m\u001b]8;;\u0007\r\nfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+            "\u001b[3A\u001b[6G"
+          ],
+          "terminalEvents": [
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l"
+            },
+            {
+              "op": "showCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l"
+            },
+            {
+              "op": "hideCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026hheader 0                                        \u001b[0m\u001b]8;;\u0007\r\nheader 1                                        \u001b[0m\u001b]8;;\u0007\r\nheader 2                                        \u001b[0m\u001b]8;;\u0007\r\nheader 3                                        \u001b[0m\u001b]8;;\u0007\r\nstatus line 0                                   \u001b[0m\u001b]8;;\u0007\r\nstatus line 1                                   \u001b[0m\u001b]8;;\u0007\r\nline 0\u001b[0m\u001b]8;;\u0007\r\nline 1 nested\u001b[0m\u001b]8;;\u0007\r\nline 2\u001b[0m\u001b]8;;\u0007\r\nfooter line 0                                   \u001b[0m\u001b]8;;\u0007\r\nfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[3A\u001b[6G"
+            },
+            {
+              "op": "showCursor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "clipped-switch-fullscreen-to-regular",
+      "description": "Mode switch from fullscreen to regular while valid cursor is clipped at height 2, then restored at height 24",
+      "dimensions": {
+        "columns": 48,
+        "rows": 2
+      },
+      "inputs": {
+        "initialMode": "fullscreen",
+        "targetMode": "regular",
+        "preference": true,
+        "document": [
+          "header 0",
+          "header 1",
+          "header 2",
+          "header 3"
+        ],
+        "pending": [],
+        "status": [
+          "status line 0",
+          "status line 1"
+        ],
+        "editor": [
+          "line 0",
+          "line 1 nested",
+          "line 2"
+        ],
+        "footer": [
+          "footer line 0",
+          "footer line 1"
+        ],
+        "cursorCol": 5,
+        "cursorRow": 1,
+        "constrainedRows": 2,
+        "restoredRows": 24
+      },
+      "expected": {
+        "initialClipped": {
+          "mode": "fullscreen",
+          "showHardwareCursor": true,
+          "cursorVisible": false,
+          "cursor": {
+            "column": 6,
+            "row": 1
+          }
+        },
+        "afterSwitchClipped": {
+          "mode": "regular",
+          "showHardwareCursor": true,
+          "cursorVisible": false,
+          "cursor": {
+            "column": 48,
+            "row": 1
+          },
+          "screen": [
+            "footer line 0                                   ",
+            "footer line 1                                   "
+          ],
+          "rawWrites": [
+            "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+            "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+            "\u001b[?2026hheader 0                                        \u001b[0m\u001b]8;;\u0007\r\nheader 1                                        \u001b[0m\u001b]8;;\u0007\r\nheader 2                                        \u001b[0m\u001b]8;;\u0007\r\nheader 3                                        \u001b[0m\u001b]8;;\u0007\r\nstatus line 0                                   \u001b[0m\u001b]8;;\u0007\r\nstatus line 1                                   \u001b[0m\u001b]8;;\u0007\r\nline 0\u001b[0m\u001b]8;;\u0007\r\nline \u001b_pi:c\u00071 nested\u001b[0m\u001b]8;;\u0007\r\nline 2\u001b[0m\u001b]8;;\u0007\r\nfooter line 0                                   \u001b[0m\u001b]8;;\u0007\r\nfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+          ],
+          "terminalEvents": [
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l"
+            },
+            {
+              "op": "showCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l"
+            },
+            {
+              "op": "hideCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026hheader 0                                        \u001b[0m\u001b]8;;\u0007\r\nheader 1                                        \u001b[0m\u001b]8;;\u0007\r\nheader 2                                        \u001b[0m\u001b]8;;\u0007\r\nheader 3                                        \u001b[0m\u001b]8;;\u0007\r\nstatus line 0                                   \u001b[0m\u001b]8;;\u0007\r\nstatus line 1                                   \u001b[0m\u001b]8;;\u0007\r\nline 0\u001b[0m\u001b]8;;\u0007\r\nline \u001b_pi:c\u00071 nested\u001b[0m\u001b]8;;\u0007\r\nline 2\u001b[0m\u001b]8;;\u0007\r\nfooter line 0                                   \u001b[0m\u001b]8;;\u0007\r\nfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+            },
+            {
+              "op": "hideCursor"
+            }
+          ]
+        },
+        "afterResizeRestored": {
+          "mode": "regular",
+          "showHardwareCursor": true,
+          "cursorVisible": true,
+          "cursor": {
+            "column": 5,
+            "row": 7
+          },
+          "screen": [
+            "header 0                                        ",
+            "header 1                                        ",
+            "header 2                                        ",
+            "header 3                                        ",
+            "status line 0                                   ",
+            "status line 1                                   ",
+            "line 0",
+            "line 1 nested",
+            "line 2",
+            "footer line 0                                   ",
+            "footer line 1                                   ",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            ""
+          ],
+          "rawWrites": [
+            "\u001b[?2026h\u001b[2J\u001b[H\u001b[3Jheader 0                                        \u001b[0m\u001b]8;;\u0007\r\nheader 1                                        \u001b[0m\u001b]8;;\u0007\r\nheader 2                                        \u001b[0m\u001b]8;;\u0007\r\nheader 3                                        \u001b[0m\u001b]8;;\u0007\r\nstatus line 0                                   \u001b[0m\u001b]8;;\u0007\r\nstatus line 1                                   \u001b[0m\u001b]8;;\u0007\r\nline 0\u001b[0m\u001b]8;;\u0007\r\nline 1 nested\u001b[0m\u001b]8;;\u0007\r\nline 2\u001b[0m\u001b]8;;\u0007\r\nfooter line 0                                   \u001b[0m\u001b]8;;\u0007\r\nfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+            "\u001b[3A\u001b[6G"
+          ],
+          "terminalEvents": [
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026h\u001b[2J\u001b[H\u001b[3Jheader 0                                        \u001b[0m\u001b]8;;\u0007\r\nheader 1                                        \u001b[0m\u001b]8;;\u0007\r\nheader 2                                        \u001b[0m\u001b]8;;\u0007\r\nheader 3                                        \u001b[0m\u001b]8;;\u0007\r\nstatus line 0                                   \u001b[0m\u001b]8;;\u0007\r\nstatus line 1                                   \u001b[0m\u001b]8;;\u0007\r\nline 0\u001b[0m\u001b]8;;\u0007\r\nline 1 nested\u001b[0m\u001b]8;;\u0007\r\nline 2\u001b[0m\u001b]8;;\u0007\r\nfooter line 0                                   \u001b[0m\u001b]8;;\u0007\r\nfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[3A\u001b[6G"
+            },
+            {
+              "op": "showCursor"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "clipped-switch-regular-to-fullscreen",
+      "description": "Mode switch from regular to fullscreen while valid cursor is clipped at height 2, then restored at height 24",
+      "dimensions": {
+        "columns": 48,
+        "rows": 2
+      },
+      "inputs": {
+        "initialMode": "regular",
+        "targetMode": "fullscreen",
+        "preference": true,
+        "document": [
+          "header 0",
+          "header 1",
+          "header 2",
+          "header 3"
+        ],
+        "pending": [],
+        "status": [
+          "status line 0",
+          "status line 1"
+        ],
+        "editor": [
+          "line 0",
+          "line 1 nested",
+          "line 2"
+        ],
+        "footer": [
+          "footer line 0",
+          "footer line 1"
+        ],
+        "cursorCol": 5,
+        "cursorRow": 1,
+        "constrainedRows": 2,
+        "restoredRows": 24
+      },
+      "expected": {
+        "initialClipped": {
+          "mode": "regular",
+          "showHardwareCursor": true,
+          "cursorVisible": false,
+          "cursor": {
+            "column": 48,
+            "row": 1
+          }
+        },
+        "afterSwitchClipped": {
+          "mode": "fullscreen",
+          "showHardwareCursor": true,
+          "cursorVisible": false,
+          "cursor": {
+            "column": 6,
+            "row": 1
+          },
+          "screen": [
+            "header 3                                        ",
+            "line 0"
+          ],
+          "rawWrites": [
+            "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+            "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kheader 3                                        \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+          ],
+          "terminalEvents": [
+            {
+              "op": "showCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l"
+            },
+            {
+              "op": "hideCursor"
+            },
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kheader 3                                        \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+            }
+          ]
+        },
+        "afterResizeRestored": {
+          "mode": "fullscreen",
+          "showHardwareCursor": true,
+          "cursorVisible": true,
+          "cursor": {
+            "column": 5,
+            "row": 20
+          },
+          "screen": [
+            "header 0                                        ",
+            "header 1                                        ",
+            "header 2                                        ",
+            "header 3                                        ",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "status line 0                                   ",
+            "status line 1                                   ",
+            "line 0",
+            "line 1 nested",
+            "line 2",
+            "footer line 0                                   ",
+            "footer line 1                                   "
+          ],
+          "rawWrites": [
+            "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kheader 0                                        \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kheader 1                                        \u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kheader 2                                        \u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kheader 3                                        \u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[11;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[12;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[13;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[14;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[15;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[16;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[17;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[18;1H\u001b[2Kstatus line 0                                   \u001b[0m\u001b]8;;\u0007\u001b[19;1H\u001b[2Kstatus line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[20;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[21;1H\u001b[2Kline 1 nested\u001b[0m\u001b]8;;\u0007\u001b[22;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[23;1H\u001b[2Kfooter line 0                                   \u001b[0m\u001b]8;;\u0007\u001b[24;1H\u001b[2Kfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[21;6H\u001b[?25h\u001b[?2026l"
+          ],
+          "terminalEvents": [
+            {
+              "op": "write",
+              "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kheader 0                                        \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kheader 1                                        \u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kheader 2                                        \u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kheader 3                                        \u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[11;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[12;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[13;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[14;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[15;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[16;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[17;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[18;1H\u001b[2Kstatus line 0                                   \u001b[0m\u001b]8;;\u0007\u001b[19;1H\u001b[2Kstatus line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[20;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[21;1H\u001b[2Kline 1 nested\u001b[0m\u001b]8;;\u0007\u001b[22;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[23;1H\u001b[2Kfooter line 0                                   \u001b[0m\u001b]8;;\u0007\u001b[24;1H\u001b[2Kfooter line 1                                   \u001b[0m\u001b]8;;\u0007\u001b[21;6H\u001b[?25h\u001b[?2026l"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

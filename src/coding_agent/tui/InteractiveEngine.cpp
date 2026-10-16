@@ -258,6 +258,7 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     } else {
         diagnostics = std::move(*loaded);
     }
+    tui_->set_show_hardware_cursor(show_hardware_cursor_);
 
     // The model flows need the startup resources (live theme, settings,
     // keybindings), so the controller is created right after they load;
@@ -370,10 +371,16 @@ void InteractiveEngine::apply_debug_hook() {
     tui_->set_on_debug(cch::tui::TuiDebugHook{[hook = debug_hook_]() { hook(); }});
 }
 
+void InteractiveEngine::set_show_hardware_cursor(bool enabled) noexcept {
+    show_hardware_cursor_ = enabled;
+    if (tui_ != nullptr) tui_->set_show_hardware_cursor(enabled);
+}
+
 support::ExpectedVoid InteractiveEngine::wire_selected_root() {
     tui_->set_keybinding_context(keybindings_ ? keybindings_->context() : nullptr);
     tui_->set_scheduler(tui_scheduler_.get());
     tui_->set_clear_on_shrink(clear_on_shrink_);
+    tui_->set_show_hardware_cursor(show_hardware_cursor_);
     apply_debug_hook();
     if (auto sinks = bind_render_sinks(); !sinks) return std::unexpected(sinks.error());
     // pi restores the captured main-screen state on the replacement before it
@@ -479,6 +486,8 @@ support::Expected<bool> InteractiveEngine::switch_tui_mode(coding_agent::TuiMode
     // the focus before the replacement root could be handed it.
     auto* const focus = tui_->focus();
     clear_on_shrink_ = tui_->clear_on_shrink();
+    const bool show_hardware_cursor = tui_->show_hardware_cursor();
+    show_hardware_cursor_ = show_hardware_cursor;
 
     // The retained layout root owns the dock and the one view instance, so it is
     // taken back before the retired root stops; the view stays alive through the
@@ -508,6 +517,7 @@ support::Expected<bool> InteractiveEngine::switch_tui_mode(coding_agent::TuiMode
     if (auto unfocused = tui_->set_focus(nullptr); !unfocused) return std::unexpected(unfocused.error());
 
     select_root(mode);
+    tui_->set_show_hardware_cursor(show_hardware_cursor);
     if (auto mounted = mount_selected_root(std::move(children)); !mounted) {
         return std::unexpected(mounted.error());
     }
@@ -739,6 +749,7 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
     // and re-apply live (the two G2-graduated fields).
     hide_thinking_block_ = settings_manager_->hide_thinking_block();
     output_pad_ = settings_manager_->output_pad();
+    show_hardware_cursor_ = settings_manager_->get_show_hardware_cursor();
     // pi interactive-mode ctor: the theme controller boots against the
     // env-only COLORFGBG terminal theme; registered themes arrive with
     // the boot session (the C++ boot defers session creation until after

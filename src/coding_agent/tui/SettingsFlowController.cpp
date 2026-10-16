@@ -35,20 +35,15 @@ namespace {
 
 } // namespace
 
-SettingsFlowController::SettingsFlowController(
-    boost::asio::any_io_executor executor,
-    ModalPresenter& presenter,
-    std::weak_ptr<void> host_lifetime,
-    SettingsFlowHostHooks hooks,
-    std::shared_ptr<SharedKeybindings> keybindings,
-    coding_agent::SettingsManager* settings_manager,
-    ThemeController* theme_controller)
-    : executor_(std::move(executor)),
-      presenter_(&presenter),
-      host_lifetime_(std::move(host_lifetime)),
-      hooks_(std::move(hooks)),
-      keybindings_(std::move(keybindings)),
-      settings_manager_(settings_manager),
+SettingsFlowController::SettingsFlowController(boost::asio::any_io_executor executor,
+        ModalPresenter& presenter,
+        std::weak_ptr<void> host_lifetime,
+        SettingsFlowHostHooks hooks,
+        std::shared_ptr<SharedKeybindings> keybindings,
+        coding_agent::SettingsManager* settings_manager,
+        ThemeController* theme_controller)
+    : executor_(std::move(executor)), presenter_(&presenter), host_lifetime_(std::move(host_lifetime)),
+      hooks_(std::move(hooks)), keybindings_(std::move(keybindings)), settings_manager_(settings_manager),
       theme_controller_(theme_controller) {}
 
 void SettingsFlowController::post(std::move_only_function<void()> action) {
@@ -71,19 +66,18 @@ void SettingsFlowController::show_error(const std::string& text) {
 void SettingsFlowController::show_settings_selector() {
     if (hooks_.is_live == nullptr || !hooks_.is_live()) return;
     auto* session = current_session();
-    if (session == nullptr || !session->is_open() || theme_controller_ == nullptr ||
-        keybindings_ == nullptr || settings_manager_ == nullptr) {
+    if (session == nullptr || !session->is_open() || theme_controller_ == nullptr || keybindings_ == nullptr ||
+            settings_manager_ == nullptr) {
         return;
     }
     if (hooks_.overlay_active && hooks_.overlay_active()) return;
 
     const auto snapshot = session->snapshot();
     SettingsSelectorConfig config;
-    config.hide_thinking_block =
-        hooks_.hide_thinking_block && hooks_.hide_thinking_block();
+    config.hide_thinking_block = hooks_.hide_thinking_block && hooks_.hide_thinking_block();
     config.output_pad = hooks_.output_pad ? hooks_.output_pad() : 0;
-    config.enable_skill_commands =
-        settings_manager_->get_enable_skill_commands();
+    config.enable_skill_commands = settings_manager_->get_enable_skill_commands();
+    config.show_hardware_cursor = hooks_.show_hardware_cursor && hooks_.show_hardware_cursor();
     config.thinking_level = snapshot.agent_state.thinking_level;
     const auto supported = ai::get_supported_thinking_levels(snapshot.agent_state.model);
     config.available_thinking_levels.reserve(supported.size());
@@ -92,8 +86,7 @@ void SettingsFlowController::show_settings_selector() {
             config.available_thinking_levels.emplace_back(*name);
         }
     }
-    config.default_project_trust =
-        settings_manager_->default_project_trust().value_or(DefaultProjectTrust::Ask);
+    config.default_project_trust = settings_manager_->default_project_trust().value_or(DefaultProjectTrust::Ask);
     // pi settings-selector.ts config: the raw theme setting (`|| "dark"`),
     // the active theme name (the `(current)` marker source), and the
     // sorted available themes.
@@ -127,9 +120,7 @@ void SettingsFlowController::show_settings_selector() {
                 // `setEnableSkillCommands(enabled)` then
                 // `setupAutocompleteProvider()`.
                 if (self->settings_manager_ != nullptr) {
-                    if (auto saved =
-                            self->settings_manager_->set_enable_skill_commands(enabled);
-                        !saved) {
+                    if (auto saved = self->settings_manager_->set_enable_skill_commands(enabled); !saved) {
                         self->show_error(combined_error_text(saved.error()));
                     }
                 }
@@ -137,6 +128,11 @@ void SettingsFlowController::show_settings_selector() {
                     self->hooks_.rebuild_autocomplete_provider();
                 }
             });
+        }
+    };
+    callbacks.on_show_hardware_cursor_change = [weak](bool enabled) {
+        if (const auto self = weak.lock()) {
+            self->post([self, enabled] { self->set_show_hardware_cursor_setting(enabled); });
         }
     };
     callbacks.on_thinking_level_change = [weak](std::string level) {
@@ -158,9 +154,7 @@ void SettingsFlowController::show_settings_selector() {
         if (const auto self = weak.lock()) {
             self->post([self, trust] {
                 if (self->settings_manager_ == nullptr) return;
-                if (auto saved =
-                        self->settings_manager_->set_default_project_trust(trust);
-                    !saved) {
+                if (auto saved = self->settings_manager_->set_default_project_trust(trust); !saved) {
                     self->show_error(combined_error_text(saved.error()));
                 }
             });
@@ -180,9 +174,8 @@ void SettingsFlowController::show_settings_selector() {
                 // then `themeController.applyFromSettings()`.
                 if (self->settings_manager_ != nullptr) {
                     if (auto saved = self->settings_manager_->set_theme(
-                            coding_agent::SettingsScope::Global,
-                            theme_setting);
-                        !saved) {
+                                coding_agent::SettingsScope::Global, theme_setting);
+                            !saved) {
                         self->show_error(combined_error_text(saved.error()));
                     }
                 }
@@ -232,10 +225,7 @@ void SettingsFlowController::show_settings_selector() {
     };
 
     auto selector = std::make_shared<SettingsSelectorComponent>(
-        theme_controller_->live_theme(),
-        keybindings_->get(),
-        std::move(config),
-        std::move(callbacks));
+            theme_controller_->live_theme(), keybindings_->get(), std::move(config), std::move(callbacks));
     *selector_slot = selector;
     if (presenter_ != nullptr) {
         presenter_->replace_prompt_slot(std::move(selector));
@@ -245,8 +235,7 @@ void SettingsFlowController::show_settings_selector() {
 void SettingsFlowController::set_hide_thinking_block_setting(bool hidden) {
     if (hooks_.set_hide_thinking_block) hooks_.set_hide_thinking_block(hidden);
     if (settings_manager_ != nullptr) {
-        if (auto persisted = settings_manager_->set_hide_thinking_block(hidden);
-            !persisted) {
+        if (auto persisted = settings_manager_->set_hide_thinking_block(hidden); !persisted) {
             show_error(combined_error_text(persisted.error()));
         }
     }
@@ -256,20 +245,27 @@ void SettingsFlowController::set_hide_thinking_block_setting(bool hidden) {
 void SettingsFlowController::set_output_pad_setting(std::size_t padding) {
     if (hooks_.set_output_pad) hooks_.set_output_pad(padding);
     if (settings_manager_ != nullptr) {
-        if (auto persisted = settings_manager_->set_output_pad(padding);
-            !persisted) {
+        if (auto persisted = settings_manager_->set_output_pad(padding); !persisted) {
             show_error(combined_error_text(persisted.error()));
         }
     }
     if (hooks_.rebuild_chat) hooks_.rebuild_chat();
 }
 
+void SettingsFlowController::set_show_hardware_cursor_setting(bool enabled) {
+    if (settings_manager_ != nullptr) {
+        if (auto persisted = settings_manager_->set_show_hardware_cursor(enabled); !persisted) {
+            show_error(combined_error_text(persisted.error()));
+        }
+    }
+    if (hooks_.set_show_hardware_cursor) hooks_.set_show_hardware_cursor(enabled);
+}
+
 void SettingsFlowController::toggle_thinking_block_visibility() {
     const bool hidden = hooks_.hide_thinking_block && !hooks_.hide_thinking_block();
     set_hide_thinking_block_setting(hidden);
     if (presenter_ != nullptr) {
-        presenter_->show_status(
-            "Thinking blocks: " + std::string{hidden ? "hidden" : "visible"});
+        presenter_->show_status("Thinking blocks: " + std::string{hidden ? "hidden" : "visible"});
     }
 }
 
