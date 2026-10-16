@@ -393,6 +393,11 @@ void migrate_settings(JsonObject& settings) {
             settings.enable_skill_commands = *parsed;
         }
     }
+    if (const auto found = object.find("showHardwareCursor"); found != object.end()) {
+        if (const auto* parsed = found->second.get_if<bool>()) {
+            settings.show_hardware_cursor = *parsed;
+        }
+    }
     if (const auto* value = string_field(object, "deviceId")) {
         settings.device_id = *value;
     }
@@ -720,6 +725,9 @@ struct SettingsManager::Impl {
         }
         if (project.enable_skill_commands) {
             merged.enable_skill_commands = project.enable_skill_commands;
+        }
+        if (project.show_hardware_cursor) {
+            merged.show_hardware_cursor = project.show_hardware_cursor;
         }
         return merged;
     }
@@ -1125,6 +1133,31 @@ support::ExpectedVoid SettingsManager::set_enable_skill_commands(bool enabled) {
         return persisted;
     }
     target.enable_skill_commands = enabled;
+    impl_->recompute_merged();
+    return support::ExpectedVoid{};
+}
+
+bool SettingsManager::get_show_hardware_cursor() const noexcept {
+    if (impl_->merged_settings.show_hardware_cursor.has_value()) {
+        return *impl_->merged_settings.show_hardware_cursor;
+    }
+    const char* env = std::getenv("PI_HARDWARE_CURSOR");
+    return env != nullptr && std::string_view{env} == "1";
+}
+
+support::ExpectedVoid SettingsManager::set_show_hardware_cursor(bool enabled) {
+    if (impl_->global_write_suppressed()) {
+        return support::ExpectedVoid{};
+    }
+    auto& target = impl_->global_settings;
+    if (target.show_hardware_cursor == enabled) {
+        return support::ExpectedVoid{};
+    }
+
+    if (auto persisted = impl_->persist_global_field("showHardwareCursor", support::JsonValue{enabled}); !persisted) {
+        return persisted;
+    }
+    target.show_hardware_cursor = enabled;
     impl_->recompute_merged();
     return support::ExpectedVoid{};
 }
