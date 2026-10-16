@@ -377,6 +377,23 @@ same `environment`, every other artifact byte-identical, manifest 27 → 28).
 `ProductProgressEvidenceTest` replays settings resolution, surgical persistence, switch restoration expectations,
 and protocol sequences against `SettingsManager` and `InteractiveEngine` from the verified frozen artifact.
 
+`product-progress-protocol.json` records authoritative independent product terminal progress protocol
+execution (#1037, spec #946) using real frozen `ProcessTerminal` stdout capture and `InteractiveMode`
+seams: raw OSC 9;4 sequences (`\x1b]9;4;3\x07` active, `\x1b]9;4;0\x07` clear with no trailing semicolon)
+and 1-second keepalive interval lifecycle, real `InteractiveMode.prototype.handleEvent` driving
+stdout across `turn_start`, `agent_end`, `compaction_start`, and `compaction_end` (with unrelated UI
+stubs explicitly documented), full 16-case truth matrix and restoration suppression in `switchTuiMode`
+retaining all raw ordered writes, direct `SettingsManager.setShowTerminalProgress(false)` setting toggle
+measurement proving stale progress retention until shutdown teardown, and `InteractiveMode.prototype.stop`
+clear sequence counts across active/idle/toggled states. Historical artifact 28 (`product-progress.json`,
+which exercised a manual `VirtualTerminal` double and literal constants) is partial and remains preserved
+byte-for-byte; appended 29th artifact `product-progress-protocol.json` establishes the authoritative
+protocol acceptance boundary without deleting existing bytes.
+`capture/product-progress-protocol-scenarios.mts` defines the scenarios;
+`capture/recapture-product-progress-protocol.mts` is the append recipe (same frozen revision
+`7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`, same `environment`, every other artifact
+byte-identical, manifest 28 → 29).
+
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
 widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key
