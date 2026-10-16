@@ -61,6 +61,9 @@ struct SettingsList::Impl : public std::enable_shared_from_this<SettingsList::Im
     std::shared_ptr<KeybindingsContext> keybinding_context;
     std::unique_ptr<Component> submenu;
     std::optional<std::size_t> submenu_item_index;
+    /// Row selected by the last left press, used by the renderer's synthesized
+    /// click (pi `mousePressedIndex`).
+    std::optional<std::size_t> mouse_pressed_index;
     std::optional<std::string> navigate_after_close;
     std::optional<support::Error> callback_error;
     bool focused{false};
@@ -442,6 +445,73 @@ InputAdmissionOutcome SettingsList::handle_input(const InputEventVariant& input)
     const auto outcome = impl->search_input->handle_input(input);
     impl->apply_filter();
     return outcome;
+}
+
+std::optional<MouseDispatchResult> SettingsList::handle_mouse_forwarded(const MouseEvent& event) {
+    // pi settings-list.ts:180-184: while a submenu is open it owns every mouse
+    // event. The child's resolved result is forwarded unchanged so the child
+    // keeps the drag/release target, and the dispatcher then keeps this list as
+    // the focus target because it routes keys to that child itself.
+    auto impl = impl_;
+    if (!impl->submenu) return std::nullopt;
+    auto forwarded = dispatch_mouse_event(*impl->submenu, event);
+    if (!forwarded) return std::nullopt;
+    forwarded->focus = true;
+    return forwarded;
+}
+
+std::optional<MouseEventResult> SettingsList::handle_mouse(const MouseEvent& event) {
+    // pi settings-list.ts:179-220. The search row is answered with a plain
+    // result spread with `focus: true`, so the settings list stays the target
+    // even though the search Input positions its own cursor.
+    auto impl = impl_;
+    // An open submenu already answered (or deliberately ignored) the event in
+    // `handle_mouse_forwarded`; the settings rows must not fall through to it.
+    if (impl->submenu) return std::nullopt;
+    if (impl->search_enabled && impl->search_input) {
+        if (event.y == 0) {
+            auto result = impl->search_input->handle_mouse(event);
+            if (!result) return std::nullopt;
+            result->focus = true;
+            return result;
+        }
+        if (event.y == 1) return std::nullopt;
+    }
+    const auto& displayed = impl->displayed_indices();
+    if (displayed.empty()) return std::nullopt;
+    if (event.type == MouseEventType::Wheel && event.wheel_delta && *event.wheel_delta != 0) {
+        const auto delta = *event.wheel_delta < 0 ? std::ptrdiff_t{-1} : std::ptrdiff_t{1};
+        const auto previous = impl->selected_index;
+        impl->selected_index = static_cast<std::size_t>(std::clamp<std::ptrdiff_t>(
+                static_cast<std::ptrdiff_t>(impl->selected_index) + delta,
+                0,
+                static_cast<std::ptrdiff_t>(displayed.size() - 1)));
+        return MouseEventResult{.handled = true, .render = impl->selected_index != previous};
+    }
+    // Hover must not change selection: the visible range is centered on it.
+    if (event.button != MouseButton::Left ||
+            (event.type != MouseEventType::Press && event.type != MouseEventType::Click)) {
+        return std::nullopt;
+    }
+    // With search enabled the search row and its blank separator row sit above
+    // the first item row (pi `rowOffset`).
+    const auto row_offset = impl->search_enabled ? std::ptrdiff_t{2} : std::ptrdiff_t{0};
+    const auto range = detail::centered_visible_range(displayed.size(), impl->selected_index, impl->max_visible);
+    const auto item_index = static_cast<std::ptrdiff_t>(range.begin) + event.y - row_offset;
+    if (item_index < static_cast<std::ptrdiff_t>(range.begin) ||
+            item_index >= static_cast<std::ptrdiff_t>(range.end)) {
+        return std::nullopt;
+    }
+    const auto index = static_cast<std::size_t>(item_index);
+    if (event.type == MouseEventType::Press) {
+        impl->mouse_pressed_index = index;
+        impl->selected_index = index;
+        return MouseEventResult{.handled = true, .focus = true};
+    }
+    impl->selected_index = impl->mouse_pressed_index.value_or(index);
+    impl->mouse_pressed_index.reset();
+    impl->activate_item();
+    return MouseEventResult{.handled = true};
 }
 
 void SettingsList::set_focused(bool focused) {

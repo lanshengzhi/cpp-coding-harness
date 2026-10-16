@@ -2,6 +2,7 @@
 
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/Mouse.hpp>
 
 #include <cch/support/Error.hpp>
 
@@ -45,11 +46,12 @@ struct InputOptions {
 ///
 /// Behaves like pi's Input: bracketed-paste insertion at the cursor, Emacs
 /// kill ring with yank/yank-pop, undo with typing coalescing, word
-/// navigation, and submit/escape routed through the injected sinks. The
+/// navigation, submit/escape routed through the injected sinks, and a left
+/// press on the rendered row placing the cursor. The
 /// rendered window scrolls around the cursor; the cursor itself is presented
 /// through the focus lifecycle (`cursor_location`), following the editor's
 /// convention in this repository's decoded-event fork.
-class Input final : public Component, public InputHandler, public Focusable {
+class Input final : public Component, public InputHandler, public Focusable, public MouseHandler {
 public:
     explicit Input(
         InputOptions options = {},
@@ -75,6 +77,10 @@ public:
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
     InputAdmissionOutcome handle_input(const InputEventVariant& input) override;
+    /// A left press on the single rendered row places the cursor (pi
+    /// `Input.handleMouse`). Only press positions the cursor; drag and release
+    /// stay unhandled so the renderer's screen-level selection owns them.
+    [[nodiscard]] std::optional<MouseEventResult> handle_mouse(const MouseEvent& event) override;
     void set_focused(bool focused) override;
     [[nodiscard]] bool focused() const override;
     [[nodiscard]] std::optional<CursorPosition> cursor_location() const override;
