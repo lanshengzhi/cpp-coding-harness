@@ -26,8 +26,7 @@ using cch::support::JsonValue;
 
 class ReplayCursorChild final : public cch::tui::Component, public cch::tui::Focusable {
 public:
-    ReplayCursorChild(
-            std::vector<std::string> lines, std::optional<cch::tui::CursorPosition> cursor = std::nullopt)
+    ReplayCursorChild(std::vector<std::string> lines, std::optional<cch::tui::CursorPosition> cursor = std::nullopt)
         : lines_(std::move(lines)), cursor_(cursor) {}
 
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
@@ -51,9 +50,7 @@ private:
     bool focused_{false};
 };
 
-[[nodiscard]] std::size_t size_of(const JsonValue& value) {
-    return static_cast<std::size_t>(value.get_number());
-}
+[[nodiscard]] std::size_t size_of(const JsonValue& value) { return static_cast<std::size_t>(value.get_number()); }
 
 [[nodiscard]] const JsonValue& find_scenario(const JsonValue& bundle, std::string_view name) {
     for (const auto& scenario : bundle.at("scenarios").get_array()) {
@@ -192,8 +189,7 @@ TEST_CASE("frozen hardware-cursor observations replay across MainScreen and AltS
         cch::tui::VirtualTerminal terminal(cch::tui::VirtualTerminalOptions{.columns = cols, .rows = rows});
         cch::tui::MainScreen main_screen{terminal, true};
 
-        auto child = std::make_unique<ReplayCursorChild>(
-                std::vector<std::string>{"no cursor line"}, std::nullopt);
+        auto child = std::make_unique<ReplayCursorChild>(std::vector<std::string>{"no cursor line"}, std::nullopt);
         auto* child_pointer = child.get();
         REQUIRE(main_screen.add_child(std::move(child)));
         REQUIRE(main_screen.start());
@@ -368,8 +364,7 @@ TEST_CASE("frozen hardware-cursor observations replay across MainScreen and AltS
         cch::tui::VirtualTerminal terminal(cch::tui::VirtualTerminalOptions{.columns = cols, .rows = rows});
         cch::tui::AltScreen alt_screen{terminal, true};
 
-        auto child = std::make_unique<ReplayCursorChild>(
-                std::vector<std::string>{"no cursor line"}, std::nullopt);
+        auto child = std::make_unique<ReplayCursorChild>(std::vector<std::string>{"no cursor line"}, std::nullopt);
         auto* child_pointer = child.get();
         REQUIRE(alt_screen.add_child(std::move(child)));
         REQUIRE(alt_screen.start());
@@ -433,8 +428,7 @@ TEST_CASE("frozen hardware-cursor observations replay across MainScreen and AltS
         std::vector<std::string> lines;
         for (int i = 0; i < 8; ++i)
             lines.push_back(std::format("line {}", i));
-        auto child = std::make_unique<ReplayCursorChild>(
-                lines, cch::tui::CursorPosition{.column = 5, .row = 2});
+        auto child = std::make_unique<ReplayCursorChild>(lines, cch::tui::CursorPosition{.column = 5, .row = 2});
         auto* child_pointer = child.get();
         REQUIRE(alt_screen.add_child(std::move(child)));
         REQUIRE(alt_screen.start());

@@ -80,7 +80,7 @@ public:
     void invalidate() override;
     void set_clear_on_shrink(bool enabled) noexcept override { clear_on_shrink_ = enabled; }
     [[nodiscard]] bool clear_on_shrink() const noexcept override { return clear_on_shrink_; }
-    [[nodiscard]] bool show_hardware_cursor() const noexcept override { return show_hardware_cursor_; }
+    [[nodiscard]] bool show_hardware_cursor() const noexcept override;
     void set_show_hardware_cursor(bool enabled) override;
     void set_scheduler(TuiScheduler* scheduler) override;
     void set_render_prepare_sink(TuiRenderPrepareSink sink) override;
@@ -164,7 +164,6 @@ private:
     std::vector<std::size_t> rendered_child_rows_;
     bool rendered_children_valid_{false};
     bool clear_on_shrink_{false};
-    bool show_hardware_cursor_{false};
     bool started_{false};
     bool stopping_{false};
     bool pending_render_{false};
