@@ -3,19 +3,33 @@
 // which was captured on a clean frozen checkout at
 // `7c10bd4337495ee613f2224843ecdf349b80d1df`; nothing is re-derived here.
 //
-// Evidence boundary: `switchTuiMode` (`interactive-mode.ts:883-934`) and
-// `stopInteractiveTui` (`:874-881`) are private and need the full interactive
-// runtime, so the matrix below asserts the recorded order and flags instead of
-// re-driving them. Two frozen parameters have no Pike seam at all: Pike's
-// `InteractiveEngine::switch_tui_mode(TuiMode)` takes no `restoreProgress` and
-// no `startRenderer`, and Pike has no terminal-progress setting or
-// `Terminal::set_progress` caller (`InteractiveEngine.cpp:526-529`), so the
-// progress scenario replays the recorded boolean condition over the frozen
-// rows. The frames themselves replay through the Pike roots, because the
-// capture mounts the product's own region tree.
+// Evidence boundary:
+// - `InteractiveEngine::switch_tui_mode` is the live renderer switch operation;
+//   its state transitions, focus continuity, editor retention, and hidden-overlay
+//   refusal are verified against the frozen expectations.
+// - Frame replay builds separate fresh Pike roots rather than switching a live
+//   engine; it validates that each mode's layout renders identical frames to pi.
+//   Not all frames or raw protocol bytes are compared across live switches.
+// - Theme color queries (OSC 10/11) during switch are unmeasured in this test seam.
+// - Two frozen parameters have no Pike seam: Pike's `switch_tui_mode(TuiMode)` takes
+//   no `restoreProgress` and no `startRenderer`, and Pike has no terminal-progress
+//   setting or `Terminal::set_progress` caller, so the progress scenario replays
+//   the recorded boolean condition over the frozen rows.
 
+#include "coding_agent/AgentSession.hpp"
+#include "coding_agent/SessionTarget.hpp"
+#include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/tui/ChatViewport.hpp"
+#include "coding_agent/tui/InteractiveEngine.hpp"
+#include "coding_agent/tui/InteractiveSessionRun.hpp"
+#include "support/ModelsFixture.hpp"
+#include "support/PumpUntil.hpp"
+#include "support/RuntimeFixture.hpp"
+#include "support/RuntimeLoopDriver.hpp"
+#include "support/TempWorkspace.hpp"
 
+#include <cch/ai/Content.hpp>
+#include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/tui/AltScreen.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Container.hpp>
@@ -29,6 +43,11 @@
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
 #include <cstddef>
 #include <format>
@@ -471,6 +490,161 @@ TEST_CASE("frozen renderer-switch frames replay through the Pike roots",
     }
     // Both recorded complete styled grids were replayed, not just row text.
     CHECK(styled_frames == 2);
+}
+
+[[nodiscard]] std::string live_visible_screen(const cch::tui::VirtualTerminal& terminal) {
+    std::string text;
+    for (const auto& line : terminal.screen()) {
+        text.append(line);
+        text.push_back('\n');
+    }
+    return text;
+}
+
+[[nodiscard]] tests::ModelsSessionOptions test_session_options(
+        const tests::TempWorkspace& workspace, std::shared_ptr<tests::ScriptedProvider> client) {
+    tests::ModelsSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.models = cch::tests::models_from_provider(std::move(client));
+    return options;
+}
+
+[[nodiscard]] support::AsyncResult<coding_agent::CreateAgentSessionResult> create_test_session_async(
+        tests::RuntimeFixture& runtime, tests::ModelsSessionOptions options) {
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    return coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models)));
+}
+
+[[nodiscard]] coding_agent::tui::InteractiveSessionRun make_test_run(coding_agent::AgentSession& session,
+        const std::filesystem::path& agent_config_directory,
+        coding_agent::TuiMode tui_mode) {
+    return coding_agent::tui::InteractiveSessionRunBuilder{}
+            .with_session(session)
+            .with_agent_config_directory(agent_config_directory)
+            .with_tui_mode(tui_mode)
+            .build();
+}
+
+[[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> drive_test_engine(
+        std::shared_ptr<coding_agent::tui::InteractiveEngine> engine, coding_agent::tui::InteractiveSessionRun run) {
+    if (auto started = engine->start(std::move(run)); !started) co_return std::unexpected(started.error());
+    if (auto warning = co_await engine->append_project_trust_warning_if_needed(); !warning) {
+        auto finished = co_await engine->finish();
+        if (!finished) co_return std::unexpected(finished.error());
+        co_return std::unexpected(warning.error());
+    }
+    boost::system::error_code wait_error;
+    if (!engine->exit_requested()) {
+        co_await engine->exit_wait().async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+    }
+    co_return co_await engine->finish();
+}
+
+TEST_CASE("live renderer switch validates focus and state expectations from frozen evidence",
+        "[coding_agent][tui][fullscreen][renderer-switch][issue1018][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_tui_evidence("renderer-switch.json");
+    REQUIRE(bundle);
+
+    const auto& f2r_scenario =
+            scenario_of(*bundle, "fullscreen-to-regular-retains-the-tree-and-detaches-the-layout-root");
+    const auto& f2r_expected = f2r_scenario.at("expected");
+    const auto& f2r_before = f2r_expected.at("stateBefore");
+    const auto& f2r_after = f2r_expected.at("stateAfter");
+    const auto& f2r_inputs = f2r_scenario.at("inputs");
+
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("settings.json", R"({"tuiMode": "fullscreen"})");
+    auto created = runtime.run(
+            create_test_session_async(runtime, test_session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    cch::tui::VirtualTerminal terminal({
+            .columns = size_of(f2r_inputs.at("columns")),
+            .rows = size_of(f2r_inputs.at("rows")),
+    });
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+    boost::asio::co_spawn(io,
+            drive_test_engine(
+                    engine, make_test_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    tests::drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+    REQUIRE(terminal.modes().alternate_screen);
+    REQUIRE(tests::pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+    // Verify initial fullscreen mode matches recorded stateBefore.
+    CHECK(f2r_before.at("mode").get_string() == "fullscreen");
+    auto* const initial_focus = engine->focus();
+    REQUIRE(initial_focus != nullptr);
+
+    // Type the recorded draft editor text.
+    const std::string draft = f2r_inputs.at("editor").get_string();
+    REQUIRE(terminal.inject_input(draft));
+    REQUIRE(tests::pump_until(io, [&] { return live_visible_screen(terminal).find(draft) != std::string::npos; }));
+
+    // Hidden overlay refusal check against recorded overlay scenario:
+    // Any existing overlay entry (hidden included) refuses the switch.
+    auto& presenter = static_cast<coding_agent::tui::ModalPresenter&>(*engine);
+    presenter.show_overlay(overlay_entry());
+    presenter.hide_overlay();
+    tests::drain_ready(io);
+
+    auto hidden_refusal = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+    REQUIRE(hidden_refusal);
+    CHECK_FALSE(*hidden_refusal);
+    CHECK(terminal.modes().alternate_screen);
+    CHECK(engine->focus() == initial_focus);
+
+    // Clear overlay so the switch can proceed.
+    presenter.close_overlay();
+    tests::drain_ready(io);
+
+    // Live switch fullscreen -> regular: asserts recorded result (true) and mode transition.
+    auto switched_to_regular = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+    REQUIRE(switched_to_regular);
+    CHECK(*switched_to_regular == f2r_expected.at("result").get_boolean());
+    tests::drain_ready(io);
+    REQUIRE(tests::pump_until(io, [&] { return !terminal.modes().alternate_screen; }));
+    CHECK(f2r_after.at("mode").get_string() == "regular");
+
+    // Live focus target identity: the focused component survives across roots.
+    CHECK(engine->focus() == initial_focus);
+
+    // Live editor text continuity: draft text is retained on the regular root.
+    CHECK(live_visible_screen(terminal).find(draft) != std::string::npos);
+
+    // Switch regular -> fullscreen: roundtrip retains focus and text.
+    auto switched_to_fullscreen = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+    REQUIRE(switched_to_fullscreen);
+    CHECK(*switched_to_fullscreen);
+    tests::drain_ready(io);
+    REQUIRE(tests::pump_until(io, [&] { return terminal.modes().alternate_screen; }));
+    CHECK(engine->focus() == initial_focus);
+    CHECK(live_visible_screen(terminal).find(draft) != std::string::npos);
+
+    // Submit the draft text and then exit on empty prompt.
+    REQUIRE(terminal.inject_input("\r"));
+    REQUIRE(tests::pump_until(
+            io, [&] { return live_visible_screen(terminal).find("fake: draft prompt") != std::string::npos; }));
+
+    // Exit cleanly.
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result);
+    CHECK(*run_result);
 }
 
 } // namespace cch::coding_agent::tui
