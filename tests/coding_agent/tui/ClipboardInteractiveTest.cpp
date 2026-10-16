@@ -204,6 +204,7 @@ public:
                 cch::coding_agent::tui::run_interactive_mode(*terminal_double,
                         cch::cli::assemble_interactive_session_run(cch::cli::InitialMessageResult{},
                                 cch::cli::CliConfig{},
+                                cch::coding_agent::TuiMode::Regular,
                                 /*runtime_root=*/nullptr,
                                 /*shared_runtime=*/nullptr,
                                 /*model_runtime_cli_fake=*/false,

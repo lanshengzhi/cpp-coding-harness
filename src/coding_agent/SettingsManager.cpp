@@ -351,6 +351,9 @@ void migrate_settings(JsonObject& settings) {
     if (const auto* value = string_field(object, "theme")) {
         settings.theme = *value;
     }
+    if (const auto* value = string_field(object, "tuiMode")) {
+        settings.tui_mode = *value;
+    }
     if (const auto found = object.find("compaction"); found != object.end()) {
         if (auto parsed = parse_compaction_settings(found->second); parsed) {
             settings.compaction = std::move(*parsed);
@@ -709,6 +712,9 @@ struct SettingsManager::Impl {
         if (project.hide_thinking_block) {
             merged.hide_thinking_block = project.hide_thinking_block;
         }
+        if (project.tui_mode) {
+            merged.tui_mode = project.tui_mode;
+        }
         if (project.output_pad) {
             merged.output_pad = project.output_pad;
         }
@@ -974,6 +980,38 @@ support::ExpectedVoid SettingsManager::set_default_thinking_level(
 
 bool SettingsManager::hide_thinking_block() const noexcept {
     return impl_->merged_settings.hide_thinking_block.value_or(false);
+}
+
+TuiMode SettingsManager::get_tui_mode() const noexcept {
+    // pi `getTuiMode`: `this.settings.tuiMode === "regular" ? "regular" :
+    // "fullscreen"`, with one named divergence: pi's unset default is
+    // fullscreen and this product's is regular until #1024 (T78) flips it.
+    const auto& stored = impl_->merged_settings.tui_mode;
+    if (stored) {
+        return *stored == "regular" ? TuiMode::Regular : TuiMode::Fullscreen;
+    }
+    return TuiMode::Regular;
+}
+
+support::ExpectedVoid SettingsManager::set_tui_mode(TuiMode mode) {
+    // pi `setTuiMode` always writes the global scope.
+    if (impl_->global_write_suppressed()) {
+        return support::ExpectedVoid{};
+    }
+    const std::string value = mode == TuiMode::Regular ? "regular" : "fullscreen";
+    auto& target = impl_->global_settings;
+    if (target.tui_mode == value) {
+        return support::ExpectedVoid{};
+    }
+
+    // Persist first; the in-memory view advances only when the surgical write
+    // succeeded, so a persist failure never leaves memory diverged from disk.
+    if (auto persisted = impl_->persist_global_field("tuiMode", support::JsonValue{value}); !persisted) {
+        return persisted;
+    }
+    target.tui_mode = value;
+    impl_->recompute_merged();
+    return support::ExpectedVoid{};
 }
 
 std::size_t SettingsManager::output_pad() const noexcept {

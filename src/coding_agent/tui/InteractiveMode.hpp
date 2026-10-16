@@ -53,9 +53,10 @@ struct WriteClipboardAction {
     std::string text;
 };
 
-/// Request a native clipboard read and editor insertion. Fullscreen production
-/// composition through `InteractiveEngine::paste_clipboard()` is owned by T71;
-/// the current default run sink acknowledges this action until then.
+/// Request a native clipboard read and editor insertion. The fullscreen
+/// product root dispatches this on right-click; the engine intercepts it and
+/// runs its own clipboard read and editor insert flow (#1017). A run without a
+/// fullscreen host acknowledges it: no regular-mode root dispatches a paste.
 struct PasteClipboardAction {};
 
 /// Suspend the process group (pi `handleCtrlZ` `process.kill(0, "SIGTSTP")`).

@@ -14,6 +14,7 @@ namespace cch::cli {
 
 coding_agent::tui::InteractiveSessionRun assemble_interactive_session_run(InitialMessageResult initial,
         const CliConfig& config,
+        coding_agent::TuiMode tui_mode,
         std::shared_ptr<harness::RuntimeRoot> runtime_root,
         std::shared_ptr<coding_agent::ModelRuntime> shared_runtime,
         bool model_runtime_cli_fake,
@@ -28,6 +29,7 @@ coding_agent::tui::InteractiveSessionRun assemble_interactive_session_run(Initia
     const auto environment = clipboard.environment;
     return coding_agent::tui::InteractiveSessionRunBuilder{}
             .with_session_facts(config.session_facts)
+            .with_tui_mode(tui_mode)
             .with_agent_config_directory(coding_agent::agent_config_dir())
             .with_initial_prompt(initial.initial_message.empty()
                                          ? std::nullopt

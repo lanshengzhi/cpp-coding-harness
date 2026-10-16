@@ -25,4 +25,9 @@ support::Expected<Frontend> select_frontend(const CliConfig& config, FrontendEnv
     return Frontend::Interactive;
 }
 
+coding_agent::TuiMode select_tui_mode(const CliConfig& config, const coding_agent::SettingsManager& settings) {
+    // pi interactive-mode.ts:604 `options.tuiMode ?? settingsManager.getTuiMode()`.
+    return config.tui_mode.value_or(settings.get_tui_mode());
+}
+
 } // namespace cch::cli

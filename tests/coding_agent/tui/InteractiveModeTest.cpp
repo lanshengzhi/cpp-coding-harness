@@ -69,6 +69,7 @@ struct TestRunOptions {
     std::optional<std::string> model_fallback_message{std::nullopt};
     coding_agent::tui::TuiActionSink action_sink{nullptr};
     coding_agent::runtime::InteractiveSessionFacts session_facts{};
+    coding_agent::TuiMode tui_mode{coding_agent::TuiMode::Regular};
 };
 
 [[nodiscard]] auto make_run(coding_agent::AgentSession& session, TestRunOptions options = {}) {
@@ -81,6 +82,7 @@ struct TestRunOptions {
             .with_model_fallback_message(std::move(options.model_fallback_message))
             .with_action_sink(std::move(options.action_sink))
             .with_session_facts(std::move(options.session_facts))
+            .with_tui_mode(options.tui_mode)
             .build();
 }
 
@@ -1809,6 +1811,130 @@ TEST_CASE("Native TUI right-click paste action composes into native clipboard ed
     REQUIRE(run_result);
     CHECK(*run_result);
     REQUIRE(host.alt_screen().stop());
+}
+
+TEST_CASE("Native TUI fullscreen selection launches the assembled AltScreen root",
+        "[coding_agent][tui][fullscreen][issue1017][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    {
+        // pi `createInteractiveTui` fullscreen branch: the run's root is the
+        // AltScreen composition, so the terminal enters the alternate buffer
+        // and leaves it when the run stops.
+        tui::VirtualTerminal terminal({.columns = 60, .rows = 30});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        boost::asio::co_spawn(io,
+                coding_agent::tui::run_interactive_mode(terminal,
+                        make_run(*created->session,
+                                {.agent_config_directory = config.path(),
+                                        .tui_mode = coding_agent::TuiMode::Fullscreen})),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        CHECK(terminal.modes().started);
+        CHECK(terminal.modes().alternate_screen);
+
+        // The assembled view renders and accepts input under that root.
+        REQUIRE(terminal.inject_input("fullscreen prompt\r"));
+        REQUIRE(pump_until(
+                io, [&] { return visible_screen(terminal).find("fake: fullscreen prompt") != std::string::npos; }));
+
+        REQUIRE(terminal.inject_input("\x04"));
+        drain_ready(io);
+        REQUIRE(run_result);
+        CHECK(*run_result);
+        CHECK_FALSE(terminal.modes().started);
+        CHECK_FALSE(terminal.modes().alternate_screen);
+    }
+
+    {
+        // The same run under the regular root keeps the main screen: no
+        // alternate buffer is entered, while the transcript, editor, and
+        // footer still render and accept input.
+        auto regular = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(regular);
+        tui::VirtualTerminal terminal({.columns = 60, .rows = 30});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        boost::asio::co_spawn(io,
+                coding_agent::tui::run_interactive_mode(terminal,
+                        make_run(*regular->session,
+                                {.agent_config_directory = config.path(), .tui_mode = coding_agent::TuiMode::Regular})),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        CHECK(terminal.modes().started);
+        CHECK_FALSE(terminal.modes().alternate_screen);
+
+        REQUIRE(terminal.inject_input("regular prompt\r"));
+        REQUIRE(pump_until(
+                io, [&] { return visible_screen(terminal).find("fake: regular prompt") != std::string::npos; }));
+
+        REQUIRE(terminal.inject_input("\x04"));
+        drain_ready(io);
+        REQUIRE(run_result);
+        CHECK(*run_result);
+        CHECK_FALSE(terminal.modes().alternate_screen);
+    }
+}
+
+TEST_CASE("Native TUI fullscreen right-click paste composes through the engine, not the run sink",
+        "[coding_agent][tui][clipboard][fullscreen][issue1017][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    auto clipboard = std::make_unique<FakeNativeClipboard>();
+    clipboard->text = "clipboard text";
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    coding_agent::tui::testing::ActionSinkRecorder recorder;
+
+    tui::VirtualTerminal terminal({.columns = 60, .rows = 30});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal,
+                    make_run(*created->session,
+                            {.agent_config_directory = config.path(),
+                                    .native_clipboard = std::move(clipboard),
+                                    .action_sink = recorder.make_sink(),
+                                    .tui_mode = coding_agent::TuiMode::Fullscreen})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    REQUIRE(terminal.modes().alternate_screen);
+
+    // The fullscreen root's right-click paste reaches the engine's own
+    // clipboard read and editor insert (pi's paste binding), so the run's
+    // action sink never sees the paste action and the text lands at the cursor.
+    REQUIRE(terminal.inject_input("\x1b[<2;1;1M"));
+    REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("clipboard text") != std::string::npos; }));
+    CHECK(recorder.paste_clipboard.empty());
+    CHECK(recorder.generations.empty());
+
+    // The pasted text leaves the editor non-empty, and Ctrl+D exits only an
+    // empty editor (pi `app.exit`): clear it first.
+    REQUIRE(terminal.inject_input("\x03"));
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
 }
 
 TEST_CASE("Native TUI clipboard falls back to text at the cursor and ignores read failures",

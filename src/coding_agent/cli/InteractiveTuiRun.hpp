@@ -43,10 +43,12 @@ struct InteractiveClipboardInjection {
 };
 
 /// Assemble the one Interactive Session Run the Native TUI boots: the
-/// CLI-owned facts, run intent, host effects, and the clipboard reader and copy
-/// policy the injection names.
+/// CLI-owned facts, the resolved Native TUI root mode
+/// (`cch::cli::select_tui_mode`), run intent, host effects, and the clipboard
+/// reader and copy policy the injection names.
 [[nodiscard]] coding_agent::tui::InteractiveSessionRun assemble_interactive_session_run(InitialMessageResult initial,
         const CliConfig& config,
+        coding_agent::TuiMode tui_mode,
         std::shared_ptr<harness::RuntimeRoot> runtime_root,
         std::shared_ptr<coding_agent::ModelRuntime> shared_runtime,
         bool model_runtime_cli_fake,

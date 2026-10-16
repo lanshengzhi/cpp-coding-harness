@@ -13,6 +13,14 @@
 
 namespace cch::coding_agent {
 
+/// pi `TuiMode` — the Native TUI root a run uses (settings key `tuiMode`,
+/// `--tui-mode` CLI flag). The product runs either the regular main-screen
+/// composition or the fullscreen AltScreen composition.
+enum class TuiMode {
+    Regular,
+    Fullscreen,
+};
+
 /// pi `compaction` — nested automatic-compaction settings. Every field is
 /// optional: a missing field falls back to pi's `DEFAULT_COMPACTION_SETTINGS`
 /// (`enabled: true`, `reserveTokens: 16384`, `keepRecentTokens: 20000`) when
@@ -93,6 +101,10 @@ struct UserSettings {
     /// of the G2 record; consumed by the interactive assistant-message
     /// rendering and `app.thinking.toggle`.
     std::optional<bool> hide_thinking_block{std::nullopt};
+    /// pi `tuiMode` — Native TUI root mode (`"regular"` or `"fullscreen"`).
+    /// The raw stored string is kept as loaded: pi does not validate it, and
+    /// resolution normalizes it (see `SettingsManager::get_tui_mode`).
+    std::optional<std::string> tui_mode{std::nullopt};
     /// pi `outputPad` — horizontal padding for user messages, assistant
     /// messages, and thinking (default 1; only 0 or 1). Graduated into the
     /// #327 field subset with decision 10 of the G2 record; any non-zero
@@ -190,6 +202,22 @@ public:
     [[nodiscard]] support::ExpectedVoid set_default_thinking_level(
         SettingsScope scope,
         std::string_view value);
+
+    /// Resolved pi `tuiMode` over the merged view (pi `getTuiMode`): a stored
+    /// `"regular"` resolves as regular and every other stored value as
+    /// fullscreen (`settings.tuiMode === "regular" ? "regular" :
+    /// "fullscreen"`).
+    ///
+    /// Divergence from pi (#1017): an *absent* value resolves as regular here,
+    /// while frozen pi's `getTuiMode()` resolves it as fullscreen. The product
+    /// default stays regular for this ticket and #1024 (T78) is the named flip
+    /// point.
+    [[nodiscard]] TuiMode get_tui_mode() const noexcept;
+    /// Surgical field-level write of the pi `tuiMode` field in the global
+    /// scope (pi `SettingsManager.setTuiMode`, which always writes
+    /// `globalSettings`); preserves every other field. A global load failure
+    /// suppresses the write. No-op when the value is unchanged.
+    [[nodiscard]] support::ExpectedVoid set_tui_mode(TuiMode mode);
 
     /// Resolved pi `hideThinkingBlock` over the merged view (default false).
     [[nodiscard]] bool hide_thinking_block() const noexcept;

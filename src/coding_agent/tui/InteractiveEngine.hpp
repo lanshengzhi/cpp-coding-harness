@@ -88,6 +88,12 @@ class InteractiveEngine final : public std::enable_shared_from_this<InteractiveE
 public:
     /// The terminal must outlive the run.
     InteractiveEngine(cch::tui::Terminal& terminal, boost::asio::any_io_executor executor);
+    /// Select this run's TUI root (pi `createInteractiveTui`): `Regular` keeps
+    /// the main-screen composition, `Fullscreen` owns the `AltScreenHost`
+    /// fullscreen root (#1017) and routes its platform actions through the
+    /// engine.
+    InteractiveEngine(
+            cch::tui::Terminal& terminal, boost::asio::any_io_executor executor, coding_agent::TuiMode tui_mode);
     InteractiveEngine(InteractiveEngine&&) = delete;
     InteractiveEngine& operator=(InteractiveEngine&&) = delete;
     ~InteractiveEngine() override;
@@ -143,8 +149,8 @@ public:
     void set_alt_screen_host(AltScreenHost* host) noexcept;
 
     /// Forward a fullscreen paste request to the existing native clipboard
-    /// read and editor insertion path. Production fullscreen assembly installs
-    /// this action route in T71.
+    /// read and editor insertion path. The fullscreen root's right-click paste
+    /// reaches this path through the engine's action route (#1017).
     void paste_clipboard();
 
 private:
@@ -499,10 +505,27 @@ private:
     /// replace_session().
     std::vector<std::unique_ptr<AgentSession>> retired_sessions_;
     cch::tui::Terminal& terminal_; // must outlive this interactive run.
+    /// One move-only sink carrying closed application-level actions to the
+    /// composition host (ADR 0040); null applies TUI-local platform defaults
+    /// for the environment operations. Declared before the TUI roots because
+    /// the fullscreen host borrows it: `start()` fills it in later and the
+    /// borrowed reference keeps observing that assignment.
+    TuiActionSink action_sink_{nullptr};
+    /// Action-generation counter for the closed action seam (ADR 0040):
+    /// every action is delivered with the generation that admitted it, and
+    /// `retire_action_generation()` rejects later deliveries from a retired
+    /// session generation. Executor-confined; captured by `open_browser_hook`
+    /// at hook creation. Declared with `action_sink_` because the fullscreen
+    /// host borrows it too.
+    std::size_t action_generation_{0};
+    /// The run's selected TUI root (pi `createInteractiveTui`): present only
+    /// for `TuiMode::Fullscreen`, where `tui_` binds to it instead of the main
+    /// screen.
+    std::unique_ptr<AltScreenHost> fullscreen_host_{nullptr};
     AltScreenHost* alt_screen_host_{nullptr}; // borrowed fullscreen host, when a fullscreen consumer is active.
     std::unique_ptr<cch::tui::TuiScheduler> tui_scheduler_;
     cch::tui::MainScreen main_screen_;
-    cch::tui::ITui& tui_; // main_screen_ outlives this interface and every consumer.
+    cch::tui::ITui& tui_; // the selected root outlives this interface and every consumer.
     /// pi's mutable shared KeybindingsManager consumption shape (ADR 0035,
     /// #418): every durable view component observes this slot; `/reload`
     /// replaces the current registry so all consumers see the new bindings
@@ -545,10 +568,6 @@ private:
     /// the OSC 52 terminal route this engine installs; the copy path never reads
     /// the process environment.
     ClipboardWriteOptions clipboard_write_options_{};
-    /// One move-only sink carrying closed application-level actions to the
-    /// composition host (ADR 0040); null applies TUI-local platform defaults
-    /// for the environment operations.
-    TuiActionSink action_sink_{nullptr};
     AsyncSessionReplacementSink async_session_replacement_sink_{nullptr};
     ExtensionUiHost extension_ui_host_;
     ExtensionUiRegistrationFactory extension_ui_registration_factory_{nullptr};
@@ -564,12 +583,6 @@ private:
     /// workspace, reused by in-session session creations in the same
     /// workspace (a session-only choice leaves no store entry).
     std::optional<std::pair<std::filesystem::path, bool>> resolved_boot_trust_{std::nullopt};
-    /// Action-generation counter for the closed action seam (ADR 0040):
-    /// every action is delivered with the generation that admitted it, and
-    /// `retire_action_generation()` rejects later deliveries from a retired
-    /// session generation. Executor-confined; captured by `open_browser_hook`
-    /// at hook creation.
-    std::size_t action_generation_{0};
 
     /// Startup diagnostics stashed by the boot `start()` until the boot
     /// session binds and `initialize_view` renders them (pi

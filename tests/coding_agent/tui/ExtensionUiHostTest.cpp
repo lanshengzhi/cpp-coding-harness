@@ -160,6 +160,7 @@ public:
             if (use_cli_assembly) {
                 return cli::assemble_interactive_session_run(cli::InitialMessageResult{},
                         cli::CliConfig{},
+                        coding_agent::TuiMode::Regular,
                         /* runtime_root */ nullptr,
                         /* shared_runtime */ nullptr,
                         /* model_runtime_cli_fake */ false,

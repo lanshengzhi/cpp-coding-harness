@@ -3,7 +3,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <string>
 
@@ -906,4 +908,73 @@ TEST_CASE("SettingsManager resolves pi's codemode mode and inline budget",
     auto unknown = coding_agent::SettingsManager::create(other.cwd, other.agent_dir, /* project_trusted */ true);
     CHECK(unknown.errors().empty());
     CHECK(unknown.codemode_mode() == "on");
+}
+
+TEST_CASE("SettingsManager resolves tuiMode with the unset default recorded as regular",
+        "[settings][two-scope][issue1017][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"theme":"dark"})");
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    // Frozen pi `getTuiMode` defaults an unset key to fullscreen and Pike keeps
+    // the regular root: the T78 default flip (#1024) changes this one case.
+    CHECK_FALSE(manager.settings().tui_mode.has_value());
+    CHECK(manager.get_tui_mode() == coding_agent::TuiMode::Regular);
+
+    for (const auto& [stored, expected] : std::array{
+                 std::pair<std::string_view, coding_agent::TuiMode>{"regular", coding_agent::TuiMode::Regular},
+                 std::pair<std::string_view, coding_agent::TuiMode>{"fullscreen", coding_agent::TuiMode::Fullscreen},
+                 // pi does not validate the stored value; resolution normalizes
+                 // everything that is not "regular" to fullscreen.
+                 std::pair<std::string_view, coding_agent::TuiMode>{"bogus", coding_agent::TuiMode::Fullscreen},
+         }) {
+        dirs.write_global(std::format(R"({{"tuiMode":"{}"}})", stored));
+        auto scoped = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+        CHECK(scoped.errors().empty());
+        CHECK(scoped.get_tui_mode() == expected);
+    }
+}
+
+TEST_CASE("SettingsManager tuiMode write is a surgical global-scope merge and a no-op when unchanged",
+        "[settings][two-scope][write][issue1017][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"theme":"dark","future":true})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.set_tui_mode(coding_agent::TuiMode::Fullscreen));
+
+    CHECK(manager.get_tui_mode() == coding_agent::TuiMode::Fullscreen);
+    CHECK(manager.settings().theme == "dark");
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"tuiMode\": \"fullscreen\"") != std::string::npos);
+    // Unknown and unmodified fields survive the surgical write.
+    CHECK(content.find("\"future\": true") != std::string::npos);
+
+    auto reloaded = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    CHECK(reloaded.get_tui_mode() == coding_agent::TuiMode::Fullscreen);
+
+    // The unchanged value is a no-op: the file is not rewritten.
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_tui_mode(coding_agent::TuiMode::Fullscreen));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+
+    // Writing regular over an unset key persists it (pi `setTuiMode` writes the
+    // key rather than relying on the resolution default).
+    SettingsDirs empty;
+    auto unset = coding_agent::SettingsManager::create(empty.cwd, empty.agent_dir, /* project_trusted */ true);
+    REQUIRE(unset.set_tui_mode(coding_agent::TuiMode::Regular));
+    CHECK(empty.workspace.read("agent/settings.json").find("\"tuiMode\": \"regular\"") != std::string::npos);
+}
+
+TEST_CASE("SettingsManager tuiMode write suppresses on a global load failure",
+        "[settings][two-scope][write][error][issue1017][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global("{");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE_FALSE(manager.errors().empty());
+    REQUIRE(manager.set_tui_mode(coding_agent::TuiMode::Fullscreen));
+    // A scope whose load failed suppresses writes to that scope (pi), and the
+    // in-memory view does not advance either.
+    CHECK(manager.get_tui_mode() == coding_agent::TuiMode::Regular);
 }

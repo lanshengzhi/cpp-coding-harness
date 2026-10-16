@@ -163,6 +163,7 @@ void print_session_diagnostics(
 
 [[nodiscard]] int run_native_tui_boot(InitialMessageResult initial,
         const CliConfig& config,
+        coding_agent::TuiMode tui_mode,
         std::shared_ptr<coding_agent::ModelRuntime> model_runtime,
         bool model_runtime_cli_fake,
         CliStreams streams,
@@ -202,6 +203,7 @@ void print_session_diagnostics(
     // both work from that observation, never from the process environment.
     auto run = assemble_interactive_session_run(std::move(initial),
             config,
+            tui_mode,
             runtime_root,
             shared_runtime,
             model_runtime_cli_fake,
@@ -258,8 +260,11 @@ void print_session_diagnostics(
     }
 
     // pi main.ts: the startup settings manager resolves the sessionDir chain
-    // value and the global-scope theme for the startup-TUI hosts.
+    // value, the global-scope theme for the startup-TUI hosts, and the Native
+    // TUI root mode (pi interactive-mode.ts:604 `options.tuiMode ??
+    // settingsManager.getTuiMode()` — an explicit `--tui-mode` always wins).
     auto settings = startup_settings(config.workspace);
+    const auto tui_mode = select_tui_mode(config, settings);
 
     // pi main.ts `selectSession`: `--resume` opens the startup-TUI session
     // picker on its own terminal before any session machinery. The real host
@@ -453,6 +458,7 @@ void print_session_diagnostics(
         // and the base request to the boot.
         return run_native_tui_boot(std::move(*initial),
                 config,
+                tui_mode,
                 std::move(model_runtime),
                 model_runtime_cli_fake,
                 streams,
