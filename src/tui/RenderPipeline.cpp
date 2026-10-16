@@ -786,6 +786,10 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(
         return frame;
     }
 
+    // Frozen picks the full-redraw clear from the cache as it stood before this
+    // frame's uploads are cached (pi `hadUploadedKittyImages`).
+    const bool had_uploaded_images = !fullscreen_image_placements_.empty();
+
     for (auto& [resource_id, placement] : fullscreen_image_placements_) placement.visible = false;
     bool need_redraw = false;
     std::vector<std::uint64_t> visible_resources;
@@ -865,8 +869,7 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(
     for (auto& [resource_id, placement] : fullscreen_image_placements_) placement.anchored = placement.visible;
 
     if (full_redraw) {
-        frame.clear_bytes = fullscreen_image_placements_.empty() ? delete_all_kitty_images()
-                                                                 : delete_all_kitty_placements();
+        frame.clear_bytes = had_uploaded_images ? delete_all_kitty_placements() : delete_all_kitty_images();
     } else if (need_redraw) {
         frame.clear_bytes = delete_all_kitty_placements();
     }
