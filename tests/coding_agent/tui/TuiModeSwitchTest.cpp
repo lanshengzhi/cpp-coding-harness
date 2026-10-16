@@ -13,6 +13,7 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "support/EnvVarGuard.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PumpUntil.hpp"
@@ -665,4 +666,314 @@ TEST_CASE("Native TUI TUI mode switch rebinds extension listeners once with no r
     REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
     REQUIRE(run_result);
     CHECK(*run_result);
+}
+
+TEST_CASE("Native TUI InteractiveEngine resolves hardware cursor preference at startup",
+        "[coding_agent][tui][cursor][issue1037][spec]") {
+    tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
+    env_guard.unset();
+
+    // 1. Regular mode with default/empty config (cursor hidden)
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        auto created = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+        CHECK_FALSE(engine->show_hardware_cursor());
+        CHECK_FALSE(terminal.modes().cursor_visible);
+        // Valid IME target positioned at editor prompt even when hidden
+        CHECK(terminal.cursor().row > 0);
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+
+    // 2. Regular mode with PI_HARDWARE_CURSOR=1 env fallback
+    {
+        env_guard.set("1");
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        auto created = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+        CHECK(engine->show_hardware_cursor());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().row > 0);
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+
+    // 3. Explicit false wins over PI_HARDWARE_CURSOR=1
+    {
+        env_guard.set("1");
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"showHardwareCursor": false})");
+        auto created = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+        CHECK_FALSE(engine->show_hardware_cursor());
+        CHECK_FALSE(terminal.modes().cursor_visible);
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+
+    // 4. Fullscreen mode with explicit true
+    {
+        env_guard.unset();
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "fullscreen", "showHardwareCursor": true})");
+        auto created = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(terminal.modes().alternate_screen);
+        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+        CHECK(engine->show_hardware_cursor());
+        CHECK(terminal.modes().cursor_visible);
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+}
+
+TEST_CASE("Native TUI TUI mode switch preserves live hardware cursor preference in both directions",
+        "[coding_agent][tui][cursor][renderer-switch][issue1037][spec]") {
+    tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
+    env_guard.unset();
+
+    // 1. Regular -> Fullscreen with live preference true differing from setting (setting is false)
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"showHardwareCursor": false})");
+        auto created = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+        CHECK_FALSE(engine->show_hardware_cursor());
+        CHECK_FALSE(terminal.modes().cursor_visible);
+
+        // Dynamically toggle live preference to true
+        engine->set_show_hardware_cursor(true);
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return terminal.modes().cursor_visible; }));
+        CHECK(engine->show_hardware_cursor());
+
+        // Switch regular -> fullscreen: live preference true MUST transfer to the fullscreen root!
+        auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+        REQUIRE(switched);
+        REQUIRE(*switched);
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return terminal.modes().alternate_screen; }));
+
+        // Fullscreen root must retain the live preference (true), not the stored setting (false)
+        CHECK(engine->show_hardware_cursor());
+        CHECK(terminal.modes().cursor_visible);
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+
+    // 2. Fullscreen -> Regular with live preference false differing from setting (setting is true)
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "fullscreen", "showHardwareCursor": true})");
+        auto created = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(terminal.modes().alternate_screen);
+        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+        CHECK(engine->show_hardware_cursor());
+        CHECK(terminal.modes().cursor_visible);
+
+        // Dynamically toggle live preference to false
+        engine->set_show_hardware_cursor(false);
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return !terminal.modes().cursor_visible; }));
+        CHECK_FALSE(engine->show_hardware_cursor());
+
+        // Switch fullscreen -> regular: live preference false MUST transfer to the regular root!
+        auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+        REQUIRE(switched);
+        REQUIRE(*switched);
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return !terminal.modes().alternate_screen; }));
+
+        // Regular root must retain the live preference (false), not the stored setting (true)
+        CHECK_FALSE(engine->show_hardware_cursor());
+        CHECK_FALSE(terminal.modes().cursor_visible);
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+
+    // 3. Stored setting modified on disk is NOT re-read during switch
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"showHardwareCursor": true})");
+        auto created = runtime.run(
+                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+        CHECK(engine->show_hardware_cursor());
+        CHECK(terminal.modes().cursor_visible);
+
+        // Mutate the file on disk to false
+        config.write("settings.json", R"({"showHardwareCursor": false})");
+
+        // Switch regular -> fullscreen: switch must NOT re-read the setting file
+        auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+        REQUIRE(switched);
+        REQUIRE(*switched);
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return terminal.modes().alternate_screen; }));
+
+        CHECK(engine->show_hardware_cursor());
+        CHECK(terminal.modes().cursor_visible);
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
 }

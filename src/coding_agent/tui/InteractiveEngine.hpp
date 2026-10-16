@@ -165,6 +165,12 @@ public:
     /// The component holding focus on the live renderer (pi `getFocusedComponent()`).
     [[nodiscard]] cch::tui::Component* focus() const noexcept { return tui_ != nullptr ? tui_->focus() : nullptr; }
 
+    /// The hardware cursor preference on the live renderer (pi `getShowHardwareCursor()` / `setShowHardwareCursor()`).
+    [[nodiscard]] bool show_hardware_cursor() const noexcept {
+        return tui_ != nullptr ? tui_->show_hardware_cursor() : show_hardware_cursor_;
+    }
+    void set_show_hardware_cursor(bool enabled) noexcept;
+
 private:
     // ── Submission kinds (folded from the deleted InteractionPolicy) ──────
 
@@ -669,6 +675,7 @@ private:
     /// alternate buffer is cleared on entry.
     std::optional<cch::tui::TuiMainScreenRenderState> main_screen_render_state_;
     bool clear_on_shrink_{false};
+    bool show_hardware_cursor_{false};
     SlashCommandRouter slash_command_router_;
     std::atomic<bool> running_{false};
     std::stop_source stop_source_;
