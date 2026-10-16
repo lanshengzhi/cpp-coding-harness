@@ -322,7 +322,6 @@ public:
     void set_fullscreen_terminal_rows(std::size_t rows);
     void set_fullscreen(bool fullscreen) noexcept { fullscreen_ = fullscreen; }
 
-
 private:
     void record_callback_error(
         std::string message,

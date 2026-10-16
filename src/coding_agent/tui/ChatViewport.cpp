@@ -31,8 +31,8 @@ public:
 
     [[nodiscard]] support::ExpectedVoid set(std::unique_ptr<cch::tui::Component> editor) {
         if (!editor) {
-            return std::unexpected(support::make_error(
-                    support::ErrorCode::Validation, "Chat viewport editor cannot be null"));
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "Chat viewport editor cannot be null"));
         }
         if (editor_) {
             return std::unexpected(support::make_error(
@@ -53,8 +53,7 @@ std::unique_ptr<cch::tui::Component> ChatViewport::take_editor() {
 
 support::ExpectedVoid ChatViewport::set_editor(std::unique_ptr<cch::tui::Component> editor) {
     if (!editor_slot_) {
-        return std::unexpected(support::make_error(
-                support::ErrorCode::Validation, "Chat viewport has no editor slot"));
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "Chat viewport has no editor slot"));
     }
     if (auto restored = editor_slot_->set(std::move(editor)); !restored) return restored;
     return {};

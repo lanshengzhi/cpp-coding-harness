@@ -283,13 +283,13 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     if (tui_ == &fullscreen_host_->tui()) {
         fullscreen_host_->alt_screen().set_layout_root(std::move(fullscreen_viewport_->root));
     } else if (auto editor = fullscreen_viewport_->take_editor(); !editor) {
-        return fail_start(support::make_error(
-                support::ErrorCode::Unknown, "Fullscreen viewport did not retain its editor"));
+        return fail_start(
+                support::make_error(support::ErrorCode::Unknown, "Fullscreen viewport did not retain its editor"));
     } else if (auto attached = tui_->add_child(std::move(editor)); !attached) {
         return fail_start(attached.error());
     }
-    if (view_ == nullptr) return fail_start(support::make_error(
-            support::ErrorCode::Unknown, "Interactive view construction failed"));
+    if (view_ == nullptr)
+        return fail_start(support::make_error(support::ErrorCode::Unknown, "Interactive view construction failed"));
     if (!booting) {
         if (session_ == nullptr) {
             return fail_start(support::make_error(
@@ -457,8 +457,8 @@ support::ExpectedVoid InteractiveEngine::mount_selected_root(
 }
 
 support::Expected<bool> InteractiveEngine::switch_tui_mode(coding_agent::TuiMode mode) {
-    const auto previous_mode = tui_ == main_screen_.get() ? coding_agent::TuiMode::Regular
-                                                          : coding_agent::TuiMode::Fullscreen;
+    const auto previous_mode =
+            tui_ == main_screen_.get() ? coding_agent::TuiMode::Regular : coding_agent::TuiMode::Fullscreen;
     // pi orders the same-mode no-op before the overlay guard, so re-selecting
     // the live mode always succeeds.
     if (mode == previous_mode) return true;

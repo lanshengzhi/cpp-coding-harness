@@ -241,8 +241,7 @@ private:
     /// Mount the retained view and every component captured from the retired
     /// root on the selected root (pi `mountInteractiveTui`,
     /// `interactive-mode.ts:868-875`).
-    [[nodiscard]] support::ExpectedVoid mount_selected_root(
-            std::vector<std::unique_ptr<cch::tui::Component>> children);
+    [[nodiscard]] support::ExpectedVoid mount_selected_root(std::vector<std::unique_ptr<cch::tui::Component>> children);
 
     /// pi `switchTuiMode` (`interactive-mode.ts:883-933`): replace the live
     /// renderer while keeping the one `InteractiveView` instance, its editor
@@ -655,7 +654,7 @@ private:
     /// SIGTSTP/SIGCONT suspend flow (pi `handleCtrlZ`); created at start.
     std::shared_ptr<SuspendController> suspend_controller_;
     std::unique_ptr<cch::tui::Component> active_overlay_placement_;
-    InteractiveView* view_{nullptr}; // aliases the current root's view instance.
+    InteractiveView* view_{nullptr};             // aliases the current root's view instance.
     cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_ and is null across switches.
     cch::tui::OverlayHandle active_overlay_handle_;
     std::optional<ChatViewport> fullscreen_viewport_;

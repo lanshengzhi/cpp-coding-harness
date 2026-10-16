@@ -134,7 +134,7 @@ TEST_CASE("SettingsSelector renders the #327 subset items with pi labels and res
         std::string::npos);
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     CHECK(render_screen(selector).find("Interface layout; regular mode uses the terminal's normal scrollback") !=
-        std::string::npos);
+            std::string::npos);
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     CHECK(render_screen(selector).find("Color theme for the interface") !=
         std::string::npos);

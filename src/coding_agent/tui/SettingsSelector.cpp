@@ -289,11 +289,11 @@ private:
         .control = cch::tui::SettingSubmenu{},
     });
     items.push_back({
-        .id = "tui-mode",
-        .label = "TUI mode",
-        .description = "Interface layout; regular mode uses the terminal's normal scrollback",
-        .current_value = config.current_tui_mode,
-        .control = cch::tui::SettingValues{{"regular", "fullscreen"}},
+            .id = "tui-mode",
+            .label = "TUI mode",
+            .description = "Interface layout; regular mode uses the terminal's normal scrollback",
+            .current_value = config.current_tui_mode,
+            .control = cch::tui::SettingValues{{"regular", "fullscreen"}},
     });
     items.push_back({
         .id = "theme",
