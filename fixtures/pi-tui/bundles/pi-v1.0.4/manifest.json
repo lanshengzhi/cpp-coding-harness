@@ -77,6 +77,10 @@
       {
         "path": "capture/cli-tui-mode-scenarios.mts",
         "sha256": "787d0822f1f26ebca1c2a5b448fa11cf43676577b298ed5b90108e803c7022b3"
+      },
+      {
+        "path": "capture/chat-viewport-scenarios.mts",
+        "sha256": "2d663a377bc38738c6bd084fc9e63ad8f3561b0a8947a69506d8903a4a3f0fa6"
       }
     ]
   },
@@ -350,6 +354,22 @@
         "packages/coding-agent/src/core/settings-manager.ts:1348",
         "packages/coding-agent/src/core/settings-manager.ts:1352",
         "packages/coding-agent/src/modes/interactive/interactive-mode.ts:604"
+      ]
+    },
+    {
+      "path": "chat-viewport.json",
+      "family": "chat-viewport",
+      "bytes": 118171,
+      "sha256": "0ca3074ce0f19de95365262a0a93de6fefa6136bb1dd1851c830e3ac8d4231ec",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/chat-viewport.ts:createChatViewport",
+        "packages/coding-agent/test/chat-viewport.test.ts:createChatViewport",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:setLayoutRoot,document,pendingMessages,status,editor,footer,widgetsAbove,widgetsBelow",
+        "packages/tui/src/components/scroll-view.ts:ScrollView,scrollTop,viewportHeight,isFollowingEnd,scrollbar,isScrollbarVisible",
+        "packages/tui/src/components/v-stack.ts:VStack",
+        "packages/tui/src/components/stack.ts:allocateStackSizes,visibleStackEntries",
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen,setLayoutRoot,viewportTop,isFollowingOutput",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.sendInput,VirtualTerminal.resize,VirtualTerminal.waitForRender"
       ]
     }
   ]
