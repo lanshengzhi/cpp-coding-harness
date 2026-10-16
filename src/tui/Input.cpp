@@ -155,10 +155,10 @@ struct Input::Impl {
             true);
         if (!before) return std::unexpected(before.error());
         return VisibleWindow{
-            .text = std::move(*visible),
-            .before_width = visible_width(*before),
-            .cursor_offset = before->size(),
-            .start_column = start_col,
+                .text = std::move(*visible),
+                .before_width = visible_width(*before),
+                .cursor_offset = before->size(),
+                .start_column = start_col,
         };
     }
 };

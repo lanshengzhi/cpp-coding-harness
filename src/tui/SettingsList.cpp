@@ -482,10 +482,10 @@ std::optional<MouseEventResult> SettingsList::handle_mouse(const MouseEvent& eve
     if (event.type == MouseEventType::Wheel && event.wheel_delta && *event.wheel_delta != 0) {
         const auto delta = *event.wheel_delta < 0 ? std::ptrdiff_t{-1} : std::ptrdiff_t{1};
         const auto previous = impl->selected_index;
-        impl->selected_index = static_cast<std::size_t>(std::clamp<std::ptrdiff_t>(
-                static_cast<std::ptrdiff_t>(impl->selected_index) + delta,
-                0,
-                static_cast<std::ptrdiff_t>(displayed.size() - 1)));
+        impl->selected_index = static_cast<std::size_t>(
+                std::clamp<std::ptrdiff_t>(static_cast<std::ptrdiff_t>(impl->selected_index) + delta,
+                        0,
+                        static_cast<std::ptrdiff_t>(displayed.size() - 1)));
         return MouseEventResult{.handled = true, .render = impl->selected_index != previous};
     }
     // Hover must not change selection: the visible range is centered on it.
@@ -498,8 +498,7 @@ std::optional<MouseEventResult> SettingsList::handle_mouse(const MouseEvent& eve
     const auto row_offset = impl->search_enabled ? std::ptrdiff_t{2} : std::ptrdiff_t{0};
     const auto range = detail::centered_visible_range(displayed.size(), impl->selected_index, impl->max_visible);
     const auto item_index = static_cast<std::ptrdiff_t>(range.begin) + event.y - row_offset;
-    if (item_index < static_cast<std::ptrdiff_t>(range.begin) ||
-            item_index >= static_cast<std::ptrdiff_t>(range.end)) {
+    if (item_index < static_cast<std::ptrdiff_t>(range.begin) || item_index >= static_cast<std::ptrdiff_t>(range.end)) {
         return std::nullopt;
     }
     const auto index = static_cast<std::size_t>(item_index);

@@ -914,15 +914,6 @@ std::optional<int> AltScreen::search_navigation_direction_at(std::ptrdiff_t x, s
             static_cast<std::size_t>(x - static_cast<std::ptrdiff_t>(bounds->col)));
 }
 
-bool AltScreen::search_overlay_contains(std::ptrdiff_t x, std::ptrdiff_t y) const {
-    if (!active_search_ || !active_search_->overlay) return false;
-    const auto bounds = active_search_->overlay->get_bounds();
-    return bounds && x >= static_cast<std::ptrdiff_t>(bounds->col) &&
-           x < static_cast<std::ptrdiff_t>(bounds->col + bounds->width) &&
-           y >= static_cast<std::ptrdiff_t>(bounds->row) &&
-           y < static_cast<std::ptrdiff_t>(bounds->row + bounds->height);
-}
-
 bool AltScreen::handle_search_mouse_report(const detail::MousePacket& packet) {
     if (!active_search_) return false;
     const auto direction = search_navigation_direction_at(packet.x, packet.y);
@@ -1816,14 +1807,15 @@ bool AltScreen::handle_viewport_input(std::string_view data) {
 
     if (const auto packet = detail::parse_mouse_packet(data)) {
         if (packet->kind == detail::MousePacket::Kind::Wheel) {
-            if (should_defer_viewport_input_to_overlay()) return false;
-            handle_wheel_report(*packet);
+            if (!handle_wheel_report(*packet)) return false;
         } else {
             const auto event = create_mouse_event(*packet, detail::pointer_event_type(*packet));
             if (handle_gesture_mouse_report(*packet, event)) return true;
             if (handle_search_mouse_report(*packet)) return true;
-            if (should_defer_viewport_input_to_overlay() && !search_overlay_contains(packet->x, packet->y))
-                return false;
+            // Frozen defers only the wheel and the viewport keys to a focused
+            // overlay (pi `tui-alt-screen.ts:710,741`). A pointer report always
+            // reaches the overlay walk, so a click inside an overlay is a
+            // component event even while that overlay owns keyboard focus.
             handle_mouse_report(*packet);
         }
         return true;
@@ -1870,18 +1862,26 @@ MouseEvent AltScreen::create_mouse_event(const detail::MousePacket& packet,
     return detail::create_mouse_event(packet, type, dimensions.columns, dimensions.rows, wheel_delta, click_count);
 }
 
-void AltScreen::handle_wheel_report(const detail::MousePacket& packet) {
+bool AltScreen::handle_wheel_report(const detail::MousePacket& packet) {
     const auto lines = next_wheel_scroll_lines(packet.direction);
     // Frozen applies the Alt multiplier to the accelerated line count before
     // layout dispatch (pi `tui-alt-screen.ts:699-704`, SGR bit 3).
     const auto multiplier = (packet.button & 8) != 0 ? std::ptrdiff_t{5} : std::ptrdiff_t{1};
     const auto delta = packet.direction * lines * multiplier;
     const auto event = create_mouse_event(packet, MouseEventType::Wheel, delta);
-    if (auto result = dispatch_mouse_to_layout(event)) {
+    // Frozen offers the wheel to the overlay under the pointer first, then to
+    // the layout, and only routes it to the viewports when neither answered
+    // (pi `tui-alt-screen.ts:705-712`).
+    const auto overlay = dispatch_mouse_to_overlay(event);
+    auto result = overlay.result;
+    if (!result && !overlay.hit) result = dispatch_mouse_to_layout(event);
+    if (result) {
         if (apply_mouse_dispatch_result(event, *result)) request_render();
-        return;
+        return true;
     }
+    if (should_defer_viewport_input_to_overlay()) return false;
     route_wheel(event, delta);
+    return true;
 }
 
 void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
@@ -1889,19 +1889,30 @@ void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
     const auto event = create_mouse_event(packet, type);
     if (selection_press_active_ && handle_selection_mouse_report(packet)) return;
     if (handle_gesture_mouse_report(packet, event)) return;
-    if (handle_scroll_to_end_indicator_mouse_report(packet)) return;
 
-    // A report no gesture owns moves the scrollbar hover before any component
-    // sees it (pi `handleMouseEvent`).
-    const bool scrollbar_handled = handle_scrollbar_mouse_report(packet);
-    if (!scrollbar_drag_) update_scrollbar_hover(packet.x, packet.y);
-    if (scrollbar_handled) return;
+    // Frozen offers the report to the overlay under the pointer first; the
+    // scroll-to-end indicator and the scrollbars only see a report no overlay
+    // covers, and a covered pointer outside every scrollbar ends the hover
+    // (pi `tui-alt-screen.ts:920-940`).
+    const auto overlay = dispatch_mouse_to_overlay(event);
+    if (!overlay.hit) {
+        if (handle_scroll_to_end_indicator_mouse_report(packet)) return;
+        // A report no gesture owns moves the scrollbar hover before any
+        // component sees it (pi `handleMouseEvent`).
+        const bool scrollbar_handled = handle_scrollbar_mouse_report(packet);
+        if (!scrollbar_drag_) update_scrollbar_hover(packet.x, packet.y);
+        if (scrollbar_handled) return;
+    } else {
+        stop_scrollbar_hover();
+    }
 
-    if (auto result = dispatch_mouse_to_layout(event)) {
+    auto result = overlay.result;
+    if (!result && !overlay.hit) result = dispatch_mouse_to_layout(event);
+    if (result) {
         const bool render = apply_mouse_dispatch_result(event, *result);
         if (type == MouseEventType::Press) {
             clear_text_selection();
-            mouse_press_target_ = result->target;
+            mouse_press_target_ = anchor_gesture_target(result->target, result->host_target);
             mouse_press_point_ = std::pair{packet.x, packet.y};
             mouse_press_moved_ = false;
         }
@@ -1913,6 +1924,26 @@ void AltScreen::handle_mouse_report(const detail::MousePacket& packet) {
     if (handle_selection_mouse_report(packet)) return;
     // Unclaimed pointer reports are consumed by the fullscreen root, which is
     // also the owner of text selection on terminal-rendered content.
+}
+
+AltScreen::OverlayMouseDispatch AltScreen::dispatch_mouse_to_overlay(const MouseEvent& event) {
+    if (compositor_ == nullptr) return {};
+    auto* overlay = compositor_->overlay_at(event.screen_x, event.screen_y, terminal_.dimensions());
+    if (overlay == nullptr) return {};
+    const auto bounds = compositor_->bounds(overlay);
+    if (!bounds) return {};
+
+    auto local = event;
+    local.x = event.screen_x - static_cast<std::ptrdiff_t>(bounds->col);
+    local.y = event.screen_y - static_cast<std::ptrdiff_t>(bounds->row);
+    local.width = bounds->width;
+    local.height = bounds->height;
+    auto result = dispatch_mouse_event(*overlay, local);
+    if (!result) return OverlayMouseDispatch{.hit = true};
+    // Frozen pins the hit overlay as the focus target of any focus answer, so
+    // the container keeps keyboard focus while a nested control is clicked.
+    if (result->focus) result->focus_target = overlay;
+    return OverlayMouseDispatch{.hit = true, .result = std::move(result)};
 }
 
 bool AltScreen::handle_right_click_paste(const detail::MousePacket& packet) {
@@ -2208,11 +2239,18 @@ bool AltScreen::apply_mouse_dispatch_result(const MouseEvent& event, const Mouse
     const bool can_focus = focus_target != nullptr && owns(focus_target);
     const bool focus_changed = result.focus && can_focus && focused_ != focus_target;
     if (result.focus && can_focus) apply_focus(focus_target);
-    if (result.capture) mouse_capture_ = result.target;
+    if (result.capture) mouse_capture_ = anchor_gesture_target(result.target, result.host_target);
     // Move and release default to no render; press, click, drag and wheel default
     // to one, and a handler that answered `render` overrides both (pi
     // `tui-alt-screen.ts:847-856`).
     return result.render.value_or(focus_changed || mouse_event_renders_by_default(event.type));
+}
+
+MouseDispatchTarget AltScreen::anchor_gesture_target(
+        const MouseDispatchTarget& target, const MouseDispatchTarget& host) const {
+    if (owns(target.component)) return target;
+    if (host.component != nullptr && owns(host.component)) return host;
+    return target;
 }
 
 std::size_t AltScreen::next_component_click_count(

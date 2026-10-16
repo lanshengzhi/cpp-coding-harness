@@ -256,6 +256,19 @@ InputAdmissionOutcome Overlay::handle_input(const InputEventVariant& input) {
     return InputAdmissionOutcome::Consumed;
 }
 
+std::optional<MouseDispatchResult> Overlay::handle_mouse_forwarded(const MouseEvent& event) {
+    // Frozen resolves an overlay hit to the overlay's own component and keeps
+    // that component as the keyboard focus target (`tui.ts:874-883`), so the
+    // overlay forwards the event to the child keys reach instead of letting the
+    // nested control claim focus (pi `dispatchMouseEvent`). A non-capturing
+    // overlay is not filtered here: frozen's overlay walk covers every visible
+    // overlay (`tui.ts:862-880`), whatever its capture options.
+    if (impl_->focused_child_ == nullptr) return std::nullopt;
+    auto* child = dynamic_cast<Component*>(impl_->focused_child_);
+    if (child == nullptr) return std::nullopt;
+    return dispatch_mouse_event(*child, event);
+}
+
 void Overlay::set_focused(bool focused) {
     impl_->focused_ = focused;
     if (focused && impl_->focused_child_ == nullptr) {

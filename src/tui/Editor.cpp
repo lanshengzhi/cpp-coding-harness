@@ -1062,8 +1062,7 @@ std::optional<MouseEventResult> Editor::handle_mouse(const MouseEvent& event) {
         target_index = last_grapheme_index;
     }
 
-    impl.buffer.set_cursor(detail::BufferCursor{
-            .line = visual_line.logical_line,
+    impl.buffer.set_cursor(detail::BufferCursor{.line = visual_line.logical_line,
             .column = visual_line_start_column(impl.buffer.document(), visual_line) + target_index});
     // pi editor.ts:689-691: a click leaves history browsing and re-queries an
     // open completion menu for the new cursor position.

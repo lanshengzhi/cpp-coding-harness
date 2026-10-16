@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/tui/Component.hpp>
+#include <cch/tui/Mouse.hpp>
 
 #include <cch/support/Error.hpp>
 
@@ -97,7 +98,7 @@ struct OverlayOptions {
 /// Overlays support percentage and absolute sizing, independent row and column
 /// placement, viewport margins, responsive visibility, and deterministic
 /// clipping to terminal bounds.
-class Overlay final : public Component, public InputHandler, public Focusable {
+class Overlay final : public Component, public InputHandler, public Focusable, public MouseHandler {
 public:
     explicit Overlay(OverlayOptions options = {});
     Overlay(Overlay&&) noexcept;
@@ -130,6 +131,9 @@ public:
 
     // InputHandler (forwards to focused child)
     InputAdmissionOutcome handle_input(const InputEventVariant& input) override;
+
+    // MouseHandler (forwards to the child keys reach)
+    [[nodiscard]] std::optional<MouseDispatchResult> handle_mouse_forwarded(const MouseEvent& event) override;
 
     // Focusable
     void set_focused(bool focused) override;

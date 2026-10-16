@@ -353,10 +353,10 @@ std::optional<MouseEventResult> SelectList::handle_mouse(const MouseEvent& event
     if (event.type == MouseEventType::Wheel && event.wheel_delta && *event.wheel_delta != 0) {
         const auto delta = *event.wheel_delta < 0 ? std::ptrdiff_t{-1} : std::ptrdiff_t{1};
         const auto previous = impl->selected_index;
-        impl->selected_index = static_cast<std::size_t>(std::clamp<std::ptrdiff_t>(
-                static_cast<std::ptrdiff_t>(impl->selected_index) + delta,
-                0,
-                static_cast<std::ptrdiff_t>(impl->items.size() - 1)));
+        impl->selected_index = static_cast<std::size_t>(
+                std::clamp<std::ptrdiff_t>(static_cast<std::ptrdiff_t>(impl->selected_index) + delta,
+                        0,
+                        static_cast<std::ptrdiff_t>(impl->items.size() - 1)));
         const bool changed = impl->selected_index != previous;
         if (changed) impl->notify_selection_change();
         return MouseEventResult{.handled = true, .render = changed};
@@ -368,8 +368,7 @@ std::optional<MouseEventResult> SelectList::handle_mouse(const MouseEvent& event
     }
     const auto range = detail::centered_visible_range(impl->items.size(), impl->selected_index, impl->max_visible);
     const auto item_index = static_cast<std::ptrdiff_t>(range.begin) + event.y;
-    if (item_index < static_cast<std::ptrdiff_t>(range.begin) ||
-            item_index >= static_cast<std::ptrdiff_t>(range.end)) {
+    if (item_index < static_cast<std::ptrdiff_t>(range.begin) || item_index >= static_cast<std::ptrdiff_t>(range.end)) {
         return std::nullopt;
     }
     const auto index = static_cast<std::size_t>(item_index);

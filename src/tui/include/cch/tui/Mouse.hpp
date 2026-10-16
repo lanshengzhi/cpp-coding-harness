@@ -65,6 +65,11 @@ struct MouseDispatchTarget {
 struct MouseDispatchResult {
     bool handled{true};
     MouseDispatchTarget target{};
+    /// The forwarding host's own dispatch target when this result came from a
+    /// host that forwarded to a child. pi holds the deep child object; a C++
+    /// host can outlive a privately held child, so this lets a gesture
+    /// re-resolve the live child instead of a stale pointer.
+    MouseDispatchTarget host_target{};
     /// Keyboard focus target, which may be a delegating parent container.
     Component* focus_target{nullptr};
     bool capture{false};
