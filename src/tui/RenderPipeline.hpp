@@ -28,6 +28,28 @@
 
 namespace cch::tui::detail {
 
+/// Frozen offscreen Kitty cache caps (pi tui-alt-screen.ts
+/// `MAX_CACHED_OFFSCREEN_KITTY_*`): entries kept offscreen before the oldest
+/// are deleted by image id.
+inline constexpr std::size_t kMaxCachedOffscreenKittyImages = 16;
+inline constexpr std::size_t kMaxCachedOffscreenKittyTransmissionBytes = 32 * 1024 * 1024;
+inline constexpr std::size_t kMaxCachedOffscreenKittyDecodedBytes = 64 * 1024 * 1024;
+
+/// One prepared fullscreen frame: the row buffer with image anchors, plus the
+/// frozen cleanup bytes that precede the row writes.
+struct FullscreenImageFrame {
+    std::vector<std::string> lines;
+    /// Frozen `clearImages`: delete every cached resource on a full redraw
+    /// when nothing was uploaded yet, every placement once something was, and
+    /// placements only on an image-anchor redraw. Empty when the frame keeps
+    /// its placements.
+    std::string clear_bytes;
+    /// Image-id deletions for cache entries evicted past the frozen caps.
+    std::string deletion_bytes;
+    /// Whether changed image anchors force a full row rewrite.
+    bool images_need_redraw{false};
+};
+
 /// Owns the state and terminal effects for differential frame rendering.
 class RenderPipeline final {
 public:
@@ -63,6 +85,21 @@ public:
             bool clear_on_shrink,
             std::optional<CursorPosition> cursor_location);
 
+    /// The fullscreen root's frozen image stage (#1012): replace each visible
+    /// placement's row with its Kitty transmission or `a=p` placement-only
+    /// reuse, evict offscreen uploads past the frozen caps, and report the
+    /// clear bytes and full-row rewrite a changed anchor requires. A non-Kitty
+    /// session (including the fullscreen iTerm2 fallback, which suppresses
+    /// images for the whole session) writes the fallback text at each anchor
+    /// row and places nothing. `full_redraw` maps the root's full repaint.
+    [[nodiscard]] FullscreenImageFrame prepare_fullscreen_images(std::vector<std::string> lines,
+            const std::vector<InlineImageRenderRegion>& images,
+            InlineImageProtocol protocol,
+            bool full_redraw);
+    /// Drop the uploaded-placement cache at a session boundary
+    /// (pi `beforeTerminalStart`/`beforeTerminalStop`).
+    void clear_image_placements() noexcept;
+
 private:
     void compose_images(std::vector<std::string>& lines,
             const std::vector<InlineImageRenderRegion>& images,
@@ -78,6 +115,22 @@ private:
         TerminalImageHandle handle;
         CellRegion region;
         std::uint64_t revision{0};
+    };
+
+    /// One cached fullscreen upload: the session upload id, the anchor command
+    /// of its last prepared frame, and the frozen eviction accounting.
+    struct FullscreenImagePlacement {
+        TerminalImageHandle handle;
+        std::uint64_t revision{0};
+        std::size_t transmission_bytes{0};
+        std::size_t decoded_bytes{0};
+        std::size_t row{0};
+        std::size_t column{0};
+        std::string anchor;
+        /// Visible in the previous prepared frame: an anchor that stops being
+        /// visible forces a redraw so its old cells are rewritten.
+        bool anchored{false};
+        bool visible{false};
     };
 
     Terminal& terminal_; // must outlive this pipeline.
@@ -96,6 +149,10 @@ private:
     AdmittedFrame admitted_{};
     std::vector<std::uint32_t> previous_kitty_image_ids_;
     std::unordered_map<std::uint64_t, ImagePlacementState> image_placements_;
+    std::unordered_map<std::uint64_t, FullscreenImagePlacement> fullscreen_image_placements_;
+    /// Upload ids in frozen LRU order (oldest first): visible placements move
+    /// to the back on each redraw frame, exactly like the frozen Map order.
+    std::vector<std::uint64_t> fullscreen_image_order_;
     bool restored_state_pending_start_{false};
     std::size_t full_redraws_{0};
     TuiWriteAccounting write_accounting_{};

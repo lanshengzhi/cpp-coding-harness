@@ -192,6 +192,29 @@ struct CellSizeInputResult {
     std::string pending,
     std::string_view input);
 
+struct KittyImageCrop {
+    std::size_t source_y{0};
+    std::size_t source_height{0};
+    std::size_t rows{0};
+
+    bool operator==(const KittyImageCrop&) const = default;
+};
+
+/// Frozen `cropKittyImageLine` source rectangle (pi terminal-image.ts:452-463)
+/// for a placement that shows `visible_rows` of its `total_rows` destination
+/// rows with `hidden_rows` scrolled or clipped off the top. `rows == 0` means
+/// frozen leaves the source rectangle unset (no `y=`/`h=`/`r=`).
+[[nodiscard]] KittyImageCrop kitty_image_crop(
+    std::size_t pixel_height,
+    std::size_t total_rows,
+    std::size_t hidden_rows,
+    std::size_t visible_rows);
+
+/// Kitty placement-only command for a resource already uploaded in this
+/// terminal session (pi `getKittyImagePlacement`): `a=p,q=2` with the
+/// transmission's placement controls and the same crop controls as the line.
+[[nodiscard]] std::string encode_kitty_image_placement(const TerminalImage& image, TerminalImageHandle handle);
+
 [[nodiscard]] bool cell_regions_intersect(
     const CellRegion& left,
     const CellRegion& right);

@@ -244,8 +244,67 @@ TEST_CASE("Kitty helper allocation and deletion commands map metadata lifecycle 
     CHECK(cch::tui::is_image_line("prefix\x1b_Ga=T;data\x1b\\"));
 }
 
-TEST_CASE("hyperlink emits pi-exact OSC 8 sequences", "[tui][image][terminal-image][issue385][compat-pi]") {
-    CHECK(cch::tui::hyperlink("click me", "https://example.com") ==
+TEST_CASE("kitty crop geometry follows frozen cropKittyImageLine",
+        "[tui][image][terminal-image][issue1012][compat-pi]") {
+    using cch::tui::detail::kitty_image_crop;
+
+    // The frozen pin: a 3-row placement whose top two rows scrolled away shows
+    // only the last third of a 100px source (terminal-image.test.ts).
+    CHECK(kitty_image_crop(100, 3, 2, 1) == (cch::tui::detail::KittyImageCrop{66, 34, 1}));
+    // A bottom clip (no hidden rows) crops the source end instead.
+    CHECK(kitty_image_crop(100, 3, 0, 2) == (cch::tui::detail::KittyImageCrop{0, 67, 2}));
+    // Distinguishable bands: a 64px / 4-row source scrolled by one row.
+    CHECK(kitty_image_crop(64, 4, 1, 1) == (cch::tui::detail::KittyImageCrop{16, 16, 1}));
+    CHECK(kitty_image_crop(64, 4, 2, 2) == (cch::tui::detail::KittyImageCrop{32, 32, 2}));
+    CHECK(kitty_image_crop(64, 4, 3, 1) == (cch::tui::detail::KittyImageCrop{48, 16, 1}));
+    // A source shorter than one destination row still reports at least one
+    // pixel (frozen `Math.max(1, ...)`).
+    CHECK(kitty_image_crop(4, 4, 3, 1) == (cch::tui::detail::KittyImageCrop{3, 1, 1}));
+
+    // Frozen no-ops: a fully visible placement, a hidden count outside the
+    // placement, an empty destination, and an unknown total all stay unset.
+    CHECK(kitty_image_crop(100, 3, 0, 3) == cch::tui::detail::KittyImageCrop{});
+    CHECK(kitty_image_crop(100, 3, 3, 1) == cch::tui::detail::KittyImageCrop{});
+    CHECK(kitty_image_crop(100, 3, 4, 1) == cch::tui::detail::KittyImageCrop{});
+    CHECK(kitty_image_crop(100, 3, 1, 0) == cch::tui::detail::KittyImageCrop{});
+    CHECK(kitty_image_crop(100, 3, 0, 4) == cch::tui::detail::KittyImageCrop{});
+}
+
+TEST_CASE("kitty placement commands carry the frozen crop and reuse controls",
+        "[tui][image][terminal-image][issue1012][compat-pi]") {
+    cch::tui::TerminalImage image{
+            .encoded_data = "QUJDRA==",
+            .mime_type = "image/png",
+            .pixel_width = 100,
+            .pixel_height = 100,
+            .resource_id = 42,
+            .revision = 7,
+            .region = cch::tui::CellRegion{.column = 0, .row = 2, .columns = 3, .rows = 3},
+            .source_rows = 3,
+            .source_row_offset = 2,
+    };
+
+    // A clipped placement drops the destination `r=` and appends `y=,h=,r=`.
+    auto clipped = cch::tui::detail::encode_terminal_image(cch::tui::InlineImageProtocol::Kitty, image,
+            cch::tui::TerminalImageHandle{.value = 42});
+    REQUIRE(clipped);
+    CHECK(*clipped == "\x1b_Ga=T,f=100,q=2,C=1,c=3,i=42,y=66,h=34,r=1;QUJDRA==\x1b\\");
+    CHECK(cch::tui::detail::encode_kitty_image_placement(image, cch::tui::TerminalImageHandle{.value = 42}) ==
+            "\x1b_Ga=p,q=2,C=1,c=3,i=42,y=66,h=34,r=1\x1b\\");
+
+    // An uncropped placement keeps the destination row count and reuses only
+    // the transmission's placement controls.
+    image.region.rows = 3;
+    image.source_row_offset = 0;
+    auto full = cch::tui::detail::encode_terminal_image(cch::tui::InlineImageProtocol::Kitty, image,
+            cch::tui::TerminalImageHandle{.value = 42});
+    REQUIRE(full);
+    CHECK(*full == "\x1b_Ga=T,f=100,q=2,C=1,c=3,r=3,i=42;QUJDRA==\x1b\\");
+    CHECK(cch::tui::detail::encode_kitty_image_placement(image, cch::tui::TerminalImageHandle{.value = 42}) ==
+            "\x1b_Ga=p,q=2,C=1,c=3,r=3,i=42\x1b\\");
+}
+
+TEST_CASE("hyperlink emits pi-exact OSC 8 sequences", "[tui][image][terminal-image][issue385][compat-pi]") {    CHECK(cch::tui::hyperlink("click me", "https://example.com") ==
         "\x1b]8;;https://example.com\x1b\\click me\x1b]8;;\x1b\\");
     CHECK(cch::tui::hyperlink("", "https://example.com") ==
         "\x1b]8;;https://example.com\x1b\\\x1b]8;;\x1b\\");

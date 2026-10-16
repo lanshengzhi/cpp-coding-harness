@@ -176,6 +176,7 @@ support::Expected<RenderResult> Image::render(std::size_t width) {
                                 .columns = default_geometry.columns,
                                 .rows = default_geometry.rows,
                         },
+                .source_rows = default_geometry.rows,
                 .rows_reserved_in_lines = true,
         });
         output.lines.assign(default_geometry.rows, std::string{});

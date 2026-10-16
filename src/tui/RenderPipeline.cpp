@@ -762,6 +762,160 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
     return finish(support::ExpectedVoid{});
 }
 
+void RenderPipeline::clear_image_placements() noexcept {
+    fullscreen_image_placements_.clear();
+    fullscreen_image_order_.clear();
+}
+
+FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(
+        std::vector<std::string> lines,
+        const std::vector<InlineImageRenderRegion>& images,
+        InlineImageProtocol protocol,
+        bool full_redraw) {
+    FullscreenImageFrame frame{
+            .lines = std::move(lines), .clear_bytes = {}, .deletion_bytes = {}, .images_need_redraw = false};
+    if (protocol != InlineImageProtocol::Kitty) {
+        // Frozen fullscreen sessions on iTerm2 null out the image capability
+        // for the whole session: the component's text fallback shows and no
+        // image sequence is emitted (pi `beforeTerminalStart`).
+        for (const auto& image : images) {
+            if (image.region.row < frame.lines.size()) {
+                frame.lines[image.region.row] = image.fallback_text;
+            }
+        }
+        return frame;
+    }
+
+    for (auto& [resource_id, placement] : fullscreen_image_placements_) placement.visible = false;
+    bool need_redraw = false;
+    std::vector<std::uint64_t> visible_resources;
+    visible_resources.reserve(images.size());
+    for (const auto& image : images) {
+        if (image.region.columns == 0 || image.region.rows == 0) continue;
+        if (image.region.row >= frame.lines.size()) continue;
+        if (frame.lines.size() < image.region.row + image.region.rows) {
+            frame.lines.resize(image.region.row + image.region.rows);
+        }
+
+        std::optional<std::string_view> filename;
+        if (image.filename) filename = *image.filename;
+        TerminalImage term_img{
+                .encoded_data = image.encoded_data,
+                .mime_type = image.mime_type,
+                .filename = filename,
+                .pixel_width = image.pixel_width,
+                .pixel_height = image.pixel_height,
+                .resource_id = image.resource_id,
+                .revision = image.revision,
+                .region = image.region,
+                .source_rows = image.source_rows,
+                .source_row_offset = image.source_row_offset,
+        };
+
+        if (image.resource_id == 0) {
+            // No session identity to reuse: frozen transmits and places again,
+            // and the changed anchor forces the full rewrite.
+            const auto handle = allocate_image_id();
+            auto encoded = detail::encode_terminal_image(protocol, term_img, handle);
+            if (!encoded) continue;
+            frame.lines[image.region.row] = std::string(image.region.column, ' ') + *encoded;
+            for (std::size_t row = image.region.row + 1; row < image.region.row + image.region.rows; ++row) {
+                frame.lines[row].clear();
+            }
+            need_redraw = true;
+            continue;
+        }
+
+        const auto cached = fullscreen_image_placements_.find(image.resource_id);
+        std::string anchor;
+        if (cached != fullscreen_image_placements_.end() && cached->second.revision == image.revision) {
+            anchor = detail::encode_kitty_image_placement(term_img, cached->second.handle);
+        } else {
+            const auto handle = cached != fullscreen_image_placements_.end()
+                    ? cached->second.handle
+                    : allocate_image_id();
+            auto encoded = detail::encode_terminal_image(protocol, term_img, handle);
+            if (!encoded) continue;
+            auto& placement = fullscreen_image_placements_[image.resource_id];
+            placement.handle = handle;
+            placement.revision = image.revision;
+            placement.transmission_bytes = encoded->size();
+            placement.decoded_bytes = image.pixel_width * image.pixel_height * 4;
+            anchor = std::move(*encoded);
+        }
+
+        auto& placement = fullscreen_image_placements_[image.resource_id];
+        const bool moved = placement.row != image.region.row || placement.column != image.region.column;
+        if (!placement.anchored || moved || placement.anchor != anchor) need_redraw = true;
+        placement.anchor = anchor;
+        placement.row = image.region.row;
+        placement.column = image.region.column;
+        placement.visible = true;
+        visible_resources.push_back(image.resource_id);
+
+        frame.lines[image.region.row] = std::string(image.region.column, ' ') + anchor;
+        for (std::size_t row = image.region.row + 1; row < image.region.row + image.region.rows; ++row) {
+            frame.lines[row].clear();
+        }
+    }
+
+    for (const auto& [resource_id, placement] : fullscreen_image_placements_) {
+        if (placement.anchored && !placement.visible) need_redraw = true;
+    }
+    for (auto& [resource_id, placement] : fullscreen_image_placements_) placement.anchored = placement.visible;
+
+    if (full_redraw) {
+        frame.clear_bytes = fullscreen_image_placements_.empty() ? delete_all_kitty_images()
+                                                                 : delete_all_kitty_placements();
+    } else if (need_redraw) {
+        frame.clear_bytes = delete_all_kitty_placements();
+    }
+    frame.images_need_redraw = need_redraw;
+    if (!full_redraw && !need_redraw) {
+        // Frozen never calls prepareKittyScreen when no image row changed, so
+        // the cache keeps its order and nothing is evicted.
+        return frame;
+    }
+
+    for (const auto resource_id : visible_resources) {
+        std::erase(fullscreen_image_order_, resource_id);
+        fullscreen_image_order_.push_back(resource_id);
+    }
+
+    std::size_t offscreen_count = 0;
+    std::size_t transmission_bytes = 0;
+    std::size_t decoded_bytes = 0;
+    for (const auto& [resource_id, placement] : fullscreen_image_placements_) {
+        if (placement.visible) continue;
+        ++offscreen_count;
+        transmission_bytes += placement.transmission_bytes;
+        decoded_bytes += placement.decoded_bytes;
+    }
+    for (auto it = fullscreen_image_order_.begin(); it != fullscreen_image_order_.end();) {
+        if (offscreen_count <= kMaxCachedOffscreenKittyImages &&
+                transmission_bytes <= kMaxCachedOffscreenKittyTransmissionBytes &&
+                decoded_bytes <= kMaxCachedOffscreenKittyDecodedBytes) {
+            break;
+        }
+        const auto placement = fullscreen_image_placements_.find(*it);
+        if (placement == fullscreen_image_placements_.end()) {
+            it = fullscreen_image_order_.erase(it);
+            continue;
+        }
+        if (placement->second.visible) {
+            ++it;
+            continue;
+        }
+        frame.deletion_bytes += delete_kitty_image(placement->second.handle);
+        --offscreen_count;
+        transmission_bytes -= placement->second.transmission_bytes;
+        decoded_bytes -= placement->second.decoded_bytes;
+        fullscreen_image_placements_.erase(placement);
+        it = fullscreen_image_order_.erase(it);
+    }
+    return frame;
+}
+
 void RenderPipeline::compose_images(std::vector<std::string>& lines,
         const std::vector<InlineImageRenderRegion>& images,
         InlineImageProtocol protocol) {
