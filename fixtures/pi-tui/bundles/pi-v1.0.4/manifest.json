@@ -81,6 +81,10 @@
       {
         "path": "capture/chat-viewport-scenarios.mts",
         "sha256": "2d663a377bc38738c6bd084fc9e63ad8f3561b0a8947a69506d8903a4a3f0fa6"
+      },
+      {
+        "path": "capture/renderer-switch-scenarios.mts",
+        "sha256": "2112ccd8ba3ba3f40f02481bc266e92747624dbe2822a2bcb96c26e4012fe7d6"
       }
     ]
   },
@@ -370,6 +374,25 @@
         "packages/tui/src/components/stack.ts:allocateStackSizes,visibleStackEntries",
         "packages/tui/src/tui-alt-screen.ts:TuiAltScreen,setLayoutRoot,viewportTop,isFollowingOutput",
         "packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.sendInput,VirtualTerminal.resize,VirtualTerminal.waitForRender"
+      ]
+    },
+    {
+      "path": "renderer-switch.json",
+      "family": "renderer-switch",
+      "bytes": 167336,
+      "sha256": "b57cd76a88702b4a4399a2e465559e7d0d5032fdfed870634f740af274fe7ccf",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:883",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:874",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:866",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:2594",
+        "packages/coding-agent/src/modes/interactive/tui-renderer.ts:22",
+        "packages/coding-agent/src/modes/interactive/chat-viewport.ts:createChatViewport",
+        "packages/coding-agent/test/interactive-tui.test.ts:111",
+        "packages/tui/src/tui.ts:911",
+        "packages/tui/src/tui-main-screen.ts:captureRenderState,restoreRenderState",
+        "packages/tui/src/tui-alt-screen.ts:321",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.waitForRender"
       ]
     }
   ]

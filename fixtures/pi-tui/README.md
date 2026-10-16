@@ -270,6 +270,49 @@ passes `widgetContainerAbove`/`widgetContainerBelow` into the dock (fed from `ex
 all, so the assembly passes no widget entry; `create_chat_viewport` itself accepts both optional entries
 and the captured scenarios record the frozen dock order they take.
 
+For #1018, the named runner appended one more family and re-captured nothing else:
+`renderer-switch.json` records eight scenarios of the live `switchTuiMode` renderer swap
+(`packages/coding-agent/src/modes/interactive/interactive-mode.ts:883`, driven through the frozen
+arbiter's `Object.create(InteractiveMode.prototype)` context trick) and of `stopInteractiveTui`
+(`:874`) through the frozen `TuiMainScreen`, `TuiAltScreen` and `VirtualTerminal`: the same-mode
+call that returns `true` without touching the renderer even while a visible overlay entry exists
+(the no-op check runs before the overlay guard); the overlay-entry refusal in two cases, hidden
+and visible, each leaving the mode, focus, child list and terminal counters untouched and writing
+zero bytes; regular to fullscreen and back with the same children, focus and editor text and the
+frozen rebind order (`stop` the retired root, `start` the replacement, then theme rebind, extension
+unsubscribe and listener rebind); the main-screen render state crossing out and back (the switch
+captures the live 28-column, 11-line main screen and the returning root restores exactly those
+lines); `startRenderer = false` completing the swap without starting the replacement root; the
+progress-restore condition over five operand cases; and the transcript exit, which drains the
+overlay stack, switches to regular without starting it, renders once and stops the terminal twice.
+Every step records the complete frame rows, cursor position, cursor visibility and the transcript's
+`scrollTop`/`viewportHeight`/`isFollowingEnd`/`isScrollbarVisible`, plus the switch's own trace: the
+callback order, the invalidated regions, the bytes the switch wrote and the terminal's start/stop
+counts. Exactly one frame per direction is designated styled (the fullscreen frame of the
+regular-to-fullscreen scenario and the regular frame of the fullscreen-to-regular one); those two
+record the complete cell grid with every style attribute and the scrollback, every other frame
+fails the capture if it draws any styled cell, and the styled frames replay a document whose last
+row carries the frozen `\x1b[31m` wrap, so a dropped or misplaced style fails the replay.
+`capture/renderer-switch-scenarios.mts` holds the scenario bodies (including the runtime-only Azure
+provider stub the frozen module graph needs) and is emitted by the main generator;
+`capture/recapture-renderer-switch.mts` is the append recipe (same frozen revision, same
+`capturedAt`, same `environment`, every other artifact byte-identical, manifest 23 → 24 with the
+record's `sourceEndpoints` and source digests). `RendererSwitchEvidenceTest` replays six recorded
+frames — both styled grids through the Pike `MainScreen`, `AltScreen`, `set_layout_root` and
+`create_chat_viewport` — and asserts the recorded matrix, including a Pike-side check that a
+*hidden* overlay entry still refuses. Four divergences are recorded rather than assumed: frozen
+`switchTuiMode` reads `previousUi.getShowHardwareCursor()` (`:891`) and hands it to the replacement
+renderer while Pike has no hardware-cursor read-back and never transfers one, so each selected root
+keeps its own default; frozen reads `previousUi.onDebug` (`:893`) while Pike reapplies the debug
+hook it owns (`InteractiveEngine::apply_debug_hook`); frozen restores progress from
+`restoreProgress && getShowTerminalProgress() && (isStreaming || isCompacting)` (`:926-931`) while
+Pike has no terminal-progress setting and no `Terminal::set_progress` caller, so the capture records
+that condition as an expression over the frozen rows instead of a driven behavior; and frozen's
+private seam takes `restoreProgress` and `startRenderer`, which Pike's
+`InteractiveEngine::switch_tui_mode(TuiMode)` does not have, so the `startRenderer = false` scenario
+is recorded rather than re-driven. `switchTuiMode` and `stopInteractiveTui` themselves are private
+and need the full interactive runtime, so they are cited source endpoints too.
+
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
 widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key
