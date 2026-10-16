@@ -309,7 +309,7 @@ public:
     /// so the engine's `view_`, the focused editor and the text it holds stay
     /// the same instance every other region addresses. Scrollbar hooks come
     /// from the view's live theme.
-    [[nodiscard]] static support::Expected<std::unique_ptr<cch::tui::Component>> make_fullscreen_root(
+    [[nodiscard]] static support::Expected<ChatViewport> make_fullscreen_root(
             std::unique_ptr<InteractiveView> view, cch::tui::ScrollbarMode scrollbar);
 
     /// Fullscreen editor bound: a layout-root child is never pushed
@@ -319,6 +319,8 @@ public:
     /// every fullscreen frame; Regular mode keeps the `available_rows_` budget
     /// and never calls this.
     void set_fullscreen_terminal_rows(std::size_t rows);
+    void set_fullscreen(bool fullscreen) noexcept { fullscreen_ = fullscreen; }
+
 
 private:
     void record_callback_error(

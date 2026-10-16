@@ -16,6 +16,8 @@
 
 #include <boost/asio/any_io_executor.hpp>
 
+#include <cch/coding_agent/Settings.hpp>
+
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -62,6 +64,8 @@ struct SettingsFlowHostHooks {
     std::move_only_function<void()> rebuild_chat{nullptr};
     /// pi `setupAutocompleteProvider` after a settings change.
     std::move_only_function<void()> rebuild_autocomplete_provider{nullptr};
+    std::move_only_function<support::Expected<bool>(coding_agent::TuiMode)> switch_tui_mode{nullptr};
+    std::move_only_function<support::Expected<bool>(coding_agent::TuiMode)> switch_tui_mode{nullptr};
 };
 
 /// Native TUI settings flow controller (#506). Synchronous like the pi

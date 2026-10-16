@@ -30,6 +30,7 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/InteractiveStartup.hpp"
 #include "coding_agent/tui/InteractiveViewActions.hpp"
+#include "coding_agent/tui/ChatViewport.hpp"
 #include "coding_agent/tui/ModalPresenter.hpp"
 #include "coding_agent/tui/SlashCommandRouter.hpp"
 
@@ -209,6 +210,9 @@ private:
     [[nodiscard]] ProjectResourceFileSystems project_resource_filesystems_for(const std::filesystem::path& workspace);
 
     [[nodiscard]] support::ExpectedVoid fail_start(const support::Error& error);
+    [[nodiscard]] support::ExpectedVoid bind_render_sinks();
+    void apply_debug_hook();
+    void select_root(coding_agent::TuiMode mode);
 
     // ── Executor hops and render requests ────────────────────────────────
 
@@ -348,11 +352,7 @@ private:
     void replace_prompt_slot(std::shared_ptr<cch::tui::Component> component) override;
     void restore_prompt_slot() override;
 
-    /// pi `setCustomEditorComponent`: install the registration context's
-    /// custom prompt editor into the view, or restore the built-in editor
-    /// when the current context registered none. Runs whenever the extension
-    /// registrations refresh (start, deferred boot bind, session
-    /// replacement, `/reload`).
+    [[nodiscard]] support::ExpectedVoid switch_tui_mode(coding_agent::TuiMode mode);
     void apply_extension_editor();
     /// pi `resetExtensionUI` (`beforeSessionInvalidate`): dispose the current
     /// registration context while the terminal stays live, then restore the
@@ -518,14 +518,14 @@ private:
     /// at hook creation. Declared with `action_sink_` because the fullscreen
     /// host borrows it too.
     std::size_t action_generation_{0};
-    /// The run's selected TUI root (pi `createInteractiveTui`): present only
-    /// for `TuiMode::Fullscreen`, where `tui_` binds to it instead of the main
-    /// screen.
-    std::unique_ptr<AltScreenHost> fullscreen_host_{nullptr};
-    AltScreenHost* alt_screen_host_{nullptr}; // borrowed fullscreen host, when a fullscreen consumer is active.
+    /// The currently selected root is updated before a retired root releases
+    /// its callbacks or child tree.
+    std::unique_ptr<cch::tui::MainScreen> main_screen_;
+    std::unique_ptr<AltScreenHost> fullscreen_host_;
+    AltScreenHost* alt_screen_host_{nullptr};
     std::unique_ptr<cch::tui::TuiScheduler> tui_scheduler_;
-    cch::tui::MainScreen main_screen_;
-    cch::tui::ITui& tui_; // the selected root outlives this interface and every consumer.
+    cch::tui::TuiDebugHook debug_hook_{};
+    cch::tui::ITui* tui_{nullptr};
     /// pi's mutable shared KeybindingsManager consumption shape (ADR 0035,
     /// #418): every durable view component observes this slot; `/reload`
     /// replaces the current registry so all consumers see the new bindings
@@ -606,9 +606,16 @@ private:
     boost::asio::steady_timer flows_settled_;
     /// SIGTSTP/SIGCONT suspend flow (pi `handleCtrlZ`); created at start.
     std::shared_ptr<SuspendController> suspend_controller_;
-    InteractiveView* view_{nullptr};             // aliases the child owned by tui_.
-    cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_.
+    std::unique_ptr<cch::tui::Component> active_overlay_placement_;
+    InteractiveView* view_{nullptr}; // aliases the current root's view instance.
+    cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_ and is null across switches.
     cch::tui::OverlayHandle active_overlay_handle_;
+    std::optional<ChatViewport> fullscreen_viewport_;
+    cch::tui::Component* regular_focus_{nullptr};
+    std::optional<cch::tui::TuiMainScreenRenderState> main_screen_render_state_;
+    std::optional<cch::tui::TuiAltScreenRenderState> alt_screen_render_state_;
+    bool clear_on_shrink_{false};
+    std::optional<support::Error> switch_error_;
     SlashCommandRouter slash_command_router_;
     std::atomic<bool> running_{false};
     std::stop_source stop_source_;

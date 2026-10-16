@@ -172,19 +172,19 @@ InteractiveEngine::InteractiveEngine(cch::tui::Terminal& terminal, boost::asio::
 InteractiveEngine::InteractiveEngine(
         cch::tui::Terminal& terminal, boost::asio::any_io_executor executor, coding_agent::TuiMode tui_mode)
     : session_(nullptr), terminal_(terminal),
-      fullscreen_host_(tui_mode == coding_agent::TuiMode::Fullscreen
-                               ? std::make_unique<AltScreenHost>(terminal, action_sink_, action_generation_)
-                               : nullptr),
-      tui_scheduler_(std::make_unique<AsioTuiScheduler>(executor)), main_screen_(terminal),
-      tui_(fullscreen_host_ != nullptr ? fullscreen_host_->tui() : static_cast<cch::tui::ITui&>(main_screen_)),
+      main_screen_(std::make_unique<cch::tui::MainScreen>(terminal)),
+      fullscreen_host_(std::make_unique<AltScreenHost>(terminal, action_sink_, action_generation_)),
+      tui_scheduler_(std::make_unique<AsioTuiScheduler>(executor)),
+      tui_(tui_mode == coding_agent::TuiMode::Fullscreen ? static_cast<cch::tui::ITui*>(&fullscreen_host_->tui())
+                                                        : main_screen_.get()),
       executor_(std::move(executor)), exit_wait_(executor_), flows_settled_(executor_) {
     exit_wait_.expires_at(std::chrono::steady_clock::time_point::max());
     flows_settled_.expires_at(std::chrono::steady_clock::time_point::max());
     // The owned fullscreen root registers the same platform-action adapter an
     // externally hosted fullscreen consumer uses (#1006): selection copies, OSC
     // 8 link opens, and right-click paste all cross the closed action seam.
-    if (fullscreen_host_ != nullptr) set_alt_screen_host(fullscreen_host_.get());
-    tui_.set_scheduler(tui_scheduler_.get());
+    set_alt_screen_host(tui_ == &fullscreen_host_->tui() ? fullscreen_host_.get() : nullptr);
+    tui_->set_scheduler(tui_scheduler_.get());
 }
 
 support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
@@ -233,8 +233,8 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     // editor, and the read flow; every other action still crosses to the run's
     // composition host. A run without a fullscreen host keeps that host's
     // acknowledge-only fallback: no regular-mode root dispatches a paste.
-    auto run_action_sink = run.make_action_sink();
     if (fullscreen_host_ != nullptr) {
+        auto run_action_sink = run.make_action_sink();
         const auto host_weak = weak_from_this();
         action_sink_ = [host_weak, run_action_sink = std::move(run_action_sink)](std::size_t generation,
                                TuiActionVariant action) mutable -> support::Expected<TuiActionResultVariant> {
@@ -246,7 +246,7 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
             return run_action_sink(generation, std::move(action));
         };
     } else {
-        action_sink_ = std::move(run_action_sink);
+        action_sink_ = run.make_action_sink();
     }
     async_session_replacement_sink_ = run.make_async_session_replacement_sink();
     extension_ui_registration_factory_ = run.take_extension_ui_registration_factory();
@@ -277,19 +277,20 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     const auto weak = weak_from_this();
     auto view = make_interactive_view(weak);
     view_ = view.get();
-    if (fullscreen_host_ != nullptr) {
-        // Fullscreen composes the frozen two-region viewport as the layout
-        // root (`chat-viewport.ts:22`, installed at `interactive-mode.ts:961`):
-        // the transcript viewport over the fixed dock, with this one view as
-        // the dock's editor entry. Installing the root here, before any
-        // `set_focus` below, keeps `AltScreen::set_layout_root`'s fallback
-        // focus (`AltScreen.cpp:311-330`) from landing on a mounted child.
-        auto root = InteractiveView::make_fullscreen_root(std::move(view), cch::tui::ScrollbarMode::Auto);
-        if (!root) return fail_start(root.error());
-        fullscreen_host_->alt_screen().set_layout_root(std::move(*root));
-    } else if (auto attached = tui_.add_child(std::move(view)); !attached) {
+    regular_focus_ = view_;
+    auto viewport = InteractiveView::make_fullscreen_root(std::move(view), cch::tui::ScrollbarMode::Auto);
+    if (!viewport) return fail_start(viewport.error());
+    fullscreen_viewport_.emplace(std::move(*viewport));
+    if (tui_ == &fullscreen_host_->tui()) {
+        fullscreen_host_->alt_screen().set_layout_root(std::move(fullscreen_viewport_->root));
+    } else if (auto editor = fullscreen_viewport_->take_editor(); !editor) {
+        return fail_start(support::make_error(
+                support::ErrorCode::Unknown, "Fullscreen viewport did not retain its editor"));
+    } else if (auto attached = tui_->add_child(std::move(editor)); !attached) {
         return fail_start(attached.error());
     }
+    if (view_ == nullptr) return fail_start(support::make_error(
+            support::ErrorCode::Unknown, "Interactive view construction failed"));
     if (!booting) {
         if (session_ == nullptr) {
             return fail_start(support::make_error(
@@ -300,17 +301,28 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         }
     }
 
-    tui_.set_render_prepare_sink([weak]() -> support::Expected<bool> {
-        if (const auto self = weak.lock()) return self->prepare_frame();
-        return false;
-    });
-    tui_.set_render_complete_sink([weak](const support::ExpectedVoid& result) {
-        if (const auto self = weak.lock()) self->complete_frame(result);
-    });
-    if (auto started = tui_.start(); !started) return fail_start(started.error());
+    tui_->set_keybinding_context(keybindings_ ? keybindings_->context() : nullptr);
+    tui_->set_scheduler(tui_scheduler_.get());
+    tui_->set_clear_on_shrink(clear_on_shrink_);
+    apply_debug_hook();
+    if (auto sinks = bind_render_sinks(); !sinks) return std::unexpected(sinks.error());
+    if (tui_ == &fullscreen_host_->tui() && alt_screen_render_state_) {
+        if (auto restored = fullscreen_host_->alt_screen().restore_render_state(*alt_screen_render_state_); !restored) {
+            return fail_start(restored.error());
+        }
+        alt_screen_render_state_.reset();
+    }
+    if (tui_ == main_screen_.get() && main_screen_render_state_) {
+        if (auto restored = main_screen_->restore_render_state(*main_screen_render_state_); !restored) {
+            return fail_start(restored.error());
+        }
+        main_screen_render_state_.reset();
+    }
+    if (auto started = tui_->start(); !started) return fail_start(started.error());
     tui_started_ = true;
     running_ = true;
-    extension_ui_host_.bind(tui_, std::move(extension_ui_registration_factory_));
+    extension_ui_host_.bind(*tui_, std::move(extension_ui_registration_factory_));
+    if (theme_controller_) theme_controller_->rebind_tui(*tui_);
 
     // pi main.ts `ensurePngTranscoder` right after `ui.start()`: a Kitty
     // terminal only places non-PNG images once the host conversion capability
@@ -330,9 +342,9 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         // bind at `bind_boot_session` already orders it this way).
         mcp_flows_->refresh_completion();
         rebuild_autocomplete_provider();
-        if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
+        if (auto focused = tui_->set_focus(view_); !focused) return fail_start(focused.error());
         prompt_presentation_dirty_.store(true, std::memory_order_release);
-        tui_.request_render();
+        tui_->request_render();
         if (run.initial_prompt()) {
             submit(*run.initial_prompt(),
                     InputSubmission::Ordinary,
@@ -346,9 +358,9 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         // diagnostics render after bind, alongside the created session's
         // snapshot.
         startup_diagnostics_ = std::move(diagnostics);
-        if (auto focused = tui_.set_focus(view_); !focused) return fail_start(focused.error());
+        if (auto focused = tui_->set_focus(view_); !focused) return fail_start(focused.error());
         prompt_presentation_dirty_.store(true, std::memory_order_release);
-        tui_.request_render();
+        tui_->request_render();
         initial_prompt_ = run.initial_prompt();
         initial_prompt_options_ = run.initial_prompt_options();
     }
@@ -396,7 +408,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         dispose_extension_ui();
         retire_current_session();
         if (tui_started_) {
-            (void)tui_.stop();
+            (void)tui_->stop();
             tui_started_ = false;
         }
         co_return std::unexpected(failure);
@@ -450,12 +462,12 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         auto failed = fail_start(warning.error());
         co_return std::unexpected(failed.error());
     }
-    if (auto focused = tui_.set_focus(view_); !focused) {
+    if (auto focused = tui_->set_focus(view_); !focused) {
         auto failed = fail_start(focused.error());
         co_return std::unexpected(failed.error());
     }
     prompt_presentation_dirty_.store(true, std::memory_order_release);
-    tui_.request_render();
+    tui_->request_render();
     if (initial_prompt_) {
         submit(std::move(*initial_prompt_),
                 InputSubmission::Ordinary,
@@ -471,8 +483,8 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     // is settled (`beforeSessionInvalidate` -> `resetExtensionUI`) while the
     // terminal is still owned by the run.
     dispose_extension_ui();
-    tui_.set_render_prepare_sink(nullptr);
-    tui_.set_render_complete_sink(nullptr);
+    tui_->set_render_prepare_sink(nullptr);
+    tui_->set_render_complete_sink(nullptr);
     // Cancel extracted modal/session flows before terminal restoration;
     // their host-lifetime captures then let their coroutines quiesce
     // without touching a stopped presenter.
@@ -492,8 +504,8 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
         boost::system::error_code wait_error;
         co_await flows_settled_.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
     }
-    const auto stopped = tui_.stop();
-    tui_.set_scheduler(nullptr);
+    const auto stopped = tui_->stop();
+    tui_->set_scheduler(nullptr);
     tui_started_ = false;
     if (!completion_result_) completion_result_.emplace();
     if (!*completion_result_) {
@@ -596,7 +608,7 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
     theme_controller_ = make_interactive_theme_controller(run.agent_config_directory(),
             *settings_manager_,
             terminal_.capabilities().color,
-            tui_,
+            *tui_,
             std::move(theme_hooks));
     return diagnostics;
 }
@@ -607,7 +619,7 @@ std::unique_ptr<InteractiveView> InteractiveEngine::make_interactive_view(std::w
     // The view's top-level composition: Regular renders the whole main-screen
     // transcript, Fullscreen renders only the dock's editor region of the
     // layout root installed in `start`.
-    options.fullscreen = fullscreen_host_ != nullptr;
+    options.fullscreen = tui_ == &fullscreen_host_->tui();
     // Preserve the existing production hint: the application supplies
     // the clipboard action path even when the clipboard reader is
     // unavailable, so the hint remains part of the assembled Native TUI.
@@ -790,7 +802,7 @@ support::ExpectedVoid InteractiveEngine::fail_start(const support::Error& error)
     }
     support::ExpectedVoid stopped;
     if (theme_controller_) theme_controller_->dispose();
-    if (tui_started_) stopped = tui_.stop();
+    if (tui_started_) stopped = tui_->stop();
     tui_started_ = false;
     if (!stopped) {
         return std::unexpected(aggregate_presentation_errors(
@@ -806,14 +818,14 @@ void InteractiveEngine::post_invalidate() {
     boost::asio::post(executor_, [weak] {
         if (const auto self = weak.lock(); self && self->running_) {
             self->prompt_presentation_dirty_.store(true, std::memory_order_release);
-            self->tui_.invalidate();
+            self->tui_->invalidate();
         }
     });
 }
 
 void InteractiveEngine::invalidate_frame() {
     prompt_presentation_dirty_.store(true, std::memory_order_release);
-    tui_.invalidate();
+    tui_->invalidate();
 }
 
 void InteractiveEngine::post_exit() {
@@ -838,7 +850,7 @@ void InteractiveEngine::append_command_error(const support::Error& error) {
 
 support::ExpectedVoid InteractiveEngine::attach_overlay(std::unique_ptr<cch::tui::Overlay> overlay) {
     auto* overlay_pointer = overlay.get();
-    auto attached = tui_.show_overlay(std::move(overlay));
+    auto attached = tui_->show_overlay(std::move(overlay));
     if (!attached) return std::unexpected(attached.error());
     active_overlay_ = overlay_pointer;
     active_overlay_handle_ = std::move(*attached);
@@ -1004,7 +1016,7 @@ void InteractiveEngine::signal_exit() {
             prompt_presentation_dirty_.store(true, std::memory_order_release);
         }
     }
-    if (prompt_presentation_dirty_.load(std::memory_order_acquire)) tui_.request_render(true);
+    if (prompt_presentation_dirty_.load(std::memory_order_acquire)) tui_->request_render(true);
     (void)exit_wait_.cancel();
 }
 

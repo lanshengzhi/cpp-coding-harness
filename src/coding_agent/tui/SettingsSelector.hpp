@@ -42,10 +42,11 @@ struct SettingsSelectorConfig {
     /// The currently applied theme name (pi `theme-selector.ts` `(current)`
     /// marker source).
     std::string active_theme{};
+    /// Current global `tuiMode` setting, displayed as regular/fullscreen.
+    std::string current_tui_mode{"regular"};
     /// pi `getAvailableThemes()`: builtins + custom directory + registered
     /// themes, deduped and sorted by name.
     std::vector<std::string> available_themes{};
-};
 
 using SettingsSelectorHideThinkingSink = std::move_only_function<void(bool)>;
 using SettingsSelectorOutputPadSink = std::move_only_function<void(std::size_t)>;
@@ -69,6 +70,7 @@ struct SettingsSelectorCallbacks {
     SettingsSelectorThemeChangeSink on_theme_change{};
     /// pi `onThemePreview`: in-memory preview of one theme name or setting.
     SettingsSelectorThemePreviewSink on_theme_preview{};
+    std::move_only_function<void(std::string)> on_tui_mode_change{};
     SettingsSelectorCancelSink on_cancel{};
 };
 

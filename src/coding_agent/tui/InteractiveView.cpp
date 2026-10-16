@@ -716,7 +716,7 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render_main_screen(st
     return transcript_result;
 }
 
-support::Expected<std::unique_ptr<cch::tui::Component>> InteractiveView::make_fullscreen_root(
+support::Expected<ChatViewport> InteractiveView::make_fullscreen_root(
         std::unique_ptr<InteractiveView> view, cch::tui::ScrollbarMode scrollbar) {
     auto* const raw = view.get();
     ChatViewportOptions options;
@@ -755,7 +755,7 @@ support::Expected<std::unique_ptr<cch::tui::Component>> InteractiveView::make_fu
 
     auto viewport = create_chat_viewport(std::move(options));
     if (!viewport) return std::unexpected(viewport.error());
-    return std::move(viewport->root);
+    return std::move(*viewport);
 }
 
 void InteractiveView::set_fullscreen_terminal_rows(std::size_t rows) {

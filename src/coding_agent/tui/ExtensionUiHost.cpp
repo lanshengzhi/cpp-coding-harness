@@ -11,6 +11,14 @@ void ExtensionUiHost::bind(cch::tui::ITui& tui, ExtensionUiRegistrationFactory f
     refresh();
 }
 
+void ExtensionUiHost::rebind(cch::tui::ITui& tui) {
+    listeners_.clear();
+    tui_ = &tui;
+    for (const auto& listener : registered_listeners_) {
+        listeners_.push_back(tui_->add_raw_input_listener(listener));
+    }
+}
+
 void ExtensionUiHost::refresh() {
     if (tui_ == nullptr || !factory_) return;
     reset();
@@ -19,6 +27,7 @@ void ExtensionUiHost::refresh() {
 
 void ExtensionUiHost::reset() noexcept {
     listeners_.clear();
+    registered_listeners_.clear();
     editor_factory_ = nullptr;
 }
 
@@ -30,6 +39,7 @@ void ExtensionUiHost::dispose() noexcept {
 
 void ExtensionUiHost::on_terminal_input(cch::tui::RawInputListener listener) {
     if (tui_ == nullptr || !listener) return;
+    registered_listeners_.push_back(listener);
     listeners_.push_back(tui_->add_raw_input_listener(std::move(listener)));
 }
 

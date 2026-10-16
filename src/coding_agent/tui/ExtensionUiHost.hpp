@@ -37,8 +37,9 @@ public:
     /// Bind the live TUI and install the first registration context.
     void bind(cch::tui::ITui& tui, ExtensionUiRegistrationFactory factory);
 
-    /// Dispose the current context and install a fresh one on the same TUI.
-    void refresh();
+    /// Rebind the existing listener callbacks to a new root without invoking
+    /// the extension registration factory again.
+    void rebind(cch::tui::ITui& tui);
 
     /// Dispose current listener handles but keep the host ready to refresh.
     void reset() noexcept;
@@ -71,6 +72,7 @@ private:
     cch::tui::ITui* tui_{nullptr}; // must outlive this host binding.
     ExtensionUiRegistrationFactory factory_{nullptr};
     ExtensionEditorFactory editor_factory_{nullptr};
+    std::vector<cch::tui::RawInputListener> registered_listeners_;
     std::vector<cch::tui::RawInputListenerHandle> listeners_;
 };
 
