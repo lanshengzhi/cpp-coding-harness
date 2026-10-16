@@ -332,8 +332,8 @@ byte-identical, manifest 24 → 25 with the record's `sourceEndpoints` and sourc
 `HardwareCursorEvidenceTest` replays the family through Pike's `MainScreen`, `AltScreen`, and
 `VirtualTerminal` over `ITui`. Replay asserts exact terminal cursor coordinates (`cursor.col`, `cursor.row`),
 visibility mode (`cursorVisible`), preference state (`showHardwareCursor`), movement escape byte sequences
-(`rawWrites`), and the protocol ordering of movement versus visibility operations (`terminalEvents`). Idempotent
-redundant `set_cursor_visible(false)` suppression in AltScreen and incidental frame paint padding in MainScreen
+(`terminalEvents[].bytes`), and the protocol ordering of movement versus visibility operations (`terminalEvents`). Idempotent
+redundant visibility-call suppression in AltScreen and incidental frame paint padding in MainScreen
 invalid-cursor are bounded and verified at the public terminal decorator boundary.
 
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:

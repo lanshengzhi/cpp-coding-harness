@@ -185,14 +185,14 @@ void verify_mainscreen_step_protocol(const ProtocolRecordingTerminal& recording_
         const cch::tui::MainScreen& main_screen,
         const JsonValue& step,
         bool check_terminal_cursor = true) {
-    std::optional<std::string> expected_movement_bytes;
+    std::vector<std::string> expected_movement_bytes;
     std::vector<bool> expected_visibility_sequence;
     for (const auto& ev : step.at("terminalEvents").get_array()) {
         const auto op = ev.at("op").get_string();
         if (op == "write") {
             const auto bytes = ev.at("bytes").get_string();
             if (is_cursor_movement_sequence(bytes)) {
-                expected_movement_bytes = bytes;
+                expected_movement_bytes.push_back(bytes);
             }
         } else if (op == "showCursor") {
             expected_visibility_sequence.push_back(true);
@@ -201,7 +201,7 @@ void verify_mainscreen_step_protocol(const ProtocolRecordingTerminal& recording_
         }
     }
 
-    std::optional<std::string> actual_movement_bytes;
+    std::vector<std::string> actual_movement_bytes;
     std::size_t movement_op_index = std::string::npos;
     std::vector<std::pair<std::size_t, bool>> actual_visibility_sequence;
 
@@ -210,7 +210,7 @@ void verify_mainscreen_step_protocol(const ProtocolRecordingTerminal& recording_
         const auto& op = ops[i];
         if (op.kind == ProtocolRecordingTerminal::OpKind::Write) {
             if (is_cursor_movement_sequence(op.write_bytes)) {
-                actual_movement_bytes = op.write_bytes;
+                actual_movement_bytes.push_back(op.write_bytes);
                 movement_op_index = i;
             }
         } else if (op.kind == ProtocolRecordingTerminal::OpKind::SetCursorVisible) {
@@ -228,7 +228,7 @@ void verify_mainscreen_step_protocol(const ProtocolRecordingTerminal& recording_
     }
 
     // 3. Assert protocol ordering: cursor movement must occur before final visibility call.
-    if (actual_movement_bytes.has_value() && !actual_visibility_sequence.empty()) {
+    if (!actual_movement_bytes.empty() && !actual_visibility_sequence.empty()) {
         const auto final_vis_op_index = actual_visibility_sequence.back().first;
         CHECK(movement_op_index < final_vis_op_index);
     }
@@ -318,7 +318,9 @@ void verify_altscreen_step_protocol(const ProtocolRecordingTerminal& recording_t
         if (op == "hideCursor") {
             preceding_hide_cursor = true;
         } else if (op == "write") {
-            frozen_ctrl = parse_frozen_altscreen_controls(ev.at("bytes").get_string());
+            if (auto controls = parse_frozen_altscreen_controls(ev.at("bytes").get_string()); controls) {
+                frozen_ctrl = std::move(controls);
+            }
         }
     }
     REQUIRE(frozen_ctrl.has_value());
