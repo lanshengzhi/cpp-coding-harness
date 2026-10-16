@@ -5,6 +5,7 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
 #include "support/PiTuiEvidence.hpp"
+#include "support/ProtocolRecordingTerminal.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/coding_agent/Settings.hpp>
@@ -177,7 +178,8 @@ TEST_CASE("frozen product-cursor live switch scenarios replay across MainScreen 
             const auto pad_x = size_of(inputs.at("paddingX"));
             const auto pad_y = size_of(inputs.at("paddingY"));
 
-            cch::tui::VirtualTerminal terminal({.columns = cols, .rows = rows});
+            cch::tui::VirtualTerminal vt({.columns = cols, .rows = rows});
+            cch::tests::ProtocolRecordingTerminal terminal(vt);
 
             // Step 1: Build initial root
             std::unique_ptr<cch::tui::ITui> initial_root;
@@ -224,6 +226,7 @@ TEST_CASE("frozen product-cursor live switch scenarios replay across MainScreen 
                 target_root = std::make_unique<cch::tui::MainScreen>(terminal, transferred_pref);
             }
 
+            terminal.reset_recording();
             for (auto& ch : children) {
                 REQUIRE(target_root->add_child(std::move(ch)));
             }
@@ -233,18 +236,65 @@ TEST_CASE("frozen product-cursor live switch scenarios replay across MainScreen 
 
             // Step 4: Verify against exact frozen expectations
             CHECK(target_root->show_hardware_cursor() == expected.at("showHardwareCursor").get_boolean());
-            CHECK(terminal.modes().cursor_visible == expected.at("cursorVisible").get_boolean());
+            CHECK(vt.modes().cursor_visible == expected.at("cursorVisible").get_boolean());
 
-            if (expected.at("cursor").holds<std::nullptr_t>()) {
-                // suppressed / null cursor
-            } else {
-                const auto& expected_cursor = expected.at("cursor");
-                CHECK(terminal.cursor().column == size_of(expected_cursor.at("col")));
-                CHECK(terminal.cursor().row == size_of(expected_cursor.at("row")));
-            }
+            const auto& expected_cursor = expected.at("cursor");
+            CHECK(vt.cursor().column == size_of(expected_cursor.at("col")));
+            CHECK(vt.cursor().row == size_of(expected_cursor.at("row")));
 
             const auto expected_screen = visible_rows(strings_of(expected.at("screen")));
-            CHECK(visible_rows(terminal.screen()) == expected_screen);
+            CHECK(visible_rows(vt.screen()) == expected_screen);
+
+            // Protocol assertions:
+            // 1. Verify movement and visibility order: cursor positioning must precede final visibility update
+            std::size_t last_movement_or_cursor_op = std::string::npos;
+            std::size_t last_visibility_op = std::string::npos;
+            bool last_visible_state = false;
+
+            const auto& ops = terminal.ops();
+            for (std::size_t i = 0; i < ops.size(); ++i) {
+                const auto& op = ops[i];
+                if (op.kind == cch::tests::ProtocolRecordingTerminal::OpKind::Write) {
+                    if (cch::tests::is_cursor_movement_sequence(op.write_bytes)) {
+                        last_movement_or_cursor_op = i;
+                    }
+                } else if (op.kind == cch::tests::ProtocolRecordingTerminal::OpKind::SetCursor) {
+                    last_movement_or_cursor_op = i;
+                } else if (op.kind == cch::tests::ProtocolRecordingTerminal::OpKind::SetCursorVisible) {
+                    last_visibility_op = i;
+                    last_visible_state = op.visible;
+                }
+            }
+
+            if (expected.at("cursorVisible").get_boolean()) {
+                REQUIRE(last_visibility_op != std::string::npos);
+                CHECK(last_visible_state == true);
+                if (last_movement_or_cursor_op != std::string::npos) {
+                    CHECK(last_movement_or_cursor_op <= last_visibility_op);
+                }
+            } else {
+                if (last_visibility_op != std::string::npos) {
+                    CHECK(last_visible_state == false);
+                }
+            }
+
+            // 2. Check for matching movement bytes from frozen artifact
+            for (const auto& ev : expected.at("terminalEvents").get_array()) {
+                if (ev.at("op").get_string() == "write") {
+                    const auto bytes = ev.at("bytes").get_string();
+                    if (cch::tests::is_cursor_movement_sequence(bytes)) {
+                        bool found = false;
+                        for (const auto& op : ops) {
+                            if (op.kind == cch::tests::ProtocolRecordingTerminal::OpKind::Write &&
+                                    op.write_bytes == bytes) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        CHECK(found);
+                    }
+                }
+            }
 
             REQUIRE(target_root->stop());
         }

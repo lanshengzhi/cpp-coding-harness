@@ -253,12 +253,12 @@ void SettingsFlowController::set_output_pad_setting(std::size_t padding) {
 }
 
 void SettingsFlowController::set_show_hardware_cursor_setting(bool enabled) {
-    if (hooks_.set_show_hardware_cursor) hooks_.set_show_hardware_cursor(enabled);
     if (settings_manager_ != nullptr) {
         if (auto persisted = settings_manager_->set_show_hardware_cursor(enabled); !persisted) {
             show_error(combined_error_text(persisted.error()));
         }
     }
+    if (hooks_.set_show_hardware_cursor) hooks_.set_show_hardware_cursor(enabled);
 }
 
 void SettingsFlowController::toggle_thinking_block_visibility() {
