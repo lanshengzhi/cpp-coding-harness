@@ -1022,12 +1022,6 @@ support::ExpectedVoid InteractiveEngine::attach_overlay(std::unique_ptr<cch::tui
     return {};
 }
 
-void InteractiveEngine::hide_overlay() {
-    if (!running_ || active_overlay_ == nullptr) return;
-    active_overlay_handle_.set_hidden(true);
-    invalidate_frame();
-}
-
 void InteractiveEngine::close_overlay() {
     if (!running_ || active_overlay_ == nullptr) return;
     active_overlay_handle_.hide();

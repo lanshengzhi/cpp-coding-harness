@@ -383,7 +383,6 @@ private:
     void append_command_error(const support::Error& error);
 
     [[nodiscard]] support::ExpectedVoid attach_overlay(std::unique_ptr<cch::tui::Overlay> overlay);
-    void hide_overlay() override;
     void close_overlay() override;
 
     void show_overlay(std::unique_ptr<cch::tui::Overlay> overlay) override;

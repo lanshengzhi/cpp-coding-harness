@@ -192,7 +192,7 @@ public:
 
 } // namespace
 
-TEST_CASE("frozen renderer-switch matrix asserts the Pike mode-swap contract",
+TEST_CASE("frozen renderer-switch observations record the state and callback contract",
         "[coding_agent][tui][fullscreen][renderer-switch][issue1018][compat-pi]") {
     const auto bundle = cch::tests::read_pi_tui_evidence("renderer-switch.json");
     REQUIRE(bundle);
@@ -492,6 +492,8 @@ TEST_CASE("frozen renderer-switch frames replay through the Pike roots",
     CHECK(styled_frames == 2);
 }
 
+namespace {
+
 [[nodiscard]] std::string live_visible_screen(const cch::tui::VirtualTerminal& terminal) {
     std::string text;
     for (const auto& line : terminal.screen()) {
@@ -543,6 +545,8 @@ TEST_CASE("frozen renderer-switch frames replay through the Pike roots",
     }
     co_return co_await engine->finish();
 }
+
+} // namespace
 
 TEST_CASE("live renderer switch validates focus and state expectations from frozen evidence",
         "[coding_agent][tui][fullscreen][renderer-switch][issue1018][compat-pi]") {
@@ -598,8 +602,11 @@ TEST_CASE("live renderer switch validates focus and state expectations from froz
     // Hidden overlay refusal check against recorded overlay scenario:
     // Any existing overlay entry (hidden included) refuses the switch.
     auto& presenter = static_cast<coding_agent::tui::ModalPresenter&>(*engine);
-    presenter.show_overlay(overlay_entry());
-    presenter.hide_overlay();
+    auto hidden_overlay = overlay_entry();
+    auto hidden_options = hidden_overlay->options();
+    hidden_options.visible_at = [](cch::tui::TerminalDimensions) { return false; };
+    hidden_overlay->set_options(std::move(hidden_options));
+    presenter.show_overlay(std::move(hidden_overlay));
     tests::drain_ready(io);
 
     auto hidden_refusal = engine->switch_tui_mode(coding_agent::TuiMode::Regular);

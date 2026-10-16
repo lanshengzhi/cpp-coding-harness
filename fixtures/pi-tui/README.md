@@ -298,9 +298,14 @@ provider stub the frozen module graph needs) and is emitted by the main generato
 `capture/recapture-renderer-switch.mts` is the append recipe (same frozen revision, same
 `capturedAt`, same `environment`, every other artifact byte-identical, manifest 23 → 24 with the
 record's `sourceEndpoints` and source digests). `RendererSwitchEvidenceTest` replays six recorded
-frames — both styled grids through the Pike `MainScreen`, `AltScreen`, `set_layout_root` and
-`create_chat_viewport` — and asserts the recorded matrix, including a Pike-side check that a
-*hidden* overlay entry still refuses. Four divergences are recorded rather than assumed: frozen
+frames — both styled grids through fresh Pike `MainScreen`, `AltScreen`, `set_layout_root` and
+`create_chat_viewport` instances — and checks the recorded matrix. Those frame replays do not
+execute Pike's live switch. A separate live `InteractiveEngine` case compares the recorded target
+mode, result and draft text, preserves focus identity across a round trip, and verifies refusal
+with a responsively hidden overlay entry. `TuiModeSwitchTest` also measures one extension input
+delivery per input and no repeated registration or editor factory invocation across both directions.
+Theme query bytes and the complete live switch protocol trace are not compared yet. Four gaps or
+adaptations are recorded rather than assumed: frozen
 `switchTuiMode` reads `previousUi.getShowHardwareCursor()` (`:891`) and hands it to the replacement
 renderer while Pike has no hardware-cursor read-back and never transfers one, so each selected root
 keeps its own default; frozen reads `previousUi.onDebug` (`:893`) while Pike reapplies the debug

@@ -271,17 +271,20 @@ TEST_CASE("Native TUI TUI mode switch refuses while an overlay entry is present"
     // shape frozen pi's `hasOverlayEntries` guard refuses on. It is presented
     // through the seam the run's own flows use, so the engine sees a real entry.
     auto& presenter = static_cast<coding_agent::tui::ModalPresenter&>(*engine);
-    presenter.show_overlay(std::make_unique<tui::Overlay>(tui::OverlayOptions{
+    auto overlay = std::make_unique<tui::Overlay>(tui::OverlayOptions{
             .width = 12.0,
             .anchor = tui::OverlayAnchor::TopRight,
             .non_capturing = true,
-    }));
+    });
+    auto* const overlay_pointer = overlay.get(); // borrowed until close_overlay below.
+    presenter.show_overlay(std::move(overlay));
     drain_ready(io);
     REQUIRE(pump_until(io, [&] { return on_tui_mode_row(terminal); }));
 
     // 1. Hidden overlay refusal: pi's hasOverlayEntries refuses even when the
     // entry is temporarily hidden. Test both direct engine switch and UI switch.
-    presenter.hide_overlay();
+    overlay_pointer->set_visible(false);
+    presenter.invalidate();
     drain_ready(io);
     REQUIRE(pump_until(io, [&] { return on_tui_mode_row(terminal); }));
 
