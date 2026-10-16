@@ -1,6 +1,7 @@
-// Named pi-v1.0.4 acceptance for product hardware cursor settings and live switch (#1037).
-// Every expectation is read from the verified `product-cursor.json` artifact;
-// nothing here is derived from Pike assertions alone.
+// Supplemental toolkit root replay for product hardware cursor settings and live switch (#1037).
+// Reads verified `product-cursor.json` artifact for baseline component/settings replay.
+// Authoritative whole-product InteractiveEngine cursor layout, protocol bundling, and
+// viewport clipping acceptance is driven by `product-cursor-layout.json` in `TuiModeSwitchTest.cpp`.
 
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"

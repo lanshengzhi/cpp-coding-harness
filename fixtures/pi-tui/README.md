@@ -348,6 +348,24 @@ same `environment`, every other artifact byte-identical, manifest 25 → 26 with
 across `MainScreen` and `AltScreenHost`, verifying exact terminal coordinates, visibility mode, preference
 transfer, and frame buffer contents against the verified frozen artifact.
 
+`product-cursor-layout.json` records product cursor layout and protocol across mode switches (#1037, spec #946)
+using actual `createChatViewport` and `InteractiveMode.prototype.switchTuiMode` with controlled 4-line document,
+0-line pending, 2-line status, 3-line editor, and 2-line footer regions on a 48x24 terminal across all 4
+switch directions and preference configurations. In Fullscreen mode, the dock allocation pins status (2),
+editor (3), and footer (2) to the bottom 7 rows, placing the cursor at row 20 invariant of transcript height.
+In Regular mode, sequential flow places the prompt line at row 7 (4 document + 0 pending + 2 status + 1 cursor line).
+Two real layout clipping scenarios record valid in-bounds cursor placement (line 1 of 3 editor lines) under
+constrained terminal height (48x2) where editor line 1 is clipped from the visible window (producing `cursorVisible: false`)
+in both directions, followed by dynamic restoration to `(5, 7)` in Regular and `(5, 20)` in Fullscreen upon resizing
+to 48x24. Protocol frame boundaries are established explicitly: in AltScreen (`TuiAltScreen`), the target frame is
+enclosed within `begin_synchronized_update` and `end_synchronized_update` with paint lines emitted via row-addressed
+`\x1b[<row>;1H\x1b[2K` writes and trailing IME placement/visibility bundled prior to `\x1b[?2026l`; in MainScreen
+(`TuiMainScreen`), the target frame paint buffer is emitted within synchronized output followed by standalone relative
+movement writes (`\x1b[...A/B\x1b[...G`) and terminal visibility events (`showCursor`/`hideCursor`). Decoders retain
+exact constituent cursor commands and visibility in original order without synthesis or move suppression.
+`capture/product-cursor-layout-scenarios.mts` defines the scenarios; `capture/recapture-product-cursor-layout.mts`
+is the append recipe (same frozen revision, same `capturedAt`, same `environment`, manifest 26 → 27).
+
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
 widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key
