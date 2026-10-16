@@ -409,6 +409,279 @@ TEST_CASE("Native TUI TUI mode switch during pending work keeps the run live thr
     CHECK(terminal.modes().cursor_visible);
 }
 
+TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration honor settings and state",
+        "[coding_agent][tui][fullscreen][progress][issue1037][spec]") {
+    constexpr std::string_view kProgressActive = "\x1b]9;4;3\x07";
+    constexpr std::string_view kProgressClear = "\x1b]9;4;0;\x07";
+
+    const auto count_active = [&](const tui::VirtualTerminal& term) {
+        std::size_t n = 0;
+        for (const auto& out : term.output()) {
+            if (out.find(kProgressActive) != std::string::npos) ++n;
+        }
+        return n;
+    };
+    const auto count_clear = [&](const tui::VirtualTerminal& term) {
+        std::size_t n = 0;
+        for (const auto& out : term.output()) {
+            if (out.find(kProgressClear) != std::string::npos) ++n;
+        }
+        return n;
+    };
+
+    // ── Case 1: showTerminalProgress = true ──────────────────────────────────
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "fullscreen", "terminal": {"showTerminalProgress": true}})");
+        auto client = std::make_shared<tests::GatedChatProvider>();
+        auto* gated = client.get();
+        auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(terminal.modes().alternate_screen);
+        CHECK(count_active(terminal) == 0);
+
+        // Turn start activates progress.
+        REQUIRE(terminal.inject_input("pending turn\r"));
+        REQUIRE(pump_until(io, [&] { return gated->requests.size() == 1; }));
+        CHECK(count_active(terminal) >= 1);
+        const auto active_before_switch = count_active(terminal);
+
+        // Live switch to Regular while streaming: progress restored on new root.
+        auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ true);
+        REQUIRE(switched);
+        CHECK(*switched);
+        CHECK_FALSE(terminal.modes().alternate_screen);
+        // Active sequence re-emitted on restore.
+        CHECK(count_active(terminal) > active_before_switch);
+
+        // Turn complete clears progress.
+        const auto clear_before_release = count_clear(terminal);
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 1") != std::string::npos; }));
+        CHECK(count_clear(terminal) > clear_before_release);
+
+        // Switch to Fullscreen while idle: progress NOT restored.
+        const auto active_while_idle = count_active(terminal);
+        auto switched_back = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen, /* restore_progress */ true);
+        REQUIRE(switched_back);
+        CHECK(*switched_back);
+        CHECK(terminal.modes().alternate_screen);
+        CHECK(count_active(terminal) == active_while_idle);
+
+        // Switch with restore_progress = false: progress NOT restored even if streaming.
+        REQUIRE(terminal.inject_input("second turn\r"));
+        REQUIRE(pump_until(io, [&] { return gated->requests.size() == 2; }));
+        const auto active_before_no_restore = count_active(terminal);
+        auto switched_no_restore =
+                engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ false);
+        REQUIRE(switched_no_restore);
+        CHECK(*switched_no_restore);
+        CHECK(count_active(terminal) == active_before_no_restore);
+
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 2") != std::string::npos; }));
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+
+    // ── Case 2: default showTerminalProgress = false ─────────────────────────
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "fullscreen"})");
+        auto client = std::make_shared<tests::GatedChatProvider>();
+        auto* gated = client.get();
+        auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(terminal.modes().alternate_screen);
+
+        REQUIRE(terminal.inject_input("pending turn\r"));
+        REQUIRE(pump_until(io, [&] { return gated->requests.size() == 1; }));
+        // When disabled, turn start does NOT emit progress.
+        CHECK(count_active(terminal) == 0);
+
+        // Switch does NOT restore progress when disabled.
+        auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ true);
+        REQUIRE(switched);
+        CHECK(*switched);
+        CHECK(count_active(terminal) == 0);
+
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 1") != std::string::npos; }));
+        CHECK(count_active(terminal) == 0);
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+
+    // ── Case 3: compaction lifecycle and switch restoration ──────────────────
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "fullscreen", "terminal": {"showTerminalProgress": true}})");
+        auto client = std::make_shared<tests::GatedChatProvider>();
+        auto* gated = client.get();
+        auto opts = session_options(workspace, std::move(client));
+        opts.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{workspace.path() / "session.jsonl"};
+        auto created = runtime.run(create_session_async(runtime, std::move(opts)));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        // Complete two turns so the session history has entries to compact.
+        REQUIRE(terminal.inject_input("first\r"));
+        REQUIRE(pump_until(io, [&] { return gated->requests.size() == 1; }));
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 1") != std::string::npos; }));
+
+        REQUIRE(terminal.inject_input("second\r"));
+        REQUIRE(pump_until(io, [&] { return gated->requests.size() == 2; }));
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 2") != std::string::npos; }));
+
+        std::optional<support::Expected<coding_agent::CompactionResult>> compact_result;
+        boost::asio::co_spawn(
+                io,
+                [&]() -> boost::asio::awaitable<void> {
+                    compact_result = co_await created->session->compact();
+                    co_return;
+                },
+                boost::asio::detached);
+
+        REQUIRE(pump_until(io, [&] { return created->session->is_compacting(); }));
+        // Compaction start emits active sequence.
+        CHECK(count_active(terminal) >= 1);
+        const auto active_during_compaction = count_active(terminal);
+
+        // Mode switch during compaction restores progress.
+        auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ true);
+        REQUIRE(switched);
+        CHECK(*switched);
+        CHECK(count_active(terminal) > active_during_compaction);
+
+        // Releasing summarization completes compaction and emits clear sequence.
+        const auto clear_before_compact_end = count_clear(terminal);
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return compact_result.has_value(); }));
+        CHECK(count_clear(terminal) > clear_before_compact_end);
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+
+    // ── Case 4: settings toggle during streaming does NOT emit immediate write ──
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "fullscreen", "terminal": {"showTerminalProgress": true}})");
+        auto client = std::make_shared<tests::GatedChatProvider>();
+        auto* gated = client.get();
+        auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        // Turn start activates progress.
+        REQUIRE(terminal.inject_input("pending turn\r"));
+        REQUIRE(pump_until(io, [&] { return gated->requests.size() == 1; }));
+        CHECK(count_active(terminal) == 1);
+        const auto active_count = count_active(terminal);
+        const auto clear_count = count_clear(terminal);
+
+        // Open settings selector while turn is pending.
+        REQUIRE(terminal.inject_input("/settings\r"));
+        drain_ready(io);
+
+        // Move to terminal-progress row (item 3: past skill-commands, show-hardware-cursor, output-padding)
+        REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\r"));
+        drain_ready(io);
+
+        // Toggling updates settings persistence ONLY: no immediate clear or active sequence.
+        CHECK(count_active(terminal) == active_count);
+        CHECK(count_clear(terminal) == clear_count);
+
+        // Close settings.
+        close_settings(terminal, io);
+
+        // Releasing turn completes; because it was toggled false, agent_end sees false.
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 1") != std::string::npos; }));
+
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+    }
+}
+
 TEST_CASE("Native TUI fullscreen transcript keeps its scroll window across a mode round trip",
         "[coding_agent][tui][fullscreen][settings-selector][issue1018][spec]") {
     tests::RuntimeFixture runtime;

@@ -4289,8 +4289,8 @@ TEST_CASE("Native TUI settings opens only supported overlays and hotkeys renders
     CHECK(created->session->message_count() == 1);
 
     // The Theme item opens the single-mode theme submenu with the `(current)`
-    // marker on the active theme (index 7, behind the TUI mode row).
-    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r"));
+    // marker on the active theme (index 8, behind the TUI mode row).
+    REQUIRE(terminal.inject_input("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r"));
     drain_ready(io);
     screen = visible_screen(terminal);
     // The `(current)` marker renders as the styled description of the active

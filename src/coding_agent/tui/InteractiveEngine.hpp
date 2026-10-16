@@ -22,6 +22,7 @@
 // Repository-private `cch_coding_agent` implementation header: not part of
 // an Owner Interface, not installed, never exported.
 
+#include "coding_agent/AgentSession.hpp"
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
 #include "coding_agent/tui/ClipboardWrite.hpp"
@@ -160,7 +161,7 @@ public:
     /// text, transcript, focus and session. `false` is pi's overlay refusal
     /// (the engine is left exactly as it was); an error reports a swap that
     /// could not complete.
-    [[nodiscard]] support::Expected<bool> switch_tui_mode(coding_agent::TuiMode mode);
+    [[nodiscard]] support::Expected<bool> switch_tui_mode(coding_agent::TuiMode mode, bool restore_progress = true);
 
     /// The component holding focus on the live renderer (pi `getFocusedComponent()`).
     [[nodiscard]] cch::tui::Component* focus() const noexcept { return tui_ != nullptr ? tui_->focus() : nullptr; }
@@ -604,6 +605,12 @@ private:
     /// created once startup resources (live theme, settings manager,
     /// keybindings) exist.
     std::shared_ptr<ModelFlowController> model_flows_;
+    std::optional<EventSubscription> progress_agent_subscription_{std::nullopt};
+    std::optional<SessionEventSubscription> progress_session_subscription_{std::nullopt};
+
+    void bind_session_progress(AgentSession& session);
+    void unbind_session_progress() noexcept;
+
     std::shared_ptr<AuthFlowController> auth_flows_;
     /// The `/mcp` manager flow (spec #882, ticket #884): the manage panel,
     /// the login/logout/reconnect subcommands, the argument-completion

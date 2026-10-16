@@ -284,6 +284,7 @@ support::ExpectedVoid InteractiveEngine::replace_session(std::unique_ptr<AgentSe
         dispose_extension_ui();
         return std::unexpected(subscribed.error());
     }
+    bind_session_progress(*session_);
     // pi rebind: the replacement session's `session_start` registrations run
     // after `resetExtensionUI` restored the default editor, and its fresh
     // context may install another custom editor.
@@ -502,6 +503,7 @@ void InteractiveEngine::dequeue_pending_input(bool announce) {
 
 void InteractiveEngine::retire_current_session() noexcept {
     retire_action_generation();
+    unbind_session_progress();
     session_ui_->detach();
     if (session_ != nullptr) {
         session_->close();
