@@ -1,0 +1,462 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/core/settings-manager.ts:SettingsManager.getShowHardwareCursor,SettingsManager.setShowHardwareCursor",
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.switchTuiMode",
+    "packages/coding-agent/src/modes/interactive/tui-renderer.ts:createInteractiveTui"
+  ],
+  "scenarios": [
+    {
+      "name": "product-settings-resolution",
+      "description": "Resolution matrix for showHardwareCursor across scopes and env fallback",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "operation": "getShowHardwareCursor"
+      },
+      "expected": {
+        "settingsResults": {
+          "defaultUnset": false,
+          "envFallbackActive": true,
+          "envFallbackInactiveZero": false,
+          "envFallbackInactiveTrue": false,
+          "explicitFalseOverridesEnv": false,
+          "explicitTrue": true,
+          "projectScopeTrustedWins": true,
+          "projectScopeUntrustedIgnored": false
+        }
+      }
+    },
+    {
+      "name": "switch-regular-to-fullscreen-live-true",
+      "description": "Live switch from regular to fullscreen preserving live preference true",
+      "dimensions": {
+        "columns": 40,
+        "rows": 10
+      },
+      "inputs": {
+        "initialMode": "regular",
+        "targetMode": "fullscreen",
+        "initialPreference": false,
+        "livePreference": true,
+        "lines": [
+          "first line",
+          "second line here",
+          "third"
+        ],
+        "cursorCol": 5,
+        "cursorRow": 1,
+        "paddingX": 0,
+        "paddingY": 0
+      },
+      "expected": {
+        "showHardwareCursor": true,
+        "cursorVisible": true,
+        "cursor": {
+          "col": 5,
+          "row": 1
+        },
+        "screen": [
+          "first line",
+          "second line here",
+          "third",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "rawWrites": [
+          "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+          "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kfirst line\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Ksecond line here\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kthird\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;6H\u001b[?25h\u001b[?2026l"
+        ],
+        "terminalEvents": [
+          {
+            "op": "showCursor"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l"
+          },
+          {
+            "op": "hideCursor"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kfirst line\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Ksecond line here\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kthird\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;6H\u001b[?25h\u001b[?2026l"
+          }
+        ]
+      }
+    },
+    {
+      "name": "switch-fullscreen-to-regular-live-false",
+      "description": "Live switch from fullscreen to regular preserving live preference false",
+      "dimensions": {
+        "columns": 40,
+        "rows": 10
+      },
+      "inputs": {
+        "initialMode": "fullscreen",
+        "targetMode": "regular",
+        "initialPreference": true,
+        "livePreference": false,
+        "lines": [
+          "first line",
+          "second line here",
+          "third"
+        ],
+        "cursorCol": 5,
+        "cursorRow": 1,
+        "paddingX": 0,
+        "paddingY": 0
+      },
+      "expected": {
+        "showHardwareCursor": false,
+        "cursorVisible": false,
+        "cursor": {
+          "col": 5,
+          "row": 1
+        },
+        "screen": [
+          "first line",
+          "second line here",
+          "third",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "rawWrites": [
+          "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+          "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+          "\u001b[?2026hfirst line\u001b[0m\u001b]8;;\u0007\r\nsecond line here\u001b[0m\u001b]8;;\u0007\r\nthird\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+          "\u001b[1A\u001b[6G"
+        ],
+        "terminalEvents": [
+          {
+            "op": "write",
+            "bytes": "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l"
+          },
+          {
+            "op": "showCursor"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l"
+          },
+          {
+            "op": "hideCursor"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[?2026hfirst line\u001b[0m\u001b]8;;\u0007\r\nsecond line here\u001b[0m\u001b]8;;\u0007\r\nthird\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[1A\u001b[6G"
+          },
+          {
+            "op": "hideCursor"
+          }
+        ]
+      }
+    },
+    {
+      "name": "switch-regular-to-fullscreen-live-false",
+      "description": "Live switch from regular to fullscreen with live preference false",
+      "dimensions": {
+        "columns": 40,
+        "rows": 10
+      },
+      "inputs": {
+        "initialMode": "regular",
+        "targetMode": "fullscreen",
+        "initialPreference": false,
+        "livePreference": false,
+        "lines": [
+          "first line",
+          "second line here",
+          "third"
+        ],
+        "cursorCol": 5,
+        "cursorRow": 1,
+        "paddingX": 0,
+        "paddingY": 0
+      },
+      "expected": {
+        "showHardwareCursor": false,
+        "cursorVisible": false,
+        "cursor": {
+          "col": 5,
+          "row": 1
+        },
+        "screen": [
+          "first line",
+          "second line here",
+          "third",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "rawWrites": [
+          "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+          "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kfirst line\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Ksecond line here\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kthird\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;6H\u001b[?25l\u001b[?2026l"
+        ],
+        "terminalEvents": [
+          {
+            "op": "showCursor"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l"
+          },
+          {
+            "op": "hideCursor"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kfirst line\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Ksecond line here\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kthird\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;6H\u001b[?25l\u001b[?2026l"
+          }
+        ]
+      }
+    },
+    {
+      "name": "switch-fullscreen-to-regular-live-true",
+      "description": "Live switch from fullscreen to regular with live preference true",
+      "dimensions": {
+        "columns": 40,
+        "rows": 10
+      },
+      "inputs": {
+        "initialMode": "fullscreen",
+        "targetMode": "regular",
+        "initialPreference": false,
+        "livePreference": true,
+        "lines": [
+          "first line",
+          "second line here",
+          "third"
+        ],
+        "cursorCol": 5,
+        "cursorRow": 1,
+        "paddingX": 0,
+        "paddingY": 0
+      },
+      "expected": {
+        "showHardwareCursor": true,
+        "cursorVisible": true,
+        "cursor": {
+          "col": 5,
+          "row": 1
+        },
+        "screen": [
+          "first line",
+          "second line here",
+          "third",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "rawWrites": [
+          "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+          "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+          "\u001b[?2026hfirst line\u001b[0m\u001b]8;;\u0007\r\nsecond line here\u001b[0m\u001b]8;;\u0007\r\nthird\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+          "\u001b[1A\u001b[6G"
+        ],
+        "terminalEvents": [
+          {
+            "op": "write",
+            "bytes": "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l"
+          },
+          {
+            "op": "showCursor"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l"
+          },
+          {
+            "op": "hideCursor"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[?2026hfirst line\u001b[0m\u001b]8;;\u0007\r\nsecond line here\u001b[0m\u001b]8;;\u0007\r\nthird\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[1A\u001b[6G"
+          },
+          {
+            "op": "showCursor"
+          }
+        ]
+      }
+    },
+    {
+      "name": "switch-null-cursor-hides",
+      "description": "Switch with null/undefined cursor hides hardware cursor despite preference true",
+      "dimensions": {
+        "columns": 40,
+        "rows": 10
+      },
+      "inputs": {
+        "initialMode": "regular",
+        "targetMode": "fullscreen",
+        "initialPreference": true,
+        "livePreference": true,
+        "lines": [
+          "line 0 without cursor",
+          "line 1 without cursor"
+        ],
+        "cursorCol": null,
+        "cursorRow": 0,
+        "paddingX": 0,
+        "paddingY": 0
+      },
+      "expected": {
+        "showHardwareCursor": true,
+        "cursorVisible": false,
+        "cursor": {
+          "col": 0,
+          "row": 9
+        },
+        "screen": [
+          "line 0 without cursor",
+          "line 1 without cursor",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "rawWrites": [
+          "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+          "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0 without cursor\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1 without cursor\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+        ],
+        "terminalEvents": [
+          {
+            "op": "showCursor"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l"
+          },
+          {
+            "op": "hideCursor"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0 without cursor\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1 without cursor\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+          }
+        ]
+      }
+    },
+    {
+      "name": "switch-nested-box-padding",
+      "description": "Switch with editor nested in padded Box preserves adjusted coordinates and preference true",
+      "dimensions": {
+        "columns": 40,
+        "rows": 10
+      },
+      "inputs": {
+        "initialMode": "regular",
+        "targetMode": "fullscreen",
+        "initialPreference": false,
+        "livePreference": true,
+        "lines": [
+          "first line",
+          "second line here",
+          "third"
+        ],
+        "cursorCol": 5,
+        "cursorRow": 1,
+        "paddingX": 2,
+        "paddingY": 1
+      },
+      "expected": {
+        "showHardwareCursor": true,
+        "cursorVisible": true,
+        "cursor": {
+          "col": 7,
+          "row": 2
+        },
+        "screen": [
+          "                                        ",
+          "  first line                            ",
+          "  second line here                      ",
+          "  third                                 ",
+          "                                        ",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "rawWrites": [
+          "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+          "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2K                                        \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2K  first line                            \u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K  second line here                      \u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K  third                                 \u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K                                        \u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[3;8H\u001b[?25h\u001b[?2026l"
+        ],
+        "terminalEvents": [
+          {
+            "op": "showCursor"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l"
+          },
+          {
+            "op": "hideCursor"
+          },
+          {
+            "op": "write",
+            "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2K                                        \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2K  first line                            \u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K  second line here                      \u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K  third                                 \u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K                                        \u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[3;8H\u001b[?25h\u001b[?2026l"
+          }
+        ]
+      }
+    }
+  ]
+}

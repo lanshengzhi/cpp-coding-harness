@@ -336,6 +336,18 @@ visibility mode (`cursorVisible`), preference state (`showHardwareCursor`), move
 redundant visibility-call suppression in AltScreen and incidental frame paint padding in MainScreen
 invalid-cursor are bounded and verified at the public terminal decorator boundary.
 
+For the product-level hardware cursor and live mode switch contract (#1037),
+`product-cursor.json` records seven scenarios covering `SettingsManager.prototype.getShowHardwareCursor`
+resolution (8 cases spanning global/project scopes, project trust, and `PI_HARDWARE_CURSOR` env fallback)
+and live preference preservation across `InteractiveMode.prototype.switchTuiMode` with multiline
+cursor positioning, nested Box padding, and null/undefined cursor hiding.
+`capture/product-cursor-scenarios.mts` defines the scenarios; `capture/recapture-product-cursor.mts`
+is the append recipe (same frozen revision `7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`,
+same `environment`, every other artifact byte-identical, manifest 25 → 26 with `sourceEndpoints` and source digests).
+`ProductCursorEvidenceTest` replays settings resolution against `SettingsManager` and live switch scenarios
+across `MainScreen` and `AltScreenHost`, verifying exact terminal coordinates, visibility mode, preference
+transfer, and frame buffer contents against the verified frozen artifact.
+
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
 widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key

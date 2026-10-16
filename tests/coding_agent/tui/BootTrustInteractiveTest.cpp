@@ -531,12 +531,12 @@ TEST_CASE("boot registers discovered themes and the settings Theme submenu commi
     BootTrustRun run;
     run.start(fixture, std::move(request), tests::make_scripted_fake_models());
 
-    // Open /settings, navigate to the Theme item (index 6, behind the TUI mode
+    // Open /settings, navigate to the Theme item (index 7, behind the TUI mode
     // row), open the single-mode ThemeSubmenu: the builtins plus every
     // discovered theme are listed sorted, with the `(current)` marker on the
     // active theme.
     run.type("/settings\r");
-    run.type("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r");
+    run.type("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\r");
     auto screen = visible_screen(run.terminal);
     CHECK(screen.find("(current)") != std::string::npos);
     CHECK(screen.find("dark") != std::string::npos);

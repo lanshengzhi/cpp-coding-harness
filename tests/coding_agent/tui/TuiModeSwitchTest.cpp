@@ -693,14 +693,56 @@ TEST_CASE("Native TUI TUI mode switch rebinds extension listeners once with no r
 
 TEST_CASE("Native TUI InteractiveEngine resolves hardware cursor preference at startup",
         "[coding_agent][tui][cursor][issue1037][spec]") {
-    tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
-    env_guard.unset();
+    struct StartupCase {
+        coding_agent::TuiMode mode;
+        std::optional<std::string> env_var;
+        std::optional<std::string> config_json;
+        bool expected_show_hardware_cursor;
+        bool expected_cursor_visible;
+    };
 
-    // 1. Regular mode with default/empty config (cursor hidden)
-    {
+    const std::vector<StartupCase> startup_cases = {
+            // 1. Regular mode with default/empty config
+            {coding_agent::TuiMode::Regular, std::nullopt, std::nullopt, false, false},
+            // 2. Regular mode with PI_HARDWARE_CURSOR=1 env fallback
+            {coding_agent::TuiMode::Regular, "1", std::nullopt, true, true},
+            // 3. Regular mode with explicit false override
+            {coding_agent::TuiMode::Regular, "1", R"({"showHardwareCursor": false})", false, false},
+            // 4. Regular mode with explicit true
+            {coding_agent::TuiMode::Regular, std::nullopt, R"({"showHardwareCursor": true})", true, true},
+            // 5. Fullscreen mode with default/empty config
+            {coding_agent::TuiMode::Fullscreen, std::nullopt, R"({"tuiMode": "fullscreen"})", false, false},
+            // 6. Fullscreen mode with PI_HARDWARE_CURSOR=1 env fallback
+            {coding_agent::TuiMode::Fullscreen, "1", R"({"tuiMode": "fullscreen"})", true, true},
+            // 7. Fullscreen mode with explicit false override
+            {coding_agent::TuiMode::Fullscreen,
+                    "1",
+                    R"({"tuiMode": "fullscreen", "showHardwareCursor": false})",
+                    false,
+                    false},
+            // 8. Fullscreen mode with explicit true
+            {coding_agent::TuiMode::Fullscreen,
+                    std::nullopt,
+                    R"({"tuiMode": "fullscreen", "showHardwareCursor": true})",
+                    true,
+                    true},
+    };
+
+    for (const auto& test_case : startup_cases) {
+        tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
+        if (test_case.env_var) {
+            env_guard.set(*test_case.env_var);
+        } else {
+            env_guard.unset();
+        }
+
         tests::RuntimeFixture runtime;
         tests::TempWorkspace workspace;
         tests::TempWorkspace config;
+        if (test_case.config_json) {
+            config.write("settings.json", *test_case.config_json);
+        }
+
         auto created = runtime.run(
                 create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
         REQUIRE(created);
@@ -709,131 +751,27 @@ TEST_CASE("Native TUI InteractiveEngine resolves hardware cursor preference at s
         tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
         boost::asio::io_context io;
         std::optional<support::ExpectedVoid> run_result;
-        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
-                terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+        auto engine =
+                std::make_shared<coding_agent::tui::InteractiveEngine>(terminal, io.get_executor(), test_case.mode);
         boost::asio::co_spawn(io,
-                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
+                drive_engine(engine, make_run(*created->session, config.path(), test_case.mode)),
                 [&](std::exception_ptr exception, support::ExpectedVoid result) {
                     CHECK(exception == nullptr);
                     run_result.emplace(std::move(result));
                 });
         drain_ready(io);
         const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        if (test_case.mode == coding_agent::TuiMode::Fullscreen) {
+            REQUIRE(terminal.modes().alternate_screen);
+        } else {
+            REQUIRE_FALSE(terminal.modes().alternate_screen);
+        }
         REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
 
-        CHECK_FALSE(engine->show_hardware_cursor());
-        CHECK_FALSE(terminal.modes().cursor_visible);
+        CHECK(engine->show_hardware_cursor() == test_case.expected_show_hardware_cursor);
+        CHECK(terminal.modes().cursor_visible == test_case.expected_cursor_visible);
         // Valid IME target positioned at editor prompt even when hidden
         CHECK(terminal.cursor().row > 0);
-
-        REQUIRE(terminal.inject_input("\x04"));
-        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
-        REQUIRE(run_result);
-        CHECK(*run_result);
-    }
-
-    // 2. Regular mode with PI_HARDWARE_CURSOR=1 env fallback
-    {
-        env_guard.set("1");
-        tests::RuntimeFixture runtime;
-        tests::TempWorkspace workspace;
-        tests::TempWorkspace config;
-        auto created = runtime.run(
-                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
-        REQUIRE(created);
-        tests::RuntimeLoopDriver runtime_driver(runtime);
-
-        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
-        boost::asio::io_context io;
-        std::optional<support::ExpectedVoid> run_result;
-        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
-                terminal, io.get_executor(), coding_agent::TuiMode::Regular);
-        boost::asio::co_spawn(io,
-                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
-                [&](std::exception_ptr exception, support::ExpectedVoid result) {
-                    CHECK(exception == nullptr);
-                    run_result.emplace(std::move(result));
-                });
-        drain_ready(io);
-        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
-        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
-
-        CHECK(engine->show_hardware_cursor());
-        CHECK(terminal.modes().cursor_visible);
-        CHECK(terminal.cursor().row > 0);
-
-        REQUIRE(terminal.inject_input("\x04"));
-        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
-        REQUIRE(run_result);
-        CHECK(*run_result);
-    }
-
-    // 3. Explicit false wins over PI_HARDWARE_CURSOR=1
-    {
-        env_guard.set("1");
-        tests::RuntimeFixture runtime;
-        tests::TempWorkspace workspace;
-        tests::TempWorkspace config;
-        config.write("settings.json", R"({"showHardwareCursor": false})");
-        auto created = runtime.run(
-                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
-        REQUIRE(created);
-        tests::RuntimeLoopDriver runtime_driver(runtime);
-
-        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
-        boost::asio::io_context io;
-        std::optional<support::ExpectedVoid> run_result;
-        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
-                terminal, io.get_executor(), coding_agent::TuiMode::Regular);
-        boost::asio::co_spawn(io,
-                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
-                [&](std::exception_ptr exception, support::ExpectedVoid result) {
-                    CHECK(exception == nullptr);
-                    run_result.emplace(std::move(result));
-                });
-        drain_ready(io);
-        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
-        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
-
-        CHECK_FALSE(engine->show_hardware_cursor());
-        CHECK_FALSE(terminal.modes().cursor_visible);
-
-        REQUIRE(terminal.inject_input("\x04"));
-        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
-        REQUIRE(run_result);
-        CHECK(*run_result);
-    }
-
-    // 4. Fullscreen mode with explicit true
-    {
-        env_guard.unset();
-        tests::RuntimeFixture runtime;
-        tests::TempWorkspace workspace;
-        tests::TempWorkspace config;
-        config.write("settings.json", R"({"tuiMode": "fullscreen", "showHardwareCursor": true})");
-        auto created = runtime.run(
-                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
-        REQUIRE(created);
-        tests::RuntimeLoopDriver runtime_driver(runtime);
-
-        tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
-        boost::asio::io_context io;
-        std::optional<support::ExpectedVoid> run_result;
-        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
-                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
-        boost::asio::co_spawn(io,
-                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
-                [&](std::exception_ptr exception, support::ExpectedVoid result) {
-                    CHECK(exception == nullptr);
-                    run_result.emplace(std::move(result));
-                });
-        drain_ready(io);
-        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
-        REQUIRE(terminal.modes().alternate_screen);
-        REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
-
-        CHECK(engine->show_hardware_cursor());
-        CHECK(terminal.modes().cursor_visible);
 
         REQUIRE(terminal.inject_input("\x04"));
         REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
@@ -873,6 +811,14 @@ TEST_CASE("Native TUI TUI mode switch preserves live hardware cursor preference 
         const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
         REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
 
+        // Type input into prompt to give editor cursor a distinct column
+        REQUIRE(terminal.inject_input("prompt text"));
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("prompt text") != std::string::npos; }));
+
+        const auto initial_cursor = terminal.cursor();
+        CHECK(initial_cursor.column > 0);
+        CHECK(initial_cursor.row > 0);
         CHECK_FALSE(engine->show_hardware_cursor());
         CHECK_FALSE(terminal.modes().cursor_visible);
 
@@ -881,6 +827,7 @@ TEST_CASE("Native TUI TUI mode switch preserves live hardware cursor preference 
         drain_ready(io);
         REQUIRE(pump_until(io, [&] { return terminal.modes().cursor_visible; }));
         CHECK(engine->show_hardware_cursor());
+        CHECK(terminal.cursor().column == initial_cursor.column);
 
         // Switch regular -> fullscreen: live preference true MUST transfer to the fullscreen root!
         auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
@@ -892,8 +839,11 @@ TEST_CASE("Native TUI TUI mode switch preserves live hardware cursor preference 
         // Fullscreen root must retain the live preference (true), not the stored setting (false)
         CHECK(engine->show_hardware_cursor());
         CHECK(terminal.modes().cursor_visible);
+        // Target cursor cell coordinates maintained
+        CHECK(terminal.cursor().column == initial_cursor.column);
+        CHECK(terminal.cursor().row > 0);
 
-        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(terminal.inject_input("\x03\x04"));
         REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
         REQUIRE(run_result);
         CHECK(*run_result);
@@ -926,6 +876,13 @@ TEST_CASE("Native TUI TUI mode switch preserves live hardware cursor preference 
         REQUIRE(terminal.modes().alternate_screen);
         REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
 
+        // Type input into prompt
+        REQUIRE(terminal.inject_input("fullscreen text"));
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fullscreen text") != std::string::npos; }));
+
+        const auto initial_cursor = terminal.cursor();
+        CHECK(initial_cursor.column > 0);
         CHECK(engine->show_hardware_cursor());
         CHECK(terminal.modes().cursor_visible);
 
@@ -934,6 +891,7 @@ TEST_CASE("Native TUI TUI mode switch preserves live hardware cursor preference 
         drain_ready(io);
         REQUIRE(pump_until(io, [&] { return !terminal.modes().cursor_visible; }));
         CHECK_FALSE(engine->show_hardware_cursor());
+        CHECK(terminal.cursor().column == initial_cursor.column);
 
         // Switch fullscreen -> regular: live preference false MUST transfer to the regular root!
         auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
@@ -945,8 +903,10 @@ TEST_CASE("Native TUI TUI mode switch preserves live hardware cursor preference 
         // Regular root must retain the live preference (false), not the stored setting (true)
         CHECK_FALSE(engine->show_hardware_cursor());
         CHECK_FALSE(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == initial_cursor.column);
+        CHECK(terminal.cursor().row > 0);
 
-        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(terminal.inject_input("\x03\x04"));
         REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
         REQUIRE(run_result);
         CHECK(*run_result);

@@ -89,6 +89,10 @@
       {
         "path": "capture/hardware-cursor-scenarios.mts",
         "sha256": "b019bd68653bc0855460d6a6138ee04dad6c2b826bf0850c175d7900fcfd18aa"
+      },
+      {
+        "path": "capture/product-cursor-scenarios.mts",
+        "sha256": "0e9ae308d37337d9ae0b9ca2aa33e8e9df3d1a03f2eb4d9a1df38597c59704df"
       }
     ]
   },
@@ -408,6 +412,17 @@
         "packages/tui/src/tui.ts:getShowHardwareCursor,setShowHardwareCursor,extractCursorPosition,hideTerminalCursor",
         "packages/tui/src/tui-main-screen.ts:positionHardwareCursor,render",
         "packages/tui/src/tui-alt-screen.ts:constructor,render"
+      ]
+    },
+    {
+      "path": "product-cursor.json",
+      "family": "product-cursor",
+      "bytes": 17144,
+      "sha256": "00a304d780a4b7b4e3f3bd231d85de7333dffa191e667e574d94311695b7a559",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/core/settings-manager.ts:SettingsManager.getShowHardwareCursor,SettingsManager.setShowHardwareCursor",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.switchTuiMode",
+        "packages/coding-agent/src/modes/interactive/tui-renderer.ts:createInteractiveTui"
       ]
     }
   ]
