@@ -1,5 +1,7 @@
 #include "coding_agent/tui/InteractiveView.hpp"
 
+#include "coding_agent/tui/ChatViewport.hpp"
+
 #include <cch/tui/TruncatedText.hpp>
 #include <cch/support/Error.hpp>
 
@@ -56,6 +58,7 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
     chat_.set_output_pad(options.output_pad);
     autocomplete_provider_factory_ = std::move(options.autocomplete_provider_factory);
     editor_.set_autocomplete_provider(std::move(options.autocomplete_provider));
+    fullscreen_ = options.fullscreen;
 }
 
 void InteractiveView::initialize(const AgentSessionSnapshot& snapshot) { chat_.initialize(snapshot); }
@@ -376,60 +379,103 @@ void InteractiveView::clear_user_bash_progress() {
     bash_outcome_set_ = false;
 }
 
+namespace {
+
+/// One fullscreen region whose content belongs to the view: a layout-root
+/// child rendering through one of the view's region methods. It owns no view
+/// state, so the document, pending, status and footer regions and the dock's
+/// editor (the view itself) all describe the same instances the main screen
+/// composes.
+class ViewRegion final : public cch::tui::Component {
+public:
+    using Render = std::move_only_function<support::Expected<cch::tui::RenderResult>(std::size_t)>;
+
+    explicit ViewRegion(Render render) : render_(std::move(render)) {}
+
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
+        return render_(width);
+    }
+
+    void invalidate() override {}
+
+private:
+    Render render_;
+};
+
+} // namespace
+
 support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t width) {
     if (callback_error_) return std::unexpected(*callback_error_);
+    if (fullscreen_) {
+        // The dock's editor entry of the layout root: the document, pending,
+        // status and footer regions render through their own root components,
+        // and the dock allocation bounds this region. The editor keeps its own
+        // terminal bound (`set_fullscreen_terminal_rows`), pushed by the engine
+        // before every fullscreen frame.
+        editor_row_offset_ = 0;
+        auto lines = render_editor_region(width, std::nullopt);
+        if (!lines) return std::unexpected(lines.error());
+        cch::tui::RenderResult result;
+        result.lines = std::move(*lines);
+        return result;
+    }
+    return render_main_screen(width);
+}
 
-    // Header (keybinding hints), the loaded-resources block, pending-
-    // messages, status, and footer render first so the editor and
-    // autocomplete capacities account for their fixed rows below the chat.
-    std::vector<std::string> header_lines;
-    if (auto header = header_.render(width); !header) {
-        return std::unexpected(header.error());
-    } else {
-        header_lines = std::move(header->lines);
-    }
-    std::vector<std::string> resources_lines;
-    if (auto resources = resources_.render(width); !resources) {
-        return std::unexpected(resources.error());
-    } else {
-        resources_lines = std::move(resources->lines);
-    }
-    // Status and footer containers are part of the composition: the status
-    // container holds the active Working/Compaction/Retry indicator (two
-    // rows: one spacer + the loader line, pi's Loader) or the two-row
-    // IdleStatus; the footer renders pi's two-line layout from the live
-    // footer data source. While the default editor renders, the active
-    // indicator embeds into the editor's top border instead (pi v0.87.1
-    // embedWorkingStatus) and the container contributes zero rows; an
-    // editor-slot replacement keeps the standalone indicator rows (pi's
-    // non-opted custom editors).
-    std::vector<std::string> status_lines;
-    std::vector<std::string> footer_lines;
-    if (footer_data_source_) {
-        current_footer_data_ = footer_data_source_();
-    }
-    if (status_indicator_ != nullptr && editor_replacement_ == nullptr && custom_editor_ == nullptr) {
-        // Embedded: the spinner renders in the editor border (the sink at
-        // editor render); the standalone block stays empty.
-    } else if (status_indicator_ != nullptr) {
-        if (auto rendered = status_indicator_->render(width); !rendered) {
-            return std::unexpected(rendered.error());
-        } else {
-            status_lines = std::move(rendered->lines);
-        }
-    } else {
-        // pi's IdleStatus: the two-row empty status container.
-        auto idle = idle_status_.render(width);
-        if (!idle) return std::unexpected(idle.error());
-        status_lines = std::move(idle->lines);
-    }
-    footer_.set_data(current_footer_data_);
-    if (auto rendered = footer_.render(width); !rendered) {
-        return std::unexpected(rendered.error());
-    } else {
-        footer_lines = std::move(rendered->lines);
-    }
+support::Expected<std::vector<std::string>> InteractiveView::render_header_region(std::size_t width) {
+    auto header = header_.render(width);
+    if (!header) return std::unexpected(header.error());
+    return std::move(header->lines);
+}
 
+support::Expected<std::vector<std::string>> InteractiveView::render_resources_region(
+        std::size_t width, std::optional<std::size_t> budget) {
+    auto resources = resources_.render(width);
+    if (!resources) return std::unexpected(resources.error());
+    auto lines = std::move(resources->lines);
+    if (budget.has_value() && lines.size() > *budget) {
+        lines.resize(*budget);
+    }
+    return lines;
+}
+
+support::Expected<cch::tui::RenderResult> InteractiveView::render_chat_region(
+        std::size_t width, std::size_t preceding_rows) {
+    auto rendered = chat_.render(width);
+    if (!rendered) return std::unexpected(rendered.error());
+    cch::tui::RenderResult chat = std::move(*rendered);
+    for (auto& image : chat.images) {
+        image.region.row += preceding_rows;
+    }
+    return chat;
+}
+
+support::Expected<cch::tui::RenderResult> InteractiveView::render_document_region(std::size_t width) {
+    // Deliberately unbounded: the transcript viewport measures this component
+    // without a height bound and paints the visible window, so bounding the
+    // document to `available_rows_` here would destroy transcript rows the
+    // viewport can scroll to. The header, the loaded-resources block and the
+    // chat are all part of the scrollable document.
+    auto header_lines = render_header_region(width);
+    if (!header_lines) return std::unexpected(header_lines.error());
+    auto resources_lines = render_resources_region(width, std::nullopt);
+    if (!resources_lines) return std::unexpected(resources_lines.error());
+    auto chat = render_chat_region(width, header_lines->size() + resources_lines->size());
+    if (!chat) return std::unexpected(chat.error());
+
+    cch::tui::RenderResult document;
+    document.lines = std::move(*header_lines);
+    document.lines.insert(document.lines.end(),
+            std::make_move_iterator(resources_lines->begin()),
+            std::make_move_iterator(resources_lines->end()));
+    document.images = std::move(chat->images);
+    document.lines.insert(document.lines.end(),
+            std::make_move_iterator(chat->lines.begin()),
+            std::make_move_iterator(chat->lines.end()));
+    return document;
+}
+
+support::Expected<std::vector<std::string>> InteractiveView::render_pending_region(std::size_t width) {
     std::vector<std::string> pending_lines;
     pending_lines.reserve(pending_steering_.size() + pending_follow_up_.size() + 3);
     if (pending_bash_) {
@@ -470,27 +516,55 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
             pending_lines.push_back(std::move(rendered->lines.front()));
         }
     }
-    // Pending messages, status, editor, footer, and a minimum chat slice
-    // stay visible on every terminal; the loaded-resources block yields the
-    // space they need. pi's transcript scroll keeps these rows fixed while
-    // the loaded-resources content scrolls above the chat, so
-    // a huge startup diagnostic (e.g. an invalid `--theme` document's
-    // full missing-color-token list, #425) must not push the footer and
-    // editor off a small screen and freeze the boot view.
-    constexpr std::size_t kMinEditorRows = 3;
-    constexpr std::size_t kMinChatRows = 3;
-    const auto fixed_budget = pending_lines.size() + status_lines.size() + kMinEditorRows + footer_lines.size();
-    const auto top_budget =
-            available_rows_ > fixed_budget + kMinChatRows ? available_rows_ - fixed_budget - kMinChatRows : 0;
-    const auto resources_budget =
-        top_budget > header_lines.size() ? top_budget - header_lines.size() : 0;
-    if (resources_lines.size() > resources_budget) {
-        resources_lines.resize(resources_budget);
-    }
-    const auto fixed_rows =
-        header_lines.size() + resources_lines.size() + pending_lines.size() +
-        status_lines.size() + footer_lines.size();
+    return pending_lines;
+}
 
+support::Expected<std::vector<std::string>> InteractiveView::render_status_region(std::size_t width) {
+    // Status and footer containers are part of the composition: the status
+    // container holds the active Working/Compaction/Retry indicator (two
+    // rows: one spacer + the loader line, pi's Loader) or the two-row
+    // IdleStatus; the footer renders pi's two-line layout from the live
+    // footer data source. While the default editor renders, the active
+    // indicator embeds into the editor's top border instead (pi v0.87.1
+    // embedWorkingStatus) and the container contributes zero rows; an
+    // editor-slot replacement keeps the standalone indicator rows (pi's
+    // non-opted custom editors).
+    //
+    // The status region is the first region of either composition whose render
+    // reads the footer data, and it precedes the editor in both the dock order
+    // and the main-screen order, so polling here feeds the editor border and
+    // the footer of the same frame.
+    if (footer_data_source_) {
+        current_footer_data_ = footer_data_source_();
+    }
+    std::vector<std::string> status_lines;
+    if (status_indicator_ != nullptr && editor_replacement_ == nullptr && custom_editor_ == nullptr) {
+        // Embedded: the spinner renders in the editor border (the sink at
+        // editor render); the standalone block stays empty.
+    } else if (status_indicator_ != nullptr) {
+        if (auto rendered = status_indicator_->render(width); !rendered) {
+            return std::unexpected(rendered.error());
+        } else {
+            status_lines = std::move(rendered->lines);
+        }
+    } else {
+        // pi's IdleStatus: the two-row empty status container.
+        auto idle = idle_status_.render(width);
+        if (!idle) return std::unexpected(idle.error());
+        status_lines = std::move(idle->lines);
+    }
+    return status_lines;
+}
+
+support::Expected<std::vector<std::string>> InteractiveView::render_footer_region(std::size_t width) {
+    footer_.set_data(current_footer_data_);
+    auto rendered = footer_.render(width);
+    if (!rendered) return std::unexpected(rendered.error());
+    return std::move(rendered->lines);
+}
+
+support::Expected<std::vector<std::string>> InteractiveView::render_editor_region(
+        std::size_t width, std::optional<MainScreenEditorBudget> regular_budget) {
     std::vector<std::string> editor_lines;
     if (editor_replacement_) {
         // pi's editorContainer swap: the login dialog/selector renders in
@@ -500,15 +574,16 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
         } else {
             editor_lines = std::move(replaced->lines);
         }
-        // Height-bound the swap-in dialog (#607): pending/status/footer keep
-        // their rows and the minimum chat slice stays visible, so an oversized
-        // dialog is cropped from the top. Its input and selection rows remain
-        // at the physical bottom instead of growing past the terminal height.
-        const auto fixed_rest_rows = pending_lines.size() + status_lines.size() + footer_lines.size();
-        const auto replacement_budget =
-                available_rows_ > fixed_rest_rows + kMinChatRows ? available_rows_ - fixed_rest_rows - kMinChatRows : 1;
-        if (editor_lines.size() > replacement_budget) {
-            editor_lines.erase(editor_lines.begin(), editor_lines.end() - replacement_budget);
+        if (regular_budget.has_value()) {
+            // Height-bound the swap-in dialog (#607): pending/status/footer
+            // keep their rows and the minimum chat slice stays visible, so an
+            // oversized dialog is cropped from the top. Its input and selection
+            // rows remain at the physical bottom instead of growing past the
+            // terminal height. Regular-only: the fullscreen dock allocation
+            // bounds the region instead.
+            if (editor_lines.size() > regular_budget->replacement_rows) {
+                editor_lines.erase(editor_lines.begin(), editor_lines.end() - regular_budget->replacement_rows);
+            }
         }
     } else if (custom_editor_ != nullptr) {
         // pi updateEditorBorderColor: the custom editor's border follows the
@@ -524,7 +599,13 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
             editor_lines = std::move(rendered->lines);
         }
     } else {
-        editor_.set_available_height(available_rows_ > fixed_rows ? available_rows_ - fixed_rows : 0);
+        if (regular_budget.has_value()) {
+            // Main-screen budget (Regular-only): the editor's visible lines
+            // yield to the fixed rows above and below it. Fullscreen leaves the
+            // bound at the terminal rows the engine pushed
+            // (`set_fullscreen_terminal_rows`).
+            editor_.set_available_height(regular_budget->editor_rows);
+        }
         // The editor enters Bash mode as soon as the trimmed input begins
         // with `!` (where User Bash dispatch is available). The border color
         // follows the same transition: bash mode uses the bashMode token,
@@ -550,6 +631,52 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
             editor_lines = std::move(editor->lines);
         }
     }
+    return editor_lines;
+}
+
+support::Expected<cch::tui::RenderResult> InteractiveView::render_main_screen(std::size_t width) {
+    // Header (keybinding hints), the loaded-resources block, status, footer and
+    // pending-messages render first so the editor and autocomplete capacities
+    // account for their fixed rows below the chat.
+    auto header_lines = render_header_region(width);
+    if (!header_lines) return std::unexpected(header_lines.error());
+    auto status_lines = render_status_region(width);
+    if (!status_lines) return std::unexpected(status_lines.error());
+    auto footer_lines = render_footer_region(width);
+    if (!footer_lines) return std::unexpected(footer_lines.error());
+    auto pending_lines = render_pending_region(width);
+    if (!pending_lines) return std::unexpected(pending_lines.error());
+
+    // Pending messages, status, editor, footer, and a minimum chat slice
+    // stay visible on every terminal; the loaded-resources block yields the
+    // space they need. pi's transcript scroll keeps these rows fixed while
+    // the loaded-resources content scrolls above the chat, so
+    // a huge startup diagnostic (e.g. an invalid `--theme` document's
+    // full missing-color-token list, #425) must not push the footer and
+    // editor off a small screen and freeze the boot view.
+    //
+    // This whole budgeting block belongs to the Regular main-screen path:
+    // Fullscreen replaces it with the layout engine's allocation of the
+    // two-region viewport, so nothing here runs for a fullscreen frame.
+    constexpr std::size_t kMinEditorRows = 3;
+    constexpr std::size_t kMinChatRows = 3;
+    const auto fixed_budget = pending_lines->size() + status_lines->size() + kMinEditorRows + footer_lines->size();
+    const auto top_budget =
+            available_rows_ > fixed_budget + kMinChatRows ? available_rows_ - fixed_budget - kMinChatRows : 0;
+    const auto resources_budget = top_budget > header_lines->size() ? top_budget - header_lines->size() : 0;
+    auto resources_lines = render_resources_region(width, resources_budget);
+    if (!resources_lines) return std::unexpected(resources_lines.error());
+
+    const auto fixed_rows = header_lines->size() + resources_lines->size() + pending_lines->size() +
+                            status_lines->size() + footer_lines->size();
+    MainScreenEditorBudget editor_budget;
+    editor_budget.editor_rows = available_rows_ > fixed_rows ? available_rows_ - fixed_rows : 0;
+    const auto fixed_rest_rows = pending_lines->size() + status_lines->size() + footer_lines->size();
+    editor_budget.replacement_rows =
+            available_rows_ > fixed_rest_rows + kMinChatRows ? available_rows_ - fixed_rest_rows - kMinChatRows : 1;
+    auto editor_lines = render_editor_region(width, editor_budget);
+    if (!editor_lines) return std::unexpected(editor_lines.error());
+
     // The full conversation passes through to the terminal's native
     // scrollback (pi TuiMainScreen): pending/status/editor/autocomplete/
     // footer stay fixed on screen, and earlier chat lines scroll away into
@@ -557,45 +684,91 @@ support::Expected<cch::tui::RenderResult> InteractiveView::render(std::size_t wi
     // conversation grows past one screen. Inline images keep their
     // absolute buffer rows so they scroll with the content that produced
     // them (fork-B image-follows-content).
-    cch::tui::RenderResult chat_result;
-    if (auto rendered = chat_.render(width); !rendered) {
-        return std::unexpected(rendered.error());
-    } else {
-        chat_result = std::move(*rendered);
-    }
+    auto chat = render_chat_region(width, header_lines->size() + resources_lines->size());
+    if (!chat) return std::unexpected(chat.error());
 
     cch::tui::RenderResult transcript_result;
-    transcript_result.lines = std::move(header_lines);
-    transcript_result.lines.insert(
-        transcript_result.lines.end(),
-        std::make_move_iterator(resources_lines.begin()),
-        std::make_move_iterator(resources_lines.end()));
-    for (auto& image : chat_result.images) {
-        image.region.row += transcript_result.lines.size();
-        transcript_result.images.push_back(std::move(image));
-    }
-    transcript_result.lines.insert(
-        transcript_result.lines.end(),
-        std::make_move_iterator(chat_result.lines.begin()),
-        std::make_move_iterator(chat_result.lines.end()));
+    transcript_result.lines = std::move(*header_lines);
+    transcript_result.lines.insert(transcript_result.lines.end(),
+            std::make_move_iterator(resources_lines->begin()),
+            std::make_move_iterator(resources_lines->end()));
+    transcript_result.images = std::move(chat->images);
+    transcript_result.lines.insert(transcript_result.lines.end(),
+            std::make_move_iterator(chat->lines.begin()),
+            std::make_move_iterator(chat->lines.end()));
 
     transcript_result.lines.insert(transcript_result.lines.end(),
-            std::make_move_iterator(pending_lines.begin()),
-            std::make_move_iterator(pending_lines.end()));
+            std::make_move_iterator(pending_lines->begin()),
+            std::make_move_iterator(pending_lines->end()));
     transcript_result.lines.insert(transcript_result.lines.end(),
-            std::make_move_iterator(status_lines.begin()),
-            std::make_move_iterator(status_lines.end()));
+            std::make_move_iterator(status_lines->begin()),
+            std::make_move_iterator(status_lines->end()));
 
     editor_row_offset_ = transcript_result.lines.size();
 
     transcript_result.lines.insert(transcript_result.lines.end(),
-            std::make_move_iterator(editor_lines.begin()),
-            std::make_move_iterator(editor_lines.end()));
+            std::make_move_iterator(editor_lines->begin()),
+            std::make_move_iterator(editor_lines->end()));
     transcript_result.lines.insert(transcript_result.lines.end(),
-            std::make_move_iterator(footer_lines.begin()),
-            std::make_move_iterator(footer_lines.end()));
+            std::make_move_iterator(footer_lines->begin()),
+            std::make_move_iterator(footer_lines->end()));
 
     return transcript_result;
+}
+
+support::Expected<std::unique_ptr<cch::tui::Component>> InteractiveView::make_fullscreen_root(
+        std::unique_ptr<InteractiveView> view, cch::tui::ScrollbarMode scrollbar) {
+    auto* const raw = view.get();
+    ChatViewportOptions options;
+    // The document is one region: header hints, the loaded-resources block and
+    // the chat, all unbounded so the transcript viewport measures the whole
+    // conversation.
+    options.document =
+            std::make_unique<ViewRegion>([raw](std::size_t width) { return raw->render_document_region(width); });
+    // The dock regions render through the view's own instances, so the frame
+    // layout and the main screen compose the same pending/status/footer state.
+    auto line_region = [raw](auto region_method) {
+        return std::make_unique<ViewRegion>(
+                [raw, region_method](std::size_t width) -> support::Expected<cch::tui::RenderResult> {
+                    auto lines = (raw->*region_method)(width);
+                    if (!lines) return std::unexpected(lines.error());
+                    cch::tui::RenderResult result;
+                    result.lines = std::move(*lines);
+                    return result;
+                });
+    };
+    options.pending_messages = line_region(&InteractiveView::render_pending_region);
+    options.status = line_region(&InteractiveView::render_status_region);
+    options.footer = line_region(&InteractiveView::render_footer_region);
+    // The dock's editor entry is the view itself: the engine focuses this
+    // instance, and every editor operation (`set_autocomplete_provider`,
+    // `initialize`/`reconcile_snapshot`, `set_pending_input`) reaches it
+    // through the root.
+    options.editor = std::move(view);
+    options.scrollbar = scrollbar;
+    // The frozen call site passes `theme.fg("scrollbarThumb", …)`. The theme
+    // carries no `scrollbarTrack` token yet, so the track keeps the toolkit's
+    // pi dim-gray default and only the thumb follows the live theme.
+    options.scrollbar_thumb_style = [raw](std::string_view text) {
+        return raw->theme_->foreground(ThemeToken::ScrollbarThumb, std::string{text});
+    };
+
+    auto viewport = create_chat_viewport(std::move(options));
+    if (!viewport) return std::unexpected(viewport.error());
+    return std::move(viewport->root);
+}
+
+void InteractiveView::set_fullscreen_terminal_rows(std::size_t rows) {
+    const auto bounded = std::max<std::size_t>(1, rows);
+    // pi's editor reads `tui.terminal.rows` at render time and caps its visible
+    // lines at `max(5, floor(rows * 0.3))`; the dock allocation is the
+    // viewport bound. `available_rows_` stays the Regular budget and is never
+    // rewritten here.
+    editor_.set_terminal_rows(bounded);
+    editor_.set_available_height(bounded);
+    if (auto* viewport = dynamic_cast<cch::tui::ViewportAware*>(custom_editor_.get())) {
+        viewport->set_available_height(bounded);
+    }
 }
 
 void InteractiveView::invalidate() {

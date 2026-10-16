@@ -30,6 +30,7 @@
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/ScrollView.hpp>
 #include <cch/support/Error.hpp>
 
 #include <algorithm>
@@ -188,6 +189,11 @@ struct InteractiveViewOptions {
     std::move_only_function<std::unique_ptr<cch::tui::AutocompleteProvider>()> autocomplete_provider_factory;
     /// Must outlive the view: controller-owned live theme.
     const LiveTheme* theme{nullptr};
+    /// The root this view is composed into. Regular (default) renders the whole
+    /// main-screen transcript; Fullscreen renders only the dock's editor region,
+    /// because the engine installs `make_fullscreen_root` as the `AltScreen`
+    /// layout root around this same instance (#1036).
+    bool fullscreen{false};
 };
 
 /// The pi main-screen composition. Emits one closed `ViewAction` per
@@ -296,6 +302,24 @@ public:
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override;
     void set_available_height(std::size_t rows) override;
 
+    /// Assemble the frozen fullscreen two-region root around this view
+    /// (`chat-viewport.ts:22`, installed at `interactive-mode.ts:961`): the
+    /// transcript viewport over the view's document region, and the fixed dock
+    /// whose editor entry is this view. Ownership moves into the returned root,
+    /// so the engine's `view_`, the focused editor and the text it holds stay
+    /// the same instance every other region addresses. Scrollbar hooks come
+    /// from the view's live theme.
+    [[nodiscard]] static support::Expected<std::unique_ptr<cch::tui::Component>> make_fullscreen_root(
+            std::unique_ptr<InteractiveView> view, cch::tui::ScrollbarMode scrollbar);
+
+    /// Fullscreen editor bound: a layout-root child is never pushed
+    /// `set_available_height` (the frame allocation is its bound), and pi's
+    /// editor reads `tui.terminal.rows` at render time to cap its visible lines
+    /// at `max(5, 30% of rows)`. The engine pushes the terminal rows before
+    /// every fullscreen frame; Regular mode keeps the `available_rows_` budget
+    /// and never calls this.
+    void set_fullscreen_terminal_rows(std::size_t rows);
+
 private:
     void record_callback_error(
         std::string message,
@@ -381,6 +405,62 @@ private:
     /// `newEditor.setAutocompleteProvider(this.autocompleteProvider)`).
     void apply_custom_editor_autocomplete();
 
+    // The composition's regions. Regular renders every region into one
+    // main-screen transcript; Fullscreen gives each region its own component
+    // inside the layout root (`make_fullscreen_root`).
+
+    /// The header keybinding hints; the main-screen budget reads its rows
+    /// before the loaded-resources block is bounded.
+    [[nodiscard]] support::Expected<std::vector<std::string>> render_header_region(std::size_t width);
+
+    /// The loaded-resources block. `budget` bounds it on the main screen only:
+    /// the fullscreen document region renders it unbounded inside the viewport.
+    [[nodiscard]] support::Expected<std::vector<std::string>> render_resources_region(
+            std::size_t width, std::optional<std::size_t> budget);
+
+    /// The chat, with its image row offsets moved past the `preceding_rows`
+    /// document rows that render before it.
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render_chat_region(
+            std::size_t width, std::size_t preceding_rows);
+
+    /// The fullscreen document region: header, unbounded loaded resources, and
+    /// the chat. The `ScrollView` measures this whole component, so nothing
+    /// here may truncate to `available_rows_`.
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render_document_region(std::size_t width);
+
+    /// Pending Bash block, pending steering/follow-up messages and the
+    /// dequeue hint.
+    [[nodiscard]] support::Expected<std::vector<std::string>> render_pending_region(std::size_t width);
+
+    /// The active indicator or the two-row idle status; polls the footer data
+    /// source the status, editor and footer share.
+    [[nodiscard]] support::Expected<std::vector<std::string>> render_status_region(std::size_t width);
+
+    /// The two-row footer over the polled footer data.
+    [[nodiscard]] support::Expected<std::vector<std::string>> render_footer_region(std::size_t width);
+
+    /// The Regular-only main-screen row budgets for the editor slot. Fullscreen
+    /// passes nullopt: the dock allocation bounds the region and
+    /// `set_fullscreen_terminal_rows` carries the editor's terminal bound.
+    struct MainScreenEditorBudget {
+        /// Rows the installed editor may occupy: the terminal rows the regions
+        /// above and below it leave.
+        std::size_t editor_rows{0};
+        /// Rows the swap-in dialog may occupy: the same budget without the
+        /// minimum chat slice (#607).
+        std::size_t replacement_rows{1};
+    };
+
+    /// The editor slot: a swap-in dialog, the installed custom editor, or the
+    /// built-in editor. `regular_available_rows` is the main-screen budget
+    /// (`available_rows_ - fixed_rows`, a Regular-only computation); fullscreen
+    /// passes nullopt because the dock allocation bounds the region and
+    /// `set_fullscreen_terminal_rows` carries the editor's own terminal bound.
+    [[nodiscard]] support::Expected<std::vector<std::string>> render_editor_region(
+            std::size_t width, std::optional<MainScreenEditorBudget> regular_budget);
+    /// The Regular composition: one main-screen transcript.
+    [[nodiscard]] support::Expected<cch::tui::RenderResult> render_main_screen(std::size_t width);
+
     std::shared_ptr<SharedKeybindings> keybindings_;
     InvalidateSink on_invalidate_;
     ViewActionSink action_sink_;
@@ -428,6 +508,8 @@ private:
     std::size_t last_bash_output_size_{0};
     bool bash_outcome_set_{false};
     std::size_t available_rows_{24};
+    /// Fullscreen: this view is the dock's editor entry of its own layout root.
+    bool fullscreen_{false};
     std::size_t editor_row_offset_{0};
 };
 
