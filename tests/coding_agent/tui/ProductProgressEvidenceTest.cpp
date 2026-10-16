@@ -131,7 +131,7 @@ TEST_CASE("frozen product-progress protocol constants replay exact escape sequen
     const std::string clear_seq = expected.at("clearSequence").get_string();
 
     CHECK(active_seq == "\x1b]9;4;3\x07");
-    CHECK((clear_seq == "\x1b]9;4;0\x07" || clear_seq == "\x1b]9;4;0;\x07"));
+    CHECK(clear_seq == "\x1b]9;4;0\x07");
     CHECK(expected.at("turnStartAction").get_string() == "active");
     CHECK(expected.at("agentEndAction").get_string() == "clear");
     CHECK(expected.at("compactionStartAction").get_string() == "active");

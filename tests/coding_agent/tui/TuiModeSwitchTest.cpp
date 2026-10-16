@@ -412,7 +412,7 @@ TEST_CASE("Native TUI TUI mode switch during pending work keeps the run live thr
 TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration honor settings and state",
         "[coding_agent][tui][fullscreen][progress][issue1037][spec]") {
     constexpr std::string_view kProgressActive = "\x1b]9;4;3\x07";
-    constexpr std::string_view kProgressClear = "\x1b]9;4;0;\x07";
+    constexpr std::string_view kProgressClear = "\x1b]9;4;0\x07";
 
     const auto count_active = [&](const tui::VirtualTerminal& term) {
         std::size_t n = 0;

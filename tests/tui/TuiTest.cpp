@@ -876,7 +876,7 @@ TEST_CASE("Terminal seam records title and progress through VirtualTerminal", "[
     const std::vector<std::string> expected_output{
             "\x1b]0;pike - session - workspace\x07",
             "\x1b]9;4;3\x07",
-            "\x1b]9;4;0;\x07",
+            "\x1b]9;4;0\x07",
     };
     CHECK(terminal.output() == expected_output);
     REQUIRE(terminal.stop());
@@ -893,9 +893,17 @@ TEST_CASE("VirtualTerminal stop clears an active progress indicator", "[tui][ter
 
     const std::vector<std::string> expected_output{
             "\x1b]9;4;3\x07",
-            "\x1b]9;4;0;\x07",
+            "\x1b]9;4;0\x07",
     };
     CHECK(terminal.output() == expected_output);
+}
+
+TEST_CASE("VirtualTerminal stop when inactive does not emit progress clear", "[tui][terminal][issue378][spec]") {
+    cch::tui::VirtualTerminal terminal;
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.stop());
+    CHECK(terminal.output().empty());
 }
 
 TEST_CASE("VirtualTerminal drain input is a started-gated no-op", "[tui][terminal][issue378][spec]") {

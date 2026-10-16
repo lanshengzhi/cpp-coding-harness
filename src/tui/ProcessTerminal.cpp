@@ -72,7 +72,7 @@ constexpr std::string_view kKeyboardProtocolPop = "\x1b[<u";
 constexpr std::string_view kModifyOtherKeysEnable = "\x1b[>4;2m";
 constexpr std::string_view kModifyOtherKeysDisable = "\x1b[>4;0m";
 constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
-constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0;\x07";
+constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0\x07";
 constexpr auto kProgressKeepalive = std::chrono::milliseconds(1000);
 /// The readiness timer re-reads TIOCGWINSZ at least this often so resizes are
 /// detected even without SIGWINCH delivery.
