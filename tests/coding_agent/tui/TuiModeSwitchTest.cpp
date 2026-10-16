@@ -110,16 +110,39 @@ namespace {
     co_return co_await engine->finish();
 }
 
-/// The TUI mode row is the sixth of the selector's seven items: behind the
+/// The TUI mode row is the seventh of the selector's eight items: behind the
 /// thinking-level row and before the theme row.
-constexpr std::string_view kTuiModeRowKeys = "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B";
+constexpr std::string_view kTuiModeRowKeys = "\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B";
 
 /// Only the focused row renders its description, so this is what proves the
-/// five moves above landed on the TUI mode row.
+/// six moves above landed on the TUI mode row.
 constexpr std::string_view kTuiModeRowDescription = "Interface layout;";
 
 [[nodiscard]] bool on_tui_mode_row(const tui::VirtualTerminal& terminal) {
     return visible_screen(terminal).find(kTuiModeRowDescription) != std::string::npos;
+}
+
+constexpr std::string_view kHardwareCursorRowKeys = "\x1b[B";
+constexpr std::string_view kHardwareCursorRowDescription = "Show the terminal cursor";
+
+[[nodiscard]] bool on_hardware_cursor_row(const tui::VirtualTerminal& terminal) {
+    const auto screen = visible_screen(terminal);
+    return screen.find("Show hardware cursor") != std::string::npos &&
+           screen.find(kHardwareCursorRowDescription) != std::string::npos;
+}
+
+void focus_hardware_cursor_row(tui::VirtualTerminal& terminal, boost::asio::io_context& io) {
+    REQUIRE(terminal.inject_input("/settings\r"));
+    drain_ready(io);
+    REQUIRE(terminal.inject_input(std::string{kHardwareCursorRowKeys}));
+    REQUIRE(pump_until(io, [&] { return on_hardware_cursor_row(terminal); }));
+}
+
+void close_hardware_cursor_settings(tui::VirtualTerminal& terminal, boost::asio::io_context& io) {
+    REQUIRE(terminal.inject_input("\x1b"));
+    REQUIRE(terminal.flush_input());
+    drain_ready(io);
+    REQUIRE_FALSE(on_hardware_cursor_row(terminal));
 }
 
 /// Open `/settings` and move onto the TUI mode row.
@@ -976,4 +999,117 @@ TEST_CASE("Native TUI TUI mode switch preserves live hardware cursor preference 
         REQUIRE(run_result);
         CHECK(*run_result);
     }
+}
+
+TEST_CASE("Native TUI settings hardware cursor row toggles live preference and persists setting",
+        "[coding_agent][tui][cursor][settings-selector][issue1037][spec]") {
+    tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
+    env_guard.unset();
+
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("settings.json", R"({"showHardwareCursor": false})");
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+    boost::asio::co_spawn(io,
+            drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+    REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+    CHECK_FALSE(engine->show_hardware_cursor());
+    CHECK_FALSE(terminal.modes().cursor_visible);
+
+    // Open /settings and navigate to Show hardware cursor row
+    focus_hardware_cursor_row(terminal, io);
+
+    // Enter cycles false -> true: live renderer shows cursor immediately and persists to disk
+    REQUIRE(terminal.inject_input("\r"));
+    drain_ready(io);
+    REQUIRE(pump_until(io, [&] { return terminal.modes().cursor_visible; }));
+    CHECK(engine->show_hardware_cursor());
+    CHECK(read_text_file(config.path() / "settings.json").find("\"showHardwareCursor\": true") != std::string::npos);
+
+    // Enter again cycles true -> false: live renderer hides cursor immediately and persists to disk
+    REQUIRE(terminal.inject_input("\r"));
+    drain_ready(io);
+    REQUIRE(pump_until(io, [&] { return !terminal.modes().cursor_visible; }));
+    CHECK_FALSE(engine->show_hardware_cursor());
+    CHECK(read_text_file(config.path() / "settings.json").find("\"showHardwareCursor\": false") != std::string::npos);
+
+    close_hardware_cursor_settings(terminal, io);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE("Native TUI reload reapplies showHardwareCursor preference from settings",
+        "[coding_agent][tui][cursor][reload][issue1037][spec]") {
+    tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
+    env_guard.unset();
+
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("settings.json", R"({"showHardwareCursor": false})");
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    tui::VirtualTerminal terminal({.columns = 48, .rows = 24});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+    boost::asio::co_spawn(io,
+            drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+    REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
+
+    CHECK_FALSE(engine->show_hardware_cursor());
+    CHECK_FALSE(terminal.modes().cursor_visible);
+
+    // Mutate file on disk to true
+    config.write("settings.json", R"({"showHardwareCursor": true})");
+
+    // Trigger /reload
+    REQUIRE(terminal.inject_input("/reload\r"));
+    drain_ready(io);
+    REQUIRE(pump_until(io, [&] { return terminal.modes().cursor_visible; }));
+    CHECK(engine->show_hardware_cursor());
+
+    // Mutate file on disk to false
+    config.write("settings.json", R"({"showHardwareCursor": false})");
+
+    // Trigger /reload again
+    REQUIRE(terminal.inject_input("/reload\r"));
+    drain_ready(io);
+    REQUIRE(pump_until(io, [&] { return !terminal.modes().cursor_visible; }));
+    CHECK_FALSE(engine->show_hardware_cursor());
+
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result);
+    CHECK(*run_result);
 }

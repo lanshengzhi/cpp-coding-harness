@@ -28,6 +28,8 @@ struct SettingsSelectorConfig {
     std::size_t output_pad{1};
     /// Resolved pi `enableSkillCommands` (default true).
     bool enable_skill_commands{true};
+    /// Resolved pi `showHardwareCursor` (default false).
+    bool show_hardware_cursor{false};
     /// The session's current thinking level (pi `session.thinkingLevel`).
     std::string thinking_level{};
     /// The thinking levels the active model supports (pi
@@ -53,9 +55,9 @@ struct SettingsSelectorConfig {
 using SettingsSelectorHideThinkingSink = std::move_only_function<void(bool)>;
 using SettingsSelectorOutputPadSink = std::move_only_function<void(std::size_t)>;
 using SettingsSelectorEnableSkillCommandsSink = std::move_only_function<void(bool)>;
+using SettingsSelectorShowHardwareCursorSink = std::move_only_function<void(bool)>;
 using SettingsSelectorThinkingLevelSink = std::move_only_function<void(std::string)>;
-using SettingsSelectorDefaultProjectTrustSink =
-    std::move_only_function<void(DefaultProjectTrust)>;
+using SettingsSelectorDefaultProjectTrustSink = std::move_only_function<void(DefaultProjectTrust)>;
 using SettingsSelectorThemeChangeSink = std::move_only_function<void(std::string)>;
 using SettingsSelectorThemePreviewSink = std::move_only_function<void(std::string)>;
 using SettingsSelectorTuiModeChangeSink = std::move_only_function<void(std::string)>;
@@ -66,6 +68,7 @@ struct SettingsSelectorCallbacks {
     SettingsSelectorHideThinkingSink on_hide_thinking_block_change{};
     SettingsSelectorOutputPadSink on_output_pad_change{};
     SettingsSelectorEnableSkillCommandsSink on_enable_skill_commands_change{};
+    SettingsSelectorShowHardwareCursorSink on_show_hardware_cursor_change{};
     SettingsSelectorThinkingLevelSink on_thinking_level_change{};
     SettingsSelectorDefaultProjectTrustSink on_default_project_trust_change{};
     /// pi `onThemeChange`: commit a ThemeSubmenu selection (global-scope
@@ -92,16 +95,14 @@ struct SettingsSelectorCallbacks {
 /// the input thread like every selector sink, and callers post to their
 /// executor for session/settings-touching work (pi's settings callbacks run
 /// on the UI thread and write through the settings manager synchronously).
-class SettingsSelectorComponent final
-    : public cch::tui::Component,
-      public cch::tui::InputHandler,
-      public cch::tui::Focusable {
+class SettingsSelectorComponent final : public cch::tui::Component,
+                                        public cch::tui::InputHandler,
+                                        public cch::tui::Focusable {
 public:
-    SettingsSelectorComponent(
-        const LiveTheme& theme,
-        std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
-        SettingsSelectorConfig config,
-        SettingsSelectorCallbacks callbacks);
+    SettingsSelectorComponent(const LiveTheme& theme,
+            std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+            SettingsSelectorConfig config,
+            SettingsSelectorCallbacks callbacks);
     SettingsSelectorComponent(SettingsSelectorComponent&&) = delete;
     SettingsSelectorComponent& operator=(SettingsSelectorComponent&&) = delete;
     ~SettingsSelectorComponent() override;

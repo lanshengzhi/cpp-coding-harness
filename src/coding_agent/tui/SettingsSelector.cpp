@@ -33,8 +33,7 @@ namespace {
     return "Ask";
 }
 
-[[nodiscard]] std::optional<DefaultProjectTrust> default_project_trust_by_label(
-    std::string_view label) {
+[[nodiscard]] std::optional<DefaultProjectTrust> default_project_trust_by_label(std::string_view label) {
     if (label == "Ask") return DefaultProjectTrust::Ask;
     if (label == "Always trust") return DefaultProjectTrust::Always;
     if (label == "Never trust") return DefaultProjectTrust::Never;
@@ -49,12 +48,11 @@ struct SettingsSelectorState {
 /// one select list of the model's available levels with pi's per-level
 /// descriptions, pre-selecting the current level. Selection reports the level
 /// through the change sink and completes; cancel completes without a value.
-[[nodiscard]] std::unique_ptr<cch::tui::SelectList> make_thinking_submenu(
-    const LiveTheme& theme,
-    const std::shared_ptr<const cch::tui::KeybindingRegistry>& keybindings,
-    const SettingsSelectorConfig& config,
-    SettingsSelectorState& state,
-    cch::tui::SettingsSubmenuDoneSink done) {
+[[nodiscard]] std::unique_ptr<cch::tui::SelectList> make_thinking_submenu(const LiveTheme& theme,
+        const std::shared_ptr<const cch::tui::KeybindingRegistry>& keybindings,
+        const SettingsSelectorConfig& config,
+        SettingsSelectorState& state,
+        cch::tui::SettingsSubmenuDoneSink done) {
     std::vector<cch::tui::SelectItem> items;
     items.reserve(config.available_thinking_levels.size());
     std::size_t selected_index = 0;
@@ -63,10 +61,10 @@ struct SettingsSelectorState {
             selected_index = index;
         }
         items.push_back({
-            .value = config.available_thinking_levels[index],
-            .label = config.available_thinking_levels[index],
-            .description = std::optional<std::string>{
-                thinking_level_description(config.available_thinking_levels[index])},
+                .value = config.available_thinking_levels[index],
+                .label = config.available_thinking_levels[index],
+                .description =
+                        std::optional<std::string>{thinking_level_description(config.available_thinking_levels[index])},
         });
     }
 
@@ -104,23 +102,19 @@ struct SettingsSelectorState {
 /// write and re-applies, pi `onThemeChange`); cancel re-previews the
 /// original theme setting and completes without a value — the settings are
 /// never written on cancel (cancel-does-not-revert).
-class ThemeSubmenu final : public cch::tui::Component,
-                           public cch::tui::InputHandler,
-                           public cch::tui::Focusable {
+class ThemeSubmenu final : public cch::tui::Component, public cch::tui::InputHandler, public cch::tui::Focusable {
 public:
-    ThemeSubmenu(
-        const LiveTheme& theme,
-        std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
-        const SettingsSelectorConfig& config,
-        SettingsSelectorState& state,
-        cch::tui::SettingsSubmenuDoneSink done) {
+    ThemeSubmenu(const LiveTheme& theme,
+            std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+            const SettingsSelectorConfig& config,
+            SettingsSelectorState& state,
+            cch::tui::SettingsSubmenuDoneSink done) {
         const auto preview = [&state](std::string value) {
             if (state.callbacks.on_theme_preview) {
                 state.callbacks.on_theme_preview(std::move(value));
             }
         };
-        auto completion =
-            std::make_shared<cch::tui::SettingsSubmenuDoneSink>(std::move(done));
+        auto completion = std::make_shared<cch::tui::SettingsSubmenuDoneSink>(std::move(done));
         const auto original_theme_setting = config.current_theme;
 
         // pi `SelectSubmenu` chrome: bold accent title, muted description
@@ -130,15 +124,14 @@ public:
         const auto styled = [&theme](ThemeToken token, std::string text) {
             return theme.foreground(token, std::move(text));
         };
-        (void)content->add_child(std::make_unique<cch::tui::Text>(
-            "\x1b[1m" + styled(ThemeToken::Accent, "Theme") + "\x1b[22m",
-            /* padding_x */ 0,
-            /* padding_y */ 0));
+        (void)content->add_child(
+                std::make_unique<cch::tui::Text>("\x1b[1m" + styled(ThemeToken::Accent, "Theme") + "\x1b[22m",
+                        /* padding_x */ 0,
+                        /* padding_y */ 0));
         (void)content->add_child(std::make_unique<cch::tui::Spacer>(1));
-        (void)content->add_child(std::make_unique<cch::tui::Text>(
-            styled(ThemeToken::Muted, "Select a theme."),
-            /* padding_x */ 0,
-            /* padding_y */ 0));
+        (void)content->add_child(std::make_unique<cch::tui::Text>(styled(ThemeToken::Muted, "Select a theme."),
+                /* padding_x */ 0,
+                /* padding_y */ 0));
         (void)content->add_child(std::make_unique<cch::tui::Spacer>(1));
 
         std::vector<cch::tui::SelectItem> items;
@@ -154,23 +147,16 @@ public:
             }
             if (name == "dark") dark_found = true;
             items.push_back({
-                .value = name,
-                .label = name,
-                .description = name == config.active_theme
-                    ? std::optional<std::string>{"(current)"}
-                    : std::nullopt,
+                    .value = name,
+                    .label = name,
+                    .description = name == config.active_theme ? std::optional<std::string>{"(current)"} : std::nullopt,
             });
         }
         if (!active_found) {
             // pi `preferredTheme(availableThemes, current, "dark")`: fall
             // back to `dark`, then the first item.
-            const auto dark = std::find(
-                config.available_themes.begin(),
-                config.available_themes.end(),
-                "dark");
-            selected_index = dark_found
-                ? static_cast<std::size_t>(dark - config.available_themes.begin())
-                : 0;
+            const auto dark = std::find(config.available_themes.begin(), config.available_themes.end(), "dark");
+            selected_index = dark_found ? static_cast<std::size_t>(dark - config.available_themes.begin()) : 0;
         }
 
         auto select_list = std::make_unique<cch::tui::SelectList>(std::move(items),
@@ -198,10 +184,10 @@ public:
         select_list->set_selected_index(selected_index);
         (void)content->add_child(std::move(select_list));
         (void)content->add_child(std::make_unique<cch::tui::Spacer>(1));
-        (void)content->add_child(std::make_unique<cch::tui::Text>(
-            styled(ThemeToken::Dim, "  Enter to select · Esc to go back"),
-            /* padding_x */ 0,
-            /* padding_y */ 0));
+        (void)content->add_child(
+                std::make_unique<cch::tui::Text>(styled(ThemeToken::Dim, "  Enter to select · Esc to go back"),
+                        /* padding_x */ 0,
+                        /* padding_y */ 0));
         content_ = std::move(content);
     }
 
@@ -209,9 +195,7 @@ public:
         return content_->render(width);
     }
 
-    void invalidate() override {
-        content_->invalidate();
-    }
+    void invalidate() override { content_->invalidate(); }
 
     cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override {
         const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
@@ -233,9 +217,7 @@ public:
     }
 
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
-        return select_list_pointer_ != nullptr
-            ? select_list_pointer_->cursor_location()
-            : std::nullopt;
+        return select_list_pointer_ != nullptr ? select_list_pointer_->cursor_location() : std::nullopt;
     }
 
 private:
@@ -249,44 +231,49 @@ private:
 /// (the render-settings group precedes the base items, so output-padding
 /// renders before hide-thinking). The Theme item renders always (pi's
 /// settings-selector.ts renders it unconditionally).
-[[nodiscard]] std::vector<cch::tui::SettingItem> make_items(
-    const SettingsSelectorConfig& config) {
+[[nodiscard]] std::vector<cch::tui::SettingItem> make_items(const SettingsSelectorConfig& config) {
     std::vector<cch::tui::SettingItem> items;
     items.push_back({
-        .id = "skill-commands",
-        .label = "Skill commands",
-        .description = "Register skills as /skill:name commands",
-        .current_value = config.enable_skill_commands ? "true" : "false",
-        .control = cch::tui::SettingValues{{"true", "false"}},
+            .id = "skill-commands",
+            .label = "Skill commands",
+            .description = "Register skills as /skill:name commands",
+            .current_value = config.enable_skill_commands ? "true" : "false",
+            .control = cch::tui::SettingValues{{"true", "false"}},
     });
     items.push_back({
-        .id = "output-padding",
-        .label = "Output padding",
-        .description = "Horizontal padding for user messages, assistant messages, and thinking",
-        .current_value = std::to_string(config.output_pad),
-        .control = cch::tui::SettingValues{{"0", "1"}},
+            .id = "show-hardware-cursor",
+            .label = "Show hardware cursor",
+            .description = "Show the terminal cursor while still positioning it for IME support",
+            .current_value = config.show_hardware_cursor ? "true" : "false",
+            .control = cch::tui::SettingValues{{"true", "false"}},
     });
     items.push_back({
-        .id = "hide-thinking",
-        .label = "Hide thinking",
-        .description = "Hide thinking blocks in assistant responses",
-        .current_value = config.hide_thinking_block ? "true" : "false",
-        .control = cch::tui::SettingValues{{"true", "false"}},
+            .id = "output-padding",
+            .label = "Output padding",
+            .description = "Horizontal padding for user messages, assistant messages, and thinking",
+            .current_value = std::to_string(config.output_pad),
+            .control = cch::tui::SettingValues{{"0", "1"}},
     });
     items.push_back({
-        .id = "default-project-trust",
-        .label = "Default project trust",
-        .description = "Fallback behavior when no extension or saved trust decision decides project trust",
-        .current_value = std::string{default_project_trust_label(config.default_project_trust)},
-        .control = cch::tui::SettingValues{
-            {"Ask", "Always trust", "Never trust"}},
+            .id = "hide-thinking",
+            .label = "Hide thinking",
+            .description = "Hide thinking blocks in assistant responses",
+            .current_value = config.hide_thinking_block ? "true" : "false",
+            .control = cch::tui::SettingValues{{"true", "false"}},
     });
     items.push_back({
-        .id = "thinking",
-        .label = "Thinking level",
-        .description = "Reasoning depth for thinking-capable models",
-        .current_value = config.thinking_level,
-        .control = cch::tui::SettingSubmenu{},
+            .id = "default-project-trust",
+            .label = "Default project trust",
+            .description = "Fallback behavior when no extension or saved trust decision decides project trust",
+            .current_value = std::string{default_project_trust_label(config.default_project_trust)},
+            .control = cch::tui::SettingValues{{"Ask", "Always trust", "Never trust"}},
+    });
+    items.push_back({
+            .id = "thinking",
+            .label = "Thinking level",
+            .description = "Reasoning depth for thinking-capable models",
+            .current_value = config.thinking_level,
+            .control = cch::tui::SettingSubmenu{},
     });
     items.push_back({
             .id = "tui-mode",
@@ -296,11 +283,11 @@ private:
             .control = cch::tui::SettingValues{{"regular", "fullscreen"}},
     });
     items.push_back({
-        .id = "theme",
-        .label = "Theme",
-        .description = "Color theme for the interface",
-        .current_value = config.current_theme,
-        .control = cch::tui::SettingSubmenu{},
+            .id = "theme",
+            .label = "Theme",
+            .description = "Color theme for the interface",
+            .current_value = config.current_theme,
+            .control = cch::tui::SettingSubmenu{},
     });
     return items;
 }
@@ -315,85 +302,87 @@ struct SettingsSelectorComponent::Impl {
         : state(std::make_shared<SettingsSelectorState>(SettingsSelectorState{.callbacks = std::move(callbacks)})),
           theme(theme), list_(make_items(config), make_options(theme, std::move(keybindings), config, state)) {}
 
-    [[nodiscard]] static cch::tui::SettingsListOptions make_options(
-        const LiveTheme& theme,
-        std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
-        const SettingsSelectorConfig& config,
-        const std::shared_ptr<SettingsSelectorState>& state) {
-        auto cancel = std::make_shared<SettingsSelectorCancelSink>(
-            std::move(state->callbacks.on_cancel));
+    [[nodiscard]] static cch::tui::SettingsListOptions make_options(const LiveTheme& theme,
+            std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+            const SettingsSelectorConfig& config,
+            const std::shared_ptr<SettingsSelectorState>& state) {
+        auto cancel = std::make_shared<SettingsSelectorCancelSink>(std::move(state->callbacks.on_cancel));
         auto submenu_keybindings = keybindings;
         auto options = cch::tui::SettingsListOptions{
-            .max_visible = 10,
-            .enable_search = true,
-            .theme = theme.settings_list_theme(),
-            .on_change = [state](std::string id, std::string new_value) -> support::ExpectedVoid {
-                if (id == "skill-commands") {
-                    if (state->callbacks.on_enable_skill_commands_change) {
-                        state->callbacks.on_enable_skill_commands_change(new_value == "true");
+                .max_visible = 10,
+                .enable_search = true,
+                .theme = theme.settings_list_theme(),
+                .on_change = [state](std::string id, std::string new_value) -> support::ExpectedVoid {
+                    if (id == "skill-commands") {
+                        if (state->callbacks.on_enable_skill_commands_change) {
+                            state->callbacks.on_enable_skill_commands_change(new_value == "true");
+                        }
+                        return {};
                     }
-                    return {};
-                }
-                if (id == "hide-thinking") {
-                    if (state->callbacks.on_hide_thinking_block_change) {
-                        state->callbacks.on_hide_thinking_block_change(new_value == "true");
+                    if (id == "show-hardware-cursor") {
+                        if (state->callbacks.on_show_hardware_cursor_change) {
+                            state->callbacks.on_show_hardware_cursor_change(new_value == "true");
+                        }
+                        return {};
                     }
-                    return {};
-                }
-                if (id == "output-padding") {
-                    if (state->callbacks.on_output_pad_change) {
-                        state->callbacks.on_output_pad_change(new_value == "0" ? 0 : 1);
+                    if (id == "hide-thinking") {
+                        if (state->callbacks.on_hide_thinking_block_change) {
+                            state->callbacks.on_hide_thinking_block_change(new_value == "true");
+                        }
+                        return {};
                     }
-                    return {};
-                }
-                if (id == "default-project-trust") {
-                    const auto trust = default_project_trust_by_label(new_value);
-                    if (trust && state->callbacks.on_default_project_trust_change) {
-                        state->callbacks.on_default_project_trust_change(*trust);
+                    if (id == "output-padding") {
+                        if (state->callbacks.on_output_pad_change) {
+                            state->callbacks.on_output_pad_change(new_value == "0" ? 0 : 1);
+                        }
+                        return {};
                     }
-                    return {};
-                }
-                if (id == "theme") {
-                    // pi `case "theme": callbacks.onThemeChange(newValue)`
-                    // — the ThemeSubmenu completes with the selected name
-                    // and the settings-list change sink commits it.
-                    if (state->callbacks.on_theme_change) {
-                        state->callbacks.on_theme_change(std::move(new_value));
+                    if (id == "default-project-trust") {
+                        const auto trust = default_project_trust_by_label(new_value);
+                        if (trust && state->callbacks.on_default_project_trust_change) {
+                            state->callbacks.on_default_project_trust_change(*trust);
+                        }
+                        return {};
                     }
-                    return {};
-                }
-                if (id == "tui-mode") {
-                    // pi `case "tui-mode": callbacks.onTuiModeChange(newValue
-                    // as TuiMode)`. The switch itself happens on the host
-                    // executor, so a refusal arrives after the list already
-                    // moved the row; the caller rolls it back.
-                    if (state->callbacks.on_tui_mode_change) {
-                        state->callbacks.on_tui_mode_change(std::move(new_value));
+                    if (id == "theme") {
+                        // pi `case "theme": callbacks.onThemeChange(newValue)`
+                        // — the ThemeSubmenu completes with the selected name
+                        // and the settings-list change sink commits it.
+                        if (state->callbacks.on_theme_change) {
+                            state->callbacks.on_theme_change(std::move(new_value));
+                        }
+                        return {};
                     }
+                    if (id == "tui-mode") {
+                        // pi `case "tui-mode": callbacks.onTuiModeChange(newValue
+                        // as TuiMode)`. The switch itself happens on the host
+                        // executor, so a refusal arrives after the list already
+                        // moved the row; the caller rolls it back.
+                        if (state->callbacks.on_tui_mode_change) {
+                            state->callbacks.on_tui_mode_change(std::move(new_value));
+                        }
+                        return {};
+                    }
+                    // `thinking` reports through the submenu's select sink, so
+                    // it fires a change here only to refresh the item's display
+                    // value.
                     return {};
-                }
-                // `thinking` reports through the submenu's select sink, so
-                // it fires a change here only to refresh the item's display
-                // value.
-                return {};
-            },
-            .on_cancel = [cancel]() -> support::ExpectedVoid {
-                if (*cancel) (*cancel)();
-                return {};
-            },
-            .keybindings = std::move(keybindings),
+                },
+                .on_cancel = [cancel]() -> support::ExpectedVoid {
+                    if (*cancel) (*cancel)();
+                    return {};
+                },
+                .keybindings = std::move(keybindings),
         };
         options.submenu_factory = [&theme, submenu_keybindings, config, state](
-                                      const cch::tui::SettingItem& item,
-                                      cch::tui::SettingsSubmenuDoneSink done) {
+                                          const cch::tui::SettingItem& item, cch::tui::SettingsSubmenuDoneSink done) {
             if (item.id == "thinking") {
                 return std::unique_ptr<cch::tui::Component>{
-                    make_thinking_submenu(
-                        theme, submenu_keybindings, config, *state, std::move(done))};
+                        make_thinking_submenu(theme, submenu_keybindings, config, *state, std::move(done))};
             }
             if (item.id == "theme") {
-                return std::unique_ptr<cch::tui::Component>{std::make_unique<ThemeSubmenu>(
-                    theme, submenu_keybindings, config, *state, std::move(done))};
+                return std::unique_ptr<cch::tui::Component>{
+                        std::make_unique<ThemeSubmenu>(theme, submenu_keybindings, config, *state, std::move(done))};
             }
             return std::unique_ptr<cch::tui::Component>{};
         };
@@ -410,21 +399,15 @@ struct SettingsSelectorComponent::Impl {
     std::size_t cursor_row_offset{0};
 };
 
-SettingsSelectorComponent::SettingsSelectorComponent(
-    const LiveTheme& theme,
-    std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
-    SettingsSelectorConfig config,
-    SettingsSelectorCallbacks callbacks)
-    : impl_(std::make_unique<Impl>(
-          theme,
-          std::move(keybindings),
-          std::move(config),
-          std::move(callbacks))) {}
+SettingsSelectorComponent::SettingsSelectorComponent(const LiveTheme& theme,
+        std::shared_ptr<const cch::tui::KeybindingRegistry> keybindings,
+        SettingsSelectorConfig config,
+        SettingsSelectorCallbacks callbacks)
+    : impl_(std::make_unique<Impl>(theme, std::move(keybindings), std::move(config), std::move(callbacks))) {}
 
 SettingsSelectorComponent::~SettingsSelectorComponent() = default;
 
-support::Expected<cch::tui::RenderResult> SettingsSelectorComponent::render(
-    std::size_t width) {
+support::Expected<cch::tui::RenderResult> SettingsSelectorComponent::render(std::size_t width) {
     cch::tui::RenderResult result;
     const auto append = [&result, width](cch::tui::Component& component) -> support::ExpectedVoid {
         auto rendered = component.render(width);
@@ -445,9 +428,7 @@ support::Expected<cch::tui::RenderResult> SettingsSelectorComponent::render(
     return result;
 }
 
-void SettingsSelectorComponent::invalidate() {
-    impl_->list_.invalidate();
-}
+void SettingsSelectorComponent::invalidate() { impl_->list_.invalidate(); }
 
 cch::tui::InputAdmissionOutcome SettingsSelectorComponent::handle_input(const cch::tui::InputEventVariant& input) {
     const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
@@ -457,20 +438,15 @@ cch::tui::InputAdmissionOutcome SettingsSelectorComponent::handle_input(const cc
     return impl_->list_.handle_input(input);
 }
 
-void SettingsSelectorComponent::set_focused(bool focused) {
-    impl_->list_.set_focused(focused);
-}
+void SettingsSelectorComponent::set_focused(bool focused) { impl_->list_.set_focused(focused); }
 
 void SettingsSelectorComponent::update_value(std::string id, std::string new_value) {
     impl_->list_.update_value(std::move(id), std::move(new_value));
 }
 
-bool SettingsSelectorComponent::focused() const {
-    return impl_->list_.focused();
-}
+bool SettingsSelectorComponent::focused() const { return impl_->list_.focused(); }
 
-std::optional<cch::tui::CursorPosition>
-SettingsSelectorComponent::cursor_location() const {
+std::optional<cch::tui::CursorPosition> SettingsSelectorComponent::cursor_location() const {
     const auto cursor = impl_->list_.cursor_location();
     if (!cursor) return std::nullopt;
     return cch::tui::CursorPosition{

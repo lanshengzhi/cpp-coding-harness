@@ -32,8 +32,7 @@
 namespace cch::coding_agent::tui {
 
 void InteractiveEngine::spawn_flow(
-    std::move_only_function<boost::asio::awaitable<void>()> start,
-    std::string failure_label) {
+        std::move_only_function<boost::asio::awaitable<void>()> start, std::string failure_label) {
     ++in_flight_flows_;
     const auto weak = weak_from_this();
     // The coroutine lambda's frame may reference its closure (the
@@ -41,24 +40,21 @@ void InteractiveEngine::spawn_flow(
     // spawned coroutine reaches its terminal completion (the bridge holds
     // the factory for the coroutine's whole lifetime; ADR 0040
     // §Behavior mechanisms).
-    auto start_owner =
-        std::make_shared<std::move_only_function<boost::asio::awaitable<void>()>>(
-            std::move(start));
+    auto start_owner = std::make_shared<std::move_only_function<boost::asio::awaitable<void>()>>(std::move(start));
     auto bridged = support::detail::make_async_result_on(
             executor_, [start_owner]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
                 co_await (*start_owner)();
                 co_return support::ExpectedVoid{};
             });
-    std::move(bridged).start(
-        [weak, failure_label = std::move(failure_label)](support::ExpectedVoid result) noexcept {
-            if (const auto self = weak.lock()) {
-                self->flow_finished();
-                if (!result && self->running_ && self->view_ != nullptr) {
-                    self->view_->append_diagnostic(std::move(failure_label));
-                    self->invalidate_frame();
-                }
+    std::move(bridged).start([weak, failure_label = std::move(failure_label)](support::ExpectedVoid result) noexcept {
+        if (const auto self = weak.lock()) {
+            self->flow_finished();
+            if (!result && self->running_ && self->view_ != nullptr) {
+                self->view_->append_diagnostic(std::move(failure_label));
+                self->invalidate_frame();
             }
-        });
+        }
+    });
 }
 
 void InteractiveEngine::flow_finished() noexcept {
@@ -84,17 +80,15 @@ std::shared_ptr<ModelFlowController> InteractiveEngine::make_model_flow_controll
     };
     hooks.post_on_executor = [weak](std::move_only_function<void()> action) mutable {
         if (const auto self = weak.lock()) {
-            self->post_from_view(
-                [action = std::move(action)](InteractiveEngine&) mutable { action(); });
+            self->post_from_view([action = std::move(action)](InteractiveEngine&) mutable { action(); });
         }
     };
-    hooks.spawn_flow =
-        [weak](std::move_only_function<boost::asio::awaitable<void>()> start,
-               std::string failure_label) mutable {
-            if (const auto self = weak.lock()) {
-                self->spawn_flow(std::move(start), std::move(failure_label));
-            }
-        };
+    hooks.spawn_flow = [weak](std::move_only_function<boost::asio::awaitable<void>()> start,
+                               std::string failure_label) mutable {
+        if (const auto self = weak.lock()) {
+            self->spawn_flow(std::move(start), std::move(failure_label));
+        }
+    };
     hooks.current_session = [weak]() -> AgentSession* {
         const auto self = weak.lock();
         return self != nullptr ? self->session_ : nullptr;
@@ -107,16 +101,13 @@ std::shared_ptr<ModelFlowController> InteractiveEngine::make_model_flow_controll
     // The controller is created after `theme_controller_` is emplaced and
     // the optional is never reset, so the pointer stays valid for the
     // state's lifetime (flows reach it only under the gates above).
-    hooks.live_theme = [theme = &*theme_controller_]() -> const LiveTheme& {
-        return theme->live_theme();
-    };
-    return std::make_shared<ModelFlowController>(
-        executor_,
-        *this,
-        std::weak_ptr<void>{weak_from_this()},
-        std::move(hooks),
-        keybindings_,
-        settings_manager_ ? &*settings_manager_ : nullptr);
+    hooks.live_theme = [theme = &*theme_controller_]() -> const LiveTheme& { return theme->live_theme(); };
+    return std::make_shared<ModelFlowController>(executor_,
+            *this,
+            std::weak_ptr<void>{weak_from_this()},
+            std::move(hooks),
+            keybindings_,
+            settings_manager_ ? &*settings_manager_ : nullptr);
 }
 
 std::shared_ptr<AuthFlowController> InteractiveEngine::make_auth_flow_controller() {
@@ -124,33 +115,27 @@ std::shared_ptr<AuthFlowController> InteractiveEngine::make_auth_flow_controller
     AuthFlowHostHooks hooks;
     hooks.post_on_executor = [weak](std::move_only_function<void()> action) mutable {
         if (const auto self = weak.lock()) {
-            self->post_from_view(
-                [action = std::move(action)](InteractiveEngine&) mutable { action(); });
+            self->post_from_view([action = std::move(action)](InteractiveEngine&) mutable { action(); });
         }
     };
-    hooks.spawn_flow =
-        [weak](std::move_only_function<boost::asio::awaitable<void>()> start,
-               std::string failure_label) mutable {
-            if (const auto self = weak.lock()) {
-                self->spawn_flow(std::move(start), std::move(failure_label));
-            }
-        };
+    hooks.spawn_flow = [weak](std::move_only_function<boost::asio::awaitable<void>()> start,
+                               std::string failure_label) mutable {
+        if (const auto self = weak.lock()) {
+            self->spawn_flow(std::move(start), std::move(failure_label));
+        }
+    };
     hooks.current_session = [weak]() -> AgentSession* {
         const auto self = weak.lock();
         return self != nullptr ? self->session_ : nullptr;
     };
-    hooks.live_theme = [theme = &*theme_controller_]() -> const LiveTheme& {
-        return theme->live_theme();
-    };
+    hooks.live_theme = [theme = &*theme_controller_]() -> const LiveTheme& { return theme->live_theme(); };
     hooks.action_generation = [weak] {
         const auto self = weak.lock();
         return self != nullptr ? self->action_generation_ : 0;
     };
     hooks.open_browser = [weak](std::size_t generation, std::string url) {
         if (const auto self = weak.lock()) {
-            (void)self->deliver_action(
-                generation,
-                TuiActionVariant{OpenBrowserAction{std::move(url)}});
+            (void)self->deliver_action(generation, TuiActionVariant{OpenBrowserAction{std::move(url)}});
         }
     };
     hooks.get_device_id = [weak] {
@@ -161,11 +146,7 @@ std::shared_ptr<AuthFlowController> InteractiveEngine::make_auth_flow_controller
         return std::string{};
     };
     return std::make_shared<AuthFlowController>(
-        executor_,
-        *this,
-        std::weak_ptr<void>{weak_from_this()},
-        std::move(hooks),
-        keybindings_);
+            executor_, *this, std::weak_ptr<void>{weak_from_this()}, std::move(hooks), keybindings_);
 }
 
 std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_controller() {
@@ -177,24 +158,20 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
     };
     hooks.post_on_executor = [weak](std::move_only_function<void()> action) mutable {
         if (const auto self = weak.lock()) {
-            self->post_from_view(
-                [action = std::move(action)](InteractiveEngine&) mutable { action(); });
+            self->post_from_view([action = std::move(action)](InteractiveEngine&) mutable { action(); });
         }
     };
-    hooks.spawn_flow =
-        [weak](std::move_only_function<boost::asio::awaitable<void>()> start,
-               std::string failure_label) mutable {
-            if (const auto self = weak.lock()) {
-                self->spawn_flow(std::move(start), std::move(failure_label));
-            }
-        };
+    hooks.spawn_flow = [weak](std::move_only_function<boost::asio::awaitable<void>()> start,
+                               std::string failure_label) mutable {
+        if (const auto self = weak.lock()) {
+            self->spawn_flow(std::move(start), std::move(failure_label));
+        }
+    };
     hooks.current_session = [weak]() -> AgentSession* {
         const auto self = weak.lock();
         return self != nullptr ? self->session_ : nullptr;
     };
-    hooks.live_theme = [theme = &*theme_controller_]() -> const LiveTheme& {
-        return theme->live_theme();
-    };
+    hooks.live_theme = [theme = &*theme_controller_]() -> const LiveTheme& { return theme->live_theme(); };
     hooks.terminal_rows = [weak] {
         const auto self = weak.lock();
         return self != nullptr ? self->terminal_.dimensions().rows : 0;
@@ -211,8 +188,7 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
     };
     hooks.make_session_request = [weak](std::filesystem::path workspace, SessionTarget target) {
         if (const auto self = weak.lock()) {
-            return self->make_session_request(
-                std::move(workspace), std::move(target));
+            return self->make_session_request(std::move(workspace), std::move(target));
         }
         runtime::AgentSessionCreationRequest request;
         request.workspace = std::move(workspace);
@@ -234,14 +210,12 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
                             support::ErrorCode::Cancelled, "Session flow host is no longer active"));
                 });
     };
-    hooks.replace_session = [weak](std::unique_ptr<AgentSession> next)
-        -> support::ExpectedVoid {
+    hooks.replace_session = [weak](std::unique_ptr<AgentSession> next) -> support::ExpectedVoid {
         if (const auto self = weak.lock()) {
             return self->replace_session(std::move(next));
         }
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Cancelled,
-            "Session flow host is no longer active"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Cancelled, "Session flow host is no longer active"));
     };
     hooks.show_warning = [weak](std::string text) {
         if (const auto self = weak.lock(); self && self->view_ != nullptr) {
@@ -285,9 +259,8 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
     hooks.apply_reload_result = [weak](AgentSessionReloadResult result) -> support::ExpectedVoid {
         const auto self = weak.lock();
         if (!self) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Cancelled,
-                "Session flow host is no longer active"));
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Cancelled, "Session flow host is no longer active"));
         }
         // pi `handleReloadCommand`: the reload's `session_start` registrations
         // land inside `session.reload()`, before the keybinding/theme/settings
@@ -298,21 +271,19 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
             return std::unexpected(rebind.error());
         }
         if (self->theme_controller_) {
-            auto discovery = coding_agent::tui::discover_themes(
-                std::move(result.themes));
+            auto discovery = coding_agent::tui::discover_themes(std::move(result.themes));
             self->loaded_theme_diagnostics_ = std::move(discovery.diagnostics);
-            self->theme_controller_->set_registered_themes(
-                std::move(discovery.themes));
+            self->theme_controller_->set_registered_themes(std::move(discovery.themes));
             self->theme_controller_->apply_from_settings();
         }
         if (self->settings_manager_) {
-            self->hide_thinking_block_ =
-                self->settings_manager_->hide_thinking_block();
+            static_cast<void>(self->settings_manager_->reload());
+            self->hide_thinking_block_ = self->settings_manager_->hide_thinking_block();
             self->output_pad_ = self->settings_manager_->output_pad();
+            self->set_show_hardware_cursor(self->settings_manager_->get_show_hardware_cursor());
         }
         if (self->view_ != nullptr) {
-            self->view_->apply_render_settings(
-                self->hide_thinking_block_, self->output_pad_);
+            self->view_->apply_render_settings(self->hide_thinking_block_, self->output_pad_);
         }
         self->rebuild_autocomplete_provider();
         self->refresh_loaded_resources();
@@ -327,9 +298,8 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
         if (const auto self = weak.lock()) self->compaction_active_ = active;
     };
     hooks.signal_exit = [weak] {
-        if (const auto self = weak.lock(); self && self->exit_requested_ &&
-            !self->prompt_active_ && !self->user_bash_active_ &&
-            !self->compaction_active_) {
+        if (const auto self = weak.lock(); self && self->exit_requested_ && !self->prompt_active_ &&
+                                           !self->user_bash_active_ && !self->compaction_active_) {
             self->signal_exit();
         }
     };
@@ -349,13 +319,12 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
                     std::make_move_iterator(diagnostics_for_view.end()));
         }
     };
-    return std::make_shared<SessionFlowController>(
-        executor_,
-        *this,
-        std::weak_ptr<void>{weak_from_this()},
-        std::move(hooks),
-        keybindings_,
-        settings_manager_ ? &*settings_manager_ : nullptr);
+    return std::make_shared<SessionFlowController>(executor_,
+            *this,
+            std::weak_ptr<void>{weak_from_this()},
+            std::move(hooks),
+            keybindings_,
+            settings_manager_ ? &*settings_manager_ : nullptr);
 }
 
 std::shared_ptr<SessionUiBinding> InteractiveEngine::make_session_ui_binding() {
@@ -400,8 +369,7 @@ std::shared_ptr<SettingsFlowController> InteractiveEngine::make_settings_flow_co
     };
     hooks.post_on_executor = [weak](std::move_only_function<void()> action) mutable {
         if (const auto self = weak.lock()) {
-            self->post_from_view(
-                [action = std::move(action)](InteractiveEngine&) mutable { action(); });
+            self->post_from_view([action = std::move(action)](InteractiveEngine&) mutable { action(); });
         }
     };
     hooks.current_session = [weak]() -> AgentSession* {
@@ -426,6 +394,13 @@ std::shared_ptr<SettingsFlowController> InteractiveEngine::make_settings_flow_co
     hooks.set_output_pad = [weak](std::size_t padding) {
         if (const auto self = weak.lock()) self->output_pad_ = padding;
     };
+    hooks.show_hardware_cursor = [weak] {
+        const auto self = weak.lock();
+        return self != nullptr && self->show_hardware_cursor();
+    };
+    hooks.set_show_hardware_cursor = [weak](bool enabled) {
+        if (const auto self = weak.lock()) self->set_show_hardware_cursor(enabled);
+    };
     hooks.rebuild_chat = [weak] {
         if (const auto self = weak.lock()) self->rebuild_chat();
     };
@@ -448,14 +423,13 @@ std::shared_ptr<SettingsFlowController> InteractiveEngine::make_settings_flow_co
         return self != nullptr && self->tui_ == self->main_screen_.get() ? coding_agent::TuiMode::Regular
                                                                          : coding_agent::TuiMode::Fullscreen;
     };
-    return std::make_shared<SettingsFlowController>(
-        executor_,
-        *this,
-        std::weak_ptr<void>{weak_from_this()},
-        std::move(hooks),
-        keybindings_,
-        settings_manager_ ? &*settings_manager_ : nullptr,
-        theme_controller_ ? theme_controller_.get() : nullptr);
+    return std::make_shared<SettingsFlowController>(executor_,
+            *this,
+            std::weak_ptr<void>{weak_from_this()},
+            std::move(hooks),
+            keybindings_,
+            settings_manager_ ? &*settings_manager_ : nullptr,
+            theme_controller_ ? theme_controller_.get() : nullptr);
 }
 
 std::shared_ptr<McpManagerFlow> InteractiveEngine::make_mcp_flow_controller() {
@@ -527,9 +501,7 @@ std::shared_ptr<SuspendController> InteractiveEngine::make_suspend_controller() 
     };
     hooks.suspend_process = [weak] {
         if (const auto self = weak.lock()) {
-            (void)self->deliver_action(
-                self->action_generation_,
-                TuiActionVariant{SuspendProcessAction{}});
+            (void)self->deliver_action(self->action_generation_, TuiActionVariant{SuspendProcessAction{}});
         }
     };
     hooks.is_running = [weak] {

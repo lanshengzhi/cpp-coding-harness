@@ -60,6 +60,10 @@ struct SettingsFlowHostHooks {
     /// `rebuild_chat`.
     std::move_only_function<void(bool)> set_hide_thinking_block{nullptr};
     std::move_only_function<void(std::size_t)> set_output_pad{nullptr};
+    /// The current pi `showHardwareCursor` preference the host runs with.
+    std::move_only_function<bool()> show_hardware_cursor{nullptr};
+    /// Set the preference on the live renderer (pi `this.ui.setShowHardwareCursor(enabled)`).
+    std::move_only_function<void(bool)> set_show_hardware_cursor{nullptr};
     /// pi `rebuildChatFromMessages`: rebuild the chat from the session
     /// snapshot with the current render settings.
     std::move_only_function<void()> rebuild_chat{nullptr};
@@ -79,17 +83,15 @@ struct SettingsFlowHostHooks {
 /// (pi's `showSelector` editorContainer swap) and its callbacks re-enter on
 /// the host executor through the hooks. The settings manager and theme
 /// controller are borrowed from the host and must outlive the controller.
-class SettingsFlowController final
-    : public std::enable_shared_from_this<SettingsFlowController> {
+class SettingsFlowController final : public std::enable_shared_from_this<SettingsFlowController> {
 public:
-    SettingsFlowController(
-        boost::asio::any_io_executor executor,
-        ModalPresenter& presenter,
-        std::weak_ptr<void> host_lifetime,
-        SettingsFlowHostHooks hooks,
-        std::shared_ptr<SharedKeybindings> keybindings,
-        coding_agent::SettingsManager* settings_manager,
-        ThemeController* theme_controller);
+    SettingsFlowController(boost::asio::any_io_executor executor,
+            ModalPresenter& presenter,
+            std::weak_ptr<void> host_lifetime,
+            SettingsFlowHostHooks hooks,
+            std::shared_ptr<SharedKeybindings> keybindings,
+            coding_agent::SettingsManager* settings_manager,
+            ThemeController* theme_controller);
     SettingsFlowController(SettingsFlowController&&) = delete;
     SettingsFlowController& operator=(SettingsFlowController&&) = delete;
     ~SettingsFlowController() = default;
@@ -133,6 +135,9 @@ private:
     void set_hide_thinking_block_setting(bool hidden);
     /// pi `setOutputPad` + live chat rebuild.
     void set_output_pad_setting(std::size_t padding);
+    /// pi `onShowHardwareCursorChange`: persist the global `showHardwareCursor`
+    /// setting and update the live renderer (pi `interactive-mode.ts:5027-5030`).
+    void set_show_hardware_cursor_setting(bool enabled);
 
     void post(std::move_only_function<void()> action);
     [[nodiscard]] AgentSession* current_session();
@@ -144,7 +149,7 @@ private:
     SettingsFlowHostHooks hooks_;
     std::shared_ptr<SharedKeybindings> keybindings_;
     coding_agent::SettingsManager* settings_manager_; // may be null; must outlive the controller.
-    ThemeController* theme_controller_; // may be null; must outlive the controller.
+    ThemeController* theme_controller_;               // may be null; must outlive the controller.
 };
 
 } // namespace cch::coding_agent::tui
