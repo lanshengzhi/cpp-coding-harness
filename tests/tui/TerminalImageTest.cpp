@@ -250,16 +250,22 @@ TEST_CASE("kitty crop geometry follows frozen cropKittyImageLine",
 
     // The frozen pin: a 3-row placement whose top two rows scrolled away shows
     // only the last third of a 100px source (terminal-image.test.ts).
-    CHECK(kitty_image_crop(100, 3, 2, 1) == (cch::tui::detail::KittyImageCrop{66, 34, 1}));
+    CHECK(kitty_image_crop(100, 3, 2, 1) ==
+            (cch::tui::detail::KittyImageCrop{.source_y = 66, .source_height = 34, .rows = 1}));
     // A bottom clip (no hidden rows) crops the source end instead.
-    CHECK(kitty_image_crop(100, 3, 0, 2) == (cch::tui::detail::KittyImageCrop{0, 67, 2}));
+    CHECK(kitty_image_crop(100, 3, 0, 2) ==
+            (cch::tui::detail::KittyImageCrop{.source_y = 0, .source_height = 67, .rows = 2}));
     // Distinguishable bands: a 64px / 4-row source scrolled by one row.
-    CHECK(kitty_image_crop(64, 4, 1, 1) == (cch::tui::detail::KittyImageCrop{16, 16, 1}));
-    CHECK(kitty_image_crop(64, 4, 2, 2) == (cch::tui::detail::KittyImageCrop{32, 32, 2}));
-    CHECK(kitty_image_crop(64, 4, 3, 1) == (cch::tui::detail::KittyImageCrop{48, 16, 1}));
+    CHECK(kitty_image_crop(64, 4, 1, 1) ==
+            (cch::tui::detail::KittyImageCrop{.source_y = 16, .source_height = 16, .rows = 1}));
+    CHECK(kitty_image_crop(64, 4, 2, 2) ==
+            (cch::tui::detail::KittyImageCrop{.source_y = 32, .source_height = 32, .rows = 2}));
+    CHECK(kitty_image_crop(64, 4, 3, 1) ==
+            (cch::tui::detail::KittyImageCrop{.source_y = 48, .source_height = 16, .rows = 1}));
     // A source shorter than one destination row still reports at least one
     // pixel (frozen `Math.max(1, ...)`).
-    CHECK(kitty_image_crop(4, 4, 3, 1) == (cch::tui::detail::KittyImageCrop{3, 1, 1}));
+    CHECK(kitty_image_crop(4, 4, 3, 1) ==
+            (cch::tui::detail::KittyImageCrop{.source_y = 3, .source_height = 1, .rows = 1}));
 
     // Frozen no-ops: a fully visible placement, a hidden count outside the
     // placement, an empty destination, and an unknown total all stay unset.

@@ -107,6 +107,12 @@ support::Expected<RenderResult> Image::render(std::size_t width) {
             impl_->cached_cell_dimensions == cell_dimensions) {
         return impl_->cached;
     }
+    // A width change re-sizes the placement (pi re-renders the component and
+    // registers fresh transmission metadata). The new revision invalidates the
+    // fullscreen reuse cache so the terminal gets the re-sized image instead of
+    // a placement-only `a=p` against the old upload (pi `transmissionGeneration`
+    // bumps per `renderImage` call).
+    if (impl_->cache_valid && impl_->cached_width != width) ++impl_->revision;
 
     const auto detected_dimensions =
             impl_->options.dimensions ? impl_->options.dimensions

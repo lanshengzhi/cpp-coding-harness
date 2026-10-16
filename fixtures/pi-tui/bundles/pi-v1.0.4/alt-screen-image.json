@@ -1646,6 +1646,161 @@
           }
         ]
       }
+    },
+    {
+      "name": "image-column-resize-retransmit",
+      "dimensions": {
+        "columns": 20,
+        "rows": 20
+      },
+      "inputs": {
+        "capabilities": "kitty",
+        "image": {
+          "id": 7005,
+          "columns": 5,
+          "rows": 9,
+          "widthPx": 16,
+          "heightPx": 64,
+          "mimeType": "image/png",
+          "data": "iVBORw0KGgoAAAANSUhEUgAAABAAAABACAIAAACcH2DBAAAALklEQVR42u3TsQkAAAwCQfdf2iyQJm04+PYawTQ5FQB4DMwEAA4BAFs9BgCPwQCIUPs91s6WBgAAAABJRU5ErkJggg=="
+        },
+        "content": {
+          "head": "head",
+          "tail": "tail"
+        },
+        "resizes": [
+          {
+            "columns": 12,
+            "rows": 20
+          },
+          {
+            "columns": 20,
+            "rows": 20
+          }
+        ],
+        "steps": [
+          {
+            "action": "render"
+          },
+          {
+            "action": "resize",
+            "columns": 12
+          },
+          {
+            "action": "resize",
+            "columns": 20
+          }
+        ]
+      },
+      "expected": {
+        "phases": [
+          {
+            "action": "initial",
+            "viewport": [
+              "head",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "tail",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "images": [
+              {
+                "row": null,
+                "command": "\u001b_Ga=d,d=A,q=2\u001b\\"
+              },
+              {
+                "row": 1,
+                "command": "\u001b_Ga=T,f=100,q=2,C=1,c=5,r=9,i=7005;iVBORw0KGgoAAAANSUhEUgAAABAAAABACAIAAACcH2DBAAAALklEQVR42u3TsQkAAAwCQfdf2iyQJm04+PYawTQ5FQB4DMwEAA4BAFs9BgCPwQCIUPs91s6WBgAAAABJRU5ErkJggg==\u001b\\"
+              }
+            ]
+          },
+          {
+            "action": "narrower",
+            "viewport": [
+              "head",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "tail",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "images": [
+              {
+                "row": null,
+                "command": "\u001b_Ga=d,d=a,q=2\u001b\\"
+              },
+              {
+                "row": 1,
+                "command": "\u001b_Ga=T,f=100,q=2,C=1,c=3,r=5,i=7005;iVBORw0KGgoAAAANSUhEUgAAABAAAABACAIAAACcH2DBAAAALklEQVR42u3TsQkAAAwCQfdf2iyQJm04+PYawTQ5FQB4DMwEAA4BAFs9BgCPwQCIUPs91s6WBgAAAABJRU5ErkJggg==\u001b\\"
+              }
+            ]
+          },
+          {
+            "action": "wider-again",
+            "viewport": [
+              "head",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "tail",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "images": [
+              {
+                "row": null,
+                "command": "\u001b_Ga=d,d=a,q=2\u001b\\"
+              },
+              {
+                "row": 1,
+                "command": "\u001b_Ga=T,f=100,q=2,C=1,c=5,r=9,i=7005;iVBORw0KGgoAAAANSUhEUgAAABAAAABACAIAAACcH2DBAAAALklEQVR42u3TsQkAAAwCQfdf2iyQJm04+PYawTQ5FQB4DMwEAA4BAFs9BgCPwQCIUPs91s6WBgAAAABJRU5ErkJggg==\u001b\\"
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

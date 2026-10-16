@@ -1011,7 +1011,7 @@ support::ExpectedVoid AltScreen::render_frame() {
     if (auto indicator = composite_scroll_to_end_indicator(display_lines); !indicator) return indicator;
     const bool compose_overlays = compositor_->has_visible_overlays(dimensions);
     if (compose_overlays) {
-        RenderResult output{.lines = std::move(display_lines), .images = std::move(cached_frame_->images)};
+        RenderResult output{.lines = std::move(display_lines), .images = std::move(images)};
         auto materialized = detail::OverlayCompositor::materialize_images(
                 std::move(output), terminal_.capabilities(), dimensions.columns, dimensions.rows);
         if (auto overlaid = compositor_->composite(dimensions, terminal_.capabilities(), materialized); !overlaid)
@@ -1555,8 +1555,7 @@ support::ExpectedVoid AltScreen::composite_scroll_to_end_indicator(std::vector<s
     return {};
 }
 
-support::ExpectedVoid AltScreen::render_viewport(
-        std::vector<std::string> lines,
+support::ExpectedVoid AltScreen::render_viewport(std::vector<std::string> lines,
         std::optional<CursorPosition> cursor,
         TerminalDimensions dimensions,
         std::vector<InlineImageRenderRegion> images) {
@@ -1577,8 +1576,8 @@ support::ExpectedVoid AltScreen::render_viewport(
     // `prepareKittyScreen`): changed image anchors force the full row rewrite
     // and its placement cleanup, and offscreen uploads past the frozen caps
     // are deleted by image id.
-    auto prepared = image_pipeline_->prepare_fullscreen_images(
-            std::move(lines), images, session_image_protocol_, full_repaint);
+    auto prepared =
+            image_pipeline_->prepare_fullscreen_images(std::move(lines), images, session_image_protocol_, full_repaint);
     lines = std::move(prepared.lines);
     const bool rewrite_all_rows = full_repaint || prepared.images_need_redraw;
 
@@ -2118,9 +2117,12 @@ bool AltScreen::handle_viewport_key(const KeyEvent& event) {
     // Frozen dispatch order (tui-alt-screen.ts:~720-777): pageUp, pageDown,
     // previousPrompt, nextPrompt, top, bottom. A single ordered pass keeps
     // conflict resolution identical to frozen when user overrides collide.
-    constexpr std::array<std::string_view, 6> actions{
-            "tui.altScreen.pageUp", "tui.altScreen.pageDown", "tui.altScreen.previousPrompt",
-            "tui.altScreen.nextPrompt", "tui.altScreen.top", "tui.altScreen.bottom"};
+    constexpr std::array<std::string_view, 6> actions{"tui.altScreen.pageUp",
+            "tui.altScreen.pageDown",
+            "tui.altScreen.previousPrompt",
+            "tui.altScreen.nextPrompt",
+            "tui.altScreen.top",
+            "tui.altScreen.bottom"};
     const auto matched = keybinding_context_->first_match(event, actions);
     if (!matched) return false;
     if (event.type == KeyEventType::Release) return true;

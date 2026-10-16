@@ -13,6 +13,7 @@
 
 #include <cch/tui/AltScreen.hpp>
 #include <cch/tui/Image.hpp>
+#include <cch/tui/Overlay.hpp>
 #include <cch/tui/ScrollView.hpp>
 #include <cch/tui/Stack.hpp>
 #include <cch/tui/Text.hpp>
@@ -111,10 +112,13 @@ std::ostream& operator<<(std::ostream& output, const ObservedCommand& command) {
 void rename_image_ids(std::vector<ObservedCommand>& commands) {
     std::vector<std::pair<std::string, std::size_t>> seen;
     for (auto& command : commands) {
-        const auto controls_end = command.text.find(';');
-        const auto controls = std::string_view{command.text}.substr(0, controls_end);
         std::size_t cursor = 0;
         while (true) {
+            // Recompute per iteration: the replacement below mutates
+            // `command.text`, so a view captured once could dangle or address
+            // stale offsets after a length-changing rename.
+            const auto controls_end = command.text.find(';');
+            const auto controls = std::string_view{command.text}.substr(0, controls_end);
             const auto at = controls.find("i=", cursor);
             if (at == std::string_view::npos) break;
             std::size_t end = at + 2;
@@ -210,6 +214,41 @@ public:
 private:
     std::vector<std::string> lines_;
     std::vector<cch::tui::InlineImageRenderRegion> images_;
+};
+
+/// A focusable overlay body: the overlay path only composes images while a
+/// visible overlay exists, so the regression needs a focusable child.
+class OverlayFocusProbe final : public cch::tui::Component, public cch::tui::Focusable {
+public:
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{.lines = {"overlay", "overlay", "overlay", "overlay"}};
+    }
+
+    void invalidate() override {}
+    void set_focused(bool focused) override { focused_ = focused; }
+    [[nodiscard]] bool focused() const override { return focused_; }
+
+private:
+    bool focused_{false};
+};
+
+/// The pi cell geometry the frozen capture ran under: `Image.render` sizes its
+/// placement from the terminal cell dimensions, so the replay pins the same
+/// 9x18 cells (pi `getCellDimensions` default).
+class ImageGeometryGuard final {
+public:
+    ImageGeometryGuard() {
+        cch::tui::set_image_capabilities({.images = cch::tui::InlineImageProtocol::Kitty});
+        cch::tui::set_cell_dimensions({.width = 9, .height = 18});
+    }
+
+    ImageGeometryGuard(const ImageGeometryGuard&) = delete;
+    ImageGeometryGuard& operator=(const ImageGeometryGuard&) = delete;
+
+    ~ImageGeometryGuard() {
+        cch::tui::reset_image_capabilities_cache();
+        cch::tui::reset_cell_dimensions();
+    }
 };
 
 /// A placement whose declared row count is the frozen crop denominator; an
@@ -513,3 +552,85 @@ TEST_CASE("frozen fullscreen offscreen count cap evicts the least recently used 
     REQUIRE(tui.stop());
 }
 
+TEST_CASE("fullscreen image placements survive overlay composition", "[tui][image][alt-screen][issue1012]") {
+    cch::tui::VirtualTerminal terminal({.columns = 20,
+            .rows = 8,
+            .capabilities = {.inline_images = cch::tui::InlineImageProtocol::Kitty,
+                    .cell_pixels = cch::tui::CellPixelDimensions{.width = 9, .height = 18}}});
+    cch::tui::AltScreen tui(terminal);
+    cch::tui::InlineImageRenderRegion region;
+    region.resource_id = 7001;
+    region.revision = 1;
+    region.encoded_data = "QUJDRA==";
+    region.mime_type = "image/png";
+    region.pixel_width = 9;
+    region.pixel_height = 18;
+    region.fallback_text = cch::tui::image_fallback(
+            region.mime_type, cch::tui::ImagePixelSize{.width = region.pixel_width, .height = region.pixel_height});
+    region.region = cch::tui::CellRegion{.column = 0, .row = 0, .columns = 1, .rows = 1};
+    region.source_rows = 1;
+    region.rows_reserved_in_lines = true;
+    region.max_width = 1;
+    region.max_height = 1;
+    REQUIRE(tui.add_child(std::make_unique<PlacementChild>(
+            std::vector<std::string>{""}, std::vector<cch::tui::InlineImageRenderRegion>{region})));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    REQUIRE(!observed_commands(terminal, 0).empty());
+
+    const auto marker = terminal.output().size();
+    auto overlay = std::make_unique<cch::tui::Overlay>();
+    REQUIRE(overlay->add_child(std::make_unique<OverlayFocusProbe>()));
+    REQUIRE(overlay->focus_first());
+    REQUIRE(tui.add_overlay(std::move(overlay)));
+    REQUIRE(tui.render());
+    const auto commands = observed_commands(terminal, marker);
+    // The overlay frame must keep the placement alive (reuse `a=p` or a fresh
+    // transmission): a frame that only deletes it is the #1012 double-move
+    // regression where the overlay path re-moved the already-moved sidecars.
+    CHECK(std::ranges::any_of(commands, [](const ObservedCommand& command) {
+        return command.text.find("a=p") != std::string::npos || command.text.find("a=T") != std::string::npos;
+    }));
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("frozen fullscreen width change retransmits the image under the same id",
+        "[tui][image][alt-screen][issue1012][compat-pi]") {
+    const auto bundle = cch::tests::read_pi_tui_evidence("alt-screen-image.json");
+    REQUIRE(bundle);
+    const auto& scenario = scenario_of(*bundle, "image-column-resize-retransmit");
+    const auto& inputs = scenario.at("inputs");
+    const auto& image = inputs.at("image");
+    ImageGeometryGuard geometry;
+
+    cch::tui::VirtualTerminal terminal({.columns = int_of(scenario.at("dimensions").at("columns")),
+            .rows = int_of(scenario.at("dimensions").at("rows")),
+            .capabilities = {.inline_images = cch::tui::InlineImageProtocol::Kitty}});
+    cch::tui::AltScreen tui(terminal);
+    auto root = std::make_unique<cch::tui::VStack>();
+    REQUIRE(root->add_child(std::make_unique<cch::tui::Text>(inputs.at("content").at("head").get_string(), 0, 0)));
+    REQUIRE(root->add_child(
+            std::make_unique<cch::tui::Image>(cch::tui::ImageContent{.encoded_data = image.at("data").get_string(),
+                                                      .mime_type = image.at("mimeType").get_string()},
+                    cch::tui::ImageOptions{.dimensions = cch::tui::ImagePixelSize{.width = int_of(image.at("widthPx")),
+                                                   .height = int_of(image.at("heightPx"))}})));
+    REQUIRE(root->add_child(std::make_unique<cch::tui::Text>(inputs.at("content").at("tail").get_string(), 0, 0)));
+    tui.set_layout_root(std::move(root));
+    PhaseChecker check(terminal, scenario);
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    check.check("initial");
+    const auto& resizes = inputs.at("resizes").get_array();
+    const std::array<std::pair<std::string_view, std::size_t>, 2> actions{
+            std::pair<std::string_view, std::size_t>{"narrower", 0},
+            std::pair<std::string_view, std::size_t>{"wider-again", 1},
+    };
+    for (const auto& [action, index] : actions) {
+        REQUIRE(terminal.inject_resize(cch::tui::TerminalDimensions{
+                .columns = int_of(resizes.at(index).at("columns")), .rows = int_of(resizes.at(index).at("rows"))}));
+        REQUIRE(tui.render());
+        check.check(action);
+    }
+    check.require_done();
+    REQUIRE(tui.stop());
+}

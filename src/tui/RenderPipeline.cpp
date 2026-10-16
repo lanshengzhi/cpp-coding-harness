@@ -79,10 +79,6 @@ support::ExpectedVoid RenderPipeline::stop(std::optional<CursorPosition>, TuiSto
         }
     }
 
-    previous_kitty_image_ids_.clear();
-    image_placements_.clear();
-    previous_kitty_image_ids_.clear();
-    image_placements_.clear();
     reset_render_state();
     if (!image_result) return std::unexpected(image_result.error());
     return exit_result;
@@ -792,7 +788,9 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(
 
     for (auto& [resource_id, placement] : fullscreen_image_placements_) placement.visible = false;
     bool need_redraw = false;
-    std::vector<std::uint64_t> visible_resources;
+    // Placement rows for the LRU touch order: frozen walks the finished screen
+    // top-to-bottom, not the paint order (pi `prepareKittyScreen`).
+    std::vector<std::pair<std::size_t, std::uint64_t>> visible_resources;
     visible_resources.reserve(images.size());
     for (const auto& image : images) {
         if (image.region.columns == 0 || image.region.rows == 0) continue;
@@ -855,7 +853,7 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(
         placement.row = image.region.row;
         placement.column = image.region.column;
         placement.visible = true;
-        visible_resources.push_back(image.resource_id);
+        visible_resources.emplace_back(image.region.row, image.resource_id);
 
         frame.lines[image.region.row] = std::string(image.region.column, ' ') + anchor;
         for (std::size_t row = image.region.row + 1; row < image.region.row + image.region.rows; ++row) {
@@ -880,7 +878,8 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(
         return frame;
     }
 
-    for (const auto resource_id : visible_resources) {
+    std::stable_sort(visible_resources.begin(), visible_resources.end());
+    for (const auto& [resource_row, resource_id] : visible_resources) {
         std::erase(fullscreen_image_order_, resource_id);
         fullscreen_image_order_.push_back(resource_id);
     }

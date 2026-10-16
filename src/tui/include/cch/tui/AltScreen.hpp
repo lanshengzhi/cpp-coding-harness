@@ -347,9 +347,6 @@ private:
     /// placement-only reuse, per-id eviction, and the session's image
     /// fallback all run here.
     std::unique_ptr<detail::RenderPipeline> image_pipeline_;
-    /// The image protocol captured when the session started
-    /// (pi `beforeTerminalStart`): an iTerm2 session suppresses image
-    /// placements for its whole lifetime and shows the text fallback.
     struct ActiveSearch {
         AltScreenSearchComponent* component{nullptr};
         std::unique_ptr<SearchIndex> index;
@@ -377,6 +374,9 @@ private:
     /// The last rendered frame, the geometry every hit test runs against (pi
     /// `currentLayout`); the rows are painted away, the boxes stay.
     std::unique_ptr<detail::LayoutFrame> cached_frame_;
+    /// The image protocol captured when the session started
+    /// (pi `beforeTerminalStart`): an iTerm2 session suppresses image
+    /// placements for its whole lifetime and shows the text fallback.
     InlineImageProtocol session_image_protocol_{InlineImageProtocol::None};
     /// Rendered row count per mounted child of the implicit document, in mount
     /// order (pi `implicitDocument.mouseLayout.children`).

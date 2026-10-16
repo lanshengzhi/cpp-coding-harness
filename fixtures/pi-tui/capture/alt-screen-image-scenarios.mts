@@ -496,6 +496,82 @@ export async function captureAltScreenImage(piCheckout: string) {
 		});
 	}
 
+	// A real `Image` component re-rendered at a new width: pi registers fresh
+	// transmission metadata for the same id on every re-render, so the frozen
+	// cache sees a new generation and retransmits the placement with the new
+	// cell span (`a=T`, new `c=`/`r=`) instead of reusing the old upload.
+	{
+		setCapabilities(KITTY);
+		const terminal = new VirtualTerminal(20, 20);
+		const writes = recordWrites(terminal);
+		const tui = new TuiAltScreen(terminal);
+		const imageId = 7005;
+		const image = new Image(PNG, "image/png", {} as any, { imageId } as any, {
+			widthPx: 16,
+			heightPx: 64,
+		});
+		const root = new VStack([
+			{ component: new Text("head", 0, 0) },
+			{ component: image },
+			{ component: new Text("tail", 0, 0) },
+		]);
+		tui.setLayoutRoot(root);
+		tui.start();
+		await terminal.waitForRender();
+
+		let cursor = 0;
+		const phases: any[] = [];
+		const observe = (action: string) => {
+			const commands = imageCommands(writes.slice(cursor));
+			cursor = writes.length;
+			phases.push({
+				action,
+				viewport: terminal.getViewport().map((line: string) => line.trimEnd()),
+				images: commands,
+			});
+		};
+		observe("initial");
+		terminal.resize(12, 20);
+		await terminal.waitForRender();
+		observe("narrower");
+		terminal.resize(20, 20);
+		await terminal.waitForRender();
+		observe("wider-again");
+		tui.stop();
+		assert.ok(
+			phases[0].images.some((entry: any) => entry.command.includes("a=T") && entry.command.includes("c=5,r=9")),
+			"the first frame transmits the width-20 cell span",
+		);
+		assert.ok(
+			phases[1].images.some((entry: any) => entry.command.includes("d=a")),
+			"the reflow clears the placements it had placed",
+		);
+		assert.ok(
+			phases[1].images.some((entry: any) => entry.command.includes("a=T") && entry.command.includes("c=3,r=5")),
+			"a re-render at a new width transmits again with the new cell span",
+		);
+		assert.ok(
+			phases[2].images.some((entry: any) => entry.command.includes("a=T") && entry.command.includes("c=5,r=9")),
+			"the restored width transmits the wider span instead of reusing the narrow upload",
+		);
+
+		scenarios.push({
+			name: "image-column-resize-retransmit",
+			dimensions: { columns: 20, rows: 20 },
+			inputs: {
+				capabilities: "kitty",
+				image: { id: imageId, columns: 5, rows: 9, widthPx: 16, heightPx: 64, mimeType: "image/png", data: PNG },
+				content: { head: "head", tail: "tail" },
+				resizes: [
+					{ columns: 12, rows: 20 },
+					{ columns: 20, rows: 20 },
+				],
+				steps: [{ action: "render" }, { action: "resize", columns: 12 }, { action: "resize", columns: 20 }],
+			},
+			expected: { phases },
+		});
+	}
+
 	return {
 		sourceEndpoints: [
 			"packages/tui/src/tui-alt-screen.ts:doRender,beforeTerminalStart,beforeTerminalStop,scrollBy,prepareKittyScreen",
