@@ -500,12 +500,12 @@ TEST_CASE("Native TUI TUI mode switch preserves focus text and cursor identity a
     auto* const initial_focus = engine->focus();
     REQUIRE(initial_focus != nullptr);
 
-    // Text and cursor in fullscreen: draft prompt is entered and terminal cursor is visible.
+    // Text and cursor in fullscreen: draft prompt is entered and terminal cursor is hidden by default.
     REQUIRE(terminal.inject_input("draft prompt"));
     REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("draft prompt") != std::string::npos; }));
     const auto fullscreen_cursor = terminal.cursor();
     CHECK(fullscreen_cursor.row > 0);
-    CHECK(terminal.modes().cursor_visible);
+    CHECK_FALSE(terminal.modes().cursor_visible);
 
     // Switch fullscreen -> regular directly on the engine (the frontend lifecycle
     // operation the settings consumer invokes).
@@ -546,7 +546,8 @@ TEST_CASE("Native TUI TUI mode switch preserves focus text and cursor identity a
 
     // Text and cursor continuity back in fullscreen.
     CHECK(visible_screen(terminal).find("draft prompt continued") != std::string::npos);
-    REQUIRE(pump_until(io, [&] { return terminal.modes().cursor_visible; }));
+    REQUIRE(pump_until(io, [&] { return terminal.cursor().row == fullscreen_cursor.row; }));
+    CHECK_FALSE(terminal.modes().cursor_visible);
     CHECK(terminal.cursor().row == fullscreen_cursor.row);
 
     // Submit the prompt and verify normal completion.

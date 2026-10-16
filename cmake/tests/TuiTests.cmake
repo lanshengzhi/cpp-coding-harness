@@ -44,6 +44,7 @@ include_guard(GLOBAL)
         tests/tui/EditorLayoutTest.cpp
         tests/tui/FullscreenLayoutTest.cpp
         tests/tui/FuzzyTest.cpp
+        tests/tui/HardwareCursorEvidenceTest.cpp
         tests/tui/HStackEvidenceTest.cpp
         tests/tui/HStackTest.cpp
         tests/tui/ImageTest.cpp

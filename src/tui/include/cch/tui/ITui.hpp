@@ -68,6 +68,18 @@ public:
     virtual void invalidate() = 0;
     virtual void set_clear_on_shrink(bool enabled) noexcept = 0;
     [[nodiscard]] virtual bool clear_on_shrink() const noexcept = 0;
+
+    /// Hardware-cursor visibility preference (pi `getShowHardwareCursor` / `setShowHardwareCursor`).
+    /// When disabled (default `false`), the hardware cursor remains hidden during
+    /// execution while still being positioned at the active component cursor for IME.
+    /// When enabled, the hardware cursor is made visible whenever a valid cursor
+    /// location is resolved, and hidden when no cursor is present.
+    [[nodiscard]] virtual bool show_hardware_cursor() const noexcept = 0;
+    virtual void set_show_hardware_cursor(bool enabled) = 0;
+
+    /// Parity alias for `show_hardware_cursor()`.
+    [[nodiscard]] bool get_show_hardware_cursor() const noexcept { return show_hardware_cursor(); }
+
     virtual void set_scheduler(TuiScheduler* scheduler) = 0;
     virtual void set_render_prepare_sink(TuiRenderPrepareSink sink) = 0;
     virtual void set_render_complete_sink(TuiRenderCompleteSink sink) = 0;

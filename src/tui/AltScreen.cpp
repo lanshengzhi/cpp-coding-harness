@@ -230,7 +230,8 @@ AltScreen::AltScreen(Terminal& terminal, AltScreenOptions options)
       selection_copy_sink_(std::move(options.copy_selection)),
       search_match_style_(std::move(options.search_match_style)),
       search_current_match_style_(std::move(options.search_current_match_style)),
-      search_navigation_button_style_(std::move(options.search_navigation_button_style)) {
+      search_navigation_button_style_(std::move(options.search_navigation_button_style)),
+      show_hardware_cursor_(options.show_hardware_cursor) {
     flashes_.set_style(std::move(options.flash_style));
     render_schedule_state_->owner = this;
     overlay_handle_context_->owner = this;
@@ -620,6 +621,7 @@ support::ExpectedVoid AltScreen::start() {
         }
         return std::unexpected(cursor.error());
     }
+    cursor_visible_ = false;
 
     pending_render_ = false;
     flashes_.set_scheduler(scheduler_);
@@ -1633,19 +1635,19 @@ support::ExpectedVoid AltScreen::render_viewport(std::vector<std::string> lines,
         write_accounting_.committed_bytes += output.size();
     }
 
-    const bool show_cursor = resolved.has_value();
+    const bool show_cursor = resolved.has_value() && show_hardware_cursor_;
+    if (resolved) {
+        if (auto moved = terminal_.set_cursor(*resolved); !moved) {
+            (void)terminal_.end_synchronized_update();
+            return std::unexpected(moved.error());
+        }
+    }
     if (show_cursor != cursor_visible_) {
         if (auto visible = terminal_.set_cursor_visible(show_cursor); !visible) {
             (void)terminal_.end_synchronized_update();
             return std::unexpected(visible.error());
         }
         cursor_visible_ = show_cursor;
-    }
-    if (resolved) {
-        if (auto moved = terminal_.set_cursor(*resolved); !moved) {
-            (void)terminal_.end_synchronized_update();
-            return std::unexpected(moved.error());
-        }
     }
 
     if (auto ended = terminal_.end_synchronized_update(); !ended) return std::unexpected(ended.error());
@@ -1722,9 +1724,31 @@ void AltScreen::invalidate() {
     request_render();
 }
 
+namespace {
+
+AltScreenOptions with_hardware_cursor(AltScreenOptions options, bool show_hardware_cursor) {
+    options.show_hardware_cursor = show_hardware_cursor;
+    return options;
+}
+
+} // namespace
+
+AltScreen::AltScreen(Terminal& terminal, bool show_hardware_cursor, AltScreenOptions options)
+    : AltScreen(terminal, with_hardware_cursor(std::move(options), show_hardware_cursor)) {}
+
 void AltScreen::set_clear_on_shrink(bool enabled) noexcept { clear_on_shrink_ = enabled; }
 
 bool AltScreen::clear_on_shrink() const noexcept { return clear_on_shrink_; }
+
+void AltScreen::set_show_hardware_cursor(bool enabled) {
+    if (show_hardware_cursor_ == enabled) return;
+    show_hardware_cursor_ = enabled;
+    if (!enabled && started_ && !stopping_) {
+        (void)terminal_.set_cursor_visible(false);
+        cursor_visible_ = false;
+    }
+    request_render();
+}
 
 void AltScreen::set_scheduler(TuiScheduler* scheduler) {
     if (scheduler_ == scheduler) return;

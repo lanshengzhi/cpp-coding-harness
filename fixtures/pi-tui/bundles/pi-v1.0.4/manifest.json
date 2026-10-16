@@ -85,6 +85,10 @@
       {
         "path": "capture/renderer-switch-scenarios.mts",
         "sha256": "2112ccd8ba3ba3f40f02481bc266e92747624dbe2822a2bcb96c26e4012fe7d6"
+      },
+      {
+        "path": "capture/hardware-cursor-scenarios.mts",
+        "sha256": "b019bd68653bc0855460d6a6138ee04dad6c2b826bf0850c175d7900fcfd18aa"
       }
     ]
   },
@@ -393,6 +397,17 @@
         "packages/tui/src/tui-main-screen.ts:captureRenderState,restoreRenderState",
         "packages/tui/src/tui-alt-screen.ts:321",
         "packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.waitForRender"
+      ]
+    },
+    {
+      "path": "hardware-cursor.json",
+      "family": "hardware-cursor",
+      "bytes": 27424,
+      "sha256": "1e460b289818dc2ac6f1658ad1b6255c7e76a72d4edb7278a132823f2bae2460",
+      "sourceEndpoints": [
+        "packages/tui/src/tui.ts:getShowHardwareCursor,setShowHardwareCursor,extractCursorPosition,hideTerminalCursor",
+        "packages/tui/src/tui-main-screen.ts:positionHardwareCursor,render",
+        "packages/tui/src/tui-alt-screen.ts:constructor,render"
       ]
     }
   ]

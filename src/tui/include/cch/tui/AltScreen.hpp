@@ -91,6 +91,8 @@ struct AltScreenOptions {
     /// Style a search navigation button with its hover state (pi
     /// `searchNavigationButtonStyle`).
     std::function<std::string(std::string, bool)> search_navigation_button_style{};
+    /// Hardware-cursor visibility preference (pi `getShowHardwareCursor` / `setShowHardwareCursor`).
+    bool show_hardware_cursor{false};
 };
 
 /// Alternate-screen (fullscreen) root: owns the terminal's alternate buffer
@@ -119,6 +121,7 @@ struct AltScreenOptions {
 class AltScreen final : public ITui, public detail::TuiHost, private detail::OverlayHost {
 public:
     explicit AltScreen(Terminal& terminal, AltScreenOptions options = {});
+    AltScreen(Terminal& terminal, bool show_hardware_cursor, AltScreenOptions options = {});
     ~AltScreen() override;
 
     AltScreen(const AltScreen&) = delete;
@@ -195,6 +198,8 @@ public:
     void invalidate() override;
     void set_clear_on_shrink(bool enabled) noexcept override;
     [[nodiscard]] bool clear_on_shrink() const noexcept override;
+    [[nodiscard]] bool show_hardware_cursor() const noexcept override { return show_hardware_cursor_; }
+    void set_show_hardware_cursor(bool enabled) override;
     void set_scheduler(TuiScheduler* scheduler) override;
     void set_render_prepare_sink(TuiRenderPrepareSink sink) override;
     void set_render_complete_sink(TuiRenderCompleteSink sink) override;
@@ -565,6 +570,7 @@ private:
     bool pending_render_{false};
     bool render_scheduled_{false};
     bool clear_on_shrink_{false};
+    bool show_hardware_cursor_{false};
     std::size_t render_generation_{0};
 
     // Absolute-viewport baseline. Construction starts with no baseline and

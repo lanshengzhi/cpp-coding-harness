@@ -1,0 +1,886 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/tui.ts:getShowHardwareCursor,setShowHardwareCursor,extractCursorPosition,hideTerminalCursor",
+    "packages/tui/src/tui-main-screen.ts:positionHardwareCursor,render",
+    "packages/tui/src/tui-alt-screen.ts:constructor,render"
+  ],
+  "scenarios": [
+    {
+      "name": "main-screen-default-hidden",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "MainScreen",
+        "preference": "default",
+        "cursorCol": 4,
+        "cursorRow": 0
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "cursor": {
+              "col": 4,
+              "row": 0
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": false,
+            "screen": [
+              "test text",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b[5G"
+              },
+              {
+                "op": "hideCursor"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+              "\u001b[5G"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "main-screen-enabled-visible",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "MainScreen",
+        "preference": "enabled",
+        "cursorCol": 4,
+        "cursorRow": 0
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "cursor": {
+              "col": 4,
+              "row": 0
+            },
+            "cursorVisible": true,
+            "showHardwareCursor": true,
+            "screen": [
+              "test text",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b[5G"
+              },
+              {
+                "op": "showCursor"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+              "\u001b[5G"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "main-screen-disabled-explicit",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "MainScreen",
+        "preference": "disabled",
+        "cursorCol": 4,
+        "cursorRow": 0
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "cursor": {
+              "col": 4,
+              "row": 0
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": false,
+            "screen": [
+              "test text",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b[5G"
+              },
+              {
+                "op": "hideCursor"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+              "\u001b[5G"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "main-screen-toggle",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "MainScreen",
+        "transitions": [
+          "default-false",
+          "toggle-true",
+          "toggle-false"
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "default-false",
+            "cursor": {
+              "col": 4,
+              "row": 0
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": false,
+            "screen": [
+              "test text",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b[5G"
+              },
+              {
+                "op": "hideCursor"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+              "\u001b[5G"
+            ]
+          },
+          {
+            "action": "toggle-true",
+            "cursor": {
+              "col": 4,
+              "row": 0
+            },
+            "cursorVisible": true,
+            "showHardwareCursor": true,
+            "screen": [
+              "test text",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[5G"
+              },
+              {
+                "op": "showCursor"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[5G"
+            ]
+          },
+          {
+            "action": "toggle-false",
+            "cursor": {
+              "col": 4,
+              "row": 0
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": false,
+            "screen": [
+              "test text",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "hideCursor"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b[5G"
+              },
+              {
+                "op": "hideCursor"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[5G"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "main-screen-invalid-cursor",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "MainScreen",
+        "preference": "enabled",
+        "cursor": null
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "cursor": {
+              "col": 14,
+              "row": 0
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": true,
+            "screen": [
+              "no cursor line",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026hno cursor line\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+              },
+              {
+                "op": "hideCursor"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026hno cursor line\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "main-screen-nested",
+      "dimensions": {
+        "columns": 30,
+        "rows": 10
+      },
+      "inputs": {
+        "root": "MainScreen",
+        "layout": "Container(Text(1 row), Box(padX=2, padY=1, Input(col=3, row=0)))"
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "preference-false",
+            "cursor": {
+              "col": 5,
+              "row": 2
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": false,
+            "screen": [
+              "header line                   ",
+              "                              ",
+              "  nested input                ",
+              "                              ",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026hheader line                   \u001b[0m\u001b]8;;\u0007\r\n                              \u001b[0m\u001b]8;;\u0007\r\n  nested input                \u001b[0m\u001b]8;;\u0007\r\n                              \u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b[1A\u001b[6G"
+              },
+              {
+                "op": "hideCursor"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026hheader line                   \u001b[0m\u001b]8;;\u0007\r\n                              \u001b[0m\u001b]8;;\u0007\r\n  nested input                \u001b[0m\u001b]8;;\u0007\r\n                              \u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+              "\u001b[1A\u001b[6G"
+            ]
+          },
+          {
+            "action": "preference-true",
+            "cursor": {
+              "col": 5,
+              "row": 2
+            },
+            "cursorVisible": true,
+            "showHardwareCursor": true,
+            "screen": [
+              "header line                   ",
+              "                              ",
+              "  nested input                ",
+              "                              ",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[6G"
+              },
+              {
+                "op": "showCursor"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[6G"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-default-hidden",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "AltScreen",
+        "preference": "default",
+        "cursorCol": 6,
+        "cursorRow": 1
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "cursor": {
+              "col": 6,
+              "row": 1
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": false,
+            "screen": [
+              "line 0",
+              "line 1",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25l\u001b[?2026l"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25l\u001b[?2026l"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-enabled-visible",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "AltScreen",
+        "preference": "enabled",
+        "cursorCol": 6,
+        "cursorRow": 1
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "cursor": {
+              "col": 6,
+              "row": 1
+            },
+            "cursorVisible": true,
+            "showHardwareCursor": true,
+            "screen": [
+              "line 0",
+              "line 1",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25h\u001b[?2026l"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25h\u001b[?2026l"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-disabled-explicit",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "AltScreen",
+        "preference": "disabled",
+        "cursorCol": 6,
+        "cursorRow": 1
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "cursor": {
+              "col": 6,
+              "row": 1
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": false,
+            "screen": [
+              "line 0",
+              "line 1",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25l\u001b[?2026l"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25l\u001b[?2026l"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-toggle",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "AltScreen",
+        "transitions": [
+          "default-false",
+          "toggle-true",
+          "toggle-false"
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "default-false",
+            "cursor": {
+              "col": 6,
+              "row": 1
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": false,
+            "screen": [
+              "line 0",
+              "line 1",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25l\u001b[?2026l"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25l\u001b[?2026l"
+            ]
+          },
+          {
+            "action": "toggle-true",
+            "cursor": {
+              "col": 6,
+              "row": 1
+            },
+            "cursorVisible": true,
+            "showHardwareCursor": true,
+            "screen": [
+              "line 0",
+              "line 1",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[2;7H\u001b[?25h\u001b[?2026l"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026h\u001b[2;7H\u001b[?25h\u001b[?2026l"
+            ]
+          },
+          {
+            "action": "toggle-false",
+            "cursor": {
+              "col": 6,
+              "row": 1
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": false,
+            "screen": [
+              "line 0",
+              "line 1",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "hideCursor"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[2;7H\u001b[?25l\u001b[?2026l"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026h\u001b[2;7H\u001b[?25l\u001b[?2026l"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-invalid-cursor",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "AltScreen",
+        "preference": "enabled",
+        "cursor": null
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "cursor": {
+              "col": 0,
+              "row": 4
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": true,
+            "screen": [
+              "no cursor line",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kno cursor line\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kno cursor line\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-nested",
+      "dimensions": {
+        "columns": 30,
+        "rows": 10
+      },
+      "inputs": {
+        "root": "AltScreen",
+        "layout": "Container(Text(1 row), Box(padX=3, padY=1, Input(col=4, row=0)))"
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "preference-false",
+            "cursor": {
+              "col": 7,
+              "row": 2
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": false,
+            "screen": [
+              "first row                     ",
+              "                              ",
+              "   alt nested                 ",
+              "                              ",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kfirst row                     \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2K                              \u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K   alt nested                 \u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K                              \u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[3;8H\u001b[?25l\u001b[?2026l"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kfirst row                     \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2K                              \u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K   alt nested                 \u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K                              \u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[3;8H\u001b[?25l\u001b[?2026l"
+            ]
+          },
+          {
+            "action": "preference-true",
+            "cursor": {
+              "col": 7,
+              "row": 2
+            },
+            "cursorVisible": true,
+            "showHardwareCursor": true,
+            "screen": [
+              "first row                     ",
+              "                              ",
+              "   alt nested                 ",
+              "                              ",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[3;8H\u001b[?25h\u001b[?2026l"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026h\u001b[3;8H\u001b[?25h\u001b[?2026l"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "alt-screen-clipped",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "root": "AltScreen",
+        "preference": "enabled",
+        "contentRows": 8,
+        "cursorCol": 5,
+        "cursorRow": 2,
+        "transitions": [
+          "following-end",
+          "scroll-to-top",
+          "scroll-by-1",
+          "scroll-to-bottom"
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "following-end",
+            "cursor": {
+              "col": 6,
+              "row": 3
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": true,
+            "screen": [
+              "line 4",
+              "line 5",
+              "line 6",
+              "line 7"
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 4\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 5\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 6\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 7\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 4\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 5\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 6\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 7\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+            ]
+          },
+          {
+            "action": "scroll-to-top",
+            "cursor": {
+              "col": 5,
+              "row": 2
+            },
+            "cursorVisible": true,
+            "showHardwareCursor": true,
+            "screen": [
+              "line 0",
+              "line 1",
+              "line 2",
+              "line 3"
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 3\u001b[0m\u001b]8;;\u0007\u001b[3;6H\u001b[?25h\u001b[?2026l"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026h\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 3\u001b[0m\u001b]8;;\u0007\u001b[3;6H\u001b[?25h\u001b[?2026l"
+            ]
+          },
+          {
+            "action": "scroll-by-1",
+            "cursor": {
+              "col": 5,
+              "row": 1
+            },
+            "cursorVisible": true,
+            "showHardwareCursor": true,
+            "screen": [
+              "line 1",
+              "line 2",
+              "line 3",
+              "line 4"
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[1;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 3\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 4\u001b[0m\u001b]8;;\u0007\u001b[2;6H\u001b[?25h\u001b[?2026l"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026h\u001b[1;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 3\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 4\u001b[0m\u001b]8;;\u0007\u001b[2;6H\u001b[?25h\u001b[?2026l"
+            ]
+          },
+          {
+            "action": "scroll-to-bottom",
+            "cursor": {
+              "col": 6,
+              "row": 3
+            },
+            "cursorVisible": false,
+            "showHardwareCursor": true,
+            "screen": [
+              "line 4",
+              "line 5",
+              "line 6",
+              "line 7"
+            ],
+            "terminalEvents": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[1;1H\u001b[2Kline 4\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 5\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 6\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 7\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+              }
+            ],
+            "rawWrites": [
+              "\u001b[?2026h\u001b[1;1H\u001b[2Kline 4\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 5\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 6\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 7\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

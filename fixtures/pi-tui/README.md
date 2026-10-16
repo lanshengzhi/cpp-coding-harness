@@ -318,6 +318,24 @@ private seam takes `restoreProgress` and `startRenderer`, which Pike's
 is recorded rather than re-driven. `switchTuiMode` and `stopInteractiveTui` themselves are private
 and need the full interactive runtime, so they are cited source endpoints too.
 
+For #1037, the named runner appended one more family and re-captured nothing else:
+`hardware-cursor.json` records thirteen scenarios of hardware cursor visibility, preference
+controls and IME positioning through frozen `TuiMainScreen`, `TuiAltScreen` and `VirtualTerminal`
+with deterministic components: default preference (`false`), enabled (`true`), explicit disabled
+(`false`), dynamic preference toggle (`false` -> `true` -> `false`), invalid / null cursor
+(hidden regardless of preference), nested components (Container + Box padding), and clipped /
+scrolled coordinates (off-screen cursor hides). It captures terminal events (write, hideCursor,
+showCursor), exact cursor rows and columns, cursor visibility, and raw writes across both roots.
+`capture/hardware-cursor-scenarios.mts` holds the scenario bodies; `capture/recapture-hardware-cursor.mts`
+is the append recipe (same frozen revision, same `capturedAt`, same `environment`, every other artifact
+byte-identical, manifest 24 → 25 with the record's `sourceEndpoints` and source digests).
+`HardwareCursorEvidenceTest` replays the family through Pike's `MainScreen`, `AltScreen`, and
+`VirtualTerminal` over `ITui`. Replay asserts exact terminal cursor coordinates (`cursor.col`, `cursor.row`),
+visibility mode (`cursorVisible`), preference state (`showHardwareCursor`), movement escape byte sequences
+(`terminalEvents[].bytes`), and the protocol ordering of movement versus visibility operations (`terminalEvents`). Idempotent
+redundant visibility-call suppression in AltScreen and incidental frame paint padding in MainScreen
+invalid-cursor are bounded and verified at the public terminal decorator boundary.
+
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
 widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key

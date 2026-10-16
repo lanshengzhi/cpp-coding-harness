@@ -46,7 +46,7 @@ namespace detail::testing {
 /// compatibility while consumers use the shared ITui contract.
 class MainScreen final : public ITui, public detail::TuiHost, private detail::OverlayHost {
 public:
-    explicit MainScreen(Terminal& terminal);
+    explicit MainScreen(Terminal& terminal, bool show_hardware_cursor = false);
     MainScreen(MainScreen&&) = delete;
     MainScreen& operator=(MainScreen&&) = delete;
     ~MainScreen() override;
@@ -80,6 +80,8 @@ public:
     void invalidate() override;
     void set_clear_on_shrink(bool enabled) noexcept override { clear_on_shrink_ = enabled; }
     [[nodiscard]] bool clear_on_shrink() const noexcept override { return clear_on_shrink_; }
+    [[nodiscard]] bool show_hardware_cursor() const noexcept override;
+    void set_show_hardware_cursor(bool enabled) override;
     void set_scheduler(TuiScheduler* scheduler) override;
     void set_render_prepare_sink(TuiRenderPrepareSink sink) override;
     void set_render_complete_sink(TuiRenderCompleteSink sink) override;

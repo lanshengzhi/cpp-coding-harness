@@ -53,7 +53,7 @@ struct FullscreenImageFrame {
 /// Owns the state and terminal effects for differential frame rendering.
 class RenderPipeline final {
 public:
-    explicit RenderPipeline(Terminal& terminal);
+    explicit RenderPipeline(Terminal& terminal, bool show_hardware_cursor = false);
     /// Arm a fresh differential baseline. The committed dimensions start
     /// unset, so the first render is neither misread as a resize reflow nor
     /// cleared (frozen `previousWidth == 0` semantics).
@@ -72,6 +72,8 @@ public:
         return previous_dimensions_.value_or(TerminalDimensions{});
     }
     [[nodiscard]] std::size_t admitted_prefix(TerminalDimensions dimensions) const noexcept;
+    void set_show_hardware_cursor(bool enabled) noexcept { show_hardware_cursor_ = enabled; }
+    [[nodiscard]] bool show_hardware_cursor() const noexcept { return show_hardware_cursor_; }
     [[nodiscard]] support::ExpectedVoid stop(std::optional<CursorPosition> stop_cursor, TuiStopOptions options);
     [[nodiscard]] TuiMainScreenRenderState capture_render_state() const;
     [[nodiscard]] support::ExpectedVoid restore_render_state(TuiMainScreenRenderState state);
@@ -155,6 +157,7 @@ private:
     std::vector<std::uint64_t> fullscreen_image_order_;
     bool restored_state_pending_start_{false};
     std::size_t full_redraws_{0};
+    bool show_hardware_cursor_{false};
     TuiWriteAccounting write_accounting_{};
 
     /// Issue one frame write and account for its admission: a refused write is
