@@ -207,6 +207,37 @@ component's own state. Two recorded divergences stay outside the comparison: fro
 settings hint text while the toolkit spells the same line from the keybinding registry, and the
 editor's border rows need the C++ border hook to exist at all.
 
+For #1017, the named runner appended one family and re-captured nothing else: `cli-tui-mode.json`
+records seven CLI TUI-mode scenarios through the frozen `packages/coding-agent/src/cli/args.ts`
+(`parseArgs`, `printHelp`) and `core/settings-manager.ts` (`fromStorage`, `getTuiMode`,
+`setTuiMode` over a storage double), so the resolved mode surface is measured against the frozen
+module rather than a re-derived value. Each flag scenario keeps every field the `--tui-mode` branch
+can move — the mode, the positional messages, the print flag, the diagnostics and the unknown-flag
+bucket — and `tui-mode-flag-rejects-a-missing-value-without-consuming` distinguishes a missing value
+(diagnosed, nothing consumed, so `--print` still engages and `hello` still becomes a message) from a
+repeated token that yields *one* diagnostic *and* a resolved mode, while
+`tui-mode-flag-rejects-an-unknown-mode-after-consuming-it` distinguishes a consumed unknown value
+(the next token is still a message) from an accepted value that a later rejection leaves in place.
+`settings-tui-mode-read-normalization` records that the frozen `getTuiMode` compares against
+`"regular"` only, so an out-of-union stored value still resolves `fullscreen`, and
+`settings-tui-mode-write-persists-the-global-key` records `setTuiMode` rewriting the global document
+with the key added and the unrelated keys preserved.
+`tui-mode-flag-over-settings-precedence` records the expression
+`options.tuiMode ?? this.settingsManager.getTuiMode()`
+(`packages/coding-agent/src/modes/interactive/interactive-mode.ts:604`) applied to five observed
+operand pairs — each with the stored document it was read from, one of them unset and one a rejected
+flag — and states that the expression itself needs the full interactive runtime, so the capture
+executes neither it nor `runInteractiveMode`; only the operands are observations. Two divergences are
+measured rather than assumed: frozen resolves an unset `tuiMode` to `fullscreen` while Pike answers
+`regular` until #1024 flips the default, and frozen leaves the inline spelling `--tui-mode=regular`
+in `unknownFlags` (mode unset, no mode diagnostic, and its session services later report the
+unclaimed flag) while Pike's parser gives every value option a `--name=value` form and therefore
+resolves that spelling to `regular`. `capture/cli-tui-mode-scenarios.mts` holds the scenario bodies
+and is emitted by the main generator; `capture/recapture-cli-tui-mode.mts` is the append recipe (same
+frozen revision, same `capturedAt`, every other artifact byte-identical). `CliTuiModeEvidenceTest`
+replays the family through the Pike parser, the settings manager and `select_tui_mode`, comparing a
+frozen diagnostic as the failed parse that carries the frozen message text.
+
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
 widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key

@@ -11,6 +11,7 @@ include_guard(GLOBAL)
         tests/support/ModelRuntimeTestSupport.cpp
         tests/cli/CliParseTest.cpp
         tests/cli/CliSmokeTest.cpp
+        tests/cli/CliTuiModeEvidenceTest.cpp
         tests/cli/FrontendSelectionTest.cpp
         tests/cli/InitialPromptTest.cpp
         tests/cli/InstallRelocationTest.cpp

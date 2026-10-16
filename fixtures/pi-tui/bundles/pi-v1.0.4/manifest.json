@@ -28,7 +28,7 @@
   },
   "generator": {
     "path": "capture/capture-named-tui.mts",
-    "sha256": "bdebc4879df8cd90fbe050fd91e5683dab0e7b0d3c53226fa2dd9e8a316f983b",
+    "sha256": "91a091635ea8fb4268d70d9674fe0b94649a020757b287d38a51c9e307ad4a9d",
     "sources": [
       {
         "path": "capture/select-list-scenarios.mts",
@@ -73,6 +73,10 @@
       {
         "path": "capture/mouse-components-scenarios.mts",
         "sha256": "ff24a6de012024fd20df7db391059a7cc9f195a90fb2458d9904d7cddafc773c"
+      },
+      {
+        "path": "capture/cli-tui-mode-scenarios.mts",
+        "sha256": "787d0822f1f26ebca1c2a5b448fa11cf43676577b298ed5b90108e803c7022b3"
       }
     ]
   },
@@ -333,6 +337,19 @@
         "packages/tui/src/tui.ts:Container.handleMouse,dispatchMouseEvent",
         "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.dispatchMouseEvent,TuiAltScreen.getFocusedComponent",
         "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,VirtualTerminal.getViewport"
+      ]
+    },
+    {
+      "path": "cli-tui-mode.json",
+      "family": "cli-tui-mode",
+      "bytes": 11678,
+      "sha256": "558efa85f03670113c201625bea349dee7311cad5d3fa331487ea9315fccb551",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/cli/args.ts:219",
+        "packages/coding-agent/src/cli/args.ts:333",
+        "packages/coding-agent/src/core/settings-manager.ts:1348",
+        "packages/coding-agent/src/core/settings-manager.ts:1352",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:604"
       ]
     }
   ]

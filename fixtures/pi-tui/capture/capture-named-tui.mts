@@ -21,6 +21,7 @@ import { captureSelection } from "./selection-scenarios.mts";
 import { captureAltScreenSearch } from "./alt-screen-search-scenarios.mts";
 import { captureAltScreenNav } from "./alt-screen-nav-scenarios.mts";
 import { captureMouseComponents } from "./mouse-components-scenarios.mts";
+import { captureCliTuiMode } from "./cli-tui-mode-scenarios.mts";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), "..");
@@ -880,6 +881,12 @@ const mouseComponentsArtifact = envelope(
 	mouseComponentsObservation.scenarios,
 );
 
+// Observe the CLI TUI-mode surface: the `--tui-mode` parse branch and help
+// line, the settings read/write, and the resolution expression applied to the
+// observed operand pairs (#1017).
+const cliTuiModeObservation = await captureCliTuiMode(pi);
+const cliTuiModeArtifact = envelope(cliTuiModeObservation.sourceEndpoints, cliTuiModeObservation.scenarios);
+
 // No output is touched before source guards and all observations complete.
 const bundle = path.join(root, selected.bundle);
 mkdirSync(bundle, { recursive: true });
@@ -903,6 +910,8 @@ const artifacts = [
 	["selection.json", "selection", selectionArtifact],
 	["alt-screen-search.json", "alt-screen-search", altScreenSearchArtifact],
 	["alt-screen-nav.json", "alt-screen-nav", altScreenNavArtifact],
+	["cli-tui-mode.json", "cli-tui-mode", cliTuiModeArtifact],
+] as const;
 ] as const;
 const records = artifacts.map(([file, family, artifact]) => {
 	const bytes = Buffer.from(JSON.stringify(artifact, null, 2) + "\n");
@@ -953,6 +962,10 @@ const manifest = {
 			{
 				path: "capture/mouse-components-scenarios.mts",
 				sha256: sha256(readFileSync(path.join(root, "capture/mouse-components-scenarios.mts"))),
+			},
+			{
+				path: "capture/cli-tui-mode-scenarios.mts",
+				sha256: sha256(readFileSync(path.join(root, "capture/cli-tui-mode-scenarios.mts"))),
 			},
 		],
 	},
