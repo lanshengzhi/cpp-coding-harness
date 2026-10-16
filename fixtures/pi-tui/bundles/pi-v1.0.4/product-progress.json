@@ -1,0 +1,256 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/core/settings-manager.ts:SettingsManager.getShowTerminalProgress,SettingsManager.setShowTerminalProgress",
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.switchTuiMode",
+    "packages/tui/src/terminal.ts:Terminal.setProgress"
+  ],
+  "scenarios": [
+    {
+      "name": "product-progress-settings-resolution",
+      "description": "Resolution matrix for terminal.showTerminalProgress across scopes",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "operation": "getShowTerminalProgress"
+      },
+      "expected": {
+        "settingsResults": {
+          "defaultUnset": false,
+          "explicitGlobalTrue": true,
+          "explicitGlobalFalse": false,
+          "projectScopeTrustedWinsTrue": true,
+          "projectScopeTrustedWinsFalse": false,
+          "projectScopeUntrustedIgnored": true,
+          "projectScopeUntrustedGlobalDefault": false,
+          "projectScopeTrustedGlobalUnset": true
+        }
+      }
+    },
+    {
+      "name": "product-progress-settings-persistence",
+      "description": "Surgical nested persistence of terminal.showTerminalProgress in global settings",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "operation": "setShowTerminalProgress"
+      },
+      "expected": {
+        "initialResolved": false,
+        "afterSetTrue": true,
+        "afterSetFalse": false,
+        "savedFileContent1": {
+          "theme": "dark",
+          "terminal": {
+            "clearOnShrink": true,
+            "unknownProp": 42
+          }
+        },
+        "savedFileContent2": {
+          "theme": "dark",
+          "terminal": {
+            "clearOnShrink": true,
+            "unknownProp": 42
+          }
+        }
+      }
+    },
+    {
+      "name": "product-progress-mode-switch",
+      "description": "Mode switch restoration conditions and sequence emission",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "operation": "switchTuiMode"
+      },
+      "expected": {
+        "switchResults": {
+          "streamingEnabledRestore": {
+            "outcome": true,
+            "writes": [
+              "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+              "\u001b]9;4;0\u0007",
+              "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+              "\u001b]9;4;3\u0007"
+            ],
+            "events": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l"
+              },
+              {
+                "op": "terminal.stop"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b]9;4;0\u0007"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l"
+              },
+              {
+                "op": "setProgress",
+                "active": true,
+                "bytes": "\u001b]9;4;3\u0007"
+              }
+            ],
+            "progressActiveEmitted": true,
+            "progressClearEmitted": true
+          },
+          "compactingEnabledRestore": {
+            "outcome": true,
+            "writes": [
+              "\u001b]9;4;0\u0007",
+              "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+              "\u001b]9;4;3\u0007"
+            ],
+            "events": [
+              {
+                "op": "terminal.stop"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b]9;4;0\u0007"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l"
+              },
+              {
+                "op": "setProgress",
+                "active": true,
+                "bytes": "\u001b]9;4;3\u0007"
+              }
+            ],
+            "progressActiveEmitted": true,
+            "progressClearEmitted": true
+          },
+          "idleEnabledNoRestore": {
+            "outcome": true,
+            "writes": [
+              "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+              "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l"
+            ],
+            "events": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l"
+              },
+              {
+                "op": "terminal.stop"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l"
+              }
+            ],
+            "progressActiveEmitted": false,
+            "progressClearEmitted": false
+          },
+          "streamingDisabledNoRestore": {
+            "outcome": true,
+            "writes": [
+              "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+              "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l"
+            ],
+            "events": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l"
+              },
+              {
+                "op": "terminal.stop"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l"
+              }
+            ],
+            "progressActiveEmitted": false,
+            "progressClearEmitted": false
+          },
+          "streamingEnabledSuppressed": {
+            "outcome": true,
+            "writes": [
+              "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+              "\u001b]9;4;0\u0007",
+              "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l"
+            ],
+            "events": [
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l"
+              },
+              {
+                "op": "terminal.stop"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b]9;4;0\u0007"
+              },
+              {
+                "op": "write",
+                "bytes": "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l"
+              }
+            ],
+            "progressActiveEmitted": false,
+            "progressClearEmitted": true
+          }
+        }
+      }
+    },
+    {
+      "name": "product-progress-protocol-constants",
+      "description": "Exact escape sequences for terminal progress active and clear",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "protocol": "OSC 9;4"
+      },
+      "expected": {
+        "activeSequence": "\u001b]9;4;3\u0007",
+        "clearSequence": "\u001b]9;4;0\u0007",
+        "turnStartAction": "active",
+        "agentEndAction": "clear",
+        "compactionStartAction": "active",
+        "compactionEndAction": "clear",
+        "stopAction": "clear"
+      }
+    }
+  ]
+}

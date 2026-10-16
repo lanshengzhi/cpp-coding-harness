@@ -366,6 +366,17 @@ exact constituent cursor commands and visibility in original order without synth
 `capture/product-cursor-layout-scenarios.mts` defines the scenarios; `capture/recapture-product-cursor-layout.mts`
 is the append recipe (same frozen revision, same `capturedAt`, same `environment`, manifest 26 → 27).
 
+`product-progress.json` records product terminal progress settings resolution, surgical nested persistence,
+mode switch restoration, and protocol constants (#1037, spec #946) covering `terminal.showTerminalProgress`
+resolution across scopes and project trust, surgical nested persistence in global settings, mode switch progress
+restoration across streaming/compaction states, and exact escape sequence definitions (`\x1b]9;4;3\x07` active,
+`\x1b]9;4;0\x07` clear).
+`capture/product-progress-scenarios.mts` defines the scenarios; `capture/recapture-product-progress.mts`
+is the append recipe (same frozen revision `7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`,
+same `environment`, every other artifact byte-identical, manifest 27 → 28).
+`ProductProgressEvidenceTest` replays settings resolution, surgical persistence, switch restoration expectations,
+and protocol sequences against `SettingsManager` and `InteractiveEngine` from the verified frozen artifact.
+
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
 widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key

@@ -195,6 +195,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/OAuthSelectorTest.cpp
         tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
         tests/coding_agent/tui/ProductCursorEvidenceTest.cpp
+        tests/coding_agent/tui/ProductProgressEvidenceTest.cpp
         tests/coding_agent/tui/RendererSwitchEvidenceTest.cpp
         tests/coding_agent/tui/ScopedModelsSelectorTest.cpp
         tests/coding_agent/tui/SlashCommandRouterTest.cpp

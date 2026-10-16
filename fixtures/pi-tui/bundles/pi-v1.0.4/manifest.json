@@ -97,6 +97,10 @@
       {
         "path": "capture/product-cursor-layout-scenarios.mts",
         "sha256": "038ea7c80a9679d361ca7f53da893bf1862a604235609706cf61fd531f2d0b1e"
+      },
+      {
+        "path": "capture/product-progress-scenarios.mts",
+        "sha256": "073b25de68107d90be6282d8eaa570bd0d71e03ef62327bd5e74ab7935df78b5"
       }
     ]
   },
@@ -438,6 +442,17 @@
         "packages/coding-agent/src/modes/interactive/chat-viewport.ts:createChatViewport",
         "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.switchTuiMode",
         "packages/coding-agent/src/modes/interactive/tui-renderer.ts:createInteractiveTui"
+      ]
+    },
+    {
+      "path": "product-progress.json",
+      "family": "product-progress",
+      "bytes": 8257,
+      "sha256": "d96dbef338a5f04fb994fb80f86e6d8e4b9671fde777ad0755c8ab75ecb1ff41",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/core/settings-manager.ts:SettingsManager.getShowTerminalProgress,SettingsManager.setShowTerminalProgress",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.switchTuiMode",
+        "packages/tui/src/terminal.ts:Terminal.setProgress"
       ]
     }
   ]
