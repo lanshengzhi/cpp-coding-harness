@@ -473,18 +473,19 @@ support::Expected<bool> InteractiveEngine::switch_tui_mode(coding_agent::TuiMode
                 support::ErrorCode::Validation, "TUI mode cannot change before the renderer starts"));
     }
 
+    // pi captures the focused component and the frame flags while the children
+    // and layout root are still mounted; `take_layout_root()` and `take_children()`
+    // detach the active hierarchy, and detaching the focused component would clear
+    // the focus before the replacement root could be handed it.
+    auto* const focus = tui_->focus();
+    clear_on_shrink_ = tui_->clear_on_shrink();
+
     // The retained layout root owns the dock and the one view instance, so it is
     // taken back before the retired root stops; the view stays alive through the
     // dock's own regions while the switch runs.
     if (previous_mode == coding_agent::TuiMode::Fullscreen) {
         fullscreen_viewport_->root = fullscreen_host_->alt_screen().take_layout_root();
     }
-    // pi captures the focused component and the frame flags while the children
-    // are still mounted; `take_children()` is also the detach here, and
-    // detaching the focused component would clear the focus before the
-    // replacement root could be handed it.
-    auto* const focus = tui_->focus();
-    clear_on_shrink_ = tui_->clear_on_shrink();
     // pi `[...previousUi.children]` plus `previousUi.clear()`: the capture and
     // the detach are one step, with the toolkit's focus and overlay bookkeeping
     // included.
