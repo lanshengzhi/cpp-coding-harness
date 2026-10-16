@@ -621,6 +621,7 @@ support::ExpectedVoid AltScreen::start() {
         }
         return std::unexpected(cursor.error());
     }
+    cursor_visible_ = false;
 
     pending_render_ = false;
     flashes_.set_scheduler(scheduler_);

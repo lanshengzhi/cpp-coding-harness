@@ -437,4 +437,38 @@ TEST_CASE("ITui roots support hardware-cursor preference and IME positioning",
 
         REQUIRE(alt_screen.stop());
     }
+
+    SECTION("AltScreen retains hardware-cursor visibility across restore and start") {
+        cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 5});
+        cch::tui::AltScreen alt_screen{terminal};
+        alt_screen.set_show_hardware_cursor(true);
+
+        auto input = std::make_unique<FocusableCursorInput>(
+                std::vector<std::string>{"line 0", "line 1"}, cch::tui::CursorPosition{.column = 6, .row = 1});
+        auto* input_pointer = input.get();
+        REQUIRE(alt_screen.add_child(std::move(input)));
+        REQUIRE(alt_screen.start());
+        REQUIRE(alt_screen.set_focus(input_pointer));
+        REQUIRE(alt_screen.render());
+
+        CHECK(alt_screen.show_hardware_cursor());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 6);
+        CHECK(terminal.cursor().row == 1);
+
+        const auto state = alt_screen.capture_render_state();
+        REQUIRE(alt_screen.stop());
+
+        REQUIRE(alt_screen.restore_render_state(state));
+        REQUIRE(alt_screen.start());
+        REQUIRE(alt_screen.set_focus(input_pointer));
+        REQUIRE(alt_screen.render());
+
+        CHECK(alt_screen.show_hardware_cursor());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.cursor().column == 6);
+        CHECK(terminal.cursor().row == 1);
+
+        REQUIRE(alt_screen.stop());
+    }
 }
